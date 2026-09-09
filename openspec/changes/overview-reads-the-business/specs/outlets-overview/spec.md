@@ -58,3 +58,12 @@ Each metric SHALL have one subtext row on phone screens. Headline amounts SHALL 
 
 - **WHEN** P&L is -₹9,99,999.99 and comparable revenue is below the previous period
 - **THEN** Overview displays -₹9,99,999 with a red downward P&L icon and a red downward revenue icon, while tender icons remain neutral
+
+### Requirement: Outlet identity and status have breathing room
+
+Each outlet card SHALL give its identity and linked Open/Closed status a distinct, comfortably padded header band with legible name and location text. The status loading shimmer SHALL reserve the loaded pill's enlarged footprint so arrival does not reflow the card.
+
+#### Scenario: Compact phone card header
+
+- **WHEN** Overview renders an outlet card on a phone
+- **THEN** the outlet icon, two-line identity and status pill remain clearly separated without crowding the metric grid below

@@ -15,7 +15,12 @@ import {
   type AggregatorChannelConfig,
   type DeliveryChannel,
 } from './channel-config'
-import { useNeedsYouCounts, useSwiggyNeedsYouCounts, zomatoAttentionLabel } from './needs-you-count'
+import {
+  useHyperpureAttention,
+  useNeedsYouCounts,
+  useSwiggyNeedsYouCounts,
+  zomatoAttentionLabel,
+} from './needs-you-count'
 
 /**
  * **Delivery** — one navigation entry for every restaurant channel (#48).
@@ -63,11 +68,23 @@ export function DeliverySyncSurface() {
     zomato: useNeedsYouCounts(),
     swiggy: useSwiggyNeedsYouCounts(),
   }
-  const known = DELIVERY_CHANNELS.every((channel) => counts[channel] !== null)
+  const hyperpure = useHyperpureAttention()
+  const known = DELIVERY_CHANNELS.every((channel) => counts[channel] !== null) && hyperpure !== null
 
-  /** One channel's waiting work at one outlet: a single cell of the grid. */
-  const waitingAt = (channel: DeliveryChannel, outletId: string | null) =>
-    (outletId && counts[channel]?.find((entry) => entry.outletId === outletId)?.needing) || 0
+  /**
+   * One channel family's waiting work in an outlet view.
+   *
+   * Hyperpure is account-level and rides Zomato's repair path. Repeating that
+   * one shared issue in every outlet scope is intentional: the repair is
+   * available from each of those views, and selecting another outlet must not
+   * make the Zomato segment claim quiet while its page shows a repair card.
+   * Top-level navigation still counts it once through `useDeliveryAttention`.
+   */
+  const waitingAt = (channel: DeliveryChannel, outletId: string | null) => {
+    const outlet =
+      (outletId && counts[channel]?.find((entry) => entry.outletId === outletId)?.needing) || 0
+    return outlet + (channel === 'zomato' ? (hyperpure ?? 0) : 0)
+  }
 
   /** One outlet's waiting work across every channel this surface reaches. */
   const waitingForOutlet = (outletId: string) =>

@@ -1,5 +1,7 @@
 /** A normal running sync is not work for a person. Failures and missing
- * credentials on a configured integration are; a never-configured one is not. */
+ * credentials on a configured integration are; a never-configured one is not.
+ * Stored expiry is advisory: the provider, through a failed read, decides when
+ * a session has actually lapsed. */
 export function integrationNeedsAttention(
   health: {
     running: boolean
@@ -7,6 +9,7 @@ export function integrationNeedsAttention(
     lastOutcome: string | null
     lastRunAt: string | null
     syncedFrom?: string | null
+    /** Advisory provider estimate; never sufficient evidence of a lapse. */
     sessionExpiresAt?: string | null
     awaitingOneTimePassword?: unknown
   },
@@ -21,7 +24,6 @@ export function integrationNeedsAttention(
     configured &&
     (timedOut ||
       !health.hasSession ||
-      (health.sessionExpiresAt != null && Date.parse(health.sessionExpiresAt) <= now) ||
       health.lastOutcome === 'session_lapsed' ||
       health.lastOutcome === 'shape_changed')
   )

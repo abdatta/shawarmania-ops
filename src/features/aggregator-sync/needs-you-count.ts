@@ -86,18 +86,22 @@ export function useSwiggyAttention(): Attention | null {
  * a wrong number on a badge is worse than no badge: it would settle to a
  * different value a moment later with nothing to say it had.
  */
-export function useDeliveryAttention(): Attention | null {
+export function useHyperpureAttention(): number | null {
   const { aggregatorSync } = useAdapters()
   const hyperKey = hyperKeyFor(aggregatorSync)
   const readHyper = useCallback(
     async () => Number(integrationNeedsAttention(await aggregatorSync.getHyperpureHealth())),
     [aggregatorSync],
   )
-  const hyper = useSharedRead(hyperKey, readHyper)
+  return useSharedRead(hyperKey, readHyper).value
+}
+
+export function useDeliveryAttention(): Attention | null {
+  const hyper = useHyperpureAttention()
   const zomato = useZomatoAttention()
   const swiggy = useSwiggyAttention()
-  if (zomato === null || swiggy === null || hyper.value === null) return null
-  const total = zomato.count + swiggy.count + hyper.value
+  if (zomato === null || swiggy === null || hyper === null) return null
+  const total = zomato.count + swiggy.count + hyper
   return {
     count: total,
     label: zomatoAttentionLabel(total),

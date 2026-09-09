@@ -384,6 +384,35 @@ describe('progressive Overview', () => {
     expect(await screen.findByTestId('nav-badge-delivery-needs-you')).toHaveTextContent('3')
     expect(screen.getAllByTestId('overview-attention-delivery-needs-you')).toHaveLength(1)
   })
+
+  it('does not invent a Delivery issue from an advisory Hyperpure expiry', async () => {
+    const base = createMockAdapters('super_admin')
+    setup({
+      ...base,
+      attendance: { ...base.attendance, countWaitingByOutlet: async () => [] },
+      aggregatorSync: {
+        ...base.aggregatorSync,
+        countNeedsOwner: async () => [{ outletId: KAL, needing: 0 }],
+        getHyperpureHealth: async () => ({
+          running: false,
+          hasSession: true,
+          lastOutcome: 'ok',
+          lastRunAt: new Date().toISOString(),
+          sessionExpiresAt: new Date(Date.now() - 60_000).toISOString(),
+          readsPerDay: 4,
+        }),
+      },
+      swiggySync: {
+        ...base.swiggySync,
+        countNeedsOwner: async () => [{ outletId: KAL, needing: 0 }],
+      },
+    })
+
+    await screen.findByTestId(`sales-${KAL}`)
+    expect(screen.queryByTestId('overview-attention-delivery-needs-you')).toBeNull()
+    expect(screen.queryByTestId('nav-badge-delivery-needs-you')).toBeNull()
+  })
+
   it('shows every accessible outlet without a selector and links all metrics to their source', async () => {
     setup()
     const card = await screen.findByTestId(`outlet-card-${KAL}`)

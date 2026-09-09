@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it } from 'vitest'
 
+import type { DataAdapters } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters } from '@/data-access/mock'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
@@ -33,11 +34,11 @@ const ownerSession: Session = {
   persona: personaFixtures.super_admin,
 }
 
-function renderAt(path: string) {
+function renderAt(path: string, adapters: DataAdapters = createMockAdapters('super_admin')) {
   const view = render(
     <MemoryRouter initialEntries={[path]}>
       <SessionContext.Provider value={ownerSession}>
-        <AdaptersContext.Provider value={createMockAdapters('super_admin')}>
+        <AdaptersContext.Provider value={adapters}>
           <Routes>
             <Route element={<PhoneShell />}>
               <Route path="*" element={<p>a surface</p>} />
@@ -219,6 +220,29 @@ describe('waiting work inside a folded group', () => {
     expect(Number(badge.textContent?.replace(/\D.*/, ''))).toBeGreaterThan(0)
     // And it is a sentence, not a bare number, for anybody not looking at it.
     expect(badge).toHaveTextContent(/Setup: .*needs? you/i)
+  })
+
+  it('counts one Hyperpure failure once on both Setup and Delivery', async () => {
+    const adapters = createMockAdapters('super_admin')
+    adapters.aggregatorSync.countNeedsOwner = async () => []
+    adapters.swiggySync.countNeedsOwner = async () => []
+    adapters.aggregatorSync.getHyperpureHealth = async () => ({
+      lastRunAt: new Date().toISOString(),
+      lastOutcome: 'session_lapsed',
+      running: false,
+      hasSession: false,
+      sessionExpiresAt: null,
+      readsPerDay: 4,
+    })
+    const { bar } = renderAt('/demo/owner', adapters)
+
+    expect(await within(bar).findByTestId('nav-group-badge-setup')).toHaveTextContent(
+      'Setup: 1 item needs you',
+    )
+
+    await userEvent.click(within(bar).getByRole('button', { name: /^Setup/ }))
+    expect(await within(bar).findByTestId('nav-badge-delivery-needs-you')).toHaveTextContent('1')
+    expect(within(bar).queryByTestId('nav-group-badge-setup')).toBeNull()
   })
 
   it('becomes the parts when the group opens, and never both at once', async () => {

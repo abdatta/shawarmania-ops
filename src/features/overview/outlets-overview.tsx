@@ -144,22 +144,20 @@ function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
       className="overflow-hidden bg-gradient-to-br from-surface-raised/30 to-surface !px-3 !py-0"
       data-testid={`outlet-card-${outlet.id}`}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-border py-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="rounded-full bg-primary/10 p-2 text-accent-text">
-            <Store size={24} aria-hidden />
+      <div className="flex items-center justify-between gap-3 border-b border-border px-1 py-2.5">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="rounded-xl bg-primary/10 p-2.5 text-accent-text">
+            <Store size={26} aria-hidden />
           </span>
           <div className="min-w-0">
-            <h2 className="truncate text-base font-bold leading-5">{outlet.name}</h2>
-            <p className="truncate text-[0.8125rem] leading-[1.125rem] text-content-muted">
-              {outlet.location_label}
-            </p>
+            <h2 className="truncate text-[1.0625rem] font-bold leading-6">{outlet.name}</h2>
+            <p className="truncate text-sm leading-5 text-content-muted">{outlet.location_label}</p>
           </div>
         </div>
         <Link
           to={`${base}/devices/${outlet.id}`}
           data-testid={`open-outlet-${outlet.id}`}
-          className="flex min-h-11 shrink-0 items-center rounded-lg text-[0.8125rem] font-semibold focus-visible:focus-ring"
+          className="flex min-h-12 shrink-0 items-center rounded-xl text-sm font-semibold focus-visible:focus-ring"
           aria-label={
             status === 'partial' ? 'Open, some tablets unavailable. View Tablets' : undefined
           }
@@ -167,13 +165,13 @@ function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
           {tablets.error ? (
             'Status unavailable'
           ) : status === null ? (
-            <Shimmer className="h-3 w-10" />
+            <Shimmer className="h-9 w-20 !rounded-xl" />
           ) : (
-            <span className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-1.5">
+            <span className="flex items-center gap-2.5 rounded-xl border border-border px-3.5 py-2">
               {status === 'closed' ? 'Closed' : 'Open'}
               <span
                 aria-hidden
-                className={`h-2 w-2 rounded-full ${status === 'closed' ? 'bg-danger' : status === 'partial' ? 'bg-warning' : 'bg-success'}`}
+                className={`h-2.5 w-2.5 rounded-full ${status === 'closed' ? 'bg-danger' : status === 'partial' ? 'bg-warning' : 'bg-success'}`}
               />
             </span>
           )}

@@ -167,6 +167,38 @@ describe('the Delivery surface, as one entry over two channels', () => {
     expect(screen.queryByTestId('delivery-needing-zomato')).not.toBeInTheDocument()
   })
 
+  it('carries one Hyperpure issue through every control leading to its Zomato repair', async () => {
+    const base = countingAdapters({ zomato: 0, swiggy: 0 })
+    renderApp('/demo/owner/ledger/delivery/zomato', {
+      ...base,
+      aggregatorSync: {
+        ...base.aggregatorSync,
+        getHyperpureHealth: async () => ({
+          lastRunAt: new Date().toISOString(),
+          lastOutcome: 'session_lapsed',
+          running: false,
+          hasSession: false,
+          sessionExpiresAt: null,
+          readsPerDay: 4,
+        }),
+      },
+    })
+
+    // Navigation and Overview count this account-level issue once. Each outlet
+    // scope repeats it because the same repair remains available after changing
+    // outlet; those scoped badges are paths to one action, not separate work.
+    expect(await screen.findByTestId('nav-badge-delivery-needs-you')).toHaveTextContent('1')
+    expect(
+      await screen.findByTestId(`delivery-outlet-needing-${OUTLET_KALYANI_ID}`),
+    ).toHaveTextContent('1')
+    expect(
+      screen.getByTestId(`delivery-outlet-needing-${OUTLET_KANCHRAPARA_ID}`),
+    ).toHaveTextContent('1')
+    expect(screen.getByTestId('delivery-needing-zomato')).toHaveTextContent('1')
+    expect(screen.queryByTestId('delivery-needing-swiggy')).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Reconnect Hyperpure' })).toBeInTheDocument()
+  })
+
   it('opens on the channel a link names', async () => {
     renderApp('/demo/owner/ledger/delivery/swiggy', createMockAdapters('super_admin'))
 

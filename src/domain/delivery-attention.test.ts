@@ -40,7 +40,7 @@ it('distinguishes normal runs, expired credentials, broken parsers and abandoned
   )
 })
 
-it('handles OTP, exact expiry and run timeout boundaries without inventing unconfigured work', () => {
+it('handles OTP, advisory expiry and run timeout boundaries without inventing work', () => {
   const now = Date.parse('2026-09-08T12:00:00Z')
   const health = {
     running: false,
@@ -51,7 +51,7 @@ it('handles OTP, exact expiry and run timeout boundaries without inventing uncon
   expect(integrationNeedsAttention({ ...health, awaitingOneTimePassword: true }, now)).toBe(true)
   expect(
     integrationNeedsAttention({ ...health, sessionExpiresAt: new Date(now).toISOString() }, now),
-  ).toBe(true)
+  ).toBe(false)
   expect(
     integrationNeedsAttention(
       { ...health, sessionExpiresAt: new Date(now + 1).toISOString() },

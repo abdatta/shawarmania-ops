@@ -26,6 +26,7 @@ Monthly periods end on yesterday's explicit outlet business date. The first busi
 - Matched demo financial permissions to live owner/manager permissions and tested rejection for Biller and Employee.
 - Existing receipt and two-tablet test fixtures confuse UTC dates with outlet business dates near cutover. An expired seeded shift also affected a run after a long pause. Recorded these separate harness issues in `openspec/todos/database-tests-cross-the-business-cutover.md`; retained production validation and restored the local database timezone to UTC.
 - Raw `npm run lint` reads pre-existing Git-ignored diagnostic scripts under `logs/` and fails on those files. They were preserved. ESLint excluding only that scratch directory and all six repository invariant scripts pass.
+- Production showed one Delivery issue while Zomato, Hyperpure and Swiggy were all quiet. The shared badge predicate treated Hyperpure's elapsed `session_expires_at` estimate as a proven lapse, contradicting the reader contract that deliberately tries elapsed sessions until the provider rejects one. Removed that inference and pinned the exact expired-but-healthy state at the Overview/navigation boundary.
 
 ## Reverification
 
@@ -40,7 +41,7 @@ Repeated unit/component tests, browser tests, formatting, TypeScript/build, Edge
 | `format:check` | PASS |
 | `typecheck` | PASS |
 | `functions:typecheck` | PASS |
-| `npm test` | PASS: 141 files, 1,715 tests |
+| `npm test` | PASS: 142 files, 1,741 tests |
 | `contrast` | PASS: 52 pairs across light/dark |
 | `build` | PASS: production builds used by both browser suites; existing large-chunk warning |
 | `test:e2e` | PASS: 264 tests |
@@ -73,9 +74,21 @@ The follow-up adds 25 unit/component cases, five pgTAP assertions and four live-
 | Independent asynchronous reads | Existing delayed financial readers and local retry; new superseded-outlet/request rejection and foreground refresh/unmount tests |
 | Monthly qualification | Zero baseline, incomplete/provisional current or previous periods, comparison failure, neutral zero growth/break-even and no-sales P&L; existing leap-year and shorter-month tests |
 | Tablets | All/some/none dots and source links, pending/failed status, one-minute visible polling and hidden-tab suppression; existing three-minute freshness boundary |
-| Attention | Zero through three blocked integrations produce one row matching the badge, then disappear when resolved; OTP, exact expiry and abandoned-run boundaries; existing attendance grouping and manager permissions |
+| Attention | Zero through three blocked integrations produce one row matching the badge, then disappear when resolved; OTP, advisory expiry and abandoned-run boundaries; existing attendance grouping and manager permissions |
 | Density and typography | Four phone/theme browser combinations with six-digit positive/negative amounts, icon clearance, bold headers/headlines and one-line subtexts; existing demo/live phone/tablet walks and source navigation |
 
 The new browser case first failed because the revenue comparison's inline flex baseline made its caption taller than one text line. Block flex restores the one-line height; zero growth also uses a neutral dash. The change does not alter money arithmetic or the placeholder shape. SQL fixtures include actual payment allocations rather than relying on an empty seed total.
 
 The owner requested a commit before a complete CI rehearsal. That rehearsal uses the committed checkout and the commands in `verify.yml`, with `CI=true`, one initial fresh database and uninterrupted pgTAP → six REST phases → auth E2E → generated types. Its results are reported after the commit rather than claimed in advance here.
+
+## Production badge regression
+
+Reproduced before the fix with Hyperpure holding a session, a recent successful run and an elapsed advisory expiry: Overview rendered `1 delivery issue` while no actionable channel work existed. The focused test failed on that invented row before the predicate change and passed afterwards; the domain test now asserts that the timestamp alone is not intervention evidence. Re-ran all 1,741 unit/component tests, TypeScript, Edge Function typechecking, formatting, contrast, the production build, focused and repository source lint, all six invariant lint scripts, and all 264 E2E tests. Database/RLS/auth suites were not repeated because this correction changes no database, policy, schema, authentication, money or write path.
+
+## Approved spacing and Hyperpure-family follow-up
+
+The outlet identity/status header now gives the store tile, text and status control more room, with a larger tap target and a status shimmer that reserves the loaded pill's new shape. The owner approved the browser iteration. Re-inspected the phone layout directly in light and dark; the production-browser suite also covered Overview at phone and tablet sizes in both themes with no overflow or console failures.
+
+Delivery attention now has one shared Hyperpure read. Hyperpure belongs to the Zomato family because that is where its repair control lives: a Hyperpure-only failure produces `1` on collapsed Setup, `1` on Delivery and Overview, `1` on the Zomato switch, and a reachable `1` on each outlet scope while Swiggy stays at zero. The repeated scoped badges are routes to the same account-level repair and are never added into the distinct top-level total. A focused regression proves that complete path, and the advisory-expiry regression remains at zero everywhere.
+
+Re-ran 142 unit/component files with 1,743 passing tests, all 264 production-browser tests, formatting, TypeScript, Edge Function typechecking, contrast, production build, strict OpenSpec validation, source lint and all six lint invariants. Raw `npm run lint` continues to fail only on the same Git-ignored browser diagnostics under `logs/**`; repository/change source lint has zero errors. A fresh local auth run could not start because Windows currently reserves port 54322; this follow-up changes no backend/auth path, and the deploy workflow will run the fresh database, RLS and auth jobs before publication.
