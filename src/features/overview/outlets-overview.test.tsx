@@ -1,7 +1,7 @@
 import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import {
   createMockAdapters,
@@ -15,6 +15,7 @@ import { deriveSessionScope, type Session } from '@/session/session'
 import { OutletsOverview } from './outlets-overview'
 import { formatPaise, resolveBusinessDate } from '@/domain'
 import { overviewPeriod } from '@/domain/overview'
+import { attentionChanged } from '@/features/attention/attention'
 import { NavAttentionBadge } from '@/features/attention/nav-badge'
 
 function setup(
@@ -46,7 +47,265 @@ function setup(
   )
 }
 
+afterEach(() => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+})
+
 describe('progressive Overview', () => {
+  it('rolls an already-open page over at 4am and polls tablets once a minute', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-01T03:59:00+05:30'))
+    const base = createMockAdapters('super_admin')
+    const sales = vi.fn(async () => ({ cashPaise: 100, upiPaise: 0 }))
+    const revenue = vi.fn(async () => ({
+      revenuePaise: 100,
+      hasSales: true,
+      provisional: false,
+      incomplete: false,
+    }))
+    const tablets = vi.fn(async () => [new Date(Date.now() - 1000).toISOString()])
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+    setup({ ...base, overview: { ...base.overview, sales, revenue, tablets } })
+    await act(async () => {})
+    expect(sales).toHaveBeenCalledWith(KAL, '2026-09-30')
+    expect(tablets).toHaveBeenCalledTimes(2)
+    await act(async () => vi.advanceTimersByTimeAsync(59_999))
+    expect(tablets).toHaveBeenCalledTimes(2)
+    await act(async () => vi.advanceTimersByTimeAsync(1))
+    expect(tablets).toHaveBeenCalledTimes(4)
+    expect(sales).toHaveBeenCalledWith(KAL, '2026-10-01')
+    expect(revenue).toHaveBeenCalledWith(KAL, '2026-09-01', '2026-09-30')
+    expect(
+      within(screen.getByTestId(`outlet-card-${KAL}`)).getByRole('link', { name: /revenue/ }),
+    ).toHaveAttribute('href', `/demo/owner/ledger?outlet=${KAL}&view=month&month=2026-09`)
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+    await act(async () => vi.advanceTimersByTimeAsync(60_000))
+    expect(tablets).toHaveBeenCalledTimes(4)
+  })
+
+  it.each([
+    ['2026-10-01T00:00:00+05:30', '2026-09-30', '2026-09-01', '2026-09-29'],
+    ['2026-10-01T03:59:59+05:30', '2026-09-30', '2026-09-01', '2026-09-29'],
+    ['2026-10-01T04:00:00+05:30', '2026-10-01', '2026-09-01', '2026-09-30'],
+  ])(
+    'reads the business day at %s, independently of midnight',
+    async (now, today, from, through) => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date(now))
+      const base = createMockAdapters('super_admin')
+      const sales = vi.fn(base.overview.sales)
+      const revenue = vi.fn(base.overview.revenue)
+      setup({ ...base, overview: { ...base.overview, sales, revenue } })
+      await screen.findByTestId(`sales-${KAL}`)
+      expect(sales).toHaveBeenCalledWith(KAL, today)
+      expect(revenue).toHaveBeenCalledWith(KAL, from, through)
+    },
+  )
+
+  it('uses each outlet cutover rather than hard-coding four o’clock', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-01T04:30:00+05:30'))
+    const base = createMockAdapters('super_admin')
+    const outlets = await base.outlets.listOutlets()
+    const sales = vi.fn(base.overview.sales)
+    setup({
+      ...base,
+      outlets: {
+        ...base.outlets,
+        listOutlets: async () =>
+          outlets.map((o) => ({
+            ...o,
+            business_day_cutover: o.id === KPA ? '05:00:00' : '04:00:00',
+          })),
+      },
+      overview: { ...base.overview, sales },
+    })
+    await screen.findByTestId(`sales-${KPA}`)
+    expect(sales).toHaveBeenCalledWith(KAL, '2026-10-01')
+    expect(sales).toHaveBeenCalledWith(KPA, '2026-09-30')
+  })
+
+  it.each([
+    'zero baseline',
+    'previous incomplete',
+    'previous provisional',
+    'current incomplete',
+    'current provisional',
+    'comparison failed',
+  ] as const)('withholds a directional revenue claim for %s', async (scenario) => {
+    const base = createMockAdapters('super_admin')
+    const from = overviewPeriod(resolveBusinessDate(new Date(), '04:00')).from
+    setup({
+      ...base,
+      overview: {
+        ...base.overview,
+        revenue: async (_id, start) => {
+          const previous = start !== from
+          if (previous && scenario === 'comparison failed')
+            throw new Error('comparison unavailable')
+          return {
+            revenuePaise: previous && scenario === 'zero baseline' ? 0 : previous ? 10000 : 20000,
+            hasSales: true,
+            incomplete: scenario === (previous ? 'previous incomplete' : 'current incomplete'),
+            provisional: scenario === (previous ? 'previous provisional' : 'current provisional'),
+          }
+        },
+      },
+    })
+    await screen.findByTestId(`revenue-${KAL}`)
+    const link = within(screen.getByTestId(`outlet-card-${KAL}`)).getByRole('link', {
+      name: /revenue/,
+    })
+    expect(link).not.toHaveTextContent('%')
+    expect(link.querySelector('.text-success, .text-danger')).toBeNull()
+    expect(link).toHaveTextContent(
+      scenario === 'current incomplete'
+        ? 'Delivery data incomplete'
+        : scenario === 'current provisional'
+          ? 'Commission pending'
+          : scenario === 'comparison failed'
+            ? 'Comparison unavailable'
+            : 'No comparable data',
+    )
+  })
+
+  it('keeps zero change and break-even neutral, and names uncounted drawers', async () => {
+    const base = createMockAdapters('super_admin')
+    setup({
+      ...base,
+      overview: {
+        ...base.overview,
+        revenue: async () => ({
+          revenuePaise: 10000,
+          hasSales: true,
+          provisional: false,
+          incomplete: false,
+        }),
+        expenses: async () => 10000,
+        drawer: async () => ({ expectedPaise: null, leftPaise: null, spentPaise: 0 }),
+      },
+    })
+    expect(await screen.findByTestId(`profit-${KAL}`)).toHaveTextContent(/^₹0$/)
+    const card = screen.getByTestId(`outlet-card-${KAL}`)
+    for (const name of [/revenue/, /P&L/])
+      expect(
+        within(card).getByRole('link', { name }).querySelector('.text-accent-text .lucide-minus'),
+      ).not.toBeNull()
+    expect(card).toHaveTextContent('Not counted yet')
+    expect(screen.queryByTestId(`cash-${KAL}`)).toBeNull()
+  })
+
+  it('withholds profit when no sales were recorded instead of inventing a trading result', async () => {
+    const base = createMockAdapters('super_admin')
+    setup({
+      ...base,
+      overview: {
+        ...base.overview,
+        revenue: async () => ({
+          revenuePaise: 0,
+          hasSales: false,
+          provisional: false,
+          incomplete: false,
+        }),
+        expenses: async () => 12300,
+      },
+    })
+    await screen.findByTestId(`revenue-${KAL}`)
+    expect(screen.getByTestId(`outlet-card-${KAL}`)).toHaveTextContent('No sales recorded')
+    expect(screen.queryByTestId(`profit-${KAL}`)).toBeNull()
+  })
+
+  it.each([
+    ['all', 'Open', 'bg-success'],
+    ['some', 'Open', 'bg-warning'],
+    ['none', 'Closed', 'bg-danger'],
+  ] as const)(
+    'renders %s tablets online with the matching dot and destination',
+    async (kind, label, color) => {
+      const base = createMockAdapters('super_admin')
+      setup({
+        ...base,
+        overview: {
+          ...base.overview,
+          tablets: async () =>
+            kind === 'all'
+              ? [new Date(Date.now() - 1000).toISOString()]
+              : kind === 'some'
+                ? [new Date(Date.now() - 1000).toISOString(), null]
+                : [null],
+        },
+      })
+      const status = await screen.findByTestId(`open-outlet-${KAL}`)
+      await within(screen.getByTestId(`outlet-card-${KAL}`)).findByRole('link', {
+        name: kind === 'some' ? /Open, some/ : label,
+      })
+      expect(status).toHaveTextContent(label)
+      expect(status.querySelector(`.${color}`)).not.toBeNull()
+      expect(status).toHaveAttribute('href', `/demo/owner/devices/${KAL}`)
+      expect(screen.queryByText(/tablet offline/i)).toBeNull()
+    },
+  )
+
+  it('does not label pending or failed tablet reads Closed', async () => {
+    const base = createMockAdapters('super_admin')
+    setup({
+      ...base,
+      overview: {
+        ...base.overview,
+        tablets: (id) =>
+          id === KAL ? new Promise(() => {}) : Promise.reject(new Error('unavailable')),
+      },
+    })
+    await screen.findByTestId(`sales-${KAL}`)
+    expect(screen.getByTestId(`open-outlet-${KAL}`)).not.toHaveTextContent('Closed')
+    expect(screen.getByTestId(`open-outlet-${KPA}`)).toHaveTextContent('Status unavailable')
+  })
+
+  it.each([0, 1, 2, 3])(
+    'shows %i blocked integrations as one shared page count and clears resolved work',
+    async (count) => {
+      const base = createMockAdapters('super_admin')
+      let resolved = false
+      const counts = (enabled: boolean) => async () => [
+        {
+          outletId: KAL,
+          needing: !resolved && enabled ? 1 : 0,
+          integrationIssue: !resolved && enabled,
+        },
+      ]
+      setup({
+        ...base,
+        attendance: { ...base.attendance, countWaitingByOutlet: async () => [] },
+        aggregatorSync: {
+          ...base.aggregatorSync,
+          countNeedsOwner: counts(count >= 1),
+          getHyperpureHealth: async () => ({
+            running: false,
+            hasSession: true,
+            lastOutcome: !resolved && count === 3 ? 'session_lapsed' : 'ok',
+            lastRunAt: new Date().toISOString(),
+            sessionExpiresAt: null,
+            readsPerDay: null,
+          }),
+        },
+        swiggySync: { ...base.swiggySync, countNeedsOwner: counts(count >= 2) },
+      })
+      await screen.findByTestId(`sales-${KAL}`)
+      if (count) {
+        expect(
+          await screen.findByTestId('overview-attention-delivery-needs-you'),
+        ).toHaveTextContent(`${count} delivery ${count === 1 ? 'issue' : 'issues'}`)
+        expect(screen.getByTestId('nav-badge-delivery-needs-you')).toHaveTextContent(String(count))
+        resolved = true
+        await act(async () => attentionChanged())
+      }
+      expect(screen.queryByTestId('overview-attention-delivery-needs-you')).toBeNull()
+      expect(screen.queryByTestId('nav-badge-delivery-needs-you')).toBeNull()
+      expect(screen.queryByTestId('overview-attention-attendance-waiting')).toBeNull()
+    },
+  )
+
   it('omits paise on all headlines and keeps neutral tenders with directional financial icons', async () => {
     const base = createMockAdapters('super_admin')
     const from = overviewPeriod(resolveBusinessDate(new Date(), '04:00')).from

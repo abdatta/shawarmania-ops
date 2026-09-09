@@ -62,3 +62,20 @@ P&L is an operating estimate using the existing Ledger basis. Missing delivery d
 ## Typography amendment
 
 The owner requested extra emphasis after the initial commit: 22px headlines are extra-bold, smaller 18px headlines are bold, and supporting monetary values, percentages and metric headings are bold. Inspected phone and tablet in both themes, with all eight phone captions remaining one line. Re-ran the seven Overview component tests and 16 Overview browser cases, including the production build, scoped links and viewport fit. Focused ESLint and formatting pass. Earlier backend verification remains applicable because this amendment changes presentation only. Today’s sales continues to use the outlet’s configured business-day cutover and stored bill business dates.
+
+## Regression coverage follow-up
+
+The follow-up adds 25 unit/component cases, five pgTAP assertions and four live-adapter browser cases. The original coverage remains in place.
+
+| Contract | Regression evidence |
+| --- | --- |
+| Business day and month rollover | Component reads at midnight, 03:59:59 and 04:00; an already-open page crosses 04:00; differing outlet cutovers; SQL fixtures with explicit nonzero midnight, 03:59 and 04:00 allocations and an excluded void |
+| Independent asynchronous reads | Existing delayed financial readers and local retry; new superseded-outlet/request rejection and foreground refresh/unmount tests |
+| Monthly qualification | Zero baseline, incomplete/provisional current or previous periods, comparison failure, neutral zero growth/break-even and no-sales P&L; existing leap-year and shorter-month tests |
+| Tablets | All/some/none dots and source links, pending/failed status, one-minute visible polling and hidden-tab suppression; existing three-minute freshness boundary |
+| Attention | Zero through three blocked integrations produce one row matching the badge, then disappear when resolved; OTP, exact expiry and abandoned-run boundaries; existing attendance grouping and manager permissions |
+| Density and typography | Four phone/theme browser combinations with six-digit positive/negative amounts, icon clearance, bold headers/headlines and one-line subtexts; existing demo/live phone/tablet walks and source navigation |
+
+The new browser case first failed because the revenue comparison's inline flex baseline made its caption taller than one text line. Block flex restores the one-line height; zero growth also uses a neutral dash. The change does not alter money arithmetic or the placeholder shape. SQL fixtures include actual payment allocations rather than relying on an empty seed total.
+
+The owner requested a commit before a complete CI rehearsal. That rehearsal uses the committed checkout and the commands in `verify.yml`, with `CI=true`, one initial fresh database and uninterrupted pgTAP → six REST phases → auth E2E → generated types. Its results are reported after the commit rather than claimed in advance here.

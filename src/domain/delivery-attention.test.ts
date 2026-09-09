@@ -39,3 +39,47 @@ it('distinguishes normal runs, expired credentials, broken parsers and abandoned
     false,
   )
 })
+
+it('handles OTP, exact expiry and run timeout boundaries without inventing unconfigured work', () => {
+  const now = Date.parse('2026-09-08T12:00:00Z')
+  const health = {
+    running: false,
+    hasSession: true,
+    lastOutcome: 'ok',
+    lastRunAt: new Date(now).toISOString(),
+  }
+  expect(integrationNeedsAttention({ ...health, awaitingOneTimePassword: true }, now)).toBe(true)
+  expect(
+    integrationNeedsAttention({ ...health, sessionExpiresAt: new Date(now).toISOString() }, now),
+  ).toBe(true)
+  expect(
+    integrationNeedsAttention(
+      { ...health, sessionExpiresAt: new Date(now + 1).toISOString() },
+      now,
+    ),
+  ).toBe(false)
+  expect(
+    integrationNeedsAttention(
+      { ...health, running: true, lastRunAt: new Date(now - 1_800_000).toISOString() },
+      now,
+    ),
+  ).toBe(false)
+  expect(
+    integrationNeedsAttention(
+      { ...health, running: true, lastRunAt: new Date(now - 1_800_001).toISOString() },
+      now,
+    ),
+  ).toBe(true)
+  expect(
+    integrationNeedsAttention(
+      { ...health, hasSession: false, lastRunAt: null, lastOutcome: 'session_lapsed' },
+      now,
+    ),
+  ).toBe(false)
+  expect(
+    integrationNeedsAttention(
+      { ...health, hasSession: false, lastRunAt: null, syncedFrom: '2026-09-01' },
+      now,
+    ),
+  ).toBe(true)
+})

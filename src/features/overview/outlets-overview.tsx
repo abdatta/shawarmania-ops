@@ -277,9 +277,11 @@ function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
                   ) : change === null ? (
                     'No comparable data'
                   ) : (
-                    <span className="inline-flex items-center gap-1">
+                    <span className="flex items-center gap-1">
                       {change < 0 ? (
                         <ArrowDownRight size={13} aria-hidden />
+                      ) : change === 0 ? (
+                        <Minus size={13} aria-hidden />
                       ) : (
                         <ArrowUpRight size={13} aria-hidden />
                       )}

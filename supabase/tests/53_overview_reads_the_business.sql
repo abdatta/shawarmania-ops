@@ -16,6 +16,29 @@ end $$;
 \set KAL '00000000-0000-4000-a000-000000000001'
 \set KPA '00000000-0000-4000-a000-000000000002'
 
+-- Explicit midnight/03:59/04:00 amounts pin the read's business_date boundary.
+-- Synthetic historical bills follow the same timestamp validation as the seed.
+with inserted as (insert into public.bills
+  (id, outlet_id, business_date, biller_profile_id, counter_device_id,
+   subtotal_paise, total_paise, payment_method, status, created_at,
+   voided_at, voided_by, void_reason)
+select gen_random_uuid(), :'KAL', business_day,
+  '10000000-0000-4000-a000-00000000000a'::uuid,
+  '10000000-0000-4000-a000-000000000004'::uuid,
+  amount, amount, method::public.payment_method, state::public.bill_status, at_time,
+  case when state='void' then at_time end,
+  case when state='void' then :'OWNER'::uuid end,
+  case when state='void' then 'Synthetic Overview exclusion' end
+from (values
+  ('2026-01-15'::date, '2026-01-16 00:00:00+05:30'::timestamptz, 12300, 'cash', 'settled'),
+  ('2026-01-15'::date, '2026-01-16 03:59:59+05:30'::timestamptz, 67800, 'upi', 'settled'),
+  ('2026-01-16'::date, '2026-01-16 04:00:00+05:30'::timestamptz, 111100, 'cash', 'settled'),
+  ('2026-01-15'::date, '2026-01-15 20:00:00+05:30'::timestamptz, 999900, 'cash', 'void')
+) as fixture(business_day, at_time, amount, method, state)
+returning id, outlet_id, payment_method, total_paise, paid_at)
+insert into public.bill_payments (bill_id, outlet_id, method, amount_paise, created_at)
+select id, outlet_id, payment_method, total_paise, paid_at from inserted;
+
 -- A bounded, nonzero delivery example: determined net, unknown commission,
 -- another outlet, and a following day that must not enter the requested total.
 insert into public.aggregator_channel_days
@@ -30,6 +53,16 @@ values (:'KAL','zomato','overview-synthetic-zomato','enabled'),
        (:'KAL','swiggy','overview-synthetic-swiggy','enabled');
 
 select pg_temp.impersonate(:'OWNER');
+select is(overview_sales(:'KAL','2026-01-15','2026-01-15'),
+  '{"cashPaise":12300,"upiPaise":67800}'::jsonb,
+  'midnight and 03:59 stay in the previous business day; voids and 04:00 are excluded');
+select is(overview_sales(:'KAL','2026-01-16','2026-01-16'),
+  '{"cashPaise":111100,"upiPaise":0}'::jsonb,
+  '04:00 starts the next business day');
+select is((overview_revenue(:'KAL','2026-01-15','2026-01-15')->>'revenuePaise')::bigint,
+  80100::bigint, 'monthly counter revenue uses the same explicit business dates');
+select is(overview_sales(:'KPA','2026-01-15','2026-01-15'),
+  '{"cashPaise":0,"upiPaise":0}'::jsonb, 'counter amounts do not leak into the other outlet');
 select is((overview_revenue(:'KAL','2026-02-10','2026-02-10')->>'revenuePaise')::bigint,
   140000::bigint, 'revenue uses known net plus qualified gross, excluding other outlet and following day');
 select is((overview_revenue(:'KAL','2026-02-10','2026-02-10')->>'provisional')::boolean,
@@ -61,6 +94,8 @@ select is((overview_drawer(:'KAL')->>'spentPaise')::bigint,
   'spent covers the interval since the last count');
 select throws_ok(format('select overview_sales(%L,current_date-100,current_date)', :'KAL'),
   'P0001','Invalid Overview period','unbounded periods are refused');
+select throws_ok(format('select overview_revenue(%L,current_date,current_date-1)', :'KAL'),
+  'P0001','Invalid Overview period','reversed periods are refused');
 
 select pg_temp.impersonate(:'MANAGER');
 select lives_ok(format('select overview_revenue(%L,current_date,current_date)', :'KAL'), 'manager reads own monthly revenue');

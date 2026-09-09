@@ -4,6 +4,8 @@ Overview verification covers independently delayed metric reads, scoped source l
 
 `e2e-auth/overview.spec.ts` checks the same live layout against the local backend, including delayed monthly responses and manager outlet isolation. The Ledger timing REST suite compares Overview sales, revenue, expense totals and commission qualification against the Ledger reader and prints aggregate latency; local seed measurements are not production-scale guarantees.
 
+Overview boundary coverage also pins the 4am rollover while the page remains open, per-outlet cutovers, one-minute visible tablet polling, stale response suppression, invalid revenue comparisons, neutral break-even icons, and zero-to-three shared delivery alerts. `e2e-auth/overview-boundaries.spec.ts` supplies deterministic read responses through the live adapter to exercise six-digit positive and negative amounts at 360px and 390px in both themes: paise-free bold headlines must clear their icons, bold headings must remain, and subtexts must fit one line. These fixtures never write financial data.
+
 > The harness landed with `project-foundations`; the database-policy suites landed with `data-model-and-tenancy`.
 
 Testing effort follows risk, and in this app risk is concentrated in three places: **money arithmetic**, **tenancy isolation**, and **the offline path**. Those get disproportionate coverage. A settings form does not.
@@ -29,6 +31,8 @@ npm run auth:readiness # hosted read-only pre-publication identity readiness pro
 ```
 
 `test:db`, `test:rls` and `test:e2e:auth` need the local stack running with the seed applied (`db:start`, then `db:reset`). They are excluded from plain `npm test` so unit feedback stays instant; CI runs them in their own job against a fresh stack.
+
+To rehearse `.github/workflows/verify.yml`, use a clean checkout, Node 22 and `CI=true`, and preserve each job's command order. Establish the fresh seeded database **once before pgTAP**, then carry that state through all six `test:rls` phases, auth E2E and generated-type verification without another reset. The suites' own cleanup still runs. Give the demo and auth browser jobs separate checkouts, or run them sequentially: both build into `dist/` with different backend configuration. Install dependencies with `npm ci` and browsers with the workflow's `npx playwright install --with-deps chromium`; do not replace the configured workers, retries or timeouts for a rehearsal.
 
 `test:e2e:auth` has its own Playwright config and its own port, because it is the one browser suite that needs a **real backend** — everything in `e2e/` runs against a build wired to a deliberately unreachable Supabase, which is what lets `npm run test:e2e` work on a laptop with no Docker. That unreachable build also proves sign-in shows connection guidance without implying whether an identifier or password is valid. The real-backend suite separately proves unknown usernames and wrong passwords keep identical refusal copy. Keeping the ports apart means a preview server left running by one suite can never be reused by the other.
 

@@ -17,3 +17,4 @@
 - [x] 3.3 Run fresh database reset, database/RLS suites, auth E2E and generated types comparison; record aggregate query timing and tenancy evidence.
 - [x] 3.4 Inspect demo and live Overview on phone/tablet in light/dark, including console/network, links, permanent demo banner and independent loading; record evidence.
 - [x] 3.5 PHASE GATE — Overview reads the business: demonstrate every proposal Gate clause and report all results without automatic archiving; the owner separately requested a local commit after verification. This owner-requested change promotes the Home backlog item, not a pre-existing numbered roadmap checkpoint.
+- [x] 3.6 Expand regression coverage for business-day boundaries, polling, stale requests, unavailable comparisons, alert aggregation and large-value typography; document the exact CI database carryover sequence for the requested post-commit rehearsal.
