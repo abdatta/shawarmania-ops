@@ -60,7 +60,8 @@ alternative that was rejected for a reason recorded in `design.md`:
   `Cancelled` rather than showing a valid-looking receipt, and a tender correction
   reads as the corrected split.
 - **A Download button serves a real PDF from its own URL**, `…/bill/<token>.pdf`,
-  A4, themed, named recognisably. Not a script-generated `blob:`, because a plain
+  80 mm wide with height fitted to its content, themed, and named recognisably.
+  Not a script-generated `blob:`, because a plain
   navigation is the only download path that behaves reliably inside WhatsApp's
   in-app browser, which is where these links will be opened.
 - **The owner and a franchise admin get a Share button** on an expanded bill in

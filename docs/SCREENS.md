@@ -586,10 +586,10 @@ its quantity at the **list price that line snapshotted**, every discount as its
 own line naming what it was — `Menu Discount (15%)` over the categories it
 covered, `Discount (₹50)` over `On this bill` — the `Round up` line, the total,
 and how it was paid across methods. A **Download** control serves the same
-receipt as an A4 PDF from its own address, `…/bill/<token>.pdf`, as an ordinary
-link rather than anything script-generated, because that is the only download
-path that behaves inside WhatsApp's in-app browser. Nothing downloads on its own
-when the page opens.
+receipt as an 80 mm-wide PDF whose height follows its content from its own
+address, `…/bill/<token>.pdf`, as an ordinary link rather than anything
+script-generated, because that is the only download path that behaves inside
+WhatsApp's in-app browser. Nothing downloads on its own when the page opens.
 
 **It names no customer.** Not a name, not a phone number, not four masked
 digits, and not the biller or the till either. That is what makes a forwarded or

@@ -372,15 +372,15 @@ living in the brand site's repo,
 `shawarmania.in/bill/*`. This repo owns the link, the token and the reader
 function; that one owns the page and the PDF. Neither half is useful alone.
 
-### The DNS move — the owner's step, done once
+### The DNS move — completed 2026-09-10
 
-A Worker cannot be routed on the apex path until the zone is on Cloudflare. This
-touches the **live marketing site's** DNS, so the owner performs it, at a quiet
-hour, and **never while the counter is trading.**
+A Worker cannot be routed on the apex path until the zone is on Cloudflare. The
+owner completed that move at a quiet hour on 2026-09-10 and verified both the
+marketing site and the receipt route afterwards.
 
-`shawarmania.in` currently resolves at **Hostinger**. Before changing anything,
-write down what is there; Cloudflare will import it, and the import must be
-checked against this list rather than trusted:
+Cloudflare is now the authoritative DNS provider for `shawarmania.in`; Hostinger
+remains the registrar and retains the former records for rollback. The imported
+records were checked against this list before the nameserver change:
 
 | Record | Value |
 |---|---|
@@ -389,7 +389,7 @@ checked against this list rather than trusted:
 | `www` `CNAME` | `abdatta.github.io` |
 | `ops` `CNAME` | `abdatta.github.io` (this app) |
 
-Then:
+The completed runbook was:
 
 1. Create the `shawarmania.in` zone in Cloudflare and let it import the existing
    records.
@@ -404,10 +404,10 @@ only adds the one route. **Rollback is switching the nameservers back** to
 Hostinger, whose records are unchanged throughout. The landing site never moves
 and `public/CNAME` never changes.
 
-**Nothing is blocked on this.** Both repos build and verify against a
-`workers.dev` URL first, and the apex route is the last step. If the move is ever
-refused or reverted, the fallback is `bill.shawarmania.in` as a `CNAME` at
-Hostinger pointing at the Worker — a different URL, no migration.
+Both repos were first built and verified against a `workers.dev` URL; the apex
+route was the last step. If the move is ever reverted, the fallback is
+`bill.shawarmania.in` as a `CNAME` at Hostinger pointing at the Worker — a
+different URL, no migration.
 
 ### The Worker's secret
 

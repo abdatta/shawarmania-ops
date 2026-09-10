@@ -76,6 +76,7 @@ This alphabetical list maps every capability required now. For planned work, rea
 - [`outlet-tenancy`](outlet-tenancy/spec.md) — database-enforced outlet isolation, immediate deactivation and device revocation, and schema-enumerated coverage that a new table cannot skip.
 - [`profit-estimates`](profit-estimates/spec.md) — a named cash-basis operating profit estimate on the Ledger's month, presented as a ceiling while any commission is undetermined and withheld entirely where nothing was billed.
 - [`project-scaffold`](project-scaffold/spec.md) — a buildable, testable repository whose security and delivery boundaries are enforced by tooling and CI.
+- [`public-bill-receipt`](public-bill-receipt/spec.md) — one revocable public link per bill, exposing current stored receipt facts without customer identity, adjacent access, stored documents or weakened tenancy.
 - [`pwa-and-deployment`](pwa-and-deployment/spec.md) — installable, offline shell access, non-disruptive updates, identifiable builds, and safe static sub-path hosting.
 - [`statement-uploads`](statement-uploads/spec.md) — content-recognised operator files that restore figures without a live reader, discard customer data, preserve outlet isolation, and ask before restating closed periods.
 - [`supply-statements`](supply-statements/spec.md) — supplier orders booked once by source identity and delivery date, separated from payout recoveries, with omitted delivered orders reported rather than ignored.

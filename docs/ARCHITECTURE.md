@@ -96,7 +96,8 @@ GitHub Pages, which cannot set a response header or return
 `Referrer-Policy: no-referrer`, and a PDF served from its own URL as an ordinary
 navigation. So the zone moves its nameservers to Cloudflare, keeping the same
 apex records; GitHub Pages keeps serving the site, and Cloudflare only adds a
-Worker route on `/bill/*`. Rollback is switching the nameservers back.
+Worker route on `/bill/*`. That move completed on 2026-09-10; rollback is
+switching the nameservers back.
 
 The PDF is served from `…/bill/<token>.pdf` as a plain link rather than a
 script-generated `blob:`, because these links are opened inside WhatsApp's in-app
