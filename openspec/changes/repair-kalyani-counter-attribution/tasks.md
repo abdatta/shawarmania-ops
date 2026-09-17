@@ -1,5 +1,5 @@
-> **Active checkpoint — 2026-09-18 01:01 IST:** production repair remains
-> untouched. The owner has confirmed both shops are physically closed and has
+> **Active checkpoint — 2026-09-18 after production cutover:** 62 of 69 tasks
+> are complete. The owner confirmed both shops were physically closed and has
 > frozen a revised numbering decision: preserve the original Kalyani insertion
 > point by moving incident bills 742–778 to 990–1026, then shift every genuine
 > later Kalyani bill 990–1024 upward intact to 1027–1061. No settled bill is
@@ -25,6 +25,22 @@
 > The separate amended review then found and fixed collision-safe rollback
 > staging and overly broad command-result hash exclusions. A newly generated
 > bundle passed the complete matrix again, so 4.7–4.8 and 4A.2 are now green.
+> Commit `ca93b39c247d96df2aa4457f6b24968922e8d626` pins the reviewed
+> operator. At 01:45 IST, the owner-confirmed closed Kalyani counter still had
+> one database-live shift; a locked call to the existing `end_counter_shift`
+> function closed it only after rechecking zero open orders, zero pending
+> requests, zero reported unsent work and a zero report after latest server
+> work. The subsequent production plan exactly matched reviewed digest
+> `2ddd9538e42cb0141885db927d471a6d74ecc58a6654ac4622db9f954ba4b5a2`.
+> The final production bundle checksum is
+> `69108a1995fc35bc934bf661e57c3f4147beee63403789eabbca0771d56c7e07`.
+> One production apply committed. Fresh operator verification and an independent
+> direct query both passed: incident 37 bills / 906,000 paise, later 35 bills /
+> 753,000 paise, Kalyani/Kanchrapara counters 1061/778, zero source incident
+> rows, zero staging rows or command mismatches, 37/35 public links, zero
+> incident corrections/reviews, zero live shifts, one rehomed device and zero
+> disabled reviewed triggers. Night-of tasks 6.1–7.6 are complete; first-opening,
+> first-use and next-day tasks remain deliberately pending.
 >
 > **Earlier deployed checkpoint — 2026-09-17 15:59 IST:** 42 of 69 tasks were
 > complete under the superseded append-after-current numbering plan.
@@ -286,7 +302,7 @@
 
 ## 4A. Prepare the closed-hours cutover before the live window
 
-- [ ] 4A.1 Finish review, every repository/database/RLS/auth/UI gate, production
+- [x] 4A.1 Finish review, every repository/database/RLS/auth/UI gate, production
   deployment and post-deploy policy probes before the maintenance night. Pin the
   reviewed application/tool commit and migration version in private operator
   evidence; do not build, patch or deploy during the live cutover.
@@ -306,24 +322,24 @@
 - [x] 4A.5 Print or save outside Git the stop/rollback decision card: pre-apply
   abort; transaction rollback on apply failure; database-only targeted reversal
   after commit; and no automatic rollback after a new shift/dependent work.
-- [ ] 4A.6 PHASE GATE — when the counters close, all code and infrastructure work
+- [x] 4A.6 PHASE GATE — when the counters close, all code and infrastructure work
   is finished, the backups/rehearsal are proved, the maintenance laptop can
   reach every required hosted service, and the operator needs only execute the
   reviewed runbook without outlet hardware.
 
 ## 5. Final production preflight and freeze
 
-- [ ] 5.1 Begin the live window only after both counters have closed, ordinarily
+- [x] 5.1 Begin the live window only after both counters have closed, ordinarily
   around 03:00–04:00 Asia/Kolkata. Obtain the owner's dated go-ahead, record the
   last accepted counter command, confirm nobody is using either billing surface,
   and record that the incident tablet has remained powered off/unused since its
   last stored zero report. Do not require contact with any outlet device.
-- [ ] 5.2 Confirm the tablet-edit/RLS migration, Edge action and UI are deployed,
+- [x] 5.2 Confirm the tablet-edit/RLS migration, Edge action and UI are deployed,
   the production policy probes pass, and nobody uses the normal Edit flow for
   this incident; deployment itself moves no production device or historical row.
   If implementation, deploy, full-restore proof or rehearsal remains unfinished,
   cancel the live window rather than completing it under the freeze.
-- [ ] 5.3 Run a fresh production `plan`. Require the reviewed 37 bills, 906,000
+- [x] 5.3 Run a fresh production `plan`. Require the reviewed 37 bills, 906,000
   paise, 43/41 bill children, 39/45 order graph, 115 commands, five expenses,
   the exact later Kalyani 990–1024 block and dependencies, target high-water
   1024, the incident 990–1026 plus shifted-later 1027–1061 mappings, exact menu
@@ -333,42 +349,42 @@
   work. Any drift stops the run and amends this change before execution. Pass
   the literal business date `2026-09-16`; reject `today`, an inferred date or a
   host-local date.
-- [ ] 5.4 Confirm there are still no payment corrections, discounts, attribution
+- [x] 5.4 Confirm there are still no payment corrections, discounts, attribution
   reviews, end-of-day confirmations, drawer observations/collections or
   inventory movements in the incident graph, and no surviving dependent table
   omitted from backup/apply.
-- [ ] 5.5 Take the final targeted before-image after the plan, checksum it, build
+- [x] 5.5 Take the final targeted before-image after the plan, checksum it, build
   its reversal, and run a read-only comparison proving its manifest equals the
   plan digest.
-- [ ] 5.6 PHASE GATE — production is frozen, policy-safe, backed up twice, and
+- [x] 5.6 PHASE GATE — production is frozen, policy-safe, backed up twice, and
   byte-for-byte represented by the reviewed plan that `apply` will require.
   Crossing 04:00 IST after this gate does not invalidate the plan or alter its
   date, number mapping or target high-water assertions.
 
 ## 6. Atomic historical and device production repair
 
-- [ ] 6.1 Run `apply` once with the reviewed plan digest. Capture start/end time,
+- [x] 6.1 Run `apply` once with the reviewed plan digest. Capture start/end time,
   tool commit, transaction outcome and aggregate assertions in private operator
   output; never capture row payloads in Git evidence.
-- [ ] 6.2 Require every in-transaction assertion from task 3.6 and catalog equality
+- [x] 6.2 Require every in-transaction assertion from task 3.6 and catalog equality
   for every temporarily changed guard before commit. On any failure, verify the
   transaction rolled back and stop; do not patch production manually between
   attempts.
-- [ ] 6.3 Record the committed number mapping hash and resulting counters as
+- [x] 6.3 Record the committed number mapping hash and resulting counters as
   aggregate evidence. Confirm the device now has the reviewed target name/outlet
   with the same UUID/session and no live shift, and confirm no void, replacement,
   adjustment, attribution-review or application-audit row was created.
-- [ ] 6.4 PHASE GATE — one transaction committed the reviewed graph, or no
+- [x] 6.4 PHASE GATE — one transaction committed the reviewed graph, or no
   transaction committed anything. There is no partially repaired state.
 
 ## 7. Verify the offline cutover, then verify the tablet at next opening
 
-- [ ] 7.1 **First database postflight:** run `verify` from a fresh process.
+- [x] 7.1 **First database postflight:** run `verify` from a fresh process.
   Repeat all counts, totals, per-row money hashes, FK/orphan checks, counter
   checks, menu coverage, trigger/constraint state, receipt-token hash,
   assignment state and closed-shift state. Verify the device has the exact
   target name/outlet while its UUID, proof and setup facts are unchanged.
-- [ ] 7.2 **Independent database postflight:** from a separate process and fresh
+- [x] 7.2 **Independent database postflight:** from a separate process and fresh
   connection, prove Kalyani owns the 37 bills/39 orders/five expenses and
   Kanchrapara owns none of the incident graph; verify policies/catalog state,
   public-receipt resolution without printing tokens, counters and the device
@@ -378,14 +394,15 @@
   Counter 2`, with no duplicate/source card or setup code. If the hosted
   frontend is unavailable, record that UI observation as deferred; database
   postflights 7.1–7.2 remain the authoritative night-of gate.
-- [ ] 7.4 Compare Kalyani's derived sales/drawer figures and Kanchrapara's derived
+- [x] 7.4 Compare Kalyani's derived sales/drawer figures and Kanchrapara's derived
   figures against hand-calculated 906,000 total, 213,000 cash, 693,000 UPI and
   38,000 cash expenses. Verify no drawer collection or inventory movement was
   invented.
-- [ ] 7.5 If any authoritative database check disagrees, run the rehearsed
+- [x] 7.5 If any authoritative database check disagrees, run the rehearsed
   database-only targeted rollback before any counter reopens; never wait for an
-  outlet device and never improvise a partial SQL fix.
-- [ ] 7.6 NIGHT-OF PHASE GATE — tasks 7.1, 7.2 and 7.4 are green, the historical
+  outlet device and never improvise a partial SQL fix. Not invoked: both
+  authoritative postflights agreed.
+- [x] 7.6 NIGHT-OF PHASE GATE — tasks 7.1, 7.2 and 7.4 are green, the historical
   graph and current device row are complete, no shift is open, and the counter
   is safe to remain powered off until normal opening. Keep the targeted recovery
   bundle and do not claim physical-session acceptance yet.
