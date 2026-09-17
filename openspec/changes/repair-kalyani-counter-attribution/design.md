@@ -53,8 +53,9 @@ shift remained open only because its stored expiry was 04:00 IST, and there was
 no unresolved shift request. The overnight design therefore assumes no outlet
 hardware or outlet network can participate.
 
-The 13 distinct sold products all have a same-price Kalyani destination. Eleven
-are exact name-and-price matches. The owner expressly approved the two aliases:
+The 13 distinct products on settled bills all have a same-price Kalyani
+destination. Eleven are exact name-and-price matches. The owner expressly
+approved the two aliases:
 
 | Source snapshot | Kalyani snapshot | Price |
 |---|---|---:|
@@ -64,6 +65,11 @@ are exact name-and-price matches. The owner expressly approved the two aliases:
 These figures are a proposal baseline, not permission to write. The live tool
 must recompute and hash them immediately before apply. Any disagreement is drift
 and aborts the run.
+
+Dependency inventory during implementation found one further item only on a
+cancelled order: `Double Chicken Shawarma [T]`, 17,000 paise. It is an exact
+Kalyani name-and-price match. The complete order/bill graph therefore requires
+14 destination menu mappings while the settled-sale statement above remains 13.
 
 ## 2. Goals / Non-goals
 
@@ -205,10 +211,15 @@ incident roots and accounts for at least:
 | surviving `counter_shift_requests` | target outlet or verified absent, according to its actual terminal shape |
 | `counter_devices` | target current outlet/name; identity, proof and setup facts unchanged |
 | `expenses` | target outlet for the five same-operator incident rows |
-| discount/correction/review/EOD children | required absent by fingerprint; abort rather than invent handling |
+| discount/correction/allocation/review/EOD children | required absent by fingerprint; abort rather than invent handling |
 | `bill_public_links` | unchanged; same `bill_id` and token |
+| `bill_public_link_views` | unchanged; access telemetry is not reclassified |
+| legacy `shifts` / `bills.shift_id` | required absent for the incident day/graph |
+| `counter_device_setup_codes` | one consumed row remains unchanged with the same device UUID |
+| `aggregator_dismissed_duplicates` | required absent for the five moved expenses |
 | attendance | unchanged; already Kalyani |
-| drawer/inventory | required absent; no synthetic rows |
+| drawer cash-out/observation/adjustment/acknowledgement rows | required absent at both outlets for the frozen business date; no synthetic rows |
+| inventory movements | required absent at both outlets for the frozen business date |
 
 If repository inspection or the restored database finds another dependent
 table, it must be added to the plan, backup and assertions before production.

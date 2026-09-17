@@ -166,6 +166,14 @@ Worth knowing before running one:
   from the shared demo store. Kanchrapara states that nobody is at its counter.
   The reading time and all figures move together only when the surface is opened
   or **Re-read** is pressed, matching the live no-subscription contract.
+- **Tablet editing is part of the same walk.** From the owner's Tablets view,
+  open **Edit** to rename a tablet. Try an outlet move on the default cards to
+  see the confirmation followed by the same actionable refusal live mode gives
+  a busy, stale or unresolved tablet; the successful regrouped-card path is
+  covered by the UI test with a fresh-zero fixture. Switch to the manager
+  persona to see the outlet fixed and the name-only edit; **Start again**
+  restores every demo tablet and its original outlet. The walkthrough changes
+  device context only — it never edits a historical bill or order.
 - **The old counter PIN surface is hidden.** The walkthrough uses the same
   tablet↔phone handshake story as production; no personal password or PIN is
   typed on the tablet.
@@ -200,6 +208,14 @@ Both outlets are on one screen. Read the two sales figures aloud: they are diffe
 **Show the bar itself while you are here.** Four entries, all of them reachable with a thumb. Tap **Setup**: a card opens above the bar with a tail pointing at the tab that opened it, and the count that was sitting on Setup moves onto Delivery inside it. That is the rule worth naming out loud — folding a screen behind a heading must never fold what it is waiting on out of sight, so a shut group carries the sum and an open one shows the parts, and the two are never both on screen.
 
 Then open **Outlets** from inside Setup. Each card says what that shop is raising in words — a tablet holding bills it has not sent, a counter with no tablet at all — and carries a **Tablets** button that opens *that* outlet's tablet administration rather than a picker.
+
+From **Tablets**, open **Edit** on one of the cards and rename it. Try moving a
+card and read the confirmation before the default live/stale fixture refuses it;
+that refusal is the safety behavior. The component test supplies a fresh-zero
+idle fixture to cover the successful regrouping path. Switch to the manager
+persona to show that the outlet is fixed for a Franchise Admin and only the name
+can be changed. **Start again** restores the original grouping. No part of this
+walkthrough changes historical bills or orders.
 
 Then open **Attendance** from the owner's own navigation — no appointment, no switching, and the address stays inside the owner's shell. Use the outlet selector to move to **Kanchrapara**, the shop this owner holds no assignment at: one arrival is waiting there, and they settle it. The demo's emulated position is at Kalyani, so the rule asks for a reason first and records that the approver was not on site — the same rule the outlet's own manager answers to. Note who is *not* on that roll-call: the owner and the manager are not staff there, so nobody is pretending to record their arrival. Then open **Cash** at the same outlet: the day is all there, and the close and the withdrawal are not, because the drawer comes from the assignment. Switch the selector back to Kalyani, where the owner *is* the manager, and the same screen offers both — which is the whole boundary in one gesture. The outlet you last picked is where the next screen opens, so nobody answers that question twice.
 

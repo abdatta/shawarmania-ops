@@ -112,6 +112,7 @@ assignment cannot be ended by anyone, including its holder.
 | Issue setup or password-reset handover | ✓ other accounts only | ✓ Biller/Employee only at every managed current outlet | — | — |
 | See / correct username | ✓ managed accounts; own username read-only | ✓ managed Biller/Employee accounts; own username read-only | — | — |
 | Set up / remove counter tablet | ✓ | ✓ own outlet | — | — |
+| Edit counter tablet name / outlet | ✓ name or transfer | ✓ name only, own outlet | — | — |
 | **Menu** |
 | View menu | R all | ✓ own outlet | R own outlet | — |
 | Add / edit / disable items and prices | ✓ | ✓ own outlet | — | — |
@@ -257,10 +258,10 @@ for the stopgap and how it was discharged.
 
 They had no Outlets surface at all until #51, and the gap became a hole in the
 same change: **Tablets left navigation entirely**, and `admin-devices` is the
-only place a counter setup code is minted. A tablet is administered from the
-outlet it stands in and from nowhere else, so without this surface a manager
-whose tablet died had no route to the one repair they cannot make anywhere else
-— the surface exists for the counter, not for the outlet record.
+only place a counter setup code is minted. A Franchise Admin administers a
+tablet from an outlet they manage and from nowhere else; a Super Admin may
+manage every outlet's tablet, including a controlled move between outlets. The
+surface exists for the counter, not for the outlet record.
 
 That is also why Tablets has no entry beside Outlets. One would be a second door
 into a room this surface already opens, and it would falsify the sentence above.
@@ -426,6 +427,18 @@ Two layers, because a shared device has a different threat model than a personal
    **This is one factor, not two**, and it is written that way rather than called two-factor. The factor it uses is stronger than the one it replaces, because an observer behind the counter can no longer collect a password by watching.
 
 **A tablet is not a person.** Its Auth user *is* its `counter_devices` row; it has no profile and no assignment, and the session path asks the tablet question before the profile one so a machine can never resolve as a person with some rows missing. Everything it reaches — the outlet, the menu, bills, the expense it may record — comes from `app_counter_shift_outlet()`, so **no shift means no reach at all**.
+
+**A tablet's outlet is a current assignment, not a permanent machine identity.**
+From Tablets, a Super Admin may edit its name and move it to another active
+outlet in one atomic operation. A Franchise Admin may edit the name of a tablet
+at their own outlet, but the outlet is fixed and the database refuses a
+cross-outlet request even if somebody hand-crafts it. An outlet move requires no
+live shift, no pending request, a recent zero-unresolved heartbeat and a unique
+destination label. It preserves the Auth UUID, proven session and browser
+credentials, changes only future context, and leaves historical rows at the
+outlet where they were recorded. The stable device identity does not preserve
+access to former-outlet rows after the move; a live destination shift is still
+required for device reads.
 
 **There is no fallback approver.** Only the named person may confirm their own shift: not the outlet's manager holding the correct code, not the owner. The cost is recorded in [Limitations](LIMITATIONS.md) rather than softened, along with the read-it-out-loud valve that goes with it.
 

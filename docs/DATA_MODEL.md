@@ -121,11 +121,26 @@ short-window abuse ledgers. They store hashes of caller IP and submitted
 identifier, never raw addresses, and have no client-readable policy.
 
 **`counter_devices`** — the tablets set up at each counter.
-`id`, `outlet_id`, `label`, `set_up_by`, `set_up_at`, `removed_at`, `last_seen_at`, `last_reported_unsent`, `last_reported_oldest_unresolved_at`.
+`id`, `outlet_id`, `label`, `set_up_by`, `set_up_at`, `removed_at`, `last_seen_at`, `last_reported_unsent`, `last_reported_oldest_unresolved_at`, `session_proven_at`, `proof_expires_at`.
 
 `id` **is** the machine's `auth.users.id`. A tablet has no profile and no assignment: it is a machine principal, and what it may reach comes from the shift open on it rather than from anything it is.
 
-An outlet may hold **several** active tablets, each with its own machine identity and bound to that one outlet for life. What is unique is the **label**, among an outlet's live counters, by a partial unique index on `(outlet_id, lower(btrim(label))) where removed_at is null and session_proven_at is not null` — so a manager choosing which counter to remove, and an operator reading which till took an order, are never guessing.
+An outlet may hold **several** active tablets, each with its own machine identity. A
+tablet's `outlet_id` is its **current** assignment, not an origin stamped into
+the machine forever: an authorised maintenance transfer may move a proven,
+non-removed tablet between active outlets without replacing its Auth UUID,
+proven session or browser credentials. A name-only edit may happen while a
+shift is live; an outlet move is allowed only when the tablet has no live shift
+or pending request, has reported a fresh zero unresolved queue, and the label is
+unique at the destination. The database performs the name and outlet update as
+one operation, so a refusal leaves both fields unchanged.
+
+Historical records retain the `outlet_id` recorded when they were created. A
+transfer changes current and future device context only: the old outlet's
+managers may still read their historical rows, while the device's own reads are
+intersected with its current outlet and existing live-shift rule. What is unique
+is the **label**, among an outlet's live counters, by a partial unique index on
+`(outlet_id, lower(btrim(label))) where removed_at is null and session_proven_at is not null` — so a manager choosing which counter to remove, and an operator reading which till took an order, are never guessing.
 
 A row is a counter only when `removed_at is null and session_proven_at is not null`, which is the canonical predicate every policy and helper asks. A redeemed setup code writes a row that is **not yet** a counter: it reaches nothing, appears nowhere, and lapses on its own when the code's own `proof_expires_at` passes, so a setup whose sign-in never lands costs a code and not a counter. Removal is permanent, taking the live shift and any pending request with it in the same transaction.
 

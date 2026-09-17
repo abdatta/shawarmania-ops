@@ -42,6 +42,13 @@ const SHIFT_COLUMNS =
 const MESSAGES: Record<string, string> = {
   forbidden: 'You are not allowed to do that.',
   label_taken: 'A tablet at this outlet is already called this. Choose a different name.',
+  device_invalid: 'That tablet is no longer available to edit.',
+  inactive_outlet: 'That outlet is not active. Choose an active outlet.',
+  live_shift: 'End the tablet’s open shift before moving it to another outlet.',
+  pending_request: 'Cancel the tablet’s pending shift request before moving it.',
+  stale_telemetry:
+    'The tablet must report an empty queue within the last 30 minutes before it can move.',
+  unresolved_work: 'The tablet still reports unresolved work. Sync it before moving it.',
   wrong_code: 'That is not the code on the tablet. Check it and try again.',
   exhausted: 'Too many wrong codes. Ask the tablet to try again with a new one.',
   not_eligible: 'You are not set up to bill at that outlet.',
@@ -259,6 +266,15 @@ export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): 
         action: 'issue-setup-code',
         outletId,
         label,
+      })
+    },
+
+    async editDevice(input): Promise<void> {
+      await call({
+        action: 'edit',
+        deviceId: input.deviceId,
+        label: input.label,
+        outletId: input.outletId,
       })
     },
 

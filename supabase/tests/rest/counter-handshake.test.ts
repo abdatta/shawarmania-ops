@@ -68,12 +68,14 @@ async function call<T = Record<string, unknown>>(
 }
 
 let ownerToken: string
+let adminKalToken: string
 let billerKpaToken: string
 let billerKalToken: string
 let tabletToken: string
 
 beforeAll(async () => {
   ownerToken = await tokenFor('owner')
+  adminKalToken = await tokenFor('admin.kalyani')
   billerKpaToken = await tokenFor('biller.kanchrapara')
   billerKalToken = await tokenFor('biller.kalyani')
   // The seeded tablet signs in through the same alias namespace as a person,
@@ -191,6 +193,181 @@ describe('the Edge Function derives its caller from the token', () => {
       { action: 'end-shift', shiftId: opened.body.shiftId },
       billerKpaToken,
     )
+  })
+})
+
+describe('a tablet keeps its proven session when an owner transfers it', () => {
+  let disposableDeviceId: string | undefined
+  let disposableClient: Client | undefined
+
+  afterAll(async () => {
+    if (disposableDeviceId) {
+      await call('counter-devices', { action: 'remove', deviceId: disposableDeviceId }, ownerToken)
+    }
+    if (disposableClient) await disposableClient.auth.signOut()
+  })
+
+  it('uses the live Edge/Auth path and changes only its current and future outlet', async () => {
+    const suffix = crypto.randomUUID().slice(0, 8)
+    const setupLabel = `Transfer probe ${suffix}`
+    const renamedLabel = `Kalyani probe ${suffix}`
+    const destinationLabel = `Kanchrapara probe ${suffix}`
+
+    const issued = await call<{ code?: string }>(
+      'counter-devices',
+      { action: 'issue-setup-code', outletId: OUTLET_KALYANI, label: setupLabel },
+      ownerToken,
+    )
+    expect(issued.status).toBe(200)
+    expect(issued.body.code).toBeTruthy()
+
+    const setup = await call<{
+      email?: string
+      password?: string
+      deviceId?: string
+      outletId?: string
+    }>('counter-setup', { code: issued.body.code })
+    expect(setup.status).toBe(200)
+    expect(setup.body.outletId).toBe(OUTLET_KALYANI)
+    expect(setup.body.deviceId).toBeTruthy()
+    expect(setup.body.email).toBeTruthy()
+    expect(setup.body.password).toBeTruthy()
+
+    disposableDeviceId = setup.body.deviceId!
+    disposableClient = anonClient()
+    const signedIn = await disposableClient.auth.signInWithPassword({
+      email: setup.body.email!,
+      password: setup.body.password!,
+    })
+    expect(signedIn.error).toBeNull()
+    expect(signedIn.data.user?.id).toBe(disposableDeviceId)
+    const originalAccessToken = signedIn.data.session?.access_token
+    expect(originalAccessToken).toBeTruthy()
+
+    const proved = await disposableClient.rpc('prove_counter_device_session')
+    expect(proved).toMatchObject({ data: 'ok', error: null })
+    const reported = await disposableClient.rpc('report_counter_device_state', {
+      p_unsent: 0,
+    })
+    expect(reported).toMatchObject({ data: 'ok', error: null })
+
+    // The endpoint accepts no actor or role from the body. A manager's own
+    // token authorises only the small rename at the outlet they manage.
+    const renamed = await call(
+      'counter-devices',
+      {
+        action: 'edit',
+        deviceId: disposableDeviceId,
+        label: renamedLabel,
+        outletId: OUTLET_KALYANI,
+        editedBy: '10000000-0000-4000-a000-000000000001',
+        role: 'super_admin',
+      },
+      adminKalToken,
+    )
+    expect(renamed.status).toBe(204)
+
+    const managerTransfer = await call(
+      'counter-devices',
+      {
+        action: 'edit',
+        deviceId: disposableDeviceId,
+        label: destinationLabel,
+        outletId: OUTLET_KANCHRAPARA,
+        editedBy: '10000000-0000-4000-a000-000000000001',
+        role: 'super_admin',
+      },
+      adminKalToken,
+    )
+    expect(managerTransfer).toEqual({ status: 403, body: { error: 'forbidden' } })
+
+    const stillKalyani = await disposableClient
+      .from('counter_devices')
+      .select('id,label,outlet_id,session_proven_at,set_up_at')
+      .eq('id', disposableDeviceId)
+      .single()
+    expect(stillKalyani.error).toBeNull()
+    expect(stillKalyani.data).toMatchObject({
+      id: disposableDeviceId,
+      label: renamedLabel,
+      outlet_id: OUTLET_KALYANI,
+    })
+    const proofBefore = stillKalyani.data!.session_proven_at
+    const setupBefore = stillKalyani.data!.set_up_at
+
+    const transferred = await call(
+      'counter-devices',
+      {
+        action: 'edit',
+        deviceId: disposableDeviceId,
+        label: destinationLabel,
+        outletId: OUTLET_KANCHRAPARA,
+        editedBy: 'not-the-caller',
+        role: 'franchise_admin',
+      },
+      ownerToken,
+    )
+    expect(transferred.status).toBe(204)
+
+    const sameSession = await disposableClient.auth.getSession()
+    expect(sameSession.data.session?.access_token).toBe(originalAccessToken)
+    expect(sameSession.data.session?.user.id).toBe(disposableDeviceId)
+
+    const moved = await disposableClient
+      .from('counter_devices')
+      .select('id,label,outlet_id,session_proven_at,set_up_at')
+      .eq('id', disposableDeviceId)
+      .single()
+    expect(moved.error).toBeNull()
+    expect(moved.data).toEqual({
+      id: disposableDeviceId,
+      label: destinationLabel,
+      outlet_id: OUTLET_KANCHRAPARA,
+      session_proven_at: proofBefore,
+      set_up_at: setupBefore,
+    })
+
+    // The transferred UUID alone cannot recover either outlet's operational
+    // history. A live destination shift is what grants destination reads.
+    const noShiftOrders = await disposableClient.from('orders').select('id,outlet_id')
+    expect(noShiftOrders).toMatchObject({ data: [], error: null })
+    const noShiftMenu = await disposableClient.from('menu_items').select('id,outlet_id')
+    expect(noShiftMenu).toMatchObject({ data: [], error: null })
+
+    const asked = await call<{ requestId?: string; code?: string }>(
+      'counter-devices',
+      { action: 'request-shift', username: 'biller.kanchrapara' },
+      originalAccessToken,
+    )
+    expect(asked.status).toBe(200)
+    const opened = await call<{ shiftId?: string }>(
+      'counter-devices',
+      { action: 'confirm', requestId: asked.body.requestId, code: asked.body.code },
+      billerKpaToken,
+    )
+    expect(opened.status).toBe(200)
+    expect(opened.body.shiftId).toBeTruthy()
+
+    const destinationMenu = await disposableClient
+      .from('menu_items')
+      .select('id,outlet_id')
+      .eq('outlet_id', OUTLET_KANCHRAPARA)
+    expect(destinationMenu.error).toBeNull()
+    expect(destinationMenu.data?.length).toBeGreaterThan(0)
+    expect(destinationMenu.data?.every((row) => row.outlet_id === OUTLET_KANCHRAPARA)).toBe(true)
+
+    const formerMenu = await disposableClient
+      .from('menu_items')
+      .select('id,outlet_id')
+      .eq('outlet_id', OUTLET_KALYANI)
+    expect(formerMenu).toMatchObject({ data: [], error: null })
+
+    const ended = await call(
+      'counter-devices',
+      { action: 'end-shift', shiftId: opened.body.shiftId },
+      billerKpaToken,
+    )
+    expect(ended.status).toBe(204)
   })
 })
 

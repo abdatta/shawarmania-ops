@@ -21,7 +21,8 @@ import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2'
  * Two kinds of caller reach this function and they are kept apart deliberately:
  *
  *  * a **person**, resolved by `callerFrom` — an admin issuing or removing a
- *    setup code, or an operator confirming, rejecting or ending their own shift;
+ *    setup code, editing/removing a tablet, or an operator confirming,
+ *    rejecting or ending their own shift;
  *  * a **tablet**, resolved by `deviceCallerFrom` — asking for a shift, or
  *    withdrawing its own request.
  *
@@ -175,6 +176,31 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (data === 'not_authorised') return json(FORBIDDEN, 403)
     if (data !== 'ok') return json({ error: 'not_found' }, 404)
     return noContent()
+  }
+
+  if (action === 'edit') {
+    const deviceId = str(body['deviceId'])
+    const outletId = str(body['outletId'])
+    const label = str(body['label'])
+    if (!deviceId || !outletId || !label) return json(INVALID, 400)
+
+    const { data, error } = await service.rpc('edit_counter_device', {
+      p_device_id: deviceId,
+      p_edited_by: caller.id,
+      p_label: label,
+      p_outlet_id: outletId,
+    })
+    if (error) return json({ error: 'unavailable' }, 503)
+    if (data === 'ok' || data === 'no_change') return noContent()
+    if (data === 'not_authorised') return json(FORBIDDEN, 403)
+    if (data === 'device_invalid') return json({ error: 'device_invalid' }, 409)
+    if (data === 'label_taken') return json({ error: 'label_taken' }, 409)
+    if (data === 'inactive_outlet') return json({ error: 'inactive_outlet' }, 409)
+    if (data === 'live_shift') return json({ error: 'live_shift' }, 409)
+    if (data === 'pending_request') return json({ error: 'pending_request' }, 409)
+    if (data === 'stale_telemetry') return json({ error: 'stale_telemetry' }, 409)
+    if (data === 'unresolved_work') return json({ error: 'unresolved_work' }, 409)
+    return json(INVALID, 400)
   }
 
   if (action === 'confirm') {

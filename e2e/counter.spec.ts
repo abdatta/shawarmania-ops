@@ -917,7 +917,9 @@ test.describe('manager billing history', () => {
     const firstSummary = bills.nth(0).getByRole('button', { name: /Bill \d+ Paid/ })
     const secondSummary = bills.nth(1).getByRole('button', { name: /Bill \d+ Paid/ })
     await expect(firstSummary).toContainText(/(Today|Yesterday), \d{2}:\d{2} (am|pm)/)
-    await expect(firstSummary).toContainText(/by Demo Biller/)
+    // The first row depends on the seeded time ordering. Both names are valid
+    // immutable biller snapshots; the history surface must show one explicitly.
+    await expect(firstSummary).toContainText(/by Demo (?:Morning )?Biller/)
     await firstSummary.click()
     await expect(bills.nth(0)).toContainText('Order items')
     await expect(bills.nth(0)).toContainText('Paid by')

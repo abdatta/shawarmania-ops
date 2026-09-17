@@ -15,7 +15,7 @@ import {
   DEMO_COUNTER_DEVICE_TWO_ID,
   DEMO_KANCHRAPARA_DEVICE_ID,
 } from './fixtures/billing'
-import { resolveBusinessDate } from '@/domain'
+import { isCounterTelemetryFresh, resolveBusinessDate } from '@/domain'
 
 import { outletFixtures } from './fixtures/outlets'
 import { nextCutover, type DemoStore } from './store'
@@ -297,6 +297,70 @@ export function createMockCounterAdapter(
       // Shown once here too, because "write it down now" is the habit the real
       // flow depends on and a demo that let you look again would not teach it.
       return { code: 'DEMO0-SETUP', validFor: '15 minutes' }
+    },
+
+    async editDevice(input): Promise<void> {
+      const device = counter.devices.find((candidate) => candidate.id === input.deviceId)
+      if (!device || !mayAdminister(device.outletId)) {
+        throw new CounterActionError('forbidden', 'You are not allowed to do that.')
+      }
+
+      const label = input.label.trim()
+      if (!label) throw new CounterActionError('invalid_request', 'Enter a tablet name.')
+
+      const moving = input.outletId !== device.outletId
+      if (moving && role !== 'super_admin') {
+        throw new CounterActionError('forbidden', 'You are not allowed to do that.')
+      }
+      if (
+        moving &&
+        store.shifts.some((shift) => shift.device_id === device.id && !shift.ended_at)
+      ) {
+        throw new CounterActionError(
+          'live_shift',
+          'End the tablet’s open shift before moving it to another outlet.',
+        )
+      }
+      if (
+        moving &&
+        counter.requests.some(
+          (request) => request.deviceId === device.id && request.resolution === null,
+        )
+      ) {
+        throw new CounterActionError(
+          'pending_request',
+          'Cancel the tablet’s pending shift request before moving it.',
+        )
+      }
+      if (moving && !isCounterTelemetryFresh(device.lastSeenAt)) {
+        throw new CounterActionError(
+          'stale_telemetry',
+          'The tablet must report an empty queue within the last 30 minutes before it can move.',
+        )
+      }
+      if (moving && device.lastReportedUnresolved !== 0) {
+        throw new CounterActionError(
+          'unresolved_work',
+          'The tablet still reports unresolved work. Sync it before moving it.',
+        )
+      }
+      if (
+        counter.devices.some(
+          (candidate) =>
+            candidate.id !== device.id &&
+            candidate.outletId === input.outletId &&
+            candidate.label.trim().toLowerCase() === label.toLowerCase(),
+        )
+      ) {
+        throw new CounterActionError(
+          'label_taken',
+          'A tablet at this outlet is already called this. Choose a different name.',
+        )
+      }
+
+      device.label = label
+      device.outletId = input.outletId
+      announce(counter)
     },
 
     async removeDevice(deviceId: string): Promise<void> {

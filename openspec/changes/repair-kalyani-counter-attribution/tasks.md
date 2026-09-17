@@ -1,78 +1,127 @@
+> **Progress checkpoint — 2026-09-17 IST:** 42 of 69 tasks are complete.
+> Production data remains untouched. The frozen production plan was re-read
+> after the pause boundary. The current timestamp-complete plan matches digest
+> `807fb5e9340120c114a98d2f947622ff48b64186ab2d159dfc3232647b1aa8e8`.
+> Two fresh-restore scratch rehearsals proved plan/apply/fresh-process verify;
+> the latest also proved database-only rollback against every targeted
+> before-image row while retaining number high-water marks. Targeted UI/adapter
+> tests pass (33 tests). The new database transfer/RLS test passes all 39
+> assertions against a seeded restored schema and rolls its transaction back.
+> A clean local `db:reset` applies the migration and seed successfully, and
+> `test:db` passes 59 files / 2,344 assertions. The live local Edge/Auth path
+> now passes 11 tests, including disposable-device setup, session proof,
+> Franchise Admin rename/transfer refusal, Super Admin transfer, no-shift
+> isolation and destination-shift/menu access without new setup; Edge Function
+> type-checking is green. The production-schema dependency inventory now covers
+> 34 relations plus all associated triggers, constraints, policies, indexes,
+> views and functions. The expanded plan explicitly refuses drawer, inventory,
+> legacy-shift, discount/correction/review/EOD and expense-aggregator drift. A
+> version-2 external before-image passed apply, fresh-process verify and rollback
+> against the restored production snapshot; an in-repository backup path was
+> refused. Twelve scratch-only failure points—after guard disable, after every
+> mutation group, before guard restoration and after guard restoration—each
+> rolled back completely and reproduced the original plan digest. Tablet-edit
+> defaults, focus, confirmation, actionable errors and regrouping pass component
+> coverage; its phone/tablet light/dark browser matrix passes all four layout
+> cases. The complete repository suite is green: 143 unit files / 1,764 tests,
+> 274 browser tests, all static/type/function/build gates and 52 contrast pairs.
+> A clone-per-case local harness
+> also passes exact success plus count/money/cardinality, target trade/counter,
+> menu, telemetry/server-work, assignment, discount/correction, lock, digest,
+> project and unsafe-rollback refusals. A fresh full-dump clone now also
+> rehearses the repaired tablet's next request/confirm shift path and real
+> billing RPC: the first post-transfer bill landed at Kalyani as 1027 while
+> Kanchrapara's high-water mark stayed 778. The harness now proves both stored
+> cutoff branches: before expiry closes at transaction time, while at/after
+> expiry caps the close at the stored expiry. Repository hygiene is green: the
+> changed-file diff is clean, edited files have no BOM, no dump/before-image/
+> reversal/token/credential/UUID list is tracked, and evidence/operator output
+> contains aggregates and hashes only. The real local Edge/Auth rehearsal also
+> passed 11 tests, including a disposable fresh-zero device edit/transfer,
+> preserved session, regrouping, no-shift isolation and destination menu access.
+> A separate artifact/schema review found and fixed the pre-expiry refusal and
+> timestamp-canonicalization gaps, found no missing dependent relation, and
+> reran the restored-snapshot matrix successfully. A final fresh local reset
+> passes 59 database files / 2,344 assertions, the complete RLS/race/drawer/
+> telemetry/ledger sequence and all 28 real-auth browser tests; regenerated
+> types contain only the expected tablet-edit RPC. Roadmap reconciliation made
+> zero changes. No production mutation or deployment has occurred.
+
 ## 0. Freeze the incident definition
 
-- [ ] 0.1 Record the dated owner decision: the Kanchrapara-enrolled tablet was
+- [x] 0.1 Record the dated owner decision: the Kanchrapara-enrolled tablet was
   physically used at Kalyani on business date 2026-09-16; all trade from the
   identified device/shift that date, including the five same-operator expenses,
   belongs to Kalyani; the two named menu aliases are approved; the device shall
   remain usable at Kalyani without setup.
-- [ ] 0.2 Add `evidence/baseline.md` containing only the proposal's aggregate
+- [x] 0.2 Add `evidence/baseline.md` containing only the proposal's aggregate
   counts, paise totals, bill range, date and opaque row-set hashes. Verify it
   contains no UUIDs, customer facts, employee identity, receipt tokens or
   credentials.
-- [ ] 0.3 Inventory every table, view, trigger, constraint, policy, counter and
+- [x] 0.3 Inventory every table, view, trigger, constraint, policy, counter and
   function that references the incident device, shift, orders or bills on the
   current schema. Compare it with design D6 and amend the design/tasks before
   code if anything is missing.
-- [ ] 0.4 PHASE GATE — the incident has one written scope, all commercial facts
+- [x] 0.4 PHASE GATE — the incident has one written scope, all commercial facts
   and exclusions are explicit, and a second session can identify the intended
   graph without reading this conversation.
 
 ## 1. Prove the backups before building the repair
 
-- [ ] 1.1 Take a full logical production dump (schema, public data and Auth)
+- [x] 1.1 Take a full logical production dump (schema, public data and Auth)
   under the established snapshot procedure, store it outside the repository
   with restrictive access, and record only its external path, timestamp, size
   and SHA-256 in `evidence/backup.md`.
-- [ ] 1.2 Restore that dump into an isolated scratch database. Verify schema
+- [x] 1.2 Restore that dump into an isolated scratch database. Verify schema
   version, incident aggregate fingerprint, source/target counters, device proof
   state, shift state, assignments and the 741 earlier Kanchrapara bills match
   production. A dump that has not restored cleanly blocks every later phase.
-- [ ] 1.3 Export a targeted before-image template covering every row and catalog
+- [x] 1.3 Export a targeted before-image template covering every row and catalog
   object from task 0.3, plus stable row-set hashes and a generated compensating
   transaction. Verify the template writes outside the repository and refuses a
   path inside the workspace.
-- [ ] 1.4 Define recovery-artifact retention: keep the full snapshot under the
+- [x] 1.4 Define recovery-artifact retention: keep the full snapshot under the
   normal backup policy; keep the targeted bundle through first-use and next-day
   acceptance; then securely remove the targeted sensitive data while retaining
   checksum/outcome evidence only.
-- [ ] 1.5 PHASE GATE — the full backup has been restored and queried, the targeted
+- [x] 1.5 PHASE GATE — the full backup has been restored and queried, the targeted
   recovery shape is complete, and both can be located without exposing their
   contents in Git.
 
 ## 2. Make tablet transfer a safe database operation
 
-- [ ] 2.1 Add the `counter-device-sessions` delta: privileged transfer preserves
+- [x] 2.1 Add the `counter-device-sessions` delta: privileged transfer preserves
   machine identity/session, requires no live shift or pending request and recent
   zero-unresolved evidence, preserves historical row outlet, and makes future
   shifts use the target outlet. Include the Edit surface: Super Admin edits name
   and outlet; Franchise Admin edits name only at their managed outlet.
-- [ ] 2.2 Replace or wrap the existing service-only rename function with one
+- [x] 2.2 Replace or wrap the existing service-only rename function with one
   atomic tablet-edit RPC. Trim/validate the name, enforce target-label
   uniqueness, re-derive active authority, reserve outlet changes to Super Admin,
   and lock/recheck live shift, pending request, telemetry freshness/unresolved
   count, device proof/removal state and target activity in the write transaction.
-- [ ] 2.3 Add a migration tightening every device-owned read made unsafe by
+- [x] 2.3 Add a migration tightening every device-owned read made unsafe by
   transfer. Review at minimum `orders`, `billing_commands`,
   `billing_end_of_day_confirmations`, `counter_shift_requests`,
   `counter_shifts`, legacy `shifts`, and child-policy inheritance. Preserve
   existing personal-account and owner/manager authority.
-- [ ] 2.4 Expose one `edit` action through the `counter-devices` Edge Function.
+- [x] 2.4 Expose one `edit` action through the `counter-devices` Edge Function.
   Derive the human caller from their bearer token, pass no body-supplied role or
   actor authority, classify each precondition/label refusal, and add the
   required function configuration/type checks.
-- [ ] 2.5 Extend `CounterAdapter` and both live/demo implementations with an
+- [x] 2.5 Extend `CounterAdapter` and both live/demo implementations with an
   atomic `editDevice({ deviceId, label, outletId })`. Preserve typed error copy,
   mock parity and the existing list/operational snapshot shapes.
-- [ ] 2.6 Add an **Edit** action to every administrable tablet card and a prefilled
+- [x] 2.6 Add an **Edit** action to every administrable tablet card and a prefilled
   FormSheet with Name and Outlet. Let Super Admin choose an active outlet; show
   Franchise Admin the current outlet as fixed. Confirm outlet changes with
   tablet/source/target consequences; refresh grouping after success; keep the
   sheet open on actionable refusals; inspect and update the loading shape.
-- [ ] 2.7 Add database and real-HTTP RLS tests: device history at outlet A,
+- [x] 2.7 Add database and real-HTTP RLS tests: device history at outlet A,
   transfer to B, no-shift reads nothing, B shift reads B, direct A reads and
   writes fail, prior A history remains available to authorised A managers, and
   the device's Auth UUID/session proof is unchanged.
-- [ ] 2.8 Add edit/precondition tests for name-only changes during a live shift,
+- [x] 2.8 Add edit/precondition tests for name-only changes during a live shift,
   atomic name-plus-outlet success, no-change submission, Super Admin transfer,
   Franchise Admin rename, Franchise Admin transfer refusal, and refusal for live
   shift, pending request, stale heartbeat, nonzero unresolved work,
@@ -80,10 +129,10 @@
   failure leaves both fields and history unchanged. Add component/browser
   coverage for sheet defaults, confirmation, errors, regrouping, focus and
   phone/tablet light/dark layouts.
-- [ ] 2.9 Update generated schema types and run the complete migration,
+- [x] 2.9 Update generated schema types and run the complete migration,
   `test:db`, `test:rls`, real-HTTP/auth and generated-type gates; RLS changes do
   not use the quickfix lane.
-- [ ] 2.10 PHASE GATE — an authorised admin edits the fields setup originally
+- [x] 2.10 PHASE GATE — an authorised admin edits the fields setup originally
   chose; name-only edits remain small, outlet moves are atomic and safely
   refused while busy, the same browser needs no setup, and a tablet can have
   historical rows at A and a current assignment at B without either outlet
@@ -91,86 +140,86 @@
 
 ## 3. Build the incident-specific operator tool
 
-- [ ] 3.1 Add a non-browser script with `plan`, `apply`, `verify` and `rollback`
+- [x] 3.1 Add a non-browser script with `plan`, `apply`, `verify` and `rollback`
   modes. Require explicit project/environment selection; refuse non-reviewed
   source/target/date values; never load a service-role credential into frontend
   code or print a secret.
-- [ ] 3.2 Make `plan` read-only and emit the exact D2 fingerprint, frozen bill
+- [x] 3.2 Make `plan` read-only and emit the exact D2 fingerprint, frozen bill
   number/menu mappings, reviewed source-to-target device name/outlet mutation,
   stored-zero telemetry ordering against the latest accepted command/bill, and
   SHA-256 digest. Make `verify` require the exact atomically repaired graph and
   target device row. Redact
   customer, employee, device, shift and receipt-link identifiers from console
   output and committed evidence.
-- [ ] 3.3 Make `apply` require the matching plan digest and confirmation phrase,
+- [x] 3.3 Make `apply` require the matching plan digest and confirmation phrase,
   acquire advisory/row locks with a short timeout, and rerun the entire plan
   inside its transaction before the first mutation.
-- [ ] 3.4 Inventory named immutable triggers and cross-outlet foreign keys from
+- [x] 3.4 Inventory named immutable triggers and cross-outlet foreign keys from
   the live schema. Temporarily defer/disable only the exact named guards needed;
   never use global replication-role bypass; restore and catalog-compare every
   definition before commit.
-- [ ] 3.5 Implement the frozen graph repair: close/reclassify the incident shift;
+- [x] 3.5 Implement the frozen graph repair: close/reclassify the incident shift;
   move 39 orders/45 items; move and renumber 37 bills/43 items/41 allocations;
   move 115 command receipts and rewrite only outlet-local result numbers; move
   five expenses; map all menu references/snapshots; update counters; and rehome
   and rename the existing device while preserving its UUID/session/setup facts.
   Leave public-link rows, attendance and prior Kanchrapara history untouched.
-- [ ] 3.6 Assert inside the transaction: exact row counts; per-row and aggregate
+- [x] 3.6 Assert inside the transaction: exact row counts; per-row and aggregate
   money identity; 37/2 paid/cancelled order status; zero orphan/dependent drift;
   menu coverage and prices; receipt-token hash equality; source/target counters;
   unique numbers; device/shift/assignment state; all triggers/constraints/RLS
   enabled; the incident shift closed; the device assigned to the exact target
   name/outlet with identity/session unchanged; and zero application
   correction/audit rows created.
-- [ ] 3.7 Implement `rollback` from the targeted before-image. Refuse checksum
+- [x] 3.7 Implement `rollback` from the targeted before-image. Refuse checksum
   mismatch, changed affected rows, later dependent work or number collisions;
   restore historical attribution, shift state and the captured device row where
   safe; never lower a committed high-water counter. The planned reversal is
   database-only and requires no outlet hardware or admin UI.
-- [ ] 3.8 Add local tests for exact success and every refusal: count/money drift,
+- [x] 3.8 Add local tests for exact success and every refusal: count/money drift,
   second device/shift/operator, target trade, target counter drift, missing or
   price-changed menu mapping, stored nonzero unresolved work, last report before
   the latest command/bill, later server-side device work, assignment drift,
   corrections or discounts appearing, lock contention, mid-transaction failure,
   guard-restore failure, wrong digest/project and unsafe rollback.
-- [ ] 3.9 Prove repository hygiene: no dump, before-image, token, UUID list,
+- [x] 3.9 Prove repository hygiene: no dump, before-image, token, UUID list,
   customer/employee fact or secret is tracked; source files are UTF-8 without
   BOM; logs contain aggregates and hashes only.
-- [ ] 3.10 PHASE GATE — the tool can do nothing without a matching fresh plan,
+- [x] 3.10 PHASE GATE — the tool can do nothing without a matching fresh plan,
   every failure is all-or-nothing, and rollback is executable rather than prose.
 
 ## 4. Rehearse against restored production
 
-- [ ] 4.1 Run `plan` on the scratch restore and reproduce every reviewed baseline
+- [x] 4.1 Run `plan` on the scratch restore and reproduce every reviewed baseline
   fact. Investigate any difference; do not tune expectations until the command
   turns green.
-- [ ] 4.2 Run `apply`, then a fresh-process `verify`. Prove Kalyani has 37 settled
+- [x] 4.2 Run `apply`, then a fresh-process `verify`. Prove Kalyani has 37 settled
   bills totalling 906,000 paise with 213,000 cash and 693,000 UPI; Kanchrapara
   has none of the incident rows; all IDs/timestamps/customer facts/tenders and
   receipt tokens hash identically; prior history is untouched; and the device is
   at the reviewed target name/outlet with its identity/session unchanged and no
   live shift.
-- [ ] 4.3 Against the restored environment through the real app/Edge/RPC path,
+- [x] 4.3 Against the restored environment through the real app/Edge/RPC path,
   independently exercise the normal Edit feature with a fresh zero heartbeat on
   a separate test device/state. Verify confirmation, grouped-card movement,
   preserved device session, target menu after refresh and no historical-row
   mutation. This tests the durable UI without putting it on the incident's
   production critical path.
-- [ ] 4.4 Run database-only `rollback` and compare the restored state with the
+- [x] 4.4 Run database-only `rollback` and compare the restored state with the
   task-1 targeted before-image. Verify the device row and historical graph are
   restored together and the only permitted post-commit difference is that
   issued number high-water marks are not lowered.
-- [ ] 4.5 Reset scratch from the full dump and repeat the atomic apply, then
+- [x] 4.5 Reset scratch from the full dump and repeat the atomic apply, then
   simulate the repaired production tablet's next online Kalyani startup/shift
   and genuine next bill, and verify it receives bill 1027 while Kanchrapara does
   not reuse 742–778.
-- [ ] 4.6 Inject a failure after each mutation group and before guard restoration.
+- [x] 4.6 Inject a failure after each mutation group and before guard restoration.
   Verify every run rolls back completely and the next `plan` returns the
   original digest.
-- [ ] 4.7 Have a separate review pass compare proposal, design, dependency
+- [x] 4.7 Have a separate review pass compare proposal, design, dependency
   inventory, SQL, tests and reversal. Fix every unaccounted table or assumption,
   rerun 4.1–4.6, and record the evidence without PII.
-- [ ] 4.8 PHASE GATE — atomic history/device apply, independent verification,
+- [x] 4.8 PHASE GATE — atomic history/device apply, independent verification,
   database-only rollback, re-apply, separate real UI-transfer coverage,
   first-next-bill and failure injection have all passed on a restored production
   snapshot.
@@ -189,7 +238,7 @@
   commit, production access, Supabase/API reachability and the external backup
   destination. Explicitly assume every outlet tablet, phone, printer and outlet
   network is off or unreachable; none may appear in the night-of critical path.
-- [ ] 4A.4 Rehearse both cutover-time branches: apply just before the incident
+- [x] 4A.4 Rehearse both cutover-time branches: apply just before the incident
   shift's stored 04:00 IST expiry closes at transaction time; apply at/after the
   expiry caps `ended_at` at expiry. In both cases the literal incident business
   date remains `2026-09-16`, the mapping remains 990–1026 and no current-date or
@@ -300,22 +349,22 @@
 
 ## 8. Documentation, cleanup and final gate
 
-- [ ] 8.1 Update `docs/DATA_MODEL.md`, `docs/OPERATIONS.md`,
+- [x] 8.1 Update `docs/DATA_MODEL.md`, `docs/OPERATIONS.md`,
   `docs/SECURITY_AND_PRIVACY.md`, `docs/OFFLINE_AND_SYNC.md` and
   `docs/TESTING.md`, `docs/SCREENS.md`, `docs/ROLES_AND_PERMISSIONS.md` and
   `docs/DEMO_MODE.md` exactly as named in the proposal. Keep incident-specific
   counts/history in this change, not in the timeless docs.
-- [ ] 8.2 Run `npm run lint`, `npm run format:check`, `npm run typecheck`,
+- [x] 8.2 Run `npm run lint`, `npm run format:check`, `npm run typecheck`,
   `npm run functions:typecheck`, `npm test`, `npm run contrast`, `npm run build`
   and `npm run test:e2e`; fix and repeat until green.
-- [ ] 8.3 On a fresh local database run `npm run db:start && npm run db:reset`,
+- [x] 8.3 On a fresh local database run `npm run db:start && npm run db:reset`,
   then `npm run test:db`, `npm run test:rls`, `npm run test:e2e:auth`,
   `npm run db:types`, and verify the generated-type diff is expected/clean.
 - [ ] 8.4 After task 7 passes, securely remove the targeted before-image and
   reversal under the task-1 retention decision. Keep the full snapshot under
   normal backup retention and retain only non-sensitive checksums/results in
   `evidence/`.
-- [ ] 8.5 Run `npm run roadmap:sync` and confirm this intentionally unlisted
+- [x] 8.5 Run `npm run roadmap:sync` and confirm this intentionally unlisted
   incident change does not hand-edit or corrupt roadmap status.
 - [ ] 8.6 PHASE GATE — the proposal Gate is proved literally: the 2026-09-16
   trade reads wholly at Kalyani with unchanged money and identities, prior

@@ -138,6 +138,44 @@ describe('classifying a counter action failure', () => {
       body: { action: 'issue-setup-code', outletId: 'outlet-1', label: 'Tablet' },
     })
   })
+
+  it('sends one atomic edit command with name and outlet', async () => {
+    const invoke = vi.fn().mockResolvedValue({ data: null, error: null })
+
+    await expect(
+      adapterWith(invoke).editDevice({
+        deviceId: 'device-1',
+        label: 'Front counter',
+        outletId: 'outlet-2',
+      }),
+    ).resolves.toBeUndefined()
+    expect(invoke).toHaveBeenCalledWith('counter-devices', {
+      body: {
+        action: 'edit',
+        deviceId: 'device-1',
+        label: 'Front counter',
+        outletId: 'outlet-2',
+      },
+    })
+  })
+
+  it.each([
+    ['device_invalid', 'That tablet is no longer available to edit.'],
+    ['inactive_outlet', 'That outlet is not active. Choose an active outlet.'],
+    ['live_shift', 'End the tablet’s open shift before moving it to another outlet.'],
+    ['pending_request', 'Cancel the tablet’s pending shift request before moving it.'],
+    [
+      'stale_telemetry',
+      'The tablet must report an empty queue within the last 30 minutes before it can move.',
+    ],
+    ['unresolved_work', 'The tablet still reports unresolved work. Sync it before moving it.'],
+  ])('keeps the edit refusal %s actionable', async (reason, message) => {
+    const counter = adapterWith(answering(httpError({ error: reason }, 409)))
+
+    await expect(
+      counter.editDevice({ deviceId: 'device-1', label: 'Front counter', outletId: 'outlet-2' }),
+    ).rejects.toMatchObject({ code: reason, message })
+  })
 })
 
 describe('the shared outlet billing channel', () => {

@@ -4265,6 +4265,15 @@ export type Database = {
           state_fingerprint: string
         }[]
       }
+      edit_counter_device: {
+        Args: {
+          p_device_id: string
+          p_edited_by: string
+          p_label: string
+          p_outlet_id: string
+        }
+        Returns: string
+      }
       edit_drawer_observation: {
         Args: {
           p_counted_at?: string

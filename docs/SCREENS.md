@@ -147,6 +147,19 @@ it in a separate screen.
 
 **Tablets** (manager and owner) — the hardware and counter standing at each outlet. Heartbeat time, unresolved count and the oldest unresolved instant remain explicitly **last reported**: a tablet that is off, offline or broken stops moving them and is marked out of touch after 30 minutes. Unresolved includes work needing attention; excluding it would make the drawer look safer when it is not. Beneath that telemetry, a coherent read names the live operator and opening time; if no shift is open it says **Nobody is at this counter**. Billing figures do not appear here: managers read the outlet-day Cash and UPI totals in **Billing → Totals**, while Bills and Open orders already carry their own counts. **Re-read** refreshes the tablet and counter state — there is no subscription or timer on the manager's phone. The surface lists **every** tablet at each outlet in the reader's scope, grouped by outlet, and every action names the one till it acts on; an outlet with none says so rather than showing a blank card, and a tablet still awaiting proof of its session appears nowhere at all. Setting up another is always offered, because an outlet may hold several. Removing one is permanent, ends any live shift immediately, and the confirmation names what the tablet last reported unresolved.
 
+Each tablet card also has **Edit**, prefilled with its **Name** and **Outlet**. A
+Super Admin may change either; a Franchise Admin may rename a tablet at their
+managed outlet and sees the outlet as fixed. Name-only edits may occur during a
+live shift. Changing the outlet opens a confirmation naming the tablet, source
+and destination, then requires an active source and destination, no live shift
+or pending request, a fresh report of zero unresolved work, and a unique
+destination name. A refusal keeps the sheet open with its actionable reason.
+Success immediately regroups the card, preserves the device session and needs
+no setup code; only current and future context changes, so historical rows stay
+with their recorded outlet and the transferred device cannot read its former
+outlet. Reconnect the tablet before its next shift so the destination menu and
+outlet context are authoritative.
+
 **Billing counter** — the heart of the product, and the screen most worth getting right.
 
 After an offline cold start every ordinary counter command remains available,

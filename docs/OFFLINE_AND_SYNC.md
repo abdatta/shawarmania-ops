@@ -168,6 +168,34 @@ Heartbeat transport failure never blocks billing, and the next trigger retries.
 This closes the response-loss case where the server accepted the final command
 but the last zero report disappeared and no later queue change occurred.
 
+## Moving a tablet between outlets
+
+Editing a tablet's name or current outlet is an **online administrative
+operation**, not a counter command. A name-only edit does not depend on the
+queue. An outlet move is accepted only for an idle proven tablet with no pending
+shift request, a recent heartbeat (within 30 minutes) reporting zero unresolved
+work, active source and destination outlets, and a destination-unique label.
+The database checks these conditions while holding the device row, so a request
+or shift cannot race the move. The tablet need not be the browser making the
+edit, but its recent report is required evidence; a powered-off tablet or stale
+report must be refused rather than guessed clean.
+
+Moving the current assignment does not migrate the outbox or rewrite history.
+The existing machine session remains valid, historical rows retain their own
+outlet, and the next shift uses the destination after the tablet reconnects and
+refreshes its menu and outlet context. Until that online refresh, do not open a
+shift or treat cached menu data as authoritative. A transferred device cannot
+read its former outlet through its stable identity, because device reads are
+intersected with the current outlet and live-shift rule.
+
+An exceptional closed-hours historical repair may be database-only when its
+owner-approved fingerprint includes independent evidence that the powered-off
+tablet has no unresolved work and no later server-side activity. That exception
+belongs to the incident operator runbook, not to normal offline behavior: it
+does not invent a queue, reconnect a device or bypass the transfer preconditions
+for ordinary edits. The first real opening remains online verification of the
+same session, destination menu and normal shift handshake.
+
 ## Conflicts
 
 There are fewer than you would expect, by design.

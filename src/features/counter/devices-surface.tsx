@@ -11,6 +11,7 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { LoadingFigures } from '@/components/ui/loading'
+import { Select } from '@/components/ui/select'
 import { useAdapters } from '@/data-access'
 import { DataActionError, type CounterDeviceOperationalSnapshot } from '@/data-access/adapters'
 import { formatDateTime, isCounterTelemetryFresh } from '@/domain'
@@ -19,16 +20,9 @@ import { useSession } from '@/session/context'
 import { holdsRole } from '@/session/session'
 
 /**
- * The tablets at an outlet, and the two things anybody does to one: set it up,
- * and remove it.
- *
- * There is deliberately nothing in between. **Removal is permanent and there is
- * no paused state** — a paused tablet is a security question that a removed one
- * is not, and setting one up again costs a code and a walk to the counter.
- *
- * One active tablet per outlet is a database invariant for launch, so this
- * surface offers a setup code only where there is room for one. The refusal is
- * still Postgres's; this only avoids offering an act that will fail.
+ * The tablets at an outlet: set up, edit the setup name/current outlet, or
+ * remove permanently. Editing preserves the established device session;
+ * removal deliberately does not create a paused security state.
  */
 
 export function DevicesSurface() {
@@ -48,13 +42,15 @@ export function DevicesSurface() {
   // The owner administers tablets everywhere, unlike the drawer: both privileged
   // functions carry an explicit `super_admin` branch, so narrowing this to
   // managed outlets would hide a control the database accepts.
-  const mayAdminister = holdsRole(useSession(), 'super_admin') || managed
+  const isOwner = holdsRole(useSession(), 'super_admin')
+  const mayAdminister = isOwner || managed
 
   const scopeKey = outletIds.join(':')
   const [deviceReadings, setDeviceReadings] = useState<
     Record<string, CounterDeviceOperationalSnapshot[]>
   >({})
   const [names, setNames] = useState<Record<string, string>>({})
+  const [activeOutlets, setActiveOutlets] = useState<{ id: string; name: string }[]>([])
   const [error, setError] = useState<string | null>(null)
   const [reading, setReading] = useState(false)
   // Reads can overlap with a scope change or with a setup/removal refresh.
@@ -69,6 +65,10 @@ export function DevicesSurface() {
   const [issued, setIssued] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [removing, setRemoving] = useState<CounterDeviceOperationalSnapshot | null>(null)
+  const [editing, setEditing] = useState<CounterDeviceOperationalSnapshot | null>(null)
+  const [editLabel, setEditLabel] = useState('')
+  const [editOutletId, setEditOutletId] = useState('')
+  const [confirmingMove, setConfirmingMove] = useState(false)
 
   const load = useCallback(() => {
     const request = ++latestRead.current
@@ -128,6 +128,7 @@ export function DevicesSurface() {
       .then((list) => {
         if (!active) return
         setNames(Object.fromEntries(list.map((outlet) => [outlet.id, outlet.name])))
+        setActiveOutlets(list.map((outlet) => ({ id: outlet.id, name: outlet.name })))
       })
       .catch(() => undefined)
     return () => {
@@ -178,6 +179,48 @@ export function DevicesSurface() {
       setBusy(false)
       setRemoving(null)
     }
+  }
+
+  function beginEdit(device: CounterDeviceOperationalSnapshot) {
+    setError(null)
+    setEditing(device)
+    setEditLabel(device.label)
+    setEditOutletId(device.outletId)
+  }
+
+  async function saveEdit() {
+    if (!editing) return
+    setBusy(true)
+    setError(null)
+    try {
+      await counter.editDevice({
+        deviceId: editing.id,
+        label: editLabel.trim(),
+        outletId: editOutletId,
+      })
+      setEditing(null)
+      setConfirmingMove(false)
+      await load()
+    } catch (cause) {
+      setConfirmingMove(false)
+      setError(
+        cause instanceof DataActionError
+          ? cause.message
+          : 'Could not edit that tablet. Try again in a moment.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function submitEdit(event: FormEvent) {
+    event.preventDefault()
+    if (!editing || !editLabel.trim() || !editOutletId) return
+    if (editOutletId !== editing.outletId) {
+      setConfirmingMove(true)
+      return
+    }
+    void saveEdit()
   }
 
   return (
@@ -315,19 +358,28 @@ export function DevicesSurface() {
                         )}
                       </section>
                       {mayAdminister && (
-                        <button
-                          type="button"
-                          onClick={() => setRemoving(device)}
-                          className={buttonVariants({ variant: 'secondary', size: 'phone' })}
-                        >
-                          {/*
-                            Named, not just "Remove". An outlet may have two
-                            counters open on this screen, and a permanent action
-                            that does not say which one it takes is an action
-                            somebody performs on the wrong till.
-                          */}
-                          Remove {device.label}
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => beginEdit(device)}
+                            className={buttonVariants({ variant: 'secondary', size: 'phone' })}
+                          >
+                            Edit {device.label}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRemoving(device)}
+                            className={buttonVariants({ variant: 'secondary', size: 'phone' })}
+                          >
+                            {/*
+                              Named, not just "Remove". An outlet may have two
+                              counters open on this screen, and a permanent action
+                              that does not say which one it takes is an action
+                              somebody performs on the wrong till.
+                            */}
+                            Remove {device.label}
+                          </button>
+                        </div>
                       )}
                     </CardBody>
                   </Card>
@@ -400,6 +452,89 @@ export function DevicesSurface() {
           </p>
         </form>
       </FormSheet>
+
+      <FormSheet
+        open={editing !== null}
+        title={editing ? `Edit ${editing.label}` : 'Edit tablet'}
+        onClose={() => {
+          if (!busy) setEditing(null)
+        }}
+        error={error}
+        footer={
+          <button
+            type="submit"
+            form="device-edit-form"
+            disabled={busy || !editLabel.trim()}
+            className={`${buttonVariants({ size: 'phone' })} w-full`}
+          >
+            {busy ? 'Saving…' : 'Save tablet'}
+          </button>
+        }
+      >
+        <form id="device-edit-form" onSubmit={submitEdit} className="space-y-4" noValidate>
+          <div className="space-y-1">
+            <label htmlFor="device-edit-label" className="block text-sm font-semibold">
+              Name
+            </label>
+            <Input
+              id="device-edit-label"
+              name="device-edit-label"
+              type="text"
+              autoFocus
+              data-autofocus
+              required
+              maxLength={120}
+              value={editLabel}
+              onChange={(event) => setEditLabel(event.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="device-edit-outlet" className="block text-sm font-semibold">
+              Outlet
+            </label>
+            {isOwner ? (
+              <Select
+                id="device-edit-outlet"
+                name="device-edit-outlet"
+                value={editOutletId}
+                onChange={(event) => setEditOutletId(event.target.value)}
+              >
+                {activeOutlets.map((outlet) => (
+                  <option key={outlet.id} value={outlet.id}>
+                    {outlet.name}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <p id="device-edit-outlet" className="text-sm text-content">
+                {editing ? names[editing.outletId] : ''}
+              </p>
+            )}
+            <p className="text-xs text-content-muted">
+              {isOwner
+                ? 'Moving a tablet changes where its next shift and future billing belong; its earlier history stays at the original outlet.'
+                : 'Only a Super Admin can move a tablet to another outlet.'}
+            </p>
+          </div>
+        </form>
+      </FormSheet>
+
+      <ConfirmDialog
+        open={confirmingMove && editing !== null}
+        title={editing ? `Move ${editing.label}?` : 'Move this tablet?'}
+        consequence={
+          editing
+            ? `${editing.label} will leave ${names[editing.outletId] ?? 'its current outlet'} and ` +
+              `join ${names[editOutletId] ?? 'the selected outlet'}. Its existing bills and shifts stay ` +
+              'where they were; its next shift and future billing use the new outlet. The move is refused ' +
+              'unless the tablet is idle and has freshly reported no unresolved work. Keep the tablet ' +
+              'online until it reloads the new outlet before opening its next shift.'
+            : ''
+        }
+        confirmLabel={busy ? 'Moving…' : 'Move tablet'}
+        onClose={() => setConfirmingMove(false)}
+        onConfirm={saveEdit}
+      />
 
       {/*
         Removal takes the live shift with it and cancels any pending request, so

@@ -174,6 +174,92 @@ describe('the Tablets surface', () => {
     ).toBeInTheDocument()
   })
 
+  it('prefills the setup properties and lets a manager rename during a live shift', async () => {
+    const user = userEvent.setup()
+    const data = createDemoData()
+    const adapters = createMockAdapters('franchise_admin', data)
+    renderSurface('franchise_admin', adapters)
+
+    await user.click(await screen.findByRole('button', { name: 'Edit Counter tablet' }))
+    const sheet = screen.getByRole('dialog', { name: 'Edit Counter tablet' })
+    const name = within(sheet).getByLabelText('Name')
+    expect(name).toHaveValue('Counter tablet')
+    await waitFor(() => expect(name).toHaveFocus())
+    expect(within(sheet).getByText('Shawarmania Kalyani')).toBeInTheDocument()
+    expect(within(sheet).queryByRole('combobox', { name: 'Outlet' })).not.toBeInTheDocument()
+
+    await user.clear(name)
+    await user.type(name, 'Main counter')
+    await user.click(within(sheet).getByRole('button', { name: 'Save tablet' }))
+
+    expect(await screen.findByText('Main counter')).toBeInTheDocument()
+    expect(data.counter.devices.find((device) => device.label === 'Main counter')?.outletId).toBe(
+      OUTLET_KALYANI_ID,
+    )
+  })
+
+  it('confirms an outlet move, preserves the session identity, and regroups the card', async () => {
+    const user = userEvent.setup()
+    const data = createDemoData()
+    const device = data.counter.devices.find((candidate) => candidate.label === 'Takeaway counter')!
+    const originalId = device.id
+    const originalSetUpAt = device.setUpAt
+    device.lastSeenAt = new Date().toISOString()
+    const adapters = createMockAdapters('super_admin', data)
+    renderSurface('super_admin', adapters)
+    await addOutlet(OUTLET_KANCHRAPARA_ID)
+
+    await user.click(await screen.findByRole('button', { name: 'Edit Takeaway counter' }))
+    const sheet = screen.getByRole('dialog', { name: 'Edit Takeaway counter' })
+    await user.clear(within(sheet).getByLabelText('Name'))
+    await user.type(within(sheet).getByLabelText('Name'), 'Kalyani Counter 2')
+    await user.selectOptions(
+      within(sheet).getByRole('combobox', { name: 'Outlet' }),
+      OUTLET_KANCHRAPARA_ID,
+    )
+    await user.click(within(sheet).getByRole('button', { name: 'Save tablet' }))
+
+    const confirm = await screen.findByRole('dialog', { name: 'Move Takeaway counter?' })
+    expect(confirm).toHaveTextContent(/leave Shawarmania Kalyani/i)
+    expect(confirm).toHaveTextContent(/join Shawarmania Kanchrapara/i)
+    expect(confirm).toHaveTextContent(/keep the tablet online until it reloads/i)
+    await user.click(within(confirm).getByRole('button', { name: 'Move tablet' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(await screen.findByText('Kalyani Counter 2')).toBeInTheDocument()
+    expect(device).toMatchObject({
+      id: originalId,
+      setUpAt: originalSetUpAt,
+      outletId: OUTLET_KANCHRAPARA_ID,
+      label: 'Kalyani Counter 2',
+    })
+  })
+
+  it('keeps the edit sheet open with an actionable refusal', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('super_admin', createDemoData())
+    renderSurface('super_admin', adapters)
+
+    await user.click(await screen.findByRole('button', { name: 'Edit Takeaway counter' }))
+    const sheet = screen.getByRole('dialog', { name: 'Edit Takeaway counter' })
+    await user.selectOptions(
+      within(sheet).getByRole('combobox', { name: 'Outlet' }),
+      OUTLET_KANCHRAPARA_ID,
+    )
+    await user.click(within(sheet).getByRole('button', { name: 'Save tablet' }))
+    await user.click(
+      within(await screen.findByRole('dialog', { name: 'Move Takeaway counter?' })).getByRole(
+        'button',
+        { name: 'Move tablet' },
+      ),
+    )
+
+    expect(await screen.findByRole('dialog', { name: 'Edit Takeaway counter' })).toBeInTheDocument()
+    expect(await screen.findByTestId('form-sheet-error')).toHaveTextContent(
+      /report an empty queue within the last 30 minutes/i,
+    )
+  })
+
   it('names the outlet with no tablet, beside the ones that have one', async () => {
     const adapters = createMockAdapters('super_admin', createDemoData())
     const devices = await adapters.counter.listDevices()

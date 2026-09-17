@@ -37,6 +37,10 @@ export function Modal({ open, onClose, children, className, ...props }: ModalPro
     if (!dialog) return
     if (open && !dialog.open) {
       dialog.showModal()
+      // React commits children before this effect opens the native dialog.
+      // An autofocus control is inert during that commit, so browsers can
+      // otherwise leave focus on the trigger (or pick the close button).
+      dialog.querySelector<HTMLElement>('[autofocus], [data-autofocus]')?.focus()
     } else if (!open && dialog.open) {
       dialog.close()
     }

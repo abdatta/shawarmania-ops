@@ -1720,6 +1720,11 @@ export interface CounterAdapter {
    * retrievable: only its hash is kept.
    */
   issueSetupCode(outletId: string, label: string): Promise<{ code: string; validFor: string }>
+  /**
+   * Rename a tablet, and for a Super Admin optionally transfer its future work
+   * to another outlet without replacing its machine identity or session.
+   */
+  editDevice(input: { deviceId: string; label: string; outletId: string }): Promise<void>
   /** Permanent, immediate, and it ends any live shift with it. */
   removeDevice(deviceId: string): Promise<void>
 

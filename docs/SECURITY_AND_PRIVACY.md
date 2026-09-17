@@ -1,6 +1,6 @@
 # Security And Privacy
 
-> This posture is enforced in the deployed app — auth, tenancy RLS and attendance are live. Sections covering surfaces not yet built (the counter-tablet path) say so inline.
+> This posture is enforced in the deployed app — auth, tenancy RLS, attendance and the counter-tablet path are live. Any surface not yet built is marked inline.
 
 ## Hard rules
 
@@ -84,6 +84,27 @@ Almost every security question in this app reduces to "can this person see anoth
 Enforcement is in Postgres, evaluated per row, driven by the requesting person's **assignments** — not by anything in their token, which since `multi-outlet-people` carries no authority at all. A frontend bug cannot leak another outlet's rows because the database will not return them, and a forged claim buys nothing because nothing reads one. Route guards and conditional navigation are convenience, and are never the only thing standing between a Biller and the owner's cross-outlet view.
 
 The isolation test suite asserts this for every outlet-scoped table (see [Testing](TESTING.md)). It exists because tenancy bugs are silent — nothing errors, a query just quietly returns more than it should.
+
+### A tablet's current outlet is not its historical scope
+
+`counter_devices.outlet_id` is the tablet's current assignment. A Super Admin
+may move a proven, non-removed tablet between active outlets through the
+privileged Edit operation; a Franchise Admin may rename a tablet at an outlet
+they manage but cannot move it. The operation is atomic and refuses an outlet
+move unless the tablet has no live shift or pending request, its recent
+heartbeat reports zero unresolved local work, and the destination label is
+unique. The service-role key is used only inside the Edge Function, which
+re-derives the caller's authority from their own session; a device, a Biller,
+or a hand-crafted request cannot invoke the operation or supply a different
+actor.
+
+The move preserves the machine/Auth UUID, proven session and browser
+credentials, but changes only current and future device context. Bills, orders,
+shifts, commands, expenses and attendance retain the outlet recorded on each
+historical row. Device-owned reads additionally intersect that row with the
+tablet's current outlet and the existing live-shift condition, so a transferred
+tablet cannot use its stable UUID to read its former outlet. Super Admins and
+the appropriate outlet managers retain their normal historical read scope.
 
 ## Personal data we hold
 

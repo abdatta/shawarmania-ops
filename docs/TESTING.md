@@ -298,6 +298,27 @@ That is all `clientsClaim` governs, and it is worth being exact because this pag
   `auth:usernames:rehearse` sequence, proves the readiness invariant refuses
   legacy/misaligned identity states and missing owner email, records the
   production postflight, and requires `auth:readiness` before static upload.
+- **Counter-device edit/transfer changes**: `supabase/tests/48_safe_counter_device_transfer.sql`
+  proves the role split, atomic name/outlet update, active-outlet and unique-label
+  checks, live-shift/pending-request/fresh-zero telemetry refusals, preserved
+  machine/session facts, historical-row retention and post-transfer RLS. The
+  real-HTTP `supabase/tests/rest/counter-handshake.test.ts` additionally proves
+  that the Edge endpoint ignores actor/role fields in the body, a Franchise
+  Admin can rename only at their outlet, a Super Admin transfer keeps the same
+  device session, the idle device reaches neither outlet, and its next shift
+  receives only the destination menu. `src/features/counter/devices-surface.test.tsx`
+  covers the prefilled Name/Outlet sheet, confirmation, grouped-card refresh and
+  actionable refusal. A transfer must also be walked at phone and tablet widths
+  in both themes; no test or walkthrough may use the Edit flow to rewrite
+  historical bills.
+- **Production historical-repair changes**: restore the full logical snapshot
+  into an isolated scratch project, compare the reviewed plan fingerprint, take
+  and checksum the targeted before-image, rehearse apply/verify/rollback from a
+  fresh process, and inject failures after each mutation group and before guard
+  restoration. Independent postflights must agree on counts, money, identities,
+  outlet isolation, number high-water marks and device state before the next
+  shift opens; keep customer, employee, device and receipt identifiers out of
+  committed evidence.
 - **Password-manager behavior**: inspect the real forms in a normal Chrome
   profile with password saving enabled. DOM names/autocomplete tokens,
   submission and navigation are acceptance evidence; Chrome's optional native

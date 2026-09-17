@@ -34,6 +34,7 @@
     "auth:readiness": "node scripts/check-production-auth-readiness.mjs",
     "contrast": "node scripts/check-contrast.mjs",
     "icons:generate": "node scripts/generate-icons.mjs",
+    "repair:kalyani-attribution": "node scripts/repair-kalyani-counter-attribution.mjs",
     "roadmap:sync": "node openspec/tools/sync-roadmap-status.mjs"
   },
   "dependencies": {
@@ -60,6 +61,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^26.1.1",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
@@ -69,6 +71,7 @@
     "fake-indexeddb": "^6.2.5",
     "globals": "^17.7.0",
     "jsdom": "^29.1.1",
+    "pg": "^8.23.0",
     "prettier": "^3.9.6",
     "supabase": "^2.109.1",
     "tailwindcss": "^4.3.3",

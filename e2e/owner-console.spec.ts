@@ -178,3 +178,50 @@ for (const viewport of [
     })
   }
 }
+
+for (const viewport of [
+  { name: 'phone', width: 390, height: 844 },
+  { name: 'tablet', width: 1080, height: 810 },
+]) {
+  for (const theme of ['light', 'dark']) {
+    test(`Tablet edit sheet is usable in ${theme} on ${viewport.name}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize(viewport)
+      await page.goto('.')
+      await page.evaluate((value) => localStorage.setItem('shawarmania.theme', value), theme)
+      await page.goto(`demo/owner/devices/${KAL}`)
+
+      await page.getByRole('button', { name: 'Edit Counter tablet' }).click()
+      const sheet = page.getByRole('dialog', { name: 'Edit Counter tablet' })
+      const name = sheet.getByLabel('Name')
+      await expect(sheet).toBeVisible()
+      await expect(name).toHaveValue('Counter tablet')
+      await expect(name).toBeFocused()
+      await expect(sheet.getByRole('combobox', { name: 'Outlet' })).toHaveValue(KAL)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        ),
+      ).toBeLessThanOrEqual(1)
+      expect(
+        await sheet.evaluate((node) => {
+          const bounds = node.getBoundingClientRect()
+          return (
+            bounds.left >= 0 &&
+            bounds.top >= 0 &&
+            bounds.right <= window.innerWidth &&
+            bounds.bottom <= window.innerHeight
+          )
+        }),
+      ).toBe(true)
+
+      await page.screenshot({
+        path: testInfo.outputPath(`tablet-edit-${theme}-${viewport.name}.png`),
+        fullPage: true,
+      })
+    })
+  }
+}

@@ -528,6 +528,20 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
    its own code and each removable alone; what it may not hold is two live
    counters answering to the same label. Replacing one
    means removing the old one first, which is permanent and immediate.
+
+   **An enrolled tablet can later be edited from Tablets.** A Super Admin may
+   change its name and current outlet; a Franchise Admin may rename a tablet at
+   an outlet they manage, while its outlet remains fixed in the form. Renaming
+   does not require the counter to be idle. Moving an outlet is an atomic
+   maintenance operation: both outlets must be active, the tablet must have no
+   live shift or pending request, its most recent report must be within 30
+   minutes and say that no local work is unresolved, and the new name must be
+   unique there. The existing machine identity, proven session and browser
+   credentials survive, so no setup code is issued. A move changes only the
+   tablet's current and future context; bills and other historical rows remain
+   attributed to the outlet recorded on them, and the device cannot read its
+   former outlet after the move. If the preconditions are not met, finish or
+   cancel the counter work and re-read its state before trying again.
 7. **Add employees and billers** (People), sending each activation link.
    Creating a person requires name, username, one role and one or more outlets;
    job title, phone and joined date are optional. It writes the account and
@@ -1038,6 +1052,34 @@ Beyond the provider default:
 - **Restore must be tested, not assumed.** An untested backup is a hypothesis. Restore into a scratch project and confirm the data is actually usable.
 - Dumps contain PII. They are encrypted at rest, never committed, and never placed in shared storage.
 
+### Production historical repairs
+
+A narrowly scoped, owner-authorised repair of already recorded trading is an
+operator procedure, not an ordinary migration or an admin-screen action. Before
+the maintenance window, take a full logical snapshot outside the repository,
+restore it into an isolated scratch project, and prove that the relevant graph
+and tablet session are usable there. Immediately before the live transaction,
+take a second targeted before-image of every affected row, the device and shift
+state, counters, and the catalog definitions the operation depends on. Checksum
+the bundle and generate its compensating reversal before applying anything.
+
+The operator's plan must pin the reviewed outlet pair, business date, row
+counts, totals, number high-water marks and menu mapping. A fresh read that
+drifts from that fingerprint is a stop, not a new set of inputs. Apply only in a
+single locked transaction with an explicit confirmation; a failed assertion
+must leave production unchanged. Run an independent postflight from a fresh
+connection before either counter reopens. If it disagrees, use the rehearsed
+database-only reversal while no later dependent work has arrived; never improvise
+a partial SQL correction or wait for an outlet tablet.
+
+The maintenance laptop, database services and the external backup destination
+are sufficient for the closed-hours cutover. Outlet tablets, printers and
+networks may remain powered off. Keep the targeted before-image and reversal
+outside Git until the next-opening and next-day checks agree, then destroy them
+under the retention decision; keep the full snapshot under normal backup
+retention. Retain only non-sensitive checksums and aggregate results in the
+change record.
+
 ## Monitoring
 
 Deliberately minimal at this scale — the useful signals are operational rather than infrastructural:
@@ -1076,6 +1118,29 @@ was sent reads `Cancelled` rather than presenting a valid-looking receipt. The
 same is true of a corrected tender split.
 
 **A counter tablet is lost or stolen** → remove it immediately (Tablets → Remove). Removal is permanent and takes the live shift with it, so nothing further can be rung on it. Any unresolved local bills on it are lost; the confirmation names how many it last reported, but an **out of touch** report is old evidence rather than a current count. Record that uncertainty with the physical cash count and set a replacement up with a fresh code. **Nobody's account is compromised** — a tablet holds no password.
+
+**A counter tablet needs a new name or outlet** → use **Tablets → Edit**. A
+name-only edit is safe while a shift is open. An outlet move is for a Super
+Admin and must wait until the tablet has no live shift or pending request and
+has recently reported an empty local queue; check both outlets are active and
+the destination name is unique. Confirm the source and destination shown in the
+sheet. The same machine identity and session continue, and no setup code is
+needed. Verify the tablet is grouped under the destination and reconnect it
+before opening the next shift. Historical rows stay with their recorded outlet.
+If the tablet is powered off or the report is stale, this normal path must
+refuse; use a separately approved, fingerprinted operator repair only when a
+closed-hours incident requires it.
+
+**A completed trading day is attributed to the wrong outlet** → stop ordinary
+billing edits and preserve the evidence. Take and restore-test a full snapshot,
+then take a targeted before-image and checksum it. Produce a read-only plan
+whose exact date, outlet pair, row graph, totals, counters and menu mapping are
+reviewed by the owner. Apply once in the locked transaction, run independent
+postflights, and keep the counter hardware out of the critical path. If any
+postflight disagrees before a new dependent shift or command exists, use the
+rehearsed database-only reversal; otherwise stop and escalate. Never void and
+re-ring a day merely to change its outlet, and never lower a committed number
+counter.
 
 **Bills are not syncing** → check whether Tablets says **unresolved** or **out of touch**, then check the counter's network. Unresolved names the tablet's fresh retained-envelope count; out of touch means even a displayed zero is no longer current evidence. The queue is durable while the device is intact. Bring the counter app to the foreground and wait through a minute heartbeat; do not reinstall or clear site data, because that destroys the outbox.
 
