@@ -53,3 +53,33 @@ database-only rollback, pre-expiry closure at transaction time and post-expiry
 closure capped at stored expiry all passed against isolated full-dump clones;
 rollback matched every before-image row and retained issued number high-water
 marks as designed.
+
+## Final pre-cutover backup after later Kalyani trade
+
+Because Kalyani traded after the first snapshot, a new three-part production
+backup was taken outside Git at:
+
+`C:\Users\iamro\ShawarmaniaBackups\2026-09-18-kalyani-attribution-repair-final`
+
+Inheritance is removed and the current Windows identity is the only granted
+principal. This is the authoritative full backup for the amended cutover.
+
+| Artifact | Completed (UTC) | Bytes | SHA-256 |
+|---|---|---:|---|
+| `production-full.dump` | 2026-09-17T19:37:12Z | 3,015,388 | `FF8AB10F155967C732EB1E38A9D8B07431B28BA533606A214DF9B9B83132C2D8` |
+| `application-public-auth.dump` | 2026-09-17T19:39:28Z | 2,507,779 | `50759E4E8426C2042F1AADC3998D52A18C26DF5CD97F3FD1DC8376D61D0C3368` |
+| `roles.sql` | 2026-09-17T19:39:40Z | 6,173 | `9E60E0F07B9B88F2D262EB6B23F01D4BE840F263477342C6A435351228E77316` |
+
+The full dump restored into isolated database
+`shawarmania_inventory_restore_final4`. The two restore diagnostics were the
+known non-application permission refusals for Realtime's `log_min_messages` and
+`vault.secrets`; the complete `public` and Auth application graph restored and
+the amended plan reproduced every frozen incident and later-Kalyani fact.
+
+The current reviewed rehearsal-only targeted bundle lives beneath that backup
+root at `rehearsal-reviewed-v3`. Its plan digest is
+`2ddd9538e42cb0141885db927d471a6d74ecc58a6654ac4622db9f954ba4b5a2`
+and before-image checksum is
+`ba3f289719bb076670bffac702395efd36e0d8835aa6360b8976b94222203e91`.
+The final production targeted bundle is deliberately not captured until the
+last production plan passes under the closed-counter freeze.

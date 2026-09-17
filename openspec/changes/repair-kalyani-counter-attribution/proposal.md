@@ -63,10 +63,15 @@ outlet isolation true after the transfer.
 - Repair the same rows in one locked transaction. Preserve UUIDs, commercial
   timestamps, business date, quantities, integer-paise amounts, tender methods,
   customer snapshots and public receipt tokens.
-- Renumber the 37 bills in their existing chronological order after Kalyani's
-  high-water mark. The reviewed baseline is Kalyani bill 989, so the expected
-  mapping is 742–778 to 990–1026. A changed target high-water mark is drift and
-  aborts; it is not silently recalculated.
+- Preserve the owner-approved original insertion point: renumber the 37 incident
+  bills in chronological order from Kanchrapara 742–778 to Kalyani 990–1026.
+  Kalyani legitimately traded before the delayed cutover resumed, producing one
+  complete later block of 35 settled, unvoided bills numbered 990–1024 on
+  business date 2026-09-17. Move that intact block upward to 1027–1061 first,
+  without changing any bill ID, status, void state, money, child, payment
+  correction, public link or business date; rewrite only the 36 matching command
+  result numbers. Set Kalyani's high-water to 1061. The plan seals both opaque-ID
+  mappings and every later-block dependency and refuses any subsequent drift.
 - Move the complete order/command context, the five same-shift expenses and the
   incident shift with the bills. Keep the source bill and order counters at
   their old high-water marks so no number is ever reused.
@@ -110,9 +115,9 @@ outlet isolation true after the transfer.
   business-day cutover during execution neither changes the selected rows nor
   recalculates the reviewed number mapping.
 - Do not ring a synthetic sale during the closed window. The first genuine bill
-  at the next opening is the first-use verification and is expected to be
-  Kalyani bill 1027. The next-day reconciliation remains a later acceptance
-  checkpoint before targeted recovery artifacts are retired.
+  at the next opening is the first-use verification and must be **1062**, exactly
+  one above the committed 1061 high-water. The next-day reconciliation remains a
+  later acceptance checkpoint before targeted recovery artifacts are retired.
 - The incident tablet is not contacted or inspected overnight. Its first online
   refresh, Kalyani-menu check and same-session proof happen at the next real
   opening before a shift starts.
@@ -203,13 +208,17 @@ loading-state parity; an incident-specific operator tool and local rehearsal
 tests; this change's evidence templates; generated schema types; and durable
 screen/operations/security documentation for transferring a tablet safely.
 
-**Production data:** 37 bills, 43 bill items, 41 original payment allocations,
+**Production data:** 37 incident bills, 43 bill items, 41 original payment allocations,
 39 orders, 45 order items, 115 billing command receipts, five expenses, one
 counter shift, outlet counters and any surviving incident shift request are
 handled by the operator tool together with the current device name/outlet.
 Thirty-seven public-link rows keep the same bill IDs and tokens and require no
-mutation. The tool discovers and reports every dependent table before applying
-rather than relying only on this list.
+mutation. The same transaction renumbers the complete later Kalyani block of 35
+bills and updates its 36 bill-bearing command results while preserving its 40
+items, 37 payments, 35 public links, one payment correction/allocation and
+753,000-paise total byte-for-byte apart from the bill number fields. The tool
+discovers and reports every dependent table before applying rather than relying
+only on this list.
 
 **Unaffected history:** the same tablet has 741 earlier Kanchrapara bills and 33
 earlier shifts. Those records remain Kanchrapara history. Attendance already

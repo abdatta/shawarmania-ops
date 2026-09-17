@@ -1,6 +1,59 @@
-> **Progress checkpoint — 2026-09-17 IST:** 42 of 69 tasks are complete.
-> Production data remains untouched. The frozen production plan was re-read
-> after the pause boundary. The current timestamp-complete plan matches digest
+> **Active checkpoint — 2026-09-18 01:01 IST:** production repair remains
+> untouched. The owner has confirmed both shops are physically closed and has
+> frozen a revised numbering decision: preserve the original Kalyani insertion
+> point by moving incident bills 742–778 to 990–1026, then shift every genuine
+> later Kalyani bill 990–1024 upward intact to 1027–1061. No settled bill is
+> voided, replaced or deleted; the 35 later bill IDs and their money, children,
+> payment correction, public links and business date remain unchanged. The
+> Kalyani counter becomes 1061 and its next genuine bill will be 1062. Read-only
+> production inspection found the later block contiguous, settled and unvoided:
+> 35 bills / 753,000 paise / 40 items / 37 payments / 35 public links / one
+> payment correction and allocation / 36 bill-bearing command results. Both
+> tablets report zero unresolved work after their latest server work. The
+> Kalyani database shift remains live until its stored 04:00 IST expiry, so the
+> final preflight will recheck it and all counters immediately before apply.
+> A fresh three-part production backup dated 2026-09-18 has been checksummed and
+> the full dump restored successfully into an isolated scratch database. Tasks
+> 3.5–3.8 and 4.1–4.8 are reopened until the amended atomic operator, rollback,
+> clone-per-case rehearsal and separate review pass again.
+> The amended clone-per-case rehearsal has now passed exact apply, fresh-process
+> verify, database-only rollback, both incident-shift cutoff branches, active
+> later-shift refusal, next-opening bill 1062, all fourteen mutation failure
+> points, and every frozen count/money/menu/telemetry/assignment/correction,
+> digest, lock and unsafe-rollback refusal. Tasks 3.5–3.8 and 4.1–4.6 are green
+> again; 4.7–4.8 remain open for the separate amended review.
+> The separate amended review then found and fixed collision-safe rollback
+> staging and overly broad command-result hash exclusions. A newly generated
+> bundle passed the complete matrix again, so 4.7–4.8 and 4A.2 are now green.
+>
+> **Earlier deployed checkpoint — 2026-09-17 15:59 IST:** 42 of 69 tasks were
+> complete under the superseded append-after-current numbering plan.
+> The incident graph and device remain untouched. Commit
+> `3dd514f81fc3c1a0dee03cae54f94fc7c5ec0b81` deployed successfully: every CI
+> gate, production migration `20260917000000`, all Edge Functions and Pages are
+> green. Post-deploy catalog, RLS and unauthenticated Edge probes passed from the
+> connected maintenance laptop; the deployment pin and stop/rollback card are
+> saved outside Git with the recovery artifacts. A fresh read-only production
+> plan at 15:45 IST correctly stopped before producing a digest because Kalyani's
+> bill counter is now 991 rather than the reviewed 989. Normal Kalyani bills 990
+> and 991 were created at 15:26:53 and 15:27:15 IST for 39,000 paise total, and
+> Kalyani currently has an open shift. The reviewed 990–1026 mapping is obsolete,
+> so no live apply or targeted capture was attempted. The operator now derives
+> the next 37 numbers from the final plan-time target high-water, seals that
+> range into the digest/bundle and refuses later drift. A read-only production
+> plan proved the unchanged incident graph and yielded 992–1028 from counter
+> 991, but it was deliberately not captured as the final plan while Kalyani
+> remained open. The restored-production harness now passes both the original
+> 989 baseline and an advanced 991 high-water: the latter froze 992–1028 and its
+> first subsequent real billing RPC received 1029. At the requested pause,
+> production itself had continued normally through bill 994 at 15:55:02 IST;
+> the active Kalyani tablet could see its correct outlet, one live shift, five
+> current-day orders, sixteen commands and twenty-four available menu items.
+> No production repair write, bundle capture, shift closure or tablet edit was
+> attempted. The amended operator/docs remain local pending the reopened
+> separate review, verification and commit-pin tasks.
+> The original 989 restored-snapshot plan was re-read after the pause boundary
+> and still matches digest
 > `807fb5e9340120c114a98d2f947622ff48b64186ab2d159dfc3232647b1aa8e8`.
 > Two fresh-restore scratch rehearsals proved plan/apply/fresh-process verify;
 > the latest also proved database-only rollback against every targeted
@@ -45,7 +98,9 @@
 > passes 59 database files / 2,344 assertions, the complete RLS/race/drawer/
 > telemetry/ledger sequence and all 28 real-auth browser tests; regenerated
 > types contain only the expected tablet-edit RPC. Roadmap reconciliation made
-> zero changes. No production mutation or deployment has occurred.
+> zero changes. No incident production mutation has occurred; the reviewed app,
+> migration and functions have deployed, while this later operator-only amendment
+> remains local until its reopened review and verification tasks pass.
 
 ## 0. Freeze the incident definition
 
@@ -160,6 +215,10 @@
   definition before commit.
 - [x] 3.5 Implement the frozen graph repair: close/reclassify the incident shift;
   move 39 orders/45 items; move and renumber 37 bills/43 items/41 allocations;
+  preserve their frozen Kalyani range 990–1026 by shifting the complete later
+  Kalyani 2026-09-17 block from 990–1024 to 1027–1061 without changing bill IDs,
+  status, void state, money, children, correction, public links or business date;
+  rewrite matching later command result numbers and set high-water 1061;
   move 115 command receipts and rewrite only outlet-local result numbers; move
   five expenses; map all menu references/snapshots; update counters; and rehome
   and rename the existing device while preserving its UUID/session/setup facts.
@@ -211,8 +270,9 @@
   issued number high-water marks are not lowered.
 - [x] 4.5 Reset scratch from the full dump and repeat the atomic apply, then
   simulate the repaired production tablet's next online Kalyani startup/shift
-  and genuine next bill, and verify it receives bill 1027 while Kanchrapara does
-  not reuse 742–778.
+  and genuine next bill. Verify the incident block is 990–1026, the complete
+  later Kalyani block is 1027–1061, the next real bill is 1062, and Kanchrapara
+  does not reuse 742–778.
 - [x] 4.6 Inject a failure after each mutation group and before guard restoration.
   Verify every run rolls back completely and the next `plan` returns the
   original digest.
@@ -230,20 +290,20 @@
   deployment and post-deploy policy probes before the maintenance night. Pin the
   reviewed application/tool commit and migration version in private operator
   evidence; do not build, patch or deploy during the live cutover.
-- [ ] 4A.2 Confirm the full snapshot has restored successfully and tasks 4.1–4.8
+- [x] 4A.2 Confirm the full snapshot has restored successfully and tasks 4.1–4.8
   are green before the counters close. Stage the exact `plan`, `apply`,
   `verify` and `rollback` commands without secrets in shell history or Git, and
   pre-create/permission the external targeted-backup destination.
-- [ ] 4A.3 Prepare the connected maintenance laptop with the reviewed local
+- [x] 4A.3 Prepare the connected maintenance laptop with the reviewed local
   commit, production access, Supabase/API reachability and the external backup
   destination. Explicitly assume every outlet tablet, phone, printer and outlet
   network is off or unreachable; none may appear in the night-of critical path.
 - [x] 4A.4 Rehearse both cutover-time branches: apply just before the incident
   shift's stored 04:00 IST expiry closes at transaction time; apply at/after the
   expiry caps `ended_at` at expiry. In both cases the literal incident business
-  date remains `2026-09-16`, the mapping remains 990–1026 and no current-date or
-  host-timezone value enters selection.
-- [ ] 4A.5 Print or save outside Git the stop/rollback decision card: pre-apply
+  date remains `2026-09-16`, the plan-frozen mapping remains unchanged and no
+  current-date or host-timezone value enters selection.
+- [x] 4A.5 Print or save outside Git the stop/rollback decision card: pre-apply
   abort; transaction rollback on apply failure; database-only targeted reversal
   after commit; and no automatic rollback after a new shift/dependent work.
 - [ ] 4A.6 PHASE GATE — when the counters close, all code and infrastructure work
@@ -265,7 +325,9 @@
   cancel the live window rather than completing it under the freeze.
 - [ ] 5.3 Run a fresh production `plan`. Require the reviewed 37 bills, 906,000
   paise, 43/41 bill children, 39/45 order graph, 115 commands, five expenses,
-  zero target-day trade, target high-water 989, exact menu mapping, proven device,
+  the exact later Kalyani 990–1024 block and dependencies, target high-water
+  1024, the incident 990–1026 plus shifted-later 1027–1061 mappings, exact menu
+  mapping, proven device,
   active assignments at both outlets, stored zero unresolved work, last report
   after the latest accepted command/synced bill, and no later server-side device
   work. Any drift stops the run and amends this change before execution. Pass
@@ -335,9 +397,10 @@
   evidence.
 - [ ] 7.8 **First-use check:** after 7.7 passes, open the normal shift and verify
   its outlet/device/operator attribution. Let the first genuine customer sale,
-  not a manufactured night-of sale, prove Kalyani bill number 1027 with its
-  order, payment and command receipt at Kalyani. Record that this closes the
-  automatic rollback window.
+  not a manufactured night-of sale, prove the Kalyani bill number equals the
+  committed plan's repaired target high-water plus one, with its order, payment
+  and command receipt at Kalyani. The number is not a build-time constant.
+  Record that this closes the automatic rollback window.
 - [ ] 7.9 **Next-day check:** after business-date rollover, verify owner reports,
   Kalyani/Kanchrapara daily billing, drawer expectation, expenses and ledger all
   agree with the repaired day and the post-transfer sale; verify no delayed

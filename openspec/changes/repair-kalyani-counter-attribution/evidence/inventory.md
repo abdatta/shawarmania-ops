@@ -10,6 +10,7 @@ machine-readable definitions live only in the external targeted before-image.
 | Tables | Treatment |
 |---|---|
 | `bills`, `bill_items`, `bill_payments` | Move outlet context, frozen bill numbers and approved menu mappings; preserve all commercial facts. |
+| later Kalyani `bills`, children and `billing_commands` | Preserve the complete 2026-09-17 graph; shift bill numbers 990–1024 to 1027–1061 and rewrite only matching command result numbers. |
 | `orders`, `order_items` | Move outlet context and approved menu mappings; preserve order numbers and commercial facts. |
 | `billing_commands` | Move outlet context and rewrite only accepted-result bill numbers. |
 | `counter_shifts`, `counter_shift_requests` | Move the incident shift/request and close the expired shift. |
@@ -19,7 +20,7 @@ machine-readable definitions live only in the external targeted before-image.
 | `assignments`, `menu_items`, `menu_categories`, `outlets`, `profiles` | Read and lock as authority/mapping/reference facts; do not rewrite. |
 | `bill_public_links`, `bill_public_link_views` | Preserve the 37 link rows and any access rows byte-for-byte. |
 | `counter_device_setup_codes` | Preserve the one consumed setup-code row; never expose its hash. |
-| `bill_discounts`, `order_discounts`, `bill_payment_corrections`, `bill_payment_correction_allocations`, `billing_attribution_reviews`, `billing_end_of_day_confirmations` | Required absent for the incident graph. |
+| `bill_discounts`, `order_discounts`, `bill_payment_corrections`, `bill_payment_correction_allocations`, `billing_attribution_reviews`, `billing_end_of_day_confirmations` | Required absent for the incident graph. The later Kalyani graph's one correction/allocation is captured and preserved. |
 | `shifts` | Legacy device/day rows and legacy bill references are required absent. |
 | `aggregator_dismissed_duplicates` | References to the five reviewed expenses are required absent. |
 | `drawer_cash_out`, `drawer_observations`, `drawer_observation_adjustments`, `drawer_reconciliation_acknowledgements` | Required absent at both outlets for business date `2026-09-16`; the repair invents no drawer event or collection. |
@@ -79,10 +80,13 @@ The count and hash are expected to change when the reviewed transfer migration
 is deployed; the post-deploy production plan must freshly capture and freeze
 that exact live catalog rather than accepting this pre-deployment value.
 
-The current version-3 targeted bundle is outside Git under the backup root
-documented in `backup.md`. Its SHA-256 is
-`2a184e5293ccb6d774b9a401d9f68c49a4969916ef1206382dc11629ef5708a4`.
-Its canonical hashes include timestamp values, and its plan records the stored
-shift expiry without making the digest depend on whether the clock has crossed
-that expiry. An attempted destination inside this repository was refused and
-created no file.
+The post-deployment final restore contains 34 reviewed relations, 53
+non-internal triggers, 322 constraints, 48 policies, 107 indexes, two dependent
+views and 127 dependent function definitions. Its catalog hash is
+`604c0a40cd265f5b174bea70088a36ece205881ffca36bc3d94ade2e9bc90660`.
+The amended version-3 rehearsal bundle is outside Git under the final backup root
+documented in `backup.md`; its SHA-256 is
+`ba3f289719bb076670bffac702395efd36e0d8835aa6360b8976b94222203e91`.
+Its canonical hashes include timestamps, both bill-number mappings, the later
+correction/allocation and command results. An attempted destination inside this
+repository was refused and created no file.

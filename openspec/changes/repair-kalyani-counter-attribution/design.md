@@ -32,13 +32,21 @@ this proposal. They returned:
 | End-of-day confirmations | 0 |
 | Effective expenses | 5 rows, 38,000 paise (₹380) |
 | Kalyani bills and orders on that date | 0 / 0 |
-| Kalyani historical bill high-water mark | 989 |
+| Kalyani historical bill high-water at first review | 989 |
 | Device/operator/shift cardinality | one / one / one |
 | Device last-reported unresolved work | 0 |
 | Device state | proven, not removed |
 | Incident shift | still stored without `ended_at` |
 | Operator's active Biller assignments | one at each outlet |
 | Earlier Kanchrapara history on the device | 741 bills; 33 earlier shifts |
+
+The final read-only production refresh on **2026-09-18 IST** found one later,
+legitimate Kalyani block that did not exist at first review: bills 990–1024 on
+business date 2026-09-17, all 35 settled and unvoided, totalling 753,000 paise,
+with 40 items, 37 payments, 35 public links, one payment correction and one
+correction allocation. Thirty-six command results carry those bill IDs/numbers.
+The Kalyani counter and existing maximum are both 1024. This whole graph is now
+part of the frozen repair input rather than treated as disposable later trade.
 
 The earlier history is load-bearing evidence: this is not a request to pretend
 the tablet was always Kalyani's. It genuinely served Kanchrapara before the
@@ -132,10 +140,13 @@ The repair scope is the intersection of:
 - the exact dependent graph discovered from those roots.
 
 No timestamp-derived business day is used. No current date is used. The tool
-refuses multiple devices, shifts or operators, a different bill range, a
-different target high-water mark, a missing target menu row, a price mismatch,
-new corrections/discounts/reviews, additional source or target trade, or a
-nonzero unresolved-work report.
+refuses multiple devices, shifts or operators, a different source bill range,
+a target counter behind an existing bill, a missing target menu row, a price
+mismatch, new incident corrections/discounts/reviews, additional incident-date
+source or target trade, any change to the complete later Kalyani 990–1024 bill
+graph, either tablet's zero-after-server-work evidence, or the reviewed 1024
+target high-water. Any additional bill or dependent row makes `apply`'s locked
+plan digest disagree and abort.
 
 The plan manifest contains counts, paise totals, date/range facts and hashes of
 opaque IDs. It never prints customer names, phone numbers, receipt tokens or the
@@ -169,8 +180,9 @@ The tool is run against a scratch restore before production:
 3. `verify` must pass from a new connection.
 4. `rollback` must restore row attribution and identities with only the
    documented counter high-water difference.
-5. A fresh restore is repaired again, then a simulated next Kalyani bill must
-   receive 1027 and no Kanchrapara number may be reused.
+5. A fresh restore is repaired again. Incident bills must occupy 990–1026, the
+   intact later Kalyani block must occupy 1027–1061, and a simulated next Kalyani
+   bill must receive 1062 while no Kanchrapara number is reused.
 6. Deliberate corruption of every major precondition must make `apply` abort
    without a partial write.
 
@@ -186,8 +198,9 @@ rows do not change.
 
 The operator tool's mutable repair set is limited to outlet IDs, outlet-local
 numbers, Kalyani menu-item references and the two approved item-name snapshots,
-incident command result numbers, the incident shift's outlet/end state, five
-expenses' outlet, and the existing device's current outlet/label. Its Auth UUID,
+incident command result numbers, the later Kalyani bills' number plus matching
+command result numbers, the incident shift's outlet/end state, five expenses'
+outlet, and the existing device's current outlet/label. Its Auth UUID,
 session proof, setup attribution and browser credential remain unchanged.
 
 This is a privileged maintenance exception to physical attribution, not a new
@@ -207,11 +220,13 @@ incident roots and accounts for at least:
 | `orders` | target outlet; keep daily order numbers 1–39 |
 | `order_items` | target menu IDs; approved snapshots; money unchanged |
 | `billing_commands` | target outlet; canonical accepted results rewritten only where outlet-local numbers appear |
+| later Kalyani bills/commands | keep outlet/date/identity/commercial graph; move 990–1024 to 1027–1061 and rewrite only matching command result numbers |
 | `counter_shifts` | target outlet; close the incident shift |
 | surviving `counter_shift_requests` | target outlet or verified absent, according to its actual terminal shape |
 | `counter_devices` | target current outlet/name; identity, proof and setup facts unchanged |
 | `expenses` | target outlet for the five same-operator incident rows |
-| discount/correction/allocation/review/EOD children | required absent by fingerprint; abort rather than invent handling |
+| incident discount/correction/allocation/review/EOD children | required absent by fingerprint; abort rather than invent handling |
+| later Kalyani correction/allocation | preserve the one reviewed correction and allocation byte-for-byte |
 | `bill_public_links` | unchanged; same `bill_id` and token |
 | `bill_public_link_views` | unchanged; access telemetry is not reclassified |
 | legacy `shifts` / `bills.shift_id` | required absent for the incident day/graph |
@@ -224,29 +239,36 @@ incident roots and accounts for at least:
 If repository inspection or the restored database finds another dependent
 table, it must be added to the plan, backup and assertions before production.
 
-### D7. Numbering is precomputed and monotonic
+### D7. Numbering preserves the original insertion point and remains monotonic
 
-Sort the 37 bills by `(paid_at, created_at, id)` and pair them with 990–1026.
-Persist that mapping in the plan manifest by opaque-ID hash so `apply` cannot
-recompute a different order. Preserve order numbers 1–39 because Kalyani has no
-orders on that business date and the numbers do not collide.
+The final closed-hours `plan` requires Kalyani's counter and existing maximum to
+be exactly 1024. It freezes two mappings by opaque bill ID: incident 742–778 to
+990–1026 in `(paid_at, created_at, id)` order, and later Kalyani 990–1024 to
+1027–1061 in existing number order. `apply` locks both bill graphs, their command
+rows and the counter, reruns the complete plan, stages affected numbers in a
+reserved collision-free range inside the transaction, writes both final
+mappings and sets the counter to 1061. It never voids, replaces or deletes a
+bill. Preserve incident order numbers 1–39 because Kalyani has no orders on that
+business date and those numbers do not collide.
 
 After apply:
 
-- Kalyani bill high-water is 1026 and order high-water for 2026-09-16 is 39.
+- Kalyani bill high-water is 1061 and order high-water for 2026-09-16 is 39.
 - Kanchrapara bill high-water remains 778 and its 2026-09-16 order high-water
   remains 39, even though the moved rows no longer occupy those numbers.
 - A failed transaction consumes nothing.
 - A post-commit reversal does not lower either high-water mark. Kalyani keeps a
-  37-number gap because reusing numbers that existed, even briefly, is worse
-  than a visible gap.
+  37-number gap (1025–1061) because reusing numbers that existed, even briefly,
+  is worse than a visible gap.
 
 ### D8. One transaction, narrow locks, and no global trigger bypass
 
-`apply` takes a transaction-scoped advisory lock plus `FOR UPDATE` locks on the
-device, incident shift, affected parent rows, source/target counter rows and
-destination menu rows. It sets a short lock timeout and aborts rather than
-waiting through unexpected activity.
+`apply` takes a transaction-scoped advisory lock, write-blocking table locks on
+both bill graphs and their mutable dependencies, plus `FOR UPDATE` locks on both
+devices/shifts, affected parent rows, source/target counter rows and destination
+menu rows. Reads remain available. It sets a short lock timeout, requires the
+later Kalyani device to have no live shift or pending request, and aborts rather
+than waiting through unexpected activity.
 
 Before implementing updates, the separate session must inventory the exact
 immutable triggers and non-deferrable cross-outlet foreign keys on the restored
@@ -450,10 +472,10 @@ stored expiry, D9 closes it at transaction time; if apply runs after expiry, D9
 caps `ended_at` at that stored expiry. Both paths are rehearsed.
 
 No test sale is manufactured at night. The first real customer sale after
-opening performs the first-use check and is expected to receive Kalyani number
-1027. The change remains under observation until the later next-day check, but
-that deferred verification does not require the maintenance window to stay
-open.
+opening performs the first-use check and must receive Kalyani number 1062, one
+above the repaired high-water recorded by the committed plan. The change remains
+under observation until the later next-day check, but that deferred verification
+does not require the maintenance window to stay open.
 
 If a required live precondition fails, the operator follows the nearest safe
 stop rather than debugging new code in production. Before apply, nothing has
@@ -484,8 +506,9 @@ fresh plan ── targeted before-image ── plan digest approval
 locked atomic apply
   close/reclassify shift
   move orders/items/discount-free graph
-  move bills/items/payments and renumber
-  rewrite command outlet/results
+  stage/shift later Kalyani bills 990–1024 to 1027–1061
+  move incident bills/items/payments to 990–1026
+  rewrite both command-number sets
   move five expenses
   rehome/rename existing device without changing its identity/session
   restore every guard and assert totals
@@ -493,7 +516,7 @@ locked atomic apply
 two independent database postflights ── night-of cutover complete
                                   ▼
 NEXT OPENING: tablet online/session/menu proof, then first genuine
-Kalyani shift/bill 1027
+Kalyani shift/bill 1062
                                   ▼
 next-day reconciliation ── retire targeted recovery bundle
 ```
@@ -512,8 +535,9 @@ next-day reconciliation ── retire targeted recovery bundle
   explicit owner-approved aliases; 100% item coverage.
 - **Trigger left disabled:** capture definitions, transactional DDL, catalog
   equality assertion before commit, fresh-connection assertion after commit.
-- **Bill-number collision or reuse:** frozen mapping, target-high-water drift
-  refusal, source counters never lowered, post-commit counters never lowered.
+- **Bill-number collision or reuse:** both exact mappings and the 1024 input
+  high-water are sealed, a reserved temporary range makes update ordering safe,
+  the digest refuses post-plan drift, and post-commit counters are never lowered.
 - **Old outlet exposed after device transfer:** current-outlet RLS intersection
   and direct cross-outlet tests before rehome.
 - **Wrong hardware moved:** the incident plan fingerprints one exact device and

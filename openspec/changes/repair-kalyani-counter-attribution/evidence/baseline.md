@@ -29,9 +29,25 @@ derived from `today`, the host timezone, or the time at which the repair runs.
 | Expense total | 38,000 paise |
 | Earlier Kanchrapara bills | 741 |
 | Kanchrapara high-water mark | 778 |
-| Kalyani high-water mark | 989 |
+| Kalyani high-water before later trade | 989 |
 | Kalyani incident-date bills before repair | 0 |
-| Target bill numbers | 990–1026 |
+| Later Kalyani bill numbers / count | 990–1024 / 35 |
+| Later Kalyani total | 753,000 paise |
+| Later items / payments / public links | 40 / 37 / 35 |
+| Later payment corrections / allocations | 1 / 1 |
+| Later bill-bearing commands | 36 |
+| Final pre-repair Kalyani high-water | 1024 |
+| Incident target bill numbers | 990–1026 |
+| Shifted later Kalyani bill numbers | 1027–1061 |
+| Final repaired Kalyani high-water / next bill | 1061 / 1062 |
+
+When work resumed, normal Kalyani trade had legitimately issued bills 990–1024.
+No incident row had moved. The owner chose to preserve the original incident
+placement at 990–1026 and shift that complete later block upward to 1027–1061.
+The operator binds both opaque-ID mappings and the entire later dependency graph
+to its plan digest and targeted recovery bundle. It refuses any count, status,
+void, money, correction, command or counter drift and never voids or recreates
+an existing bill.
 
 UTC-normalized SHA-256 row-set fingerprints from the production snapshot:
 

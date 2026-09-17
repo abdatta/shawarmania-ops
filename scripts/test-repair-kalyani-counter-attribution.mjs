@@ -29,6 +29,8 @@ const INJECTIONS = [
   'after-menu',
   'after-orders',
   'after-payments',
+  'after-later-bills',
+  'after-later-commands',
   'after-bills',
   'after-commands',
   'after-expenses',
@@ -106,12 +108,38 @@ async function main() {
   await admin.connect()
   let serial = 0
 
-  const withClone = async (label, action) => {
+  const withClone = async (label, action, { closeLaterShift = true } = {}) => {
     serial += 1
     const name = `repair_attribution_${process.pid}_${serial}_${randomUUID().slice(0, 6)}`
     await admin.query(`create database ${name} template ${args.template}`)
     const url = databaseUrl(adminUrl, name)
     try {
+      if (closeLaterShift) {
+        const client = new Client({ connectionString: url })
+        await client.connect()
+        try {
+          // Production apply is allowed only after this genuine Kalyani shift
+          // expires. The scratch clock may still be earlier than 04:00 IST, so
+          // close only the cloned row; the plan digest intentionally freezes
+          // the bill graph rather than this operational expiry state.
+          await client.query(`alter table public.counter_shifts disable trigger user`)
+          await client.query(
+            `update public.counter_shifts
+                set ended_at=least(expires_at,statement_timestamp()),
+                    ended_reason='day_finished'
+              where id=(
+                select distinct b.counter_shift_id
+                  from public.bills b
+                  join public.outlets o on o.id=b.outlet_id and o.code='skalyani'
+                 where b.business_date=date '2026-09-17'
+                   and b.bill_number between 990 and 1024
+              )`,
+          )
+          await client.query(`alter table public.counter_shifts enable trigger user`)
+        } finally {
+          await client.end()
+        }
+      }
       await action(url)
       console.log(`PASS ${label}`)
     } finally {
@@ -179,7 +207,8 @@ async function main() {
     }
   }
 
-  const simulateNextOpening = async (url) => {
+  const simulateNextOpening = async (url, repairedTargetCounter = 1061) => {
+    const expectedNextBill = repairedTargetCounter + 1
     const client = new Client({ connectionString: url })
     await client.connect()
     try {
@@ -199,7 +228,7 @@ async function main() {
       )
       if (identity.rowCount !== 1) throw new Error('rehearsal device identity was not found')
       const row = identity.rows[0]
-      if (row.target_counter !== 1026 || row.source_counter !== 778)
+      if (row.target_counter !== repairedTargetCounter || row.source_counter !== 778)
         throw new Error('rehearsal high-water marks were not at the repaired values')
 
       const operator = await client.query(`select lower(email) email from auth.users where id=$1`, [
@@ -289,9 +318,9 @@ async function main() {
         [commandId, 2, hash, createdAt, shiftId, payload],
       )
       const result = paid.rows[0]?.result
-      if (result?.status !== 'accepted' || Number(result.billNumber) !== 1027)
+      if (result?.status !== 'accepted' || Number(result.billNumber) !== expectedNextBill)
         throw new Error(
-          `rehearsal first bill was not 1027: ${JSON.stringify({
+          `rehearsal first bill was not ${expectedNextBill}: ${JSON.stringify({
             result,
             shiftId,
             hash,
@@ -348,11 +377,11 @@ async function main() {
       const bill = landed.rows[0]
       if (
         !bill ||
-        Number(bill.bill_number) !== 1027 ||
+        Number(bill.bill_number) !== expectedNextBill ||
         bill.outlet_id !== row.target_id ||
         bill.counter_device_id !== row.device_id ||
         bill.counter_shift_id !== shiftId ||
-        bill.target_counter !== 1027 ||
+        bill.target_counter !== expectedNextBill ||
         bill.source_counter !== 778
       )
         throw new Error(`rehearsal bill landed incorrectly: ${JSON.stringify(bill)}`)
@@ -420,9 +449,29 @@ async function main() {
     await withClone('next opening and first bill', async (url) => {
       await runOperator(url, applyArgs(), { succeeds: true })
       const result = await simulateNextOpening(url)
-      if (result.billNumber !== 1027 || result.sourceCounter !== 778)
+      if (result.billNumber !== 1062 || result.sourceCounter !== 778)
         throw new Error(`next-opening assertions failed: ${JSON.stringify(result)}`)
     })
+
+    await withClone(
+      'live later Kalyani shift blocks apply',
+      async (url) => {
+        await mutate(
+          url,
+          `alter table public.counter_shifts disable trigger user;
+           update public.counter_shifts
+              set ended_at=null,ended_reason=null,expires_at=statement_timestamp()+interval '15 minutes'
+            where id=(select distinct counter_shift_id from public.bills where outlet_id=(select id from public.outlets where code='skalyani') and business_date=date '2026-09-17' and bill_number between 990 and 1024);
+           alter table public.counter_shifts enable trigger user`,
+        )
+        await runOperator(url, applyArgs(), {
+          succeeds: false,
+          contains: 'live later Kalyani shifts at apply',
+        })
+        await expectOriginalPlan(url)
+      },
+      { closeLaterShift: false },
+    )
 
     await withClone('all mutation-group failures are atomic', async (url) => {
       for (const point of INJECTIONS) {
@@ -469,12 +518,27 @@ async function main() {
     await expectPlanRefusal(
       'target-day trade',
       `alter table public.bills disable trigger bills_append_only; update public.bills set business_date=date '2026-09-16' where id=(select id from public.bills where outlet_id=${targetOutlet} order by bill_number desc limit 1)`,
-      'target incident-date bills',
+      'later Kalyani bill count',
     )
     await expectPlanRefusal(
-      'target counter drift',
-      `update public.bill_number_counters set last_number=990 where outlet_id=${targetOutlet}`,
+      'target counter behind an existing bill',
+      `update public.bill_number_counters set last_number=988 where outlet_id=${targetOutlet}`,
       'target bill counter',
+    )
+    await expectPlanRefusal(
+      'later Kalyani bill gap',
+      `alter table public.bills disable trigger bills_append_only; update public.bills set bill_number=1200 where outlet_id=${targetOutlet} and business_date=date '2026-09-17' and bill_number=990`,
+      'later Kalyani bill count',
+    )
+    await expectPlanRefusal(
+      'later Kalyani void appeared',
+      `alter table public.bills disable trigger bills_append_only; update public.bills set status='void',voided_at=now(),voided_by=biller_profile_id,void_reason='scratch refusal test' where outlet_id=${targetOutlet} and business_date=date '2026-09-17' and bill_number=990`,
+      'Later Kalyani bills are not one contiguous settled, unvoided block',
+    )
+    await expectPlanRefusal(
+      'later Kalyani command number drift',
+      `update public.billing_commands set result=jsonb_set(result,'{billNumber}','9999'::jsonb,false) where id=(select c.id from public.billing_commands c join public.bills b on b.id=(c.result->>'billId')::uuid where b.outlet_id=${targetOutlet} and b.business_date=date '2026-09-17' and b.bill_number between 990 and 1024 limit 1)`,
+      'A later Kalyani command does not match its bill number',
     )
     await expectPlanRefusal(
       'missing menu mapping',

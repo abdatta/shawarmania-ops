@@ -17,9 +17,17 @@ const FROZEN = Object.freeze({
   sourceBillMin: 742,
   sourceBillMax: 778,
   sourceCounter: 778,
-  targetCounter: 989,
+  targetCounterBeforeIncident: 989,
   targetBillMin: 990,
   targetBillMax: 1026,
+  laterBusinessDate: '2026-09-17',
+  laterBillMin: 990,
+  laterBillMax: 1024,
+  targetCounterBeforeRepair: 1024,
+  shiftedLaterBillMin: 1027,
+  shiftedLaterBillMax: 1061,
+  targetCounterAfterRepair: 1061,
+  stagingBillBase: 1000000000,
   orderCounter: 39,
   deviceLabel: 'Kalyani Counter 2',
   confirmation: 'MOVE-2026-09-16-SKPA-TO-SKALYANI',
@@ -42,6 +50,14 @@ const EXPECTED = Object.freeze({
   expensePaise: 38000,
   earlierSourceBills: 741,
   earlierDeviceShifts: 33,
+  laterBills: 35,
+  laterBillItems: 40,
+  laterPayments: 37,
+  laterPublicLinks: 35,
+  laterCommandsWithBill: 36,
+  laterCorrections: 1,
+  laterCorrectionAllocations: 1,
+  laterTotalPaise: 753000,
 })
 
 const ALIASES = new Map([
@@ -104,6 +120,8 @@ const FAILURE_INJECTION_POINTS = Object.freeze([
   'after-menu',
   'after-orders',
   'after-payments',
+  'after-later-bills',
+  'after-later-commands',
   'after-bills',
   'after-commands',
   'after-expenses',
@@ -189,6 +207,17 @@ function integer(value, name) {
   return result
 }
 
+function dateText(value, name) {
+  if (typeof value === 'string') return value
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    throw new Error(`${name} is not a PostgreSQL date`)
+  }
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, '0')
+  const day = String(value.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 function assertEqual(actual, expected, name) {
   if (actual !== expected) throw new Error(`${name}: expected ${expected}, got ${actual}`)
 }
@@ -231,6 +260,20 @@ async function hashRows(client, table, whereSql, values, excluded = [], orderBy 
     client,
     `select encode(extensions.digest(convert_to(coalesce(string_agg((to_jsonb(t)${excludedSql})::text, '' order by t.${orderBy}), ''), 'UTF8'), 'sha256'), 'hex') hash
        from public.${table} t where ${whereSql}`,
+    values,
+  )
+  return row.hash
+}
+
+async function hashCommandRows(client, whereSql, values, { excludeOutlet = false } = {}) {
+  const outletExclusion = excludeOutlet ? " - 'outlet_id'" : ''
+  const row = await one(
+    client,
+    `select encode(extensions.digest(convert_to(coalesce(string_agg(
+       (((to_jsonb(c)${outletExclusion}) - 'result') ||
+         jsonb_build_object('result',c.result - 'billNumber'))::text,
+       '' order by c.id), ''), 'UTF8'), 'sha256'), 'hex') hash
+       from public.billing_commands c where ${whereSql}`,
     values,
   )
   return row.hash
@@ -448,21 +491,162 @@ async function loadPlan(client) {
     'expense total',
   )
 
+  // Kalyani legitimately traded after this incident was first reviewed. Those
+  // later bills keep every identity and commercial fact, but move upward as a
+  // complete contiguous block so the incident keeps its original insertion
+  // point immediately after Kalyani bill 989.
+  const laterBills = await client.query(
+    `select * from public.bills
+      where outlet_id=$1 and business_date=$2::date
+        and bill_number between $3 and $4
+      order by bill_number`,
+    [target.id, FROZEN.laterBusinessDate, FROZEN.laterBillMin, FROZEN.laterBillMax],
+  )
+  assertEqual(laterBills.rowCount, EXPECTED.laterBills, 'later Kalyani bill count')
+  assert(
+    laterBills.rows.every(
+      (bill, index) =>
+        bill.status === 'settled' &&
+        bill.voided_at === null &&
+        Number(bill.bill_number) === FROZEN.laterBillMin + index,
+    ),
+    'Later Kalyani bills are not one contiguous settled, unvoided block',
+  )
+  const laterBillIds = laterBills.rows.map((bill) => bill.id)
+  const laterStats = await one(
+    client,
+    `select
+       count(*)::int bills,
+       sum(total_paise)::bigint total_paise,
+       count(distinct counter_shift_id)::int shifts,
+       count(distinct counter_device_id)::int devices,
+       (select count(*) from public.bill_items where bill_id=any($1::uuid[]))::int bill_items,
+       (select count(*) from public.bill_payments where bill_id=any($1::uuid[]))::int payments,
+       (select count(*) from public.bill_public_links where bill_id=any($1::uuid[]))::int public_links,
+       (select count(*) from public.bill_discounts where bill_id=any($1::uuid[]))::int discounts,
+       (select count(*) from public.bill_payment_corrections where bill_id=any($1::uuid[]))::int corrections,
+       (select count(*) from public.bill_payment_correction_allocations a
+          join public.bill_payment_corrections c on c.id=a.correction_id
+         where c.bill_id=any($1::uuid[]))::int correction_allocations,
+       (select count(*) from public.billing_attribution_reviews where bill_id=any($1::uuid[]))::int attribution_reviews
+      from public.bills where id=any($1::uuid[])`,
+    [laterBillIds],
+  )
+  for (const [name, expected] of [
+    ['bills', EXPECTED.laterBills],
+    ['bill_items', EXPECTED.laterBillItems],
+    ['payments', EXPECTED.laterPayments],
+    ['public_links', EXPECTED.laterPublicLinks],
+    ['corrections', EXPECTED.laterCorrections],
+    ['correction_allocations', EXPECTED.laterCorrectionAllocations],
+    ['shifts', 1],
+    ['devices', 1],
+    ['discounts', 0],
+    ['attribution_reviews', 0],
+  ])
+    assertEqual(laterStats[name], expected, `later Kalyani ${name}`)
+  assertEqual(
+    integer(laterStats.total_paise, 'later Kalyani total'),
+    EXPECTED.laterTotalPaise,
+    'later Kalyani total',
+  )
+  const laterCommands = await client.query(
+    `select c.* from public.billing_commands c
+      where c.result?'billId'
+        and (c.result->>'billId')::uuid=any($1::uuid[])
+      order by c.id`,
+    [laterBillIds],
+  )
+  assertEqual(
+    laterCommands.rowCount,
+    EXPECTED.laterCommandsWithBill,
+    'later Kalyani commands with bill',
+  )
+  assert(
+    laterCommands.rows.every((command) => {
+      const bill = laterBills.rows.find((candidate) => candidate.id === command.result.billId)
+      return (
+        bill &&
+        command.outlet_id === target.id &&
+        Number(command.result.billNumber) === Number(bill.bill_number)
+      )
+    }),
+    'A later Kalyani command does not match its bill number',
+  )
+  const laterDeviceId = laterBills.rows[0].counter_device_id
+  const laterShiftId = laterBills.rows[0].counter_shift_id
+  const laterDevice = await one(client, `select * from public.counter_devices where id=$1`, [
+    laterDeviceId,
+  ])
+  const laterShift = await one(client, `select * from public.counter_shifts where id=$1`, [
+    laterShiftId,
+  ])
+  const laterServerWork = await one(
+    client,
+    `select greatest(
+       (select max(received_at) from public.billing_commands where device_id=$1),
+       (select max(synced_at) from public.bills where counter_device_id=$1)
+     ) latest_server_work`,
+    [laterDeviceId],
+  )
+  assertEqual(laterDevice.outlet_id, target.id, 'later Kalyani device outlet')
+  assertEqual(laterShift.outlet_id, target.id, 'later Kalyani shift outlet')
+  assertEqual(laterShift.device_id, laterDeviceId, 'later Kalyani shift device')
+  assertEqual(
+    dateText(laterShift.business_date, 'later Kalyani shift date'),
+    FROZEN.laterBusinessDate,
+    'later Kalyani shift date',
+  )
+  assertEqual(laterDevice.last_reported_unsent, 0, 'later Kalyani unresolved count')
+  assert(
+    laterDevice.last_reported_oldest_unresolved_at === null,
+    'Later Kalyani device reports an unresolved oldest timestamp',
+  )
+  assert(
+    laterDevice.last_seen_at &&
+      new Date(laterDevice.last_seen_at) > new Date(laterServerWork.latest_server_work),
+    'Later Kalyani stored zero report is not after latest server work',
+  )
+  const laterRequests = await one(
+    client,
+    `select count(*) filter(where resolution is null)::int pending
+       from public.counter_shift_requests where device_id=$1`,
+    [laterDeviceId],
+  )
+  assertEqual(laterRequests.pending, 0, 'later Kalyani pending shift requests')
+
   const state = await one(
     client,
     `select
     (select last_number from public.bill_number_counters where outlet_id=$1)::int source_counter,
     (select last_number from public.bill_number_counters where outlet_id=$2)::int target_counter,
+    (select coalesce(max(bill_number),0) from public.bills where outlet_id=$2)::int target_existing_max,
     (select last_number from public.order_number_counters where outlet_id=$1 and business_date=$3::date)::int source_order_counter,
     (select last_number from public.order_number_counters where outlet_id=$2 and business_date=$3::date)::int target_order_counter,
     (select count(*) from public.bills where outlet_id=$1 and bill_number<$4)::int earlier_source_bills,
     (select count(*) from public.bills where outlet_id=$2 and business_date=$3::date)::int target_bills,
     (select count(*) from public.orders where outlet_id=$2 and business_date=$3::date)::int target_orders,
-    (select count(*) from public.counter_shifts where device_id=$5 and id<>$6)::int earlier_device_shifts`,
-    [source.id, target.id, FROZEN.businessDate, FROZEN.sourceBillMin, deviceId, shiftId],
+    (select count(*) from public.counter_shifts where device_id=$5 and id<>$6)::int earlier_device_shifts,
+    (select count(*) from public.bills where outlet_id=any($7::uuid[]) and bill_number>=$8)::int staging_bills`,
+    [
+      source.id,
+      target.id,
+      FROZEN.businessDate,
+      FROZEN.sourceBillMin,
+      deviceId,
+      shiftId,
+      [source.id, target.id],
+      FROZEN.stagingBillBase,
+    ],
   )
   assertEqual(state.source_counter, FROZEN.sourceCounter, 'source bill counter')
-  assertEqual(state.target_counter, FROZEN.targetCounter, 'target bill counter')
+  const targetCounter = integer(state.target_counter, 'target bill counter')
+  assertEqual(targetCounter, FROZEN.targetCounterBeforeRepair, 'target bill counter')
+  assertEqual(
+    integer(state.target_existing_max, 'target existing bill maximum'),
+    FROZEN.laterBillMax,
+    'target existing bill maximum',
+  )
   assertEqual(state.source_order_counter, FROZEN.orderCounter, 'source order counter')
   assert(
     state.target_order_counter === null || state.target_order_counter === 0,
@@ -472,6 +656,7 @@ async function loadPlan(client) {
   assertEqual(state.target_bills, 0, 'target incident-date bills')
   assertEqual(state.target_orders, 0, 'target incident-date orders')
   assertEqual(state.earlier_device_shifts, EXPECTED.earlierDeviceShifts, 'earlier device shifts')
+  assertEqual(state.staging_bills, 0, 'reserved staging-range bills')
 
   const device = await one(client, `select * from public.counter_devices where id=$1`, [deviceId])
   assertEqual(device.outlet_id, source.id, 'device current outlet')
@@ -614,6 +799,20 @@ async function loadPlan(client) {
     number: FROZEN.targetBillMin + index,
   }))
   assertEqual(numberMapping.at(-1).number, FROZEN.targetBillMax, 'target bill maximum')
+  const laterNumberMapping = laterBills.rows.map((bill) => ({
+    id: bill.id,
+    number: Number(bill.bill_number) + EXPECTED.bills,
+  }))
+  assertEqual(
+    laterNumberMapping[0].number,
+    FROZEN.shiftedLaterBillMin,
+    'shifted later bill minimum',
+  )
+  assertEqual(
+    laterNumberMapping.at(-1).number,
+    FROZEN.shiftedLaterBillMax,
+    'shifted later bill maximum',
+  )
   const hashes = {
     bills: await hashRows(
       client,
@@ -644,13 +843,9 @@ async function loadPlan(client) {
       [orderIds],
       ['menu_item_id', 'item_name'],
     ),
-    commands: await hashRows(
-      client,
-      'billing_commands',
-      'shift_id=$1',
-      [shiftId],
-      ['outlet_id', 'result'],
-    ),
+    commands: await hashCommandRows(client, 'shift_id=$1', [shiftId], {
+      excludeOutlet: true,
+    }),
     expenses: await hashRows(
       client,
       'expenses',
@@ -666,7 +861,44 @@ async function loadPlan(client) {
       [],
       'bill_id',
     ),
+    laterBills: await hashRows(
+      client,
+      'bills',
+      'id=any($1::uuid[])',
+      [laterBillIds],
+      ['bill_number'],
+    ),
+    laterBillItems: await hashRows(client, 'bill_items', 'bill_id=any($1::uuid[])', [laterBillIds]),
+    laterPayments: await hashRows(client, 'bill_payments', 'bill_id=any($1::uuid[])', [
+      laterBillIds,
+    ]),
+    laterPublicLinks: await hashRows(
+      client,
+      'bill_public_links',
+      'bill_id=any($1::uuid[])',
+      [laterBillIds],
+      [],
+      'bill_id',
+    ),
+    laterCommands: await hashCommandRows(client, 'id=any($1::uuid[])', [
+      laterCommands.rows.map((command) => command.id),
+    ]),
+    laterCorrections: await hashRows(
+      client,
+      'bill_payment_corrections',
+      'bill_id=any($1::uuid[])',
+      [laterBillIds],
+    ),
+    laterCorrectionAllocations: await hashRows(
+      client,
+      'bill_payment_correction_allocations',
+      'correction_id in (select id from public.bill_payment_corrections where bill_id=any($1::uuid[]))',
+      [laterBillIds],
+      [],
+      'correction_id',
+    ),
     billMapping: sha256(canonical(numberMapping)),
+    laterBillMapping: sha256(canonical(laterNumberMapping)),
     menuMapping: sha256(
       canonical(
         menu.map(({ sourceName, price, targetName }) => ({ sourceName, price, targetName })),
@@ -694,10 +926,23 @@ async function loadPlan(client) {
     counts: { ...EXPECTED },
     sourceBillRange: [FROZEN.sourceBillMin, FROZEN.sourceBillMax],
     targetBillRange: [FROZEN.targetBillMin, FROZEN.targetBillMax],
+    shiftedLaterBillRange: [FROZEN.shiftedLaterBillMin, FROZEN.shiftedLaterBillMax],
+    laterBusinessDate: FROZEN.laterBusinessDate,
+    laterCounts: {
+      bills: EXPECTED.laterBills,
+      billItems: EXPECTED.laterBillItems,
+      payments: EXPECTED.laterPayments,
+      publicLinks: EXPECTED.laterPublicLinks,
+      commandsWithBill: EXPECTED.laterCommandsWithBill,
+      corrections: EXPECTED.laterCorrections,
+      correctionAllocations: EXPECTED.laterCorrectionAllocations,
+      totalPaise: EXPECTED.laterTotalPaise,
+    },
     counters: {
       source: FROZEN.sourceCounter,
-      target: FROZEN.targetCounter,
-      targetAfter: FROZEN.targetBillMax,
+      target: targetCounter,
+      targetBeforeIncident: FROZEN.targetCounterBeforeIncident,
+      targetAfter: FROZEN.targetCounterAfterRepair,
     },
     menuProducts: menu.length,
     approvedAliases: menu
@@ -727,6 +972,13 @@ async function loadPlan(client) {
       orders: orders.rows,
       orderIds,
       commands: commands.rows,
+      laterBills: laterBills.rows,
+      laterBillIds,
+      laterCommands: laterCommands.rows,
+      laterDevice,
+      laterDeviceId,
+      laterShiftId,
+      laterShift,
       expenses: expenses.rows,
       device,
       deviceId,
@@ -735,6 +987,7 @@ async function loadPlan(client) {
       operatorId,
       menu,
       numberMapping,
+      laterNumberMapping,
       catalog,
     },
   }
@@ -748,20 +1001,22 @@ async function captureBeforeImage(client, plan, destination) {
   await mkdir(resolved, { recursive: true, mode: 0o700 })
   await chmod(resolved, 0o700).catch(() => undefined)
   const i = plan.internal
+  const allBillIds = [...i.billIds, ...i.laterBillIds]
+  const allCommandIds = [...i.commands, ...i.laterCommands].map((command) => command.id)
   const rows = {}
   const queries = {
-    bills: [`select * from public.bills where id=any($1::uuid[]) order by id`, [i.billIds]],
+    bills: [`select * from public.bills where id=any($1::uuid[]) order by id`, [allBillIds]],
     bill_items: [
       `select * from public.bill_items where bill_id=any($1::uuid[]) order by id`,
-      [i.billIds],
+      [allBillIds],
     ],
     bill_payments: [
       `select * from public.bill_payments where bill_id=any($1::uuid[]) order by id`,
-      [i.billIds],
+      [allBillIds],
     ],
     bill_public_links: [
       `select * from public.bill_public_links where bill_id=any($1::uuid[]) order by bill_id`,
-      [i.billIds],
+      [allBillIds],
     ],
     bill_public_link_views: [
       `select * from public.bill_public_link_views where token=any($1::text[]) order by id`,
@@ -769,26 +1024,26 @@ async function captureBeforeImage(client, plan, destination) {
         (
           await client.query(
             `select token from public.bill_public_links where bill_id=any($1::uuid[])`,
-            [i.billIds],
+            [allBillIds],
           )
         ).rows.map((row) => row.token),
       ],
     ],
     bill_discounts: [
       `select * from public.bill_discounts where bill_id=any($1::uuid[]) order by id`,
-      [i.billIds],
+      [allBillIds],
     ],
     bill_payment_corrections: [
       `select * from public.bill_payment_corrections where bill_id=any($1::uuid[]) order by id`,
-      [i.billIds],
+      [allBillIds],
     ],
     bill_payment_correction_allocations: [
       `select a.* from public.bill_payment_correction_allocations a join public.bill_payment_corrections c on c.id=a.correction_id where c.bill_id=any($1::uuid[]) order by a.correction_id,a.method`,
-      [i.billIds],
+      [allBillIds],
     ],
     billing_attribution_reviews: [
       `select * from public.billing_attribution_reviews where bill_id=any($1::uuid[]) order by id`,
-      [i.billIds],
+      [allBillIds],
     ],
     orders: [`select * from public.orders where id=any($1::uuid[]) order by id`, [i.orderIds]],
     order_items: [
@@ -800,8 +1055,8 @@ async function captureBeforeImage(client, plan, destination) {
       [i.orderIds],
     ],
     billing_commands: [
-      `select * from public.billing_commands where shift_id=$1 order by id`,
-      [i.shiftId],
+      `select * from public.billing_commands where id=any($1::uuid[]) order by id`,
+      [allCommandIds],
     ],
     expenses: [
       `select * from public.expenses where id=any($1::uuid[]) order by id`,
@@ -869,7 +1124,7 @@ async function captureBeforeImage(client, plan, destination) {
   for (const [name, [text, values]] of Object.entries(queries))
     rows[name] = (await client.query(text, values)).rows
   const bundle = {
-    version: 2,
+    version: 3,
     createdAt: new Date().toISOString(),
     planDigest: plan.digest,
     plan: plan.safe,
@@ -901,10 +1156,15 @@ function enableGuardsSql() {
   return `SET CONSTRAINTS ALL IMMEDIATE;\nALTER TABLE public.bill_payments ALTER CONSTRAINT bill_payments_bill_outlet_fk NOT DEFERRABLE;\n${MUTATION_TRIGGERS.map(([t, g]) => `ALTER TABLE public.${t} ENABLE TRIGGER ${g};`).join('\n')}`
 }
 function restoreRowsSql(r) {
+  const stagedBills = r.bills.map((row, index) => ({
+    id: row.id,
+    number: FROZEN.stagingBillBase + index,
+  }))
   return `
 WITH r AS (SELECT * FROM jsonb_populate_recordset(NULL::public.bill_items, ${sqlJson(r.bill_items)})) UPDATE public.bill_items t SET menu_item_id=r.menu_item_id,item_name=r.item_name FROM r WHERE t.id=r.id;
 WITH r AS (SELECT * FROM jsonb_populate_recordset(NULL::public.order_items, ${sqlJson(r.order_items)})) UPDATE public.order_items t SET menu_item_id=r.menu_item_id,item_name=r.item_name FROM r WHERE t.id=r.id;
 WITH r AS (SELECT * FROM jsonb_populate_recordset(NULL::public.bill_payments, ${sqlJson(r.bill_payments)})) UPDATE public.bill_payments t SET outlet_id=r.outlet_id FROM r WHERE t.id=r.id;
+WITH r AS (SELECT * FROM jsonb_to_recordset(${sqlJson(stagedBills)}) AS x(id uuid,number int)) UPDATE public.bills t SET bill_number=r.number FROM r WHERE t.id=r.id;
 WITH r AS (SELECT * FROM jsonb_populate_recordset(NULL::public.bills, ${sqlJson(r.bills)})) UPDATE public.bills t SET outlet_id=r.outlet_id,bill_number=r.bill_number FROM r WHERE t.id=r.id;
 WITH r AS (SELECT * FROM jsonb_populate_recordset(NULL::public.orders, ${sqlJson(r.orders)})) UPDATE public.orders t SET outlet_id=r.outlet_id FROM r WHERE t.id=r.id;
 WITH r AS (SELECT * FROM jsonb_populate_recordset(NULL::public.billing_commands, ${sqlJson(r.billing_commands)})) UPDATE public.billing_commands t SET outlet_id=r.outlet_id,result=r.result FROM r WHERE t.id=r.id;
@@ -1068,7 +1328,11 @@ async function verifyRolledBack(client, bundle) {
     [sourceId, targetId, FROZEN.businessDate],
   )
   assertEqual(counters.source_bill, FROZEN.sourceCounter, 'rolled-back source bill high-water')
-  assertEqual(counters.target_bill, FROZEN.targetBillMax, 'retained target bill high-water')
+  assertEqual(
+    counters.target_bill,
+    bundle.plan.counters.targetAfter,
+    'retained target bill high-water',
+  )
   assertEqual(counters.source_order, FROZEN.orderCounter, 'rolled-back source order high-water')
   assertEqual(counters.target_order, FROZEN.orderCounter, 'retained target order high-water')
   return { rowsMatchBeforeImage: true, highWaterMarksRetained: true, counters }
@@ -1081,7 +1345,7 @@ async function loadBundle(file) {
   const actual = sha256(serialized)
   assertEqual(actual, expected, 'before-image checksum')
   const bundle = JSON.parse(serialized)
-  assertEqual(bundle.version, 2, 'before-image format version')
+  assertEqual(bundle.version, 3, 'before-image format version')
   assertEqual(bundle.planDigest, sha256(canonical(bundle.plan)), 'before-image plan digest')
   return { bundle, checksum: actual }
 }
@@ -1089,11 +1353,45 @@ async function lockIncident(client, i) {
   await client.query(
     `select pg_advisory_xact_lock(hashtextextended('repair-kalyani-counter-attribution',0))`,
   )
-  await client.query(`select id from public.counter_devices where id=$1 for update`, [i.deviceId])
-  await client.query(`select id from public.counter_shifts where id=$1 for update`, [i.shiftId])
+  // Freeze every table that can add or change a row in either bill graph while
+  // the locked plan is re-read. Reads remain available; counter writes wait and
+  // would then allocate from the committed 1061 high-water.
+  await client.query(`lock table
+    public.bills,
+    public.bill_items,
+    public.bill_payments,
+    public.bill_public_links,
+    public.bill_discounts,
+    public.bill_payment_corrections,
+    public.bill_payment_correction_allocations,
+    public.billing_attribution_reviews,
+    public.billing_commands,
+    public.orders,
+    public.order_items,
+    public.order_discounts,
+    public.expenses,
+    public.counter_devices,
+    public.counter_shifts,
+    public.counter_shift_requests,
+    public.bill_number_counters,
+    public.order_number_counters,
+    public.menu_items
+    in share row exclusive mode`)
+  await client.query(
+    `select id from public.counter_devices where id=any($1::uuid[]) order by id for update`,
+    [[i.deviceId, i.laterDeviceId]],
+  )
+  await client.query(
+    `select id from public.counter_shifts where id=any($1::uuid[]) order by id for update`,
+    [[i.shiftId, i.laterShiftId]],
+  )
   await client.query(
     `select id from public.bills where id=any($1::uuid[]) order by id for update`,
-    [i.billIds],
+    [[...i.billIds, ...i.laterBillIds]],
+  )
+  await client.query(
+    `select id from public.billing_commands where id=any($1::uuid[]) order by id for update`,
+    [[...i.commands, ...i.laterCommands].map((command) => command.id)],
   )
   await client.query(
     `select id from public.orders where id=any($1::uuid[]) order by id for update`,
@@ -1109,6 +1407,22 @@ async function lockIncident(client, i) {
   )
 }
 
+async function assertLaterCounterClosed(client, i) {
+  const state = await one(
+    client,
+    `select
+       count(*) filter(
+         where ended_at is null and expires_at>statement_timestamp()
+       )::int live_shifts,
+       (select count(*) from public.counter_shift_requests
+         where device_id=$1 and resolution is null)::int pending_requests
+      from public.counter_shifts where device_id=$1`,
+    [i.laterDeviceId],
+  )
+  assertEqual(state.live_shifts, 0, 'live later Kalyani shifts at apply')
+  assertEqual(state.pending_requests, 0, 'pending later Kalyani shift requests at apply')
+}
+
 async function verifyRepaired(client, safe, bundleRows = null) {
   const outlets = await client.query(
     `select id,code from public.outlets where code=any($1::text[])`,
@@ -1117,16 +1431,92 @@ async function verifyRepaired(client, safe, bundleRows = null) {
   const source = outlets.rows.find((r) => r.code === FROZEN.sourceCode)
   const target = outlets.rows.find((r) => r.code === FROZEN.targetCode)
   assert(source && target, 'Reviewed outlets missing during verify')
+  const [targetBillMin, targetBillMax] = safe.targetBillRange
   const bills = await client.query(
     `select * from public.bills where outlet_id=$1 and business_date=$2::date and bill_number between $3 and $4 order by bill_number`,
-    [target.id, FROZEN.businessDate, FROZEN.targetBillMin, FROZEN.targetBillMax],
+    [target.id, FROZEN.businessDate, targetBillMin, targetBillMax],
   )
   assertEqual(bills.rowCount, EXPECTED.bills, 'repaired bill count')
   assert(
-    bills.rows.every((b, n) => Number(b.bill_number) === FROZEN.targetBillMin + n),
+    bills.rows.every((b, n) => Number(b.bill_number) === targetBillMin + n),
     'Target bill numbering drifted',
   )
   const billIds = bills.rows.map((r) => r.id)
+  const [shiftedLaterBillMin, shiftedLaterBillMax] = safe.shiftedLaterBillRange
+  const laterBills = await client.query(
+    `select * from public.bills
+      where outlet_id=$1 and business_date=$2::date
+        and bill_number between $3 and $4
+      order by bill_number`,
+    [target.id, safe.laterBusinessDate, shiftedLaterBillMin, shiftedLaterBillMax],
+  )
+  assertEqual(laterBills.rowCount, safe.laterCounts.bills, 'shifted later bill count')
+  assert(
+    laterBills.rows.every(
+      (bill, index) =>
+        bill.status === 'settled' &&
+        bill.voided_at === null &&
+        Number(bill.bill_number) === shiftedLaterBillMin + index,
+    ),
+    'Shifted later bills are not one contiguous settled, unvoided block',
+  )
+  const laterBillIds = laterBills.rows.map((bill) => bill.id)
+  const laterCounts = await one(
+    client,
+    `select
+       count(*)::int bills,
+       sum(total_paise)::bigint total_paise,
+       (select count(*) from public.bill_items where bill_id=any($1::uuid[]))::int bill_items,
+       (select count(*) from public.bill_payments where bill_id=any($1::uuid[]))::int payments,
+       (select count(*) from public.bill_public_links where bill_id=any($1::uuid[]))::int public_links,
+       (select count(*) from public.bill_discounts where bill_id=any($1::uuid[]))::int discounts,
+       (select count(*) from public.bill_payment_corrections where bill_id=any($1::uuid[]))::int corrections,
+       (select count(*) from public.bill_payment_correction_allocations a
+          join public.bill_payment_corrections c on c.id=a.correction_id
+          where c.bill_id=any($1::uuid[]))::int correction_allocations,
+       (select count(*) from public.billing_attribution_reviews where bill_id=any($1::uuid[]))::int attribution_reviews
+      from public.bills where id=any($1::uuid[])`,
+    [laterBillIds],
+  )
+  for (const [name, expected] of [
+    ['bills', safe.laterCounts.bills],
+    ['bill_items', safe.laterCounts.billItems],
+    ['payments', safe.laterCounts.payments],
+    ['public_links', safe.laterCounts.publicLinks],
+    ['corrections', safe.laterCounts.corrections],
+    ['correction_allocations', safe.laterCounts.correctionAllocations],
+    ['discounts', 0],
+    ['attribution_reviews', 0],
+  ])
+    assertEqual(laterCounts[name], expected, `shifted later ${name}`)
+  assertEqual(
+    integer(laterCounts.total_paise, 'shifted later total'),
+    safe.laterCounts.totalPaise,
+    'shifted later total',
+  )
+  const laterCommands = await client.query(
+    `select c.* from public.billing_commands c
+      where c.result?'billId'
+        and (c.result->>'billId')::uuid=any($1::uuid[])
+      order by c.id`,
+    [laterBillIds],
+  )
+  assertEqual(
+    laterCommands.rowCount,
+    safe.laterCounts.commandsWithBill,
+    'shifted later commands with bill',
+  )
+  assert(
+    laterCommands.rows.every((command) => {
+      const bill = laterBills.rows.find((candidate) => candidate.id === command.result.billId)
+      return (
+        bill &&
+        command.outlet_id === target.id &&
+        Number(command.result.billNumber) === Number(bill.bill_number)
+      )
+    }),
+    'A shifted later command does not match its bill number',
+  )
   const deviceIds = new Set(bills.rows.map((r) => r.counter_device_id))
   const shiftIds = new Set(bills.rows.map((r) => r.counter_shift_id))
   assertEqual(deviceIds.size, 1, 'repaired device cardinality')
@@ -1262,7 +1652,7 @@ async function verifyRepaired(client, safe, bundleRows = null) {
     [source.id, target.id, FROZEN.businessDate],
   )
   assertEqual(counters.source, FROZEN.sourceCounter, 'source counter')
-  assertEqual(counters.target, FROZEN.targetBillMax, 'target counter')
+  assertEqual(counters.target, safe.counters.targetAfter, 'target counter')
   assertEqual(counters.source_order, FROZEN.orderCounter, 'source order counter')
   assertEqual(counters.target_order, FROZEN.orderCounter, 'target order counter')
   const hashes = {
@@ -1295,13 +1685,9 @@ async function verifyRepaired(client, safe, bundleRows = null) {
       [orderIds],
       ['menu_item_id', 'item_name'],
     ),
-    commands: await hashRows(
-      client,
-      'billing_commands',
-      'shift_id=$1',
-      [shiftId],
-      ['outlet_id', 'result'],
-    ),
+    commands: await hashCommandRows(client, 'shift_id=$1', [shiftId], {
+      excludeOutlet: true,
+    }),
     expenses: await hashRows(
       client,
       'expenses',
@@ -1316,6 +1702,48 @@ async function verifyRepaired(client, safe, bundleRows = null) {
       [billIds],
       [],
       'bill_id',
+    ),
+    laterBills: await hashRows(
+      client,
+      'bills',
+      'id=any($1::uuid[])',
+      [laterBillIds],
+      ['bill_number'],
+    ),
+    laterBillItems: await hashRows(client, 'bill_items', 'bill_id=any($1::uuid[])', [laterBillIds]),
+    laterPayments: await hashRows(client, 'bill_payments', 'bill_id=any($1::uuid[])', [
+      laterBillIds,
+    ]),
+    laterPublicLinks: await hashRows(
+      client,
+      'bill_public_links',
+      'bill_id=any($1::uuid[])',
+      [laterBillIds],
+      [],
+      'bill_id',
+    ),
+    laterCommands: await hashCommandRows(client, 'id=any($1::uuid[])', [
+      laterCommands.rows.map((command) => command.id),
+    ]),
+    laterCorrections: await hashRows(
+      client,
+      'bill_payment_corrections',
+      'bill_id=any($1::uuid[])',
+      [laterBillIds],
+    ),
+    laterCorrectionAllocations: await hashRows(
+      client,
+      'bill_payment_correction_allocations',
+      'correction_id in (select id from public.bill_payment_corrections where bill_id=any($1::uuid[]))',
+      [laterBillIds],
+      [],
+      'correction_id',
+    ),
+    billMapping: sha256(
+      canonical(bills.rows.map((bill) => ({ id: bill.id, number: Number(bill.bill_number) }))),
+    ),
+    laterBillMapping: sha256(
+      canonical(laterBills.rows.map((bill) => ({ id: bill.id, number: Number(bill.bill_number) }))),
     ),
   }
   for (const [name, value] of Object.entries(hashes))
@@ -1337,6 +1765,7 @@ async function verifyRepaired(client, safe, bundleRows = null) {
   }
   return {
     bills: EXPECTED.bills,
+    shiftedLaterBills: safe.laterCounts.bills,
     orders: EXPECTED.orders,
     expenses: EXPECTED.expenses,
     billTotalPaise: EXPECTED.billTotalPaise,
@@ -1352,13 +1781,17 @@ async function verifyRepaired(client, safe, bundleRows = null) {
 
 async function applyRepair(client, plan, bundle, failureInjection) {
   const i = plan.internal
+  let stage = 'begin transaction'
   await client.query('begin')
   try {
+    stage = 'lock and recheck plan'
     await client.query("set local lock_timeout='5s'")
     await client.query("set local statement_timeout='60s'")
     await lockIncident(client, i)
+    await assertLaterCounterClosed(client, i)
     assertEqual((await loadPlan(client)).digest, plan.digest, 'locked plan digest')
     await disableGuards(client)
+    stage = 'mutate repaired graph'
     injectFailure(failureInjection, 'after-guards-disabled')
     for (const m of i.menu) {
       await client.query(
@@ -1381,6 +1814,27 @@ async function applyRepair(client, plan, bundle, failureInjection) {
       [i.target.id, i.billIds],
     )
     injectFailure(failureInjection, 'after-payments')
+    // Vacate the old range before assigning final numbers. The unique
+    // constraint is checked row-by-row, so a reserved high staging range makes
+    // apply and rollback independent of PostgreSQL's update order.
+    for (const [index, m] of i.laterNumberMapping.entries())
+      await client.query(`update public.bills set bill_number=$1 where id=$2`, [
+        FROZEN.stagingBillBase + index,
+        m.id,
+      ])
+    for (const m of i.laterNumberMapping)
+      await client.query(`update public.bills set bill_number=$1 where id=$2`, [m.number, m.id])
+    injectFailure(failureInjection, 'after-later-bills')
+    await client.query(
+      `update public.billing_commands c
+          set result=jsonb_set(c.result,'{billNumber}',to_jsonb(m.number),false)
+         from jsonb_to_recordset($1::jsonb)m(id uuid,number int)
+        where c.id=any($2::uuid[])
+          and c.result?'billId'
+          and (c.result->>'billId')::uuid=m.id`,
+      [JSON.stringify(i.laterNumberMapping), i.laterCommands.map((command) => command.id)],
+    )
+    injectFailure(failureInjection, 'after-later-commands')
     for (const m of i.numberMapping)
       await client.query(`update public.bills set outlet_id=$1,bill_number=$2 where id=$3`, [
         i.target.id,
@@ -1408,7 +1862,7 @@ async function applyRepair(client, plan, bundle, failureInjection) {
     )
     injectFailure(failureInjection, 'after-shift')
     await client.query(`update public.bill_number_counters set last_number=$1 where outlet_id=$2`, [
-      FROZEN.targetBillMax,
+      plan.safe.counters.targetAfter,
       i.target.id,
     ])
     await client.query(
@@ -1423,15 +1877,20 @@ async function applyRepair(client, plan, bundle, failureInjection) {
     ])
     injectFailure(failureInjection, 'after-device')
     injectFailure(failureInjection, 'before-guard-restore')
+    stage = 'restore database guards'
     await enableGuards(client)
     injectFailure(failureInjection, 'after-guard-restore')
+    stage = 'verify repaired graph'
     await assertGuards(client, bundle.catalog)
     const outcome = await verifyRepaired(client, plan.safe, bundle.rows)
+    stage = 'commit repaired graph'
     await client.query('commit')
     return outcome
   } catch (error) {
     await client.query('rollback').catch(() => undefined)
-    throw error
+    throw new Error(`${stage}: ${error instanceof Error ? error.message : String(error)}`, {
+      cause: error,
+    })
   }
 }
 async function rollbackRepair(client, bundle) {
@@ -1444,7 +1903,7 @@ async function rollbackRepair(client, bundle) {
   const drift = await one(
     client,
     `select (select count(*) from public.counter_shifts where device_id=$1 and id<>$2 and opened_at>(select ended_at from public.counter_shifts where id=$2))::int later_shifts,(select count(*) from public.bills where outlet_id=$3 and bill_number>$4)::int later_target_bills,(select count(*) from public.bills where outlet_id=$5 and bill_number>$6)::int later_source_bills`,
-    [deviceId, shiftId, targetId, FROZEN.targetBillMax, sourceId, FROZEN.sourceCounter],
+    [deviceId, shiftId, targetId, bundle.plan.counters.targetAfter, sourceId, FROZEN.sourceCounter],
   )
   assertEqual(drift.later_shifts, 0, 'later device shifts')
   assertEqual(drift.later_target_bills, 0, 'later target bills')

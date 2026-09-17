@@ -1,6 +1,7 @@
 # Separate implementation review
 
-Reviewed on 2026-09-17 against the isolated full production restore. This file
+Reviewed initially on 2026-09-17 and again on 2026-09-18 against the isolated
+fresh full production restore. This file
 contains only schema names, aggregate outcomes and hashes; it contains no row
 identifiers, customer or employee facts, receipt tokens or credentials.
 
@@ -33,19 +34,31 @@ incident row graph was found.
 3. Disposable database cleanup attempted to terminate PostgreSQL background
    workers. It now terminates only client connections before dropping a clone;
    this changes no repair behavior.
+4. The delayed cutover allowed genuine Kalyani bills 990–1024 to occupy the
+   original incident target range. The amended design freezes that complete
+   35-bill graph, shifts it intact to 1027–1061, keeps the incident at
+   990–1026, and makes 1062 the next number. No bill is voided or recreated.
+5. A bulk rollback could transiently collide with the non-deferrable per-outlet
+   bill-number uniqueness check. Apply and reversal now stage all affected
+   numbers in a reviewed high range inside the same locked transaction and the
+   plan refuses any pre-existing row in that range.
+6. Command hashing excluded the whole JSON result although only `billNumber`
+   may change. It now removes only that key (and incident outlet where expected),
+   so every other result field is sealed across apply and rollback.
 
-The current external bundle checksum is
-`2a184e5293ccb6d774b9a401d9f68c49a4969916ef1206382dc11629ef5708a4`; its
+The current reviewed external rehearsal bundle checksum is
+`ba3f289719bb076670bffac702395efd36e0d8835aa6360b8976b94222203e91`; its
 plan digest is
-`807fb5e9340120c114a98d2f947622ff48b64186ab2d159dfc3232647b1aa8e8`.
+`2ddd9538e42cb0141885db927d471a6d74ecc58a6654ac4622db9f954ba4b5a2`.
 
 ## Reverification after fixes
 
 Fresh full-dump clones passed exact plan/apply/fresh-process verify/rollback,
 pre-expiry closure at transaction time, post-expiry closure at stored expiry,
 the next request/confirm-shift path and genuine first billing RPC (Kalyani bill
-1027 with Kanchrapara high-water 778), all twelve injected transaction failure
-points, all reviewed drift refusals, lock refusal and unsafe-rollback refusal.
+1062 with Kanchrapara high-water 778), active later-shift refusal, all fourteen
+injected transaction failure points, later bill gap/void/command drift refusals,
+all earlier reviewed drift refusals, lock refusal and unsafe-rollback refusal.
 The transfer's real local Edge/Auth suite remained green with 11 tests, the
 database transfer suite remained green with 39 assertions, and tablet editing
 passed component plus phone/tablet light/dark browser coverage.
