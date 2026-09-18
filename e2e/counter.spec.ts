@@ -334,22 +334,38 @@ test.describe('the counter', () => {
   test('announces the orders outside the rail and scrolls the whole way to them', async ({
     page,
   }) => {
-    // Six more orders on top of the two seeds, so the rail holds more than its
-    // viewport can show. Newest-first, so the seeds sink to the bottom — and
-    // 104, the seeded order that is prepared and still unpaid, sinks furthest.
-    for (const customer of ['Asha', 'Bilal', 'Chitra', 'Devi', 'Ehsan', 'Farah']) {
+    const rail = page.getByTestId('counter-activity-rail')
+
+    /*
+      Orders of this test's own making, so nothing here depends on where the
+      demo's fixed-time seeds happen to fall against the wall clock. The first
+      one is marked prepared and left unpaid: newest-first puts it below the five
+      saved after it, so it is the money waiting out of sight that the bottom
+      chip has to announce.
+    */
+    const save = async (customer: string) => {
       await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
       await page.getByPlaceholder('Customer name').fill(customer)
       await page.getByTestId('save-order').click()
-      await expect(
-        page.getByTestId('counter-activity-rail').getByText(customer, { exact: true }),
-      ).toBeVisible()
+      await expect(rail.getByText(customer, { exact: true })).toBeVisible()
     }
 
-    const rail = page.getByTestId('counter-activity-rail')
+    await save('Asha')
+    const ashaCard = rail
+      .getByTestId('pipeline-list')
+      .locator('li')
+      .filter({ hasText: 'Asha' })
+      .first()
+    await ashaCard.getByRole('button', { name: 'Prepared', exact: true }).click()
+    await expect(ashaCard.getByRole('button', { name: 'Prepared', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
 
-    // The newest order is on screen — saving one returns the rail to the top —
-    // so nothing is hidden above it and only the bottom chip is drawn.
+    for (const customer of ['Bilal', 'Chitra', 'Devi', 'Ehsan', 'Farah']) await save(customer)
+
+    // Saving returns the rail to its newest end, so Asha is now below the fold
+    // along with everything older than her.
     const bottom = rail.getByRole('button', { name: /^Scroll to the oldest order/ })
     await expect(bottom).toBeVisible()
     await expect(bottom).toHaveText(/\d+ more/)
@@ -362,12 +378,41 @@ test.describe('the counter', () => {
     await bottom.click()
     const top = rail.getByRole('button', { name: /^Scroll to the newest order/ })
     await expect(top).toBeVisible()
-    await expect(rail.getByTestId('open-order-104')).toBeVisible()
     await expect(rail.getByRole('button', { name: /^Scroll to the oldest order/ })).toHaveCount(0)
 
     await top.click()
     await expect(rail.getByRole('button', { name: /^Scroll to the newest order/ })).toHaveCount(0)
     await expect(rail.getByRole('button', { name: /^Scroll to the oldest order/ })).toBeVisible()
+  })
+
+  test('draws the pipeline newest first, whatever order the adapter answers in', async ({
+    page,
+  }) => {
+    // The rail promises newest-first and enforces it itself: the live adapter
+    // orders `ordered_at` descending and the mock did not, so demo mode drew the
+    // rail upside down until #55 made the surface responsible for its own claim.
+    const list = page.getByTestId('counter-activity-rail').getByTestId('pipeline-list')
+
+    await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
+    await page.getByPlaceholder('Customer name').fill('Newest')
+    await page.getByTestId('save-order').click()
+    await expect(list.getByText('Newest', { exact: true })).toBeVisible()
+
+    const times = await list.evaluate((ul) =>
+      [...ul.children].map((li) => {
+        const meta = (li as HTMLElement).querySelector('[data-testid^="order-metadata-"]')
+        return meta?.textContent ?? ''
+      }),
+    )
+    expect(times.length).toBeGreaterThan(1)
+    // The order just taken is the first card, which is the whole reason the
+    // list reads this way: a correction happens in the seconds after saving.
+    expect(
+      await list
+        .locator('li')
+        .first()
+        .evaluate((li) => li.textContent?.includes('Newest')),
+    ).toBe(true)
   })
 
   test('leaves an upfront payment reversible while the food is still being made', async ({

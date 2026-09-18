@@ -45,7 +45,13 @@ function order(over: Partial<BillingOrder>): BillingOrder {
     deviceId: personaFixtures.biller.profile.id,
     orderNumber: seq,
     businessDate: '2026-08-23',
-    orderedAt: new Date().toISOString(),
+    /*
+      A minute older than the one before it, so the array these fixtures are
+      written in *is* the order the rail draws: newest first. They used to share
+      one timestamp and lean on the adapter's array order, which is the same
+      assumption that let the mock and the live adapter disagree (#55).
+    */
+    orderedAt: new Date(Date.now() - seq * 60_000).toISOString(),
     preparedAt: null,
     status: 'open',
     creatorId: personaFixtures.biller.profile.id,

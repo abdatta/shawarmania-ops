@@ -1106,7 +1106,10 @@ export function createMockBillingAdapter(
           break
       }
     }
-    return [...overlaid.values()].sort((a, b) => a.orderedAt.localeCompare(b.orderedAt))
+    // Newest first, which is what the live adapter's `.order('ordered_at',
+    // { ascending: false })` returns. They disagreed until #55, and a demo that
+    // hands back a different order from the server teaches the wrong rail.
+    return [...overlaid.values()].sort((a, b) => b.orderedAt.localeCompare(a.orderedAt))
   }
 
   /**

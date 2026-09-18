@@ -182,9 +182,20 @@ export function OpenOrdersSurface({
     correction happens in the first seconds after saving, so the order just
     taken has to be under the biller's thumb.
   */
-  const listed = (orders ?? []).filter(
-    (order) => order.id !== editingOrderId && order.status !== 'cancelled',
-  )
+  const listed = (orders ?? [])
+    .filter((order) => order.id !== editingOrderId && order.status !== 'cancelled')
+    /*
+      Sorted here rather than taken on trust from the adapter. Newest-first is
+      this surface's promise, and the two adapters did not agree about it: the
+      live one orders `ordered_at` descending, the mock returned it ascending,
+      so demo mode drew the rail upside down and "saving returns you to the top"
+      put the biller on the oldest ticket. A requirement the screen makes is a
+      requirement the screen has to keep.
+    */
+    .sort((left, right) => {
+      const byTime = Date.parse(right.orderedAt) - Date.parse(left.orderedAt)
+      return byTime !== 0 ? byTime : right.id.localeCompare(left.id)
+    })
 
   // The settlement flight is the only motion left. With no sections to move
   // between, the hook measures no movement when a fact is merely recorded.
