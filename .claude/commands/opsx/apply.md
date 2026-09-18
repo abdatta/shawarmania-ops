@@ -1,101 +1,81 @@
 ---
 name: "OPSX: Apply"
-description: Implement tasks from an OpenSpec change (Experimental)
+description: Implement tasks from an OpenSpec change
 category: Workflow
-tags: [workflow, artifacts, experimental]
+tags: [workflow, artifacts]
 ---
 
-Implement tasks from an OpenSpec change.
+Implement the tasks of an OpenSpec change.
 
-**Input**: Optionally specify a change name (e.g., `/opsx:apply add-auth`). If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
+**Input**: optionally a change name (e.g. `/opsx:apply add-auth`). If omitted,
+infer it from conversation context. If vague or ambiguous you MUST ask.
+
+## This repo has no `openspec` CLI
+
+There is no `openspec` binary on PATH, in `node_modules`, or in
+`package.json` — do not call one, and do not report its absence as a problem.
+Everything the CLI would have resolved is a constant here:
+
+| What the CLI would return | Value in this repo |
+|---|---|
+| `schemaName` | `spec-driven` |
+| active changes | the directories in `openspec/changes/` (excluding `archive/` and `ROADMAP.md`) |
+| `changeRoot` | `openspec/changes/<name>/` |
+| `contextFiles` | `proposal.md`, `design.md`, `specs/**/spec.md`, `tasks.md` in that folder |
+| progress | the `- [ ]` / `- [x]` lines in `tasks.md` |
 
 **Steps**
 
 1. **Select the change**
 
-   If a name is provided, use it. Otherwise:
-   - Infer from conversation context if the user mentioned a change
-   - Auto-select if only one active change exists
-   - If ambiguous, run `openspec list --json` to get available changes and use the **AskUserQuestion tool** to let the user select
+   If a name is given, use it. Otherwise infer from context, or auto-select when
+   `openspec/changes/` holds exactly one active change. If still ambiguous, list
+   the candidates and use the **AskUserQuestion tool**.
 
-   Always announce: "Using change: <name>" and how to override (e.g., `/opsx:apply <other>`).
+   Always announce: "Using change: <name>", and how to override
+   (`/opsx:apply <other>`).
 
-2. **Check status to understand the schema**
-   ```bash
-   openspec status --change "<name>" --json
-   ```
-   Parse the JSON to understand:
-   - `schemaName`: The workflow being used (e.g., "spec-driven")
-   - `planningHome`, `changeRoot`, and `actionContext`: planning scope and edit constraints
-   - Which artifact contains the tasks (typically "tasks" for spec-driven, check status for others)
+2. **Read the change folder**
 
-3. **Get apply instructions**
+   Read every artifact present in `openspec/changes/<name>/` — `proposal.md`,
+   `design.md`, each `specs/<capability>/spec.md`, and `tasks.md`. Also read
+   `AGENTS.md` for the non-negotiables before touching code.
 
-   ```bash
-   openspec instructions apply --change "<name>" --json
-   ```
+   **If `tasks.md` is missing**, the change is not apply-ready: say so and
+   recommend `/opsx:propose <name>`.
 
-   This returns:
-   - `contextFiles`: artifact ID -> array of concrete file paths (varies by schema)
-   - Progress (total, complete, remaining)
-   - Task list with status
-   - Dynamic instruction based on current state
+   **If every task is already `- [x]`**, say so and recommend `/opsx:archive`.
 
-   **Handle states:**
-   - If `state: "blocked"` (missing artifacts): show message, suggest using `/opsx:continue`
-   - If `state: "all_done"`: congratulate, suggest archive
-   - Otherwise: proceed to implementation
+3. **Show current progress**
 
-   **Workspace guard:** If status JSON reports `actionContext.mode: "workspace-planning"` and `allowedEditRoots` is empty, explain that full workspace apply is not supported in this slice. Treat linked repos and folders as read-only context, ask the user to select an affected area through an explicit implementation workflow, and STOP before editing files.
+   Display the change name, "N/M tasks complete", and the remaining tasks.
 
-4. **Read context files**
-
-   Read every file path listed under `contextFiles` from the apply instructions output.
-   The files depend on the schema being used:
-   - **spec-driven**: proposal, specs, design, tasks
-   - Other schemas: follow the contextFiles from CLI output
-
-5. **Show current progress**
-
-   Display:
-   - Schema being used
-   - Progress: "N/M tasks complete"
-   - Remaining tasks overview
-   - Dynamic instruction from CLI
-
-6. **Implement tasks (loop until done or blocked)**
+4. **Implement tasks (loop until done or blocked)**
 
    For each pending task:
-   - Show which task is being worked on
-   - Make the code changes required
-   - Keep changes minimal and focused
-   - Mark task complete in the tasks file: `- [ ]` → `- [x]`
-   - Continue to next task
+   - Say which task is being worked on
+   - Make the code changes it calls for, minimal and focused
+   - Flip `- [ ]` → `- [x]` in `tasks.md`
+   - Continue
 
-   **Pause if:**
-   - Task is unclear → ask for clarification
-   - Implementation reveals a design issue → suggest updating artifacts
-   - Error or blocker encountered → report and wait for guidance
-   - User interrupts
+   **Pause if:** the task is unclear (ask); implementation exposes a design
+   problem (propose updating the artifacts rather than quietly diverging); an
+   error or blocker appears (report and wait); the user interrupts.
 
-7. **On completion or pause, show status**
+   A PHASE GATE task is a real gate. Run what it names — do not tick it on the
+   strength of having read the code.
 
-   Display:
-   - Tasks completed this session
-   - Overall progress: "N/M tasks complete"
-   - If all done: suggest archive
-   - If paused: explain why and wait for guidance
+5. **On completion or pause, show status**
+
+   Tasks completed this session, overall "N/M", and either a suggestion to
+   archive or a plain statement of why you stopped.
 
 **Output During Implementation**
 
 ```
-## Implementing: <change-name> (schema: <schema-name>)
+## Implementing: <change-name>
 
 Working on task 3/7: <task description>
-[...implementation happening...]
-✓ Task complete
-
-Working on task 4/7: <task description>
 [...implementation happening...]
 ✓ Task complete
 ```
@@ -106,55 +86,16 @@ Working on task 4/7: <task description>
 ## Implementation Complete
 
 **Change:** <change-name>
-**Schema:** <schema-name>
 **Progress:** 7/7 tasks complete ✓
 
 ### Completed This Session
 - [x] Task 1
 - [x] Task 2
-...
 
-All tasks complete! You can archive this change with `/opsx:archive`.
+All tasks complete. Archive with `/opsx:archive <change-name>` once the change
+has been deployed and seen real use.
 ```
-
-**Output On Pause (Issue Encountered)**
-
-```
-## Implementation Paused
-
-**Change:** <change-name>
-**Schema:** <schema-name>
-**Progress:** 4/7 tasks complete
-
-### Issue Encountered
-<description of the issue>
-
-**Options:**
-1. <option 1>
-2. <option 2>
-3. Other approach
-
-What would you like to do?
-```
-
-**Reconcile the roadmap board (if the project has one)**
-
-Once implementation has begun (a task is checked), keep the roadmap board in sync with the source of truth: if this project exposes the roadmap reconciler (`npm run roadmap:sync`), run it so the ROADMAP.md status-icon + Status cells derive from folder state (→ leading icon 🔄, Status word `active`). It reads `changes/`/`archive/` (the source of truth) and never hand-stamps, so it self-corrects any drift. Skip silently if the project has no roadmap or reconciler.
 
 **Guardrails**
-- **If a change alters a surface's layout, that surface's shimmer is reshaped in the same change.** The placeholder reserves the shape of what is arriving; when the arriving shape moves and the placeholder does not, the surface reflows again — see docs/DESIGN_SYSTEM.md.
-- Keep going through tasks until done or blocked
-- Always read context files before starting (from the apply instructions output)
-- If task is ambiguous, pause and ask before implementing
-- If implementation reveals issues, pause and suggest artifact updates
-- Keep code changes minimal and scoped to each task
-- Update task checkbox immediately after completing each task
-- Pause on errors, blockers, or unclear requirements - don't guess
-- Use contextFiles from CLI output, don't assume specific file names
-
-**Fluid Workflow Integration**
-
-This skill supports the "actions on a change" model:
-
-- **Can be invoked anytime**: Before all artifacts are done (if tasks exist), after partial implementation, interleaved with other actions
-- **Allows artifact updates**: If implementation reveals design issues, suggest updating artifacts - not phase-locked, work fluidly
+- Tasks complete is not the archive trigger; deploy and real use are.
+- Keep `tasks.md` honest — an unticked box is cheaper than a false one.

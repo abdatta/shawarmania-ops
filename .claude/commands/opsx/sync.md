@@ -2,7 +2,7 @@
 name: "OPSX: Sync"
 description: Sync delta specs from a change to main specs
 category: Workflow
-tags: [workflow, specs, experimental]
+tags: [workflow, specs]
 ---
 
 Sync delta specs from a change to main specs.
@@ -11,28 +11,33 @@ This is an **agent-driven** operation - you will read delta specs and directly e
 
 **Input**: Optionally specify a change name after `/opsx:sync` (e.g., `/opsx:sync add-auth`). If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
 
+## This repo has no `openspec` CLI
+
+There is no `openspec` binary on PATH, in `node_modules`, or in
+`package.json` — do not call one, and do not report its absence as a problem.
+Everything the CLI would have resolved is a constant here:
+
+| What the CLI would return | Value in this repo |
+|---|---|
+| active changes | the directories in `openspec/changes/` (excluding `archive/` and `ROADMAP.md`) |
+| delta specs | `openspec/changes/<name>/specs/**/spec.md` |
+| main specs | `openspec/specs/<capability>/spec.md` |
+
 **Steps**
 
 1. **If no change name provided, prompt for selection**
 
-   Run `openspec list --json` to get available changes. Use the **AskUserQuestion tool** to let the user select.
-
-   Show changes that have delta specs (under `specs/` directory).
+   List the directories in `openspec/changes/` (excluding `archive/` and
+   `ROADMAP.md`) that contain a `specs/` directory, and use the
+   **AskUserQuestion tool** to let the user select.
 
    **IMPORTANT**: Do NOT guess or auto-select a change. Always let the user choose.
 
-2. **Resolve change context**
+2. **Find delta specs**
 
-   Run:
-   ```bash
-   openspec status --change "<name>" --json
-   ```
-
-   If status reports `actionContext.mode: "workspace-planning"`, explain that workspace spec sync is not supported in this slice and STOP. Do not fall back to repo-local paths or edit linked repos.
-
-3. **Find delta specs**
-
-   Use `artifactPaths.specs.existingOutputPaths` from the status JSON as the list of delta spec files.
+   The delta spec files are `openspec/changes/<name>/specs/**/spec.md`. The
+   directory under `specs/` is the capability name, and it maps to
+   `openspec/specs/<capability>/spec.md`.
 
    Each delta spec file contains sections like:
    - `## ADDED Requirements` - New requirements to add
@@ -42,9 +47,9 @@ This is an **agent-driven** operation - you will read delta specs and directly e
 
    If no delta specs found, inform user and stop.
 
-4. **For each delta spec, apply changes to main specs**
+3. **For each delta spec, apply changes to main specs**
 
-   For each repo-local capability delta spec path returned by the CLI:
+   For each capability delta spec found in step 2:
 
    a. **Read the delta spec** to understand the intended changes
 
@@ -75,7 +80,7 @@ This is an **agent-driven** operation - you will read delta specs and directly e
       - Add Purpose section (can be brief, mark as TBD)
       - Add Requirements section with the ADDED requirements
 
-5. **Show summary**
+4. **Show summary**
 
    After applying all changes, summarize:
    - Which capabilities were updated

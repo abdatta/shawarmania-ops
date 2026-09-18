@@ -1,94 +1,87 @@
 ---
 name: "OPSX: Archive"
-description: Archive a completed change in the experimental workflow
+description: Archive a completed change
 category: Workflow
-tags: [workflow, archive, experimental]
+tags: [workflow, archive]
 ---
 
-Archive a completed change in the experimental workflow.
+Archive a change that has shipped.
 
-**Input**: Optionally specify a change name after `/opsx:archive` (e.g., `/opsx:archive add-auth`). If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
+**Input**: optionally a change name (e.g. `/opsx:archive add-auth`). If omitted,
+infer it from conversation context. If vague or ambiguous you MUST ask.
+
+## This repo has no `openspec` CLI
+
+There is no `openspec` binary on PATH, in `node_modules`, or in
+`package.json` — do not call one, and do not report its absence as a problem.
+Everything the CLI would have resolved is a constant here:
+
+| What the CLI would return | Value in this repo |
+|---|---|
+| active changes | the directories in `openspec/changes/` (excluding `archive/` and `ROADMAP.md`) |
+| `changeRoot` | `openspec/changes/<name>/` |
+| delta specs | `openspec/changes/<name>/specs/**/spec.md` |
+| main specs | `openspec/specs/<capability>/spec.md` |
+| archive dir | `openspec/changes/archive/` |
 
 **Steps**
 
 1. **If no change name provided, prompt for selection**
 
-   Run `openspec list --json` to get available changes. Use the **AskUserQuestion tool** to let the user select.
+   List the directories in `openspec/changes/` (excluding `archive/` and
+   `ROADMAP.md`) and use the **AskUserQuestion tool**.
 
-   Show only active changes (not already archived).
-   Include the schema used for each change if available.
+   **IMPORTANT**: do NOT guess or auto-select. Always let the user choose.
 
-   **IMPORTANT**: Do NOT guess or auto-select a change. Always let the user choose.
+2. **Check the change actually shipped**
 
-2. **Check artifact completion status**
+   **Tasks complete is not the archive trigger.** A change archives after it has
+   been deployed and watched in real use, and the owner calls it. If you cannot
+   show that it shipped, say so and stop — offer to archive once it has.
 
-   Run `openspec status --change "<name>" --json` to check artifact completion.
+3. **Check artifact and task completion**
 
-   Parse the JSON to understand:
-   - `schemaName`: The workflow being used
-   - `planningHome`, `changeRoot`, `artifactPaths`, and `actionContext`: path and scope context
-   - `artifacts`: List of artifacts with their status (`done` or other)
+   Confirm `proposal.md` and `tasks.md` exist, and count `- [ ]` against `- [x]`
+   in `tasks.md`.
 
-   If status reports `actionContext.mode: "workspace-planning"`, explain that workspace archive is not supported in this slice and STOP. Do not move workspace changes into repo-local archives or edit linked repos.
-
-   **If any artifacts are not `done`:**
-   - Display warning listing incomplete artifacts
-   - Prompt user for confirmation to continue
-   - Proceed if user confirms
-
-3. **Check task completion status**
-
-   Read the tasks file (typically `tasks.md`) to check for incomplete tasks.
-
-   Count tasks marked with `- [ ]` (incomplete) vs `- [x]` (complete).
-
-   **If incomplete tasks found:**
-   - Display warning showing count of incomplete tasks
-   - Prompt user for confirmation to continue
-   - Proceed if user confirms
-
-   **If no tasks file exists:** Proceed without task-related warning.
+   If artifacts are missing or tasks are unticked, warn with the specifics and
+   ask for confirmation. Do not block on it — inform and confirm.
 
 4. **Assess delta spec sync state**
 
-   Use `artifactPaths.specs.existingOutputPaths` from status JSON to check for delta specs. If none exist, proceed without sync prompt.
+   Look for `openspec/changes/<name>/specs/**/spec.md`. If there are none,
+   proceed without a sync prompt — a change that restores behaviour an existing
+   requirement already demands was never a contract change.
 
-   **If delta specs exist:**
-   - Compare each delta spec with its corresponding main spec at `openspec/specs/<capability>/spec.md`
-   - Determine what changes would be applied (adds, modifications, removals, renames)
-   - Show a combined summary before prompting
+   **If delta specs exist**, compare each against its main spec at
+   `openspec/specs/<capability>/spec.md`, work out what would be applied (adds,
+   modifications, removals, renames), and show one combined summary before
+   prompting:
+   - If changes are needed: "Sync now (recommended)" / "Archive without syncing"
+   - If already synced: "Archive now" / "Sync anyway" / "Cancel"
 
-   **Prompt options:**
-   - If changes needed: "Sync now (recommended)", "Archive without syncing"
-   - If already synced: "Archive now", "Sync anyway", "Cancel"
-
-   If user chooses sync, use Task tool (subagent_type: "general-purpose", prompt: "Use Skill tool to invoke openspec-sync-specs for change '<name>'. Delta spec analysis: <include the analyzed delta spec summary>"). Proceed to archive regardless of choice.
+   If the user chooses sync, follow `/opsx:sync` for this change. Proceed to
+   archive regardless of their choice.
 
 5. **Perform the archive**
 
-   Create an `archive` directory under `planningHome.changesDir` if it doesn't exist:
    ```bash
-   mkdir -p "<planningHome.changesDir>/archive"
+   mkdir -p openspec/changes/archive
    ```
 
-   Generate target name using current date: `YYYY-MM-DD-<change-name>`
-
-   **Check if target already exists:**
-   - If yes: Fail with error, suggest renaming existing archive or using different date
-   - If no: Move `changeRoot` to the archive directory
+   Target name is `YYYY-MM-DD-<change-name>` using today's date. If that target
+   already exists, stop and report rather than merging into it. Otherwise:
 
    ```bash
-   mv "<changeRoot>" "<planningHome.changesDir>/archive/YYYY-MM-DD-<name>"
+   git mv "openspec/changes/<name>" "openspec/changes/archive/YYYY-MM-DD-<name>"
    ```
+
+   `.openspec.yaml` moves with the directory — leave it in place.
 
 6. **Display summary**
 
-   Show archive completion summary including:
-   - Change name
-   - Schema that was used
-   - Archive location
-   - Spec sync status (synced / sync skipped / no delta specs)
-   - Note about any warnings (incomplete artifacts/tasks)
+   Change name, archive location, spec sync status (synced / skipped / no delta
+   specs), and any warnings carried from steps 3 and 4.
 
 **Output On Success**
 
@@ -96,22 +89,8 @@ Archive a completed change in the experimental workflow.
 ## Archive Complete
 
 **Change:** <change-name>
-**Schema:** <schema-name>
-**Archived to:** the archive path derived from `planningHome.changesDir`/YYYY-MM-DD-<name>/
+**Archived to:** openspec/changes/archive/YYYY-MM-DD-<name>/
 **Specs:** ✓ Synced to main specs
-
-All artifacts complete. All tasks complete.
-```
-
-**Output On Success (No Delta Specs)**
-
-```
-## Archive Complete
-
-**Change:** <change-name>
-**Schema:** <schema-name>
-**Archived to:** the archive path derived from `planningHome.changesDir`/YYYY-MM-DD-<name>/
-**Specs:** No delta specs
 
 All artifacts complete. All tasks complete.
 ```
@@ -122,14 +101,11 @@ All artifacts complete. All tasks complete.
 ## Archive Complete (with warnings)
 
 **Change:** <change-name>
-**Schema:** <schema-name>
-**Archived to:** the archive path derived from `planningHome.changesDir`/YYYY-MM-DD-<name>/
+**Archived to:** openspec/changes/archive/YYYY-MM-DD-<name>/
 **Specs:** Sync skipped (user chose to skip)
 
 **Warnings:**
-- Archived with 2 incomplete artifacts
 - Archived with 3 incomplete tasks
-- Delta spec sync was skipped (user chose to skip)
 
 Review the archive if this was not intentional.
 ```
@@ -140,26 +116,33 @@ Review the archive if this was not intentional.
 ## Archive Failed
 
 **Change:** <change-name>
-**Target:** the archive path derived from `planningHome.changesDir`/YYYY-MM-DD-<name>/
+**Target:** openspec/changes/archive/YYYY-MM-DD-<name>/
 
 Target archive directory already exists.
 
 **Options:**
 1. Rename the existing archive
-2. Delete the existing archive if it's a duplicate
-3. Wait until a different date to archive
+2. Delete the existing archive if it is a duplicate
+3. Archive on a different date
 ```
 
-**Reconcile the roadmap board (if the project has one)**
+**Reconcile the roadmap board**
 
-After the archive move succeeds, keep the roadmap board in sync with the source of truth: if this project exposes the roadmap reconciler (`npm run roadmap:sync`), run it so the ROADMAP.md status-icon + Status cells derive from the archived folder (→ leading icon ✅, Status word `**archived YYYY-MM-DD**`), and mention in the summary whether it was reconciled. It reads `changes/`/`archive/` (the source of truth) and never hand-stamps, so it self-corrects any drift. Skip silently if the project has no roadmap or reconciler.
+If the change carries a ROADMAP.md row, run `npm run roadmap:sync` after the
+move so its status-icon and Status cells derive from the archived folder (→ ✅,
+`**archived YYYY-MM-DD**`), and say in the summary whether it reconciled. The
+reconciler reads `changes/` and `archive/` and never hand-stamps, so it
+self-corrects drift. Fixes and agent tooling carry no ROADMAP.md row — skip it
+for those.
 
 **Guardrails**
-- **If a change alters a surface's layout, that surface's shimmer is reshaped in the same change.** The placeholder reserves the shape of what is arriving; when the arriving shape moves and the placeholder does not, the surface reflows again — see docs/DESIGN_SYSTEM.md.
-- Always prompt for change selection if not provided
-- Use artifact graph (openspec status --json) for completion checking
-- Don't block archive on warnings - just inform and confirm
-- Preserve .openspec.yaml when moving to archive (it moves with the directory)
-- Show clear summary of what happened
-- If sync is requested, use the Skill tool to invoke `openspec-sync-specs` (agent-driven)
-- If delta specs exist, always run the sync assessment and show the combined summary before prompting
+- **If a change alters a surface's layout, that surface's shimmer is reshaped in
+  the same change.** The placeholder reserves the shape of what is arriving;
+  when the arriving shape moves and the placeholder does not, the surface
+  reflows again — see `docs/DESIGN_SYSTEM.md`.
+- **Every affected `docs/` page updates in the same change.** This is what stops
+  the wiki rotting; a docs update is part of the work, not follow-up.
+- Always prompt for change selection if not provided.
+- Do not block archive on warnings — inform and confirm.
+- If delta specs exist, always run the sync assessment and show the combined
+  summary before prompting.

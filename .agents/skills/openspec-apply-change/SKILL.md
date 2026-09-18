@@ -13,35 +13,40 @@ blocker requires user input.
 1. Use a change name supplied by the user.
 2. Otherwise infer it from the conversation or auto-select only when exactly
    one active change exists.
-3. If ambiguous, run `openspec list --json`, show the candidates, and ask the
-   user one concise selection question.
+3. If ambiguous, list the directories in `openspec/changes/` (excluding
+   `archive/` and `ROADMAP.md`), show the candidates, and ask the user one
+   concise selection question.
 4. Announce `Using change: <name>` and say that another name can override it.
-5. Run:
 
-   ```bash
-   openspec status --change "<name>" --json
-   openspec instructions apply --change "<name>" --json
-   ```
+If `tasks.md` is missing, the change is not apply-ready: explain that and
+recommend `$openspec-propose`. If every task is already `- [x]`, report that
+and recommend `$openspec-archive-change`.
 
-6. Read `schemaName`, `planningHome`, `changeRoot`, `actionContext`,
-   `contextFiles`, progress, tasks, and the dynamic instruction from the JSON.
-   Never assume artifact paths.
+## The Layout (there is no `openspec` CLI)
 
-If apply reports `blocked`, explain which artifact is missing and recommend
-`$openspec-propose`. If it reports `all_done`, report that and recommend
-`$openspec-archive-change`.
+There is no `openspec` binary on PATH, in `node_modules`, or in `package.json`.
+Do not call one, and do not report its absence as a problem. Everything the CLI
+would have resolved is a constant in this repo:
 
-If `actionContext.mode` is `workspace-planning` and `allowedEditRoots` is
-empty, treat linked repositories as read-only and stop before editing.
+| What the CLI would return | Value here |
+|---|---|
+| `schemaName` | `spec-driven` |
+| active changes | the directories in `openspec/changes/` (excluding `archive/` and `ROADMAP.md`) |
+| `changeRoot` | `openspec/changes/<name>/` |
+| `contextFiles` | `proposal.md`, `design.md`, `specs/**/spec.md`, `tasks.md` in that folder |
+| delta specs | `openspec/changes/<name>/specs/**/spec.md` |
+| main specs | `openspec/specs/<capability>/spec.md` |
+| archive dir | `openspec/changes/archive/` |
+| progress | the `- [ ]` / `- [x]` lines in `tasks.md` |
 
 ## Load Context and Plan
 
-Read every path in `contextFiles`, including proposal, design, specifications,
-and tasks when the schema provides them. Read applicable `AGENTS.md`
-instructions before acting.
+Read every artifact present in `openspec/changes/<name>/` — `proposal.md`,
+`design.md`, each `specs/<capability>/spec.md`, and `tasks.md`. Read applicable
+`AGENTS.md` instructions before acting.
 
-Use `update_plan` when available to track the implementation. Show the schema,
-overall progress, remaining task groups, and the CLI's current instruction.
+Use `update_plan` when available to track the implementation. Show overall
+progress as `N/M tasks complete` and the remaining task groups.
 
 ## Implement
 
@@ -83,7 +88,7 @@ When every task is complete, recommend `$openspec-archive-change <name>`.
 
 - **If a change alters a surface's layout, that surface's shimmer is reshaped in the same change.** The placeholder reserves the shape of what is arriving; when the arriving shape moves and the placeholder does not, the surface reflows again — see docs/DESIGN_SYSTEM.md.
 - Read all CLI-resolved context before editing.
-- Follow `contextFiles`; do not guess filenames.
+- Read the change folder's own artifacts; do not guess filenames.
 - Keep task and code changes synchronized.
 - Never weaken tests merely to make them pass.
 - Never archive as part of this skill.

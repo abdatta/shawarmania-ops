@@ -10,21 +10,30 @@ Resolve exact paths and check completeness before moving anything.
 
 ## Select the Change
 
-If the user did not provide a name, run `openspec list --json`, show active
-changes, and ask one concise selection question. Do not guess.
+If the user did not provide a name, list the directories in
+`openspec/changes/` (excluding `archive/` and `ROADMAP.md`), show them, and ask
+one concise selection question. Do not guess.
 
-Run:
+## The Layout (there is no `openspec` CLI)
 
-```bash
-openspec status --change "<name>" --json
-```
+There is no `openspec` binary on PATH, in `node_modules`, or in `package.json`.
+Do not call one, and do not report its absence as a problem. Everything the CLI
+would have resolved is a constant in this repo:
 
-Read `schemaName`, `planningHome`, `changeRoot`, `artifactPaths`,
-`actionContext`, and every artifact status. Use these paths rather than
-assuming repository-local layout.
+| What the CLI would return | Value here |
+|---|---|
+| `schemaName` | `spec-driven` |
+| active changes | the directories in `openspec/changes/` (excluding `archive/` and `ROADMAP.md`) |
+| `changeRoot` | `openspec/changes/<name>/` |
+| `contextFiles` | `proposal.md`, `design.md`, `specs/**/spec.md`, `tasks.md` in that folder |
+| delta specs | `openspec/changes/<name>/specs/**/spec.md` |
+| main specs | `openspec/specs/<capability>/spec.md` |
+| archive dir | `openspec/changes/archive/` |
+| progress | the `- [ ]` / `- [x]` lines in `tasks.md` |
 
-If `actionContext.mode` is `workspace-planning`, stop. Do not move workspace
-changes into a repository-local archive or edit linked repositories.
+**Tasks complete is not the archive trigger.** A change archives after it has
+been deployed and watched in real use, and the owner calls it. If you cannot
+show that it shipped, say so and stop.
 
 ## Check Completion
 
@@ -35,7 +44,7 @@ changes into a repository-local archive or edit linked repositories.
 3. Read the proposal's named documentation updates. In this repository, docs
    affected by a change must be current before archive; do not treat them as
    follow-up work.
-4. Use `artifactPaths.specs.existingOutputPaths` to find delta specs.
+4. Look for delta specs at `openspec/changes/<name>/specs/**/spec.md`.
 
 ## Sync Delta Specs
 
@@ -52,9 +61,9 @@ again, or cancel.
 
 ## Archive Safely
 
-1. Resolve the absolute `changeRoot` and archive directory from
-   `planningHome.changesDir`.
-2. Verify both paths remain inside the intended planning changes directory.
+1. The change is `openspec/changes/<name>/`; the archive is
+   `openspec/changes/archive/`.
+2. Verify both paths remain inside `openspec/changes/`.
 3. Build `YYYY-MM-DD-<change-name>` using the current local date.
 4. If that target exists, stop and report the collision.
 5. Create the archive directory if necessary.

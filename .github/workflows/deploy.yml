@@ -49,6 +49,7 @@ on:
       - 'openspec/specs/**'
       - 'openspec/todos/**'
       - '.claude/**'
+      - '.agents/**'
       - '*.md'
   # Lets a known-good commit be re-published without an empty commit.
   workflow_dispatch:

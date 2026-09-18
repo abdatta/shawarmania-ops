@@ -48,8 +48,11 @@ cannot, keep reading.
 The spec-driven rule is literal: no code change without a change folder. It does
 not demand four artifacts.
 
+There is no `openspec` CLI in this repo — create the folder yourself:
+
 ```bash
-npx openspec new change "<name>"
+mkdir -p "openspec/changes/<name>"
+printf 'schema: spec-driven\ncreated: %s\n' "$(date +%F)" > "openspec/changes/<name>/.openspec.yaml"
 ```
 
 Write two files and no more:

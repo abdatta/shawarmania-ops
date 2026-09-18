@@ -2,110 +2,113 @@
 name: "OPSX: Propose"
 description: Propose a new change - create it and generate all artifacts in one step
 category: Workflow
-tags: [workflow, artifacts, experimental]
+tags: [workflow, artifacts]
 ---
 
-Propose a new change - create the change and generate all artifacts in one step.
+Expand a change idea into every artifact implementation needs: `proposal.md`
+(what & why), `design.md` (how), `specs/` deltas (the contract), `tasks.md`
+(the steps). When they are written, run `/opsx:apply`.
 
-I'll create a change with artifacts:
-- proposal.md (what & why)
-- design.md (how)
-- tasks.md (implementation steps)
+**Input**: the argument after `/opsx:propose` is the change name (kebab-case),
+OR a description of what the user wants to build.
 
-When ready to implement, run /opsx:apply
+## This repo has no `openspec` CLI
 
----
+There is no `openspec` binary on PATH, in `node_modules`, or in
+`package.json` — do not call one, and do not report its absence as a problem.
+The workflow is plain files under a fixed layout, and everything the CLI would
+have resolved is a constant here:
 
-**Input**: The argument after `/opsx:propose` is the change name (kebab-case), OR a description of what the user wants to build.
+| What the CLI would return | Value in this repo |
+|---|---|
+| `schemaName` | `spec-driven` |
+| `planningHome.changesDir` | `openspec/changes/` |
+| `changeRoot` | `openspec/changes/<name>/` |
+| `applyRequires` | `tasks.md` |
+| main specs | `openspec/specs/<capability>/spec.md` |
+| `context` and `rules` | the `context:` and `rules:` keys of `openspec/config.yaml` |
+
+Read `openspec/config.yaml` for the project context and the per-artifact rules.
+They are constraints on what you write — never copy them into an artifact.
 
 **Steps**
 
 1. **If no input provided, ask what they want to build**
 
-   Use the **AskUserQuestion tool** (open-ended, no preset options) to ask:
+   Use the **AskUserQuestion tool** (open-ended, no preset options):
    > "What change do you want to work on? Describe what you want to build or fix."
 
-   From their description, derive a kebab-case name (e.g., "add user authentication" → `add-user-auth`).
+   Derive a kebab-case name from their answer. Names here read as short
+   statements of the behaviour (`a-discount-is-a-line-on-the-bill`,
+   `cash-is-counted-not-closed`), not ticket labels — match that voice.
 
-   **IMPORTANT**: Do NOT proceed without understanding what the user wants to build.
+   **IMPORTANT**: do NOT proceed without understanding what they want built.
 
-2. **Create the change directory**
-   ```bash
-   openspec new change "<name>"
+2. **Check the name is free**
+
+   If `openspec/changes/<name>/` exists, ask whether to continue that change or
+   pick a new name. Also check `openspec/changes/archive/` for a dated folder
+   with the same suffix — reusing an archived name is almost always a mistake.
+
+3. **Read the ground truth before writing**
+
+   - `openspec/config.yaml` — context and the `rules:` for each artifact
+   - `AGENTS.md` — the agent contract, including the non-negotiables
+   - `openspec/changes/ROADMAP.md` — where this change sits and its phase gate
+   - the `openspec/specs/<capability>/spec.md` of every capability you will touch
+   - one recent archived change under `openspec/changes/archive/` as a shape
+     reference for tone and structure
+
+4. **Create the folder and its artifacts**
+
+   Use the **TodoWrite tool** to track progress. Write in dependency order —
+   each artifact reads the ones before it:
+
    ```
-   This creates a scaffolded change in the planning home resolved by the CLI with `.openspec.yaml`.
-
-3. **Get the artifact build order**
-   ```bash
-   openspec status --change "<name>" --json
-   ```
-   Parse the JSON to get:
-   - `applyRequires`: array of artifact IDs needed before implementation (e.g., `["tasks"]`)
-   - `artifacts`: list of all artifacts with their status and dependencies
-   - `planningHome`, `changeRoot`, `artifactPaths`, and `actionContext`: path and scope context. Use these instead of assuming repo-local paths.
-
-4. **Create artifacts in sequence until apply-ready**
-
-   Use the **TodoWrite tool** to track progress through the artifacts.
-
-   Loop through artifacts in dependency order (artifacts with no pending dependencies first):
-
-   a. **For each artifact that is `ready` (dependencies satisfied)**:
-      - Get instructions:
-        ```bash
-        openspec instructions <artifact-id> --change "<name>" --json
-        ```
-      - The instructions JSON includes:
-        - `context`: Project background (constraints for you - do NOT include in output)
-        - `rules`: Artifact-specific rules (constraints for you - do NOT include in output)
-        - `template`: The structure to use for your output file
-        - `instruction`: Schema-specific guidance for this artifact type
-        - `resolvedOutputPath`: Resolved path or pattern to write the artifact
-        - `dependencies`: Completed artifacts to read for context
-      - Read any completed dependency files for context
-      - Create the artifact file using `template` as the structure and write it to `resolvedOutputPath`
-      - Apply `context` and `rules` as constraints - but do NOT copy them into the file
-      - Show brief progress: "Created <artifact-id>"
-
-   b. **Continue until all `applyRequires` artifacts are complete**
-      - After creating each artifact, re-run `openspec status --change "<name>" --json`
-      - Check if every artifact ID in `applyRequires` has `status: "done"` in the artifacts array
-      - Stop when all `applyRequires` artifacts are done
-
-   c. **If an artifact requires user input** (unclear context):
-      - Use **AskUserQuestion tool** to clarify
-      - Then continue with creation
-
-5. **Show final status**
-   ```bash
-   openspec status --change "<name>"
+   openspec/changes/<name>/
+     .openspec.yaml              schema: spec-driven
+                                 created: YYYY-MM-DD
+     proposal.md                 what changes, for whom, and why now
+     design.md                   how, and what was rejected
+     specs/<capability>/spec.md  the delta (see below)
+     tasks.md                    ordered, checkable steps
    ```
 
-**Output**
+   Honour the `rules:` from `openspec/config.yaml` as you write — at the time of
+   writing that means a proposal states user-visible behaviour and carries a
+   "Non-goals" section and the `docs/` pages it will update; a design records
+   rejected alternatives and calls out any RLS policy, money arithmetic or
+   offline semantics; tasks pair every outlet-scoped table with an isolation
+   test and end with a PHASE GATE task naming the checkpoint from ROADMAP.md.
+   Re-read the file rather than trusting this summary.
 
-After completing all artifacts, summarize:
-- Change name and location
-- List of artifacts created with brief descriptions
-- What's ready: "All artifacts created! Ready for implementation."
-- Prompt: "Run `/opsx:apply` to start implementing."
+   **Spec deltas** use the header vocabulary `## ADDED Requirements`,
+   `## MODIFIED Requirements`, `## REMOVED Requirements`,
+   `## RENAMED Requirements`, with `### Requirement: <name>` beneath, written in
+   SHALL language with `#### Scenario:` blocks. A change that decides nothing
+   contractual needs no delta.
 
-**Artifact Creation Guidelines**
+   If context is critically unclear, use **AskUserQuestion** — but prefer a
+   reasonable decision to keep momentum.
 
-- Follow the `instruction` field from `openspec instructions` for each artifact type
-- The schema defines what each artifact should contain - follow it
-- Read dependency artifacts for context before creating new ones
-- Use `template` as the structure for your output file - fill in its sections
-- **IMPORTANT**: `context` and `rules` are constraints for YOU, not content for the file
-  - Do NOT copy `<context>`, `<rules>`, `<project_context>` blocks into the artifact
-  - These guide what you write, but should never appear in the output
+5. **Verify and report**
 
-**Reconcile the roadmap board (if the project has one)**
+   Confirm each file exists and `tasks.md` is non-empty, then summarise the
+   change name, its location, and the artifacts written. Prompt:
+   "Run `/opsx:apply <name>` to start implementing."
 
-After all artifacts are created, keep the human-readable roadmap board in sync with the source of truth: if this project exposes the roadmap reconciler (`npm run roadmap:sync`, i.e. `node openspec/tools/sync-roadmap-status.mjs`), run it so this change's ROADMAP.md status-icon + Status cells derive from its now-expanded folder (→ leading icon 📝, Status word `proposed`). It reads `changes/`/`archive/` (the source of truth) and never hand-stamps, so it self-corrects any drift. Skip silently if the project has no roadmap or reconciler.
+**Reconcile the roadmap board**
+
+If the change carries a ROADMAP.md row, run `npm run roadmap:sync` so its
+status-icon and Status cells derive from the now-expanded folder (→ 📝,
+`proposed`). The reconciler reads `changes/` and `archive/` and never
+hand-stamps, so it self-corrects drift. **Fixes and agent tooling get a change
+folder only when they change what ships; they never get a ROADMAP.md row** —
+skip this step for those.
 
 **Guardrails**
-- Create ALL artifacts needed for implementation (as defined by schema's `apply.requires`)
-- Always read dependency artifacts before creating a new one
-- If context is critically unclear, ask the user - but prefer making reasonable decisions to keep momentum
-- If a change with that name already exists, ask if user wants to continue it or create a new one
-- Verify each artifact file exists after writing before proceeding to next
+- Write every artifact implementation needs, `tasks.md` above all.
+- Always read the artifacts you depend on before writing a new one.
+- `context` and `rules` guide what you write and never appear in the output.
+- A proposal that violates a non-negotiable in `openspec/config.yaml` is wrong,
+  however well argued.

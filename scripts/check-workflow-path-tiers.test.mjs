@@ -65,11 +65,16 @@ const fullSuite = [
 ]
 
 describe('CI path tiers', () => {
-  it('the prose tier invokes both repository index checks', () => {
+  // Each of these gates a file class this tier's filter admits, so each would be
+  // disarmed for precisely the commits it polices if it ran only in full lint.
+  it('the prose tier invokes every check its own filter makes load-bearing', () => {
     const docs = workflow('docs.yml')
 
     expect(docs).toMatch(/run: npm run lint:todos/)
     expect(docs).toMatch(/run: npm run lint:specs/)
+    expect(docs, 'agent instruction files are prose-only commits').toMatch(
+      /run: npm run lint:agents/,
+    )
   })
 
   it.each(fullSuite)('%s declares a non-empty prose denylist', (name, key) => {

@@ -12,21 +12,15 @@ requirements and scenarios. Make the operation idempotent.
 
 Use the supplied change name. If it is missing or ambiguous:
 
-1. Run `openspec list --json`.
-2. Show only active changes with delta specs.
+1. List the directories in `openspec/changes/`, excluding `archive/` and
+   `ROADMAP.md`. There is no `openspec` CLI in this repo — do not call one.
+2. Show only those that contain a `specs/` directory.
 3. Ask the user one concise selection question.
 
-Run:
-
-```bash
-openspec status --change "<name>" --json
-```
-
-If `actionContext.mode` is `workspace-planning`, stop. Do not fall back to
-guessed repo paths or edit linked repositories.
-
-Use `artifactPaths.specs.existingOutputPaths` as the delta list. If it is
-empty, report that and stop.
+The delta list is `openspec/changes/<name>/specs/**/spec.md`; the directory
+under `specs/` is the capability name and maps to
+`openspec/specs/<capability>/spec.md`. If there are no deltas, report that and
+stop.
 
 ## Merge Each Capability
 

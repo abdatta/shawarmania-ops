@@ -30,6 +30,7 @@ on:
       - 'openspec/specs/**'
       - 'openspec/todos/**'
       - '.claude/**'
+      - '.agents/**'
       - '*.md'
 
 concurrency:

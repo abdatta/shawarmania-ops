@@ -35,6 +35,7 @@ on:
       - 'openspec/specs/**'
       - 'openspec/todos/**'
       - '.claude/**'
+      - '.agents/**'
       - '*.md'
   push:
     branches: [main]
@@ -44,6 +45,7 @@ on:
       - 'openspec/specs/**'
       - 'openspec/todos/**'
       - '.claude/**'
+      - '.agents/**'
       - '*.md'
 
 concurrency:
@@ -85,6 +87,15 @@ jobs:
       # this tier as well as in normal lint.
       - name: Living-spec index is in sync
         run: npm run lint:specs
+
+      # Same trap as the backlog index above, and the reason this step is not
+      # optional: EDITING AN AGENT INSTRUCTION FILE IS ITSELF A PROSE-ONLY
+      # COMMIT. `.claude/**` and `.agents/**` are both in this tier's filter, so
+      # leaving this check behind the full-suite filter would disarm it for
+      # exactly the commits that can reintroduce a call to the `openspec` CLI
+      # this repo does not have.
+      - name: Agent instructions do not call a missing toolchain
+        run: npm run lint:agents
 
       # Nothing else runs here on purpose. eslint, typecheck, the build and
       # every test suite take no input from any file this workflow's filter

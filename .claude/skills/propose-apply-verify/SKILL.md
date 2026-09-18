@@ -19,11 +19,11 @@ Archiving is deliberately NOT part of this skill. It ends by offering `/opsx:arc
 
 ## Phase 1 — Propose
 
-Run the `/opsx:propose <name>` flow (the `openspec-propose` skill). If `openspec status --change <name>` already shows all artifacts complete, skip straight to Phase 2 and say so. After artifacts land, run `npm run roadmap:sync`.
+Run the `/opsx:propose <name>` flow (`.claude/commands/opsx/propose.md`). If `openspec/changes/<name>/` already holds every artifact — `proposal.md`, `design.md`, `specs/` where the change decides something contractual, and a non-empty `tasks.md` — skip straight to Phase 2 and say so. After artifacts land, run `npm run roadmap:sync`.
 
 ## Phase 2 — Apply
 
-Run the `/opsx:apply <name>` flow (the `openspec-apply-change` skill): read the context files, implement every task, check each `- [x]` off as it completes, run `npm run roadmap:sync` once implementation begins. Pause only for genuine design conflicts — prefer momentum plus a recorded decision over stopping to ask.
+Run the `/opsx:apply <name>` flow (`.claude/commands/opsx/apply.md`): read the change folder's artifacts, implement every task, check each `- [x]` off as it completes, run `npm run roadmap:sync` once implementation begins. Pause only for genuine design conflicts — prefer momentum plus a recorded decision over stopping to ask.
 
 ## Phase 3 — Verify, fix, re-verify (the heart of this skill)
 

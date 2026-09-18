@@ -42,23 +42,22 @@ first.
 
 ## Establish Context
 
-Start with:
+There is no `openspec` binary on PATH, in `node_modules`, or in
+`package.json` — do not call one, and do not report its absence as a problem.
+The active changes are simply the directories in `openspec/changes/`, excluding
+`archive/` and `ROADMAP.md`:
 
 ```bash
-openspec list --json
+ls openspec/changes/
 ```
 
-If the user mentions a specific active change, run:
+If the user mentions a specific active change, read whichever of `proposal.md`,
+`design.md`, `tasks.md` and `specs/<capability>/spec.md` exist under
+`openspec/changes/<name>/`.
 
-```bash
-openspec status --change "<name>" --json
-```
-
-Use `changeRoot`, `artifactPaths`, and `actionContext` from the result. Read
-existing outputs from the resolved paths; do not guess their locations.
-
-For archived changes, resolve them from the repository's archive structure and
-treat them as immutable context.
+For what is built and what comes next, read `openspec/changes/ROADMAP.md`. For
+the contract, read `openspec/specs/<capability>/spec.md`. Archived changes live
+in dated folders under `openspec/changes/archive/` and are immutable context.
 
 ## Explore Naturally
 

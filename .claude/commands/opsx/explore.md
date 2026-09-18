@@ -2,7 +2,7 @@
 name: "OPSX: Explore"
 description: "Enter explore mode - think through ideas, investigate problems, clarify requirements"
 category: Workflow
-tags: [workflow, explore, experimental, thinking]
+tags: [workflow, explore, thinking]
 ---
 
 Enter explore mode. Think deeply. Visualize freely. Follow the conversation wherever it goes.
@@ -84,15 +84,17 @@ You have full context of the OpenSpec system. Use it naturally, don't force it.
 
 ### Check for context
 
-At the start, quickly check what exists:
+At the start, quickly check what exists. There is no `openspec` CLI in this
+repo — the active changes are simply the directories in `openspec/changes/`,
+excluding `archive/` and `ROADMAP.md`:
+
 ```bash
-openspec list --json
+ls openspec/changes/
 ```
 
-This tells you:
-- If there are active changes
-- Their names, schemas, and status
-- What the user might be working on
+For what is already built and what comes next, read
+`openspec/changes/ROADMAP.md`. For the contract, read
+`openspec/specs/<capability>/spec.md`.
 
 If the user mentioned a specific change name, read its artifacts for context.
 
@@ -107,10 +109,10 @@ Think freely. When insights crystallize, you might offer:
 
 If the user mentions a change or you detect one is relevant:
 
-1. **Resolve and read existing artifacts for context**
-   - Run `openspec status --change "<name>" --json`.
-   - Use `changeRoot`, `artifactPaths`, and `actionContext` from the status JSON.
-   - Read existing files from `artifactPaths.<artifact>.existingOutputPaths`.
+1. **Read its existing artifacts for context**
+   - The change lives at `openspec/changes/<name>/`.
+   - Read whichever of `proposal.md`, `design.md`, `tasks.md` and
+     `specs/<capability>/spec.md` are present.
 
 2. **Reference them naturally in conversation**
    - "Your design mentions using Redis, but we just realized SQLite fits better..."
