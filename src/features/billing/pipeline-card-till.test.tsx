@@ -72,7 +72,6 @@ function renderCard(over: Partial<BillingOrder>, currentDeviceId: string | null)
     <MemoryRouter>
       <PipelineCard
         order={order(over)}
-        section="preparing"
         currentBillerId={ONE_PERSON}
         currentDeviceId={currentDeviceId}
         busy={false}
@@ -137,26 +136,38 @@ describe('a pipeline card says which till took the order', () => {
     ).not.toBeInTheDocument()
   })
 
-  it("stands the actions down on the other till's order", () => {
+  it("prints the other till's two facts instead of offering them as controls", () => {
     renderCard(
       { deviceId: OTHER_TILL, deviceLabel: 'Takeaway counter', creatorId: ONE_PERSON },
       THIS_TILL,
     )
 
-    // Read-only, and still shaped like a card: the till chip beside the time is
-    // what explains it, so nobody has to press something to find out.
+    /*
+      Read-only, and still shaped like a card: the till chip beside the time is
+      what explains it, so nobody has to press something to find out.
+
+      Drawn as statements rather than as dimmed buttons, deliberately. A dimmed
+      button is a promise the screen is refusing to keep and billers read it as
+      breakage — and a pressed state on a control that cannot be pressed
+      misreports the fact to assistive technology as well.
+    */
     for (const label of ['Prepared', 'Paid']) {
-      expect(screen.getByRole('button', { name: label })).toBeDisabled()
+      expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument()
+      const fact = screen.getByText(label)
+      expect(fact).toHaveAttribute('data-fact')
+      expect(fact).not.toHaveAttribute('aria-pressed')
     }
   })
 
-  it('leaves this tablet own actions alone', () => {
+  it('leaves this tablet own controls alone', () => {
     renderCard({ deviceId: THIS_TILL, deviceLabel: 'Counter tablet' }, THIS_TILL)
 
-    // The mirror of the assertion above, because a gate that disabled
-    // everything would pass that one and be useless.
+    // The mirror of the assertion above, because a gate that stood everything
+    // down would pass that one and be useless.
     for (const label of ['Prepared', 'Paid']) {
-      expect(screen.getByRole('button', { name: label })).toBeEnabled()
+      const control = screen.getByRole('button', { name: label })
+      expect(control).toBeEnabled()
+      expect(control).toHaveAttribute('aria-pressed', 'false')
     }
   })
 

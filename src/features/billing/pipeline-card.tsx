@@ -10,14 +10,21 @@ import { PAYMENT_EDIT_WINDOW_MS } from '@/domain'
 
 import { cn } from '@/lib/cn'
 
+import { StateToggle } from './state-toggle'
+
 /**
- * One compact ticket, serving every pipeline section and both hosts.
+ * One compact ticket, serving the whole pipeline list and both hosts.
  *
- * The card answers two questions at a glance — what is in it, and what happens
- * next — and nothing else. Per-line prices left deliberately (owner-flagged,
- * design D6): the total is what gets collected, line amounts live in the
- * composer and on the bill. Everything uncommon hides behind the kebab, whose
- * rows stay touch-safe at 44px.
+ * The card answers the **two** questions an order answers — is the food made,
+ * is it paid — and nothing else. It used to answer them with its section plus
+ * four button variants, and asked the biller to invert that projection while a
+ * customer waited; now each question is its own control, in its own fixed
+ * place, wearing its own fixed word. Nothing about the card depends on where it
+ * sits, because there is nowhere else for it to sit.
+ *
+ * Per-line prices left deliberately (owner-flagged, design D6): the total is
+ * what gets collected, line amounts live in the composer and on the bill.
+ * Everything uncommon hides behind the kebab, whose rows stay touch-safe.
  *
  * The same component draws the docked-edit variant: `showItems=false` drops the
  * item list the composer beside it is already editing, exactly as the old
@@ -25,7 +32,6 @@ import { cn } from '@/lib/cn'
  */
 export function PipelineCard({
   order,
-  section,
   currentBillerId = null,
   currentDeviceId = null,
   showItems = true,
@@ -41,8 +47,6 @@ export function PipelineCard({
   onCancelAfterPaid,
 }: {
   order: BillingOrder
-  /** Which section the card sits in — decides its one primary action. */
-  section: 'preparing' | 'unpaid-prepared'
   /** Omitted creator chip when this is the person holding the tablet. */
   currentBillerId?: string | null
   /**
@@ -56,11 +60,10 @@ export function PipelineCard({
   busy?: boolean
   /** Editing suspends while another order holds the composer. */
   editDisabled?: boolean
-  /** Resolved from the bill when known, so Un-pay can name what it takes back. */
+  /** Resolved from the bill when known, so the take-back can name what it returns. */
   tenderLabel?: string | null
   onEdit?: (order: BillingOrder) => void
   onMarkPrepared: (order: BillingOrder) => void
-  /** Only wired for Unpaid Prepared cards, where it is a visible secondary. */
   onUnprepare: (order: BillingOrder) => void
   onMarkPaid: (order: BillingOrder) => void
   onCancel: (order: BillingOrder) => void
@@ -115,6 +118,7 @@ export function PipelineCard({
   const discounted = grossPaise > totalPaise
   const reference = order.localReference ?? `Order #${order.orderNumber}`
   const isPaid = order.status === 'paid'
+  const prepared = order.preparedAt !== null
   // The five-minute clock, measured from stored payment time — never a timer.
   // Read one frame after mount so the render itself stays pure.
   const [nowMs, setNowMs] = useState<number | null>(null)
@@ -153,11 +157,15 @@ export function PipelineCard({
   const foreignTill = currentDeviceId !== null && order.deviceId !== currentDeviceId
   const otherTill = foreignTill ? order.deviceLabel : null
   /*
-    A neighbour's order is read-only here, and the controls stand down rather
-    than disappearing: a card that still looks like a card, with its till named
-    beside the time, explains the refusal before somebody meets it. The
-    boundary is still the database's, and the adapter refuses locally too, so
-    this is the third of three and the only one an operator ever sees.
+    A neighbour's order is read-only here, and its two facts are *printed* on
+    the card rather than offered as controls that refuse: no border, no press
+    affordance, no pressed state to misreport. A dimmed button is a promise the
+    screen is refusing to keep, and billers read it as breakage. The till named
+    beside the time is the sentence that explains it.
+
+    The boundary is still the database's, and the adapter refuses locally too,
+    so this is the third of three guards and the only one an operator ever sees
+    — changed in appearance here, never in authority.
   */
   const actionsDisabled = busy || foreignTill
 
@@ -239,15 +247,9 @@ export function PipelineCard({
             )}
           </div>
         </div>
+        {/* No paid badge: the ticked Paid box below says it, in the place the
+            biller is already looking. */}
         <div className="flex shrink-0 self-center items-center gap-1.5">
-          {isPaid && (
-            <span
-              data-testid={`paid-chip-${order.id}`}
-              className="rounded-md bg-success px-1.5 py-0.5 text-xs font-black text-on-success"
-            >
-              PAID
-            </span>
-          )}
           <span className="flex items-baseline gap-1.5">
             {discounted && (
               <Money
@@ -276,61 +278,36 @@ export function PipelineCard({
       )}
 
       <div className="mt-1 flex items-stretch justify-between gap-1.5">
-        {section === 'unpaid-prepared' ? (
-          /* Green is this card's identity: prepared food waiting for money.
-             Filled success actions use their own contrast-gated token pair. */
-          <>
-            <Button
-              size="phone"
-              className="h-9 flex-1 bg-success px-3 text-on-success"
-              disabled={actionsDisabled}
-              onClick={() => onMarkPaid(order)}
-            >
-              Paid
-            </Button>
-            <Button
-              variant="secondary"
-              size="phone"
-              className="h-9 flex-1 px-3"
-              disabled={actionsDisabled}
-              onClick={() => onUnprepare(order)}
-            >
-              Reprepare
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button
-              size="phone"
-              className="h-9 flex-1 px-3"
-              disabled={actionsDisabled}
-              onClick={() => onMarkPrepared(order)}
-            >
-              Prepared
-            </Button>
-            {unwindOpen ? (
-              <Button
-                variant="secondary"
-                size="phone"
-                className="h-9 flex-1 px-3"
-                disabled={actionsDisabled}
-                onClick={() => setUnpaying(true)}
-              >
-                Un-pay
-              </Button>
-            ) : (
-              <Button
-                variant="secondary"
-                size="phone"
-                className="h-9 flex-1 px-3"
-                disabled={actionsDisabled || isPaid}
-                onClick={() => onMarkPaid(order)}
-              >
-                Paid
-              </Button>
-            )}
-          </>
-        )}
+        {/*
+          Prepared then Paid, in that order, at equal width, on every card in
+          every state. This is the whole point of #55 and no state may reorder,
+          resize, rename or withhold either of them.
+        */}
+        <StateToggle
+          label="Prepared"
+          tone="primary"
+          checked={prepared}
+          interactive={!foreignTill}
+          disabled={busy}
+          testId={`prepared-toggle-${order.id}`}
+          onActivate={() => (prepared ? onUnprepare(order) : onMarkPrepared(order))}
+        />
+        <StateToggle
+          label="Paid"
+          tone="success"
+          checked={isPaid}
+          interactive={!foreignTill}
+          disabled={busy}
+          testId={`paid-toggle-${order.id}`}
+          /*
+            Unchecked opens the tender dialog and the tick lands only when money
+            is actually recorded; checked opens the reasoned take-back. A card
+            sits in this list only while it is not both prepared and paid, so
+            every ticked Paid box here is untickable by construction — the box
+            never lies about what pressing it will do.
+          */
+          onActivate={() => (isPaid ? setUnpaying(true) : onMarkPaid(order))}
+        />
 
         {kebabRows.length > 0 && (
           <div className="relative" ref={menuRef}>

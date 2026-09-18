@@ -9,8 +9,9 @@ let originalAnimate: PropertyDescriptor | undefined
 let originalRect: PropertyDescriptor | undefined
 
 function rectFor(element: HTMLElement): DOMRect {
-  const section = element.closest<HTMLElement>('[data-stage]')?.dataset.stage
-  const top = section === 'prepared' ? 144 : 16
+  // Where a card sits in the one list: the second slot is one card lower than
+  // the first, and a card that merely records a fact does not change slot.
+  const top = element.closest<HTMLElement>('li')?.dataset.slot === 'second' ? 144 : 16
   return {
     bottom: top + 96,
     height: 96,
@@ -24,29 +25,25 @@ function rectFor(element: HTMLElement): DOMRect {
   } as DOMRect
 }
 
-function PipelineHarness({ stage }: { stage: 'preparing' | 'prepared' }) {
+/**
+ * The pipeline as it is now: one list, in which recording a fact changes the
+ * card's colours and its slot not at all.
+ */
+function PipelineHarness({ prepared }: { prepared: boolean }) {
   const rootRef = useRef<HTMLElement>(null)
-  useFlip(rootRef, [stage])
+  useFlip(rootRef, [prepared])
 
   return (
     <section ref={rootRef}>
-      <ul data-stage="preparing">
-        {stage === 'preparing' && (
-          <li>
-            <article data-flip-id={ticketId} data-testid="moving-ticket">
-              Ticket
-            </article>
-          </li>
-        )}
-      </ul>
-      <ul data-stage="prepared">
-        {stage === 'prepared' && (
-          <li>
-            <article data-flip-id={ticketId} data-testid="moving-ticket">
-              Ticket
-            </article>
-          </li>
-        )}
+      <ul>
+        <li data-slot="first">
+          <article data-flip-id={ticketId} data-testid="moving-ticket" data-prepared={prepared}>
+            Ticket
+          </article>
+        </li>
+        <li data-slot="second">
+          <article data-flip-id="order-2">Another ticket</article>
+        </li>
       </ul>
     </section>
   )
@@ -58,9 +55,9 @@ function ArrivalHarness({ arrived }: { arrived: boolean }) {
 
   return (
     <section ref={rootRef}>
-      <ul data-stage="preparing">
+      <ul>
         {arrived && (
-          <li>
+          <li data-slot="first">
             <article data-flip-id={ticketId} data-testid="arriving-ticket">
               Ticket
             </article>
@@ -102,19 +99,21 @@ afterEach(() => {
 })
 
 describe('useFlip', () => {
-  it('shows one ghost and a destination shimmer when a ticket changes pipeline sections', () => {
-    const view = render(<PipelineHarness stage="preparing" />)
+  it('animates nothing at all when a ticket merely records one of its two facts', () => {
+    const view = render(<PipelineHarness prepared={false} />)
 
-    view.rerender(<PipelineHarness stage="prepared" />)
+    view.rerender(<PipelineHarness prepared />)
 
-    const destination = screen.getByTestId('moving-ticket')
-    expect(destination).toHaveStyle({ opacity: '0' })
-    expect(destination.parentElement?.querySelector('[data-flip-placeholder]')).not.toBeNull()
-    expect(
-      view.container.querySelector('[data-stage="preparing"] [data-flip-placeholder]'),
-    ).toBeNull()
-    expect(view.container.querySelector('[data-stage="preparing"] [data-flip-id]')).toBeNull()
-    expect(document.body.querySelectorAll('[data-flip-ghost]')).toHaveLength(1)
+    /*
+      The whole of #55's rail, in one assertion: with no sections there is
+      nowhere for a card to go, so the hook measures no movement and plays
+      nothing. If this ever animates, the list is reordering itself and the
+      card the biller was looking at has moved under their eye.
+    */
+    expect(HTMLElement.prototype.animate).not.toHaveBeenCalled()
+    expect(document.body.querySelector('[data-flip-ghost]')).toBeNull()
+    expect(view.container.querySelector('[data-flip-placeholder]')).toBeNull()
+    expect(screen.getByTestId('moving-ticket')).toBeVisible()
   })
 
   it('does not replay existing-ticket motion when a newly ordered ticket arrives', () => {
@@ -130,11 +129,10 @@ describe('useFlip', () => {
   it('carries the full ticket into a newly created bill row after payment', () => {
     const source = document.createElement('article')
     source.dataset.flipId = ticketId
-    source.dataset.stage = 'preparing'
     source.textContent = 'Order #' + '104 · ₹278'
 
     const billRow = document.createElement('li')
-    billRow.dataset.stage = 'prepared'
+    billRow.dataset.slot = 'second'
     const destination = document.createElement('details')
     billRow.appendChild(destination)
     document.body.append(source, billRow)

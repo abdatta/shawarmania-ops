@@ -1,6 +1,5 @@
-import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { ReceiptText } from 'lucide-react'
-import type { CSSProperties } from 'react'
 
 import { EmptyState } from '@/components/layout/empty-state'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
@@ -17,33 +16,36 @@ import { CounterDeviceContext } from '@/session/counter-context'
 import { CancelOrderDialog } from './cancel-order-dialog'
 import { captureCardFlight, flyCapturedCardToDestination, useFlip, waitForElement } from './flip'
 import { PipelineCard } from './pipeline-card'
-import { splitPipeline } from './pipeline'
 import { PaymentDialog } from './payment-dialog'
+import { RailScrollChip, useRailClipping } from './rail-scroll-chip'
 import { useCounterState } from './use-counter-state'
 import { OfflineFillHint } from './offline-fill-hint'
 
 /**
- * The pipeline, whole-outlet, in two colour-coded bands: **Preparing** (ember)
- * over a plain hairline over **Unpaid Prepared Orders** (green). There are no
- * section headings and no action confirmations — the card colours, the divider,
- * and the section-to-section glide say everything; the counter reads state at a
- * glance, not by reading words.
+ * The outlet's unfinished work as **one list**, newest order first.
  *
- * The old single "Open orders" list answered neither of the two questions the
- * counter actually asks — is the food made, is it paid — so everything sat in
- * one undifferentiated pile. The sections are pure derivations of
- * `prepared_at` × `status` (see pipeline.ts); a paid-but-unprepared order stays
- * in Preparing wearing its Paid marker because its food is still being made.
+ * It used to be two colour-coded bands — Preparing over Unpaid Prepared Orders
+ * — so a card's band *was* its preparation state. The Kalyani biller reported
+ * what that costs: one tap changed the card's position, both button labels, the
+ * buttons' order and their colours at once, and the eye had to re-find a card it
+ * was already looking at. The bands cost space too, each claiming a share of the
+ * panel in proportion to its work, so a rail holding two orders drew two cards
+ * and two large empty rectangles.
+ *
+ * An order answers two independent questions — is the food made, is it paid —
+ * and #45 built the data that way on purpose. The card now draws those two
+ * switches as two switches (see `state-toggle.tsx`), and a card's position is
+ * decided by when the order was taken and by nothing else. Recording either fact
+ * changes colours and moves nothing. A ticket leaves the list only when both are
+ * recorded, flying into Bills this shift.
+ *
+ * What the divider used to say — prepared work is waiting for money — is said
+ * instead by the marker on the bottom scroll chip, which is the only place that
+ * fact can still go unnoticed.
  *
  * The scope is the **outlet**, matching what live adapters have always served:
- * another tablet's work is this counter's work too, shown with its creator.
- *
- * On the counter (embedded) the two bands share the panel's height instead of
- * stacking into one long sheet: each grows with its work and scrolls its own
- * orders once they exceed that share, floored at what one complete card needs.
- * A rush in one band can no longer push the other off the screen — the board
- * always shows both questions the counter is answering. The standalone page
- * keeps the natural document flow it has always had.
+ * another tablet's work is this counter's work too, shown with its creator and
+ * its till.
  */
 export function OpenOrdersHeading({ embedded }: { embedded: boolean }) {
   return (
@@ -72,12 +74,20 @@ function methodLabelOf(bill: BillingBill): string | null {
 export function OpenOrdersSurface({
   embedded = false,
   refreshKey = 0,
+  savedOrderKey = 0,
   onActivityChanged,
   editingOrderId = null,
   onEditOrder,
 }: {
   embedded?: boolean
   refreshKey?: number
+  /**
+   * Bumped when an order is saved **on this tablet**, and only then: the rail
+   * returns to its newest end so the order just taken is the visible one. A
+   * neighbouring till's order arriving must not move the list under the biller's
+   * thumb.
+   */
+  savedOrderKey?: number
   onActivityChanged?: () => void
   editingOrderId?: string | null
   onEditOrder?: (order: BillingOrder) => void
@@ -90,8 +100,8 @@ export function OpenOrdersSurface({
   const [tenders, setTenders] = useState<Map<string, string>>(new Map())
   const [paying, setPaying] = useState<BillingOrder | null>(null)
   const [cancelling, setCancelling] = useState<BillingOrder | null>(null)
-  // Errors only. Success is carried by the motion and the card's new band —
-  // the counter asked for no inserted info bars.
+  // Errors only. Success is carried by the card's own colours — the counter
+  // asked for no inserted info bars.
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -105,7 +115,7 @@ export function OpenOrdersSurface({
     }
     const nextOrders = await billing.listOpenOrders(outletId)
     setOrders(nextOrders)
-    // Tender facts ride along so an Un-pay can name what it takes back.
+    // Tender facts ride along so a take-back can name what it returns.
     try {
       const history = await billing.listShiftHistory(shift.id)
       const nextTenders = new Map<string, string>()
@@ -162,148 +172,65 @@ export function OpenOrdersSurface({
     })
   }
 
-  const listed = orders?.filter((order) => order.id !== editingOrderId) ?? []
-  const { preparing, unpaidPrepared } = splitPipeline(listed)
+  /*
+    Every order the adapter returned that is not cancelled, in the order it
+    returned them — `ordered_at` descending. Nothing is grouped, sorted or
+    partitioned here: a card's place is when its order was taken, and nothing
+    else.
 
-  // Section-to-section moves glide: the hook measures every surviving card
-  // before and after each commit and plays the difference.
+    Newest-first was reconsidered and kept, on the owner's reasoning: a
+    correction happens in the first seconds after saving, so the order just
+    taken has to be under the biller's thumb.
+  */
+  const listed = (orders ?? []).filter(
+    (order) => order.id !== editingOrderId && order.status !== 'cancelled',
+  )
+
+  // The settlement flight is the only motion left. With no sections to move
+  // between, the hook measures no movement when a fact is merely recorded.
   const flipRootRef = useRef<HTMLElement | null>(null)
   useFlip(flipRootRef, [orders])
 
-  // Each band's floor is its own first ticket, measured live: whatever the
-  // viewport or the order's line count, a populated band never starts smaller
-  // than one complete card. Before the first measurement lands, the section's
-  // min-h-[120px] class — the spec's own one-item figure — holds the floor.
-  const [floors, setFloors] = useState<{ preparing: number | null; unpaid: number | null }>({
-    preparing: null,
-    unpaid: null,
-  })
-  const measureFloors = useCallback(() => {
-    const next = {
-      preparing:
-        document.querySelector<HTMLElement>('[data-testid="pipeline-preparing-list"] > li')
-          ?.offsetHeight || null,
-      unpaid:
-        document.querySelector<HTMLElement>('[data-testid="pipeline-unpaid-prepared-list"] > li')
-          ?.offsetHeight || null,
-    }
-    setFloors((current) =>
-      current.preparing === next.preparing && current.unpaid === next.unpaid ? current : next,
-    )
-  }, [])
-  // One frame after commit: layout must exist before it can be measured, and
-  // the compiler rightly objects to a synchronous setState inside an effect.
-  useLayoutEffect(() => {
-    const frame = requestAnimationFrame(measureFloors)
-    return () => cancelAnimationFrame(frame)
-  })
-  useEffect(() => {
-    window.addEventListener('resize', measureFloors)
-    return () => window.removeEventListener('resize', measureFloors)
-  }, [measureFloors])
+  const scrollerRef = useRef<HTMLUListElement | null>(null)
+  const clipping = useRailClipping(scrollerRef, [listed.length, orders])
+  const scrollRailTo = (edge: 'top' | 'bottom') => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    // The whole way, as a chat app jumps: a partial scroll would leave the
+    // biller re-reading the chip to find out whether anything happened. The
+    // smoothness is the scroller's own CSS, which reduced motion turns off.
+    scroller.scrollTop = edge === 'top' ? 0 : scroller.scrollHeight
+  }
 
-  /**
-   * A band claims shares of the free panel in proportion to its work, so a
-   * busy Preparing grows while a two-order money band keeps exactly what it
-   * needs — and both keep at least their floor, which is what pins the bottom
-   * band's first card on screen however long the day's list above it gets.
-   */
-  const bandStyle = (count: number, floor: number | null): CSSProperties | undefined =>
-    embedded
-      ? {
-          flexGrow: count,
-          flexShrink: 1,
-          flexBasis: 0,
-          ...(floor !== null && { minHeight: floor + 6 }),
-        }
-      : undefined
+  /*
+    Keyed on the save alone, deliberately. Keeping `orders` in here as well —
+    so the scroll could wait for the new card to render — made every ordinary
+    reload yank the rail back to the top, including a reload caused by another
+    till's order arriving. It does not need to wait: the list is newest-first,
+    so the top is where the new card lands, and a scroller already at zero is
+    already showing it.
+  */
+  useEffect(() => {
+    if (savedOrderKey === 0) return
+    const scroller = scrollerRef.current
+    if (scroller) scroller.scrollTop = 0
+  }, [savedOrderKey])
 
   if (orders === null) {
-    // The rail's own silhouette: compact ticket cards over a hairline — the
-    // shape this column fills once the pipeline arrives. Reviewed against this
-    // change's height-sharing rework per the standing placeholder rule: what
-    // arrives at rest is still cards over a hairline (the scroll containment
-    // between them is invisible until a band overflows), so the silhouette's
-    // shape stands.
+    /*
+      The rail's own silhouette, reshaped with the list it stands in for: plain
+      cards over one scroller with no hairline between them, because the hairline
+      belonged to a divider that no longer arrives.
+    */
     return (
       <LoadingRegion label="the pipeline" className="space-y-1">
         <OfflineFillHint />
         <Shimmer className="h-[92px]" />
         <Shimmer className="h-[92px]" />
-        <div className="my-1 border-t border-border" />
         <Shimmer className="h-[92px]" />
       </LoadingRegion>
     )
   }
-
-  const renderSection = (
-    label: string,
-    sectionOrders: BillingOrder[],
-    section: 'preparing' | 'unpaid-prepared',
-    emptyText: string,
-    testid: string,
-    band: { floor: number | null },
-  ) => (
-    <section
-      data-testid={testid}
-      aria-label={label}
-      style={bandStyle(sectionOrders.length, band.floor)}
-      /*
-        The 120px class is the pre-measurement floor — the spec's one-ticket
-        figure; a live measurement overrides it through the inline style.
-      */
-      className={embedded ? 'flex min-h-[120px] flex-col' : undefined}
-    >
-      {sectionOrders.length === 0 ? (
-        embedded ? null : (
-          <p className="rounded-lg bg-surface-raised p-2 text-xs text-content-muted">{emptyText}</p>
-        )
-      ) : (
-        <ul
-          data-testid={`${testid}-list`}
-          /*
-            The scroll containment the board promises: this list scrolls its own
-            orders and nothing else, so a full band never moves its neighbour.
-          */
-          className={`min-h-0 flex-1 space-y-1 ${embedded ? 'overflow-y-auto' : ''}`}
-        >
-          {sectionOrders.map((order) => (
-            <li key={order.id}>
-              <PipelineCard
-                order={order}
-                section={section}
-                currentBillerId={shift?.billerProfileId ?? null}
-                currentDeviceId={counterDevice?.device.deviceId ?? null}
-                busy={busy}
-                {...(onEditOrder ? { onEdit: onEditOrder } : {})}
-                tenderLabel={order.billId ? (tenders.get(order.billId) ?? null) : null}
-                onMarkPrepared={(target) =>
-                  void act(() => billing.markOrderPrepared(target.id, true))
-                }
-                onUnprepare={(target) =>
-                  void act(() => billing.markOrderPrepared(target.id, false))
-                }
-                onMarkPaid={(target) => {
-                  setError(null)
-                  setPaying(target)
-                }}
-                onCancel={(target) => {
-                  setError(null)
-                  setCancelling(target)
-                }}
-                onUnpay={(target, reason) =>
-                  void act(() => billing.unpayOrder(target.id, target.billId!, reason))
-                }
-                onCancelAfterPaid={(target, reason) =>
-                  void act(() => billing.cancelPaidOrder(target.id, reason))
-                }
-              />
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  )
 
   return (
     <section
@@ -322,7 +249,7 @@ export function OpenOrdersSurface({
         </p>
       )}
 
-      {preparing.length === 0 && unpaidPrepared.length === 0 ? (
+      {listed.length === 0 ? (
         embedded ? (
           <p className="rounded-lg bg-surface-raised p-3 text-sm text-content-muted">
             No orders in the pipeline right now.
@@ -334,35 +261,76 @@ export function OpenOrdersSurface({
           />
         )
       ) : (
-        <>
-          {renderSection(
-            'Preparing',
-            preparing,
-            'preparing',
-            'Nothing waiting to be made.',
-            'pipeline-preparing',
-            { floor: floors.preparing },
-          )}
-          <div
-            className="my-2 flex shrink-0 items-center gap-2"
-            role="separator"
-            aria-label="Prepared, waiting for money"
+        <div className={embedded ? 'relative flex min-h-0 flex-1 flex-col' : 'relative'}>
+          <RailScrollChip
+            edge="top"
+            count={clipping.above}
+            onActivate={() => scrollRailTo('top')}
+          />
+          <ul
+            ref={scrollerRef}
+            data-testid="pipeline-list"
+            aria-label="The pipeline"
+            /*
+              One scroller for the whole rail. `relative` so each card's
+              `offsetTop` is measured against this list rather than against
+              whatever happens to be positioned above it.
+            */
+            className={`relative min-h-0 flex-1 space-y-1 scroll-smooth motion-reduce:scroll-auto ${
+              embedded ? 'overflow-y-auto' : ''
+            }`}
           >
-            <span className="h-px flex-1 bg-border" />
-            <span className="text-xs font-bold tracking-wide text-content-muted uppercase">
-              Prepared · awaiting money
-            </span>
-            <span className="h-px flex-1 bg-border" />
-          </div>
-          {renderSection(
-            'Unpaid Prepared Orders',
-            unpaidPrepared,
-            'unpaid-prepared',
-            'No prepared order is waiting for money.',
-            'pipeline-unpaid-prepared',
-            { floor: floors.unpaid },
-          )}
-        </>
+            {listed.map((order) => (
+              <li
+                key={order.id}
+                /*
+                  How a card hidden below the fold tells the chip it is prepared
+                  food still waiting for money, without the chip holding a second
+                  copy of the order array that could fall out of step with what
+                  is actually rendered.
+                */
+                data-awaiting-money={
+                  order.preparedAt !== null && order.status === 'open' ? 'true' : undefined
+                }
+              >
+                <PipelineCard
+                  order={order}
+                  currentBillerId={shift?.billerProfileId ?? null}
+                  currentDeviceId={counterDevice?.device.deviceId ?? null}
+                  busy={busy}
+                  {...(onEditOrder ? { onEdit: onEditOrder } : {})}
+                  tenderLabel={order.billId ? (tenders.get(order.billId) ?? null) : null}
+                  onMarkPrepared={(target) =>
+                    void act(() => billing.markOrderPrepared(target.id, true))
+                  }
+                  onUnprepare={(target) =>
+                    void act(() => billing.markOrderPrepared(target.id, false))
+                  }
+                  onMarkPaid={(target) => {
+                    setError(null)
+                    setPaying(target)
+                  }}
+                  onCancel={(target) => {
+                    setError(null)
+                    setCancelling(target)
+                  }}
+                  onUnpay={(target, reason) =>
+                    void act(() => billing.unpayOrder(target.id, target.billId!, reason))
+                  }
+                  onCancelAfterPaid={(target, reason) =>
+                    void act(() => billing.cancelPaidOrder(target.id, reason))
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+          <RailScrollChip
+            edge="bottom"
+            count={clipping.below}
+            marked={clipping.moneyWaitingBelow}
+            onActivate={() => scrollRailTo('bottom')}
+          />
+        </div>
       )}
 
       <PaymentDialog

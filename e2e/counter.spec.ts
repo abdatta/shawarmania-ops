@@ -189,21 +189,22 @@ test.describe('the counter', () => {
     await expect(saved.getByText('Demo Biller', { exact: true })).toHaveCount(0)
     await expect(saved).toContainText('₹298')
 
-    // The section's next step is preparation, not money.
+    // Preparation is recorded on the card where it already stands: the box
+    // ticks, the control keeps its word, and nothing moves.
     await saved.getByRole('button', { name: 'Prepared', exact: true }).click()
-    const preparedCard = rail
-      .getByTestId('pipeline-unpaid-prepared')
-      .getByTestId(/^open-order-local-/)
+    const preparedCard = rail.getByTestId('pipeline-list').getByTestId(/^open-order-local-/)
     await expect(preparedCard).toBeVisible()
-    // Green is the unpaid-prepared band's identity, and Reprepare is a visible
-    // secondary beside the green Paid.
-    const greenPaid = preparedCard.getByRole('button', { name: 'Paid', exact: true })
-    await expect(greenPaid).toHaveClass(/bg-success/)
-    await expect(preparedCard.getByRole('button', { name: 'Reprepare', exact: true })).toBeVisible()
+    await expect(
+      preparedCard.getByRole('button', { name: 'Prepared', exact: true }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    // Prepared then Paid, in that order, at that size, whatever is recorded.
+    await expect(preparedCard.getByRole('button', { name: 'Reprepare' })).toHaveCount(0)
+    const paid = preparedCard.getByRole('button', { name: 'Paid', exact: true })
+    await expect(paid).toHaveAttribute('aria-pressed', 'false')
 
     // And then the money, which flies left into Bills this shift. The dialog
     // confirm is the only remaining Mark-Paid-family label — and it reads Paid.
-    await greenPaid.click()
+    await paid.click()
     const payment = page.getByRole('dialog', { name: 'Record payment' })
     await payment.getByRole('button', { name: 'UPI', exact: true }).click()
     await payment.getByRole('button', { name: 'Paid', exact: true }).click()
@@ -227,17 +228,26 @@ test.describe('the counter', () => {
     page,
   }) => {
     const rail = page.getByTestId('counter-activity-rail')
-    const preparing = rail.getByTestId('pipeline-preparing')
-    // 105 is the seed that is still preparing; 104 stands in Unpaid Prepared.
-    const order = preparing.getByTestId('open-order-105')
+    const list = rail.getByTestId('pipeline-list')
+    // 105 is the seed whose preparation is not yet recorded.
+    const order = list.getByTestId('open-order-105')
 
-    // Both next steps sit on the face of the card: preparation and money.
-    await expect(order.getByRole('button', { name: 'Prepared', exact: true })).toBeVisible()
-    await expect(order.getByRole('button', { name: 'Paid', exact: true })).toBeVisible()
+    // Both of the order's answers sit on the face of the card, in fixed places.
+    await expect(order.getByRole('button', { name: 'Prepared', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    await expect(order.getByRole('button', { name: 'Paid', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    const slotBefore = await order.evaluate((card) =>
+      [...card.closest('ul')!.children].indexOf(card.closest('li')!),
+    )
 
     // Money first, food still owed: no bill exists, so nothing may land in
-    // Bills this shift and no bar may be inserted. The PAID chip is the whole
-    // acknowledgement.
+    // Bills this shift and no bar may be inserted. The ticked Paid box is the
+    // whole acknowledgement — there is no separate badge.
     const billColumn = page.getByTestId('bill-column')
     await expect(billColumn.locator('details').first()).toBeVisible()
     const billsBefore = await billColumn.locator('details').count()
@@ -248,10 +258,21 @@ test.describe('the counter', () => {
 
     await expect(page.locator('dialog[open]')).toHaveCount(0)
     await expect(page.getByTestId('settled-confirmation')).toHaveCount(0)
-    const paidCard = preparing.getByTestId('open-order-105')
+    const paidCard = list.getByTestId('open-order-105')
     await expect(paidCard).toBeVisible()
     await expect(paidCard).toHaveAttribute('data-paid', 'true')
+    await expect(paidCard.getByRole('button', { name: 'Paid', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await expect(paidCard.locator('[data-testid^="paid-chip-"]')).toHaveCount(0)
     await expect(billColumn.locator('details')).toHaveCount(billsBefore)
+    // Recording one fact moved nothing: the card is in the slot it was in.
+    expect(
+      await paidCard.evaluate((card) =>
+        [...card.closest('ul')!.children].indexOf(card.closest('li')!),
+      ),
+    ).toBe(slotBefore)
 
     // Preparation was the last thing the bill waited for.
     await paidCard.getByRole('button', { name: 'Prepared', exact: true }).click()
@@ -259,32 +280,85 @@ test.describe('the counter', () => {
     await expect(billColumn.locator('details')).toHaveCount(billsBefore + 1)
   })
 
-  test('colour-codes the bands, keeps the divider as their only words, and reprepares', async ({
-    page,
-  }) => {
+  test('draws one list whose two controls keep their word and their place', async ({ page }) => {
     const rail = page.getByTestId('counter-activity-rail')
 
-    // No headings anywhere in the rail; the labelled divider is the only words
-    // between the two bands.
+    // One list: no headings, no divider, no band.
     await expect(rail.getByRole('heading')).toHaveCount(0)
-    await expect(rail.getByText('Prepared · awaiting money')).toBeVisible()
+    await expect(rail.getByText('Prepared · awaiting money')).toHaveCount(0)
+    await expect(rail.getByTestId('pipeline-preparing')).toHaveCount(0)
+    await expect(rail.getByTestId('pipeline-unpaid-prepared')).toHaveCount(0)
+    const list = rail.getByTestId('pipeline-list')
 
-    // The green band's Paid is a filled success action, and Reprepare stands
-    // beside it as a visible secondary rather than hiding in the overflow.
-    const preparedBand = rail.getByTestId('pipeline-unpaid-prepared')
-    const greenPaid = preparedBand.getByRole('button', { name: 'Paid', exact: true })
-    await expect(greenPaid).toHaveClass(/bg-success/)
-    await expect(greenPaid).toHaveClass(/text-on-success/)
-    const preparedCard = preparedBand.getByTestId(/^open-order/).first()
-    const reprepare = preparedCard.getByRole('button', { name: 'Reprepare', exact: true })
-    await expect(reprepare).toBeVisible()
+    // 104 is the seed whose preparation is recorded and whose money is not.
+    const preparedCard = list.getByTestId('open-order-104')
+    const prepared = preparedCard.getByRole('button', { name: 'Prepared', exact: true })
+    // A recorded fact floods its control with its own colour and draws the mark
+    // in that control's own foreground token.
+    await expect(prepared).toHaveAttribute('aria-pressed', 'true')
+    await expect(prepared).toHaveClass(/bg-primary/)
+    await expect(prepared).toHaveClass(/text-on-primary/)
+    // An unrecorded one is an ordinary secondary control with its box outlined.
+    const paid = preparedCard.getByRole('button', { name: 'Paid', exact: true })
+    await expect(paid).toHaveAttribute('aria-pressed', 'false')
+    await expect(paid).not.toHaveClass(/bg-success/)
+    // Nothing renamed itself, and the take-back is not hiding in the overflow.
+    await expect(preparedCard.getByRole('button', { name: 'Reprepare' })).toHaveCount(0)
     await expect(preparedCard.getByRole('menuitem', { name: 'Reprepare' })).toHaveCount(0)
+    await expect(preparedCard.getByRole('button', { name: 'Un-pay' })).toHaveCount(0)
 
-    // Reprepare carries it back up into Preparing.
-    const testid = await preparedCard.getAttribute('data-testid')
-    await reprepare.click()
-    await expect(rail.getByTestId('pipeline-preparing').getByTestId(testid!)).toBeVisible()
-    await expect(preparedBand.getByTestId(testid!)).toHaveCount(0)
+    // Unticking Prepared changes the card's colours and moves nothing.
+    const slotBefore = await preparedCard.evaluate((card) =>
+      [...card.closest('ul')!.children].indexOf(card.closest('li')!),
+    )
+    await prepared.click()
+    await expect(
+      list.getByTestId('open-order-104').getByRole('button', { name: 'Prepared', exact: true }),
+    ).toHaveAttribute('aria-pressed', 'false')
+    expect(
+      await list
+        .getByTestId('open-order-104')
+        .evaluate((card) => [...card.closest('ul')!.children].indexOf(card.closest('li')!)),
+    ).toBe(slotBefore)
+  })
+
+  test('announces the orders outside the rail and scrolls the whole way to them', async ({
+    page,
+  }) => {
+    // Six more orders on top of the two seeds, so the rail holds more than its
+    // viewport can show. Newest-first, so the seeds sink to the bottom — and
+    // 104, the seeded order that is prepared and still unpaid, sinks furthest.
+    for (const customer of ['Asha', 'Bilal', 'Chitra', 'Devi', 'Ehsan', 'Farah']) {
+      await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
+      await page.getByPlaceholder('Customer name').fill(customer)
+      await page.getByTestId('save-order').click()
+      await expect(
+        page.getByTestId('counter-activity-rail').getByText(customer, { exact: true }),
+      ).toBeVisible()
+    }
+
+    const rail = page.getByTestId('counter-activity-rail')
+
+    // The newest order is on screen — saving one returns the rail to the top —
+    // so nothing is hidden above it and only the bottom chip is drawn.
+    const bottom = rail.getByRole('button', { name: /^Scroll to the oldest order/ })
+    await expect(bottom).toBeVisible()
+    await expect(bottom).toHaveText(/\d+ more/)
+    await expect(rail.getByRole('button', { name: /^Scroll to the newest order/ })).toHaveCount(0)
+    // And it says that prepared food is waiting for money down there, which is
+    // the one thing the deleted divider used to say.
+    await expect(bottom).toHaveAccessibleName(/including prepared work waiting for money/)
+
+    // Tapping goes the whole way, so the far end is reached in one move.
+    await bottom.click()
+    const top = rail.getByRole('button', { name: /^Scroll to the newest order/ })
+    await expect(top).toBeVisible()
+    await expect(rail.getByTestId('open-order-104')).toBeVisible()
+    await expect(rail.getByRole('button', { name: /^Scroll to the oldest order/ })).toHaveCount(0)
+
+    await top.click()
+    await expect(rail.getByRole('button', { name: /^Scroll to the newest order/ })).toHaveCount(0)
+    await expect(rail.getByRole('button', { name: /^Scroll to the oldest order/ })).toBeVisible()
   })
 
   test('edits an order in the full composer and restores the waiting draft', async ({ page }) => {

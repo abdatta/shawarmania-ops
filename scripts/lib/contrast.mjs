@@ -113,6 +113,25 @@ export const CHECKS = [
     note: 'primary button is distinguishable from the page',
   },
 
+  // A pipeline card's two state controls (#55) are identified by the colour of
+  // the box they carry while unchecked, drawn straight onto the raised card. So
+  // the tone itself — not the pair it ships with — has to clear the 3:1
+  // non-text threshold against that ground, in both themes. Checked draws its
+  // mark in the fill's own foreground token, which the two `--on-*` rows above
+  // already gate.
+  {
+    fg: '--primary',
+    bg: '--surface-raised',
+    min: AA_NON_TEXT,
+    note: 'unchecked Prepared box on a pipeline card',
+  },
+  {
+    fg: '--success',
+    bg: '--surface-raised',
+    min: AA_NON_TEXT,
+    note: 'unchecked Paid box on a pipeline card',
+  },
+
   // Focus rings never rely on orange alone: 2px brand ring plus a 1px darker
   // ring outside it, so the indicator survives white cards, cream callouts and
   // coloured buttons alike.

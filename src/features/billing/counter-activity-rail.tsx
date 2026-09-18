@@ -5,8 +5,8 @@ import type { BillingOrder } from '@/data-access/adapters'
 import { CounterActivity } from './counter-activity'
 
 /**
- * The outlet's pipeline, in one continuous rail: Preparing over Unpaid Prepared
- * Orders, whole-outlet scope.
+ * The outlet's pipeline, in one continuous rail: one list of every unfinished
+ * order, newest first, whole-outlet scope.
  *
  * While the composer holds a saved order, the rail says so without a word of
  * explanation: it takes the same accent outline as the panel, the order under
@@ -15,13 +15,14 @@ import { CounterActivity } from './counter-activity'
  * dropped — so the two become one accent-outlined piece of work rather than two
  * panels that happen to be adjacent.
  *
- * The docked card sits **outside** both band scrollers, in a region of the rail
- * that never scrolls at all: scrolling either band's orders cannot move it.
- * That is also why neither this rail nor its bands' wrapper clips overflow — a
- * card that has to cross the gap cannot live in a box that clips at the gap.
+ * The docked card sits **outside** the list's scroller, in a region of the rail
+ * that never scrolls at all: scrolling the pipeline cannot move it. That is also
+ * why neither this rail nor the list's wrapper clips overflow — a card that has
+ * to cross the gap cannot live in a box that clips at the gap.
  */
 export function CounterActivityRail({
   refreshKey,
+  savedOrderKey = 0,
   editingOrder,
   onEditOrder,
   onActivityChanged,
@@ -29,6 +30,8 @@ export function CounterActivityRail({
   asOf,
 }: {
   refreshKey: number
+  /** Bumped only when an order is saved on this tablet. */
+  savedOrderKey?: number
   editingOrder: BillingOrder | null
   onEditOrder: (order: BillingOrder) => void
   /** The pipeline already reloads itself; notify the bills column only. */
@@ -65,8 +68,8 @@ export function CounterActivityRail({
         back as padding, so the content sits exactly where it always did while the
         docked card keeps its reach across the gap.
 
-        This wrapper no longer scrolls: the two bands inside it scroll their own
-        lists (see OpenOrdersSurface), and the docked card above them lives in
+        This wrapper no longer scrolls: the list inside it scrolls its own
+        orders (see OpenOrdersSurface), and the docked card above it lives in
         what is now an unmoving region by construction rather than by stickiness.
       */}
       <div
@@ -86,6 +89,7 @@ export function CounterActivityRail({
         )}
         <CounterActivity
           refreshKey={refreshKey}
+          savedOrderKey={savedOrderKey}
           editingOrderId={editingOrder?.id ?? null}
           onEditOrder={onEditOrder}
           onActivityChanged={onActivityChanged}

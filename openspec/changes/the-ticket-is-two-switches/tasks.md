@@ -1,47 +1,47 @@
 ## 0. Before Anything
 
-- [ ] 0.1 Read `design.md` end to end. In particular **When a box cannot be unticked**, which explains why the two halves of this change are one change, and **Rejected alternatives**, which carries eight drawings and rules already considered and turned down — including three the owner turned down personally.
-- [ ] 0.2 Read both spec deltas before opening any file. Two requirements are **removed with named successors**; implementing against the living spec alone would rebuild the bands.
-- [ ] 0.3 **Sections 1–4 land before sections 5–7, and are verifiable on their own.** The rail is UI with no migration; the clock is money rules in the database. Keeping them in that order means a stall in the database half never holds the biller's fix hostage inside this branch.
-- [ ] 0.4 Nothing is half-built. `src/features/billing/` is exactly as `preparing-order-pipeline` (#45), `extended-offline-billing` (#34) and `multiple-billing-devices` (#35) left it.
+- [x] 0.1 Read `design.md` end to end. In particular **When a box cannot be unticked**, which explains why the two halves of this change are one change, and **Rejected alternatives**, which carries eight drawings and rules already considered and turned down — including three the owner turned down personally.
+- [x] 0.2 Read both spec deltas before opening any file. Two requirements are **removed with named successors**; implementing against the living spec alone would rebuild the bands.
+- [x] 0.3 **Sections 1–4 land before sections 5–7, and are verifiable on their own.** The rail is UI with no migration; the clock is money rules in the database. Keeping them in that order means a stall in the database half never holds the biller's fix hostage inside this branch.
+- [x] 0.4 Nothing is half-built. `src/features/billing/` is exactly as `preparing-order-pipeline` (#45), `extended-offline-billing` (#34) and `multiple-billing-devices` (#35) left it.
 
 ## 1. One List
 
-- [ ] 1.1 Delete `splitPipeline` and `PipelineSections` from `src/features/billing/pipeline.ts`, and its tests. The file keeps `unwindWindowOpen` and nothing else; if that leaves one exported function, decide whether the module still earns its own file rather than leaving a stub.
-- [ ] 1.2 In `src/features/billing/open-orders-surface.tsx`, replace the two `renderSection` calls, the divider and the whole band apparatus with one list of every non-cancelled order in the order the adapter returns. Delete `bandStyle`, `floors`, `measureFloors`, the `useLayoutEffect` measuring frame and the resize listener that feeds it — the proportional height-sharing exists only to divide a panel between two bands.
-- [ ] 1.3 Keep the empty state and the loading shimmer, and redraw the shimmer as plain cards over one scroller with no hairline between them: the silhouette must be the shape that actually arrives.
-- [ ] 1.4 Drop the `section` prop from `PipelineCard` and every call site. Nothing about a card may depend on where it sits.
-- [ ] 1.5 Confirm the docked-edit card still leaves the list and docks against the composer exactly as before. It sat outside both band scrollers; it must now sit outside the one.
-- [ ] 1.6 Delete `src/features/billing/pipeline-board.test.tsx` — both its cases assert the height-sharing this change removes — and replace it with a test that a card keeps its position in the list across a prepare and an unprepare.
+- [x] 1.1 Delete `splitPipeline` and `PipelineSections` from `src/features/billing/pipeline.ts`, and its tests. The file keeps `unwindWindowOpen` and nothing else; if that leaves one exported function, decide whether the module still earns its own file rather than leaving a stub.
+- [x] 1.2 In `src/features/billing/open-orders-surface.tsx`, replace the two `renderSection` calls, the divider and the whole band apparatus with one list of every non-cancelled order in the order the adapter returns. Delete `bandStyle`, `floors`, `measureFloors`, the `useLayoutEffect` measuring frame and the resize listener that feeds it — the proportional height-sharing exists only to divide a panel between two bands.
+- [x] 1.3 Keep the empty state and the loading shimmer, and redraw the shimmer as plain cards over one scroller with no hairline between them: the silhouette must be the shape that actually arrives.
+- [x] 1.4 Drop the `section` prop from `PipelineCard` and every call site. Nothing about a card may depend on where it sits.
+- [x] 1.5 Confirm the docked-edit card still leaves the list and docks against the composer exactly as before. It sat outside both band scrollers; it must now sit outside the one.
+- [x] 1.6 Delete `src/features/billing/pipeline-board.test.tsx` — both its cases assert the height-sharing this change removes — and replace it with a test that a card keeps its position in the list across a prepare and an unprepare.
 
 ## 2. The Two Controls
 
-- [ ] 2.1 Build a `StateToggle` in `src/features/billing/` (not in `src/components/ui/`, until a second surface wants one): a button rendering a checkbox glyph and a constant label, with `aria-pressed`, an accessible name, and a `tone` of `primary` or `success`.
-- [ ] 2.2 Unchecked: the secondary button treatment with the box outlined in the tone's colour. Checked: the button filled with the tone's colour, box and mark in that tone's **foreground token** (`--on-primary`, `--on-success`). No literal grey anywhere — see `design.md`, Colour.
-- [ ] 2.3 Give the toggle a third, non-interactive rendering for a fact that cannot be changed: no border, no press affordance, not a `button`, and no `aria-pressed` to misreport. After section 5 its only user is another till's order; build it that way from the start rather than wiring an expiry case that section 5 deletes.
-- [ ] 2.4 Draw checked and unchecked so they differ in **shape**, not only in colour and fill, and keep the focus ring visible on the filled state — the ring on a filled primary is the case `design-system` already calls out.
-- [ ] 2.5 In `PipelineCard`, replace the four button variants with two toggles: Prepared then Paid, fixed order, equal width, on every card. Delete the `Reprepare`, `Un-pay` and secondary-`Paid` branches and the `PAID` chip with its `paid-chip-*` test id.
-- [ ] 2.6 Wire the Paid toggle: unchecked activates `onMarkPaid` (the tender dialog); checked activates the existing `UnpayDialog`. Wire the Prepared toggle to `onMarkPrepared` / `onUnprepare`. No adapter call changes in this section.
-- [ ] 2.7 Reduce the kebab to Edit and Cancel order on an unpaid card, and Cancel after paid on a paid card. Un-pay leaves the menu; it is the Paid toggle now.
-- [ ] 2.8 Register `--primary` and `--success` against `--surface-raised` in the contrast validator at the 3:1 control threshold, run `npm run contrast`, and **read both themes' output** rather than the exit code alone.
-- [ ] 2.9 Update every test that asserts on the old wording. `billing-counter.test.tsx`, `pipeline-card-till.test.tsx` and the e2e specs query by the words Reprepare, Un-pay and the paid chip; each becomes an assertion on a toggle's checked state. Do not delete a case to make it pass.
+- [x] 2.1 Build a `StateToggle` in `src/features/billing/` (not in `src/components/ui/`, until a second surface wants one): a button rendering a checkbox glyph and a constant label, with `aria-pressed`, an accessible name, and a `tone` of `primary` or `success`.
+- [x] 2.2 Unchecked: the secondary button treatment with the box outlined in the tone's colour. Checked: the button filled with the tone's colour, box and mark in that tone's **foreground token** (`--on-primary`, `--on-success`). No literal grey anywhere — see `design.md`, Colour.
+- [x] 2.3 Give the toggle a third, non-interactive rendering for a fact that cannot be changed: no border, no press affordance, not a `button`, and no `aria-pressed` to misreport. After section 5 its only user is another till's order; build it that way from the start rather than wiring an expiry case that section 5 deletes.
+- [x] 2.4 Draw checked and unchecked so they differ in **shape**, not only in colour and fill, and keep the focus ring visible on the filled state — the ring on a filled primary is the case `design-system` already calls out.
+- [x] 2.5 In `PipelineCard`, replace the four button variants with two toggles: Prepared then Paid, fixed order, equal width, on every card. Delete the `Reprepare`, `Un-pay` and secondary-`Paid` branches and the `PAID` chip with its `paid-chip-*` test id.
+- [x] 2.6 Wire the Paid toggle: unchecked activates `onMarkPaid` (the tender dialog); checked activates the existing `UnpayDialog`. Wire the Prepared toggle to `onMarkPrepared` / `onUnprepare`. No adapter call changes in this section.
+- [x] 2.7 Reduce the kebab to Edit and Cancel order on an unpaid card, and Cancel after paid on a paid card. Un-pay leaves the menu; it is the Paid toggle now.
+- [x] 2.8 Register `--primary` and `--success` against `--surface-raised` in the contrast validator at the 3:1 control threshold, run `npm run contrast`, and **read both themes' output** rather than the exit code alone.
+- [x] 2.9 Update every test that asserts on the old wording. `billing-counter.test.tsx`, `pipeline-card-till.test.tsx` and the e2e specs query by the words Reprepare, Un-pay and the paid chip; each becomes an assertion on a toggle's checked state. Do not delete a case to make it pass.
 
 ## 3. The Scroll Chip
 
-- [ ] 3.1 Add a chip component to the rail: a floating control at the clipped edge saying how many orders are hidden that way, with an accessible name naming the destination rather than the direction glyph.
-- [ ] 3.2 Derive "hidden above" and "hidden below" from the scroller's own geometry against each card's offset, recomputed on scroll and on resize and throttled to a frame. Never from a guessed card height — cards vary with their item lines.
-- [ ] 3.3 Show each chip only while orders are actually clipped that way, and hide both when the whole list fits.
-- [ ] 3.4 Activating a chip scrolls to that end of the list — the whole way, as a chat app does, not by a page and not to the next card.
-- [ ] 3.5 Mark the bottom chip whenever any order hidden below it is prepared and unpaid, with a marker that is not text and not colour alone.
-- [ ] 3.6 Scroll the list to its newest end when an order is saved on this tablet, and only then: another till's order arriving must not move the rail under the biller's thumb.
-- [ ] 3.7 Test the chip against a list long enough to clip in both directions, including the marker appearing and disappearing as the prepared-unpaid order crosses the fold.
+- [x] 3.1 Add a chip component to the rail: a floating control at the clipped edge saying how many orders are hidden that way, with an accessible name naming the destination rather than the direction glyph.
+- [x] 3.2 Derive "hidden above" and "hidden below" from the scroller's own geometry against each card's offset, recomputed on scroll and on resize and throttled to a frame. Never from a guessed card height — cards vary with their item lines.
+- [x] 3.3 Show each chip only while orders are actually clipped that way, and hide both when the whole list fits.
+- [x] 3.4 Activating a chip scrolls to that end of the list — the whole way, as a chat app does, not by a page and not to the next card.
+- [x] 3.5 Mark the bottom chip whenever any order hidden below it is prepared and unpaid, with a marker that is not text and not colour alone.
+- [x] 3.6 Scroll the list to its newest end when an order is saved on this tablet, and only then: another till's order arriving must not move the rail under the biller's thumb.
+- [x] 3.7 Test the chip against a list long enough to clip in both directions, including the marker appearing and disappearing as the prepared-unpaid order crosses the fold.
 
 ## 4. Animation, And The Rail Proved
 
-- [ ] 4.1 Keep `useFlip` and the settlement flight into the bills column untouched, including its placeholder, its 300ms budget and its reduced-motion crossfade.
-- [ ] 4.2 Confirm that recording one fact animates nothing at all: with no section change, the FLIP hook must measure no movement. If it plays anything, the list is reordering and section 1 is wrong.
-- [ ] 4.3 Update `flip.test.tsx` for the one remaining destination.
-- [ ] 4.4 **Checkpoint.** Run the full CLI suite and look at the rail on a real counter viewport in both themes, at a short viewport clipped both ways, and under reduced motion. Everything the biller complained about is fixed at this line, and nothing below it has started.
+- [x] 4.1 Keep `useFlip` and the settlement flight into the bills column untouched, including its placeholder, its 300ms budget and its reduced-motion crossfade.
+- [x] 4.2 Confirm that recording one fact animates nothing at all: with no section change, the FLIP hook must measure no movement. If it plays anything, the list is reordering and section 1 is wrong.
+- [x] 4.3 Update `flip.test.tsx` for the one remaining destination.
+- [x] 4.4 **Checkpoint.** Run the full CLI suite and look at the rail on a real counter viewport in both themes, at a short viewport clipped both ways, and under reduced motion. Everything the biller complained about is fixed at this line, and nothing below it has started.
 
 ## 5. The Clock, In The Database
 

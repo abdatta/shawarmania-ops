@@ -170,6 +170,12 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   // the rail twice and replaying its FLIP motion.
   const [billRefresh, setBillRefresh] = useState(0)
   const [pipelineRefresh, setPipelineRefresh] = useState(0)
+  /*
+    Distinct from `pipelineRefresh`, which every reload bumps. The rail returns
+    to its newest end only when an order is taken **here**: a neighbouring
+    till's order arriving must not move the list under the biller's thumb.
+  */
+  const [savedOrderKey, setSavedOrderKey] = useState(0)
   const [editingOrder, setEditingOrder] = useState<BillingOrder | null>(null)
   const [columnWidths, setColumnWidths] = useState<CounterColumnWidths>(readCounterColumnWidths)
 
@@ -560,6 +566,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
       })
       clearPanel()
       setPipelineRefresh((value) => value + 1)
+      setSavedOrderKey((value) => value + 1)
     } catch (cause) {
       setError(cause instanceof DataActionError ? cause.message : 'That order could not be saved.')
     } finally {
@@ -944,6 +951,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         <CounterActivityRail
           {...(resume ? { asOf: resume.lastSuccessfulReadAt } : {})}
           refreshKey={pipelineRefresh}
+          savedOrderKey={savedOrderKey}
           editingOrder={editingOrder}
           onEditOrder={beginOrderEdit}
           onActivityChanged={() => setBillRefresh((value) => value + 1)}

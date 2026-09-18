@@ -338,12 +338,12 @@ describe('BillingCounter', () => {
     const person = user()
     renderCounter()
 
-    // The rail is the pipeline: two colour-coded bands, no headings — the
-    // labelled divider is the only words between them.
+    // The rail is the pipeline: one list, no headings, no divider and no band.
     const rail = await screen.findByTestId('counter-activity-rail')
-    expect(within(rail).getByTestId('pipeline-preparing')).toBeInTheDocument()
-    expect(within(rail).getByTestId('pipeline-unpaid-prepared')).toBeInTheDocument()
-    expect(within(rail).getByText('Prepared · awaiting money')).toBeInTheDocument()
+    expect(within(rail).getByTestId('pipeline-list')).toBeInTheDocument()
+    expect(within(rail).queryByTestId('pipeline-preparing')).not.toBeInTheDocument()
+    expect(within(rail).queryByTestId('pipeline-unpaid-prepared')).not.toBeInTheDocument()
+    expect(within(rail).queryByText('Prepared · awaiting money')).not.toBeInTheDocument()
     expect(within(rail).queryByRole('heading')).not.toBeInTheDocument()
 
     // The middle column hosts Bills this shift: totals on top, expandable
@@ -391,27 +391,43 @@ describe('BillingCounter', () => {
     expect(attention.compareDocumentPosition(firstBill)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
   })
 
-  it('replaces Paid with Un-pay on the face of a paid preparing card', async () => {
+  it('ticks the Paid box in place rather than renaming the control', async () => {
     const person = user()
     renderCounter()
 
     const preparing = await screen.findByTestId('open-order-105')
-    await person.click(within(preparing).getByRole('button', { name: 'Paid' }))
+    const paid = within(preparing).getByRole('button', { name: 'Paid' })
+    expect(paid).toHaveAttribute('aria-pressed', 'false')
+    await person.click(paid)
     const dialog = screen.getByRole('dialog', { name: 'Record payment' })
     await person.click(within(dialog).getByRole('button', { name: 'Cash' }))
     await person.click(within(dialog).getByRole('button', { name: 'Paid' }))
 
     await waitFor(() => expect(preparing).toHaveAttribute('data-paid', 'true'))
+    /*
+      The same control, in the same place, wearing the same word — only the box
+      is ticked now. Nothing renamed itself to Un-pay, and there is no separate
+      PAID badge, because a ticked box already says it.
+    */
     await waitFor(() =>
-      expect(within(preparing).getByRole('button', { name: 'Un-pay' })).toBeVisible(),
+      expect(within(preparing).getByRole('button', { name: 'Paid' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      ),
     )
-    expect(within(preparing).queryByRole('button', { name: 'Paid' })).not.toBeInTheDocument()
+    expect(within(preparing).queryByRole('button', { name: 'Un-pay' })).not.toBeInTheDocument()
+    expect(within(preparing).queryByText('PAID')).not.toBeInTheDocument()
+    // And Prepared is untouched in place and wording by the payment landing.
+    expect(within(preparing).getByRole('button', { name: 'Prepared' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
 
     const getBoundingClientRect = vi
       .spyOn(HTMLDivElement.prototype, 'getBoundingClientRect')
       .mockReturnValue({ top: 120, right: 320 } as DOMRect)
     await person.click(
-      within(preparing).getByRole('button', { name: /^More actions for Order .105$/ }),
+      await within(preparing).findByRole('button', { name: /^More actions for Order .105$/ }),
     )
     const menu = within(preparing).getByRole('menu')
     expect(menu).toHaveStyle({

@@ -20,11 +20,20 @@ import {
   BILLING_COMMAND_SCHEMA_VERSION,
   createBillingCommand,
 } from '../../../shared/billing-command'
-import { splitPipeline } from '@/features/billing/pipeline'
 
 import { RECEIPT_BASE_URL } from '@/lib/receipt-link'
 import { createSupabaseBillingAdapter } from './billing'
 import { createSupabaseBillingCommandAdapter } from './billing-command'
+
+/**
+ * Prepared and still unpaid — the state the rail used to give its own band and
+ * now marks on a card in one list. Asserted here as a predicate over the
+ * adapter's own output rather than through a screen helper: what this file
+ * pins is the projection, not how anything draws it.
+ */
+function unpaidPrepared(orders: readonly BillingOrder[]): BillingOrder[] {
+  return orders.filter((order) => order.status === 'open' && order.preparedAt !== null)
+}
 
 const session: CounterDeviceSession = {
   kind: 'counter-device',
@@ -978,7 +987,7 @@ describe('the delivery handoff cannot lose accepted work', () => {
     // bills, not on the pipeline, and above all not in the payable band.
     expect(await database.envelopes.get(commandId)).toBeUndefined()
     expect(orders.some((order) => order.id === PREPARED_ORDER_ID)).toBe(false)
-    expect(splitPipeline(orders).unpaidPrepared).toHaveLength(0)
+    expect(unpaidPrepared(orders)).toHaveLength(0)
   })
 
   it('refuses a second payment for an order it already holds as paid', async () => {
@@ -1045,13 +1054,13 @@ describe('the delivery handoff cannot lose accepted work', () => {
     const billing = createSupabaseBillingAdapter(client, session)
 
     const before = await billing.listOpenOrders('outlet-1')
-    expect(splitPipeline(before).unpaidPrepared).toHaveLength(1)
+    expect(unpaidPrepared(before)).toHaveLength(1)
 
     await queuePayment(PREPARED_ORDER_ID, commandId)
 
     // The mirror gap D2 accepts is bounded, not permanent: whatever a read in
     // flight missed, the read after it carries.
     const after = await billing.listOpenOrders('outlet-1')
-    expect(splitPipeline(after).unpaidPrepared).toHaveLength(0)
+    expect(unpaidPrepared(after)).toHaveLength(0)
   })
 })

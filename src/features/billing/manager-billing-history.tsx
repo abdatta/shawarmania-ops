@@ -27,7 +27,36 @@ import { averageBillPaise, combinedTakingsPaise, paymentTotalPaise } from './day
 import { ManagerBillDetail } from './manager-bill-detail'
 import { countSyncProblems, ManagerSyncStatus } from './manager-sync-status'
 import { PaymentTotalCards } from './payment-total-cards'
-import { splitPipeline } from './pipeline'
+
+/**
+ * The manager's two open-order groups, derived — never stored.
+ *
+ * This lived in a shared `pipeline.ts` while the counter rail drew the same two
+ * bands. #55 replaced the rail with one list in which a card's position encodes
+ * nothing, and left the manager's history exactly as it was, so the split is now
+ * this screen's own business and lives beside its only reader.
+ *
+ * A paid-but-unprepared order groups with Preparing: that is the upfront payer
+ * whose food is still being made. Cancelled orders are nobody's work in flight.
+ */
+function splitPipeline(orders: readonly BillingOrder[]): {
+  preparing: BillingOrder[]
+  unpaidPrepared: BillingOrder[]
+} {
+  const preparing: BillingOrder[] = []
+  const unpaidPrepared: BillingOrder[] = []
+  for (const order of orders) {
+    if (order.status === 'cancelled') continue
+    if (order.status === 'open') {
+      if (order.preparedAt === null) preparing.push(order)
+      else unpaidPrepared.push(order)
+    } else if (order.status === 'paid' && order.preparedAt === null) {
+      preparing.push(order)
+    }
+    // Paid and prepared: fully done, listed among the bills instead.
+  }
+  return { preparing, unpaidPrepared }
+}
 
 type View = 'bills' | 'orders' | 'status'
 
@@ -532,8 +561,8 @@ export function ManagerBillingHistory() {
         orders.length === 0 ? (
           <EmptyState icon={ReceiptText} title="No open orders at this outlet." />
         ) : (
-          // The same two sections the counter rail derives, derived the same
-          // way — the manager reads the pipeline, not a flat pile.
+          // The manager reads the pipeline in two groups, not a flat pile. The
+          // counter's rail is one list now (#55); this screen is unchanged.
           (
             [
               ['Preparing', splitPipeline(orders).preparing],
