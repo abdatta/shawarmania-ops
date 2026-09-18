@@ -336,6 +336,23 @@ select is(
   ->> 'status',
   'accepted', 'the order pays again');
 
+-- The clock starts when the ticket is finished (#55), so the window on this
+-- re-paid order only begins once its food is recorded as made. Marking it
+-- prepared at 12:21 is what makes 12:30 "outside five minutes" at all; without
+-- it the food is still owed and the payment stays reversible indefinitely,
+-- which is the whole point of the derived window and is asserted directly in
+-- 54_the_ticket_is_two_switches.sql.
+select is(
+  public.prepare_billing_order(
+    'e1000000-0000-4000-a000-000000000015', 1,
+    public.billing_payload_hash(pg_temp.prepare_payload(
+      'e2000000-0000-4000-a000-000000000001', true)),
+    ((current_date - 1) + time '12:21') at time zone 'Asia/Kolkata',
+    'e5000000-0000-4000-a000-000000000001',
+    pg_temp.prepare_payload('e2000000-0000-4000-a000-000000000001', true)
+  ) ->> 'status',
+  'accepted', 'the re-paid order''s food is made, which starts its clock');
+
 select is(
   public.cancel_paid_billing_order(
     'e1000000-0000-4000-a000-000000000011', 1,

@@ -825,6 +825,56 @@ describe('mock billing adapter', () => {
       expect(adapter.getCounterState().sync.pending).toBe(0)
     })
 
+    it("keeps an unprepared order's payment reversible however long ago it was taken", async () => {
+      const store = createDemoStore()
+      const adapter = createMockBillingAdapter(store)
+      const saved = await adapter.saveOrder(
+        orderDraft(store, '66000000-0000-4000-8000-000000000001'),
+      )
+      await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+
+      // Paid upfront, food still being made: the ticket is not finished, so the
+      // clock has not started and nothing expires (#55). Demo mode has to
+      // answer exactly as the live database does.
+      const held = await adapter.payOrder(saved.id, [
+        { method: 'cash', amountPaise: saved.totalPaise },
+      ])
+      expect(held).toBeNull()
+      await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+      adapter.advanceDemoPaymentClock!(PAYMENT_EDIT_WINDOW_MS * 12)
+
+      const reopened = await adapter.unpayOrder(saved.id, null, 'Wrong tender')
+      expect(reopened.status).toBe('open')
+      expect(reopened.paidAt).toBeNull()
+    })
+
+    it('starts the clock when the food is made, and expires five minutes later', async () => {
+      const store = createDemoStore()
+      const adapter = createMockBillingAdapter(store)
+      const saved = await adapter.saveOrder(
+        orderDraft(store, '67000000-0000-4000-8000-000000000001'),
+      )
+      await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+      await adapter.payOrder(saved.id, [{ method: 'cash', amountPaise: saved.totalPaise }])
+      await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+
+      // An hour of food-making costs the biller nothing; preparation is what
+      // starts the five minutes.
+      adapter.advanceDemoPaymentClock!(PAYMENT_EDIT_WINDOW_MS * 12)
+      const settled = await adapter.markOrderPrepared(saved.id, true)
+      await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+      expect(settled.preparedAt).not.toBeNull()
+      const bill = (await adapter.listShiftHistory(DEMO_OPEN_SHIFT_ID)).bills.find(
+        (candidate) => candidate.orderId === saved.id,
+      )
+      if (!bill) throw new Error('preparation settles the upfront payer into a bill')
+
+      adapter.advanceDemoPaymentClock!(PAYMENT_EDIT_WINDOW_MS)
+      await expect(adapter.unpayOrder(saved.id, bill.id, 'Too late now')).rejects.toThrow(
+        /no longer be taken back/,
+      )
+    })
+
     it('cancels a paid order with one reasoned act that voids and cancels together', async () => {
       const store = createDemoStore()
       const adapter = createMockBillingAdapter(store)

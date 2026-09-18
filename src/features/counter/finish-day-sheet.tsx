@@ -149,6 +149,19 @@ export function FinishDaySheet({
               resolution="Close this sheet and prepare, pay, or cancel every open order in the pipeline."
             />
           )}
+          {/*
+            Its own blocker, in the biller's words. A customer has handed over
+            money and is still waiting for food, which is not the same work as
+            an open order and not the same thing as a recent payment.
+          */}
+          {readiness.foodOwedCount > 0 && (
+            <Blocker
+              title={`${readiness.foodOwedCount} order${
+                readiness.foodOwedCount === 1 ? ' is' : 's are'
+              } paid but not marked prepared`}
+              resolution="Close this sheet and tick Prepared on those cards in the pipeline, or take the payment back if the food is not coming."
+            />
+          )}
 
           {readiness.editablePaymentCount > 0 && (
             <div className="rounded-xl border border-warning p-3">

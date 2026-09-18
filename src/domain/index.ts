@@ -18,6 +18,7 @@ export {
   menuLineDiscount,
   provisionalReference,
   provisionalToken,
+  ticketEditDeadlineMs,
   MINIMUM_BILL_PAISE,
   PAYMENT_EDIT_WINDOW_MS,
   SYNC_ESCALATION_COUNT,
@@ -31,6 +32,7 @@ export {
   type LineDiscount,
   type MenuDiscountRule,
   type SyncStateKind,
+  type TicketEditFacts,
 } from './billing'
 export {
   describeDifference,

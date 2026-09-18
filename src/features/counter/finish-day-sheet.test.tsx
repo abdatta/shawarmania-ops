@@ -28,6 +28,7 @@ describe('Finish Day readiness sheet', () => {
       unsentCount: 0,
       needsAttentionCount: 0,
       openOrderCount: 0,
+      foodOwedCount: 0,
       editablePaymentCount: 1,
       serverReachable: true,
       attributionExceptionCount: 0,
@@ -47,6 +48,7 @@ describe('Finish Day readiness sheet', () => {
       unsentCount: 2,
       needsAttentionCount: 1,
       openOrderCount: 3,
+      foodOwedCount: 0,
       editablePaymentCount: 0,
       serverReachable: false,
       attributionExceptionCount: 0,
@@ -62,11 +64,33 @@ describe('Finish Day readiness sheet', () => {
     expect(screen.getByRole('button', { name: /keep billing/i })).toBeInTheDocument()
   })
 
+  it('blocks the day while a paying customer is still owed food, in its own words', async () => {
+    renderSheet({
+      unsentCount: 0,
+      needsAttentionCount: 0,
+      openOrderCount: 0,
+      foodOwedCount: 1,
+      editablePaymentCount: 1,
+      serverReachable: true,
+      canFinish: false,
+      attributionExceptionCount: 0,
+    })
+
+    // Not counted among open orders and not among recent payments: closing a day
+    // while a customer who has paid is still waiting for food is wrong on its
+    // own terms, and it sends the biller to a different card.
+    expect(await screen.findByText(/1 order is paid but not marked prepared/i)).toBeInTheDocument()
+    expect(screen.getByText(/tick Prepared on those cards in the pipeline/i)).toBeInTheDocument()
+    expect(screen.queryByText(/open orders?$/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /finish day now/i })).not.toBeInTheDocument()
+  })
+
   it('keeps earlier attribution exceptions informational and financially included', async () => {
     renderSheet({
       unsentCount: 0,
       needsAttentionCount: 0,
       openOrderCount: 0,
+      foodOwedCount: 0,
       editablePaymentCount: 0,
       serverReachable: true,
       attributionExceptionCount: 2,

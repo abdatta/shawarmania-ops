@@ -18,6 +18,7 @@ const bill: BillingBill = {
   paymentBusinessDate: '2026-08-12',
   payments: [{ method: 'upi', amountPaise: 13_900 }],
   paymentRevision: 0,
+  paymentEditable: false,
   paymentEditableUntil: null,
   paymentMethod: 'upi',
   status: 'settled',

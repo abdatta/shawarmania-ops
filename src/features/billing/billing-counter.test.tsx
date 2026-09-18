@@ -426,8 +426,10 @@ describe('BillingCounter', () => {
     const getBoundingClientRect = vi
       .spyOn(HTMLDivElement.prototype, 'getBoundingClientRect')
       .mockReturnValue({ top: 120, right: 320 } as DOMRect)
+    // No wait: an unprepared order's payment has no deadline, so the card knows
+    // the take-back is available without first measuring a clock.
     await person.click(
-      await within(preparing).findByRole('button', { name: /^More actions for Order .105$/ }),
+      within(preparing).getByRole('button', { name: /^More actions for Order .105$/ }),
     )
     const menu = within(preparing).getByRole('menu')
     expect(menu).toHaveStyle({

@@ -261,9 +261,34 @@ delete are refused on both tables. `effective_bill_payments` exposes the
 original `bill_payments` at revision zero or only the latest replacement; it is
 the sole allocation source for billing totals and revenue reads. The correction
 RPC accepts the same bill identity only from its originating tablet and current
-shift, under a bill lock, at the expected revision and no later than the stored
-`paid_at + 5 minutes`. Exact command replay returns its recorded revision without
+shift, under a bill lock, at the expected revision and inside **the ticket's
+edit window**. Exact command replay returns its recorded revision without
 appending again.
+
+**That window is derived over two columns, never stored** *(#55)*. An order
+answers two independent facts — `orders.prepared_at` and its payment — and the
+ticket is finished when the second of them lands, whichever it was. So:
+
+```
+window closes = bills.order_id is null
+                  ? bills.paid_at + 5 minutes
+                  : orders.prepared_at is null
+                      ? never — the food is still owed
+                      : greatest(bills.paid_at, orders.prepared_at) + 5 minutes
+```
+
+`public.billing_edit_window_end(paid_at, prepared_at, settles_an_order)` is the
+one definition; `correct_bill_payment`, `unpay_billing_order` and
+`cancel_paid_billing_order` all read it from there rather than repeating the
+expression, and `src/domain/billing.ts` computes the identical rule for the
+screen. **`bills.order_id` is nullable and that null is the direct sale**, not an
+unprepared order: read the other way it would hand every directly rung bill an
+unbounded window, which is why the third argument exists rather than being
+inferred from a null `prepared_at`.
+
+Nothing is stored for any of this. A deadline written to a column would be a
+fourth copy of the rule and the first one to go stale, since preparation can
+land minutes after payment and move the answer.
 
 **`billing_commands`** — compact idempotency receipts containing envelope
 identity, attribution, command type/version/hash, client and server clocks,

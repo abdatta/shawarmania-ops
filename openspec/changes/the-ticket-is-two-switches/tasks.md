@@ -45,45 +45,45 @@
 
 ## 5. The Clock, In The Database
 
-- [ ] 5.1 Write one migration carrying every function below. Name the derived window in a comment where each function checks it, so the next reader does not have to reconstruct the rule from three copies of an expression.
-- [ ] 5.2 `unpay_billing_order` and `cancel_paid_billing_order`: replace `p_created_at >= v_bill.paid_at + interval '5 minutes'` with the derived window — no deadline while `v_order.prepared_at` is null, otherwise `greatest(v_bill.paid_at, v_order.prepared_at) + interval '5 minutes'`. Keep the existing `p_created_at < v_bill.paid_at` clock-sanity refusal, and keep every authorization check ahead of the window check, in that order.
-- [ ] 5.3 `correct_bill_payment`: the same window, reached through `bills.order_id`. That column is nullable and the null is the direct-sale case, which keeps `paid_at + interval '5 minutes'`. A join that silently drops the null would hand every direct bill an unbounded window — assert the opposite in a test rather than reading the SQL twice.
-- [ ] 5.4 `finish_billing_day` (latest definition in `resilient-counter-departure-and-day-close`): extend the `unresolved_operations` check from `status='open'` to also catch `status='paid' and prepared_at is null`, and return a status the sheet can name distinctly from an ordinary open order.
-- [ ] 5.5 Drop the `billing_end_of_day_payment_edit_guard` trigger and `reject_open_payment_edit_at_finish`. **Before dropping it, prove in pgTAP what replaces it**: that a take-back, a cancel-after-paid and a correction are each refused for a bill whose day has been finished, because the shift is ended and `billing_device_context` refuses. If any of the three is *accepted*, stop — keep the trigger and rewrite it to the derived window instead, and say so in `design.md`.
-- [ ] 5.6 pgTAP for each of the three commands on both sides of the new deadline: accepted on an unprepared order long after payment; accepted inside five minutes of preparation; refused five minutes after preparation; refused five minutes after payment when payment came last; refused five minutes after payment for a bill with no order. Hand-crafted requests, not adapter calls.
-- [ ] 5.7 Confirm `npm run test:rls` is unchanged and still passes. This change moves a deadline, not an authority; if an isolation case moves, something in 5.2–5.4 reached past the clock.
+- [x] 5.1 Write one migration carrying every function below. Name the derived window in a comment where each function checks it, so the next reader does not have to reconstruct the rule from three copies of an expression.
+- [x] 5.2 `unpay_billing_order` and `cancel_paid_billing_order`: replace `p_created_at >= v_bill.paid_at + interval '5 minutes'` with the derived window — no deadline while `v_order.prepared_at` is null, otherwise `greatest(v_bill.paid_at, v_order.prepared_at) + interval '5 minutes'`. Keep the existing `p_created_at < v_bill.paid_at` clock-sanity refusal, and keep every authorization check ahead of the window check, in that order.
+- [x] 5.3 `correct_bill_payment`: the same window, reached through `bills.order_id`. That column is nullable and the null is the direct-sale case, which keeps `paid_at + interval '5 minutes'`. A join that silently drops the null would hand every direct bill an unbounded window — assert the opposite in a test rather than reading the SQL twice.
+- [x] 5.4 `finish_billing_day` (latest definition in `resilient-counter-departure-and-day-close`): extend the `unresolved_operations` check from `status='open'` to also catch `status='paid' and prepared_at is null`, and return a status the sheet can name distinctly from an ordinary open order.
+- [x] 5.5 Drop the `billing_end_of_day_payment_edit_guard` trigger and `reject_open_payment_edit_at_finish`. **Before dropping it, prove in pgTAP what replaces it**: that a take-back, a cancel-after-paid and a correction are each refused for a bill whose day has been finished, because the shift is ended and `billing_device_context` refuses. If any of the three is *accepted*, stop — keep the trigger and rewrite it to the derived window instead, and say so in `design.md`.
+- [x] 5.6 pgTAP for each of the three commands on both sides of the new deadline: accepted on an unprepared order long after payment; accepted inside five minutes of preparation; refused five minutes after preparation; refused five minutes after payment when payment came last; refused five minutes after payment for a bill with no order. Hand-crafted requests, not adapter calls.
+- [x] 5.7 Confirm `npm run test:rls` is unchanged and still passes. This change moves a deadline, not an authority; if an isolation case moves, something in 5.2–5.4 reached past the clock.
 
 ## 6. The Clock, In The App
 
-- [ ] 6.1 Put the derived window in one place in `src/domain/` — a function over `paidAt` and `preparedAt` returning a deadline or none — and make every reader call it. Two copies of this rule is how the screen and the server come to disagree.
-- [ ] 6.2 `paymentEditableUntil` in both adapters: computed from that function, including the locally projected bill the tablet builds at acceptance time.
-- [ ] 6.3 `unwindOpen` in `pipeline-card.tsx`: the same function. Delete the expiry branch of the toggle's non-interactive rendering — in the pipeline list, a payment on this till's order is always reversible now.
-- [ ] 6.4 The bills column: where no deadline exists yet, keep the pencil indicator and the edit affordance and **draw no countdown**, saying instead that it stays editable until the order is prepared. Never draw an unstarted countdown as expired.
-- [ ] 6.5 `inspectFinishDay`: count payments whose deadline has not passed rather than bills paid inside five minutes, and add the paid-and-unprepared count as its own blocker.
-- [ ] 6.6 The Finish Day sheet: a new blocker in the biller's words — *1 order is paid but not marked prepared* — with a resolution pointing at the pipeline. Leave the recent-payment note as an advisory note; it becomes true once 5.5 lands.
-- [ ] 6.7 Mirror the whole rule in the mock adapter so demo mode and the mock tests answer exactly as the live one does, including the direct-bill exception.
+- [x] 6.1 Put the derived window in one place in `src/domain/` — a function over `paidAt` and `preparedAt` returning a deadline or none — and make every reader call it. Two copies of this rule is how the screen and the server come to disagree.
+- [x] 6.2 `paymentEditableUntil` in both adapters: computed from that function, including the locally projected bill the tablet builds at acceptance time.
+- [x] 6.3 `unwindOpen` in `pipeline-card.tsx`: the same function. Delete the expiry branch of the toggle's non-interactive rendering — in the pipeline list, a payment on this till's order is always reversible now.
+- [x] 6.4 The bills column: where no deadline exists yet, keep the pencil indicator and the edit affordance and **draw no countdown**, saying instead that it stays editable until the order is prepared. Never draw an unstarted countdown as expired.
+- [x] 6.5 `inspectFinishDay`: count payments whose deadline has not passed rather than bills paid inside five minutes, and add the paid-and-unprepared count as its own blocker.
+- [x] 6.6 The Finish Day sheet: a new blocker in the biller's words — *1 order is paid but not marked prepared* — with a resolution pointing at the pipeline. Leave the recent-payment note as an advisory note; it becomes true once 5.5 lands.
+- [x] 6.7 Mirror the whole rule in the mock adapter so demo mode and the mock tests answer exactly as the live one does, including the direct-bill exception.
 
 ## 7. Offline, Ownership And Demo
 
-- [ ] 7.1 Walk the rail with the backend stopped: a locally accepted prepare, pay and take-back each redraw their toggle from the projected order, with no card moving and nothing waiting on the network. The offline deadline comes from the same domain function, over facts the tablet already holds.
-- [ ] 7.2 Walk a second till's order: both toggles drawn as facts without chrome, the till still named beside the time, and the adapter's refusal still reached if a command is forced.
-- [ ] 7.3 Walk demo mode: the same rail, the same toggles, the same clock, no real write.
-- [ ] 7.4 Confirm the counter's resume path and the `pipeline-as-of` label are unaffected.
+- [x] 7.1 Walk the rail with the backend stopped: a locally accepted prepare, pay and take-back each redraw their toggle from the projected order, with no card moving and nothing waiting on the network. The offline deadline comes from the same domain function, over facts the tablet already holds.
+- [x] 7.2 Walk a second till's order: both toggles drawn as facts without chrome, the till still named beside the time, and the adapter's refusal still reached if a command is forced.
+- [x] 7.3 Walk demo mode: the same rail, the same toggles, the same clock, no real write.
+- [x] 7.4 Confirm the counter's resume path and the `pipeline-as-of` label are unaffected.
 
 ## 8. Docs And Board
 
-- [ ] 8.1 `docs/SCREENS.md` — rewrite the Counter's **Open orders** paragraph for one list, two fixed controls and the chip; correct the three-column paragraph that names the rail's divider; restate the tender-correction deadline; and add the new Finish Day blocker. While there, the paragraph still says Open orders holds *this tablet's* orders; it has held the outlet's since #35.
-- [ ] 8.2 `docs/DESIGN_SYSTEM.md` — the checkbox-in-a-button control, its two token pairs, the rule that the mark takes the fill's foreground token, and the rule that a fact which cannot be changed is drawn without control chrome rather than disabled.
-- [ ] 8.3 `docs/OPERATIONS.md` — what now stops a day from closing, and what closing one does to an open edit window.
-- [ ] 8.4 `docs/DATA_MODEL.md` — the payment-edit deadline as a derived value over two columns rather than one, and the direct-sale exception.
-- [ ] 8.5 Run `npm run roadmap:sync`. Never hand-stamp a status. The #55 row is already in the inventory from this proposal.
+- [x] 8.1 `docs/SCREENS.md` — rewrite the Counter's **Open orders** paragraph for one list, two fixed controls and the chip; correct the three-column paragraph that names the rail's divider; restate the tender-correction deadline; and add the new Finish Day blocker. While there, the paragraph still says Open orders holds *this tablet's* orders; it has held the outlet's since #35.
+- [x] 8.2 `docs/DESIGN_SYSTEM.md` — the checkbox-in-a-button control, its two token pairs, the rule that the mark takes the fill's foreground token, and the rule that a fact which cannot be changed is drawn without control chrome rather than disabled.
+- [x] 8.3 `docs/OPERATIONS.md` — what now stops a day from closing, and what closing one does to an open edit window.
+- [x] 8.4 `docs/DATA_MODEL.md` — the payment-edit deadline as a derived value over two columns rather than one, and the direct-sale exception.
+- [x] 8.5 Run `npm run roadmap:sync`. Never hand-stamp a status. The #55 row is already in the inventory from this proposal.
 
 ## 9. Verification
 
-- [ ] 9.1 Run what CI runs, from the workflow file rather than from this list, and read each job's output. At minimum: `npm run typecheck`, `npm run lint`, `npm run lint:tokens`, `npm run lint:specs`, `npm run lint:todos`, `npm run contrast`, `npm test`, `npm run build`, `npm run test:e2e`, `npm run test:db`, `npm run test:rls`.
-- [ ] 9.2 Reset the local database before trusting any DB gate — the container is shared and another session may have reset it mid-run.
-- [ ] 9.3 Walk the whole thing by hand on a counter viewport: take an order, pay it upfront, wait past five minutes, take the payment back, pay it again, mark it prepared, watch it fly to Bills, then try to take it back from there before and after its five minutes.
-- [ ] 9.4 Finish a day with an order paid and unprepared, and read the refusal. Then prepare it and finish the day within a minute of a payment, and confirm the day closes.
+- [x] 9.1 Run what CI runs, from the workflow file rather than from this list, and read each job's output. At minimum: `npm run typecheck`, `npm run lint`, `npm run lint:tokens`, `npm run lint:specs`, `npm run lint:todos`, `npm run contrast`, `npm test`, `npm run build`, `npm run test:e2e`, `npm run test:db`, `npm run test:rls`.
+- [x] 9.2 Reset the local database before trusting any DB gate — the container is shared and another session may have reset it mid-run.
+- [x] 9.3 Walk the whole thing by hand on a counter viewport: take an order, pay it upfront, wait past five minutes, take the payment back, pay it again, mark it prepared, watch it fly to Bills, then try to take it back from there before and after its five minutes.
+- [x] 9.4 Finish a day with an order paid and unprepared, and read the refusal. Then prepare it and finish the day within a minute of a payment, and confirm the day closes.
 
 ## 10. Phase Gate
 

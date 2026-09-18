@@ -2,7 +2,7 @@ import {
   billTotals,
   classifySync,
   lineTotalPaise,
-  PAYMENT_EDIT_WINDOW_MS,
+  ticketEditDeadlineMs,
   provisionalToken,
 } from '@/domain'
 import { demoReceiptToken, receiptLink } from '@/lib/receipt-link'
@@ -412,6 +412,28 @@ export function createMockBillingAdapter(
     }
   }
 
+  /**
+   * The ticket's edit window over the mock's own payment clock, as an ISO
+   * instant or null while it has not started.
+   *
+   * `acceptedAtMs` is epoch milliseconds on the demo clock; the domain function
+   * speaks ISO, so the two are bridged here rather than in two copies of the
+   * rule.
+   */
+  function mockEditDeadline(
+    acceptedAtMs: number | undefined,
+    preparedAt: string | null,
+    settlesAnOrder: boolean,
+  ): string | null {
+    if (acceptedAtMs === undefined) return null
+    const deadline = ticketEditDeadlineMs({
+      paidAt: new Date(acceptedAtMs).toISOString(),
+      preparedAt,
+      settlesAnOrder,
+    })
+    return deadline === null ? null : new Date(deadline).toISOString()
+  }
+
   function billView(row: Tables<'bills'>): BillingBill {
     const order = row.order_id
       ? store.orders.find((candidate) => candidate.id === row.order_id)
@@ -434,14 +456,33 @@ export function createMockBillingAdapter(
       paymentBusinessDate: row.payment_business_date,
       payments,
       paymentRevision: paymentCorrections.get(row.id)?.length ?? 0,
-      paymentEditableUntil:
+      /*
+        The same derived window the live database computes (#55): five minutes
+        past the later of payment and preparation, and no deadline at all while
+        an order's food is still owed. Demo mode has to answer exactly as the
+        live adapter does or the walkthrough teaches the wrong rule.
+
+        The mock's clock for a payment is the moment it was accepted here rather
+        than the row's stored `paid_at`, because the demo advances it.
+      */
+      paymentEditable:
         acceptedAt !== undefined &&
         context.role === 'biller' &&
         row.status === 'settled' &&
-        openShiftRow()?.device_id === row.counter_device_id &&
-        acceptedAt + PAYMENT_EDIT_WINDOW_MS > paymentNow()
-          ? new Date(acceptedAt + PAYMENT_EDIT_WINDOW_MS).toISOString()
-          : null,
+        openShiftRow()?.device_id === row.counter_device_id,
+      paymentEditableUntil: mockEditDeadline(
+        acceptedAt,
+        // Projected, so a preparation accepted here and not yet delivered still
+        // starts the clock. The tablet must never be more permissive than the
+        // server about when a window closes.
+        (row.order_id
+          ? projectedOrders(row.outlet_id).find((candidate) => candidate.id === row.order_id)
+              ?.preparedAt
+          : null) ??
+          order?.prepared_at ??
+          null,
+        row.order_id !== null,
+      ),
       paymentMethod: payments.length === 1 ? payments[0]!.method : 'mixed',
       status: row.status,
       billerName: actorName(row.biller_profile_id) ?? 'Counter operator',
@@ -742,10 +783,17 @@ export function createMockBillingAdapter(
     row.cancelled_shift_id = actor?.id ?? null
   }
 
-  function applySetOrderPreparation(orderId: string, prepared: boolean) {
+  /**
+   * `preparedAt` is the **command's** time, not delivery's, exactly as
+   * `prepare_billing_order` stamps `p_created_at` in the live database. It has
+   * to be: the ticket's edit window is derived from it (#55), so stamping it at
+   * delivery would push a deadline the tablet had already drawn minutes into
+   * the future the moment the queue drained.
+   */
+  function applySetOrderPreparation(orderId: string, prepared: boolean, atMs: number) {
     const row = store.orders.find((candidate) => candidate.id === orderId)
     if (!row || (row.status !== 'open' && !(row.status === 'paid' && prepared))) return
-    row.prepared_at = prepared ? new Date().toISOString() : null
+    row.prepared_at = prepared ? new Date(atMs).toISOString() : null
     // Settling the upfront payer: money is already held against this order,
     // and preparation was the last thing its bill waited for.
     if (prepared && row.status === 'paid') {
@@ -999,6 +1047,12 @@ export function createMockBillingAdapter(
             overlaid.set(record.orderId, {
               ...current,
               status: 'paid',
+              // When the money was taken, carried on the projected order itself.
+              // Without it a payment accepted here and not yet delivered would
+              // look to the card like an order that is paid at no time at all,
+              // and the take-back it is entitled to would be withheld until the
+              // queue drained — which offline is exactly when it is needed.
+              paidAt: record.paidAt,
               // A bill exists only when the order was already prepared; the
               // upfront payer holds its money without one until preparation
               // settles it at delivery. Once delivered the command leaves the
@@ -1169,9 +1223,25 @@ export function createMockBillingAdapter(
       paymentBusinessDate: content.paymentBusinessDate,
       payments,
       paymentRevision: revisions?.length ?? 0,
-      paymentEditableUntil: new Date(
-        Date.parse(content.paidAt) + PAYMENT_EDIT_WINDOW_MS,
-      ).toISOString(),
+      paymentEditable: true,
+      ...(() => {
+        /*
+          The **projected** order, not the stored row: a preparation accepted a
+          moment ago on this tablet has not been delivered yet, and reading past
+          it would leave this bill drawing no countdown when its ticket is in
+          fact finished. Offline, projection is all there is.
+        */
+        const order = content.orderId
+          ? projectedOrders(content.outletId).find((candidate) => candidate.id === content.orderId)
+          : null
+        return {
+          paymentEditableUntil: mockEditDeadline(
+            Date.parse(content.paidAt),
+            order?.preparedAt ?? null,
+            content.orderId !== null,
+          ),
+        }
+      })(),
       paymentMethod: payments.length > 1 ? 'mixed' : payments[0]!.method,
       status: 'settled',
       billerName: content.billerName,
@@ -1283,22 +1353,45 @@ export function createMockBillingAdapter(
         (item) => item.state === 'needs_attention',
       ).length
       const unsentCount = pending.size
-      const openOrderCount = projectedOrders(row.outlet_id).filter(
-        (order) => order.status === 'open',
+      const projected = projectedOrders(row.outlet_id)
+      const openOrderCount = projected.filter((order) => order.status === 'open').length
+      // A customer who has paid and is still waiting for food. Its own blocker,
+      // exactly as the live database refuses it (#55).
+      const foodOwedCount = projected.filter(
+        (order) => order.status === 'paid' && order.preparedAt === null,
       ).length
-      const latestPaidAt = Math.max(0, ...acceptedPaymentTimes.values())
-      const editablePaymentCount = latestPaidAt + PAYMENT_EDIT_WINDOW_MS > paymentNow() ? 1 : 0
+      // Payments whose window has not passed — including those whose window has
+      // not started, because the order behind them is not prepared yet.
+      const editablePaymentCount = [...acceptedPaymentTimes.entries()].filter(
+        ([billId, acceptedAt]) => {
+          const bill = store.bills.find((candidate) => candidate.id === billId)
+          const order = bill?.order_id
+            ? store.orders.find((candidate) => candidate.id === bill.order_id)
+            : null
+          const deadline = ticketEditDeadlineMs({
+            paidAt: new Date(acceptedAt).toISOString(),
+            preparedAt: order?.prepared_at ?? null,
+            settlesAnOrder: Boolean(bill?.order_id),
+          })
+          return deadline === null || deadline > paymentNow()
+        },
+      ).length
       return {
         unsentCount,
         needsAttentionCount,
         openOrderCount,
+        foodOwedCount,
         editablePaymentCount,
         serverReachable: isOnline(),
         attributionExceptionCount: store.bills.filter(
           (bill) => bill.recorded_after_shift_end && bill.business_date === row.business_date,
         ).length,
         canFinish:
-          isOnline() && unsentCount === 0 && needsAttentionCount === 0 && openOrderCount === 0,
+          isOnline() &&
+          unsentCount === 0 &&
+          needsAttentionCount === 0 &&
+          openOrderCount === 0 &&
+          foodOwedCount === 0,
       }
     },
 
@@ -1375,7 +1468,15 @@ export function createMockBillingAdapter(
       if (!Number.isFinite(paidAt) || totalPaise === undefined) {
         throw new BillingActionError('not_found', 'That bill was not found on this tablet.')
       }
-      if (paidAt + PAYMENT_EDIT_WINDOW_MS <= paymentNow()) {
+      const correctionOrderId = orderPayment?.orderId ?? row?.order_id ?? null
+      const correctionDeadline = ticketEditDeadlineMs({
+        paidAt: new Date(paidAt).toISOString(),
+        preparedAt: correctionOrderId
+          ? (store.orders.find((order) => order.id === correctionOrderId)?.prepared_at ?? null)
+          : null,
+        settlesAnOrder: correctionOrderId !== null,
+      })
+      if (correctionDeadline !== null && correctionDeadline <= paymentNow()) {
         throw new BillingActionError(
           'payment_edit_expired',
           'That payment can no longer be edited.',
@@ -1569,16 +1670,17 @@ export function createMockBillingAdapter(
         throw new BillingActionError('not_open', `Order ${referenceLabel(projected)} is not open.`)
       }
       const commandId = crypto.randomUUID()
+      const preparedAtMs = Date.now()
       pendingPreparations.set(commandId, { orderId, prepared })
       accept({
         commandId,
         type: 'set_order_preparation',
-        acceptedAtMs: Date.now(),
-        apply: () => applySetOrderPreparation(orderId, prepared),
+        acceptedAtMs: preparedAtMs,
+        apply: () => applySetOrderPreparation(orderId, prepared, preparedAtMs),
       })
       return {
         ...projected,
-        preparedAt: prepared ? new Date(Date.now()).toISOString() : null,
+        preparedAt: prepared ? new Date(preparedAtMs).toISOString() : null,
       }
     },
 
@@ -1589,13 +1691,18 @@ export function createMockBillingAdapter(
       if (!projected || projected.deviceId !== shift.device_id || projected.billId !== billId) {
         throw new BillingActionError('not_found', 'That payment is not on this tablet.')
       }
-      // The window runs from the money's own clock: a settled bill's stored
-      // paid_at, or the moment an upfront payer's cash was handed over.
       const paidAtMs = billId !== null ? paidAtOf(billId) : Date.parse(projected.paidAt ?? '')
       if (!Number.isFinite(paidAtMs) || paidAtMs === null || Number.isNaN(paidAtMs)) {
         throw new BillingActionError('not_found', 'That payment is not on this tablet.')
       }
-      if (paidAtMs + PAYMENT_EDIT_WINDOW_MS <= paymentNow()) {
+      // The ticket's window, not the money's: while the food is still owed the
+      // ticket is not finished and the payment stays reversible (#55).
+      const unwindDeadline = ticketEditDeadlineMs({
+        paidAt: new Date(paidAtMs).toISOString(),
+        preparedAt: projected.preparedAt,
+        settlesAnOrder: true,
+      })
+      if (unwindDeadline !== null && unwindDeadline <= paymentNow()) {
         throw new BillingActionError(
           'window_expired',
           'That payment can no longer be taken back. Ask the manager to void it.',
@@ -1640,7 +1747,12 @@ export function createMockBillingAdapter(
       if (paidAtMs === null || Number.isNaN(paidAtMs)) {
         throw new BillingActionError('not_found', 'That payment is not on this tablet.')
       }
-      if (paidAtMs + PAYMENT_EDIT_WINDOW_MS <= paymentNow()) {
+      const cancelDeadline = ticketEditDeadlineMs({
+        paidAt: new Date(paidAtMs).toISOString(),
+        preparedAt: projected.preparedAt,
+        settlesAnOrder: true,
+      })
+      if (cancelDeadline !== null && cancelDeadline <= paymentNow()) {
         throw new BillingActionError(
           'window_expired',
           'That payment can no longer be undone. Ask the manager to void it.',

@@ -120,14 +120,22 @@ select throws_ok($q$
     where correction_id=(select id from public.bill_payment_corrections
       where bill_id='b4000000-0000-4000-a000-000000000001' and revision=2)
 $q$,'P0001',null,'correction allocations reject delete');
-select throws_ok($q$
+-- #55 withdrew the guard that used to refuse this insert for five minutes
+-- after any settled payment. The Finish Day sheet two screens away had been
+-- calling that situation "not a blocker" and offering to finish through it
+-- since this migration shipped, and nothing in the app handled the refusal, so
+-- a biller who closed a day quickly met a generic failure. The owner decided
+-- for the screen: closing the day ends the edit window early. What stops a
+-- later unwind is the shift requirement every command already answers to,
+-- proved by hand-crafted request in 54_the_ticket_is_two_switches.sql.
+select lives_ok($q$
   insert into public.billing_end_of_day_confirmations
     (outlet_id,device_id,business_date,shift_id,command_watermark)
   values ('00000000-0000-4000-a000-000000000001',
     '10000000-0000-4000-a000-000000000004',
     public.app_business_date(now(),time '04:00'),
     '90000000-0000-4000-a000-000000000001',0)
-$q$,'P0001',null,'finish day refuses while the payment edit window remains open');
+$q$,'a still-editable payment no longer refuses the day close');
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000004');
 

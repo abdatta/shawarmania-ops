@@ -4036,6 +4036,14 @@ export type Database = {
         Args: { p_created_at: string; p_shift_id: string }
         Returns: Json
       }
+      billing_edit_window_end: {
+        Args: {
+          p_paid_at: string
+          p_prepared_at: string
+          p_settles_an_order: boolean
+        }
+        Returns: string
+      }
       billing_envelope_error: {
         Args: {
           p_command_id: string

@@ -1154,6 +1154,30 @@ counter.
 
 **Bills are not syncing** → check whether Tablets says **unresolved** or **out of touch**, then check the counter's network. Unresolved names the tablet's fresh retained-envelope count; out of touch means even a displayed zero is no longer current evidence. The queue is durable while the device is intact. Bring the counter app to the foreground and wait through a minute heartbeat; do not reinstall or clear site data, because that destroys the outbox.
 
+**Finish Day refuses and names an order that is paid but not prepared** → that
+is the guard working, and it is the newest of the hard blockers *(#55)*. A
+customer has handed over money and is still waiting for food, so the day's
+figures are not final and the shift is not over. Close the sheet, find that card
+in the pipeline and tick **Prepared** once the food is handed over; if it is not
+coming, take the payment back or cancel after paid, with a reason. The database
+refuses the close on the same condition, so there is no way round it from the
+screen and none is wanted. Open orders and food owed on a paid order are
+separate counts on purpose: they send the biller to different work.
+
+**Finish Day closes a day a minute after a payment** → that is correct, and it
+is deliberate *(#55)*. **Closing the day ends any open payment-edit window
+early.** The sheet still names a still-editable payment as an advisory so the
+biller can review it before going home, but it is not a blocker: a biller
+closing the day is leaving, and if they wanted to undo a payment they would not
+be closing the day. The guard that used to refuse the close for five minutes
+after any settled payment was withdrawn with that decision, because the sheet
+had been promising the opposite since it shipped and nothing in the app handled
+the refusal. **After the day is closed, nothing can be unwound on that tablet**
+— taking a payment back, cancelling after payment and correcting a tender all
+run through the live-shift requirement, and finishing the day ends the shift, so
+all three are refused by the database. Anything genuinely wrong after that point
+is a manager void plus a manual re-ring, as it always was.
+
 **The counter resumed offline and has reached expiry or cutover** → do not move
 the clock or clear storage. Restore the backend; the tablet must re-resolve
 itself before delivering. The next operator opens a new shift from their own

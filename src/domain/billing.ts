@@ -24,6 +24,8 @@ export type BillingCommandRefusal =
   | 'malformed_payload'
   | 'arithmetic_invalid'
   | 'unresolved_operations'
+  /** An order at this business date is paid and its preparation unrecorded. */
+  | 'unresolved_preparation'
   | 'identity_conflict'
   | 'stale_revision'
   | 'payment_edit_expired'
@@ -376,9 +378,52 @@ export const SYNC_ESCALATION_COUNT = 5
 export const SYNC_ESCALATION_MS = 2 * 60 * 1000
 
 /**
- * The server-authoritative tender-correction window measured from `paid_at`.
+ * How long a finished ticket stays editable. The duration is not under review;
+ * only the moment it starts from — see `ticketEditDeadlineMs`.
  */
 export const PAYMENT_EDIT_WINDOW_MS = 5 * 60 * 1000
+
+/** The two stored facts a ticket's edit window is derived from. */
+export interface TicketEditFacts {
+  /** The bill's stored payment time. */
+  paidAt: string | null
+  /** The order's preparation time, or null while its food is still owed. */
+  preparedAt: string | null
+  /**
+   * Whether there is an order behind this money at all. A direct sale rung and
+   * paid without saving an order has no preparation to wait for, and the null
+   * that says so must never be mistaken for "not prepared yet" — that mistake
+   * hands every direct bill an unbounded window.
+   */
+  settlesAnOrder: boolean
+}
+
+/**
+ * When a ticket's edit window closes, in epoch milliseconds — or **null while
+ * it has not started**.
+ *
+ * An order answers two independent questions, and the ticket is finished when
+ * the second of them is answered, whichever it was: the upfront payer is
+ * prepared after paying, the customer who pays on handover is paid after
+ * preparing. So the window ends five minutes after the LATER of the two, and
+ * while preparation is unrecorded there is no deadline at all — the food is
+ * still owed, the ticket is not finished, and the payment stays reversible.
+ *
+ * This is the one place the rule lives on this side of the wire. The database
+ * computes the identical expression in `billing_edit_window_end`, and both
+ * adapters and the card read it from here, because a screen that disagrees with
+ * the server is how a refusal arrives with no warning.
+ */
+export function ticketEditDeadlineMs(facts: TicketEditFacts): number | null {
+  if (facts.paidAt === null) return null
+  const paidAtMs = Date.parse(facts.paidAt)
+  if (Number.isNaN(paidAtMs)) return null
+  if (!facts.settlesAnOrder) return paidAtMs + PAYMENT_EDIT_WINDOW_MS
+  if (facts.preparedAt === null) return null
+  const preparedAtMs = Date.parse(facts.preparedAt)
+  if (Number.isNaN(preparedAtMs)) return null
+  return Math.max(paidAtMs, preparedAtMs) + PAYMENT_EDIT_WINDOW_MS
+}
 
 export type SyncStateKind = 'synced' | 'pending' | 'stalled'
 

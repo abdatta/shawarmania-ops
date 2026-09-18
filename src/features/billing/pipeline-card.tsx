@@ -5,8 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { Money } from '@/components/ui/money'
 import type { BillingOrder } from '@/data-access/adapters'
-import { formatRecentAge } from '@/domain'
-import { PAYMENT_EDIT_WINDOW_MS } from '@/domain'
+import { formatRecentAge, ticketEditDeadlineMs } from '@/domain'
 
 import { cn } from '@/lib/cn'
 
@@ -119,18 +118,34 @@ export function PipelineCard({
   const reference = order.localReference ?? `Order #${order.orderNumber}`
   const isPaid = order.status === 'paid'
   const prepared = order.preparedAt !== null
-  // The five-minute clock, measured from stored payment time — never a timer.
-  // Read one frame after mount so the render itself stays pure.
+  /*
+    The ticket's edit window, from the one domain function the database and both
+    adapters also read — never a timer. Read one frame after mount so the render
+    itself stays pure.
+
+    A card sits in the pipeline list only while it is not both prepared and
+    paid, so in practice every payment reachable here has no deadline yet and
+    this is always open. It is still computed rather than assumed: the rule is
+    the rule, and the day a paid-and-prepared card can appear in this list, the
+    card must not offer something the database would refuse.
+  */
   const [nowMs, setNowMs] = useState<number | null>(null)
   useEffect(() => {
     const frame = requestAnimationFrame(() => setNowMs(Date.now()))
     return () => cancelAnimationFrame(frame)
-  }, [order.paidAt])
+  }, [order.paidAt, order.preparedAt])
+  const editDeadlineMs = ticketEditDeadlineMs({
+    paidAt: order.paidAt,
+    preparedAt: order.preparedAt,
+    settlesAnOrder: true,
+  })
   const unwindOpen =
     isPaid &&
     order.paidAt !== null &&
-    nowMs !== null &&
-    Date.parse(order.paidAt) + PAYMENT_EDIT_WINDOW_MS > nowMs
+    // No deadline yet — the food is still owed — so this needs no clock at all
+    // and the card offers the take-back on its very first frame. Only a started
+    // countdown has to wait to be measured.
+    (editDeadlineMs === null || (nowMs !== null && editDeadlineMs > nowMs))
   // The creator chip appears for everybody except the person holding the
   // tablet — including on paid cards, whose money someone else may have taken.
   const showCreator = order.creatorId !== currentBillerId

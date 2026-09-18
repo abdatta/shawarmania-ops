@@ -12,6 +12,7 @@ import {
   provisionalToken,
   SYNC_ESCALATION_COUNT,
   SYNC_ESCALATION_MS,
+  ticketEditDeadlineMs,
 } from './billing'
 import { NotPaiseError } from './money'
 
@@ -338,5 +339,69 @@ describe('menuLineDiscount', () => {
       fifteenOffShawarma,
     ])
     expect(result.discountPaise).toBe(0)
+  })
+})
+
+/**
+ * The ticket's edit window (#55). The database computes the identical
+ * expression in `billing_edit_window_end`; these cases are the app's half of
+ * the promise that the two never disagree.
+ */
+describe('ticketEditDeadlineMs', () => {
+  const noon = '2026-09-17T12:00:00.000Z'
+  const ms = (iso: string) => Date.parse(iso)
+
+  it('gives an order whose food is still owed no deadline at all', () => {
+    // The complaint that started #55: the customer pays when they order, and
+    // the clock used to run while the shawarma was being made.
+    // Null is "no deadline", not "expired". Every reader treats it as open, so
+    // the payment stays reversible however long the food takes.
+    expect(
+      ticketEditDeadlineMs({ paidAt: noon, preparedAt: null, settlesAnOrder: true }),
+    ).toBeNull()
+  })
+
+  it('starts the clock at preparation for the upfront payer', () => {
+    expect(
+      ticketEditDeadlineMs({
+        paidAt: noon,
+        preparedAt: '2026-09-17T12:30:00.000Z',
+        settlesAnOrder: true,
+      }),
+    ).toBe(ms('2026-09-17T12:35:00.000Z'))
+  })
+
+  it('starts it at payment when the payment came last', () => {
+    // `greatest`, not `prepared_at`: the handover payer's undo would otherwise
+    // land already expired.
+    expect(
+      ticketEditDeadlineMs({
+        paidAt: '2026-09-17T12:30:00.000Z',
+        preparedAt: noon,
+        settlesAnOrder: true,
+      }),
+    ).toBe(ms('2026-09-17T12:35:00.000Z'))
+  })
+
+  it('keeps the payment-time clock for a bill with no order behind it', () => {
+    // The direct sale. Reading its absent preparation as "not prepared yet"
+    // would hand every direct bill an unbounded window.
+    expect(ticketEditDeadlineMs({ paidAt: noon, preparedAt: null, settlesAnOrder: false })).toBe(
+      ms('2026-09-17T12:05:00.000Z'),
+    )
+  })
+
+  it('closes exactly five minutes after the ticket was finished', () => {
+    // Both facts at once, which is the ordinary handover sale: one instant is
+    // the later one and the window is five minutes from it.
+    expect(ticketEditDeadlineMs({ paidAt: noon, preparedAt: noon, settlesAnOrder: true })).toBe(
+      ms('2026-09-17T12:05:00.000Z'),
+    )
+  })
+
+  it('offers nothing on money that was never taken', () => {
+    expect(
+      ticketEditDeadlineMs({ paidAt: null, preparedAt: noon, settlesAnOrder: true }),
+    ).toBeNull()
   })
 })

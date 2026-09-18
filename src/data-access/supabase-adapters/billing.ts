@@ -30,8 +30,9 @@ import {
   billTotals,
   classifySync,
   lineTotalPaise,
-  PAYMENT_EDIT_WINDOW_MS,
   provisionalToken,
+  ticketEditDeadlineMs,
+  type TicketEditFacts,
 } from '@/domain'
 import { receiptLink } from '@/lib/receipt-link'
 import { newUuid } from '@/lib/uuid'
@@ -79,10 +80,30 @@ type BillReadRow = Tables<'bills'> & {
   // typed both ways because the client's own types describe it as either.
   bill_public_links: PublicLinkReadRow | PublicLinkReadRow[] | null
   bill_payments: Tables<'bill_payments'>[]
-  order: { order_number: number } | { order_number: number }[] | null
+  // `prepared_at` rides along because the bill's edit window is derived from
+  // it as well as from `paid_at` (#55).
+  order:
+    | { order_number: number; prepared_at: string | null }
+    | { order_number: number; prepared_at: string | null }[]
+    | null
   biller: { full_name: string } | { full_name: string }[] | null
   voider: { id: string; full_name: string } | { id: string; full_name: string }[] | null
   attribution_reviews: ReviewReadRow[] | ReviewReadRow | null
+}
+
+/**
+ * The ticket's edit window as a bill carries it (#55).
+ *
+ * `paymentEditableUntil` is null while the window has not started, which is the
+ * unprepared order's case and not the same thing as "not editable" —
+ * `paymentEditable` is the field that answers that. Both come from the one
+ * domain function, which computes the expression `billing_edit_window_end`
+ * computes in the database: a screen that disagrees with the server is how a
+ * refusal arrives with no warning.
+ */
+function editWindowOf(facts: TicketEditFacts): { paymentEditableUntil: string | null } {
+  const deadline = ticketEditDeadlineMs(facts)
+  return { paymentEditableUntil: deadline === null ? null : new Date(deadline).toISOString() }
 }
 
 type PublicLinkReadRow = { token: string; revoked_at: string | null }
@@ -220,9 +241,15 @@ function billView(
     paymentBusinessDate: row.payment_business_date,
     payments,
     paymentRevision: Math.max(0, ...effectiveForBill.map((payment) => payment.revision)),
-    paymentEditableUntil: paymentEditable
-      ? new Date(Date.parse(row.paid_at) + PAYMENT_EDIT_WINDOW_MS).toISOString()
-      : null,
+    paymentEditable,
+    ...editWindowOf({
+      paidAt: row.paid_at,
+      preparedAt: joined(row.order)?.prepared_at ?? null,
+      // Nullable, and the null is the direct sale rather than an unprepared
+      // order. Reading it the other way would hand every direct bill an
+      // unbounded window.
+      settlesAnOrder: row.order_id !== null,
+    }),
     paymentMethod: payments.length > 1 ? 'mixed' : payments[0]!.method,
     status: row.status,
     billerName: joined(row.biller)?.full_name ?? 'Counter operator',
@@ -767,7 +794,7 @@ export function createSupabaseBillingAdapter(
     let query = client
       .from('bills')
       .select(
-        '*, bill_items(*), bill_discounts(*), bill_public_links(token, revoked_at), bill_payments(*), order:orders!bills_order_id_fkey(order_number), biller:profiles!bills_biller_profile_id_fkey(full_name), voider:profiles!bills_voided_by_fkey(id, full_name), attribution_reviews:billing_attribution_reviews(*, resolved_operator:profiles!billing_attribution_reviews_resolved_operator_id_fkey(full_name), reviewer:profiles!billing_attribution_reviews_reviewed_by_fkey(full_name))',
+        '*, bill_items(*), bill_discounts(*), bill_public_links(token, revoked_at), bill_payments(*), order:orders!bills_order_id_fkey(order_number, prepared_at), biller:profiles!bills_biller_profile_id_fkey(full_name), voider:profiles!bills_voided_by_fkey(id, full_name), attribution_reviews:billing_attribution_reviews(*, resolved_operator:profiles!billing_attribution_reviews_resolved_operator_id_fkey(full_name), reviewer:profiles!billing_attribution_reviews_reviewed_by_fkey(full_name))',
       )
     if (filters.id) query = query.eq('id', filters.id)
     if (filters.outletId) query = query.eq('outlet_id', filters.outletId)
@@ -921,9 +948,13 @@ export function createSupabaseBillingAdapter(
           paymentBusinessDate: command.payload.paymentBusinessDate,
           payments: [...command.payload.payments],
           paymentRevision: 0,
-          paymentEditableUntil: new Date(
-            Date.parse(command.createdAt) + PAYMENT_EDIT_WINDOW_MS,
-          ).toISOString(),
+          paymentEditable: true,
+          // A direct sale: no order, so the clock runs from its own payment.
+          ...editWindowOf({
+            paidAt: command.createdAt,
+            preparedAt: null,
+            settlesAnOrder: false,
+          }),
           paymentMethod:
             command.payload.payments.length > 1 ? 'mixed' : command.payload.payments[0]!.method,
           status: 'settled',
@@ -969,9 +1000,14 @@ export function createSupabaseBillingAdapter(
             paymentBusinessDate: command.payload.paymentBusinessDate,
             payments: [...command.payload.payments],
             paymentRevision: 0,
-            paymentEditableUntil: new Date(
-              Date.parse(command.payload.paidAt) + PAYMENT_EDIT_WINDOW_MS,
-            ).toISOString(),
+            paymentEditable: true,
+            // Over the order the tablet already holds: while its preparation is
+            // unrecorded this payment has no deadline, offline included.
+            ...editWindowOf({
+              paidAt: command.payload.paidAt,
+              preparedAt: order.preparedAt,
+              settlesAnOrder: true,
+            }),
             paymentMethod:
               command.payload.payments.length > 1 ? 'mixed' : command.payload.payments[0]!.method,
             status: 'settled',
@@ -1222,45 +1258,82 @@ export function createSupabaseBillingAdapter(
         needsAttentionCount + queuedExpenses.filter((row) => row.state === 'needs_attention').length
 
       let openOrderCount = 0
+      let foodOwedCount = 0
       let editablePaymentCount = 0
       try {
         if (!serverReachable) throw new Error('offline')
-        const [ordersResult, billsResult] = await Promise.all([
+        const [ordersResult, foodOwedResult, billsResult] = await Promise.all([
           client
             .from('orders')
             .select('id', { count: 'exact', head: true })
             .eq('device_id', session.device.deviceId)
             .eq('business_date', shift.businessDate)
             .eq('status', 'open'),
+          // Paid and not prepared: a customer who has handed over money and is
+          // still waiting for food. The database refuses the close on it too.
+          client
+            .from('orders')
+            .select('id', { count: 'exact', head: true })
+            .eq('device_id', session.device.deviceId)
+            .eq('business_date', shift.businessDate)
+            .eq('status', 'paid')
+            .is('prepared_at', null),
+          // Every settled payment of this day; which of them are still editable
+          // is the derived window's answer, not a `paid_at` cutoff's — a payment
+          // on an unprepared order has no deadline at all.
           client
             .from('bills')
-            .select('id', { count: 'exact', head: true })
+            .select('id, paid_at, order_id, order:orders!bills_order_id_fkey(prepared_at)')
             .eq('counter_device_id', session.device.deviceId)
             .eq('payment_business_date', shift.businessDate)
-            .eq('status', 'settled')
-            .gt('paid_at', new Date(Date.now() - PAYMENT_EDIT_WINDOW_MS).toISOString()),
+            .eq('status', 'settled'),
         ])
-        if (ordersResult.error || billsResult.error) throw ordersResult.error ?? billsResult.error
+        if (ordersResult.error || foodOwedResult.error || billsResult.error) {
+          throw ordersResult.error ?? foodOwedResult.error ?? billsResult.error
+        }
         openOrderCount = ordersResult.count ?? 0
-        editablePaymentCount = billsResult.count ?? 0
+        foodOwedCount = foodOwedResult.count ?? 0
+        const now = Date.now()
+        editablePaymentCount = (
+          billsResult.data as unknown as Array<{
+            paid_at: string
+            order_id: string | null
+            order: { prepared_at: string | null } | { prepared_at: string | null }[] | null
+          }>
+        ).filter((row) => {
+          const deadline = ticketEditDeadlineMs({
+            paidAt: row.paid_at,
+            preparedAt: joined(row.order)?.prepared_at ?? null,
+            settlesAnOrder: row.order_id !== null,
+          })
+          return deadline === null || deadline > now
+        }).length
       } catch {
         serverReachable = false
       }
 
       const localBills = await overlayDurableBills(shift.id, [])
       editablePaymentCount += localBills.filter(
-        (bill) => bill.paymentEditableUntil && Date.parse(bill.paymentEditableUntil) > Date.now(),
+        (bill) =>
+          bill.paymentEditable &&
+          (bill.paymentEditableUntil === null ||
+            Date.parse(bill.paymentEditableUntil) > Date.now()),
       ).length
 
       return {
         unsentCount,
         needsAttentionCount: attentionCount,
         openOrderCount,
+        foodOwedCount,
         editablePaymentCount,
         serverReachable,
         attributionExceptionCount: 0,
         canFinish:
-          serverReachable && unsentCount === 0 && attentionCount === 0 && openOrderCount === 0,
+          serverReachable &&
+          unsentCount === 0 &&
+          attentionCount === 0 &&
+          openOrderCount === 0 &&
+          foodOwedCount === 0,
       }
     },
     async closeShift(shiftId: string): Promise<void> {
@@ -1354,9 +1427,12 @@ export function createSupabaseBillingAdapter(
         paymentBusinessDate: draft.businessDate,
         payments: [...draft.payments],
         paymentRevision: 0,
-        paymentEditableUntil: new Date(
-          Date.parse(command.createdAt) + PAYMENT_EDIT_WINDOW_MS,
-        ).toISOString(),
+        paymentEditable: true,
+        ...editWindowOf({
+          paidAt: command.createdAt,
+          preparedAt: null,
+          settlesAnOrder: false,
+        }),
         paymentMethod: draft.payments.length > 1 ? 'mixed' : draft.payments[0]!.method,
         status: 'settled',
         billerName: 'Counter operator',
@@ -1385,8 +1461,8 @@ export function createSupabaseBillingAdapter(
         )
       if (
         !bill ||
-        !bill.paymentEditableUntil ||
-        Date.parse(bill.paymentEditableUntil) <= Date.now()
+        !bill.paymentEditable ||
+        (bill.paymentEditableUntil !== null && Date.parse(bill.paymentEditableUntil) <= Date.now())
       ) {
         throw new BillingActionError(
           'payment_edit_expired',
@@ -1577,9 +1653,12 @@ export function createSupabaseBillingAdapter(
         paymentBusinessDate: command.payload.paymentBusinessDate,
         payments: [...payments],
         paymentRevision: 0,
-        paymentEditableUntil: new Date(
-          Date.parse(command.payload.paidAt) + PAYMENT_EDIT_WINDOW_MS,
-        ).toISOString(),
+        paymentEditable: true,
+        ...editWindowOf({
+          paidAt: command.payload.paidAt,
+          preparedAt: existing.preparedAt,
+          settlesAnOrder: true,
+        }),
         paymentMethod: payments.length > 1 ? 'mixed' : payments[0]!.method,
         status: 'settled',
         billerName: existing.creatorName,

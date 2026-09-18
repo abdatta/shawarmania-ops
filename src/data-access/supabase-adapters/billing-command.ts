@@ -20,6 +20,7 @@ const RESULT_STATUSES = new Set<BillingCommandResult['status']>([
   'malformed_payload',
   'arithmetic_invalid',
   'unresolved_operations',
+  'unresolved_preparation',
   'identity_conflict',
   'stale_revision',
   'payment_edit_expired',

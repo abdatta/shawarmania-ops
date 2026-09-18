@@ -222,6 +222,15 @@ test.describe('the counter', () => {
     await expect(closed).toContainText('Classic Chicken Shawarma')
     await expect(closed).toContainText('Mayonnaise Chicken Shawarma')
     await expect(closed).toContainText('1 × ₹139')
+
+    // Taking the money back and cancelling after payment stand on the same
+    // deadline as the edit beside them, and go when it does. A control that
+    // outlived the window would offer something the database is going to refuse.
+    await expect(closed.getByRole('button', { name: 'Take the payment back' })).toBeVisible()
+    await closed.getByRole('button', { name: 'Demo: expire' }).click()
+    await expect(closed.getByRole('button', { name: /^Edit/ })).toHaveCount(0)
+    await expect(closed.getByRole('button', { name: 'Take the payment back' })).toHaveCount(0)
+    await expect(closed.getByRole('button', { name: 'Cancel after paid' })).toHaveCount(0)
   })
 
   test('pays a preparing order straight away and settles it only when prepared', async ({
@@ -359,6 +368,69 @@ test.describe('the counter', () => {
     await top.click()
     await expect(rail.getByRole('button', { name: /^Scroll to the newest order/ })).toHaveCount(0)
     await expect(rail.getByRole('button', { name: /^Scroll to the oldest order/ })).toBeVisible()
+  })
+
+  test('leaves an upfront payment reversible while the food is still being made', async ({
+    page,
+  }) => {
+    const rail = page.getByTestId('counter-activity-rail')
+    const list = rail.getByTestId('pipeline-list')
+    // 105 is the seed whose preparation is not recorded.
+    const order = list.getByTestId('open-order-105')
+
+    await order.getByRole('button', { name: 'Paid', exact: true }).click()
+    const payment = page.getByRole('dialog', { name: 'Record payment' })
+    await payment.getByRole('button', { name: 'Cash', exact: true }).click()
+    await payment.getByRole('button', { name: 'Paid', exact: true }).click()
+    await expect(page.locator('dialog[open]')).toHaveCount(0)
+
+    // The ticket is not finished, so its payment has no deadline: the ticked
+    // Paid box unticks through the reasoned take-back rather than refusing, and
+    // it will still do so in an hour.
+    const paidCard = list.getByTestId('open-order-105')
+    const paid = paidCard.getByRole('button', { name: 'Paid', exact: true })
+    await expect(paid).toHaveAttribute('aria-pressed', 'true')
+    await paid.click()
+    const takeBack = page.getByRole('dialog', { name: /^Take back the payment for/ })
+    await expect(takeBack.getByRole('heading', { name: 'Take this payment back?' })).toBeVisible()
+    await takeBack.getByPlaceholder('Why is this payment coming back?').fill('Wrong tender')
+    await takeBack.getByRole('button', { name: 'Take it back' }).click()
+
+    // Back in the pipeline, in the same place, ready to be paid again.
+    await expect(
+      list.getByTestId('open-order-105').getByRole('button', { name: 'Paid', exact: true }),
+    ).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  test('draws no countdown on a bill whose order is still being made', async ({ page }) => {
+    // An upfront payment settles in the live database at once, so its bill is
+    // in Bills this shift while its order still stands in the rail. There is no
+    // deadline yet, and a countdown that has not started must not be drawn as
+    // one — least of all as an expired one.
+    const list = page.getByTestId('counter-activity-rail').getByTestId('pipeline-list')
+    await list
+      .getByTestId('open-order-105')
+      .getByRole('button', { name: 'Paid', exact: true })
+      .click()
+    const payment = page.getByRole('dialog', { name: 'Record payment' })
+    await payment.getByRole('button', { name: 'Cash', exact: true }).click()
+    await payment.getByRole('button', { name: 'Paid', exact: true }).click()
+
+    // Demo mode defers the bill until preparation, exactly as #45 left it, so
+    // the ticket is finished here and then read in Bills this shift.
+    await list
+      .getByTestId('open-order-105')
+      .getByRole('button', { name: 'Prepared', exact: true })
+      .click()
+    const settled = page
+      .getByTestId('bill-column')
+      .locator('details')
+      .filter({ hasText: 'Order 105' })
+    await expect(settled).toBeVisible()
+    await settled.locator('summary').click()
+    // Finished at preparation, so its five minutes start there and are drawn.
+    await expect(settled.getByRole('button', { name: /^Edit \(\d+ min\)$/ })).toBeVisible()
+    await expect(settled.getByText('Editable until this order is marked prepared.')).toHaveCount(0)
   })
 
   test('edits an order in the full composer and restores the waiting draft', async ({ page }) => {

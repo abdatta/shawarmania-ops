@@ -1326,7 +1326,14 @@ export interface BillingBill {
   payments: PaymentAllocation[]
   /** Revision zero is the immutable original allocation. */
   paymentRevision: number
-  /** Present only when this tablet may still append a tender correction. */
+  /** True while this tablet may still append a tender correction to this bill. */
+  paymentEditable: boolean
+  /**
+   * When that window closes — or **null while it has not started**, which is
+   * the unprepared order's case: the food is still owed, the ticket is not
+   * finished, and there is nothing yet to count down to. A null here is never
+   * "not editable"; `paymentEditable` is the field that answers that.
+   */
   paymentEditableUntil: string | null
   /** Convenience label for summaries; `mixed` is not itself a tender method. */
   paymentMethod: PaymentMethod | 'mixed'
@@ -1402,6 +1409,18 @@ export interface FinishDayReadiness {
   unsentCount: number
   needsAttentionCount: number
   openOrderCount: number
+  /**
+   * Orders at this business date that are paid and whose preparation is not
+   * recorded. Its own count, not folded into `openOrderCount`: a paying
+   * customer still owed food sends the biller to different work, and it is a
+   * blocker where a recent payment is not.
+   */
+  foodOwedCount: number
+  /**
+   * Payments whose edit window has not passed — including those whose window
+   * has not started, because their order is not prepared yet. Never a blocker:
+   * finishing the day ends the window early.
+   */
   editablePaymentCount: number
   serverReachable: boolean
   /** Flagged prior-shift bills are financially included and never block finish. */

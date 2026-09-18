@@ -109,7 +109,7 @@ export interface DemoStore {
   /**
    * Tender held against a paid order that has no bill yet — the upfront payer
    * whose food is still being made. It becomes `billPayments` when preparation
-   * settles the order, and is discarded by an Un-pay.
+   * settles the order, and is discarded when the payment is taken back.
    */
   orderPayments: Map<string, { payments: PaymentAllocation[]; paidAt: string; shiftId: string }>
   /** Owned by the billing adapter; open, paid and cancelled lifecycle records. */
