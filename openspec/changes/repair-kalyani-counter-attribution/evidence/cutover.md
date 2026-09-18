@@ -80,3 +80,26 @@ collection. With 20,000 paise retained after the prior collection, the live
 expected drawer was therefore 135,000 paise. The first-start and first-use gates
 are complete; next-day acceptance remains pending until the following 04:00 IST
 business-date rollover.
+
+## Owner UI verification
+
+The deployed production UI was inspected read-only from the owner's existing
+signed-in Edge session on 2026-09-18 IST:
+
+- Tablets showed `Kalyani Counter 2` only in the Kalyani group, freshly reported
+  with zero unresolved work. Kanchrapara showed that no tablet was set up.
+- Kalyani Billing for 2026-09-16 showed 37 bills and 906,000 paise, split
+  213,000 Cash and 693,000 UPI. The visible incident range 990–1026 displayed
+  `Kalyani Counter 2`.
+- Kanchrapara Billing for 2026-09-16 showed zero bills and zero totals.
+- Kalyani Ledger for 2026-09-16 independently rendered the same 906,000 paise
+  bill total and five cash expenses totalling 38,000 paise. Kanchrapara Ledger
+  showed zero counter revenue and zero expenses for that date.
+- The live Kalyani Drawer rendered 135,000 paise: 20,000 last left plus 130,000
+  from nine cash bills minus 15,000 from two cash expenses.
+- Kalyani Ledger for the current 2026-09-18 business date independently showed
+  the same 771,000 paise counter total and 135,000 paise drawer close.
+
+No button that writes, verifies, counts, edits, removes or issues setup codes was
+used. This completes the optional owner-UI checkpoint; the next-day checkpoint
+still waits for the next 04:00 IST rollover.

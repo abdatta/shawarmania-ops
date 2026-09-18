@@ -1,4 +1,4 @@
-> **Active checkpoint — 2026-09-18 after first real use:** 70 of 75 tasks
+> **Active checkpoint — 2026-09-18 after first real use:** 71 of 75 tasks
 > are complete. A fresh 03:15 IST read proved both repaired business dates and
 > every effective payment allocation reconcile, and explained the live ₹200:
 > ₹5,200 was physically counted, ₹5,000 was collected from that observation,
@@ -108,6 +108,14 @@
 > and 15,000 paise of new Cash expenses against the retained 20,000 paise,
 > yielding 135,000 paise expected. Tasks 7.7 and 7.8 are complete; task 7.9 must
 > wait until the next 04:00 IST business-date rollover.
+> The deployed owner UI was then checked from the owner's signed-in Edge
+> session. Tablets groups `Kalyani Counter 2` only under Kalyani with zero
+> unresolved work, while Kanchrapara says no tablet is set up. Billing and
+> Ledger agree on the repaired 2026-09-16 figures: 37 Kalyani bills / 906,000
+> paise (213,000 Cash / 693,000 UPI), five cash expenses / 38,000 paise, and
+> zero Kanchrapara bills, revenue or expenses. The live Kalyani drawer also
+> renders 135,000 paise from 20,000 left + 130,000 Cash bills - 15,000 Cash
+> expenses. Task 7.3 is complete without mutating production.
 >
 > The owner confirmed both shops were physically closed and has
 > frozen a revised numbering decision: preserve the original Kalyani insertion
@@ -499,7 +507,7 @@
   Kanchrapara owns none of the incident graph; verify policies/catalog state,
   public-receipt resolution without printing tokens, counters and the device
   row. Do not require a tablet token or any outlet connection.
-- [ ] 7.3 From the connected laptop, optionally open the deployed owner Tablets
+- [x] 7.3 From the connected laptop, optionally open the deployed owner Tablets
   surface and confirm the read-only card is grouped under Kalyani as `Kalyani
   Counter 2`, with no duplicate/source card or setup code. If the hosted
   frontend is unavailable, record that UI observation as deferred; database
