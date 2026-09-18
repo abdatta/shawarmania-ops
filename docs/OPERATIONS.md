@@ -1164,6 +1164,30 @@ refuses the close on the same condition, so there is no way round it from the
 screen and none is wanted. Open orders and food owed on a paid order are
 separate counts on purpose: they send the biller to different work.
 
+**…and the till that took that order is no longer switched on** → the advice
+above assumes somebody can press the button, and **only the tablet that took an
+order may touch it**. Where the order came from a till that has no live shift —
+an older day, or the other counter at the same outlet — nobody can tick
+**Prepared** on it from any screen, and the blocker cannot be cleared by hand.
+That is what `public.backfill_prepared_history()` is for: it stamps every paid
+order whose preparation was never recorded as prepared **at the moment it was
+paid**, touches nothing else, and leaves bills byte-for-byte. Execute is revoked
+from every client role, so it is run from a laptop over a direct database
+connection — the production password lives in the gitignored `.env` and is
+deliberately not written down here — never from a tablet, and never as a
+migration. Treat it as the narrow end of
+[Production historical repairs](#production-historical-repairs).
+Check first what it would move — `select count(*) from public.orders where
+status = 'paid' and prepared_at is null and paid_at is not null` — because it
+moves **all** of them, not one; capture the rows as a before-image, and verify
+the bill afterwards. It writes no command receipt, so the only record of who
+decided it is the one you keep.
+
+Run for real on 2026-09-19 after #55 deployed: order 35 at Kalyani, ₹180, paid
+17 Sep 22:05 and never marked prepared. The biller confirmed the food had gone
+out and the tick was simply forgotten. Its till had no live shift, so the screen
+path could not have worked. One row moved; bill 1061 unchanged.
+
 **Finish Day closes a day a minute after a payment** → that is correct, and it
 is deliberate *(#55)*. **Closing the day ends any open payment-edit window
 early.** The sheet still names a still-editable payment as an advisory so the
