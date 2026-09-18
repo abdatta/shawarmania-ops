@@ -1,4 +1,4 @@
-> **Active checkpoint — 2026-09-18 correcting the identity boundary:** 66 of 75 tasks
+> **Active checkpoint — 2026-09-18 after identity-boundary correction:** 68 of 75 tasks
 > are complete. A fresh 03:15 IST read proved both repaired business dates and
 > every effective payment allocation reconcile, and explained the live ₹200:
 > ₹5,200 was physically counted, ₹5,000 was collected from that observation,
@@ -86,6 +86,17 @@
 > 741 bills / 790 orders retain `Kanchrapara`, while all 37 incident bills / 39
 > incident orders resolve to `Kalyani Counter 2`; every frozen money figure and
 > both bill counters remained unchanged.
+> Commit `f57671513a35149100dfc625f71c7cba63db34ec` passed the complete deploy
+> workflow. The final restricted production boundary before-image has checksum
+> `dc59aa65a02758c56f112788ca3eef1a8ae62344e183283240ef099d26d88844`.
+> One guarded production transaction moved the contiguous boundary to exactly
+> 2026-09-16 04:00 IST. Fresh-process verification and an independent read-only
+> audit agree: 741 bills / 790 orders before cutover retain `Kanchrapara`; all 37
+> incident bills / 39 incident orders resolve to `Kalyani Counter 2`; overlap is
+> zero. Incident bills/payments remain 906,000 paise (213,000 Cash / 693,000 UPI)
+> with zero mismatches, the Kalyani counter remains 1061, the current tablet is
+> active at Kalyani and no device shift is live. Tasks 7.14 and 7.16 are complete
+> again; physical first-start/use and next-day acceptance remain open.
 >
 > The owner confirmed both shops were physically closed and has
 > frozen a revised numbering decision: preserve the original Kalyani insertion
@@ -537,7 +548,7 @@
   current interval and opens the next one atomically, while historical bill and
   order readers resolve the tablet identity whose interval contained the event
   time. Do not copy a display name onto bills or rewrite prior history.
-- [ ] 7.14 Backfill the transferred tablet's pre-transfer Kanchrapara identity and
+- [x] 7.14 Backfill the transferred tablet's pre-transfer Kanchrapara identity and
   post-transfer Kalyani identity from the retained before-image and committed
   cutover facts, and backfill every other existing tablet with a safe initial
   interval. Verify that old Kanchrapara bills regain the old tablet name while
@@ -546,7 +557,7 @@
 - [x] 7.15 Index and explain the temporal lookup so history pages remain fast;
   cover boundary instants, rename-only edits, outlet transfers, repeated edits,
   tenancy and historical rendering in database and adapter tests.
-- [ ] 7.16 Re-run all money and tenancy gates plus production read-only finance
+- [x] 7.16 Re-run all money and tenancy gates plus production read-only finance
   reconciliation after deployment/backfill. Keep 7.10 and 8.6 open until both the
   finance-wide proof and historical-label proof are green.
 

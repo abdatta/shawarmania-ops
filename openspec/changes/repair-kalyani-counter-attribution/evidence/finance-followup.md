@@ -181,6 +181,21 @@ Every frozen bill/payment split, expense total, drawer figure and both bill
 counters stayed unchanged. The disposable clone and its container copies were
 removed after the rehearsal.
 
+Commit `f57671513a35149100dfc625f71c7cba63db34ec` then passed the complete
+deployment workflow. The restricted production boundary before-image has
+checksum `dc59aa65a02758c56f112788ca3eef1a8ae62344e183283240ef099d26d88844`
+and one ACL entry for the current Windows owner.
+
+One guarded production transaction moved the shared interval endpoint to
+2026-09-16 04:00 IST. A fresh verifier and a separately written read-only SQL
+audit both found exactly two contiguous, non-overlapping intervals. The 741
+prior bills and 790 prior orders retain `Kanchrapara`; all 37 incident bills and
+39 incident orders resolve to `Kalyani Counter 2`. Incident bills and payments
+remain 906,000 paise, split 213,000 Cash and 693,000 UPI, with zero mismatches.
+The Kalyani bill counter remains 1061, current device authority remains active
+at Kalyani, and no device shift was live at postflight. No bill, order, payment,
+expense, drawer or device-authority row was changed by this correction.
+
 The rehearsal bundle remained outside the repository under the operating
 system's temporary directory. It contains production identifiers and is not
 committed.
