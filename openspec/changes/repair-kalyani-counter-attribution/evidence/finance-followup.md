@@ -125,6 +125,38 @@ counted/collected cash, both exact business-date bill/payment splits, two
 identity intervals, 778 historical bills and 829 historical orders. Production
 was not connected for this rehearsal.
 
+## Production follow-up
+
+Commit `f402c5f082534a054900471e87e46abaa6030f2d` passed the complete deploy
+workflow: repository gates, production migration, Edge Functions and frontend
+publication. The hosted application returned HTTP 200 and its published asset
+contained that exact build SHA. A new production plan still matched the frozen
+incident bundle.
+The final outside-Git before-image is checksum
+`81c8f2e075dfbbc3bd3eef8f2684dbfa698b1ffe9b56c55d3d32fde038b5c515`;
+its ACL has one entry for the current Windows owner.
+
+One guarded production transaction committed. A fresh verifier and a separate
+read-only SQL transaction then agreed on all material facts:
+
+- Kalyani 2026-09-16: 37 settled bills, 906,000 paise of bills/payments,
+  213,000 Cash, 693,000 UPI and numbers 990–1026.
+- Kalyani 2026-09-17: 35 settled bills, 753,000 paise of bills/payments,
+  256,000 Cash, 497,000 UPI and numbers 1027–1061.
+- Zero bill/payment mismatches, zero source incident bills and counters
+  Kalyani 1061 / Kanchrapara 778.
+- Five incident expenses total 38,000 paise. The latest Kalyani observation
+  remains counted 520,000 and collected 500,000 paise; expected is 697,000,
+  difference is -177,000 and zero later cash activity leaves 20,000 paise.
+- The transferred tablet has exactly two non-overlapping intervals: the former
+  Kanchrapara identity and current active Kalyani identity. They resolve 778 old
+  bills and 829 old orders to the former label.
+- The migration, bounded label function, both indexes and overlap trigger are
+  live. `authenticated` has no direct history-table grant. No live shift or
+  pending unexpired request existed at postflight.
+
+No customer, employee, device or receipt identifier is recorded here.
+
 The rehearsal bundle remained outside the repository under the operating
 system's temporary directory. It contains production identifiers and is not
 committed.

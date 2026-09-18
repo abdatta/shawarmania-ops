@@ -1,4 +1,4 @@
-> **Active checkpoint — 2026-09-18 after production cutover:** 64 of 75 tasks
+> **Active checkpoint — 2026-09-18 after production follow-up:** 68 of 75 tasks
 > are complete. A fresh 03:15 IST read proved both repaired business dates and
 > every effective payment allocation reconcile, and explained the live ₹200:
 > ₹5,200 was physically counted, ₹5,000 was collected from that observation,
@@ -56,6 +56,22 @@
 > unrelated row-actions unit case missed its synthetic menu click in the first
 > parallel run; it passed immediately in isolation (4/4) and the complete rerun
 > then passed all 143 files / 1,765 tests.
+> Commit `f402c5f082534a054900471e87e46abaa6030f2d` deployed through green
+> verification, migration, Edge Function and frontend jobs. A fresh restricted
+> production before-image was captured outside Git with checksum
+> `81c8f2e075dfbbc3bd3eef8f2684dbfa698b1ffe9b56c55d3d32fde038b5c515`.
+> One guarded follow-up transaction committed, and fresh-process verification
+> plus a separate read-only SQL audit both passed. The latest Kalyani observation
+> now retains counted 520,000 and collected 500,000 paise while expected is
+> 697,000, difference is -177,000 and the live drawer remains 20,000 paise.
+> Counters remain Kalyani 1061 / Kanchrapara 778; the 37 incident and 35 later
+> bills exactly match their bill/payment and Cash/UPI totals with zero mismatches;
+> five incident expenses total 38,000 paise. The transferred tablet has one old
+> Kanchrapara and one current Kalyani interval with no overlap, resolving 778 old
+> bills and 829 old orders to the former label. The current device is active at
+> Kalyani, with zero live shifts and zero pending unexpired requests. Tasks 7.4,
+> 7.12, 7.14 and 7.16 are now complete; physical first-start/use and next-day
+> acceptance deliberately remain open.
 >
 > The owner confirmed both shops were physically closed and has
 > frozen a revised numbering decision: preserve the original Kalyani insertion
@@ -452,7 +468,7 @@
   Counter 2`, with no duplicate/source card or setup code. If the hosted
   frontend is unavailable, record that UI observation as deferred; database
   postflights 7.1–7.2 remain the authoritative night-of gate.
-- [ ] 7.4 Compare Kalyani's derived sales/drawer figures and Kanchrapara's derived
+- [x] 7.4 Compare Kalyani's derived sales/drawer figures and Kanchrapara's derived
   figures against hand-calculated 906,000 total, 213,000 cash, 693,000 UPI and
   38,000 cash expenses. Verify no drawer collection or inventory movement was
   invented. **Reopened after the live owner drawer showed only the latest
@@ -498,7 +514,7 @@
   from canonical rows or stores a value that must be repaired. Recorded in
   `evidence/finance-followup.md`; only one containing drawer observation stores
   an affected copied financial value.
-- [ ] 7.12 Run a read-only production reconciliation for both outlets across the
+- [x] 7.12 Run a read-only production reconciliation for both outlets across the
   incident interval, the later genuine Kalyani interval and the latest drawer
   observation. Prove bill/payment totals, payment-method splits, expenses,
   collections, expected drawer balance and observation difference agree at every
@@ -507,7 +523,7 @@
   current interval and opens the next one atomically, while historical bill and
   order readers resolve the tablet identity whose interval contained the event
   time. Do not copy a display name onto bills or rewrite prior history.
-- [ ] 7.14 Backfill the transferred tablet's pre-transfer Kanchrapara identity and
+- [x] 7.14 Backfill the transferred tablet's pre-transfer Kanchrapara identity and
   post-transfer Kalyani identity from the retained before-image and committed
   cutover facts, and backfill every other existing tablet with a safe initial
   interval. Verify that old Kanchrapara bills regain the old tablet name while
@@ -516,7 +532,7 @@
 - [x] 7.15 Index and explain the temporal lookup so history pages remain fast;
   cover boundary instants, rename-only edits, outlet transfers, repeated edits,
   tenancy and historical rendering in database and adapter tests.
-- [ ] 7.16 Re-run all money and tenancy gates plus production read-only finance
+- [x] 7.16 Re-run all money and tenancy gates plus production read-only finance
   reconciliation after deployment/backfill. Keep 7.10 and 8.6 open until both the
   finance-wide proof and historical-label proof are green.
 
