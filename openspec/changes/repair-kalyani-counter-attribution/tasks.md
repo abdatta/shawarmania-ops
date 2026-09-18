@@ -1,4 +1,4 @@
-> **Active checkpoint — 2026-09-18 after identity-boundary correction:** 68 of 75 tasks
+> **Active checkpoint — 2026-09-18 after first real use:** 70 of 75 tasks
 > are complete. A fresh 03:15 IST read proved both repaired business dates and
 > every effective payment allocation reconcile, and explained the live ₹200:
 > ₹5,200 was physically counted, ₹5,000 was collected from that observation,
@@ -97,6 +97,17 @@
 > with zero mismatches, the Kalyani counter remains 1061, the current tablet is
 > active at Kalyani and no device shift is live. Tasks 7.14 and 7.16 are complete
 > again; physical first-start/use and next-day acceptance remain open.
+> At 21:01 IST the same proven tablet was active and freshly seen at Kalyani with
+> zero reported unsent or oldest-unresolved work. Its normal Kalyani shift opened
+> at 16:51 IST without setup. The first genuine bill was exactly 1062; by the
+> read-only checkpoint it had produced 33 settled bills numbered 1062–1094, 42
+> orders and 113 commands, all at Kalyani. Bills and effective payments both
+> totalled 771,000 paise (130,000 Cash / 641,000 UPI); historical-label,
+> menu-outlet, bill/payment and delayed-wrong-outlet mismatches were all zero.
+> The secured owner drawer reader reconciled 130,000 paise of new Cash receipts
+> and 15,000 paise of new Cash expenses against the retained 20,000 paise,
+> yielding 135,000 paise expected. Tasks 7.7 and 7.8 are complete; task 7.9 must
+> wait until the next 04:00 IST business-date rollover.
 >
 > The owner confirmed both shops were physically closed and has
 > frozen a revised numbering decision: preserve the original Kalyani insertion
@@ -509,13 +520,13 @@
   graph and current device row are complete, no shift is open, and the counter
   is safe to remain powered off until normal opening. Keep the targeted recovery
   bundle and do not claim physical-session acceptance yet.
-- [ ] 7.7 **First-start check at the next real opening:** bring the physical
+- [x] 7.7 **First-start check at the next real opening:** bring the physical
   tablet online before requesting a shift. Verify the same proven session loads
   the Kalyani device/outlet and Kalyani menu and asks for the normal shift
   handshake rather than setup. If it shows Kanchrapara, requests setup or reports
   unresolved local work, open no shift and escalate using the retained recovery
   evidence.
-- [ ] 7.8 **First-use check:** after 7.7 passes, open the normal shift and verify
+- [x] 7.8 **First-use check:** after 7.7 passes, open the normal shift and verify
   its outlet/device/operator attribution. Let the first genuine customer sale,
   not a manufactured night-of sale, prove the Kalyani bill number equals the
   committed plan's repaired target high-water plus one, with its order, payment

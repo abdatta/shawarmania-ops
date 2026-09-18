@@ -59,3 +59,24 @@ read-only query from another connection independently confirmed:
 No rollback was invoked because the authoritative postflights agreed. The
 database cutover is complete; same-session/menu verification, genuine bill
 1062 and next-day reconciliation remain future acceptance checkpoints.
+
+## First real opening and use
+
+At 21:01 IST on 2026-09-18, a fresh production read found the same proven tablet
+active and freshly seen as `Kalyani Counter 2` at Kalyani. It reported zero
+unsent work and no oldest unresolved write. A normal Kalyani shift had opened at
+16:51 IST without a new setup flow.
+
+The first genuine bill was exactly 1062. By the checkpoint, the tablet had
+produced 33 settled Kalyani bills numbered 1062–1094, 42 Kalyani orders and 113
+Kalyani commands. The bills and their effective payments both totalled 771,000
+paise, split 130,000 Cash and 641,000 UPI, with zero mismatches. There were zero
+wrong historical labels, menu-outlet mismatches, wrong-outlet bills or orders,
+delayed Kanchrapara commands, or pending shift requests.
+
+The secured owner-context drawer reader independently found 130,000 paise of
+post-observation Cash receipts, 15,000 paise of Cash expenses and no later cash
+collection. With 20,000 paise retained after the prior collection, the live
+expected drawer was therefore 135,000 paise. The first-start and first-use gates
+are complete; next-day acceptance remains pending until the following 04:00 IST
+business-date rollover.
