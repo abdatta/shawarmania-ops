@@ -142,6 +142,7 @@ function managerHistoryClient(
     bill_payments: [{ method: 'upi', amount_paise: 13_900 }],
     order: { order_number: 9 },
     biller: { full_name: 'Demo Biller' },
+    counter_device: { label: 'Current renamed tablet' },
     bill_public_links: publicLink,
   }
   const selected: string[] = []
@@ -163,9 +164,18 @@ function managerHistoryClient(
     }
     return query
   })
+  const rpc = vi.fn(async (name: string) =>
+    name === 'billing_event_device_labels'
+      ? { data: [{ event_id: bill.id, label: 'Historical counter name' }], error: null }
+      : { data: null, error: null },
+  )
   return {
-    client: { rpc: vi.fn(), from } as unknown as SupabaseClient<Database>,
+    client: {
+      rpc,
+      from,
+    } as unknown as SupabaseClient<Database>,
     selected,
+    rpc,
   }
 }
 
@@ -174,19 +184,25 @@ afterEach(async () => Dexie.delete(BILLING_DELIVERY_DATABASE_NAME))
 
 describe('the live tablet acceptance boundary', () => {
   it('resolves existing biller attribution for manager history', async () => {
-    const { client, selected } = managerHistoryClient()
+    const { client, selected, rpc } = managerHistoryClient()
     const billing = createSupabaseBillingAdapter(client)
 
     await expect(billing.listManagerHistory({ outletId: 'outlet-1' })).resolves.toMatchObject([
       {
         id: 'bill-1',
         billerName: 'Demo Biller',
+        tillLabel: 'Historical counter name',
         customerName: 'Demo Customer',
         customerPhone: '9000000000',
       },
     ])
     expect(selected[0]).toContain('biller:profiles!bills_biller_profile_id_fkey(full_name)')
     expect(selected[0]).toContain('voider:profiles!bills_voided_by_fkey(id, full_name)')
+    expect(rpc).toHaveBeenCalledOnce()
+    expect(rpc).toHaveBeenCalledWith('billing_event_device_labels', {
+      p_event_kind: 'bill',
+      p_event_ids: ['bill-1'],
+    })
   })
 
   /*
@@ -822,7 +838,7 @@ function openPreparedRow(overrides: Record<string, unknown> = {}) {
  * deleted by it. Reading the outbox first survives that; reading it second does
  * not, so this fails on the tree before the fix rather than by timing luck.
  */
-function raceOrdersClient(row: unknown, duringRead: () => Promise<void>) {
+function raceOrdersClient(row: { id: string }, duringRead: () => Promise<void>) {
   const from = vi.fn((table: string) => {
     if (table === 'orders') {
       const query: Record<string, unknown> = {
@@ -850,7 +866,14 @@ function raceOrdersClient(row: unknown, duringRead: () => Promise<void>) {
     }
     return other
   })
-  return { rpc: vi.fn(), from } as unknown as SupabaseClient<Database>
+  return {
+    rpc: vi.fn(async (name: string) =>
+      name === 'billing_event_device_labels'
+        ? { data: [{ event_id: row.id, label: 'Till' }], error: null }
+        : { data: null, error: null },
+    ),
+    from,
+  } as unknown as SupabaseClient<Database>
 }
 
 async function queuePayment(orderId: string, commandId: string) {

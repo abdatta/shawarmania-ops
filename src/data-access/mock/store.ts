@@ -84,6 +84,8 @@ export interface DemoStore {
   discountPresets: Map<string, DiscountPreset[]>
   /** Read-only here; #9 owns enrolment. */
   counterDevices: Tables<'counter_devices'>[]
+  /** Effective-dated display identity; current authority stays on counterDevices. */
+  counterDeviceHistory: Tables<'counter_device_history'>[]
   /**
    * Owned by the billing adapter, and **the live shift table rather than the
    * retired one**.
@@ -1314,6 +1316,14 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       ]),
     ),
     counterDevices: structuredClone(counterDeviceFixtures),
+    counterDeviceHistory: counterDeviceFixtures.map((device, index) => ({
+      id: `d5100000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`,
+      device_id: device.id,
+      outlet_id: device.outlet_id,
+      label: device.label,
+      valid_from: device.set_up_at,
+      valid_to: null,
+    })),
     shifts,
     bills,
     billItems,

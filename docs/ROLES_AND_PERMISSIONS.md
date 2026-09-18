@@ -438,7 +438,9 @@ destination label. It preserves the Auth UUID, proven session and browser
 credentials, changes only future context, and leaves historical rows at the
 outlet where they were recorded. The stable device identity does not preserve
 access to former-outlet rows after the move; a live destination shift is still
-required for device reads.
+required for device reads. Managers who may read a historical bill or order see
+the tablet name effective when that event happened, not the tablet's current
+name; that presentation history grants no former-outlet access to the device.
 
 **There is no fallback approver.** Only the named person may confirm their own shift: not the outlet's manager holding the correct code, not the owner. The cost is recorded in [Limitations](LIMITATIONS.md) rather than softened, along with the read-it-out-loud valve that goes with it.
 

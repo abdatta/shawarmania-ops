@@ -1072,6 +1072,16 @@ connection before either counter reopens. If it disagrees, use the rehearsed
 database-only reversal while no later dependent work has arrived; never improvise
 a partial SQL correction or wait for an outlet tablet.
 
+If the repair moves cash bills or cash expenses across outlets, canonical bill,
+effective-payment and expense totals are only the first check. Find every
+stored drawer observation whose `(previous counted_at, counted_at]` interval
+contains a moved row. Preserve the physical count and any collection; recompute
+only its copied expected/difference pair from the corrected interval. Never add
+a cash movement to make the screen look right — the notes already existed and
+that would double-count them. If a tablet was renamed or transferred, split its
+effective-dated identity at the reviewed cutover so pre-cutover bills keep the
+old name and future work receives the new one.
+
 The maintenance laptop, database services and the external backup destination
 are sufficient for the closed-hours cutover. Outlet tablets, printers and
 networks may remain powered off. Keep the targeted before-image and reversal

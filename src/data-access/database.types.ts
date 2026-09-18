@@ -1864,6 +1864,48 @@ export type Database = {
           },
         ]
       }
+      counter_device_history: {
+        Row: {
+          device_id: string
+          id: string
+          label: string
+          outlet_id: string
+          valid_from: string
+          valid_to: string | null
+        }
+        Insert: {
+          device_id: string
+          id?: string
+          label: string
+          outlet_id: string
+          valid_from: string
+          valid_to?: string | null
+        }
+        Update: {
+          device_id?: string
+          id?: string
+          label?: string
+          outlet_id?: string
+          valid_from?: string
+          valid_to?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "counter_device_history_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "counter_devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "counter_device_history_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       counter_device_setup_codes: {
         Row: {
           attempts: number
@@ -4005,6 +4047,13 @@ export type Database = {
           p_schema_version: number
         }
         Returns: string
+      }
+      billing_event_device_labels: {
+        Args: { p_event_ids: string[]; p_event_kind: string }
+        Returns: {
+          event_id: string
+          label: string
+        }[]
       }
       billing_finish_command: {
         Args: {

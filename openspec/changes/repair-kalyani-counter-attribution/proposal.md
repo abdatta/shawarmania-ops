@@ -47,6 +47,18 @@ device-scoped read policies assume that remains true. This change makes a
 carefully gated maintenance transfer a real contract and keeps historical
 outlet isolation true after the transfer.
 
+The first post-cutover owner reading exposed two facts the original dependency
+inventory did not model deeply enough. First, a drawer observation stores the
+expected cash and variance calculated when the count was recorded. Moving the
+incident's ₹2,130 cash receipts and ₹380 cash expenses into an interval that had
+already been counted changes that interval by a net ₹1,750 even though the
+current drawer still correctly carries the physical ₹200 left after a ₹5,000
+collection. Leaving the stored observation untouched makes its historical
+variance stale. Second, bill and order history currently joins the mutable
+`counter_devices.label`, so renaming the tablet made genuine old Kanchrapara
+bills display the new `Kalyani Counter 2` name. Both are financial/history
+consistency defects created by an otherwise-correct attribution repair.
+
 ## What Changes
 
 ### The incident is repaired once, under an exact fingerprint
@@ -166,6 +178,39 @@ outlet isolation true after the transfer.
   tested against restored/local environments, but is not exercised against the
   powered-off production tablet during the overnight repair.
 
+### Historical tablet identity is temporal, not copied onto a bill
+
+- Add a compact device-identity history containing device, outlet, label and a
+  non-overlapping effective interval. Setup creates the first interval; every
+  successful rename or transfer closes it and opens the next in the same locked
+  transaction as the current-row edit.
+- Keep bills and orders free of copied display names. Billing history resolves
+  the identity effective at `paid_at` or `ordered_at` through one batched,
+  authority-checked database read per page.
+- Index the history by `(device_id, valid_from desc)` and prove the page lookup
+  uses that index. A rename must not turn a history page into one query per row.
+- Backfill ordinary tablets with their current identity from setup. Split the
+  incident tablet's row from the retained before-image only after asserting it
+  has produced no post-transfer event, so old Kanchrapara rows retain the old
+  name and future Kalyani rows use the new one without guessing a billing event.
+
+### The follow-up repair reconciles the stored drawer interval
+
+- Take a new targeted before-image of the affected observation and device
+  history before any follow-up write.
+- Recompute the one non-legacy Kalyani observation whose interval contains the
+  reattributed cash facts from canonical effective payments, effective expenses
+  and cash-out rows. Preserve its physical count, counted/recorded instants,
+  opening, collection and recorder; update only its derived expected total and
+  difference under their existing identity constraint.
+- Require the exact reviewed delta: ₹2,130 moved cash less ₹380 moved cash
+  expenses raises expected cash by ₹1,750, so the ₹5,200 count changes from ₹20
+  short to ₹1,770 short. The present drawer remains ₹200 because the observation
+  re-anchors to what was physically counted and ₹5,000 was collected from it.
+- Reconcile both outlets across bills, effective allocations, expenses,
+  overview, ledger and drawer before and after the write. No revenue cache or
+  duplicate cash movement is created.
+
 ### A small policy migration makes transfer safe
 
 The owner explicitly did not want hand-crafted-request risk to block the
@@ -192,7 +237,9 @@ separate explicit act.
   scoped to the outlet recorded on them, future shifts use the new outlet, and
   the transferred device cannot read its former outlet. The Tablets surface
   exposes the same atomic edit to a Super Admin; a Franchise Admin retains
-  name-only administration at their own outlet.
+  name-only administration at their own outlet. Every successful edit also
+  preserves temporal name/outlet history, and bill/order history resolves the
+  tablet identity effective when the event happened.
 
 The one-time bill/order repair is deliberately not added to `counter-billing` as
 a reusable capability. Application bills remain append-only; the incident,
@@ -201,8 +248,9 @@ operator evidence.
 
 ## Impact
 
-**Repository changes:** one migration containing the atomic tablet-edit RPC and
-the narrowly scoped RLS correction, with database/isolation tests; one new Edge
+**Repository changes:** migrations containing the atomic tablet-edit RPC, the
+narrowly scoped RLS correction and temporal device identity, with
+database/isolation/performance tests; one new Edge
 action; typed live and demo adapters; the Tablets edit sheet, confirmation and
 loading-state parity; an incident-specific operator tool and local rehearsal
 tests; this change's evidence templates; generated schema types; and durable
@@ -227,7 +275,9 @@ places the operator at Kalyani on the incident date and is not rewritten.
 **No ordinary deployment may execute the data repair.** A SQL migration is the
 wrong vehicle: it would run automatically in every environment, mix backup and
 operator approval with deployment, and make an incident-specific mutation look
-like a reusable schema transition. Only the RLS correction is a migration.
+like a reusable schema transition. The reusable RLS/device-history schema ships
+as migrations; the incident observation correction and the incident tablet's
+two historical intervals remain an explicit backed-up operator action.
 
 ## Non-goals
 
@@ -236,7 +286,8 @@ like a reusable schema transition. Only the RLS correction is a migration.
 - Letting a Franchise Admin move a tablet to another outlet, transferring a
   tablet with unresolved work, or editing setup attribution/device identity.
 - Using the Edit sheet to reclassify historical trade; it moves the device from
-  that point forward and deliberately leaves history alone.
+  that point forward and deliberately leaves historical rows alone. Resolving
+  the label effective at a historical event is not reclassification.
 - Voids, replacement bills, adjustment rows, duplicate receipts or an
   application-visible audit trail for this incident.
 - Changing totals, tender, timestamps, customer snapshots, discounts, tax,

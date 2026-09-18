@@ -105,6 +105,11 @@ historical row. Device-owned reads additionally intersect that row with the
 tablet's current outlet and the existing live-shift condition, so a transferred
 tablet cannot use its stable UUID to read its former outlet. Super Admins and
 the appropriate outlet managers retain their normal historical read scope.
+The effective-dated identity table is not directly granted to any client role.
+Historical billing screens call a bounded function which first authorises the
+requested bills or orders under their own outlet rules, then returns only each
+event id and the label effective at its timestamp. The old outlet recorded in
+the identity interval is display evidence, never an alternate route to rows.
 
 ## Personal data we hold
 

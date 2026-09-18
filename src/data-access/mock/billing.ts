@@ -357,6 +357,19 @@ export function createMockBillingAdapter(
     return accountFixtures.find((account) => account.id === id)?.full_name ?? 'Former team member'
   }
 
+  function deviceLabelAt(deviceId: string, instant: string): string | null {
+    return (
+      store.counterDeviceHistory
+        .filter(
+          (history) =>
+            history.device_id === deviceId &&
+            history.valid_from <= instant &&
+            (history.valid_to === null || instant < history.valid_to),
+        )
+        .sort((left, right) => right.valid_from.localeCompare(left.valid_from))[0]?.label ?? null
+    )
+  }
+
   function orderView(row: Tables<'orders'>): BillingOrder {
     return {
       id: row.id,
@@ -374,8 +387,7 @@ export function createMockBillingAdapter(
       creatorName: actorName(row.created_by) ?? 'Unknown operator',
       // The tablet that took it, so the demo pipeline explains a refusal the
       // same way the live one does.
-      deviceLabel:
-        store.counterDevices.find((device) => device.id === row.device_id)?.label ?? null,
+      deviceLabel: deviceLabelAt(row.device_id, row.ordered_at),
       customerName: row.customer_name,
       customerPhone: row.customer_phone,
       lines: store.orderItems
@@ -433,8 +445,7 @@ export function createMockBillingAdapter(
       paymentMethod: payments.length === 1 ? payments[0]!.method : 'mixed',
       status: row.status,
       billerName: actorName(row.biller_profile_id) ?? 'Counter operator',
-      tillLabel:
-        store.counterDevices.find((device) => device.id === row.counter_device_id)?.label ?? null,
+      tillLabel: deviceLabelAt(row.counter_device_id, row.paid_at),
       billerId: row.biller_profile_id,
       recordedAfterShiftEnd: row.recorded_after_shift_end,
       attributionShiftEndedAt: row.attribution_shift_ended_at,

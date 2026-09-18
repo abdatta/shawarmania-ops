@@ -233,7 +233,7 @@ incident roots and accounts for at least:
 | `counter_device_setup_codes` | one consumed row remains unchanged with the same device UUID |
 | `aggregator_dismissed_duplicates` | required absent for the five moved expenses |
 | attendance | unchanged; already Kalyani |
-| drawer cash-out/observation/adjustment/acknowledgement rows | required absent at both outlets for the frozen business date; no synthetic rows |
+| drawer cash-out/observation/adjustment/acknowledgement rows | incident-date rows remain required absent and no synthetic movement is created; additionally inspect every later observation whose interval contains the moved cash facts and reconcile its stored derived expected/difference |
 | inventory movements | required absent at both outlets for the frozen business date |
 
 If repository inspection or the restored database finds another dependent
@@ -360,6 +360,15 @@ There are seven distinct checks because they catch different failures:
 7. **Next-day check:** owner reports, ledger, drawer expectation and expense
    totals agree after the business day has rolled.
 
+The post-cutover drawer reading is now a concrete eighth check, not an
+interpretation left to the UI. The latest Kalyani observation was recorded after
+the incident cash facts but before their outlet correction. Its physical
+`counted_total_paise` and ₹5,000 collection are observations and remain frozen;
+its `expected_paise` and `difference_paise` are derived facts and must be
+reconciled to the repaired canonical interval. Kanchrapara has no observation
+after the incident interval, so its current balance already derives from its
+last count and the now-correct source rows without a stored snapshot to amend.
+
 Passing an earlier check never waives a later one. Evidence records the command,
 time, commit/version, aggregate result and reviewer, never PII.
 
@@ -433,7 +442,67 @@ restored snapshot and automated environments. Production incident execution
 uses D9's exact-fingerprint operator transaction because the real tablet and its
 fresh heartbeat are unavailable overnight.
 
-### D14. The 03:00–04:00 IST run is a cutover, not an implementation session
+### D14. Tablet display identity is an effective-dated relation
+
+`counter_devices` remains the one current row used for authentication, current
+outlet scope and administration. A new `counter_device_history` relation stores
+only `device_id`, `outlet_id`, `label`, `valid_from` and nullable `valid_to`.
+It is not a second source of current authority and carries no general audit
+metadata. Exactly one open interval exists per device; intervals are
+non-overlapping and a successful edit closes/opens them under the same device
+row lock and transaction that changes the current row. A refused or no-change
+edit creates no interval.
+
+Historical bills and orders do **not** gain a copied tablet label. A stable,
+security-definer read accepts a bounded array of bill or order IDs, first
+re-derives the caller's authority for each event using the same owner,
+Franchise-Admin and live-tablet predicates as the row itself, and then resolves
+the latest interval whose `valid_from` is not after `paid_at`/`ordered_at` and
+whose `valid_to` is still open at that instant. The client makes one batched
+label read per page. The lookup index is `(device_id, valid_from desc)` with the
+closing instant and display fields covered; database tests inspect an
+`EXPLAIN` plan over a production-shaped history rather than accepting an N+1
+implementation.
+
+The schema migration can safely seed ordinary devices with one interval from
+`set_up_at` carrying their current identity. It cannot infer the transferred
+tablet's earlier identity from its already-mutated current row. The follow-up
+operator therefore splits only that device's interval using the retained
+before-image (`Kanchrapara`) and current row (`Kalyani Counter 2`). It chooses a
+boundary after the last old-device event and before any new-device event and
+asserts that the interval is empty; because the tablet has not yet reopened,
+the exact instant inside that empty gap cannot change the identity of any bill
+or order. If a post-transfer event exists, the operator refuses and the
+boundary must be designed from that actual event set.
+
+### D15. A historical attribution repair also repairs derived observation snapshots
+
+The drawer's current balance is intentionally anchored to the latest physical
+count, so the owner card is correct to show ₹200: ₹5,200 was counted, ₹5,000 was
+collected from that observation, and no cash receipt or cash expense occurred
+after it. “Cash from bills” on that card means **since the latest count**, not
+the selected business day's sales.
+
+The count's historical variance is different. At record time, its stored
+expected value used the then-current outlet attribution. The repaired interval
+adds ₹2,130 cash receipts and ₹380 cash expenses, a net ₹1,750. A second,
+backed-up forward operator action recalculates the interval from canonical
+`effective_bill_payments`, `effective_expenses` and `drawer_cash_out`, excludes
+the observation's own simultaneous collection exactly as recording did, and
+updates only `expected_paise` and `difference_paise`. The invariant remains
+`difference = counted_total - expected`; the reviewed result is ₹6,970 expected
+and ₹1,770 short. It creates no bill, payment, expense, collection, adjustment
+or acknowledgement.
+
+The operator inventories every finance reader before applying. Daily billing,
+Overview and Ledger derive on read from bills/effective payments and expenses;
+public receipts derive from the same bill identity; aggregator channel days are
+independent of counter bills. The only affected copied financial value is the
+observation snapshot above. A new targeted before-image and digest cover that
+row plus the device-history seed, and rollback restores both without touching
+the already-correct bill attribution.
+
+### D16. The 03:00–04:00 IST run is a cutover, not an implementation session
 
 The production operator may begin after the final counter closes at roughly
 03:00 or 04:00 **Asia/Kolkata**. By then the implementation commit, migration,

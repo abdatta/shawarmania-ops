@@ -83,3 +83,25 @@ and before-image checksum is
 `ba3f289719bb076670bffac702395efd36e0d8835aa6360b8976b94222203e91`.
 The final production targeted bundle is deliberately not captured until the
 last production plan passes under the closed-counter freeze.
+
+## Finance/history follow-up backup
+
+A new read-only three-part snapshot was taken after the attribution cutover and
+before the follow-up schema/data work. It is stored outside Git beneath the same
+restricted backup root at `finance-history-followup`.
+
+| Artifact | Completed (UTC) | Bytes | SHA-256 |
+|---|---|---:|---|
+| `production-full.dump` | 2026-09-17T23:33:39Z | 3,015,422 | `268A602DC20889B3B18278CC9BD13F7FC7CE40A5B90D5EBAC63542230D641D4E` |
+| `application-public-auth.dump` | 2026-09-17T23:35:42Z | 2,508,474 | `9A7774D601A8A90B0FC2509F6C3B10231C6524D900B75CE78EF3040F8DB4B8A1` |
+| `roles.sql` | 2026-09-17T23:35:54Z | 7,623 | `F11C81168964E8238AAA517605F824F96BCDA1D770D37D7A4E062BD806472532` |
+
+Both custom archives pass `pg_restore --list`. The application archive restored
+with `--exit-on-error` into isolated database `repair_followup_final_20260918`;
+the temporal migration then applied cleanly on that production state. The
+scratch-only targeted rehearsal bundle beneath `finance-history-followup` has
+plan digest `d4d12edc98dd289ecf1b8de32b71168a6013ef275b6866108490786ce75e119c`
+and checksum
+`5d2f7dc92d6c4809cc81bcf470090588da42d95bc2f5b5fd2fbb6a53bc137811`.
+It is rehearsal evidence, not the final production before-image; production
+capture remains a distinct post-deploy step.

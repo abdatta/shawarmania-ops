@@ -28,6 +28,38 @@ function demo(role: 'super_admin' | 'biller' = 'biller') {
 }
 
 describe('the demo counter shift', () => {
+  it('keeps historical bill labels when a tablet is renamed', async () => {
+    const { data, adapters } = demo('super_admin')
+    const before = await adapters.billing.listManagerHistory({ outletId: DEMO_OUTLET_ID })
+    const labelledBill = before.find((bill) => bill.tillLabel === 'Counter tablet')
+    expect(labelledBill).toBeDefined()
+
+    const intervalsBefore = data.store.counterDeviceHistory.length
+    await adapters.counter.editDevice({
+      deviceId: DEMO_COUNTER_DEVICE_ID,
+      label: 'Kalyani Counter 2',
+      outletId: DEMO_OUTLET_ID,
+    })
+
+    const [current] = await adapters.counter.readDeviceOperations([DEMO_OUTLET_ID])
+    const liveShift = (await adapters.counter.listLiveShifts()).find(
+      (shift) => shift.deviceId === DEMO_COUNTER_DEVICE_ID,
+    )
+    const after = await adapters.billing.listManagerHistory({ outletId: DEMO_OUTLET_ID })
+    expect(current?.label).toBe('Kalyani Counter 2')
+    expect(liveShift?.deviceLabel).toBe('Kalyani Counter 2')
+    expect(after.find((bill) => bill.id === labelledBill!.id)?.tillLabel).toBe('Counter tablet')
+    expect(data.store.counterDeviceHistory).toHaveLength(intervalsBefore + 1)
+
+    // Saving an unchanged form is deliberately not a new historical identity.
+    await adapters.counter.editDevice({
+      deviceId: DEMO_COUNTER_DEVICE_ID,
+      label: 'Kalyani Counter 2',
+      outletId: DEMO_OUTLET_ID,
+    })
+    expect(data.store.counterDeviceHistory).toHaveLength(intervalsBefore + 1)
+  })
+
   it('is one fact: Tablets and the phone name the same holder', async () => {
     const { data, adapters } = demo('super_admin')
 

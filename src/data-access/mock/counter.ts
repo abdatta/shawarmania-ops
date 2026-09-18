@@ -77,12 +77,15 @@ function outletCutover(outletId: string): string {
 }
 
 /** A stored shift as the handshake surfaces describe it. */
-function toLiveShift(row: Tables<'counter_shifts'>): LiveCounterShift {
+function toLiveShift(
+  row: Tables<'counter_shifts'>,
+  devices: readonly CounterDeviceSummary[],
+): LiveCounterShift {
   return {
     id: row.id,
     personId: row.person_id,
     deviceId: row.device_id,
-    deviceLabel: counterDeviceFixtures.find((device) => device.id === row.device_id)?.label ?? null,
+    deviceLabel: devices.find((device) => device.id === row.device_id)?.label ?? null,
     outletId: row.outlet_id,
     outletName: outletName(row.outlet_id),
     openedAt: row.opened_at,
@@ -358,8 +361,30 @@ export function createMockCounterAdapter(
         )
       }
 
+      if (label === device.label && input.outletId === device.outletId) return
+
+      const boundary = new Date().toISOString()
+      const currentHistory = store.counterDeviceHistory.find(
+        (row) => row.device_id === device.id && row.valid_to === null,
+      )
+      if (!currentHistory) throw new Error('The demo tablet has no current identity interval.')
+      currentHistory.valid_to = boundary
+      store.counterDeviceHistory.push({
+        id: crypto.randomUUID(),
+        device_id: device.id,
+        outlet_id: input.outletId,
+        label,
+        valid_from: boundary,
+        valid_to: null,
+      })
+
       device.label = label
       device.outletId = input.outletId
+      const storedDevice = store.counterDevices.find((row) => row.id === device.id)
+      if (storedDevice) {
+        storedDevice.label = label
+        storedDevice.outlet_id = input.outletId
+      }
       announce(counter)
     },
 
@@ -453,7 +478,7 @@ export function createMockCounterAdapter(
       return store.shifts
         .filter((row) => row.ended_at === null && Date.parse(row.expires_at) > now)
         .sort((a, b) => b.opened_at.localeCompare(a.opened_at))
-        .map(toLiveShift)
+        .map((row) => toLiveShift(row, counter.devices))
     },
 
     async confirmShift(requestId: string, code: string): Promise<void> {

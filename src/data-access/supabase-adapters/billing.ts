@@ -68,7 +68,6 @@ type OrderReadRow = Tables<'orders'> & {
   order_discounts: Tables<'order_discounts'>[]
   creator: { full_name: string } | { full_name: string }[] | null
   canceller: { full_name: string } | { full_name: string }[] | null
-  device: { label: string } | { label: string }[] | null
 }
 
 type BillReadRow = Tables<'bills'> & {
@@ -79,7 +78,6 @@ type BillReadRow = Tables<'bills'> & {
   // that shape, so this goes through `joined()` like every other to-one here —
   // typed both ways because the client's own types describe it as either.
   bill_public_links: PublicLinkReadRow | PublicLinkReadRow[] | null
-  counter_device: { label: string } | { label: string }[] | null
   bill_payments: Tables<'bill_payments'>[]
   order: { order_number: number } | { order_number: number }[] | null
   biller: { full_name: string } | { full_name: string }[] | null
@@ -120,7 +118,7 @@ function lineView(row: Tables<'order_items'> | Tables<'bill_items'>): BillLineDr
   }
 }
 
-function orderView(row: OrderReadRow): BillingOrder {
+function orderView(row: OrderReadRow, historicalDeviceLabel: string | null): BillingOrder {
   return {
     id: row.id,
     outletId: row.outlet_id,
@@ -133,7 +131,7 @@ function orderView(row: OrderReadRow): BillingOrder {
     status: row.status,
     creatorId: row.created_by,
     creatorName: joined(row.creator)?.full_name ?? 'Counter operator',
-    deviceLabel: joined(row.device)?.label ?? null,
+    deviceLabel: historicalDeviceLabel,
     customerName: row.customer_name,
     customerPhone: row.customer_phone,
     lines: row.order_items.map(lineView),
@@ -182,8 +180,9 @@ function requireOwnOrder(order: BillingOrder, deviceId: string): void {
 
 function billView(
   row: BillReadRow,
-  effective: readonly EffectivePaymentRow[] = [],
-  paymentEditable = false,
+  effective: readonly EffectivePaymentRow[],
+  paymentEditable: boolean,
+  historicalDeviceLabel: string | null,
 ): BillingBill {
   const voider = joined(row.voider)
   const review = joined(row.attribution_reviews)
@@ -227,7 +226,7 @@ function billView(
     paymentMethod: payments.length > 1 ? 'mixed' : payments[0]!.method,
     status: row.status,
     billerName: joined(row.biller)?.full_name ?? 'Counter operator',
-    tillLabel: joined(row.counter_device)?.label ?? null,
+    tillLabel: historicalDeviceLabel,
     billerId: row.biller_profile_id,
     recordedAfterShiftEnd: row.recorded_after_shift_end,
     attributionShiftEndedAt: row.attribution_shift_ended_at,
@@ -405,6 +404,23 @@ export function createSupabaseBillingAdapter(
 
   const notify = () => {
     for (const listener of [...listeners]) listener()
+  }
+
+  /**
+   * One temporal lookup for a whole page. The database checks each event's
+   * authority before returning only the label effective at its own instant.
+   */
+  async function deviceLabelsFor(
+    eventKind: 'bill' | 'order',
+    eventIds: readonly string[],
+  ): Promise<Map<string, string>> {
+    if (eventIds.length === 0) return new Map()
+    const { data, error } = await client.rpc('billing_event_device_labels', {
+      p_event_kind: eventKind,
+      p_event_ids: [...eventIds],
+    })
+    if (error) throw actionError(error, 'Could not load historical counter names.')
+    return new Map((data ?? []).map((row) => [row.event_id, row.label]))
   }
 
   function requireTablet() {
@@ -690,7 +706,7 @@ export function createSupabaseBillingAdapter(
     let query = client
       .from('orders')
       .select(
-        '*, order_items(*), order_discounts(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name), device:counter_devices!orders_device_id_fkey(label)',
+        '*, order_items(*), order_discounts(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name)',
       )
       .eq('outlet_id', outletId)
       .order('ordered_at', { ascending: false })
@@ -704,7 +720,12 @@ export function createSupabaseBillingAdapter(
         (order) => order.outletId === outletId && (!pipelineOnly || inPipeline(order)),
       )
     } else {
-      orders = (data as unknown as OrderReadRow[]).map(orderView)
+      const rows = data as unknown as OrderReadRow[]
+      const labels = await deviceLabelsFor(
+        'order',
+        rows.map((row) => row.id),
+      )
+      orders = rows.map((row) => orderView(row, labels.get(row.id) ?? null))
       if (pipelineOnly) resumeCoordinator?.notePipeline(outletId, orders)
       for (const [id, cached] of orderCache) {
         if (cached.outletId === outletId) orderCache.delete(id)
@@ -722,13 +743,15 @@ export function createSupabaseBillingAdapter(
     const { data, error } = await client
       .from('orders')
       .select(
-        '*, order_items(*), order_discounts(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name), device:counter_devices!orders_device_id_fkey(label)',
+        '*, order_items(*), order_discounts(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name)',
       )
       .eq('id', orderId)
       .maybeSingle()
     if (error) throw actionError(error, 'Could not load that order.')
     if (!data) return null
-    const order = orderView(data as unknown as OrderReadRow)
+    const row = data as unknown as OrderReadRow
+    const labels = await deviceLabelsFor('order', [row.id])
+    const order = orderView(row, labels.get(row.id) ?? null)
     orderCache.set(order.id, order)
     return order
   }
@@ -744,7 +767,7 @@ export function createSupabaseBillingAdapter(
     let query = client
       .from('bills')
       .select(
-        '*, bill_items(*), bill_discounts(*), bill_public_links(token, revoked_at), bill_payments(*), order:orders!bills_order_id_fkey(order_number), biller:profiles!bills_biller_profile_id_fkey(full_name), voider:profiles!bills_voided_by_fkey(id, full_name), attribution_reviews:billing_attribution_reviews(*, resolved_operator:profiles!billing_attribution_reviews_resolved_operator_id_fkey(full_name), reviewer:profiles!billing_attribution_reviews_reviewed_by_fkey(full_name)), counter_device:counter_devices!bills_counter_device_id_fkey(label)',
+        '*, bill_items(*), bill_discounts(*), bill_public_links(token, revoked_at), bill_payments(*), order:orders!bills_order_id_fkey(order_number), biller:profiles!bills_biller_profile_id_fkey(full_name), voider:profiles!bills_voided_by_fkey(id, full_name), attribution_reviews:billing_attribution_reviews(*, resolved_operator:profiles!billing_attribution_reviews_resolved_operator_id_fkey(full_name), reviewer:profiles!billing_attribution_reviews_reviewed_by_fkey(full_name))',
       )
     if (filters.id) query = query.eq('id', filters.id)
     if (filters.outletId) query = query.eq('outlet_id', filters.outletId)
@@ -759,10 +782,15 @@ export function createSupabaseBillingAdapter(
     const rows = data as unknown as BillReadRow[]
     const ids = rows.map((row) => row.id)
     let effective: EffectivePaymentRow[] = []
+    let deviceLabels = new Map<string, string>()
     if (ids.length > 0) {
-      const response = await client.from('effective_bill_payments').select('*').in('bill_id', ids)
+      const [response, labels] = await Promise.all([
+        client.from('effective_bill_payments').select('*').in('bill_id', ids),
+        deviceLabelsFor('bill', ids),
+      ])
       if (response.error) throw actionError(response.error, 'Could not load bill payments.')
       effective = response.data as EffectivePaymentRow[]
+      deviceLabels = labels
     }
     const serverBills = rows.map((row) =>
       billView(
@@ -773,6 +801,7 @@ export function createSupabaseBillingAdapter(
           row.counter_device_id === counterSession.device.deviceId &&
           row.counter_shift_id === counterSession.shift.id,
         ),
+        deviceLabels.get(row.id) ?? null,
       ),
     )
     if (filters.counterShiftId) resumeCoordinator?.noteBills(filters.counterShiftId, serverBills)

@@ -28,6 +28,17 @@ Editing the outlet SHALL affect current and future device context only. It SHALL
 NOT rewrite any historical bill, order, shift, command, expense or attendance
 row.
 
+Every successful name or outlet change SHALL preserve the previous name and
+outlet in a non-overlapping effective interval and open the new interval in the
+same transaction as the current-row edit. A refused edit and a submission that
+changes neither field SHALL create no interval.
+
+Bill and order history SHALL resolve the tablet name effective at the event's
+`paid_at` or `ordered_at` instant. It SHALL NOT display the tablet's mutable
+current name for an older event and SHALL NOT copy a display name onto the bill
+or order. A history page SHALL obtain these labels in a bounded batch backed by
+an index on device and effective instant, not one request per row.
+
 #### Scenario: A Super Admin renames a tablet
 
 - **WHEN** a Super Admin edits only the name to a unique non-blank value
@@ -58,6 +69,20 @@ row.
   destination
 - **THEN** the edit is refused with an actionable label message and neither
   field changes
+
+#### Scenario: A later rename does not rewrite old billing history
+
+- **WHEN** a tablet named `Kanchrapara` took a bill and is later renamed
+  `Kalyani Counter 2`
+- **THEN** that old bill still shows `Kanchrapara`, while a bill taken after the
+  rename shows `Kalyani Counter 2`, and neither bill stores a copied label
+
+#### Scenario: Historical labels are loaded as one bounded read
+
+- **WHEN** an authorised admin opens a page containing bills from several
+  device-identity intervals
+- **THEN** the page resolves all visible event labels in one batched database
+  read whose temporal lookup uses the device/effective-time index
 
 ### Requirement: The normal admin path may transfer a proven tablet without setup
 

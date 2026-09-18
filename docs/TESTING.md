@@ -318,7 +318,12 @@ That is all `clientsClaim` governs, and it is worth being exact because this pag
   restoration. Independent postflights must agree on counts, money, identities,
   outlet isolation, number high-water marks and device state before the next
   shift opens; keep customer, employee, device and receipt identifiers out of
-  committed evidence.
+  committed evidence. When moved rows include Cash, recompute the containing
+  observation interval and prove that physical counted cash and collection stay
+  unchanged while expected/difference move by exactly receipts minus expenses.
+  A tablet rename/transfer also proves effective-dated labels on both sides of
+  the boundary, one batched history request per page, refusal of direct history
+  reads, and an `EXPLAIN` using the `(device_id, valid_from)` lookup index.
 - **Password-manager behavior**: inspect the real forms in a normal Chrome
   profile with password saving enabled. DOM names/autocomplete tokens,
   submission and navigation are acceptance evidence; Chrome's optional native

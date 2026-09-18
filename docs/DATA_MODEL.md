@@ -142,6 +142,18 @@ intersected with its current outlet and existing live-shift rule. What is unique
 is the **label**, among an outlet's live counters, by a partial unique index on
 `(outlet_id, lower(btrim(label))) where removed_at is null and session_proven_at is not null` — so a manager choosing which counter to remove, and an operator reading which till took an order, are never guessing.
 
+**`counter_device_history`** — effective-dated device identity: `id`,
+`device_id`, `outlet_id`, `label`, `valid_from`, `valid_to`. Exactly one open
+interval exists per device and intervals may not overlap. Setup opens the first;
+an atomic name or outlet edit closes it and opens its successor at the same
+instant. `counter_devices` remains the authority for the tablet's current
+assignment and access. History answers presentation only: a bill or order names
+the label effective at its own event time, so a later rename never rewrites what
+a historical row says on screen. `billing_event_device_labels()` resolves a
+bounded page of bill or order ids in one indexed call after rechecking access to
+the events themselves. Clients receive event id and label only; no client role
+may select the base history table directly.
+
 A row is a counter only when `removed_at is null and session_proven_at is not null`, which is the canonical predicate every policy and helper asks. A redeemed setup code writes a row that is **not yet** a counter: it reaches nothing, appears nowhere, and lapses on its own when the code's own `proof_expires_at` passes, so a setup whose sign-in never lands costs a code and not a counter. Removal is permanent, taking the live shift and any pending request with it in the same transaction.
 
 The tablet heartbeat writes `last_seen_at`, the number of locally unresolved
@@ -701,6 +713,15 @@ reports the break and repairs nothing.** Note that this is the opposite of the
 rule *inside* one row, where a third derivable column is refused because it could
 disagree with the two it comes from. Within a row, derive. Across rows, store.
 Both rules exist to stop a figure changing without anybody deciding it should.
+
+One exceptional operator case remains: if an authorised historical repair
+reattributes canonical cash bills or cash expenses across outlets, the one
+already-recorded observation whose interval contains those rows has copied
+`expected_paise` and `difference_paise`. The same locked repair must recompute
+those two values from the corrected canonical interval while preserving the
+physical `counted_total_paise`, collection row and every later opening. It must
+not create a compensating cash movement: the cash existed physically already,
+and doing so would count it twice.
 
 **An outlet's first observation is a pure anchor**, carrying no opening, no
 expected total and no difference — `is_anchor` is true and all three are null

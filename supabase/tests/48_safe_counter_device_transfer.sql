@@ -114,9 +114,22 @@ select is(
   'Front counter',
   'the stored label is trimmed');
 select is(
+  (select count(*) from public.counter_device_history where device_id=:'DEVICE'),
+  3::bigint,
+  'a rename closes the setup identity and opens one new interval');
+select is(
+  (select label from public.counter_device_history
+    where device_id=:'DEVICE' and valid_to is null),
+  'Front counter',
+  'the open history interval agrees with the renamed current row');
+select is(
   public.edit_counter_device(:'DEVICE',:'FA_KAL','Front counter',:'KAL'),
   'no_change',
   'submitting the same setup properties is an explicit no-op');
+select is(
+  (select count(*) from public.counter_device_history where device_id=:'DEVICE'),
+  3::bigint,
+  'a no-op creates no identity-history noise');
 select is(
   public.edit_counter_device(:'DEVICE',:'FA_KAL','Cross-outlet name',:'KPA'),
   'not_authorised',
@@ -223,6 +236,15 @@ select is(
   (select outlet_id from public.counter_devices where id=:'DEVICE'),
   :'KPA'::uuid,
   'the current device context is now the destination outlet');
+select results_eq(
+  $$select outlet_id,label from public.counter_device_history
+      where device_id='10000000-0000-4000-a000-00000000000f' and valid_to is null$$,
+  $$values ('00000000-0000-4000-a000-000000000002'::uuid,'Kanchrapara front counter'::text)$$,
+  'the transfer opens one current destination identity interval');
+select is(
+  (select count(*) from public.counter_device_history where device_id=:'DEVICE'),
+  4::bigint,
+  'setup plus the test reset, rename and transfer are four non-overlapping intervals');
 
 -- The stable device UUID does not grant its former history back. With no live
 -- shift it sees no operational rows at either outlet.
@@ -251,7 +273,7 @@ insert into public.orders
   (id,outlet_id,order_number,device_id,created_by,created_shift_id,ordered_at,
    business_date,status,subtotal_paise,total_paise,pricing_mode)
 values
-  (:'NEW_ORDER',:'KPA',990001,:'DEVICE',:'BILLER_KPA',:'NEW_SHIFT',now(),
+  (:'NEW_ORDER',:'KPA',990001,:'DEVICE',:'BILLER_KPA',:'NEW_SHIFT',clock_timestamp(),
    :'new_date'::date,'open',15900,15900,'no_tax');
 insert into public.billing_commands
   (id,outlet_id,device_id,shift_id,actor_id,command_type,schema_version,
@@ -274,8 +296,18 @@ select :'KPA',:'DEVICE',:'new_date'::date,:'NEW_SHIFT',now(),watermark
 select pg_temp.impersonate(:'DEVICE'::uuid);
 select is((select count(*) from public.orders where id=:'OLD_ORDER'),0::bigint,
   'the destination shift does not expose the device UUID''s former-outlet order');
+select is(
+  (select count(*) from public.billing_event_device_labels(
+    'order',array['f3000000-0000-4000-a000-000000000001'::uuid])),
+  0::bigint,
+  'the label reader does not turn the stable device UUID into former-outlet access');
 select is((select count(*) from public.orders where id=:'NEW_ORDER'),1::bigint,
   'the destination shift reads destination orders');
+select results_eq(
+  $$select event_id,label from public.billing_event_device_labels(
+      'order',array['f3000000-0000-4000-a000-000000000002'::uuid])$$,
+  $$values ('f3000000-0000-4000-a000-000000000002'::uuid,'Kanchrapara front counter'::text)$$,
+  'a destination order resolves the tablet identity effective when it was taken');
 select is((select count(*) from public.billing_commands where id=:'OLD_COMMAND'),0::bigint,
   'the destination shift does not expose a former-outlet command receipt');
 select is((select count(*) from public.billing_commands where id=:'NEW_COMMAND'),1::bigint,
@@ -312,6 +344,11 @@ select pg_temp.unimpersonate();
 select pg_temp.impersonate(:'FA_KAL'::uuid);
 select is((select count(*) from public.orders where id=:'OLD_ORDER'),1::bigint,
   'the former outlet manager retains its historical order');
+select results_eq(
+  $$select event_id,label from public.billing_event_device_labels(
+      'order',array['f3000000-0000-4000-a000-000000000001'::uuid])$$,
+  $$values ('f3000000-0000-4000-a000-000000000001'::uuid,'Kalyani second counter'::text)$$,
+  'the old order keeps the tablet name effective before either later edit');
 select is((select count(*) from public.billing_commands where id=:'OLD_COMMAND'),1::bigint,
   'the former outlet manager retains its historical command receipt');
 select is((select count(*) from public.counter_shifts where id=:'OLD_SHIFT'),1::bigint,
@@ -324,6 +361,55 @@ select ok(
     'public.edit_counter_device(uuid,uuid,text,uuid)',
     'EXECUTE'),
   'the reusable edit RPC is not callable by an application session');
+select ok(
+  not has_table_privilege('authenticated','public.counter_device_history','SELECT'),
+  'application roles cannot bypass the bounded label reader and select identity history');
+
+select pg_temp.impersonate(:'OWNER'::uuid);
+select results_eq(
+  $$select event_id,label from public.billing_event_device_labels(
+      'bill',array['50000000-0000-4000-a000-000000000001'::uuid])$$,
+  $$values ('50000000-0000-4000-a000-000000000001'::uuid,'Kalyani counter tablet'::text)$$,
+  'the bounded reader resolves bill labels as well as order labels');
+select throws_ok(
+  $$select * from public.billing_event_device_labels(
+      'bill',array(select gen_random_uuid() from generate_series(1,1001)))$$,
+  '42501',
+  'invalid billing device-label request',
+  'the event-label reader refuses pages beyond its fixed bound');
+select pg_temp.unimpersonate();
+
+-- Production-shaped temporal depth: the event reader's inner lookup must stay
+-- logarithmic as one tablet accumulates years of renames/transfers.
+delete from public.counter_device_history
+ where device_id='10000000-0000-4000-a000-000000000009';
+insert into public.counter_device_history
+  (device_id,outlet_id,label,valid_from,valid_to)
+select '10000000-0000-4000-a000-000000000009', :'KAL', 'Historical label '||g,
+       timestamptz '2020-01-01 00:00:00+00' + g*interval '1 day',
+       case when g=999 then null
+            else timestamptz '2020-01-01 00:00:00+00' + (g+1)*interval '1 day' end
+  from generate_series(0,999) g;
+
+create function pg_temp.history_lookup_plan()
+returns text language plpgsql as $$
+declare v_plan json;
+begin
+  perform set_config('enable_seqscan','off',true);
+  execute $plan$
+    explain (format json)
+    select label from public.counter_device_history
+     where device_id='10000000-0000-4000-a000-000000000009'
+       and valid_from <= timestamptz '2022-01-01 12:00:00+00'
+       and (valid_to is null or timestamptz '2022-01-01 12:00:00+00' < valid_to)
+     order by valid_from desc limit 1
+  $plan$ into v_plan;
+  return v_plan::text;
+end;
+$$;
+select ok(
+  pg_temp.history_lookup_plan() like '%counter_device_history_lookup%',
+  'the temporal event-label lookup uses the device/effective-time index');
 
 select * from finish();
 rollback;
