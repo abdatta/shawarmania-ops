@@ -248,9 +248,9 @@ test('two tablets bill one outlet at once, own their own orders, and neither dra
     await saveOrder(one.page, 'Kitchen Owes This')
 
     // The outlet's pipeline, on the other till: the order is there, named with
-    // the counter that took it, and every control on it stands down. Without
-    // the till chip this card is indistinguishable from its own work whenever
-    // one person holds both shifts.
+    // the counter that took it, and its two facts are *printed* rather than
+    // offered. Without the till chip this card is indistinguishable from its own
+    // work whenever one person holds both shifts.
     /*
       Scoped to THIS order's card, not to the rail.
 
@@ -271,14 +271,27 @@ test('two tablets bill one outlet at once, own their own orders, and neither dra
     const neighbourCard = cardFor(two.page, 'Kitchen Owes This')
     await expect(neighbourCard).toBeVisible({ timeout: 20_000 })
     await expect(neighbourCard).toContainText(`on ${TILL_ONE.label}`)
-    await expect(neighbourCard.getByRole('button', { name: 'Prepared' })).toBeDisabled()
+    /*
+      Drawn without control chrome rather than as a dimmed button (#55): a
+      disabled button is a promise the screen is refusing to keep, and billers
+      read it as breakage. So the assertion is that there is no control here at
+      all — just the fact, with no pressed state to misreport to a screen
+      reader — which is a stronger claim than "disabled" was.
+    */
+    await expect(neighbourCard.getByRole('button', { name: 'Prepared' })).toHaveCount(0)
+    const neighbourFact = neighbourCard.getByText('Prepared', { exact: true })
+    await expect(neighbourFact).toBeVisible()
+    await expect(neighbourFact).toHaveAttribute('data-fact', 'true')
+    await expect(neighbourFact).not.toHaveAttribute('aria-pressed', /.*/)
 
     // And the same order is still fully actionable on the till that took it,
-    // which is the assertion that keeps the gate from being "disable
-    // everything".
+    // which is the assertion that keeps the gate from being "stand everything
+    // down".
     const ownCard = cardFor(one.page, 'Kitchen Owes This')
     await expect(ownCard).toBeVisible({ timeout: 20_000 })
-    await expect(ownCard.getByRole('button', { name: 'Prepared' })).toBeEnabled()
+    const ownControl = ownCard.getByRole('button', { name: 'Prepared' })
+    await expect(ownControl).toBeEnabled()
+    await expect(ownControl).toHaveAttribute('aria-pressed', 'false')
     // Its own card names no till: the order is this counter's own work.
     await expect(ownCard).not.toContainText(`on ${TILL_ONE.label}`)
 
