@@ -157,6 +157,30 @@ read-only SQL transaction then agreed on all material facts:
 
 No customer, employee, device or receipt identifier is recorded here.
 
+## Identity-boundary correction
+
+The first production history split used its capture instant. That preserved the
+former tablet name through the incident bills, which is not the intended fact:
+the tablet became `Kalyani Counter 2` at Kalyani before the 2026-09-16 shift.
+
+A production read-only timeline found an unambiguous empty interval. The last
+prior Kanchrapara device event was 2026-09-15 22:26:27.526 IST. The incident-day
+Kalyani shift opened at 2026-09-16 12:32:03.552 IST, and no bill, order or shift
+event occurred between the 04:00 IST business-day cutover and that opening.
+Therefore the corrective boundary is 2026-09-16 04:00 IST. The correction must
+move only the old interval's `valid_to` and current interval's `valid_from` to
+that instant; it must not rewrite bills, orders, device authority or money.
+
+A restored production clone then ran the dedicated boundary operator through
+plan, outside-Git capture, apply, fresh verify, exact rollback, re-apply and
+re-verify. Before the correction, 778 bills and 829 orders resolved to the old
+label. Afterwards, the 741 bills and 790 orders before the cutover retained
+`Kanchrapara`, while all 37 incident bills and 39 incident orders resolved to
+`Kalyani Counter 2`. The intervals remained contiguous and non-overlapping.
+Every frozen bill/payment split, expense total, drawer figure and both bill
+counters stayed unchanged. The disposable clone and its container copies were
+removed after the rehearsal.
+
 The rehearsal bundle remained outside the repository under the operating
 system's temporary directory. It contains production identifiers and is not
 committed.
