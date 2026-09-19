@@ -79,7 +79,7 @@
 - [x] 5.1 In `abdatta/shawarmania-sync`, update documentation so
   `HYPERPURE_OPS_OUTLET_ID` is explicitly run-health attribution and not expense
   routing.
-- [ ] 5.2 At rollout, change `HYPERPURE_OPS_OUTLET_ID` from Kanchrapara's Ops UUID
+- [x] 5.2 At rollout, change `HYPERPURE_OPS_OUTLET_ID` from Kanchrapara's Ops UUID
   to Kalyani's Ops UUID; retain historical run rows unchanged.
 - [x] 5.3 Leave `HYPERPURE_DELIVERY_OUTLET_ID=1719650`, the Zomato picker card,
   stored credentials, capture workflow, login workflow and OTP mailbox code
@@ -105,7 +105,7 @@
   outlet, invoice/business date and paise; record that the 17 September order
   was the only post-cutover row requiring correction at proposal time, while
   treating every later arrival before deploy as part of the bounded correction.
-- [ ] 7.2 Run the repository suite from `.github/workflows/verify.yml`:
+- [x] 7.2 Run the repository suite from `.github/workflows/verify.yml`:
   `lint`, `format:check`, `typecheck`, `functions:typecheck`, unit tests,
   contrast and build, followed by `test:e2e`.
 - [x] 7.3 Because this changes a table, RLS, migration and money attribution,
@@ -114,22 +114,22 @@
   generated-type diff.
 - [x] 7.4 Run the companion sync repo's Hyperpure, session, workflow, format and
   static checks. Do not invoke `login.yml` or any OTP path.
-- [ ] 7.5 Pause only `hyperpure.yml`, deploy the migration and compatible Edge
+- [x] 7.5 Pause only `hyperpure.yml`, deploy the migration and compatible Edge
   changes, then change only the health-attribution variable.
-- [ ] 7.6 Dispatch `hyperpure.yml` with `rehearse=true`; if the stored session is
+- [x] 7.6 Dispatch `hyperpure.yml` with `rehearse=true`; if the stored session is
   unavailable or lapsed, stop and report the blocker without reconnecting.
-- [ ] 7.7 Dispatch one ordinary Hyperpure read, then prove in production:
+- [x] 7.7 Dispatch one ordinary Hyperpure read, then prove in production:
   through 15 September remains Kanchrapara; from 16 September is Kalyani; order
   `ZHPWB27-OR-0030242357` exists once at Kalyani for 110,129 paise; every
   Hyperpure source ref is globally unique; and the overlapping replay did not
   change the all-time paise total except for later genuine orders.
-- [ ] 7.8 Resume `hyperpure.yml`. Record the rehearsal, live-run URL and
+- [x] 7.8 Resume `hyperpure.yml`. Record the rehearsal, live-run URL and
   read-only database evidence. No OTP or re-login is an allowed verification
   dependency.
 
 ## 8. PHASE GATE
 
-- [ ] 8.1 **Gate (`hyperpure-delivery-cutover`):** every Hyperpure order invoiced
+- [x] 8.1 **Gate (`hyperpure-delivery-cutover`):** every Hyperpure order invoiced
   through 15 September 2026 remains booked once at Kanchrapara, every order
   invoiced from 16 September 2026 is booked once at Kalyani, order
   `ZHPWB27-OR-0030242357` (17 September, ₹1,101.29) is corrected to Kalyani,
@@ -137,6 +137,23 @@
   manual upload and scheduled read resolve the same outlet, every client role is
   refused route writes and every non-owner role is refused route reads, and no
   implementation or verification step invokes or changes a login or OTP path.
-- [ ] 8.2 Report every suite and live clause honestly. A lapsed stored session
+- [x] 8.2 Report every suite and live clause honestly. A lapsed stored session
   blocks only the optional live replay evidence; it never authorises escalation
   into login, reconnect or OTP.
+
+### Rollout evidence — 19 September 2026
+
+- Production deploy: <https://github.com/abdatta/shawarmania-ops/actions/runs/35422375947>
+  (all verify jobs, migration, Edge Functions and Pages deployment passed).
+- Stored-session rehearsal: <https://github.com/abdatta/shawarmania-sync/actions/runs/35422716533>
+  (`2026-08-22..2026-09-19`, no write, `outcome: ok`).
+- Ordinary replay: <https://github.com/abdatta/shawarmania-sync/actions/runs/35422750554>
+  (`added: 0`, `amended: 0`, `outcome: ok`).
+- Read-only postflight: 49 unvoided Hyperpure rows for 21,313,745 paise,
+  unchanged from baseline; 48 rows / 21,203,616 paise through 15 September at
+  `skpa`; one row / 110,129 paise from 16 September at `skalyani`; anchor
+  `ZHPWB27-OR-0030242357` exists once at `skalyani`; zero duplicate source refs;
+  latest non-rehearsal health run is `ok` at Kalyani.
+- `hyperpure.yml` is active. `HYPERPURE_DELIVERY_OUTLET_ID` remains `1719650`;
+  only `HYPERPURE_OPS_OUTLET_ID` changed to Kalyani's Ops UUID. No login,
+  reconnect, capture or OTP path ran.
