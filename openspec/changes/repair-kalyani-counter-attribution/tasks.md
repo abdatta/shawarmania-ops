@@ -540,14 +540,21 @@
   committed plan's repaired target high-water plus one, with its order, payment
   and command receipt at Kalyani. The number is not a build-time constant.
   Record that this closes the automatic rollback window.
-- [ ] 7.9 **Next-day check:** after business-date rollover, verify owner reports,
+- [x] 7.9 **Next-day check:** after business-date rollover, verify owner reports,
   Kalyani/Kanchrapara daily billing, drawer expectation, expenses and ledger all
   agree with the repaired day and the post-transfer sale; verify no delayed
   Kanchrapara command arrived from the tablet.
-- [ ] 7.10 PHASE GATE — both night-of database postflights, next-opening
+- [x] 7.10 PHASE GATE — both night-of database postflights, next-opening
   same-session/menu verification, first-use and next-day checks all agree; every
   disagreement was resolved before the next checkpoint rather than waived by
-  an earlier green check.
+  an earlier green check. Next-day acceptance ran 2026-09-19 after the 04:00 IST
+  rollover and is recorded in `evidence/next-day.md`: both repaired dates
+  reproduce their frozen figures exactly, the closed post-transfer day is
+  number-contiguous and reconciles at every layer, Kanchrapara recorded no bill,
+  order, expense, shift or command, and no delayed command ever arrived. Both
+  frozen operator `verify` modes are superseded by later deploys and a genuine
+  tablet rename; the gate was therefore proved by fresh read-only queries over
+  canonical rows rather than by re-running them.
 
 ### 7A. Finance-wide reconciliation and historical tablet identity
 
@@ -593,13 +600,18 @@
 - [x] 8.3 On a fresh local database run `npm run db:start && npm run db:reset`,
   then `npm run test:db`, `npm run test:rls`, `npm run test:e2e:auth`,
   `npm run db:types`, and verify the generated-type diff is expected/clean.
-- [ ] 8.4 After task 7 passes, securely remove the targeted before-image and
+- [x] 8.4 After task 7 passes, securely remove the targeted before-image and
   reversal under the task-1 retention decision. Keep the full snapshot under
   normal backup retention and retain only non-sensitive checksums/results in
-  `evidence/`.
+  `evidence/`. Done 2026-09-19: all three production before-image checksums were
+  re-verified against `cutover.md` and `finance-followup.md` and matched, then
+  40 targeted files across both restricted roots were overwritten with equal-
+  length random bytes, truncated and unlinked. Both full snapshots, `roles.sql`
+  and the decision/pin notes are retained; the retired inventory and its
+  checksums are in `evidence/backup.md`.
 - [x] 8.5 Run `npm run roadmap:sync` and confirm this intentionally unlisted
   incident change does not hand-edit or corrupt roadmap status.
-- [ ] 8.6 PHASE GATE — the proposal Gate is proved literally: the 2026-09-16
+- [x] 8.6 PHASE GATE — the proposal Gate is proved literally: the 2026-09-16
   trade reads wholly at Kalyani with unchanged money and identities, prior
   Kanchrapara history is intact, no number was reused, no fictional correction
   trail exists, the tablet continues at Kalyani without setup, authorised admins
