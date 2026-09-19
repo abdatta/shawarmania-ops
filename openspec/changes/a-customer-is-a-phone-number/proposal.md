@@ -221,6 +221,14 @@ UUID offline gives two tablets two ids for one phone; one loses the unique
 constraint and its bill references a row that does not exist. Bills are
 append-only, so it could not be corrected afterwards.
 
+**This lands in `billing-command-contract`, not `counter-billing`.** What it
+governs is the boundary — that the server resolves at the moment a command is
+recorded, from the phone the command carried rather than from a client-supplied
+identifier, and that the resolution can never refuse the sale. That is the same
+register as *Settlement readiness is checked at the database boundary* and
+*Content payloads carry their discounts and their rounding*. So this change
+carries two delta specs, and the customer link is in the second one.
+
 ### The rate bound must not be able to fail a sale
 
 `customer_create_or_get` checks `customer_lookup_exceeded` — 120 per caller per
