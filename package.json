@@ -30,12 +30,9 @@
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local > src/data-access/database.types.ts",
-    "auth:usernames": "node scripts/migrate-usernames.mjs",
-    "auth:usernames:rehearse": "node scripts/rehearse-username-migration.mjs",
     "auth:readiness": "node scripts/check-production-auth-readiness.mjs",
     "contrast": "node scripts/check-contrast.mjs",
     "icons:generate": "node scripts/generate-icons.mjs",
-    "repair:kalyani-attribution": "node scripts/repair-kalyani-counter-attribution.mjs",
     "roadmap:sync": "node openspec/tools/sync-roadmap-status.mjs"
   },
   "dependencies": {

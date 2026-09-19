@@ -644,9 +644,10 @@ drawer is counted mid-shift, at a time the collector picks, sometimes after
 skipping a day or two, and sometimes entered an hour later from somewhere else. A
 count taken at 22:00 measured against a whole business date's cash sales produces
 a difference that is fiction — **₹4,640 of it in one month across two outlets**,
-measured on August 2026 production data by
-`scripts/rehearse-august-drawer.mjs`. At Kanchrapara it is the ordinary case
-rather than an edge: 8 of its 13 cash dates traded past 22:00.
+measured on August 2026 production data by a one-off rehearsal that replayed the
+month through this repository's own drawer domain. At Kanchrapara it is the
+ordinary case rather than an edge: 8 of its 13 cash dates traded past 22:00.
+`docs/TESTING.md` records what that rehearsal established.
 
 **`drawer_observations`** — `id`, `outlet_id`, `counted_at`, `recorded_at`,
 `is_anchor`, `opening_paise`, `expected_paise`, `difference_paise`,

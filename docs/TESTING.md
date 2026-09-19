@@ -495,21 +495,16 @@ If a gate was not run, say so. A change reported as verified when the offline pa
 
 ## The August rehearsal (#11)
 
-`scripts/rehearse-august-drawer.mjs` replays a real month of production data
-through the **real** `src/domain/drawer.ts` — not a copy of it — and reports what
-it finds. It runs offline against a JSON snapshot kept **outside the repo**,
-because a production dump does not belong in git:
+A one-off rehearsal replayed a real month of August 2026 production data through
+the **real** `src/domain/drawer.ts`, offline, against a JSON snapshot kept
+outside the repo. The operator was retired once the interval arithmetic it
+justified had shipped and been in production use; it lives in the history of
+this repo rather than in `scripts/`, and the snapshot it read was never
+committed.
 
-```bash
-node --import ./scripts/lib/resolve-ts.mjs scripts/rehearse-august-drawer.mjs --snapshot <path.json>
-```
-
-**It reports and never repairs, and a clean run is a failure.** The production
-notebook's opening-cash chain is already broken in eleven places, and the script
-*asserts* three of them by date. A run that found none would mean the chain check
-had regressed — not that the data was sound — so it exits non-zero and says so.
-
-What it establishes, and each figure is measured rather than estimated:
+Its findings are kept here because they are the measured justification for
+decisions the drawer model still rests on. Each figure was measured rather than
+estimated:
 
 - **The mid-day boundary is worth ₹4,640 of fiction in one month.** Placing a
   22:00 count on every real trading date, ₹740 at Kalyani (4 bills, 3 dates) and
@@ -526,5 +521,8 @@ What it establishes, and each figure is measured rather than estimated:
   decision 5's claim that it needs no concept of its own is replayed against real
   rows rather than invented ones.
 
-Re-run it before any change to the interval arithmetic. It costs nothing to get
-wrong at a desk and a great deal to get wrong at a counter.
+Treat these as fixed measurements of a month that has passed, not as a gate.
+A change to the interval arithmetic is now covered by the drawer's own unit and
+database tests; if a future change needs a fresh replay, take a new snapshot and
+write the rehearsal against the month in question rather than restoring this
+one, whose findings are already spent.
