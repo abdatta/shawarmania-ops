@@ -43,24 +43,25 @@ SHALL carry that.
 
 ### Requirement: A saved order enters the preparation pipeline
 
-On saving, the surface SHALL put the order directly into Preparing, where its
-complete quantity-and-item lines SHALL be the primary information, followed by
-the customer name when one exists and the prominent total. Where the order was
-rung for a member, its card SHALL carry the member mark, read from the order's
-own snapshot, so preparation can be ordered or handled differently. Its order
-number SHALL remain visible as a secondary reference until payment or
-cancellation. The surface SHALL NOT add a separate latest-order card that can
-represent only one of several rapid orders. The order number SHALL be visually
-distinct from a bill number wherever both could be seen.
+On saving, the surface SHALL put the order directly into the pipeline list at
+its newest end, where its complete quantity-and-item lines SHALL be the primary
+information, followed by the customer name when one exists and the prominent
+total. Where the order was rung for a member, its card SHALL carry the member
+mark, read from the order's own snapshot, so preparation can be ordered or
+handled differently. Its order number SHALL remain visible as a secondary
+reference until payment or cancellation. The surface SHALL NOT add a separate
+latest-order card that can represent only one of several rapid orders. The order
+number SHALL be visually distinct from a bill number wherever both could be
+seen.
 
 #### Scenario: The order is saved
 
 - **WHEN** an order is accepted
-- **THEN** its preparation items and total appear immediately in Preparing, its customer is shown when known, and its order number remains available as a small reference
+- **THEN** its preparation items and total appear immediately at the newest end of the pipeline list, its customer is shown when known, and its order number remains available as a small reference
 
 #### Scenario: A member's order reaches the pipeline
 
-- **WHEN** an order rung for a member appears in Preparing
+- **WHEN** an order rung for a member appears in the pipeline list
 - **THEN** its card carries the member mark, and it carries no membership date, actor or figure
 
 #### Scenario: The order is paid

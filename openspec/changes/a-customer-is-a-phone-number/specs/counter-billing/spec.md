@@ -47,35 +47,6 @@ number as malformed while it is still being typed.
 - **WHEN** a label differing from the matched customer's saved name is carried on the order
 - **THEN** that label is snapshotted onto this order and bill only, and the saved global profile is unchanged
 
-### Requirement: The server links the sale to the customer, from the phone it was given
-
-A recorded order or bill SHALL be linked to the global customer identified by the
-phone the accepted command carried. The link SHALL be resolved by the server at
-the moment the command is recorded, and SHALL NOT be taken from a
-client-supplied identifier.
-
-A command carrying no phone SHALL be linked to no customer.
-
-The resolution SHALL NOT be subject to the interactive lookup's rate bound, and
-SHALL NOT be able to refuse the sale: a command whose customer cannot be resolved
-SHALL still be recorded, carrying its snapshots and no customer link.
-
-#### Scenario: A sale is rung against a number
-- **WHEN** an accepted command carries a valid phone
-- **THEN** the recorded order or bill is linked to the one global customer holding that phone, whether or not that customer existed beforehand
-
-#### Scenario: A tablet settles a day's offline trade at once
-- **WHEN** a tablet that has been offline drains far more queued commands than the interactive lookup bound permits in its window
-- **THEN** every command is recorded and linked, and none is refused
-
-#### Scenario: A skipped sale is linked to nobody
-- **WHEN** an accepted command carries no phone
-- **THEN** the recorded order or bill carries no customer link, and no customer is created
-
-#### Scenario: The directory cannot be reached
-- **WHEN** the customer cannot be resolved while a command is being recorded
-- **THEN** the sale is still recorded with its snapshots and no customer link, and the money is unaffected
-
 ### Requirement: A complete number resolves itself inside the customer dialog
 
 The counter SHALL request an exact customer match only when a complete valid
@@ -140,7 +111,7 @@ in the bill column, and both paths SHALL carry whatever discount results.
 
 #### Scenario: Food has to be made first
 - **WHEN** an operator chooses Order
-- **THEN** the order appears in Preparing with its order number and no bill number
+- **THEN** the order appears at the newest end of the pipeline list with its order number and no bill number
 
 #### Scenario: The biller has not decided yet
 - **WHEN** the current bill has items and the customer control has not been used
@@ -151,6 +122,36 @@ in the bill column, and both paths SHALL carry whatever discount results.
 - **THEN** both terminal actions become available
 
 ## ADDED Requirements
+
+### Requirement: The server links the sale to the customer, from the phone it was given
+
+A recorded order or bill SHALL be linked to the global customer identified by the
+phone the accepted command carried. The link SHALL be resolved by the server at
+the moment the command is recorded, and SHALL NOT be taken from a
+client-supplied identifier.
+
+A command carrying no phone SHALL be linked to no customer.
+
+The resolution SHALL NOT be subject to the interactive lookup's rate bound, and
+SHALL NOT be able to refuse the sale: a command whose customer cannot be resolved
+SHALL still be recorded, carrying its snapshots and no customer link.
+
+#### Scenario: A sale is rung against a number
+- **WHEN** an accepted command carries a valid phone
+- **THEN** the recorded order or bill is linked to the one global customer holding that phone, whether or not that customer existed beforehand
+
+#### Scenario: A tablet settles a day's offline trade at once
+- **WHEN** a tablet that has been offline drains far more queued commands than the interactive lookup bound permits in its window
+- **THEN** every command is recorded and linked, and none is refused
+
+#### Scenario: A skipped sale is linked to nobody
+- **WHEN** an accepted command carries no phone
+- **THEN** the recorded order or bill carries no customer link, and no customer is created
+
+#### Scenario: The directory cannot be reached
+- **WHEN** the customer cannot be resolved while a command is being recorded
+- **THEN** the sale is still recorded with its snapshots and no customer link, and the money is unaffected
+
 
 ### Requirement: The customer is identified from one control that opens a keypad
 
