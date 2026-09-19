@@ -3585,6 +3585,32 @@ export type Database = {
           },
         ]
       }
+      supplier_delivery_routes: {
+        Row: {
+          effective_from: string
+          outlet_id: string
+          source_system: string
+        }
+        Insert: {
+          effective_from: string
+          outlet_id: string
+          source_system: string
+        }
+        Update: {
+          effective_from?: string
+          outlet_id?: string
+          source_system?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_delivery_routes_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       effective_bill_payments: {
@@ -3786,6 +3812,7 @@ export type Database = {
       }
       app_username_from_auth_alias: { Args: { input: string }; Returns: string }
       app_username_valid: { Args: { input: string }; Returns: boolean }
+      apply_hyperpure_delivery_cutover: { Args: never; Returns: Json }
       assert_payment_method_narrowing_safe: {
         Args: { p_has_aggregator_history: boolean }
         Returns: undefined

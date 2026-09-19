@@ -10,7 +10,9 @@ Quality is part of the brand promise: the menu is lab-tested (NABL/ISO 17025 acc
 
 ## Outlets
 
-Both are live counters. These are the seed records for the system.
+Kalyani is the active counter. Kanchrapara operations are paused after trading
+through 15 September 2026, but its historical records and outlet identity remain
+intact. These are the seed records for the system.
 
 | | Kalyani | Kanchrapara |
 |---|---|---|
@@ -34,6 +36,11 @@ Home delivery line (shared): **033 2582 3100**. FSSAI licences: `22825123001193`
 **Coordinates are outstanding and cannot be looked up.** They must be taken standing at each counter, not from a map search — a map pin can be tens of metres out, which against a 150 m fence is most of the margin. Attendance (#5) is where they become load-bearing; until then the schema seeds approximate values. See the 🧍 item in that change's proposal.
 
 Note that both outlets currently publish the same contact number. The data model still stores contact per outlet — franchise outlets will have their own, and the owner needs to reach a specific outlet.
+
+Hyperpure deliveries followed the physical operation: Kanchrapara is the
+delivery outlet for invoices through 15 September 2026, and Kalyani is the
+delivery outlet from 16 September 2026. The provider app's displayed location
+may lag this operational fact, so invoice-date routing in Ops is authoritative.
 
 ## Menu
 

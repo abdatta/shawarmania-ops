@@ -106,10 +106,10 @@ function parseCsv(text: string): string[][] {
 /**
  * The outlet map, read from the database rather than trusted from the caller.
  *
- * A res id and a delivery flag are outlet facts, so they live on the outlet row.
- * The caller says which outlets it may write for — the reader by its env allow
- * list, a person by their own assignments — and the map is narrowed to those, so
- * a statement can never be booked against an outlet the caller does not hold.
+ * Zomato restaurant ids remain routing facts. `hyperpure_delivery` is retained
+ * only to populate the required version-1 compatibility field during rollout;
+ * the database routes each Hyperpure order by its invoice date. The map remains
+ * narrowed to permitted outlets so mixed old/new deployments interoperate.
  */
 async function outletMap(
   service: ReturnType<typeof serviceClient>,
@@ -133,16 +133,16 @@ async function outletMap(
   if (swiggyError) throw swiggyError
 
   const zomatoResIds: Record<string, string> = {}
-  let hyperpureOutletId = ''
+  let hyperpureCompatibilityOutletId = ''
   const swiggyRefs: Record<string, string> = {}
   for (const row of rows) {
     if (row.zomato_res_id) zomatoResIds[row.zomato_res_id] = row.id
-    if (row.hyperpure_delivery) hyperpureOutletId = row.id
+    if (row.hyperpure_delivery) hyperpureCompatibilityOutletId = row.id
   }
   for (const row of (swiggyRows ?? []) as { outlet_id: string; external_ref: string }[]) {
     swiggyRefs[row.external_ref] = row.outlet_id
   }
-  return { zomatoResIds, hyperpureOutletId, swiggyRefs }
+  return { zomatoResIds, hyperpureCompatibilityOutletId, swiggyRefs }
 }
 
 function secretMatches(offered: string, expected: string): boolean {

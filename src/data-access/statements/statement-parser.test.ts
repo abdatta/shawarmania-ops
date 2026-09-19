@@ -30,7 +30,7 @@ const OUTLETS: OutletMap = {
     '21917311': 'outlet-kalyani',
     '22675834': 'outlet-kanchrapara',
   },
-  hyperpureOutletId: 'outlet-kanchrapara',
+  hyperpureCompatibilityOutletId: 'outlet-kanchrapara',
 }
 
 // --- decoders (the thin byte layer, Node side) -----------------------------
@@ -95,7 +95,10 @@ function parseCsv(text: string): string[][] {
 
 // --- fixtures --------------------------------------------------------------
 
-function hyperpureBytes(): Uint8Array {
+function hyperpureBytes(
+  firstInvoiceDate = '2026-08-02',
+  secondInvoiceDate = '2026-08-04',
+): Uint8Array {
   const soa: (string | number)[][] = [
     ['Summary of Shawarmania'],
     [],
@@ -127,7 +130,7 @@ function hyperpureBytes(): Uint8Array {
       '2026-08-01',
       'ZBS-1',
       'NON-TAXABLE_GOODS',
-      '2026-08-02',
+      firstInvoiceDate,
       1200,
       1200,
       '',
@@ -142,7 +145,7 @@ function hyperpureBytes(): Uint8Array {
       '2026-08-01',
       'ZHP-1',
       'TAXABLE_GOODS_AND_SERVICES',
-      '2026-08-02',
+      firstInvoiceDate,
       7633,
       8111.11,
       'CN-1',
@@ -158,7 +161,7 @@ function hyperpureBytes(): Uint8Array {
       '2026-08-03',
       'ZBS-2',
       'NON-TAXABLE_GOODS',
-      '2026-08-04',
+      secondInvoiceDate,
       1785,
       1785,
       '',
@@ -395,6 +398,20 @@ describe('the statement parser core', () => {
       expect(parsed.statement.outlet_id).toBe('outlet-kanchrapara')
       expect(parsed.statement.orders).toHaveLength(2)
     })
+
+    it('gives scheduled and manually uploaded cross-boundary bytes the same candidate', () => {
+      const bytes = hyperpureBytes('2026-09-15', '2026-09-16')
+      const scheduled = parseStatement(decodeXlsx(bytes), OUTLETS)
+      const manual = parseStatement(decodeXlsx(bytes), OUTLETS)
+
+      expect(manual).toEqual(scheduled)
+      if (scheduled.kind !== 'hyperpure-statement') throw new Error('wrong kind')
+      expect(scheduled.statement.outlet_id).toBe('outlet-kanchrapara')
+      expect(scheduled.statement.orders.map((order) => order.invoice_date)).toEqual([
+        '2026-09-15',
+        '2026-09-16',
+      ])
+    })
   })
 
   describe('Zomato order history: a provisional cycle per outlet, no PII', () => {
@@ -498,7 +515,7 @@ function annexureRow(overrides: Record<number, string>): string[] {
 
 const SWIGGY_OUTLETS: OutletMap = {
   zomatoResIds: {},
-  hyperpureOutletId: '',
+  hyperpureCompatibilityOutletId: '',
   swiggyRefs: { '9999999': 'outlet-kalyani' },
 }
 

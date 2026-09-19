@@ -699,8 +699,34 @@ Notes that save a support call:
 - **Re-uploading the same file changes nothing.** A purchase is keyed on its order
   number and a settled day is final, so nothing is counted twice.
 
-If the reader itself has merely lost its session, prefer **Reconnect** on the same
-page over an upload: it repairs the session and the next scheduled run catches up.
+### Changing Hyperpure's physical delivery outlet
+
+Hyperpure attribution changes by invoice date, not by changing the provider
+app's current address and not by flipping one undated outlet flag. Add a dated
+row to `supplier_delivery_routes`; a statement spanning the boundary will then
+route its orders to both outlets in one atomic ingest. Hyperpure order identity
+is global across outlets, so replaying the normal 28-day window cannot create a
+second expense after a cutover.
+
+For a production cutover, pause only `hyperpure.yml`, apply the reviewed forward
+migration and compatible parser, then change `HYPERPURE_OPS_OUTLET_ID` in
+`abdatta/shawarmania-sync` to the outlet that should own future **run-health**
+rows. That variable does not route expenses and historical health rows stay
+where they were recorded. `HYPERPURE_DELIVERY_OUTLET_ID` is the account-level
+API header and does not change merely because physical delivery moved.
+
+Verify first with `rehearse=true`, then one ordinary read, using only the stored
+session. The rehearsal downloads and reconciles but posts nothing. If the stored
+session is unavailable or lapsed, stop and report that blocker: this procedure
+does not dispatch `login.yml`, start capture/reconnect, open a code request, or
+request or submit an OTP. After the ordinary read, verify the dated outlet split,
+global source-reference uniqueness, the expected anchor order and unchanged
+paise under replay before resuming `hyperpure.yml`.
+
+Outside this guarded cutover procedure, if the reader itself has merely lost its
+session, prefer **Reconnect** on the same page over an upload: it repairs the
+session and the next scheduled run catches up. During this cutover, a lapsed
+session is a stop condition and never authorises reconnect or OTP work.
 
 One reconnect covers both channels *(#44)*. Pressing it first checks what is
 actually broken, then does the least repair that works: if only Hyperpure has

@@ -676,7 +676,8 @@ select is(
                          'amount_paise', 410000),
       jsonb_build_object('order_ref', 'HP-2', 'invoice_date', pg_temp.day(18),
                          'amount_paise', 220000))
-  ), pg_temp.outlets()) -> 'summary' -> 'supply_orders',
+  ), array['00000000-0000-4000-a000-000000000001'::uuid,
+           '00000000-0000-4000-a000-000000000002'::uuid]) -> 'summary' -> 'supply_orders',
   jsonb_build_object('added', 2, 'amended', 0),
   'two orders the ledger had never seen are two orders added');
 
@@ -689,7 +690,8 @@ select is(
                          'amount_paise', 410000),
       jsonb_build_object('order_ref', 'HP-2', 'invoice_date', pg_temp.day(18),
                          'amount_paise', 231500))
-  ), pg_temp.outlets()) -> 'summary' -> 'supply_orders',
+  ), array['00000000-0000-4000-a000-000000000001'::uuid,
+           '00000000-0000-4000-a000-000000000002'::uuid]) -> 'summary' -> 'supply_orders',
   jsonb_build_object('added', 0, 'amended', 1),
   're-reading the same statement reports only the order whose figure actually moved');
 

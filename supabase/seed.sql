@@ -51,6 +51,19 @@ values
    22.9450, 88.4330, 150, time '04:00', time '20:00',
    null, null);
 
+-- Supplier delivery attribution is an effective-dated database fact. The
+-- migration seeds production, where outlet rows already exist; a local reset
+-- applies migrations before this synthetic seed, so mirror those exact routes
+-- here after the deterministic outlet ids exist.
+insert into public.supplier_delivery_routes (source_system, effective_from, outlet_id)
+values
+  ('hyperpure', date '0001-01-01', '00000000-0000-4000-a000-000000000002'),
+  ('hyperpure', date '2026-09-16', '00000000-0000-4000-a000-000000000001');
+
+update public.outlets
+   set hyperpure_delivery = (code = 'kalyani')
+ where code in ('kalyani', 'kanchrapara');
+
 -- ---------------------------------------------------------------------------
 -- Auth users. Username + password, encoded through the reserved
 -- non-deliverable Auth alias required by Supabase's native password grant.

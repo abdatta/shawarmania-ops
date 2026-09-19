@@ -47,7 +47,7 @@ export const outletFixtures: Tables<'outlets'>[] = [
       { basis: 'percent', value: 1500 },
       { basis: 'percent', value: 2000 },
     ],
-    hyperpure_delivery: false,
+    hyperpure_delivery: true,
     is_active: true,
     created_at: FIXTURE_CREATED_AT,
     location_accuracy_m: 9,
@@ -84,7 +84,7 @@ export const outletFixtures: Tables<'outlets'>[] = [
       { basis: 'percent', value: 1500 },
       { basis: 'percent', value: 2000 },
     ],
-    hyperpure_delivery: true,
+    hyperpure_delivery: false,
     is_active: true,
     created_at: FIXTURE_CREATED_AT,
     // Never surveyed, mirroring supabase/seed.sql — so the demo shows both

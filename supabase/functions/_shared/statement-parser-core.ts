@@ -24,17 +24,17 @@ export interface DecodedStatement {
 }
 
 /**
- * Which operator outlet a source's own outlet id belongs to.
+ * Compatibility identifiers copied into version-1 payloads.
  *
- * Passed in rather than hard-coded, because it is deployment configuration: the
- * Zomato restaurant ids and the Hyperpure delivery outlet are the account's, not
- * the parser's.
+ * Zomato still routes by its restaurant id. Hyperpure is different: its value
+ * only keeps old and new deployments interoperable; the database resolves each
+ * order from effective-dated delivery routes and never trusts this field.
  */
 export interface OutletMap {
   /** Zomato restaurant id -> operator outlet uuid. */
   zomatoResIds: Record<string, string>
-  /** The operator outlet a Hyperpure delivery is booked against (shared cost). */
-  hyperpureOutletId: string
+  /** Legacy value for the version-1 field; never Hyperpure routing authority. */
+  hyperpureCompatibilityOutletId: string
   /** Swiggy portal restaurant reference -> operator outlet uuid. */
   swiggyRefs?: Record<string, string>
 }
@@ -489,7 +489,9 @@ export function parseHyperpure(
 
   return {
     contract_version: 1,
-    outlet_id: outlets.hyperpureOutletId,
+    // Version 1 requires this field. It is deliberately compatibility-only:
+    // ingest_supply_statement routes each order by source + invoice date.
+    outlet_id: outlets.hyperpureCompatibilityOutletId,
     source_system: 'hyperpure',
     category: 'Hyperpure',
     orders,

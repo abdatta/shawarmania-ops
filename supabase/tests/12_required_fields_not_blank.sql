@@ -211,6 +211,16 @@ select throws_ok($$
 $$, '23514', null, 'an alert cannot be inserted with a whitespace-only subject');
 
 select throws_ok($$
+  insert into public.supplier_delivery_routes (source_system, effective_from, outlet_id)
+  values ('', date '2026-09-18', '00000000-0000-4000-a000-000000000001')
+$$, '23514', null, 'a supplier route cannot be inserted with an empty source');
+
+select throws_ok($$
+  insert into public.supplier_delivery_routes (source_system, effective_from, outlet_id)
+  values ('   ', date '2026-09-18', '00000000-0000-4000-a000-000000000001')
+$$, '23514', null, 'a supplier route cannot be inserted with a whitespace-only source');
+
+select throws_ok($$
   insert into public.alerts (outlet_id, raised_by, subject, message, category)
   values ('00000000-0000-4000-a000-000000000001',
           '10000000-0000-4000-a000-000000000001', 'A subject', '', 'other')
@@ -321,6 +331,7 @@ $$, $$ values
   -- A restaurant mapping names an external identity; one that occupies the
   -- field and says nothing would be an ambiguous write waiting to happen.
   ('outlet_channel_restaurants_ref_not_blank'),
+  ('supplier_delivery_routes_source_not_blank'),
   -- The drawer (#11). An observation's note is OPTIONAL, on exactly the
   -- reasoning `manual_ledger_days_note_not_blank` gives: it exists to explain a
   -- difference, and most counts have none to explain. What is refused is a note

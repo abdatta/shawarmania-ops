@@ -913,13 +913,27 @@ Seven properties are load-bearing and easy to undo by accident:
   a second spelling cannot recreate the duplicate reserving it prevents. It is
   written only by the supply origin, from a statement.
 - **A supply purchase carries a source identity and a shared-cost marker.**
-  `source_system`/`source_ref` (unique per outlet) key one supplier order to one
-  row, so a re-read, a later statement and a hand upload cannot triplicate it;
-  `shared_cost` marks a purchase booked once against its delivery outlet but drawn
-  on by both kitchens from one inventory. A payout recovery of such a purchase is
-  reconciliation only and writes no expense, because the supplier's own statement
-  already recorded it. A machine-sourced row carries its source identity **instead
-  of** a recorder, rather than falsely naming a human.
+  `source_system`/`source_ref` key one supplier order to one row, so a re-read, a
+  later statement and a hand upload cannot triplicate it. Hyperpure order
+  numbers are account-global, so their partial unique index deliberately omits
+  `outlet_id` and includes withdrawn rows; other sources retain outlet-local
+  identity until their references prove global. If a stored Hyperpure order is
+  at an outlet different from its dated route, ingest reports an attribution
+  conflict and never duplicates or silently moves it. `shared_cost` marks a
+  purchase booked once against its delivery outlet but drawn on by both kitchens
+  from one inventory. A payout recovery of such a purchase is reconciliation
+  only and writes no expense, because the supplier's own statement already
+  recorded it. A machine-sourced row carries its source identity **instead of**
+  a recorder, rather than falsely naming a human.
+- **Supplier delivery routing is dated configuration.**
+  `supplier_delivery_routes` carries `source_system`, `effective_from date` and
+  `outlet_id`, keyed by source and start date. An invoice uses the greatest start
+  not later than its invoice date. Hyperpure routes to Kanchrapara from
+  `0001-01-01` and to Kalyani from `2026-09-16`; the historical default resolves
+  old invoices before any books-opening fallback changes their ledger date.
+  Only the Super Admin may read this table and no client role may write it.
+  `outlets.hyperpure_delivery` remains temporarily to populate the version-1
+  payload during mixed deployment, but it is not routing authority.
 - **There is no capital marker, deliberately.** Capital spending is not recorded
   here at all, so the monthly figure is a cash-basis *operating* estimate and the
   surface says so. Equipment paid for from the drawer is recorded as cash taken

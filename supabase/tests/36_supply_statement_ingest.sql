@@ -1,11 +1,6 @@
--- One supplier order, one expense row, whatever reads it and whenever.
---
--- The failure this guards is a purchase counted twice: the same Hyperpure order
--- reaching the ledger from a statement, then a later statement that still lists
--- it, then a person supplying the file by hand. Each is a true-looking write, and
--- three of them for one purchase overstates the cost threefold. The key is the
--- order number, not an amount-and-date match, because two real purchases of
--- similar size on nearby days are ordinary and must both stand.
+-- A supplier order is globally unique where the supplier proves account-level
+-- order numbers, and its physical delivery outlet is resolved from dated
+-- database configuration rather than a caller assertion.
 
 begin;
 create extension if not exists pgtap with schema extensions;
@@ -24,138 +19,216 @@ returns jsonb language sql as $$
                             '00000000-0000-4000-a000-000000000002'::uuid]))
 $$;
 
-create function pg_temp.day(back int)
-returns date language sql stable as $$
-  select public.app_business_date(now(), time '04:00') - back
-$$;
-
--- A canonical expense establishes the earliest live book date the fallback can
--- find. The notebook archive is deliberately not a runtime input.
-insert into public.expenses
-  (outlet_id, business_date, category, is_cash, amount_paise, recorded_by)
-values (:'KAL', pg_temp.day(30), 'Other', false, 100,
-        '10000000-0000-4000-a000-000000000001');
-
--- ---------------------------------------------------------------------------
--- 1. The same order, three ways, is one row.
-
-create function pg_temp.hyperpure_payload(order_ref text, amount bigint, invoice date)
-returns jsonb language sql stable as $$
+create function pg_temp.hyperpure_payload(
+  orders jsonb,
+  asserted_outlet uuid default '00000000-0000-4000-a000-000000000002'
+)
+returns jsonb language sql immutable as $$
   select jsonb_build_object(
     'contract_version', 1,
-    'outlet_id', '00000000-0000-4000-a000-000000000001',
+    'outlet_id', asserted_outlet,
     'source_system', 'hyperpure',
     'category', 'Hyperpure',
-    'orders', jsonb_build_array(
-      jsonb_build_object('order_ref', order_ref, 'invoice_date', invoice,
-                         'amount_paise', amount, 'shared_cost', true)))
+    'orders', orders)
 $$;
 
-select is(
-  pg_temp.ingest(pg_temp.hyperpure_payload('ZHPWB27-OR-1', 931100, pg_temp.day(10))) ->> 'outcome',
-  'ok',
-  'a Hyperpure statement is ingested');
+create function pg_temp.order_row(ref text, invoice date, amount bigint)
+returns jsonb language sql immutable as $$
+  select jsonb_build_object(
+    'order_ref', ref,
+    'invoice_date', invoice,
+    'amount_paise', amount,
+    'description', 'Hyperpure ' || ref,
+    'shared_cost', true)
+$$;
 
-select is(
-  pg_temp.ingest(pg_temp.hyperpure_payload('ZHPWB27-OR-1', 931100, pg_temp.day(10))) ->> 'outcome',
-  'ok',
-  'and read again from a later statement');
-
--- Supplied by hand is the same function with the same payload: there is no
--- second path, so there is no second row it could make.
-select is(
-  pg_temp.ingest(pg_temp.hyperpure_payload('ZHPWB27-OR-1', 931100, pg_temp.day(10))) ->> 'outcome',
-  'ok',
-  'and supplied by hand a third time');
-
-select is(
-  (select count(*) from public.expenses
-    where outlet_id = :'KAL'::uuid and source_ref = 'ZHPWB27-OR-1'),
-  1::bigint,
-  'and the ledger holds exactly one row for it, keyed on the order number');
-
-select is(
-  (select shared_cost from public.expenses
-    where outlet_id = :'KAL'::uuid and source_ref = 'ZHPWB27-OR-1'),
-  true,
-  'marked shared, because both kitchens draw on one Hyperpure inventory');
-
--- A revised figure updates the row it already owns rather than adding a second.
-select is(
-  pg_temp.ingest(pg_temp.hyperpure_payload('ZHPWB27-OR-1', 925000, pg_temp.day(10))) ->> 'outcome',
-  'ok',
-  'a corrected figure for the same order is accepted');
-
-select is(
-  (select amount_paise from public.expenses
-    where outlet_id = :'KAL'::uuid and source_ref = 'ZHPWB27-OR-1'),
-  925000::bigint,
-  'and it moves the one row rather than adding another');
-
-select is(
-  (select count(*) from public.expenses
-    where outlet_id = :'KAL'::uuid and source_ref = 'ZHPWB27-OR-1'),
-  1::bigint,
-  'still one row');
+-- Keep invoice dates visible rather than allowing the existing-books fallback
+-- to clamp them. Routing itself always happens before that fallback.
+insert into public.expenses
+  (outlet_id, business_date, category, is_cash, amount_paise, recorded_by)
+values
+  (:'KAL', date '2026-08-01', 'Other', false, 100,
+   '10000000-0000-4000-a000-000000000001'),
+  (:'KPA', date '2026-08-01', 'Other', false, 100,
+   '10000000-0000-4000-a000-000000000001');
 
 -- ---------------------------------------------------------------------------
--- 2. Dating: invoice date, with the opening fallback.
+-- One statement spans the cutover. Its top-level outlet is deliberately the
+-- wrong answer for one order and has no routing authority.
 
-select pg_temp.ingest(pg_temp.hyperpure_payload('ZHPWB27-OR-2', 300000, pg_temp.day(5)));
 select is(
-  (select business_date from public.expenses
-    where outlet_id = :'KAL'::uuid and source_ref = 'ZHPWB27-OR-2'),
-  pg_temp.day(5),
-  'an order is dated by its invoice date, the day the goods arrived');
+  pg_temp.ingest(pg_temp.hyperpure_payload(jsonb_build_array(
+    pg_temp.order_row('CUTOVER-15', date '2026-09-15', 1500),
+    pg_temp.order_row('CUTOVER-16', date '2026-09-16', 1600)
+  ), :'KAL')) ->> 'outcome',
+  'ok',
+  'one statement spanning the cutover is accepted');
 
--- Invoiced before the books open (day 30 is the earliest recorded day here).
-select pg_temp.ingest(pg_temp.hyperpure_payload('ZHPWB27-OR-3', 141990, pg_temp.day(40)));
 select is(
-  (select business_date from public.expenses
-    where outlet_id = :'KAL'::uuid and source_ref = 'ZHPWB27-OR-3'),
-  pg_temp.day(30),
-  'an order invoiced before the books open lands on the opening date, so a cost '
-  'settled from an in-period payout is recorded rather than lost');
+  (select outlet_id from public.expenses
+    where source_system = 'hyperpure' and source_ref = 'CUTOVER-15'),
+  :'KPA'::uuid,
+  'an order invoiced through 15 September routes to Kanchrapara');
 
--- ---------------------------------------------------------------------------
--- 3. Two genuine purchases of similar size on nearby days are two rows.
+select is(
+  (select outlet_id from public.expenses
+    where source_system = 'hyperpure' and source_ref = 'CUTOVER-16'),
+  :'KAL'::uuid,
+  'an order invoiced from 16 September routes to Kalyani');
 
-select pg_temp.ingest(jsonb_build_object(
-  'contract_version', 1, 'outlet_id', :'KAL', 'source_system', 'hyperpure',
-  'category', 'Hyperpure',
-  'orders', jsonb_build_array(
-    jsonb_build_object('order_ref', 'ZHPWB27-OR-A', 'invoice_date', pg_temp.day(6),
-                       'amount_paise', 300100),
-    jsonb_build_object('order_ref', 'ZHPWB27-OR-B', 'invoice_date', pg_temp.day(5),
-                       'amount_paise', 300000))));
 select is(
   (select count(*) from public.expenses
-    where outlet_id = :'KAL'::uuid and source_ref in ('ZHPWB27-OR-A', 'ZHPWB27-OR-B')),
+    where source_system = 'hyperpure' and source_ref in ('CUTOVER-15', 'CUTOVER-16')),
   2::bigint,
-  'two similar purchases on nearby days are two rows, because the key is the '
-  'order and not a tolerance a real pair would collide on');
+  'the cross-boundary statement creates exactly one row per order');
+
+-- Authority is checked against every resolved route. A failure on the second
+-- order rolls back the first order from the same function call.
+select throws_ok(
+  format($$select public.ingest_supply_statement(%L::jsonb, array[%L::uuid])$$,
+    pg_temp.hyperpure_payload(jsonb_build_array(
+      pg_temp.order_row('ONLY-KPA-FIRST', date '2026-09-15', 1000),
+      pg_temp.order_row('ONLY-KPA-SECOND', date '2026-09-16', 1000))), :'KPA'),
+  '42501', null,
+  'a manager missing the Kalyani route is refused');
+
+select is(
+  (select count(*) from public.expenses
+    where source_ref in ('ONLY-KPA-FIRST', 'ONLY-KPA-SECOND')),
+  0::bigint,
+  'the refused cross-boundary ingest leaves no partial write');
+
+select throws_ok(
+  format($$select public.ingest_supply_statement(%L::jsonb, array[%L::uuid])$$,
+    pg_temp.hyperpure_payload(jsonb_build_array(
+      pg_temp.order_row('ONLY-KAL', date '2026-09-15', 1000))), :'KAL'),
+  '42501', null,
+  'a manager missing the Kanchrapara route is refused');
+
+-- A route gap is a configuration error, never an invitation to trust the
+-- payload. The deletion is inside this rolled-back pgTAP transaction.
+delete from public.supplier_delivery_routes
+ where source_system = 'hyperpure' and effective_from = date '0001-01-01';
+
+select throws_ok(
+  format($$select public.ingest_supply_statement(%L::jsonb, array[%L::uuid, %L::uuid])$$,
+    pg_temp.hyperpure_payload(jsonb_build_array(
+      pg_temp.order_row('NO-ROUTE', date '2026-09-15', 1000))), :'KAL', :'KPA'),
+  '22023', null,
+  'an invoice with no effective route is refused rather than guessed');
+
+insert into public.supplier_delivery_routes (source_system, effective_from, outlet_id)
+values ('hyperpure', date '0001-01-01', :'KPA');
 
 -- ---------------------------------------------------------------------------
--- 4. The outlet and category guards.
+-- A 28-day account-level replay stays globally idempotent across the cutover.
+
+create temporary table replay_orders as
+select format('REPLAY-%s', d)::text as source_ref,
+       date '2026-08-20' + d as invoice_date,
+       (10000 + d)::bigint as amount_paise
+  from generate_series(0, 27) d;
+
+select is(
+  pg_temp.ingest(pg_temp.hyperpure_payload((
+    select jsonb_agg(pg_temp.order_row(source_ref, invoice_date, amount_paise)
+                     order by invoice_date)
+      from replay_orders
+  ), :'KPA')) ->> 'outcome',
+  'ok',
+  'the first 28-day statement is ingested');
+
+create temporary table replay_baseline as
+select count(*)::bigint as row_count, sum(amount_paise)::bigint as total_paise
+  from public.expenses where source_ref like 'REPLAY-%';
+
+select is(
+  pg_temp.ingest(pg_temp.hyperpure_payload((
+    select jsonb_agg(pg_temp.order_row(source_ref, invoice_date, amount_paise)
+                     order by invoice_date)
+      from replay_orders
+  ), :'KAL')) ->> 'outcome',
+  'ok',
+  'the same 28 days replay with the opposite asserted outlet');
+
+select is(
+  (select count(*) from public.expenses where source_ref like 'REPLAY-%'),
+  (select row_count from replay_baseline),
+  'the overlapping replay adds no rows');
+
+select is(
+  (select sum(amount_paise)::bigint from public.expenses where source_ref like 'REPLAY-%'),
+  (select total_paise from replay_baseline),
+  'the overlapping replay adds no paise');
+
+select is(
+  (select count(*) from (
+     select source_ref from public.expenses
+      where source_system = 'hyperpure'
+      group by source_ref having count(*) > 1
+   ) duplicates),
+  0::bigint,
+  'every Hyperpure order reference is globally unique');
+
+select is(
+  (select count(*) from public.expenses e join replay_orders r using (source_ref)
+    where r.invoice_date <= date '2026-09-15' and e.outlet_id <> :'KPA'),
+  0::bigint,
+  'the replay leaves every pre-cutover order at Kanchrapara');
+
+select is(
+  (select count(*) from public.expenses e join replay_orders r using (source_ref)
+    where r.invoice_date >= date '2026-09-16' and e.outlet_id <> :'KAL'),
+  0::bigint,
+  'the replay leaves every post-cutover order at Kalyani');
+
+-- ---------------------------------------------------------------------------
+-- An existing identity at the wrong outlet must be repaired by an audited
+-- migration; ingest cannot silently move it or insert a second copy.
+
+insert into public.expenses
+  (outlet_id, business_date, category, is_cash, amount_paise, description,
+   source_system, source_ref, shared_cost, recorded_by)
+values
+  (:'KPA', date '2026-09-17', 'Hyperpure', false, 1900,
+   'deliberately misattributed fixture', 'hyperpure', 'ATTRIBUTION-CONFLICT', true, null);
 
 select throws_ok(
-  format($$select public.ingest_supply_statement(
-    jsonb_build_object('contract_version', 1, 'outlet_id', %L, 'source_system', 'hyperpure',
-      'category', 'Hyperpure', 'orders', '[]'::jsonb),
-    array['%s'::uuid])$$, :'KPA', :'KAL'),
-  '42501', null,
-  'a statement naming an outlet the credential may not write is refused');
-
-select throws_ok(
-  format($$select public.ingest_supply_statement(
-    jsonb_build_object('contract_version', 1, 'outlet_id', %L, 'source_system', 'hyperpure',
-      'category', 'Chicken',
-      'orders', jsonb_build_array(jsonb_build_object(
-        'order_ref', 'X', 'invoice_date', %L, 'amount_paise', 1000))),
-    array['%s'::uuid, '%s'::uuid])$$, :'KAL', pg_temp.day(5), :'KAL', :'KPA'),
+  format($$select public.ingest_supply_statement(%L::jsonb, array[%L::uuid, %L::uuid])$$,
+    pg_temp.hyperpure_payload(jsonb_build_array(
+      pg_temp.order_row('ATTRIBUTION-CONFLICT', date '2026-09-17', 1900))), :'KAL', :'KPA'),
   '22023', null,
-  'a category the source does not own is refused, rather than dropped by the '
-  'reserved-category trigger where its absence would be noticed too late');
+  'an existing Hyperpure identity at the wrong outlet is refused explicitly');
+
+select is(
+  (select count(*) from public.expenses
+    where source_system = 'hyperpure' and source_ref = 'ATTRIBUTION-CONFLICT'),
+  1::bigint,
+  'the attribution conflict neither moves nor duplicates the stored row');
+
+-- Equal date and amount are ordinary; distinct order numbers are distinct
+-- purchases and must never be collapsed by a tolerance heuristic.
+select pg_temp.ingest(pg_temp.hyperpure_payload(jsonb_build_array(
+  pg_temp.order_row('EQUAL-A', date '2026-09-17', 300000),
+  pg_temp.order_row('EQUAL-B', date '2026-09-17', 300000))));
+
+select is(
+  (select count(*) from public.expenses
+    where source_system = 'hyperpure' and source_ref in ('EQUAL-A', 'EQUAL-B')),
+  2::bigint,
+  'different order numbers with equal dates and amounts remain two purchases');
+
+-- Reserved source/category ownership still rejects a malformed statement.
+select throws_ok(
+  format($$select public.ingest_supply_statement(
+    jsonb_build_object('contract_version', 1, 'outlet_id', %L,
+      'source_system', 'hyperpure', 'category', 'Chicken',
+      'orders', jsonb_build_array(jsonb_build_object(
+        'order_ref', 'WRONG-CATEGORY', 'invoice_date', '2026-09-17',
+        'amount_paise', 1000))), array[%L::uuid, %L::uuid])$$,
+    :'KPA', :'KAL', :'KPA'),
+  '22023', null,
+  'a category the source does not own is refused');
 
 select * from finish();
 rollback;
