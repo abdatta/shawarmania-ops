@@ -247,6 +247,56 @@ database outside it.
 - **WHEN** the operator cancels an unprepared order that was paid an hour earlier
 - **THEN** the cancellation is accepted with its reason and its warning, because the ticket was never finished
 
+### Requirement: A saved order enters the preparation pipeline
+
+On saving, the surface SHALL put the order directly into the pipeline list at
+its newest end, where its complete quantity-and-item lines SHALL be the primary
+information, followed by the customer name when one exists and the prominent
+total. Its order number SHALL remain visible as a secondary reference until
+payment or cancellation. The surface SHALL NOT add a separate latest-order card
+that can represent only one of several rapid orders. The order number SHALL be
+visually distinct from a bill number wherever both could be seen.
+
+#### Scenario: The order is saved
+
+- **WHEN** an order is accepted
+- **THEN** its preparation items and total appear immediately at the newest end of the pipeline list, its customer is shown when known, and its order number remains available as a small reference
+
+#### Scenario: The order is paid
+
+- **WHEN** an order becomes a paid bill
+- **THEN** the bill number identifies it from that point and the two numbers are never presented as interchangeable
+
+### Requirement: The composer supports immediate payment and saving an order
+
+The billing composer SHALL offer primary Order and secondary Mark Paid once at
+least one line exists and either customer name or phone is nonblank. Order SHALL
+create a tablet-owned order without assigning a bill number and SHALL clear the
+composer only after the adapter accepts it. Mark Paid SHALL open the tender dialog
+and create a paid result after exact payment allocation. This identification
+requirement SHALL exist only in the UI; the database SHALL keep both snapshots
+nullable.
+
+The composer SHALL offer an **Add discount** control, positioned below the lines
+in the bill column, and both paths SHALL carry whatever discount results.
+
+#### Scenario: Customer pays upfront
+- **WHEN** an operator opens Mark Paid, allocates the exact total and confirms Mark Paid
+- **THEN** a paid result is created directly, with no order saved first
+
+#### Scenario: A discount is applied before the order leaves
+- **WHEN** an operator adds a discount and then chooses Order or Mark Paid
+- **THEN** the accepted command carries that discount, its basis, and the bill's
+  rounding
+
+#### Scenario: Food has to be made first
+- **WHEN** an operator chooses Order
+- **THEN** the order appears at the newest end of the pipeline list with its order number and no bill number
+
+#### Scenario: Customer identification is missing
+- **WHEN** the current bill has items but both customer name and phone are blank
+- **THEN** Order and Mark Paid remain disabled with guidance to add either field, while no database constraint is added
+
 ## ADDED Requirements
 
 ### Requirement: A pipeline card states both of its answers in two fixed controls

@@ -209,13 +209,23 @@ void transition with its structured kind where a bill exists — an upfront
 payer paid before preparation holds its money without one, and unwinding it
 discards the held tender — and the order's return to open or to cancelled
 respectively. Both SHALL be refused unless the commanding tablet and shift are
-the ones that took the payment,
-under the same historical-shift validity every delayed command uses; where a
-bill exists it
-is settled and not already voided; the order is paid; and the commanding time
-falls within five minutes of the money's own `paid_at`. Outside that window
-both SHALL be refused permanently. Direct table writes performing either
-effect SHALL remain impossible for every client role.
+the ones that took the payment, under the same historical-shift validity every
+delayed command uses; where a bill exists it is settled and not already voided;
+the order is paid; and the commanding time falls **inside the ticket's edit
+window**.
+
+The ticket's edit window SHALL be derived, never stored: it closes five minutes
+after the later of the bill's `paid_at` and the order's `prepared_at`, and it
+SHALL NOT close at all while `prepared_at` is null, because a ticket whose food
+is still owed is not finished. A bill carrying no order SHALL close five minutes
+after its own `paid_at`. `correct_bill_payment` SHALL answer to the same window.
+Outside it all three SHALL be refused permanently. Direct table writes performing
+any of these effects SHALL remain impossible for every client role.
+
+No guard SHALL refuse an end-of-day confirmation on the grounds that a payment
+is still inside its window; finishing the day ends the window instead, and the
+shift requirement every command already answers to is what refuses a later
+unwind.
 
 #### Scenario: Preparation command replays exactly
 
@@ -229,13 +239,23 @@ effect SHALL remain impossible for every client role.
 
 #### Scenario: An unwind within the window succeeds atomically
 
-- **WHEN** the originating tablet submits `void_order_payment` inside five minutes of the bill's stored `paid_at`
+- **WHEN** the originating tablet submits `void_order_payment` inside the ticket's edit window
 - **THEN** the bill is void with kind `counter_unpay` and the order is open again in one transaction, or neither effect exists
+
+#### Scenario: An unwind on an unprepared order is always inside the window
+
+- **WHEN** either unwind command arrives an hour after payment for an order whose `prepared_at` is null
+- **THEN** it is accepted, because the window has not started
 
 #### Scenario: An unwind outside the window is refused
 
-- **WHEN** either unwind command's commanding time exceeds five minutes past the bill's stored `paid_at`
+- **WHEN** either unwind command's commanding time exceeds five minutes past the later of the bill's `paid_at` and the order's `prepared_at`
 - **THEN** the command is refused permanently, the bill stays settled and the order stays paid
+
+#### Scenario: A bill with no order keeps the payment-time window
+
+- **WHEN** a correction or unwind is submitted against a directly paid bill more than five minutes after its `paid_at`
+- **THEN** it is refused, because there is no preparation for the window to wait on
 
 #### Scenario: Another tablet cannot unwind a payment
 
@@ -246,6 +266,11 @@ effect SHALL remain impossible for every client role.
 
 - **WHEN** any session attempts the void transition through the data API
 - **THEN** the database refuses the write, whatever the window
+
+#### Scenario: A finished day refuses every unwind
+
+- **WHEN** any of the three commands is hand-crafted for a bill whose business day has been finished on its tablet
+- **THEN** the database refuses it
 
 ### Requirement: Content payloads carry their discounts and their rounding
 
