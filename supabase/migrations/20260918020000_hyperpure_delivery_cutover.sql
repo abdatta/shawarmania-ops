@@ -88,8 +88,18 @@ begin
   -- Compatibility only: an old parser still needs a value for the version-1
   -- top-level field while old and new deployments can overlap. The ingest
   -- function below never treats this boolean as routing authority.
-  update public.outlets set hyperpure_delivery = (id = v_kalyani)
-   where hyperpure_delivery or id = v_kalyani;
+  -- The compatibility marker has a partial unique index. PostgreSQL checks a
+  -- non-deferrable unique index row by row, so one CASE-style update can try to
+  -- set Kalyani true before it has cleared Kanchrapara and fail even though the
+  -- statement's final state would be unique. Clear the old holder first.
+  update public.outlets
+     set hyperpure_delivery = false
+   where hyperpure_delivery
+     and id <> v_kalyani;
+
+  update public.outlets
+     set hyperpure_delivery = true
+   where id = v_kalyani;
 end;
 $seed_routes$;
 

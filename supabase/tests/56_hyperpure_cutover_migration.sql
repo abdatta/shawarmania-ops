@@ -21,6 +21,28 @@ update public.outlets
    end
  where id in (:'KAL'::uuid, :'KPA'::uuid);
 
+-- Production begins with Kanchrapara holding the non-deferrable partial-unique
+-- compatibility marker. Rehearse the two-step handoff used by the migration:
+-- setting Kalyani true before clearing Kanchrapara would raise 23505 here.
+update public.outlets
+   set hyperpure_delivery = false
+ where id = :'KAL'::uuid;
+update public.outlets
+   set hyperpure_delivery = true
+ where id = :'KPA'::uuid;
+update public.outlets
+   set hyperpure_delivery = false
+ where hyperpure_delivery
+   and id <> :'KAL'::uuid;
+update public.outlets
+   set hyperpure_delivery = true
+ where id = :'KAL'::uuid;
+
+select is(
+  (select id from public.outlets where hyperpure_delivery),
+  :'KAL'::uuid,
+  'the compatibility marker moves through a unique-index-safe two-step handoff');
+
 -- Exact production-shaped boundary: one retained historical row, the named
 -- anchor, and a later genuine arrival that must join the bounded correction.
 insert into public.expenses
