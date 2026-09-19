@@ -1,6 +1,32 @@
 # Customer Loyalty And Cross-Outlet Insights
 
-**Type**: Feature · **Status**: Anticipated, not scheduled · **Area**: Customers
+**Type**: Feature · **Status**: **Partly promoted 2026-09-18** · **Area**: Customers
+
+## Partly promoted, 2026-09-18
+
+The trigger below fired: the owner decided to recognise regulars. What that
+decision actually needed was **a label granted by hand**, not a programme, so
+only the membership half graduated — as
+[`a-gold-member-is-a-label`](../changes/a-gold-member-is-a-label/proposal.md)
+(#57), where membership is **business-wide**, carries no automatic discount and
+is appointed by the owner from their phone.
+
+**What stays here**, unchanged and still waiting on its own trigger:
+
+- cross-outlet activity and spend **insight** as a reportable thing, beyond the
+  owner-only thirty-day figures #57 derives live inside one customer's card;
+- **automated appointment** — a rule that decides who becomes gold, and what
+  happens when a manual grant and a rule disagree;
+- any **benefit the system applies itself**, and with it the discount attribution
+  #57 deliberately does without (see its proposal: a hand-given gold discount is
+  indistinguishable from any other biller discount, which is the accepted cost);
+- **consent and franchise-agreement language** before activity from separate
+  outlets contributes to one brand-wide programme;
+- **merge, split and reassignment** of mistyped or reassigned numbers. #57 adds
+  rename and nothing else.
+
+The open questions below remain open except the first, which #57 answered: the
+business action was a label, and nothing more.
 
 ## Expectation
 
