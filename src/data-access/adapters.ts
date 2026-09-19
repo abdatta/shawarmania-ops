@@ -1823,6 +1823,32 @@ export class CustomerActionError extends DataActionError {
   }
 }
 
+/**
+ * How much of a number must be typed before anything is suggested.
+ *
+ * Four, and the floor is doing less work here than the outlet scope above: a
+ * till may only ever match its own customers, so the number of digits governs
+ * how useful the suggestion is rather than how much it discloses. Four is also
+ * about where a biller starts expecting the screen to react
+ * [owner, 2026-09-19].
+ */
+export const PARTIAL_PHONE_MIN_DIGITS = 4
+
+/**
+ * The one customer a partial number surfaces, and how many it did not.
+ *
+ * **The count is a number and never a list.** Its whole job is to tell the
+ * biller that the name in front of them is a best guess rather than the answer,
+ * so they keep typing instead of tapping. Anything that let them open the other
+ * matches would be the browse path this product refuses to build.
+ */
+export interface PartialPhoneMatch {
+  /** The best match: the customer this outlet served most recently. */
+  customer: CustomerIdentity
+  /** How many OTHER customers of this outlet also match. Never who they are. */
+  otherMatches: number
+}
+
 export interface CustomersAdapter {
   /**
    * Find a returning customer by their COMPLETE phone number.
@@ -1843,6 +1869,33 @@ export interface CustomersAdapter {
    * counter rename anybody.
    */
   createOrGet(input: { phone: string; name?: string | null }): Promise<CustomerIdentity>
+  /**
+   * The best match for a PARTIAL number, among customers **this outlet has
+   * already served**.
+   *
+   * **The outlet scope is the whole of its safety.** `customers` is
+   * business-wide, so a prefix search over the directory itself would let one
+   * franchise's till read another franchise's customers — which is the thing
+   * `global-customer-identity` was built not to allow. Scoped to the callers's
+   * own outlet, a partial number can only ever surface somebody this counter
+   * has served itself, which it already knew.
+   *
+   * Three rules the implementations share, and that a later change must not
+   * quietly relax:
+   *
+   *   1. **Never fewer than `PARTIAL_PHONE_MIN_DIGITS`.** Below that the answer
+   *      is null without asking anybody.
+   *   2. **One match or none, never a list.** A list is a directory. The count
+   *      of the others is returned so the counter can say "keep typing", and
+   *      that count is the only thing about them that ever leaves the server.
+   *   3. **The outlet comes from the caller's own authority**, never from an
+   *      argument — a till cannot ask about an outlet it does not work at.
+   *
+   * A complete number is a different question and keeps a different answer:
+   * `lookupByPhone` reaches the whole business, because a number given in full
+   * was given by the person it belongs to.
+   */
+  suggestByPartialPhone(partial: string): Promise<PartialPhoneMatch | null>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import { phoneErrorMessage, validateIndianPhone } from '../../../shared/phone'
 import {
   CustomerActionError,
+  PARTIAL_PHONE_MIN_DIGITS,
   type AppRole,
   type CustomerIdentity,
   type CustomersAdapter,
@@ -31,6 +32,19 @@ const MAY_LOOK_UP: readonly AppRole[] = ['biller']
 export interface DemoCustomers {
   /** Keyed by canonical phone, which is what identity means here. */
   byPhone: Map<string, CustomerIdentity>
+  /**
+   * The canonical phones **this outlet has served**, newest first.
+   *
+   * **Deliberately a separate list from the directory above**, because that is
+   * the real boundary: a partial number may only ever reach a customer this
+   * counter has already served, and never the business-wide directory. In
+   * production this is a join from the outlet's own bills; here it is a list,
+   * because the boundary is what the mock has to enforce, not the SQL.
+   *
+   * Seeded with the fixtures so the demo counter behaves like an outlet that
+   * has been trading a while rather than one that opened a minute ago.
+   */
+  servedAtThisOutlet: string[]
 }
 
 export function createDemoCustomers(): DemoCustomers {
@@ -38,6 +52,7 @@ export function createDemoCustomers(): DemoCustomers {
     byPhone: new Map(
       customerFixtures.map((row) => [row.phone, { id: row.id, phone: row.phone, name: row.name }]),
     ),
+    servedAtThisOutlet: customerFixtures.map((row) => row.phone),
   }
 }
 
@@ -74,7 +89,27 @@ export function createMockCustomersAdapter(
       requireBillingContext()
       const canonical = requirePhone(phone)
       const found = customers.byPhone.get(canonical)
+      if (found) noteServed(customers, canonical)
       return found ? copy(found) : null
+    },
+
+    async suggestByPartialPhone(partial) {
+      requireBillingContext()
+      const digits = partial.replace(/\D/g, '').slice(-10)
+      // Below the floor there is nothing to answer, and nobody is asked.
+      if (digits.length < PARTIAL_PHONE_MIN_DIGITS) return null
+
+      // This outlet's own customers, most recently served first, and **one of
+      // them or none**. Returning a list would make the counter a directory,
+      // which is the one thing this path must never become — so the rest are
+      // counted and nothing else about them leaves this function.
+      const matching = customers.servedAtThisOutlet
+        .map((phone) => customers.byPhone.get(phone))
+        .filter((identity): identity is CustomerIdentity =>
+          Boolean(identity?.phone.slice(-10).startsWith(digits)),
+        )
+      const [best] = matching
+      return best ? { customer: copy(best), otherMatches: matching.length - 1 } : null
     },
 
     async createOrGet({ phone, name }) {
@@ -84,7 +119,10 @@ export function createMockCustomersAdapter(
       const existing = customers.byPhone.get(canonical)
       // The rule this whole change turns on: a differing name at the counter
       // goes on the bill's snapshot, never over the saved profile.
-      if (existing) return copy(existing)
+      if (existing) {
+        noteServed(customers, canonical)
+        return copy(existing)
+      }
 
       const created: CustomerIdentity = {
         id: `d8000000-0000-4000-a000-${String(customers.byPhone.size + 100).padStart(12, '0')}`,
@@ -92,7 +130,16 @@ export function createMockCustomersAdapter(
         name: name?.trim() ? name.trim() : null,
       }
       customers.byPhone.set(canonical, created)
+      noteServed(customers, canonical)
       return copy(created)
     },
   }
+}
+
+/** Most recently served first, which is the order a suggestion is picked in. */
+function noteServed(customers: DemoCustomers, phone: string): void {
+  customers.servedAtThisOutlet = [
+    phone,
+    ...customers.servedAtThisOutlet.filter((served) => served !== phone),
+  ]
 }

@@ -18,10 +18,13 @@ import { cn } from '@/lib/cn'
  * Neither captures tender here; that is a dialog, so method buttons cannot crowd
  * the panel.
  *
- * Editing a saved order, the footer is not here at all — it has moved into the
+ * Editing a saved order, most of the footer is not here — it has moved into the
  * card docked against this column at the top of the activity rail, beside the
- * order it is changing. What is left is exactly what editing is about: the items,
- * and the accent outline and title saying which order they belong to. See
+ * order it is changing. **The customer row stays**, in the same place it sits
+ * while composing, because a biller who has just learnt where the customer goes
+ * should not have to find it again on the way back in [owner, 2026-09-19]. What
+ * is left is what editing is about: the items, who they are for, and the accent
+ * outline and title saying which order they belong to. See
  * `BillComposerFooter`, which is the one instance moving between the two.
  */
 export function BillPanel({

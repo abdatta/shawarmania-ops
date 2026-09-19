@@ -1,12 +1,12 @@
-import { Check, ListPlus } from 'lucide-react'
-import { useState } from 'react'
+import { Check, ListPlus, UserRound, UserRoundPlus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Money } from '@/components/ui/money'
 import type { BillLineDraft } from '@/data-access/adapters'
 import { billTotals } from '@/domain'
-import { phoneErrorMessage, validateIndianPhone } from '../../../shared/phone'
+import { formatIndianPhone } from '../../../shared/phone'
+
+import type { CustomerSelection } from './customer-dialog'
 
 /**
  * The composer's controls: the total, who the order is for, and how it leaves.
@@ -19,32 +19,39 @@ import { phoneErrorMessage, validateIndianPhone } from '../../../shared/phone'
  * what it is at that moment: the items, and nothing else.
  *
  * Exactly one instance is ever mounted. Two would mean two Save changes buttons
- * and two customer name fields sharing one id, which is a worse bug than
- * whichever layout problem tempted anyone into it.
+ * and two customer rows opening one dialog, which is a worse bug than whichever
+ * layout problem tempted anyone into it.
  *
- * Either customer name or phone is required by this UI trial. The database keeps
- * both nullable so the owner can reverse the trial without a migration.
+ * **The customer is one row, not two boxes.** Identity is decided in the dialog
+ * the row opens — the phone is what identifies somebody — and the row reports
+ * what was decided in three states, and a decision already made is changed by
+ * tapping the row again and making a different one.
+ *
+ * What enforces the decision is the terminal actions: they stay disabled until
+ * the biller has either identified somebody or skipped. There is no sentence
+ * under the row saying so, because a disabled Paid button beside an untouched
+ * row already says it, and a third way of saying the same thing is what the red
+ * line under the old inputs was. The requirement is this UI's, never the
+ * schema's: both snapshot columns stay nullable so the owner can reverse the
+ * trial without a migration.
  */
 export function BillComposerFooter({
   lines,
-  customerName,
-  customerPhone,
+  customer,
   settling,
   editing,
-  onCustomerNameChange,
-  onCustomerPhoneChange,
+  onOpenCustomer,
   onPaid,
   onSaveOrder,
   onCancelEdit,
   discountTotalPaise = 0,
 }: {
   lines: BillLineDraft[]
-  customerName: string
-  customerPhone: string
+  /** What the biller decided, or null while they have decided nothing. */
+  customer: CustomerSelection | null
   settling: boolean
   editing: boolean
-  onCustomerNameChange: (value: string) => void
-  onCustomerPhoneChange: (value: string) => void
+  onOpenCustomer: () => void
   onPaid: () => void
   onSaveOrder: () => void
   onCancelEdit?: (() => void) | undefined
@@ -58,25 +65,7 @@ export function BillComposerFooter({
 }) {
   const totals = billTotals(lines, { discountPaise: discountTotalPaise })
 
-  /*
-    A phone that is not a phone is worse than no phone at all: it is PII written
-    wrong, it will never match this customer again, and `customers.createOrGet`
-    quietly declines to save it — so without this the biller is told nothing and
-    the number lands on the bill anyway. Canonicalised by the same `shared/phone`
-    rule the database uses, so the form and the far end cannot disagree.
-  */
-  const phone = validateIndianPhone(customerPhone)
-  const typedPhone = customerPhone.trim() !== ''
-  const phoneIsBad = typedPhone && phone.error !== null
-
-  // Reported on blur, not on every keystroke: a number is incomplete for the
-  // first nine digits of typing it, and a red line that appears while somebody is
-  // still typing teaches them to ignore red lines.
-  const [phoneBlurred, setPhoneBlurred] = useState(false)
-  const showPhoneError = phoneIsBad && phoneBlurred
-
-  const hasCustomerIdentity = customerName.trim() !== '' || phone.phone !== null
-  const canComplete = !settling && lines.length > 0 && hasCustomerIdentity && !phoneIsBad
+  const canComplete = !settling && lines.length > 0 && customer !== null
 
   return (
     <div className="space-y-3">
@@ -92,62 +81,12 @@ export function BillComposerFooter({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-2">
-        <label className="sr-only" htmlFor="customer-name">
-          Customer name
-        </label>
-        <Input
-          id="customer-name"
-          className="h-11"
-          autoComplete="off"
-          placeholder="Customer name"
-          aria-describedby={
-            lines.length > 0 && !hasCustomerIdentity ? 'customer-requirement' : undefined
-          }
-          value={customerName}
-          onChange={(event) => onCustomerNameChange(event.target.value)}
-        />
-        <label className="sr-only" htmlFor="customer-phone">
-          Customer phone
-        </label>
-        <Input
-          id="customer-phone"
-          className="h-11"
-          type="tel"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          autoComplete="off"
-          placeholder="Phone number"
-          aria-invalid={showPhoneError || undefined}
-          aria-describedby={
-            showPhoneError
-              ? 'customer-phone-error'
-              : lines.length > 0 && !hasCustomerIdentity
-                ? 'customer-requirement'
-                : undefined
-          }
-          value={customerPhone}
-          onChange={(event) => onCustomerPhoneChange(event.target.value)}
-          onBlur={() => setPhoneBlurred(true)}
-          onFocus={() => setPhoneBlurred(false)}
-        />
-      </div>
-
-      {showPhoneError && (
-        <p
-          id="customer-phone-error"
-          data-testid="customer-phone-error"
-          className="text-xs font-semibold text-danger"
-        >
-          {phoneErrorMessage(phone.error!)}
-        </p>
-      )}
-
-      {!showPhoneError && lines.length > 0 && !hasCustomerIdentity && (
-        <p id="customer-requirement" className="text-xs font-semibold text-danger">
-          Add a customer name or phone to continue.
-        </p>
-      )}
+      {/*
+        Editing, this footer is docked in the rail and the panel renders the row
+        itself, in the place it always sits. Rendering it here too would be two
+        of one control — which is the failure this footer's own doc warns about.
+      */}
+      {!editing && <CustomerRow customer={customer} onOpen={onOpenCustomer} />}
 
       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
         <Button
@@ -183,5 +122,77 @@ export function BillComposerFooter({
         )}
       </div>
     </div>
+  )
+}
+
+/**
+ * What the row says once a decision exists.
+ *
+ * `Skipped Customer Info` is the ordinary skipped row — a decision, stated, and
+ * tappable again. It names what was skipped rather than saying the customer was,
+ * because there is still a customer; it is their details that were not taken.
+ *
+ * `Asha · no number` is an order rung **before** this change: every one of them
+ * carries a name and no phone, so reopening one has to say which half is
+ * missing without implying the name identifies anybody. A customer who gave a
+ * number but no name is their number, which is what they are.
+ */
+function customerRowLabel(customer: CustomerSelection): string {
+  if (customer.kind === 'skipped') {
+    return customer.name === '' ? 'Skipped Customer Info' : `${customer.name} · no number`
+  }
+  const phone = `+91 ${formatIndianPhone(customer.phone)}`
+  return customer.name === '' ? phone : `${customer.name} · ${phone}`
+}
+
+/**
+ * Who the order is for, as one control.
+ *
+ * **Its own component so it can keep its place.** Composing a bill it sits in
+ * the panel's footer; editing a saved order the footer moves into the docked
+ * card, and the row stays behind in the panel — because a biller who has just
+ * learnt where the customer goes should not have to find it again on the way
+ * back in [owner, 2026-09-19]. One instance is mounted either way.
+ */
+export function CustomerRow({
+  customer,
+  onOpen,
+}: {
+  customer: CustomerSelection | null
+  onOpen: () => void
+}) {
+  /*
+    One control and nothing beside it. There was a clear action here; it was
+    removed because it only ever returned the row to a state the biller then had
+    to leave again through this same dialog [owner, 2026-09-19]. A decision is
+    changed by making a different one.
+
+    And no skip out here either, which is the one control this change most
+    deliberately does not add: a bypass under the same thumb that taps Paid forty
+    times an hour is muscle memory inside a week.
+  */
+  return (
+    <button
+      type="button"
+      data-testid="customer-row"
+      onClick={onOpen}
+      className="flex h-[var(--size-control)] w-full min-w-0 items-center gap-2 rounded-lg border border-border bg-surface px-3 text-left font-semibold text-content hover:bg-surface-raised focus-visible:focus-ring"
+    >
+      {customer === null ? (
+        <>
+          <UserRoundPlus aria-hidden size={18} className="shrink-0 text-content-muted" />
+          <span className="text-content-muted">Enter Customer Info</span>
+        </>
+      ) : (
+        <>
+          <UserRound aria-hidden size={18} className="shrink-0 text-primary" />
+          <span className="truncate">{customerRowLabel(customer)}</span>
+          {/*
+            a-gold-member-is-a-label (#57) draws its ⭐ here, beside the name it
+            belongs to. It is deliberately not drawn yet.
+          */}
+        </>
+      )}
+    </button>
   )
 }

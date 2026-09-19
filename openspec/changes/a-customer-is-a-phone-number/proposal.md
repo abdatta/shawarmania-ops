@@ -134,6 +134,49 @@ on 2026-09-10 and carrying one test bill — starts trading at the turn of the
 month. So this change is very likely to ship into a counter with no habits yet,
 which is the best possible moment to replace the field that made the habits.
 
+### The rollout, as the owner expects it [owner, 2026-09-19]
+
+There is no per-outlet setting — that was rejected — so **a push puts this on
+every trading till at once**, and `counter-billing` is `live`. The owner's
+expectation is that **Kalyani and Kanchrapara capture nothing**; real capture
+starts with `Kalyani Cafe`, with a possible test run at Kalyani beforehand.
+Kanchrapara stopped trading on 2026-09-15 and is not affected. Four things
+follow, and the first is a sequencing constraint rather than a preference.
+
+**Section 1 must not ship without section 3.** Today production is clean: zero
+bills carry a phone, zero carry a `customer_id`, and `customers` is empty. Ship
+the dialog alone and the first number anybody enters — a test run, or a biller
+simply trying it — writes a phone onto a bill whose `customer_id` is still null,
+while `saveCustomerIfComplete` creates the customer row beside it, unlinked.
+That is precisely the orphan state section 3 exists to repair, and it turns task
+3.10's "no backfill, and confirm that before relying on it" from a formality
+into a live decision about real rows. **Keep the two together, and let the test
+run be the first thing that happens after the link lands, not before.**
+
+**The decision gate reaches Kalyani on the day of the push.** Order and Mark Paid
+stay disabled until the biller has used the customer row, on every till,
+including the one not meant to be capturing anything. That is the enforcement
+working as designed, but it means two extra taps on every bill at Kalyani for the
+weeks before the Cafe opens, with no benefit to that counter.
+
+**And the same push takes their labels away.** The preparation card and Bills
+this shift currently print whatever the biller typed; after this change a skipped
+order carries nothing and those cards identify by reference alone. At Kalyani one
+biller used 78 distinct strings across 816 bills, so somebody there is genuinely
+labelling orders — and they lose that at the outlet that will use the new flow
+least. Either accept it for the pre-Cafe window, or put the label back behind the
+dialog, or hold the push until the Cafe opens. It is the owner's call and it
+should be made deliberately rather than discovered at the counter.
+
+**The Cafe starts blind, including for customers the business already knows.**
+Partial matching is scoped to customers *this outlet* has served, so a regular
+captured during a Kalyani test run will not come up on four digits at the Cafe
+until the Cafe has served them once — even though it is the same neighbourhood
+and, very likely, the same people. Nothing is lost: the complete ten digits still
+finds them, because that lookup is business-wide. But it is worth telling whoever
+is on the till, so an empty suggestion on opening week is not reported as a
+fault.
+
 ## What already exists, and is not this change's work
 
 A fresh session should read this before planning anything. **The identity layer

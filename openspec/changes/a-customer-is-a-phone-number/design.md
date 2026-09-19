@@ -208,6 +208,148 @@ Specifically, and to be checked at review rather than assumed:
   the mock, which enforces the same three rules the database does;
 - the rate bound, the attempt table and its no-phone-columns rule are untouched.
 
+## What the owner settled at the checkpoint, 2026-09-19
+
+Section 2's stop, and it moved more than the sketch. Recorded here because #57
+draws its ⭐ on this row and inherits whatever shape it ends up with, and because
+two of these reverse decisions written above rather than filling gaps in them.
+
+**The readout carries `+91` instead of a placeholder.** An empty readout reads
+`+91`, which says a number goes here without a word of instruction, and it is the
+one part of the number a biller never types.
+
+**The match is a name over a number, with no heading.** `Returning customer` and
+`Remembered customer` are gone: the biller is looking for a person, and a label
+saying what kind of row this is pushes the one fact they want down the card. The
+name is bold and the number sits small beneath it. The sync-age line survives,
+because it is only shown when it is true, and a stale name given confidently is
+worse than one given with its age.
+
+**The row is the only control, and there is no clear action beside it.** A ✕ was
+built and removed: it returned the row to *nothing chosen*, a state the biller
+then had to leave again through the same dialog, so it was a tap that achieved
+nothing. A decision is revised by making a different one.
+
+**The dialog can be left without deciding.** A biller opens it expecting a
+number and the customer starts changing their order instead; without a way out
+the only exit is Skip, which records a decision nobody meant to make and would
+have to remember to undo. Closing changes nothing — and nothing is lost by it,
+because the undecided row keeps Order and Mark Paid disabled, so the bill cannot
+be rung by accident. The disabled buttons are the reminder.
+
+**A number saved for the first time must carry a name.** Enforced in the UI
+only, columns still nullable. This is the moment the directory row is created and
+it is the only moment: `customer_create_or_get` never rewrites a saved profile
+from a till, so a row saved nameless stays nameless for good. It does **not**
+apply to a customer who already exists without a name — they are identified by
+their number, and completing somebody else's profile is not the counter's job.
+
+**Enter saves.** The body is a real form, so a keyboard's Enter and a tablet
+keypad's Go key both commit without reaching for the button; `enterKeyHint`
+labels that key. Every key on the pad is a `type="button"`, so none of them can
+submit it by accident.
+
+**Skip is one tap and confirms nothing — and it stayed inside the dialog.** The
+owner asked first for it to move out onto the composer, into the slot the clear
+action occupies, and then reversed that within the hour on the reasoning this
+design had already written down: a skip under the same thumb that taps Paid forty
+times an hour is muscle memory inside a week. It lives in the dialog, reads
+**Skip**, and takes effect immediately rather than swapping to a confirmation.
+It is not called *No customer*: there is still a customer, and the thing being
+declined is their number. The row reads `Skipped`. The row can be tapped again afterwards, so nothing about it is
+final.
+
+**A skipped order carries nothing, and "order label" was never a real idea.**
+The confirmation step that was removed was also the only place a name could be
+typed without a number, so a skipped order now carries nothing at all and the
+preparation card and the shift bill list identify it by its reference alone.
+
+**The proposal's labelling argument is withdrawn.** It read the `As`/`Kk`/`Jj`
+strings as partly a demand for an order label and built a feature to serve it.
+The owner challenged that reading on 2026-09-18, and settled it on 2026-09-19:
+*"we don't rely on the labels today, they are ways to evade the customer info
+blocker."* The 60%-distinguished figure measured a side effect of evasion, not a
+need. **"Label" was the proposal's word, never the owner's, and nothing in the
+product should use it** — a later session reading it as a requirement would
+rebuild something nobody asked for.
+
+What survives is narrower and concrete: a `name` on the skipped variant, because
+every order rung *before* this change carries a name and no number — all 1840 of
+them — and reopening one to add an item must not wipe the name it was rung under.
+The row says `Asha · no number` for those, which states which half is missing
+without implying the name identifies anybody.
+
+### A partial number, and why it is outlet-scoped
+
+The proposal refused prefix search permanently, on the position that a
+business-wide PII directory must not be browsable from a shared tablet. **The
+owner's counter-proposal keeps that position and satisfies the requirement
+anyway**, by splitting the question in two:
+
+| Question | Scope | Answer |
+|---|---|---|
+| a partial number, four digits or more | **this outlet's own customers** | the one served most recently, plus a count of the others |
+| a complete number | the whole business | `customer_lookup_by_phone`, unchanged |
+
+This is better than what this design first proposed, and the reason is precise.
+The objection to a global prefix search was never the tablet behind the counter —
+a biller already sees every number they take. It was that `customers` is
+business-wide **by design, for franchising**, so a prefix search at one
+franchise's till would reach every other franchise's customers. An outlet scope
+removes exactly that, and leaves behind only customers this counter has served
+itself, which it already knew.
+
+With the cross-outlet reach gone, the digit floor stops carrying the weight it
+was carrying and can be set for the biller instead: **four**, which is about
+where somebody expects a screen to react. A longer floor was buying protection
+that the outlet scope now provides for free.
+
+Three rules hold the shape, and a later change must not relax any of them:
+
+- **one match or none, never a list** — a list is a directory;
+- **the count of the others is a number and never a way to reach them.** It is
+  text, not a control, and its whole job is to say *this is a guess, keep
+  typing*;
+- **the outlet comes from the caller's own authority**, never from an argument,
+  so a till cannot ask about an outlet it does not work at.
+
+**This depends on a link that does not exist yet.** "Customers this outlet has
+served" is a join from the outlet's bills to `customers` through
+`bills.customer_id` — the column no bill in production has ever carried, and the
+repair this change makes in section 3. So the outlet-scoped function has nothing
+to answer with until that link is populated, and the suggestion is silent rather
+than wrong in the meantime. That is the correct order: the link first, the search
+on top of it.
+
+### IndexedDB is the offline fallback, not the source
+
+The till's own `rememberedCustomers` cache answers a partial number **only when
+the server cannot** [owner, 2026-09-19]. Online, the outlet-scoped function is
+the source of truth; a cache read would go stale against a customer saved at the
+neighbouring till ten minutes ago.
+
+Falling back to it is safe rather than merely convenient: the cache holds numbers
+this till already resolved, so it is a strict subset of what the outlet has
+served — narrower than the server's answer, never wider. It cannot disclose
+anything the tablet was not already told.
+
+Two changes to how it is kept, both the owner's:
+
+- **a rolling fifty, with no time limit**, replacing fifty-within-24-hours. The
+  window was forgetting the weekly regular, who is precisely the customer worth
+  remembering;
+- **cleared when the tablet's enrolment is revoked**, because fifty names and
+  numbers now sit on the device indefinitely and a tablet taken out of service
+  should not still be carrying them.
+
+### The pad settles before it asks
+
+Every digit from the fourth to the tenth would otherwise be its own request —
+seven per customer, on a path that carries a rate bound. The dialog waits a
+quarter of a second after the last tap, which is under the gap between two
+deliberate taps, so a number keyed straight through costs one request and a biller
+who pauses mid-number still gets an answer as they do.
+
 ## Alternatives rejected
 
 **Keep one field and validate it harder.** Rejected: the field is overloaded, so

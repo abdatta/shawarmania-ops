@@ -1,4 +1,4 @@
-import { KeyRound, UserRoundCheck } from 'lucide-react'
+import { KeyRound } from 'lucide-react'
 import {
   useCallback,
   useContext,
@@ -24,7 +24,6 @@ import {
   type DiscountPreset,
   type BillLineDraft,
   type BillingOrder,
-  type CustomerIdentity,
   type MenuCategoryWithItems,
   type MenuDiscount,
   type PaymentAllocation,
@@ -42,10 +41,11 @@ import { newUuid } from '@/lib/uuid'
 import { declareUnsavedWork } from '@/pwa/occupancy'
 import { SessionContext } from '@/session/context'
 import { CounterDeviceContext } from '@/session/counter-context'
-import { validateIndianPhone } from '../../../shared/phone'
+import { normalizeIndianPhone } from '../../../shared/phone'
 
-import { BillComposerFooter } from './bill-composer-footer'
+import { BillComposerFooter, CustomerRow } from './bill-composer-footer'
 import { BillDiscountRows } from './bill-discount-rows'
+import { CustomerDialog, type CustomerSelection } from './customer-dialog'
 import { DiscountDialog } from './discount-dialog'
 import { OfflineFillHint } from './offline-fill-hint'
 import { BillPanel } from './bill-panel'
@@ -94,9 +94,38 @@ interface Restorable {
    * out silently dropped every discount on both journeys.
    */
   discounts: readonly BillDiscountDraft[]
+  customer: CustomerSelection | null
+  payments: PaymentAllocation[]
+}
+
+/**
+ * The two snapshot columns a decision comes to.
+ *
+ * The phone is what identifies somebody, so a skip carries no number and an
+ * identified customer carries both. The `customer_id` is not here: the server
+ * resolves it from the phone when the command is recorded, because a till
+ * cannot know the id of a number it has never seen.
+ */
+function customerSnapshots(customer: CustomerSelection | null): {
   customerName: string
   customerPhone: string
-  payments: PaymentAllocation[]
+} {
+  if (customer === null) return { customerName: '', customerPhone: '' }
+  if (customer.kind === 'skipped') return { customerName: customer.name, customerPhone: '' }
+  return { customerName: customer.name, customerPhone: customer.phone }
+}
+
+/**
+ * What a saved order's snapshots say the biller decided when they rang it.
+ *
+ * A canonical phone is an identification; anything else is a skip carrying
+ * whatever name the order has — including none. Reopening one must not demand a
+ * decision that was not asked for at the time.
+ */
+function customerFromOrder(order: BillingOrder): CustomerSelection {
+  const phone = normalizeIndianPhone(order.customerPhone)
+  if (phone !== null) return { kind: 'identified', phone, name: order.customerName ?? '' }
+  return { kind: 'skipped', name: order.customerName ?? '' }
 }
 
 const COUNTER_COLUMN_RESIZE_STEP = 16
@@ -156,15 +185,12 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   const [menuOffline, setMenuOffline] = useState(false)
   const [outlet, setOutlet] = useState<Tables<'outlets'> | null>(null)
   const [lines, setLines] = useState<BillLineDraft[]>([])
-  const [customerName, setCustomerName] = useState('')
-  const [customerPhone, setCustomerPhone] = useState('')
+  const [customer, setCustomer] = useState<CustomerSelection | null>(null)
+  const [customerDialogOpen, setCustomerDialogOpen] = useState(false)
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
   const [paymentPreset, setPaymentPreset] = useState<PaymentAllocation[]>([])
   const [error, setError] = useState<string | null>(null)
   const [settling, setSettling] = useState(false)
-  const [customerMatch, setCustomerMatch] = useState<CustomerIdentity | null>(null)
-  const [customerMatchPhone, setCustomerMatchPhone] = useState<string | null>(null)
-  const [declinedPhone, setDeclinedPhone] = useState<string | null>(null)
   // A command reloads the surface that performed it itself. These two signals
   // refresh only the *other* column, preventing a pipeline action from loading
   // the rail twice and replaying its FLIP motion.
@@ -317,33 +343,23 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     return declareUnsavedWork('billing-composer')
   }, [lines.length])
 
-  useEffect(() => {
-    const validation = validateIndianPhone(customerPhone)
-    if (!validation.phone || validation.phone === declinedPhone) {
-      return
-    }
-    let active = true
-    void customers
-      .lookupByPhone(validation.phone)
-      .then((match) => {
-        if (active) {
-          setCustomerMatch(match)
-          setCustomerMatchPhone(validation.phone)
-        }
-      })
-      .catch(() => {
-        if (active) setCustomerMatch(null)
-      })
-    return () => {
-      active = false
-    }
-  }, [customerPhone, customers, declinedPhone])
+  /*
+    The dialog resolves a complete number for itself, so there is no lookup
+    effect here any more. Handed down rather than reached for, which keeps the
+    dialog one component over the mock directory and the real one.
+  */
+  const lookupCustomer = useCallback((phone: string) => customers.lookupByPhone(phone), [customers])
+  const openCustomerDialog = useCallback(() => setCustomerDialogOpen(true), [])
 
-  const currentPhone = validateIndianPhone(customerPhone).phone
-  const visibleCustomerMatch =
-    currentPhone && currentPhone === customerMatchPhone && currentPhone !== declinedPhone
-      ? customerMatch
-      : null
+  /*
+    The partial question, which reaches only this outlet's own customers. Handed
+    down beside the complete-number lookup, which reaches the whole business:
+    two scopes, two functions, and the dialog never has to know which is which.
+  */
+  const suggestCustomer = useCallback(
+    (partial: string) => customers.suggestByPartialPhone(partial),
+    [customers],
+  )
 
   const quantities = useMemo(
     () => new Map(lines.map((line) => [line.menuItemId, line.quantity])),
@@ -448,50 +464,74 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     [settling, discountRules, categoryNameById],
   )
 
+  /**
+   * Everything the panel carries that is not the lines themselves.
+   *
+   * Only the setters are used, and those are stable, so this never goes stale.
+   */
+  const resetBillContext = useCallback(() => {
+    setBillDiscountRules([])
+    setCustomer(null)
+    setPaymentPreset([])
+    // The error too: it is a sentence about a bill, and it outlived the bill.
+    // "That payment was not saved on this tablet. Nothing was cleared" reads as
+    // a live warning over a panel the biller has just emptied themselves.
+    setError(null)
+  }, [])
+
   const changeQuantity = useCallback(
     (menuItemId: string, delta: number) => {
       if (settling) return
-      setLines((current) =>
-        current.flatMap((line) => {
-          if (line.menuItemId !== menuItemId) return [line]
-          const quantity = line.quantity + delta
-          // Below one there is no line: taking the last one off is how a line is
-          // removed, so there is no separate delete to hunt for.
-          if (quantity < 1) return []
-          // The captured terms are re-applied at the new quantity rather than
-          // re-read from today's menu: the line keeps the deal it was created
-          // under, and only its size changes.
-          const scaled =
-            line.discountPercentBp != null
-              ? Math.round((line.unitPricePaise * quantity * line.discountPercentBp) / 10000)
-              : Math.round(((line.discountPaise ?? 0) / line.quantity) * quantity)
-          return [
-            { ...line, quantity, discountPaise: Math.min(scaled, line.unitPricePaise * quantity) },
-          ]
-        }),
-      )
+      const next = lines.flatMap((line) => {
+        if (line.menuItemId !== menuItemId) return [line]
+        const quantity = line.quantity + delta
+        // Below one there is no line: taking the last one off is how a line is
+        // removed, so there is no separate delete to hunt for.
+        if (quantity < 1) return []
+        // The captured terms are re-applied at the new quantity rather than
+        // re-read from today's menu: the line keeps the deal it was created
+        // under, and only its size changes.
+        const scaled =
+          line.discountPercentBp != null
+            ? Math.round((line.unitPricePaise * quantity * line.discountPercentBp) / 10000)
+            : Math.round(((line.discountPaise ?? 0) / line.quantity) * quantity)
+        return [
+          { ...line, quantity, discountPaise: Math.min(scaled, line.unitPricePaise * quantity) },
+        ]
+      })
+      setLines(next)
+      /*
+        **Taking the last line off ends the bill, not just the line.** The panel
+        gives way to Bills this shift at zero lines, so what was on it is over —
+        and anything left behind reappears on the next bill the moment an item is
+        tapped.
+
+        The sharp one is the bill-level discounts: they would be applied to the
+        next customer, who never asked for them and whose bill nobody would think
+        to check. Same hazard as a discount surviving a settle, same answer.
+
+        Editing a saved order is deliberately not this case. That order still
+        exists, its card is still docked, and emptying it is a revision in
+        progress rather than an abandoned bill.
+      */
+      if (next.length === 0 && editingOrder === null) resetBillContext()
     },
-    [settling],
+    [editingOrder, lines, resetBillContext, settling],
   )
 
   function clearPanel() {
     setLines([])
     // Cleared with the lines, and for a sharper reason than tidiness: a
     // discount left behind after a settle is applied to the next customer, who
-    // never asked for it and whose bill nobody would think to check.
-    setBillDiscountRules([])
-    setCustomerName('')
-    setCustomerPhone('')
-    setCustomerMatch(null)
-    setCustomerMatchPhone(null)
-    setDeclinedPhone(null)
-    setPaymentPreset([])
+    // never asked for it and whose bill nobody would think to check. The same
+    // reasoning applies when the last line is taken off by hand, which is why
+    // `changeQuantity` calls the same reset.
+    resetBillContext()
   }
 
   function putDraftOnPanel(draft: Restorable) {
     setLines(structuredClone(draft.lines))
-    setCustomerName(draft.customerName)
-    setCustomerPhone(draft.customerPhone)
+    setCustomer(draft.customer)
     setPaymentPreset(structuredClone(draft.payments))
     // Restored from the draft rather than cleared. Clearing dropped every
     // bill-level discount the order carried the moment it was reopened, and the
@@ -503,9 +543,6 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         valuePaise: discount.valuePaise,
       })),
     )
-    setCustomerMatch(null)
-    setCustomerMatchPhone(null)
-    setDeclinedPhone(null)
   }
 
   function beginOrderEdit(order: BillingOrder) {
@@ -513,16 +550,14 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     suspendedDraft.current = {
       lines,
       discounts: billDiscounts,
-      customerName,
-      customerPhone,
+      customer,
       payments: paymentPreset,
     }
     setEditingOrder(order)
     putDraftOnPanel({
       lines: order.lines,
       discounts: order.discounts,
-      customerName: order.customerName ?? '',
-      customerPhone: order.customerPhone ?? '',
+      customer: customerFromOrder(order),
       payments: [],
     })
     setPaymentDialogOpen(false)
@@ -539,9 +574,8 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   }
 
   async function saveCustomerIfComplete(): Promise<void> {
-    const validation = validateIndianPhone(customerPhone)
-    if (!validation.phone) return
-    await customers.createOrGet({ phone: validation.phone, name: customerName })
+    if (customer === null || customer.kind !== 'identified') return
+    await customers.createOrGet({ phone: customer.phone, name: customer.name })
   }
 
   async function saveOrder() {
@@ -561,8 +595,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         lines,
         discounts: billDiscounts,
         customerId: null,
-        customerName,
-        customerPhone,
+        ...customerSnapshots(customer),
       })
       clearPanel()
       setPipelineRefresh((value) => value + 1)
@@ -584,8 +617,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         lines,
         discounts: billDiscounts,
         customerId: null,
-        customerName,
-        customerPhone,
+        ...customerSnapshots(customer),
       })
       leaveOrderEdit()
       setPipelineRefresh((value) => value + 1)
@@ -635,8 +667,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         payments,
         lines,
         discounts: billDiscounts,
-        customerName,
-        customerPhone,
+        ...customerSnapshots(customer),
       })
       setPaymentDialogOpen(false)
       clearPanel()
@@ -681,12 +712,10 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   const composerFooter = (
     <BillComposerFooter
       lines={lines}
-      customerName={customerName}
-      customerPhone={customerPhone}
+      customer={customer}
       settling={settling}
       editing={editingOrder !== null}
-      onCustomerNameChange={setCustomerName}
-      onCustomerPhoneChange={setCustomerPhone}
+      onOpenCustomer={openCustomerDialog}
       onPaid={() => {
         setError(null)
         setPaymentDialogOpen(true)
@@ -832,6 +861,13 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
                 ? {
                     editingOrderReference:
                       editingOrder.localReference ?? `order #${editingOrder.orderNumber}`,
+                    /*
+                      The customer row keeps its place while the rest of the
+                      footer is docked beside the order [owner, 2026-09-19]. A
+                      biller who has just learnt where the customer goes should
+                      not have to go looking for it again on the way back in.
+                    */
+                    footer: <CustomerRow customer={customer} onOpen={openCustomerDialog} />,
                   }
                 : { footer: composerFooter })}
             />
@@ -864,60 +900,6 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
                 setDiscountDialog(null)
               }}
             />
-
-            {visibleCustomerMatch && (
-              <div
-                className="rounded-xl border border-primary bg-surface p-3"
-                role="status"
-                data-testid="customer-match"
-              >
-                <div className="flex gap-2">
-                  <UserRoundCheck aria-hidden className="mt-0.5 text-primary" size={20} />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-content">
-                      {visibleCustomerMatch.remembered
-                        ? 'Remembered customer found'
-                        : 'Returning customer found'}
-                    </p>
-                    <p className="text-sm text-content-muted">
-                      {visibleCustomerMatch.name
-                        ? customerName.trim() && customerName.trim() !== visibleCustomerMatch.name
-                          ? `Use ${visibleCustomerMatch.name}? This replaces the name in this order only.`
-                          : `Fill this order with ${visibleCustomerMatch.name}?`
-                        : 'This phone has no saved name.'}
-                    </p>
-                    {visibleCustomerMatch.remembered && (
-                      <p className="mt-1 text-xs font-semibold text-content-muted">
-                        Exact phone match from this tablet&rsquo;s last online read. It will be
-                        checked again on sync.
-                      </p>
-                    )}
-                    <div className="mt-2 flex gap-2">
-                      <Button
-                        size="phone"
-                        onClick={() => {
-                          if (visibleCustomerMatch.name) setCustomerName(visibleCustomerMatch.name)
-                          setCustomerMatch(null)
-                          setDeclinedPhone(validateIndianPhone(customerPhone).phone)
-                        }}
-                      >
-                        Use saved details
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="phone"
-                        onClick={() => {
-                          setCustomerMatch(null)
-                          setDeclinedPhone(validateIndianPhone(customerPhone).phone)
-                        }}
-                      >
-                        Keep this order
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
           </>
         ) : (
           <MyShiftSurface
@@ -960,13 +942,25 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
               <EditingOrderPin
                 order={editingOrder}
                 lines={lines}
-                customerName={customerName}
+                customerName={customerSnapshots(customer).customerName}
                 footer={composerFooter}
               />
             )
           }
         />
       </div>
+
+      <CustomerDialog
+        open={customerDialogOpen}
+        selection={customer}
+        lookup={lookupCustomer}
+        suggest={suggestCustomer}
+        onClose={() => setCustomerDialogOpen(false)}
+        onChoose={(selection) => {
+          setCustomer(selection)
+          setCustomerDialogOpen(false)
+        }}
+      />
 
       <PaymentDialog
         open={paymentDialogOpen}

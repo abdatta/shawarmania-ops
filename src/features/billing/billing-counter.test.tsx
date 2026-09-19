@@ -66,10 +66,46 @@ function user() {
   return userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
 }
 
+/**
+ * Decide the customer the way a biller does: open the row, tap the pad, confirm.
+ *
+ * The number is entered from the dialog's own keys rather than typed, because
+ * the counter tablet has no keyboard out and that is the point of the pad.
+ */
+async function identifyCustomer(person: ReturnType<typeof user>, digits: string, name?: string) {
+  await person.click(screen.getByTestId('customer-row'))
+  const dialog = screen.getByRole('dialog', { name: 'Customer' })
+  for (const digit of digits) {
+    await person.click(within(dialog).getByRole('button', { name: digit }))
+  }
+  if (name !== undefined) {
+    // `Name` while the number is new and the name is required of it, `Name
+    // (optional)` for a customer who already exists without one.
+    await person.type(await within(dialog).findByPlaceholderText(/name/i), name)
+  }
+  await person.click(within(dialog).getByTestId('customer-confirm'))
+}
+
+/**
+ * The other decision: no number was given.
+ *
+ * Two taps, and both of them deliberate — the row, then No customer. There is
+ * no skip on the composer, because one under the thumb that taps Paid forty
+ * times an hour is muscle memory inside a week.
+ *
+ * Most tests in this file are about something else entirely and reach for this
+ * because a terminal action is behind a decision — and this is the cheapest one.
+ */
+async function skipCustomer(person: ReturnType<typeof user>) {
+  await person.click(screen.getByTestId('customer-row'))
+  const dialog = screen.getByRole('dialog', { name: 'Customer' })
+  await person.click(within(dialog).getByTestId('customer-skip'))
+}
+
 async function recordPaid(person: ReturnType<typeof user>, method = 'Cash') {
-  const name = screen.getByPlaceholderText('Customer name') as HTMLInputElement
-  const phone = screen.getByPlaceholderText('Phone number') as HTMLInputElement
-  if (!name.value.trim() && !phone.value.trim()) await person.type(name, 'Test customer')
+  if (screen.getByTestId('customer-row').textContent === 'Enter Customer Info') {
+    await skipCustomer(person)
+  }
   await person.click(screen.getByTestId('settle'))
   const dialog = screen.getByRole('dialog', { name: 'Record payment' })
   await person.click(within(dialog).getByRole('button', { name: method }))
@@ -228,7 +264,7 @@ describe('BillingCounter', () => {
     expect(screen.queryByTestId(`bill-line-${MENU_ITEM_STUFFED_ID}`)).not.toBeInTheDocument()
   })
 
-  it('requires either customer name or phone in the UI before either action', async () => {
+  it('requires a decision about the customer — identified or skipped — before either action', async () => {
     const person = user()
     const { adapters } = renderCounter()
     const settleBill = vi.spyOn(adapters.billing, 'settleBill')
@@ -236,17 +272,33 @@ describe('BillingCounter', () => {
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
     expect(screen.getByTestId('save-order')).toBeDisabled()
     expect(screen.getByTestId('settle')).toBeDisabled()
-    expect(screen.getByText('Add a customer name or phone to continue.')).toBeInTheDocument()
+    // The disabled actions beside an untouched row are the whole message. The
+    // sentence that used to sit here was a third way of saying it.
+    expect(screen.queryByText(/Add a customer/i)).not.toBeInTheDocument()
     expect(settleBill).not.toHaveBeenCalled()
 
-    await person.type(screen.getByPlaceholderText('Phone number'), '9000000000')
+    // A number nobody has used before, so the UI insists on a name for it.
+    await identifyCustomer(person, '9000000000', 'Rahul')
+    expect(screen.getByTestId('customer-row')).toHaveTextContent('Rahul · +91 90000 00000')
     expect(screen.getByTestId('save-order')).toBeEnabled()
     expect(screen.getByTestId('settle')).toBeEnabled()
-    await person.clear(screen.getByPlaceholderText('Phone number'))
-    expect(screen.getByTestId('save-order')).toBeDisabled()
-    await person.type(screen.getByPlaceholderText('Customer name'), 'Demo Regular')
+
+    // Skipping is a decision too, and it is the whole of the enforcement. It
+    // costs opening the dialog first — there is no skip on the composer, which
+    // is the one control this change most deliberately does not add.
+    await skipCustomer(person)
+    expect(screen.getByTestId('customer-row')).toHaveTextContent('Skipped Customer Info')
+    expect(screen.queryByRole('dialog', { name: 'Customer' })).not.toBeInTheDocument()
     expect(screen.getByTestId('save-order')).toBeEnabled()
     expect(screen.getByTestId('settle')).toBeEnabled()
+
+    // And it can be changed: the row reopens on the pad, which is the only way
+    // a decision is revised — there is no clear action beside it, because
+    // clearing only ever returned the row to a state the biller then had to
+    // leave again through this same dialog.
+    await person.click(screen.getByTestId('customer-row'))
+    expect(screen.getByRole('dialog', { name: 'Customer' })).toBeInTheDocument()
+    expect(screen.queryByTestId('clear-customer')).not.toBeInTheDocument()
 
     const order = screen.getByRole('button', { name: 'Order' })
     const markPaid = screen.getByTestId('settle')
@@ -262,13 +314,14 @@ describe('BillingCounter', () => {
     const settleBill = vi.spyOn(adapters.billing, 'settleBill')
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.type(screen.getByPlaceholderText('Customer name'), 'Demo Regular')
-    await person.type(screen.getByPlaceholderText('Phone number'), '9000000000')
+    await identifyCustomer(person, '9000000000', 'Demo Regular')
     await recordPaid(person, 'UPI')
 
     const draft = settleBill.mock.calls[0]![0] as BillDraft
+    // The label and the canonical number both, never the identity alone: a bill
+    // carrying an id and nothing to print is a receipt nobody can read.
     expect(draft.customerName).toBe('Demo Regular')
-    expect(draft.customerPhone).toBe('9000000000')
+    expect(draft.customerPhone).toBe('+919000000000')
     expect(draft.payments).toEqual([{ method: 'upi', amountPaise: 13900 }])
   })
 
@@ -278,7 +331,7 @@ describe('BillingCounter', () => {
     const settleBill = vi.spyOn(adapters.billing, 'settleBill')
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.type(screen.getByPlaceholderText('Customer name'), 'Demo Regular')
+    await skipCustomer(person)
     await person.click(screen.getByTestId('settle'))
 
     const dialog = screen.getByRole('dialog', { name: 'Record payment' })
@@ -293,7 +346,7 @@ describe('BillingCounter', () => {
     renderCounter()
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.type(screen.getByPlaceholderText('Customer name'), 'Demo Regular')
+    await skipCustomer(person)
     await person.click(screen.getByTestId('settle'))
     const dialog = screen.getByRole('dialog', { name: 'Record payment' })
     await waitFor(() =>
@@ -318,7 +371,7 @@ describe('BillingCounter', () => {
     const settleBill = vi.spyOn(adapters.billing, 'settleBill')
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.type(screen.getByPlaceholderText('Customer name'), 'Demo Regular')
+    await skipCustomer(person)
     await person.click(screen.getByTestId('settle'))
     const dialog = screen.getByRole('dialog', { name: 'Record payment' })
     await person.click(within(dialog).getByRole('button', { name: '1' }))
@@ -485,7 +538,7 @@ describe('BillingCounter', () => {
     )
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.type(screen.getByPlaceholderText('Customer name'), 'Waiting customer')
+    await skipCustomer(person)
     await person.click(screen.getByTestId('settle'))
     const dialog = screen.getByRole('dialog', { name: 'Record payment' })
     await person.click(within(dialog).getByRole('button', { name: 'Cash' }))
@@ -493,7 +546,7 @@ describe('BillingCounter', () => {
 
     expect(dialog).toBeInTheDocument()
     expect(screen.getByTestId(`bill-line-${MENU_ITEM_CLASSIC_ID}`)).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('Customer name')).toHaveValue('Waiting customer')
+    expect(screen.getByTestId('customer-row')).toHaveTextContent('Skipped Customer Info')
     expect(within(dialog).getByRole('button', { name: 'Paid' })).toBeDisabled()
 
     await act(async () => commit())
@@ -510,7 +563,7 @@ describe('BillingCounter', () => {
     vi.spyOn(adapters.billing, 'settleBill').mockRejectedValue(new Error('IndexedDB unavailable'))
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.type(screen.getByPlaceholderText('Customer name'), 'Unsaved customer')
+    await skipCustomer(person)
     await person.click(screen.getByTestId('settle'))
     const dialog = screen.getByRole('dialog', { name: 'Record payment' })
     await person.click(within(dialog).getByRole('button', { name: 'UPI' }))
@@ -518,7 +571,7 @@ describe('BillingCounter', () => {
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(/not saved on this tablet/i)
     expect(screen.getByTestId(`bill-line-${MENU_ITEM_CLASSIC_ID}`)).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('Customer name')).toHaveValue('Unsaved customer')
+    expect(screen.getByTestId('customer-row')).toHaveTextContent('Skipped Customer Info')
     expect(within(dialog).getByRole('list', { name: 'Payment split' })).toHaveTextContent('UPI')
     expect(screen.queryByTestId('settled-confirmation')).not.toBeInTheDocument()
   })
@@ -529,7 +582,9 @@ describe('BillingCounter', () => {
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
     await person.click(screen.getByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.type(screen.getByPlaceholderText('Customer name'), 'Demo Regular')
+    // Identified rather than skipped, because the bill is found below by the
+    // name it carries — and a skipped bill carries none.
+    await identifyCustomer(person, '9000000999', 'Demo Regular')
     await recordPaid(person)
 
     expect(screen.queryByTestId('undo-settle')).not.toBeInTheDocument()
@@ -613,7 +668,7 @@ describe('BillingCounter', () => {
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
     await person.click(screen.getByRole('button', { name: 'Mayonnaise Chicken Shawarma' }))
-    await person.type(screen.getByPlaceholderText('Customer name'), 'Asha')
+    await identifyCustomer(person, '9000000999', 'Asha')
     await person.click(screen.getByTestId('save-order'))
 
     expect(saveOrder).toHaveBeenCalledWith(expect.objectContaining({ lines: expect.any(Array) }))
@@ -682,7 +737,7 @@ describe('BillingCounter', () => {
     const reviseOrder = vi.spyOn(adapters.billing, 'reviseOrder')
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.type(screen.getByPlaceholderText('Customer name'), 'Waiting customer')
+    await skipCustomer(person)
 
     const rail = await screen.findByTestId('counter-activity-rail')
     const openOrder = await within(rail).findByTestId('open-order-104')
@@ -709,22 +764,25 @@ describe('BillingCounter', () => {
     // changes buttons and two fields sharing one id.
     expect(within(pin).getByTestId('save-order')).toBeInTheDocument()
     expect(within(pin).getByTestId('cancel-edit')).toBeInTheDocument()
-    expect(within(pin).getByPlaceholderText('Customer name')).toBeInTheDocument()
+    // The customer row does NOT move with it: it stays in the panel, where it
+    // sits while composing, so it is never somewhere new on the way back in.
+    expect(within(pin).queryByTestId('customer-row')).toBeNull()
+    expect(within(screen.getByTestId('bill-panel')).getByTestId('customer-row')).toBeInTheDocument()
     expect(within(screen.getByTestId('bill-panel')).queryByTestId('save-order')).toBeNull()
-    expect(screen.getAllByPlaceholderText('Customer name')).toHaveLength(1)
+    expect(screen.getAllByTestId('customer-row')).toHaveLength(1)
     // The items are the composer's job; the card does not show a second copy.
     expect(within(pin).queryByRole('list', { name: /Items for order/ })).toBeNull()
     // And one total, at the top of the card.
     expect(within(pin).queryByTestId('bill-total')).toBeNull()
 
     expect(screen.getByTestId(`bill-quantity-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('2')
-    expect(screen.getByPlaceholderText('Customer name')).toHaveValue('Demo Customer')
-    expect(screen.getByPlaceholderText('Phone number')).toHaveAttribute('inputmode', 'numeric')
+    // The saved order's own decision comes back onto the row. Every order rung
+    // before this change carries a name and no number, and the row has to say
+    // which half is missing without implying the name identifies anybody.
+    expect(screen.getByTestId('customer-row')).toHaveTextContent('Demo Customer · no number')
 
     await person.click(screen.getByRole('button', { name: 'Mayonnaise Chicken Shawarma' }))
-    await person.clear(screen.getByPlaceholderText('Customer name'))
-    await person.type(screen.getByPlaceholderText('Customer name'), 'Updated customer')
-    await person.type(screen.getByPlaceholderText('Phone number'), '9000000222')
+    await identifyCustomer(person, '9000000222', 'Updated customer')
     await person.click(screen.getByTestId('save-order'))
 
     await waitFor(() => expect(reviseOrder).toHaveBeenCalledTimes(1))
@@ -732,7 +790,7 @@ describe('BillingCounter', () => {
       expect.any(String),
       expect.objectContaining({
         customerName: 'Updated customer',
-        customerPhone: '9000000222',
+        customerPhone: '+919000000222',
         lines: expect.arrayContaining([
           expect.objectContaining({ menuItemId: MENU_ITEM_MAYO_ID, quantity: 1 }),
         ]),
@@ -743,7 +801,7 @@ describe('BillingCounter', () => {
     expect(within(rail).queryByTestId('editing-order-pin')).not.toBeInTheDocument()
     // And the footer is back in the panel, still just the one.
     expect(within(screen.getByTestId('bill-panel')).getByTestId('save-order')).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('Customer name')).toHaveValue('Waiting customer')
+    expect(screen.getByTestId('customer-row')).toHaveTextContent('Skipped Customer Info')
     expect(screen.getByTestId(`bill-quantity-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('1')
     expect(screen.queryByTestId(`bill-line-${MENU_ITEM_MAYO_ID}`)).not.toBeInTheDocument()
 
@@ -757,49 +815,103 @@ describe('BillingCounter', () => {
     await person.click(within(updated).getByRole('menuitem', { name: 'Edit' }))
     await person.click(screen.getByRole('button', { name: 'One more Classic Chicken Shawarma' }))
     await person.click(screen.getByTestId('cancel-edit'))
-    expect(screen.getByPlaceholderText('Customer name')).toHaveValue('Waiting customer')
+    expect(screen.getByTestId('customer-row')).toHaveTextContent('Skipped Customer Info')
     expect(screen.getByTestId(`bill-quantity-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('1')
   })
 
-  it('prompts before replacing a conflicting name from an exact full-phone match', async () => {
+  it('resolves a saved number to its saved name, and puts that on the row', async () => {
     const person = user()
     renderCounter()
 
-    // The composer opens on the first tap; the customer fields live there.
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.type(screen.getByPlaceholderText('Customer name'), 'Ria')
-    await person.type(screen.getByPlaceholderText('Phone number'), '9000000101')
+    await identifyCustomer(person, '9000000101')
 
-    const prompt = await screen.findByTestId('customer-match')
-    expect(prompt).toHaveTextContent(/replaces the name in this order only/i)
-    await person.click(within(prompt).getByRole('button', { name: /Use saved details/i }))
-    expect(screen.getByPlaceholderText('Customer name')).toHaveValue('Ritika Sen')
+    // The saved name is this order's label. Nothing was typed to get it, and
+    // nothing about the saved profile was touched to give it.
+    expect(screen.getByTestId('customer-row')).toHaveTextContent('Ritika Sen · +91 90000 00101')
   })
 
-  it('refuses a phone that is not a phone, rather than dropping it silently', async () => {
+  it('refuses a phone that is not a phone, rather than offering to save it', async () => {
     const person = user()
     const { adapters } = renderCounter()
     const createOrGet = vi.spyOn(adapters.customers, 'createOrGet')
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.type(screen.getByPlaceholderText('Phone number'), '12345')
+    await person.click(screen.getByTestId('customer-row'))
+    const dialog = screen.getByRole('dialog', { name: 'Customer' })
 
     // Nothing said while they are still typing — a number is incomplete for the
     // first nine digits of every number anybody enters.
-    expect(screen.queryByTestId('customer-phone-error')).not.toBeInTheDocument()
-    await person.tab()
-    expect(screen.getByTestId('customer-phone-error')).toHaveTextContent(/complete 10-digit/i)
+    for (const digit of '123456789') {
+      await person.click(within(dialog).getByRole('button', { name: digit }))
+    }
+    expect(within(dialog).queryByTestId('customer-no-match')).not.toBeInTheDocument()
+    expect(within(dialog).queryByPlaceholderText('Name (optional)')).not.toBeInTheDocument()
+    expect(within(dialog).getByTestId('customer-confirm')).toBeDisabled()
 
-    // And it cannot be completed: a bad number would reach the bill as PII
-    // written wrong while the customer record quietly failed to save.
-    expect(screen.getByTestId('save-order')).toBeDisabled()
-    expect(screen.getByTestId('settle')).toBeDisabled()
+    // The tenth digit completes a number the Indian mobile rule still refuses.
+    // It reads as a miss and offers no save: a form that fails on submit is
+    // worse than one that never opened.
+    await person.click(within(dialog).getByRole('button', { name: '0' }))
+    expect(await within(dialog).findByTestId('customer-no-match')).toHaveTextContent(
+      /invalid mobile number/i,
+    )
+    expect(within(dialog).queryByPlaceholderText('Name (optional)')).not.toBeInTheDocument()
+    expect(within(dialog).getByTestId('customer-confirm')).toBeDisabled()
     expect(createOrGet).not.toHaveBeenCalled()
+  })
 
-    await person.clear(screen.getByPlaceholderText('Phone number'))
-    await person.type(screen.getByPlaceholderText('Phone number'), '9000000999')
-    expect(screen.queryByTestId('customer-phone-error')).not.toBeInTheDocument()
-    expect(screen.getByTestId('save-order')).toBeEnabled()
+  it('starts a genuinely new bill after the last line is taken off', async () => {
+    const person = user()
+    renderCounter()
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await skipCustomer(person)
+    await person.click(screen.getByTestId('add-discount'))
+    await person.click(screen.getByTestId('discount-preset-percent-1000'))
+    await person.click(screen.getByTestId('apply-discount'))
+    await waitFor(() => expect(screen.getByTestId('bill-total')).toHaveTextContent('₹126'))
+
+    // Taking the last line off closes the panel: there is no bill in progress
+    // any more, and everything that belonged to it goes with it.
+    await person.click(screen.getByRole('button', { name: 'One fewer Classic Chicken Shawarma' }))
+    expect(await screen.findByRole('heading', { name: 'Bills this shift' })).toBeInTheDocument()
+
+    await person.click(screen.getByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+
+    // The next customer never asked for the last one's discount, and nobody
+    // would think to check their bill for it.
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹139')
+    expect(screen.queryByTestId('bill-discount-row-0')).not.toBeInTheDocument()
+    // And they are not the last customer either.
+    expect(screen.getByTestId('customer-row')).toHaveTextContent('Enter Customer Info')
+    expect(screen.getByTestId('save-order')).toBeDisabled()
+  })
+
+  it('suggests one customer this outlet has served, from a partial number', async () => {
+    const person = user()
+    renderCounter()
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.click(screen.getByTestId('customer-row'))
+    const dialog = screen.getByRole('dialog', { name: 'Customer' })
+
+    for (const digit of '9000') {
+      await person.click(within(dialog).getByRole('button', { name: digit }))
+    }
+
+    // The demo outlet has served both fixture customers, and both numbers open
+    // `9000`. One is offered and the other is a count — never a list, because a
+    // list over the customer directory is the thing this product refuses to
+    // build.
+    const offered = await within(dialog).findByTestId('customer-suggestion')
+    expect(offered).toHaveTextContent('Ritika Sen')
+    expect(within(dialog).getByTestId('customer-suggestion-others')).toHaveTextContent('+1 more')
+
+    await person.click(offered)
+    expect(await within(dialog).findByTestId('customer-match')).toHaveTextContent('Ritika Sen')
+    await person.click(within(dialog).getByTestId('customer-confirm'))
+    expect(screen.getByTestId('customer-row')).toHaveTextContent('Ritika Sen · +91 90000 00101')
   })
 
   it('automatically saves a complete new phone when an order is accepted', async () => {
@@ -808,8 +920,7 @@ describe('BillingCounter', () => {
     const createOrGet = vi.spyOn(adapters.customers, 'createOrGet')
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.type(screen.getByPlaceholderText('Customer name'), 'New Customer')
-    await person.type(screen.getByPlaceholderText('Phone number'), '9000000999')
+    await identifyCustomer(person, '9000000999', 'New Customer')
     await person.click(screen.getByTestId('save-order'))
 
     await waitFor(() =>
@@ -824,8 +935,7 @@ describe('BillingCounter', () => {
     vi.spyOn(adapters.customers, 'createOrGet').mockReturnValue(new Promise(() => {}))
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.type(screen.getByPlaceholderText('Customer name'), 'Waiting directory')
-    await person.type(screen.getByPlaceholderText('Phone number'), '9000000999')
+    await identifyCustomer(person, '9000000999', 'Waiting directory')
     await person.click(screen.getByTestId('save-order'))
 
     // The panel cleared even though the directory request never answered.
@@ -1007,7 +1117,7 @@ describe('BillingCounter — a discount survives the whole journey', () => {
     renderCounter()
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_BURGER_ID}`))
-    await person.type(screen.getByPlaceholderText('Customer name'), 'Test customer')
+    await skipCustomer(person)
     await person.click(screen.getByTestId('save-order'))
 
     // ₹250 less the 15% menu discount is ₹212.50, carried to ₹213.
@@ -1028,7 +1138,7 @@ describe('BillingCounter — a discount survives the whole journey', () => {
     await person.click(screen.getByTestId('apply-discount'))
     await waitFor(() => expect(screen.getByTestId('bill-total')).toHaveTextContent('₹126'))
 
-    await person.type(screen.getByPlaceholderText('Customer name'), 'Test customer')
+    await skipCustomer(person)
     await person.click(screen.getByTestId('save-order'))
     await waitFor(() => expect(screen.queryByTestId('bill-total')).not.toBeInTheDocument())
 
@@ -1057,7 +1167,7 @@ describe('BillingCounter — a discount survives the whole journey', () => {
     await person.click(screen.getByTestId('apply-discount'))
     await waitFor(() => expect(screen.getByTestId('bill-total')).toHaveTextContent('₹126'))
 
-    await person.type(screen.getByPlaceholderText('Customer name'), 'Test customer')
+    await skipCustomer(person)
     await person.click(screen.getByTestId('save-order'))
     await waitFor(() => expect(screen.queryByTestId('bill-total')).not.toBeInTheDocument())
 

@@ -1,7 +1,12 @@
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 
 import { normalizeIndianPhone, phoneErrorMessage, validateIndianPhone } from '../../../shared/phone'
-import { CustomerActionError, type CustomerIdentity, type CustomersAdapter } from '../adapters'
+import {
+  CustomerActionError,
+  PARTIAL_PHONE_MIN_DIGITS,
+  type CustomerIdentity,
+  type CustomersAdapter,
+} from '../adapters'
 import type { Database } from '../database.types'
 import type { CounterResumeCoordinator, CounterResumeRecord } from '@/outbox'
 
@@ -84,6 +89,40 @@ export function createSupabaseCustomersAdapter(
         throw new CustomerActionError('failed', 'The customer could not be saved.')
       }
       return toIdentity(row)
+    },
+
+    async suggestByPartialPhone(partial) {
+      const digits = partial.replace(/\D/g, '').slice(-10)
+      if (digits.length < PARTIAL_PHONE_MIN_DIGITS) return null
+
+      /*
+        **The server answers this, and the tablet's cache is only the offline
+        fallback** [owner, 2026-09-19]. The outlet-scoped function that serves
+        the online path lands with the rest of the real wiring; until then this
+        adapter answers from the resume record alone, which is correct offline
+        behaviour and merely incomplete online.
+
+        The cache is the last fifty customers this till resolved, so it is a
+        subset of what the outlet has served — narrower than the server's
+        answer, never wider. It cannot leak anything the till was not already
+        told, which is why it is safe to fall back to rather than fail.
+      */
+      const matching = Object.values(offlineResume?.rememberedCustomers ?? {})
+        .sort((left, right) => right.rememberedAt.localeCompare(left.rememberedAt))
+        .filter((remembered) => remembered.phone.slice(-10).startsWith(digits))
+
+      const [best] = matching
+      return best
+        ? {
+            customer: {
+              id: best.id,
+              phone: best.phone,
+              name: best.name,
+              remembered: true as const,
+            },
+            otherMatches: matching.length - 1,
+          }
+        : null
     },
   }
 }

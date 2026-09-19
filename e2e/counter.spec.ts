@@ -5,7 +5,8 @@ import { expect, test, type Page } from '@playwright/test'
  *
  * The gate for `ui-billing-counter` is three clauses and each has a test here:
  * a full order rung and settled on a tablet viewport, the whole menu visible
- * without scrolling, and the UI-only customer-name-or-phone gate.
+ * without scrolling, and the UI-only gate that a customer has been decided —
+ * identified from their number, or deliberately skipped.
  *
  * The offline spec is the other half — the sync indicator's three states are the
  * whole reason it exists, and the escalated one cannot be reached by looking at
@@ -20,11 +21,37 @@ async function setTheme(page: Page, theme: 'light' | 'dark') {
   }, theme)
 }
 
+/**
+ * Decide the customer the way a biller does: open the row, tap the pad, confirm.
+ * The number is entered from the dialog's own keys, because the counter tablet
+ * has no keyboard out and that is what the pad is for.
+ */
+async function identifyCustomer(page: Page, digits: string, name?: string) {
+  await page.getByTestId('customer-row').click()
+  const dialog = page.getByRole('dialog', { name: 'Customer' })
+  for (const digit of digits) {
+    await dialog.getByRole('button', { name: digit, exact: true }).click()
+  }
+  if (name !== undefined) {
+    // `Name` while the number is new and a name is required of it, `Name
+    // (optional)` for a customer who already exists without one.
+    await dialog.getByPlaceholder(/name/i).fill(name)
+  }
+  await dialog.getByTestId('customer-confirm').click()
+}
+
+/**
+ * The other decision: no number given. Two taps, both deliberate — the row,
+ * then No customer. There is deliberately no skip on the composer.
+ */
+async function skipCustomer(page: Page) {
+  await page.getByTestId('customer-row').click()
+  await page.getByRole('dialog', { name: 'Customer' }).getByTestId('customer-skip').click()
+}
+
 async function recordPaid(page: Page, method = 'Cash') {
-  const name = page.getByPlaceholder('Customer name')
-  const phone = page.getByPlaceholder('Phone number')
-  if (!(await name.inputValue()).trim() && !(await phone.inputValue()).trim()) {
-    await name.fill('Test customer')
+  if ((await page.getByTestId('customer-row').textContent()) === 'Enter Customer Info') {
+    await skipCustomer(page)
   }
   await page.getByTestId('settle').click()
   const dialog = page.getByRole('dialog', { name: 'Record payment' })
@@ -93,25 +120,41 @@ test.describe('the counter', () => {
     ).toBeVisible()
   })
 
-  test('requires either customer name or phone before Order or Paid', async ({ page }) => {
+  test('requires a decision about the customer before Order or Paid', async ({ page }) => {
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
-    await expect(page.getByPlaceholder('Customer name')).toHaveValue('')
-    await expect(page.getByPlaceholder('Phone number')).toHaveValue('')
+    await expect(page.getByTestId('customer-row')).toHaveText('Enter Customer Info')
     await expect(page.getByRole('button', { name: 'Order', exact: true })).toBeDisabled()
     await expect(page.getByTestId('settle')).toBeDisabled()
     await expect(page.getByTestId('settle')).toHaveText('Paid')
-    await expect(page.getByText('Add a customer name or phone to continue.')).toBeVisible()
+    // The disabled actions beside an untouched row are the message. The
+    // sentence that used to sit here was a third way of saying it.
+    await expect(page.getByText(/Add a customer/i)).toHaveCount(0)
 
-    await page.getByPlaceholder('Phone number').fill('9000000000')
+    // A number nobody has used before, so the UI insists on a name for it.
+    await identifyCustomer(page, '9000000000', 'Rahul')
+    await expect(page.getByTestId('customer-row')).toContainText('Rahul · +91 90000 00000')
     await expect(page.getByRole('button', { name: 'Order', exact: true })).toBeEnabled()
     await expect(page.getByTestId('settle')).toBeEnabled()
+
+    // A decision is revised by making a different one: the row reopens the
+    // dialog, and there is no clear action beside it.
+    await expect(page.getByTestId('clear-customer')).toHaveCount(0)
+
+    // Skipping is a decision too, and it costs opening the dialog first. There
+    // is no skip on the composer — that is the one control this change most
+    // deliberately does not add.
+    await expect(page.getByTestId('skip-customer')).toHaveCount(0)
+    await skipCustomer(page)
+    await expect(page.getByRole('dialog', { name: 'Customer' })).toHaveCount(0)
+    await expect(page.getByTestId('customer-row')).toHaveText('Skipped Customer Info')
+    await expect(page.getByRole('button', { name: 'Order', exact: true })).toBeEnabled()
     await expect(page.getByTestId('save-order')).toHaveClass(/bg-primary/)
     await expect(page.getByTestId('settle')).toHaveClass(/bg-surface/)
   })
 
   test('keeps the bill until payment allocations exactly cover it', async ({ page }) => {
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
-    await page.getByPlaceholder('Customer name').fill('Demo Regular')
+    await skipCustomer(page)
     await page.getByTestId('settle').click()
 
     const dialog = page.getByRole('dialog', { name: 'Record payment' })
@@ -138,7 +181,7 @@ test.describe('the counter', () => {
 
   test('edits an immediate payment beside the paid bill', async ({ page }) => {
     await page.getByRole('button', { name: 'Mayonnaise Chicken Shawarma' }).click()
-    await page.getByPlaceholder('Customer name').fill('Demo Regular')
+    await skipCustomer(page)
     await recordPaid(page)
 
     await expect(page.getByTestId('undo-settle')).toHaveCount(0)
@@ -173,7 +216,8 @@ test.describe('the counter', () => {
   test('saves and records a food-first order from the persistent rail', async ({ page }) => {
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
     await page.getByRole('button', { name: 'Mayonnaise Chicken Shawarma', exact: true }).click()
-    await page.getByPlaceholder('Customer name').fill('Asha')
+    // Identified, because the cards are found below by the name they carry.
+    await identifyCustomer(page, '9000000888', 'Asha')
     await page.getByTestId('save-order').click()
     await expect(page.getByTestId('saved-order-confirmation')).toHaveCount(0)
 
@@ -343,9 +387,13 @@ test.describe('the counter', () => {
       saved after it, so it is the money waiting out of sight that the bottom
       chip has to announce.
     */
+    // Identified rather than skipped: each card is found below by the name it
+    // carries, and a skipped order carries none. One number apiece, since the
+    // number is the identity.
+    let nextNumber = 9000001000
     const save = async (customer: string) => {
       await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
-      await page.getByPlaceholder('Customer name').fill(customer)
+      await identifyCustomer(page, String((nextNumber += 1)), customer)
       await page.getByTestId('save-order').click()
       await expect(rail.getByText(customer, { exact: true })).toBeVisible()
     }
@@ -394,7 +442,7 @@ test.describe('the counter', () => {
     const list = page.getByTestId('counter-activity-rail').getByTestId('pipeline-list')
 
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
-    await page.getByPlaceholder('Customer name').fill('Newest')
+    await identifyCustomer(page, '9000001999', 'Newest')
     await page.getByTestId('save-order').click()
     await expect(list.getByText('Newest', { exact: true })).toBeVisible()
 
@@ -480,7 +528,7 @@ test.describe('the counter', () => {
 
   test('edits an order in the full composer and restores the waiting draft', async ({ page }) => {
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
-    await page.getByPlaceholder('Customer name').fill('Waiting customer')
+    await skipCustomer(page)
 
     const rail = page.getByTestId('counter-activity-rail')
     const order = rail.getByTestId('open-order-104')
@@ -498,10 +546,10 @@ test.describe('the counter', () => {
     await expect(order).toHaveCount(0)
 
     // The composer footer moved into the card rather than being duplicated: one
-    // Save changes, one set of customer fields, and no second total or item list.
+    // Save changes, one customer row, and no second total or item list.
     await expect(pin.getByTestId('save-order')).toBeVisible()
     await expect(pin.getByTestId('cancel-edit')).toBeVisible()
-    await expect(page.getByPlaceholder('Customer name')).toHaveCount(1)
+    await expect(page.getByTestId('customer-row')).toHaveCount(1)
     await expect(pin.getByTestId('bill-total')).toHaveCount(0)
     await expect(pin.getByRole('list', { name: /Items for order/ })).toHaveCount(0)
 
@@ -529,16 +577,17 @@ test.describe('the counter', () => {
       .getByRole('button', { name: 'One more Classic Chicken Shawarma' })
       .locator('xpath=preceding-sibling::span[1]')
     await expect(classicQuantity).toHaveText('2')
-    await expect(page.getByPlaceholder('Customer name')).toHaveValue('Demo Customer')
+    // The saved order's own decision comes back onto the row: a name and no
+    // number, which is every order rung before this change.
+    await expect(page.getByTestId('customer-row')).toContainText('Demo Customer · no number')
 
     await page.getByRole('button', { name: 'Mayonnaise Chicken Shawarma', exact: true }).click()
-    await page.getByPlaceholder('Customer name').fill('Updated customer')
-    await page.getByPlaceholder('Phone number').fill('9000000222')
+    await identifyCustomer(page, '9000000222', 'Updated customer')
     await page.getByTestId('save-order').click()
 
     await expect(page.getByRole('heading', { name: 'Current bill' })).toBeVisible()
     await expect(pin).toHaveCount(0)
-    await expect(page.getByPlaceholder('Customer name')).toHaveValue('Waiting customer')
+    await expect(page.getByTestId('customer-row')).toContainText('Skipped Customer Info')
     await expect(classicQuantity).toHaveText('1')
     await expect(order.getByText('Updated customer', { exact: true })).toBeVisible()
     await expect(order.getByText('Mayonnaise Chicken Shawarma', { exact: true })).toBeVisible()
@@ -547,29 +596,37 @@ test.describe('the counter', () => {
     await order.getByRole('menuitem', { name: 'Edit' }).click()
     await page.getByRole('button', { name: 'One more Classic Chicken Shawarma' }).click()
     await page.getByTestId('cancel-edit').click()
-    await expect(page.getByPlaceholder('Customer name')).toHaveValue('Waiting customer')
+    await expect(page.getByTestId('customer-row')).toContainText('Skipped Customer Info')
     await expect(classicQuantity).toHaveText('1')
   })
 
-  test('offers exact-phone autofill only after the complete number and keeps conflicts local', async ({
+  test('resolves a complete number and says nothing at all before the tenth digit', async ({
     page,
   }) => {
-    // The customer fields live in the composer, which opens on the first tap.
+    // The customer row lives in the composer, which opens on the first tap.
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
-    await page.getByPlaceholder('Customer name').fill('Ria')
-    await page.getByPlaceholder('Phone number').fill('900000010')
-    await expect(page.getByTestId('customer-match')).toHaveCount(0)
-    await page.getByPlaceholder('Phone number').fill('9000000101')
-    await expect(page.getByTestId('customer-match')).toContainText(
-      'replaces the name in this order only',
-    )
-    await page.getByRole('button', { name: 'Keep this order' }).click()
-    await expect(page.getByPlaceholder('Customer name')).toHaveValue('Ria')
+    await page.getByTestId('customer-row').click()
+    const dialog = page.getByRole('dialog', { name: 'Customer' })
+
+    for (const digit of '900000010') {
+      await dialog.getByRole('button', { name: digit, exact: true }).click()
+    }
+    // Nine digits of a number this outlet HAS served, so what shows is the
+    // outlet-scoped suggestion rather than an answer from the directory.
+    await expect(dialog.getByTestId('customer-suggestion')).toContainText('Ritika Sen')
+    await expect(dialog.getByTestId('customer-confirm')).toBeDisabled()
+
+    await dialog.getByRole('button', { name: '1', exact: true }).click()
+    await expect(dialog.getByTestId('customer-match')).toContainText('Ritika Sen')
+    await expect(dialog.getByTestId('customer-match')).toContainText('+91 90000 00101')
+    await expect(dialog.getByTestId('customer-suggestion')).toHaveCount(0)
+    await dialog.getByTestId('customer-confirm').click()
+    await expect(page.getByTestId('customer-row')).toContainText('Ritika Sen · +91 90000 00101')
   })
 
   test('records a mixed cash and UPI payment in exact paise', async ({ page }) => {
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
-    await page.getByPlaceholder('Customer name').fill('Demo Regular')
+    await skipCustomer(page)
     await page.getByTestId('settle').click()
     const dialog = page.getByRole('dialog', { name: 'Record payment' })
     for (const digit of ['1', '0', '0']) {
@@ -638,7 +695,7 @@ test.describe('the counter', () => {
     page,
   }) => {
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
-    await page.getByPlaceholder('Customer name').fill('Demo Regular')
+    await skipCustomer(page)
     await page.getByTestId('settle').click()
     const payment = page.getByRole('dialog', { name: 'Record payment' })
     for (const unsupported of ['Swiggy', 'Zomato', 'Card', 'Other']) {
@@ -744,10 +801,45 @@ test.describe('the counter', () => {
     )
   })
 
-  test('requests the native numeric keypad for customer phone', async ({ page }) => {
+  test('needs no device keyboard to enter a customer phone', async ({ page }) => {
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
-    await expect(page.getByPlaceholder('Phone number')).toHaveAttribute('inputmode', 'numeric')
-    await expect(page.getByPlaceholder('Phone number')).toHaveAttribute('pattern', '[0-9]*')
+    await page.getByTestId('customer-row').click()
+    const dialog = page.getByRole('dialog', { name: 'Customer' })
+
+    // Every digit comes from the dialog's own pad, so there is no text input to
+    // ask the device for a numeric keyboard in the first place.
+    for (const key of ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '00']) {
+      await expect(dialog.getByRole('button', { name: key, exact: true })).toBeVisible()
+    }
+    await expect(dialog.getByRole('button', { name: 'Delete last digit' })).toBeVisible()
+    for (const digit of '9000000101') {
+      await dialog.getByRole('button', { name: digit, exact: true }).click()
+    }
+    await expect(dialog.getByTestId('customer-phone-readout')).toHaveText('+91 90000 00101')
+  })
+
+  test('suggests one customer this outlet has served, and counts the rest', async ({ page }) => {
+    await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
+    await page.getByTestId('customer-row').click()
+    const dialog = page.getByRole('dialog', { name: 'Customer' })
+
+    // Below four digits nothing is shown and nobody is asked.
+    for (const digit of '900') {
+      await dialog.getByRole('button', { name: digit, exact: true }).click()
+    }
+    await expect(dialog.getByTestId('customer-resolution')).toBeEmpty()
+
+    await dialog.getByRole('button', { name: '0', exact: true }).click()
+    // One match and a count of the others. Never a list: a list over the
+    // customer directory is the path this product does not have.
+    await expect(dialog.getByTestId('customer-suggestion')).toHaveCount(1)
+    await expect(dialog.getByTestId('customer-suggestion')).toContainText('Ritika Sen')
+    await expect(dialog.getByTestId('customer-suggestion-others')).toHaveText('+1 more')
+
+    // The digits still to be checked are the ones drawn strongly.
+    await expect(dialog.getByTestId('customer-suggestion').getByText('0 00101')).toHaveClass(
+      /font-bold/,
+    )
   })
 
   test('removes the legacy PIN shift surface now that the enrolled tablet owns handover', async ({
