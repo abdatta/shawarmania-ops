@@ -1,0 +1,3 @@
+# Demo pipeline times never point into the future
+
+The counter demo seeds a complete trading day, but lifecycle orders whose wall-clock times have not arrived can sort ahead of an order just entered by the user. Clamp the seeded order, preparation, and cancellation instants to the current time, matching the existing demo rule for other today-dated records. This is a fixture correction only: it changes neither live billing nor the counter contract. The gate is the existing newest-first browser test, which reproduces the failure before this fix and must pass on both tablet and desktop afterwards.

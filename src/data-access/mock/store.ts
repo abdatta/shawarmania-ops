@@ -642,7 +642,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
           .slice(0, 1)
     const orderedAt =
       sourceBill?.ordered_at ??
-      instantAt(today, index === 2 ? '18:15' : index === 3 ? '18:40' : '19:10')
+      notLaterThanNow(instantAt(today, index === 2 ? '18:15' : index === 3 ? '18:40' : '19:10'))
     const totals = billTotals(
       sourceLines.map((line) => ({
         unitPricePaise: line.unit_price_paise,
@@ -654,7 +654,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       seed.preparedAtTime !== undefined
         ? seed.preparedAtTime === null
           ? null
-          : instantAt(today, seed.preparedAtTime)
+          : notLaterThanNow(instantAt(today, seed.preparedAtTime))
         : (sourceBill?.paid_at ?? null)
     orders.push({
       id,
@@ -687,7 +687,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       paid_by: sourceBill ? DEMO_BILLER_ID : null,
       paid_shift_id: sourceBill ? DEMO_OPEN_SHIFT_ID : null,
       cancel_reason: seed.reason ?? null,
-      cancelled_at: cancelled ? instantAt(today, '18:25') : null,
+      cancelled_at: cancelled ? notLaterThanNow(instantAt(today, '18:25')) : null,
       cancelled_by: cancelled ? MANAGER_ID : null,
       cancelled_device_id: cancelled ? DEMO_COUNTER_DEVICE_ID : null,
       cancelled_shift_id: cancelled ? DEMO_OPEN_SHIFT_ID : null,
