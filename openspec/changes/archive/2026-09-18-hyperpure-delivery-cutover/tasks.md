@@ -96,7 +96,7 @@
   order, no-OTP verification boundary and run-health variable.
 - [x] 6.3 Update `docs/BUSINESS_CONTEXT.md`: physical Hyperpure deliveries are
   Kanchrapara through 15 September 2026 and Kalyani from 16 September 2026.
-- [ ] 6.4 Merge the delta into `openspec/specs/supply-statements/spec.md` only at
+- [x] 6.4 Merge the delta into `openspec/specs/supply-statements/spec.md` only at
   archive time.
 
 ## 7. Verification and production rollout
