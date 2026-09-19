@@ -46,7 +46,6 @@ export function EditingOrderPin({
     >
       <OpenOrderCardBody
         orderNumber={order.orderNumber}
-        {...(order.localReference !== undefined ? { localReference: order.localReference } : {})}
         orderedAt={order.orderedAt}
         customerName={customerName.trim() === '' ? null : customerName}
         lines={lines}

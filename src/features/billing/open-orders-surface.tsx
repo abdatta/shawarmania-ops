@@ -10,6 +10,7 @@ import {
   type BillingOrder,
   type PaymentAllocation,
 } from '@/data-access/adapters'
+import { isAwaitingOrderNumber, UNSENT_ORDER_REFERENCE } from '@/domain'
 import { SessionContext } from '@/session/context'
 import { CounterDeviceContext } from '@/session/counter-context'
 
@@ -354,8 +355,8 @@ export function OpenOrdersSurface({
       <CancelOrderDialog
         open={cancelling !== null}
         orderNumber={cancelling?.orderNumber ?? 0}
-        {...(cancelling?.localReference !== undefined
-          ? { orderReference: cancelling.localReference }
+        {...(cancelling && isAwaitingOrderNumber(cancelling.orderNumber)
+          ? { orderReference: UNSENT_ORDER_REFERENCE }
           : {})}
         busy={busy}
         onClose={() => setCancelling(null)}

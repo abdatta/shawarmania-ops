@@ -1,9 +1,11 @@
 import {
+  AWAITING_ORDER_NUMBER,
+  isAwaitingOrderNumber,
+  UNSENT_ORDER_REFERENCE,
   billTotals,
   classifySync,
   lineTotalPaise,
   ticketEditDeadlineMs,
-  provisionalToken,
 } from '@/domain'
 import { demoReceiptToken, receiptLink } from '@/lib/receipt-link'
 
@@ -378,7 +380,6 @@ export function createMockBillingAdapter(
       orderNumber: row.order_number,
       // Delivered orders carry their permanent number; only queued ones speak
       // of a local reference — matching the live adapter exactly.
-      localReference: null,
       businessDate: row.business_date,
       orderedAt: row.ordered_at,
       preparedAt: row.prepared_at,
@@ -520,8 +521,10 @@ export function createMockBillingAdapter(
     }
   }
 
-  function referenceLabel(order: Pick<BillingOrder, 'localReference' | 'orderNumber'>): string {
-    return order.localReference ?? `#${order.orderNumber}`
+  function referenceLabel(order: Pick<BillingOrder, 'orderNumber'>): string {
+    return isAwaitingOrderNumber(order.orderNumber)
+      ? UNSENT_ORDER_REFERENCE
+      : `#${order.orderNumber}`
   }
 
   function requireOpenShift() {
@@ -988,8 +991,7 @@ export function createMockBillingAdapter(
             id: input.clientId,
             outletId: input.outletId,
             deviceId: creatorShift?.device_id ?? DEMO_COUNTER_DEVICE_ID,
-            orderNumber: 0,
-            localReference: `Local · ${provisionalToken(input.clientId)}`,
+            orderNumber: AWAITING_ORDER_NUMBER,
             businessDate: input.businessDate,
             orderedAt: new Date(command.acceptedAtMs).toISOString(),
             preparedAt: null,
@@ -1550,8 +1552,7 @@ export function createMockBillingAdapter(
         id: input.clientId,
         outletId: input.outletId,
         deviceId: shift.device_id,
-        orderNumber: 0,
-        localReference: `Local · ${provisionalToken(input.clientId)}`,
+        orderNumber: AWAITING_ORDER_NUMBER,
         businessDate: input.businessDate,
         orderedAt: new Date(acceptedAtMs).toISOString(),
         preparedAt: null,

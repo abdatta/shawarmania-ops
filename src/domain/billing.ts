@@ -317,47 +317,35 @@ export function menuLineDiscount(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// What a bill is called before it has a number.
+// What an order is called before it has a number.
 
 /**
- * Crockford base32, minus the characters that get misread aloud. The first
- * character of a reference is drawn from the letters only, so a provisional
- * reference can never be read — or parsed — as a number.
- */
-const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
-const CROCKFORD_LETTERS = 'ABCDEFGHJKMNPQRSTVWXYZ'
-
-/**
- * The short token that stands in for a bill number until the bill syncs.
+ * The `order_number` a queued order carries until the server assigns a real one.
  *
- * Bill numbers are the server's, assigned at insert, per outlet and sequential.
- * A queued bill has none, and showing a plausible-looking integer would be the
- * worst possible lie to tell a biller — or a customer reading over the counter.
- * So this is deliberately unlike one: four characters, the first always a
- * letter, derived from the bill's own client UUID so the same bill always
- * carries the same token.
+ * Order numbers are the server's — per outlet, sequential, assigned at insert —
+ * so an order that has only reached this tablet's IndexedDB has none. Both
+ * adapters have always used nought for that; this names it, so the sentinel is
+ * not a bare `0` repeated at five call sites where a reader has to work out
+ * whether it is a number or a flag.
  */
-export function provisionalToken(clientId: string): string {
-  const hex = clientId.replace(/[^0-9a-fA-F]/g, '')
-  let hash = 0
-  for (const character of hex) {
-    hash = (hash * 33 + parseInt(character, 16)) % 0xffffffff
-  }
+export const AWAITING_ORDER_NUMBER = 0
 
-  const first = CROCKFORD_LETTERS[hash % CROCKFORD_LETTERS.length]!
-  let rest = ''
-  let remaining = Math.floor(hash / CROCKFORD_LETTERS.length)
-  for (let index = 0; index < 3; index += 1) {
-    rest += CROCKFORD[remaining % CROCKFORD.length]!
-    remaining = Math.floor(remaining / CROCKFORD.length)
-  }
-  return `${first}${rest}`
+export function isAwaitingOrderNumber(orderNumber: number): boolean {
+  return orderNumber === AWAITING_ORDER_NUMBER
 }
 
-/** What a queued bill is called on screen. Never formatted as a bill number. */
-export function provisionalReference(clientId: string): string {
-  return `Queued · ${provisionalToken(clientId)}`
-}
+/**
+ * What an order with no number yet is called in prose and in accessible names.
+ *
+ * **Not an identifier, and deliberately not one.** A short token used to stand
+ * here — four characters, first always a letter, derived from the order's own
+ * UUID. It was honest about not being a number and still read as one, because
+ * four characters in an identifier slot is what an identifier looks like: when
+ * `#106` replaced it, the order appeared to change identity rather than to
+ * receive its number. Where the number is *displayed*, a shimmer stands in
+ * instead; where it is *spoken*, this phrase does.
+ */
+export const UNSENT_ORDER_REFERENCE = 'an unsent order'
 
 /** What a sent bill is called on screen, once the server has numbered it. */
 export function billReference(billNumber: number): string {

@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  AWAITING_ORDER_NUMBER,
   billReference,
+  isAwaitingOrderNumber,
+  UNSENT_ORDER_REFERENCE,
   billTotals,
   classifySync,
   discountAmountPaise,
   lineTotalPaise,
   menuLineDiscount,
   MINIMUM_BILL_PAISE,
-  provisionalReference,
-  provisionalToken,
   SYNC_ESCALATION_COUNT,
   SYNC_ESCALATION_MS,
   ticketEditDeadlineMs,
@@ -197,36 +198,22 @@ describe('discountAmountPaise', () => {
   })
 })
 
-describe('provisional references', () => {
-  const clientId = '0f9c4a11-3b8e-4c2a-9d77-1e5b6a0c8f31'
-
-  it('is stable for a given bill', () => {
-    expect(provisionalToken(clientId)).toBe(provisionalToken(clientId))
+describe('an order with no number yet', () => {
+  it('is the sentinel both adapters already write, named', () => {
+    expect(isAwaitingOrderNumber(AWAITING_ORDER_NUMBER)).toBe(true)
+    expect(isAwaitingOrderNumber(106)).toBe(false)
   })
 
-  it('cannot be mistaken — or parsed — as a bill number', () => {
-    const token = provisionalToken(clientId)
-    expect(token).toHaveLength(4)
-    expect(token[0]).toMatch(/[A-Z]/)
-    expect(Number.isNaN(Number(token))).toBe(true)
-    expect(provisionalReference(clientId)).toMatch(/^Queued · [A-Z][0-9A-Z]{3}$/)
+  it('is spoken as a phrase, never as something that could be an identifier', () => {
+    // A token used to stand here. Four characters in an identifier slot read as
+    // an identifier, so `#106` replacing it read as the order changing identity.
+    expect(UNSENT_ORDER_REFERENCE).not.toMatch(/\d/)
+    expect(UNSENT_ORDER_REFERENCE).toMatch(/\s/)
   })
 
-  it('differs from the way a numbered bill is written', () => {
+  it('is written differently from a numbered bill', () => {
     expect(billReference(143)).toBe('Bill 143')
-    expect(provisionalReference(clientId)).not.toMatch(/^Bill /)
-  })
-
-  it('gives different bills different tokens', () => {
-    const tokens = new Set(
-      [
-        '0f9c4a11-3b8e-4c2a-9d77-1e5b6a0c8f31',
-        '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d',
-        'ffffffff-ffff-4fff-8fff-ffffffffffff',
-        '00000000-0000-4000-8000-000000000001',
-      ].map(provisionalToken),
-    )
-    expect(tokens.size).toBe(4)
+    expect(UNSENT_ORDER_REFERENCE).not.toMatch(/^Bill /)
   })
 })
 

@@ -31,6 +31,8 @@ import {
 import {
   billTotals,
   discountAmountPaise,
+  isAwaitingOrderNumber,
+  UNSENT_ORDER_REFERENCE,
   lineTotalPaise,
   menuLineDiscount,
   resolveBusinessDate,
@@ -859,8 +861,9 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
               }
               {...(editingOrder
                 ? {
-                    editingOrderReference:
-                      editingOrder.localReference ?? `order #${editingOrder.orderNumber}`,
+                    editingOrderReference: isAwaitingOrderNumber(editingOrder.orderNumber)
+                      ? UNSENT_ORDER_REFERENCE
+                      : `order #${editingOrder.orderNumber}`,
                     /*
                       The customer row keeps its place while the rest of the
                       footer is docked beside the order [owner, 2026-09-19]. A

@@ -222,13 +222,15 @@ test.describe('the counter', () => {
     await expect(page.getByTestId('saved-order-confirmation')).toHaveCount(0)
 
     const rail = page.getByTestId('counter-activity-rail')
-    // Before delivery the card carries a local reference, never a number — and
-    // no per-line prices: the total is what the pipeline card shows.
+    // Before delivery the card shows the shape of the number, never a number —
+    // and no per-line prices: the total is what the pipeline card shows.
     const saved = rail.getByTestId(/^open-order-local-/)
     await expect(saved.getByText('Asha', { exact: true })).toBeVisible()
     await expect(saved.getByText('Classic Chicken Shawarma', { exact: true })).toBeVisible()
     await expect(saved.getByText('Mayonnaise Chicken Shawarma', { exact: true })).toBeVisible()
-    await expect(saved.getByText(/^Local · [0-9A-Z]{4}$/)).toBeVisible()
+    // The shape of the number that is coming, never a stand-in for it.
+    await expect(saved.locator('.animate-pulse')).toBeVisible()
+    await expect(saved).not.toContainText(/#\d/)
     await expect(saved.getByText('now', { exact: true })).toBeVisible()
     await expect(saved.getByText('Demo Biller', { exact: true })).toHaveCount(0)
     await expect(saved).toContainText('₹298')

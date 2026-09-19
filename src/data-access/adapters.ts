@@ -1247,9 +1247,16 @@ export interface BillingOrder {
   id: Tables<'orders'>['id']
   outletId: Tables<'orders'>['outlet_id']
   deviceId: Tables<'orders'>['device_id']
+  /**
+   * `AWAITING_ORDER_NUMBER` until the server assigns the permanent daily one.
+   *
+   * Numbers are the server's — per outlet, sequential, assigned at insert — so
+   * an order that has only reached this tablet's IndexedDB has none yet. The
+   * surface draws that gap as a shimmer the shape of the number; it does not
+   * fill it with a stand-in, because anything in an identifier slot reads as an
+   * identifier and would appear to change when the real number lands.
+   */
   orderNumber: Tables<'orders'>['order_number']
-  /** Present only until the server assigns the permanent daily order number. */
-  localReference?: string | null
   businessDate: Tables<'orders'>['business_date']
   orderedAt: Tables<'orders'>['ordered_at']
   /**

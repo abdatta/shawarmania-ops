@@ -125,10 +125,16 @@ retry look like a new collision. The receipt needs no customer or line payload:
 the canonical hash plus command, scope and time identities are enough to decide
 replay versus conflict.
 
-**Bill numbers are assigned by the server, never the client.** Two offline
-tablets cannot safely agree on the next number in a sequence. Until a bill
-syncs, the UI shows a short local reference and **not sent yet**; it never calls
-the bill provisional. The real per-outlet number arrives with acceptance.
+**Bill and order numbers are assigned by the server, never the client.** Two
+offline tablets cannot safely agree on the next number in a sequence. The real
+per-outlet number arrives with acceptance.
+
+**Until it does, the surface shows the *shape* of the number and nothing else.**
+A placeholder, never a stand-in: anything printed in an identifier slot is read
+as an identifier, so a short reference there makes the real number look like a
+change of identity rather than an arrival. **And the words are said once** — the
+sync indicator names the unsent condition and counts the items waiting, so no
+individual card repeats it. Nothing anywhere calls unsent work provisional.
 
 **Totals are computed on the device and validated by the database as one
 aggregate.** Parent, lines, number, state transition and receipt commit in one

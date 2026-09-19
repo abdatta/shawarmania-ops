@@ -27,10 +27,10 @@ import {
 } from '../adapters'
 import type { Database, Tables } from '../database.types'
 import {
+  AWAITING_ORDER_NUMBER,
   billTotals,
   classifySync,
   lineTotalPaise,
-  provisionalToken,
   ticketEditDeadlineMs,
   type TicketEditFacts,
 } from '@/domain'
@@ -145,7 +145,6 @@ function orderView(row: OrderReadRow, historicalDeviceLabel: string | null): Bil
     outletId: row.outlet_id,
     deviceId: row.device_id,
     orderNumber: row.order_number,
-    localReference: null,
     businessDate: row.business_date,
     orderedAt: row.ordered_at,
     preparedAt: row.prepared_at,
@@ -569,8 +568,7 @@ export function createSupabaseBillingAdapter(
             id: payload.orderId,
             outletId: envelope.outletId,
             deviceId: envelope.tabletId,
-            orderNumber: 0,
-            localReference: `Local · ${provisionalToken(envelope.commandId)}`,
+            orderNumber: AWAITING_ORDER_NUMBER,
             businessDate: payload.businessDate,
             orderedAt: envelope.command.createdAt,
             preparedAt: null,
@@ -900,9 +898,7 @@ export function createSupabaseBillingAdapter(
           id: command.payload.orderId,
           outletId: envelope.outletId,
           deviceId: counterSession.device.deviceId,
-          orderNumber: previous?.orderNumber ?? 0,
-          localReference:
-            previous?.localReference ?? `Local · ${provisionalToken(command.payload.orderId)}`,
+          orderNumber: previous?.orderNumber ?? AWAITING_ORDER_NUMBER,
           businessDate: command.payload.businessDate,
           orderedAt: previous?.orderedAt ?? command.createdAt,
           preparedAt: null,
@@ -1526,8 +1522,7 @@ export function createSupabaseBillingAdapter(
         id: input.clientId,
         outletId: input.outletId,
         deviceId: session.device.deviceId,
-        orderNumber: 0,
-        localReference: `Local · ${provisionalToken(input.clientId)}`,
+        orderNumber: AWAITING_ORDER_NUMBER,
         businessDate: input.businessDate,
         orderedAt: command.createdAt,
         preparedAt: null,

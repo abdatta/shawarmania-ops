@@ -673,12 +673,14 @@ describe('BillingCounter', () => {
 
     expect(saveOrder).toHaveBeenCalledWith(expect.objectContaining({ lines: expect.any(Array) }))
     const rail = await screen.findByTestId('counter-activity-rail')
-    // Before delivery the card carries a local reference, never a number.
+    // Before delivery the card shows the SHAPE of the number that is coming and
+    // nothing that could be read as one. A token stood here once; `#106`
+    // replacing it read as the order changing identity.
     const clientId = (saveOrder.mock.calls[0]![0] as { clientId: string }).clientId
     const saved = await within(rail).findByTestId(`open-order-local-${clientId}`)
     expect(within(saved).getByText('Asha')).toBeInTheDocument()
-    expect(within(saved).getByText(/Local · [0-9A-Z]{4}/)).toBeInTheDocument()
-    expect(within(saved).getByText(/Local · /).textContent).not.toMatch(/#\d/)
+    expect(saved.querySelector('.animate-pulse')).toBeInTheDocument()
+    expect(saved).not.toHaveTextContent(/#\d/)
     expect(within(saved).getByText('Classic Chicken Shawarma')).toBeInTheDocument()
     expect(within(saved).getByText('Mayonnaise Chicken Shawarma')).toBeInTheDocument()
     expect(within(saved).getByText('now')).toBeInTheDocument()
@@ -689,7 +691,7 @@ describe('BillingCounter', () => {
     await vi.advanceTimersByTimeAsync(500)
     const delivered = await within(rail).findByTestId('open-order-106')
     expect(within(delivered).getByText(/^#\s*106$/)).toBeInTheDocument()
-    expect(within(rail).queryByText(/Local · /)).not.toBeInTheDocument()
+    expect(delivered.querySelector('.animate-pulse')).toBeNull()
 
     expect(screen.queryByTestId('saved-order-confirmation')).not.toBeInTheDocument()
     // The composer gave way: the middle column is the money list again.
@@ -1144,8 +1146,7 @@ describe('BillingCounter — a discount survives the whole journey', () => {
 
     // Uncommon actions live behind the kebab; Edit is one of them.
     const rail = await screen.findByTestId('counter-activity-rail')
-    const card = await within(rail).findByText(/Local ·/)
-    const openOrder = card.closest('article')!
+    const openOrder = await within(rail).findByTestId(/^open-order-local-/)
     await person.click(within(openOrder).getByRole('button', { name: /^More actions/ }))
     await person.click(within(openOrder).getByRole('menuitem', { name: 'Edit' }))
 

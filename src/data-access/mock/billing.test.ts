@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { PAYMENT_EDIT_WINDOW_MS, SYNC_ESCALATION_COUNT, SYNC_ESCALATION_MS } from '@/domain'
+import {
+  AWAITING_ORDER_NUMBER,
+  PAYMENT_EDIT_WINDOW_MS,
+  SYNC_ESCALATION_COUNT,
+  SYNC_ESCALATION_MS,
+} from '@/domain'
 
 import type { BillDraft, SaveOrderInput } from '../adapters'
 import { createMockBillingAdapter } from './billing'
@@ -383,8 +388,9 @@ describe('mock billing adapter', () => {
     const adapter = createMockBillingAdapter(store)
     const saved = await adapter.saveOrder(orderDraft(store, '10000000-0000-4000-8000-000000000001'))
     // The order exists locally first; the row lands with its number at delivery.
-    expect(saved.orderNumber).toBe(0)
-    expect(saved.localReference).toMatch(/^Local · [0-9A-Z]{4}$/)
+    // No stand-in reference: the surface draws the gap as a shimmer, and the
+    // sentinel is the whole of what the adapter says about it.
+    expect(saved.orderNumber).toBe(AWAITING_ORDER_NUMBER)
     await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
 
     expect(store.orders.find((order) => order.id === saved.id)?.discount_paise).toBe(0)
@@ -663,15 +669,15 @@ describe('mock billing adapter', () => {
       expect(store.orders.length).toBe(ordersBefore)
       expect(store.orderNumbers.get(`${DEMO_OUTLET_ID}:${store.today}`)).toBe(highestBefore)
       const listed = await adapter.listOpenOrders(DEMO_OUTLET_ID)
-      expect(listed.find((order) => order.id === saved.id)?.localReference).toMatch(
-        /^Local · [0-9A-Z]{4}$/,
-      )
+      expect(listed.find((order) => order.id === saved.id)?.orderNumber).toBe(AWAITING_ORDER_NUMBER)
 
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
       const delivered = store.orders.find((order) => order.id === saved.id)
       expect(delivered?.order_number).toBe(highestBefore + 1)
       const afterDelivery = await adapter.listOpenOrders(DEMO_OUTLET_ID)
-      expect(afterDelivery.find((order) => order.id === saved.id)?.localReference).toBeNull()
+      expect(afterDelivery.find((order) => order.id === saved.id)?.orderNumber).toBe(
+        highestBefore + 1,
+      )
     })
 
     // Spec: the queue drains when the screen subscribes, not only on reconnect.

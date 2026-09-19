@@ -1,6 +1,8 @@
 import 'fake-indexeddb/auto'
 
 import Dexie from 'dexie'
+
+import { AWAITING_ORDER_NUMBER } from '@/domain'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -377,9 +379,9 @@ describe('the live tablet acceptance boundary', () => {
     const orderId = orderInput.clientId
 
     const created = await billing.saveOrder(orderInput)
-    expect(created.localReference).toMatch(/^Local · [0-9A-Z]{4}$/)
+    expect(created.orderNumber).toBe(AWAITING_ORDER_NUMBER)
     await expect(billing.listOpenOrders(session.device.outletId)).resolves.toMatchObject([
-      { id: orderId, localReference: created.localReference, lines: [{ quantity: 1 }] },
+      { id: orderId, orderNumber: AWAITING_ORDER_NUMBER, lines: [{ quantity: 1 }] },
     ])
 
     await billing.reviseOrder(orderId, {
@@ -414,7 +416,6 @@ describe('the live tablet acceptance boundary', () => {
       outletId: 'outlet-1',
       deviceId: session.device.deviceId,
       orderNumber: 17,
-      localReference: null,
       businessDate: '2026-08-11',
       orderedAt: '2026-08-11T12:00:00.000Z',
       preparedAt: null,

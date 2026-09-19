@@ -1,8 +1,9 @@
 import { UserRound } from 'lucide-react'
 
+import { Shimmer } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import type { BillLineDraft } from '@/data-access/adapters'
-import { formatRecentAge } from '@/domain'
+import { formatRecentAge, isAwaitingOrderNumber, UNSENT_ORDER_REFERENCE } from '@/domain'
 
 /**
  * How an open order looks, in one place.
@@ -20,7 +21,6 @@ import { formatRecentAge } from '@/domain'
  */
 export function OpenOrderCardBody({
   orderNumber,
-  localReference,
   orderedAt,
   customerName,
   creatorName,
@@ -28,7 +28,6 @@ export function OpenOrderCardBody({
   showLines = true,
 }: {
   orderNumber: number
-  localReference?: string | null
   orderedAt: string
   customerName: string | null
   /** Omitted for the current shift holder — they know who took the order. */
@@ -42,7 +41,8 @@ export function OpenOrderCardBody({
   showLines?: boolean
 }) {
   const totalPaise = lines.reduce((sum, line) => sum + line.unitPricePaise * line.quantity, 0)
-  const reference = localReference ?? `Order #${orderNumber}`
+  const awaitingNumber = isAwaitingOrderNumber(orderNumber)
+  const reference = awaitingNumber ? UNSENT_ORDER_REFERENCE : `Order #${orderNumber}`
 
   return (
     <>
@@ -61,9 +61,16 @@ export function OpenOrderCardBody({
                 : 'flex flex-wrap items-center gap-1.5'
             }
           >
-            <span className="rounded-md border border-border bg-surface px-1.5 py-0.5 text-xs font-bold text-content-muted">
-              {reference}
-            </span>
+            {awaitingNumber ? (
+              <>
+                <Shimmer className="h-5 w-16 rounded-md" />
+                <span className="sr-only">Order number not yet assigned</span>
+              </>
+            ) : (
+              <span className="rounded-md border border-border bg-surface px-1.5 py-0.5 text-xs font-bold text-content-muted">
+                {reference}
+              </span>
+            )}
             <span className="text-xs text-content-muted">
               {formatRecentAge(orderedAt)}
               {creatorName && <> · {creatorName}</>}

@@ -3,9 +3,15 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
+import { Shimmer } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import type { BillingOrder } from '@/data-access/adapters'
-import { formatRecentAge, ticketEditDeadlineMs } from '@/domain'
+import {
+  formatRecentAge,
+  isAwaitingOrderNumber,
+  ticketEditDeadlineMs,
+  UNSENT_ORDER_REFERENCE,
+} from '@/domain'
 
 import { cn } from '@/lib/cn'
 
@@ -115,7 +121,8 @@ export function PipelineCard({
   /** The list price, shown struck through only when a discount moved it. */
   const grossPaise = order.lines.reduce((sum, line) => sum + line.unitPricePaise * line.quantity, 0)
   const discounted = grossPaise > totalPaise
-  const reference = order.localReference ?? `Order #${order.orderNumber}`
+  const awaitingNumber = isAwaitingOrderNumber(order.orderNumber)
+  const reference = awaitingNumber ? UNSENT_ORDER_REFERENCE : `Order #${order.orderNumber}`
   const isPaid = order.status === 'paid'
   const prepared = order.preparedAt !== null
   /*
@@ -228,7 +235,7 @@ export function PipelineCard({
     <article
       data-flip-id={order.id}
       data-testid={
-        order.localReference ? `open-order-local-${order.id}` : `open-order-${order.orderNumber}`
+        awaitingNumber ? `open-order-local-${order.id}` : `open-order-${order.orderNumber}`
       }
       data-paid={isPaid || undefined}
       className="rounded-xl border border-border bg-surface-raised px-2 py-1.5"
@@ -240,7 +247,19 @@ export function PipelineCard({
           data-testid={`order-reference-${order.id}`}
           className="flex shrink-0 items-center text-xl font-black leading-6 text-primary"
         >
-          {order.localReference ?? `#${order.orderNumber}`}
+          {awaitingNumber ? (
+            <>
+              {/*
+                The shape of the number that is coming, not a stand-in for it.
+                A token stood here once and read as an identifier, so the real
+                number replacing it read as the order changing identity.
+              */}
+              <Shimmer className="h-6 w-12 rounded-md" />
+              <span className="sr-only">Order number not yet assigned</span>
+            </>
+          ) : (
+            `#${order.orderNumber}`
+          )}
         </span>
         <div className="min-w-0 flex-1 self-center">
           {order.customerName && (
