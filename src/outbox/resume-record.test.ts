@@ -195,7 +195,7 @@ describe('counter resume record', () => {
       rememberedAt: '2026-08-01T00:00:00.000Z',
     }
 
-    const retained = retainRememberedCustomers(customers, now)
+    const retained = retainRememberedCustomers(customers)
     expect(Object.keys(retained)).toHaveLength(REMEMBERED_CUSTOMER_LIMIT)
     expect(retained).not.toHaveProperty('+919999999999')
     expect(log).not.toHaveBeenCalled()

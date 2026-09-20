@@ -22,7 +22,7 @@ export {
   COUNTER_RESUME_SCHEMA_VERSION,
   MATERIAL_CLOCK_SKEW_MS,
   REMEMBERED_CUSTOMER_LIMIT,
-  REMEMBERED_CUSTOMER_RETENTION_MS,
+  forgetRememberedCustomers,
   counterResumeStopAt,
   hasMaterialClockSkew,
   readCounterResume,

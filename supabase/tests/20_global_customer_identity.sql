@@ -198,6 +198,24 @@ $q$, '22023', null, 'and neither is nothing at all');
 
 -- There is no listing function to call. The strongest form of "cannot
 -- enumerate" is that the verb does not exist.
+--
+-- **Two verbs were added to this list on 2026-09-20 and each had to earn it**
+-- (`the-server-links-the-sale-to-the-customer`). Adding a third without the
+-- same argument is how a directory becomes browsable one reasonable-looking
+-- commit at a time.
+--
+--   `customer_resolve_for_sale` is not a search: it takes one complete phone
+--   already written on the sale being recorded, and it is revoked from every
+--   client role, so nothing a session can call reaches it.
+--
+--   `customer_suggest_at_outlet` IS a prefix match, which this file otherwise
+--   forbids outright — admitted only because it cannot reach the directory.
+--   It is scoped to the customers the CALLER'S OWN OUTLET has served, derived
+--   from their live shift and never from an argument, and it returns one row
+--   or none. The objection to a prefix search was never the tablet behind the
+--   counter; it was that `customers` is business-wide, so a prefix over the
+--   table reads one franchise's customers from another's till. An outlet scope
+--   removes exactly that and leaves people this counter already served.
 select is(
   (select count(*) from pg_proc p
      join pg_namespace n on n.oid = p.pronamespace
@@ -205,9 +223,19 @@ select is(
       and p.proname ~ 'customer'
       and p.proname not in ('customer_lookup_by_phone', 'customer_create_or_get',
                             'customer_directory', 'customer_lookup_exceeded',
-                            'record_customer_lookup', 'app_may_look_up_customer')),
+                            'record_customer_lookup', 'app_may_look_up_customer',
+                            'customer_resolve_for_sale', 'customer_suggest_at_outlet')),
   0::bigint,
-  'no customer search, list, count or prefix function exists to be called');
+  'no customer search, list, count or prefix function exists beyond the two argued for');
+
+-- And the one prefix verb that does exist refuses anybody who is not standing
+-- at a counter. A Franchise Admin has every outlet-scoped read this product
+-- gives them and still cannot ask it, because it is keyed on a live counter
+-- shift rather than on a role.
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002');
+select throws_ok($q$
+  select * from public.customer_suggest_at_outlet('9000')
+$q$, '42501', null, 'the outlet-scoped prefix refuses a caller with no live counter shift');
 
 reset role;
 

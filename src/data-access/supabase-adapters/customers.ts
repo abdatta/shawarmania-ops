@@ -97,15 +97,33 @@ export function createSupabaseCustomersAdapter(
 
       /*
         **The server answers this, and the tablet's cache is only the offline
-        fallback** [owner, 2026-09-19]. The outlet-scoped function that serves
-        the online path lands with the rest of the real wiring; until then this
-        adapter answers from the resume record alone, which is correct offline
-        behaviour and merely incomplete online.
+        fallback** [owner, 2026-09-19]. `customer_suggest_at_outlet` scopes the
+        match to the customers this outlet has served, derives that outlet from
+        the caller's own live shift, and returns one row or none with a count of
+        the others. Reading the cache first would go stale against a customer
+        the neighbouring till saved ten minutes ago.
+      */
+      const { data, error } = await client.rpc('customer_suggest_at_outlet', {
+        p_partial: digits,
+      })
+      if (!error) {
+        const row = data?.[0]
+        return row
+          ? {
+              customer: { id: row.id, phone: row.phone, name: row.name },
+              otherMatches: row.other_matches,
+            }
+          : null
+      }
 
-        The cache is the last fifty customers this till resolved, so it is a
-        subset of what the outlet has served — narrower than the server's
-        answer, never wider. It cannot leak anything the till was not already
-        told, which is why it is safe to fall back to rather than fail.
+      /*
+        Unreachable, refused or rate-limited: fall back to what this till has
+        already resolved for itself.
+
+        Safe rather than merely convenient — the cache holds numbers this till
+        was told and looked up, so it is a strict SUBSET of what the outlet has
+        served. Falling back narrows the answer and can never widen it, and it
+        cannot disclose anything the tablet was not already given.
       */
       const matching = Object.values(offlineResume?.rememberedCustomers ?? {})
         .sort((left, right) => right.rememberedAt.localeCompare(left.rememberedAt))

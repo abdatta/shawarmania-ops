@@ -10,7 +10,6 @@ import type { Tables } from '@/data-access/database.types'
 import { BillingDeliveryDatabase } from './schema'
 
 export const COUNTER_RESUME_SCHEMA_VERSION = 2
-export const REMEMBERED_CUSTOMER_RETENTION_MS = 24 * 60 * 60 * 1000
 export const REMEMBERED_CUSTOMER_LIMIT = 50
 export const MATERIAL_CLOCK_SKEW_MS = 2 * 60 * 1000
 
@@ -125,7 +124,7 @@ export async function readCounterResume(
   // on write would let a record that stopped being rewritten keep serving
   // phone numbers past the cap that `docs/SECURITY_AND_PRIVACY.md` states.
   const record = structuredClone(raw)
-  record.rememberedCustomers = retainRememberedCustomers(record.rememberedCustomers, nowMs)
+  record.rememberedCustomers = retainRememberedCustomers(record.rememberedCustomers)
   return { status: 'ready', record }
 }
 
@@ -139,17 +138,44 @@ export async function writeCounterResume(
   })
 }
 
+/**
+ * The fifty customers this till resolved most recently, and no time limit
+ * [owner, 2026-09-20].
+ *
+ * There was a twenty-four hour window here, and it was forgetting the weekly
+ * regular — precisely the customer worth remembering, and the one a biller
+ * would otherwise make type ten digits again. A count is the honest bound: it
+ * caps what the device holds however long it trades.
+ *
+ * **The consequence is that fifty names and numbers now sit on the tablet
+ * indefinitely**, which is why `forgetRememberedCustomers` exists and is called
+ * the moment the device's enrolment is revoked.
+ */
 export function retainRememberedCustomers(
   customers: Record<string, RememberedCustomerResult>,
-  nowMs = Date.now(),
 ): Record<string, RememberedCustomerResult> {
   return Object.fromEntries(
     Object.entries(customers)
-      .filter(
-        ([, customer]) =>
-          nowMs - Date.parse(customer.rememberedAt) <= REMEMBERED_CUSTOMER_RETENTION_MS,
-      )
       .sort(([, left], [, right]) => right.rememberedAt.localeCompare(left.rememberedAt))
       .slice(0, REMEMBERED_CUSTOMER_LIMIT),
   )
+}
+
+/**
+ * Drop every remembered customer from this device's resume record.
+ *
+ * Called when the server says the tablet is no longer a counter. The record
+ * itself may still be wanted — it carries the menu and the shift — but customer
+ * names and numbers are PII this device has lost the right to hold, and a
+ * tablet taken out of service should not still be carrying them.
+ */
+export async function forgetRememberedCustomers(
+  installationId: string,
+  database = new BillingDeliveryDatabase(),
+): Promise<void> {
+  await database.transaction('rw', database.resumeRecords, async () => {
+    const row = await database.resumeRecords.get(installationId)
+    if (!row) return
+    await database.resumeRecords.put({ ...row, rememberedCustomers: {} })
+  })
 }

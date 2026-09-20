@@ -44,6 +44,7 @@ import {
   BillingUnsentReporter,
   counterResumeStopAt,
   drainCounterExpenses,
+  forgetRememberedCustomers,
   listCounterExpenses,
   type BillingDeliveryEnvelopeRecord,
   type BillingLockManager,
@@ -1143,6 +1144,14 @@ export function createSupabaseBillingAdapter(
         if (result.status === 'removed_tablet') {
           tabletRemoved = true
           void drain?.stop()
+          /*
+            The device has lost the right to hold customer PII, so it stops
+            holding it. The resume record's other contents — the menu, the
+            shift, the day's bills — are this outlet's own trade and stay; fifty
+            names and phone numbers are not, and a tablet taken out of service
+            should not still be carrying them.
+          */
+          void forgetRememberedCustomers(tabletId).catch(() => undefined)
         }
         return result
       },

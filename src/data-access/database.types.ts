@@ -3750,6 +3750,7 @@ export type Database = {
       }
       app_account_active: { Args: never; Returns: boolean }
       app_account_email_valid: { Args: { input: string }; Returns: boolean }
+      app_billing_outlet: { Args: never; Returns: string }
       app_business_date: {
         Args: { cutover: string; ts: string }
         Returns: string
@@ -4288,6 +4289,19 @@ export type Database = {
           p_window?: string
         }
         Returns: boolean
+      }
+      customer_resolve_for_sale: {
+        Args: { p_name?: string; p_phone: string }
+        Returns: string
+      }
+      customer_suggest_at_outlet: {
+        Args: { p_partial: string }
+        Returns: {
+          id: string
+          name: string
+          other_matches: number
+          phone: string
+        }[]
       }
       discount_presets_valid: { Args: { p_presets: Json }; Returns: boolean }
       drawer_cash_expenses_by_day: {

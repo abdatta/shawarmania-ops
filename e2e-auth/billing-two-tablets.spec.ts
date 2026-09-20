@@ -165,9 +165,33 @@ async function openTill(
   return { context, page }
 }
 
+/*
+  Identify the customer from the dialog's keypad, which is the only way a
+  number reaches a bill now. Each call takes its own number, so the customers
+  these specs create never collide — and the bill still carries the name the
+  assertions below find it by.
+
+  Offline this is the no-match path: the lookup cannot reach the directory, the
+  dialog reads exactly as it does for a number nobody has used, and the sale
+  carries on. The customer itself is created by the server when the command
+  drains, which is the whole point of the change these specs now exercise.
+*/
+let nextCustomerDigits = 9000004000
+
+async function identifyCustomer(page: Page, name: string) {
+  await page.getByTestId('customer-row').click()
+  const dialog = page.getByRole('dialog', { name: 'Customer' })
+  for (const digit of String((nextCustomerDigits += 1))) {
+    await dialog.getByRole('button', { name: digit, exact: true }).click()
+  }
+  await dialog.getByPlaceholder(/name/i).fill(name)
+  await dialog.getByTestId('customer-confirm').click()
+  await expect(dialog).toHaveCount(0)
+}
+
 async function markPaid(page: Page, customerName: string) {
   await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
-  await page.getByPlaceholder('Customer name').fill(customerName)
+  await identifyCustomer(page, customerName)
   await page.getByTestId('settle').click()
   const dialog = page.getByRole('dialog', { name: 'Record payment' })
   await dialog.getByRole('button', { name: 'Cash', exact: true }).click()
@@ -178,7 +202,7 @@ async function markPaid(page: Page, customerName: string) {
 
 async function saveOrder(page: Page, customerName: string) {
   await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
-  await page.getByPlaceholder('Customer name').fill(customerName)
+  await identifyCustomer(page, customerName)
   await page.getByRole('button', { name: 'Order', exact: true }).click()
   await expect(page.getByTestId('bill-total')).toHaveCount(0)
 }

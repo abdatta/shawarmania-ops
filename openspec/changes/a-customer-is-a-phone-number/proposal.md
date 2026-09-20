@@ -1,6 +1,6 @@
 # Proposal: a-customer-is-a-phone-number
 
-> **Model**: Opus · **Wave**: F · **Depends on**: #55 · **Gate**: a biller identifies the customer in front of them from one tap and an on-screen keypad — a complete number resolves to the saved name, an unknown one offers to save it with a name, and neither path leaves the bill screen; the name box stops being an identity field and becomes what it has always really been, the label the kitchen and the rail call the order by; a biller who is not given a number taps **Skip** once, still labels the order, and creates nothing in the directory; Order and Paid stay disabled until the biller has either identified or skipped, so the number is the default rather than the rule; and the four-role demo walkthrough still walks.
+> **Model**: Opus · **Wave**: F · **Depends on**: #55 · **Gate**: a biller identifies the customer in front of them from one tap and an on-screen keypad — four digits suggest the one customer this outlet has served, a complete number resolves against the whole business, an unknown one insists on a name before saving, and neither path leaves the bill screen; a biller who is not given a number taps **Skip** once, inside the dialog and never beside it, and creates nothing in the directory; Order and Paid stay disabled until the biller has either identified or skipped; the server links every sale to its customer from the phone the command carried, including every sale rung offline, and no failure to resolve one ever refuses a sale; and the four-role demo walkthrough still walks.
 
 ## Why
 

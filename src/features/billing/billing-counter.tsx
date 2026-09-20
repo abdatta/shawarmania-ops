@@ -575,20 +575,11 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     setError(null)
   }
 
-  async function saveCustomerIfComplete(): Promise<void> {
-    if (customer === null || customer.kind !== 'identified') return
-    await customers.createOrGet({ phone: customer.phone, name: customer.name })
-  }
-
   async function saveOrder() {
     if (!shift || !outlet || !outletId || lines.length === 0) return
     setSettling(true)
     setError(null)
     try {
-      // Directory persistence is helpful, but it is not part of the sale's
-      // acknowledgement boundary. A slow request must never hold the counter
-      // in front of an IndexedDB commit.
-      void saveCustomerIfComplete().catch(() => undefined)
       await billing.saveOrder({
         clientId: newUuid(),
         outletId,
@@ -614,7 +605,6 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     setSettling(true)
     setError(null)
     try {
-      void saveCustomerIfComplete().catch(() => undefined)
       await billing.reviseOrder(editingOrder.id, {
         lines,
         discounts: billDiscounts,
@@ -655,9 +645,6 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     const businessDate = resolveBusinessDate(new Date(), outlet.business_day_cutover)
     setSettling(true)
     setError(null)
-    // Customer identity is helpful, never a condition of sale.
-    void saveCustomerIfComplete().catch(() => undefined)
-
     try {
       // This resolves at the IndexedDB transaction boundary. Network delivery
       // starts later and is never awaited by the counter.

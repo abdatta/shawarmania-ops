@@ -916,32 +916,53 @@ describe('BillingCounter', () => {
     expect(screen.getByTestId('customer-row')).toHaveTextContent('Ritika Sen · +91 90000 00101')
   })
 
-  it('automatically saves a complete new phone when an order is accepted', async () => {
+  it('sends the phone and leaves the customer to the server', async () => {
     const person = user()
     const { adapters } = renderCounter()
+    const saveOrder = vi.spyOn(adapters.billing, 'saveOrder')
     const createOrGet = vi.spyOn(adapters.customers, 'createOrGet')
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
     await identifyCustomer(person, '9000000999', 'New Customer')
     await person.click(screen.getByTestId('save-order'))
 
-    await waitFor(() =>
-      expect(createOrGet).toHaveBeenCalledWith({ phone: '+919000000999', name: 'New Customer' }),
-    )
+    await waitFor(() => expect(saveOrder).toHaveBeenCalledOnce())
+    const draft = saveOrder.mock.calls[0]![0] as BillDraft
+    expect(draft.customerPhone).toBe('+919000000999')
+    expect(draft.customerName).toBe('New Customer')
+
+    /*
+      **The till does not create the customer, and used to.** A bare
+      fire-and-forget `createOrGet` sat beside the sale with its failure
+      swallowed, so a day of offline trade created no customer rows at all and
+      the bills that would have identified them carried text nothing could be
+      joined to. The command carries the phone; the server resolves the customer
+      when it records the command, whether that is now or after a ten-hour
+      drain.
+    */
+    expect(createOrGet).not.toHaveBeenCalled()
   })
 
-  it('does not hold local order acceptance behind a slow customer-directory request', async () => {
+  it('never holds local acceptance behind anything to do with the customer', async () => {
     const person = user()
     const { adapters } = renderCounter()
     const saveOrder = vi.spyOn(adapters.billing, 'saveOrder')
+    // Hang every directory call. Nothing on the acceptance path may await one.
     vi.spyOn(adapters.customers, 'createOrGet').mockReturnValue(new Promise(() => {}))
+    vi.spyOn(adapters.customers, 'lookupByPhone').mockReturnValue(new Promise(() => {}))
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await identifyCustomer(person, '9000000999', 'Waiting directory')
+    await person.click(screen.getByTestId('customer-row'))
+    const dialog = screen.getByRole('dialog', { name: 'Customer' })
+    for (const digit of '9000000999') {
+      await person.click(within(dialog).getByRole('button', { name: digit }))
+    }
+    // The lookup never answers, so the dialog reads as a number nobody has used
+    // — indistinguishable from a miss, which is the requirement.
+    await person.type(await within(dialog).findByPlaceholderText(/name/i), 'Waiting directory')
+    await person.click(within(dialog).getByTestId('customer-confirm'))
     await person.click(screen.getByTestId('save-order'))
 
-    // The panel cleared even though the directory request never answered.
-    //
     // Both inside one `waitFor`: the heading arrives on the render that follows
     // the save, so waiting only for the call and asserting the heading on the
     // next line is a race the test loses under load.

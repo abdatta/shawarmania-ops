@@ -916,11 +916,20 @@ insert into pg_temp.command_values values
     public.app_business_date(now(),time '04:00'))
     || jsonb_build_object('customerId','not-a-uuid'));
 
+-- **A garbage `customerId` is ignored, not refused** — changed deliberately on
+-- 2026-09-20 (`the-server-links-the-sale-to-the-customer`). The server resolves
+-- the customer from the phone and never reads the client's id, so a malformed
+-- value in a field nothing consults must not cost a sale. The key is still
+-- required by the envelope; its contents are simply not the client's to decide.
 select is(public.create_billing_order('a1000000-0000-4000-a000-000000000030',1,
   public.billing_payload_hash((select value from pg_temp.command_values where name='malformed_create')),
   now(),'90000000-0000-4000-a000-000000000001',
   (select value from pg_temp.command_values where name='malformed_create'))->>'status',
-  'malformed_payload','create parses customer UUIDs into a permanent refusal');
+  'accepted','create ignores a client-supplied customer UUID rather than refusing the sale');
+select is(
+  (select customer_id from public.orders where id='a2000000-0000-4000-a000-000000000030'),
+  null,
+  'and the order it wrote carries no link, never the string the client sent');
 select is(public.revise_billing_order('a1000000-0000-4000-a000-000000000031',1,
   public.billing_payload_hash((select value from pg_temp.command_values where name='malformed_revise')),
   now(),'90000000-0000-4000-a000-000000000001',
@@ -941,7 +950,7 @@ select is(public.pay_billing_now('a1000000-0000-4000-a000-000000000034',1,
   public.billing_payload_hash((select value from pg_temp.command_values where name='malformed_pay_now')),
   now(),'90000000-0000-4000-a000-000000000001',
   (select value from pg_temp.command_values where name='malformed_pay_now'))->>'status',
-  'malformed_payload','pay-now parses customer UUIDs into a permanent refusal');
+  'accepted','pay-now ignores a client-supplied customer UUID rather than refusing the money');
 
 select is(public.create_billing_order('a1000000-0000-4000-a000-000000000038',1,
   public.billing_payload_hash(pg_temp.order_payload(

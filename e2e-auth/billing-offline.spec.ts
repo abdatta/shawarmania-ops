@@ -52,9 +52,33 @@ async function signInSeededTablet(page: Page, request: APIRequestContext) {
   await expect(page.getByTestId('menu-grid')).toBeVisible()
 }
 
+/*
+  Identify the customer from the dialog's keypad, which is the only way a
+  number reaches a bill now. Each call takes its own number, so the customers
+  these specs create never collide — and the bill still carries the name the
+  assertions below find it by.
+
+  Offline this is the no-match path: the lookup cannot reach the directory, the
+  dialog reads exactly as it does for a number nobody has used, and the sale
+  carries on. The customer itself is created by the server when the command
+  drains, which is the whole point of the change these specs now exercise.
+*/
+let nextCustomerDigits = 9000003000
+
+async function identifyCustomer(page: Page, name: string) {
+  await page.getByTestId('customer-row').click()
+  const dialog = page.getByRole('dialog', { name: 'Customer' })
+  for (const digit of String((nextCustomerDigits += 1))) {
+    await dialog.getByRole('button', { name: digit, exact: true }).click()
+  }
+  await dialog.getByPlaceholder(/name/i).fill(name)
+  await dialog.getByTestId('customer-confirm').click()
+  await expect(dialog).toHaveCount(0)
+}
+
 async function markPaid(page: Page, customerName: string) {
   await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
-  await page.getByPlaceholder('Customer name').fill(customerName)
+  await identifyCustomer(page, customerName)
   await page.getByTestId('settle').click()
   const dialog = page.getByRole('dialog', { name: 'Record payment' })
   await dialog.getByRole('button', { name: 'Cash', exact: true }).click()
@@ -101,6 +125,30 @@ async function billCount(
   expect(response.ok()).toBe(true)
   const range = response.headers()['content-range']
   return Number(range?.split('/')[1] ?? 0)
+}
+
+/**
+ * Whether the bill the till rang while it was offline came back **linked**.
+ *
+ * The till never sends a customer id — it cannot know one for a number it has
+ * never seen — so this is the server having resolved the customer from the
+ * phone on the command, at whatever moment the command finally drained.
+ */
+async function billCustomer(
+  request: APIRequestContext,
+  accessToken: string,
+  customerName: string,
+): Promise<{ customerId: string | null; customerPhone: string | null }> {
+  const response = await request.get(`${SUPABASE_URL}/rest/v1/bills`, {
+    headers: { apikey: LOCAL_ANON_KEY, authorization: `Bearer ${accessToken}` },
+    params: { select: 'customer_id,customer_phone', customer_name: `eq.${customerName}` },
+  })
+  expect(response.ok()).toBe(true)
+  const [row] = (await response.json()) as {
+    customer_id: string | null
+    customer_phone: string | null
+  }[]
+  return { customerId: row?.customer_id ?? null, customerPhone: row?.customer_phone ?? null }
 }
 
 async function billId(
@@ -190,7 +238,13 @@ test('the real tablet survives network loss and settles each local acceptance ex
   context,
   request,
 }) => {
-  test.setTimeout(90_000)
+  /*
+    Raised from ninety seconds when the customer moved onto a keypad: each
+    identification is now about thirteen interactions where it was one `fill`,
+    and this spec identifies several customers across two reloads and a service
+    worker. The work is real rather than slow.
+  */
+  test.setTimeout(180_000)
   await signInSeededTablet(page, request)
 
   const run = Date.now().toString(36)
@@ -281,6 +335,16 @@ test('the real tablet survives network loss and settles each local acceptance ex
     .toBe(1)
   const offlineBillId = await billId(request, managerToken, offlineCustomer)
   expect(offlineBillId).not.toBeNull()
+
+  /*
+    **The bill rung with the backend gone came back pointing at a customer.**
+    Nothing on the tablet made that link: the command carried a phone and a null
+    id, and the server resolved it when the command finally drained. Before this
+    change every bill ever written failed this, offline or not.
+  */
+  const offlineLink = await billCustomer(request, managerToken, offlineCustomer)
+  expect(offlineLink.customerPhone).not.toBeNull()
+  expect(offlineLink.customerId).not.toBeNull()
   await expect
     .poll(() => correctionCount(request, managerToken, offlineBillId!), { timeout: 15_000 })
     .toBe(1)

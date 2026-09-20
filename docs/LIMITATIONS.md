@@ -338,13 +338,17 @@ Each outlet owns its menu. Two outlets selling the same item means two rows. For
 
 Customers are business-wide since `global-customer-identity` (#32): one normalized phone is one person at either outlet. What that change deliberately did **not** build is anything that reads across outlets *about* them. There is no visit count, no spend total, no cross-outlet history, no loyalty, no marketing and no export — a counter that could see any of those could see the other outlet's trade through a customer both shops serve. See [`openspec/todos/customer-loyalty-and-cross-outlet-insights.md`](../openspec/todos/customer-loyalty-and-cross-outlet-insights.md), which is where that work waits for a real decision to justify it.
 
-The billing composer currently requires either a customer name or phone before Order or Mark Paid enables. That is an operating trial in the UI only: both bill snapshots remain nullable in the database, so the rule can be relaxed without rewriting historical data or adding a migration.
+The billing composer requires the biller to have **decided** about the customer — identified them by phone, or deliberately skipped — before Order or Mark Paid enables. That is an operating trial in the UI only: both bill snapshots remain nullable in the database, so the rule can be relaxed without rewriting historical data or adding a migration.
 
-Three consequences worth stating plainly:
+It replaced a rule that accepted **either a name or a phone**, which measured badly: of 1840 production bills, 1754 carried a name of one or two characters and not one carried a phone. A field that accepts anything is a field that gets `Kk`.
+
+Five consequences worth stating plainly:
 
 - **A phone is the identity.** Somebody who gives a different number is a different customer, and a reassigned number carries the old identity with it. No merge, split or reassignment flow exists; the first real case is what should design one.
 - **Several people sharing one phone are one customer.** A household ordering on one number is normal, and at launch it reads as a single identity.
-- **No screen edits a customer.** The owner can read the directory; nobody can rename or delete a profile from the app. Correction is a deliberate future flow, not something to smuggle into billing.
+- **No screen edits a customer.** The owner can read the directory; nobody can rename or delete a profile from the app. Correction is a deliberate future flow, not something to smuggle into billing. **The counter's one chance to give a name is the moment it first saves a number**, which is why the UI insists on one there.
+- **The server links the sale, not the till.** A command carries the phone; the billing functions resolve the customer when they record it. So a tablet that was dark for a day settles into a correctly linked set of bills on drain, and two tills first using one number in the same second resolve to one row. The till never sends an id, because it cannot know one for a number it has never seen.
+- **A partial number reaches this outlet's customers only.** Four digits or more suggests one person this counter has already served, with the others counted and never listed. The directory itself stays unbrowsable: there is no prefix, wildcard, list or count verb over `customers`, and the business-wide lookup still takes a complete number. The scope is what makes the shorter prefix safe — a prefix over the directory would read one franchise's customers from another's till.
 
 **A shared directory is a franchise fact, not a technical detail.** Both outlets are owned today, so one directory is uncontroversial. Before `outlet-onboarding` (#14) puts a third-party franchisee on this schema, the franchise agreement must say that customer identity is shared brand-wide while every transaction stays the outlet's own.
 
