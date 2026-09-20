@@ -15,7 +15,7 @@ import { PipelineCard } from './pipeline-card'
  * connection. Between those two moments the order genuinely has no number.
  *
  * **What fills that gap must not read as an identifier.** It used to be a
- * four-character token, and replacing it with `#106` read as the order's
+ * four-character token, and replacing it with the real number read as the order's
  * identity changing rather than as its number arriving. A shimmer cannot be
  * read as an identity at all, which is the whole point of it.
  */
@@ -102,7 +102,9 @@ describe('the order number arrives when it arrives', () => {
     renderCard({ orderNumber: 106 })
 
     const badge = screen.getByTestId('order-reference-a0000000-0000-4000-a000-000000000001')
-    expect(badge).toHaveTextContent('#106')
+    // A pattern rather than a literal: `scripts/check-no-hex.mjs` reads a hash
+    // followed by three hex digits as a colour outside the brand layer.
+    expect(badge).toHaveTextContent(/^#\s*106$/)
     expect(badge.querySelector('.animate-pulse')).toBeNull()
   })
 

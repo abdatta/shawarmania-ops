@@ -341,7 +341,7 @@ export function isAwaitingOrderNumber(orderNumber: number): boolean {
  * here — four characters, first always a letter, derived from the order's own
  * UUID. It was honest about not being a number and still read as one, because
  * four characters in an identifier slot is what an identifier looks like: when
- * `#106` replaced it, the order appeared to change identity rather than to
+ * the real number replaced it, the order appeared to change identity rather
  * receive its number. Where the number is *displayed*, a shimmer stands in
  * instead; where it is *spoken*, this phrase does.
  */

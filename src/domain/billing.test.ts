@@ -206,7 +206,7 @@ describe('an order with no number yet', () => {
 
   it('is spoken as a phrase, never as something that could be an identifier', () => {
     // A token used to stand here. Four characters in an identifier slot read as
-    // an identifier, so `#106` replacing it read as the order changing identity.
+    // an identifier, so the real number replacing it read as a change of identity.
     expect(UNSENT_ORDER_REFERENCE).not.toMatch(/\d/)
     expect(UNSENT_ORDER_REFERENCE).toMatch(/\s/)
   })

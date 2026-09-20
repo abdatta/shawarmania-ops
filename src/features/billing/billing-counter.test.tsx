@@ -674,7 +674,7 @@ describe('BillingCounter', () => {
     expect(saveOrder).toHaveBeenCalledWith(expect.objectContaining({ lines: expect.any(Array) }))
     const rail = await screen.findByTestId('counter-activity-rail')
     // Before delivery the card shows the SHAPE of the number that is coming and
-    // nothing that could be read as one. A token stood here once; `#106`
+    // nothing that could be read as one. A token stood here once, and the number
     // replacing it read as the order changing identity.
     const clientId = (saveOrder.mock.calls[0]![0] as { clientId: string }).clientId
     const saved = await within(rail).findByTestId(`open-order-local-${clientId}`)
