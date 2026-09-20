@@ -64,7 +64,39 @@
 - [x] 3.7 **A customer that cannot be resolved must never fail a sale.** The command settles carrying its snapshots and a null `customer_id`. Prove it by making the resolve fail deliberately and confirming the money still lands.
 - [x] 3.8 Choosing a customer still writes **`customer_phone` and `customer_name`** onto the order and the bill snapshot — the server supplies the id, the till supplies the snapshots. Writing the id alone leaves #58 with nothing to print and breaks manager bill detail, which reads the snapshots.
 - [x] 3.9 Skipping sends no phone, so the server creates nothing and `customer_id` stays null. Assert against the database, not only in the UI. No special case should be needed — if one is, the resolve is wrong.
-- [ ] 3.10 🧍 **No backfill of existing bills — and the counts must be re-read against production before relying on that.** Cannot be done from here: the pooler host and password live outside the repo. **Owner: re-run the three counts and paste them in.** If any bill now carries a phone, stop and decide deliberately rather than defaulting. Original wording: **No backfill of existing bills, and confirm that before relying on it.** Production on 2026-09-18 carried 1840 bills and 1941 orders, of which **zero** held a phone and zero held a `customer_id`, against an empty `customers` table — so there is no link to reconstruct for any historical row, even in principle. Re-run the counts at implementation time and record them; if a phone has appeared since, stop and decide deliberately, because `#32` set the precedent for a narrow rewire under a lifted `bills_append_only` and that is a decision, not a default.
+- [x] 3.10 **Counts re-read against production on 2026-09-21, and they had moved. Recorded below; the backfill itself is deliberately not written.**
+
+  |  | 2026-09-18 (proposal) | 2026-09-21 (now) |
+  |---|---|---|
+  | bills | 1840 | 1926 |
+  | bills carrying a `customer_id` | 0 | 0 |
+  | bills carrying a phone | 0 | **1** |
+  | orders | 1941 | 2045 |
+  | orders carrying a `customer_id` | 0 | 0 |
+  | orders carrying a phone | 0 | **1** |
+  | customers | 0 | **1** |
+
+  **So the proposal's "there is nothing to backfill" is no longer true**, and this
+  is exactly the case 3.10 said to stop for. One bill (`#1117`, Kalyani,
+  2026-09-19 20:04 IST, ₹200, settled) and its order carry a phone, and a single
+  customer row was created fifteen seconds before the bill — the signature of
+  `saveCustomerIfComplete`, the fire-and-forget call this change deletes.
+  Somebody typed a real number into the old composer during trading.
+
+  **It is reconstructable**: the bill's phone normalises to exactly the one
+  customer's, so the link is unambiguous rather than inferred.
+
+  **Recommendation: do not backfill, and the reason is proportion.** The order
+  could be updated freely, but the bill needs `bills_append_only` lifted — the
+  narrow rewire `#32` set a precedent for — and lifting the append-only trigger
+  on the money table is not a reasonable price for one historical row. That
+  customer is in the directory; the next time they give their number they are
+  linked like anybody else, and `#57`'s figures already start from this release.
+
+  🧍 **The owner may overrule this.** If they want it, it is a small migration:
+  update the one order, lift the trigger, update the one bill, put it back, with
+  the narrowness argued in place as `#32` did.
+
 - [x] 3.11 Reconsider `saveCustomerIfComplete`. It is no longer the persistence path, only an optimistic warm-up. Keep it with a comment saying so, or drop it — but it must not be left looking like the thing that saves customers.
 - [x] 3.12 Confirm the saved profile is still never rewritten from the till, now that the server creates customers: a label differing from a matched customer's saved name snapshots onto this bill only. Prove it holds in `customer_create_or_get` and in the mock.
 - [x] 3.13 **No new client grant on `public.customers`, and no browse, prefix, fuzzy, list or count path anywhere** — including in the mock. The new function is internal and must never become a client surface.

@@ -116,11 +116,13 @@ member."* Asking for a phone with no payoff for either person is a thing any
 sensible biller skips. So the two changes should ship close together, and #56's
 capture rate should not be judged before #57 exists.
 
-**There is nothing to backfill.** The `customer_id` repair below has no history to
-repair — zero bills carry a phone, so no link could be reconstructed for any of
-them even in principle. The question of lifting `bills_append_only` for a backfill
-does not arise. Confirm the counts are still zero at implementation time and
-record that; do not write the backfill.
+**There was nothing to backfill when this was written, and by implementation
+there was exactly one row.** Re-read on 2026-09-21: one bill and one order now
+carry a phone, and one customer row exists — somebody typed a real number into
+the old composer at Kalyani on 2026-09-19. The link is reconstructable, and the
+decision taken was still **not to backfill**: lifting `bills_append_only` on the
+money table is not a proportionate price for one historical row. The counts and
+the reasoning are recorded in `tasks.md` § 3.10.
 
 **Both figures start from zero whatever we do.** `a-gold-member-is-a-label` (#57)
 reports a customer's last thirty days; on this data every customer's card would
