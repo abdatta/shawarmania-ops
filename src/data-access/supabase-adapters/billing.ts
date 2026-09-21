@@ -389,6 +389,73 @@ async function requireAccepted(
 }
 
 /**
+ * How many pending order ids the pipeline read will name before it gives up on
+ * narrowing and asks for everything.
+ *
+ * A uuid costs 37 characters inside `id.in.(…)`, and a request past the
+ * gateway's URI limit comes back 414 — the rail simply stops loading. A tablet
+ * that has been offline long enough to queue this many orders therefore pays
+ * the old unbounded read, which is slow and correct, rather than a cheap one
+ * that fails outright.
+ */
+export const ENVELOPE_ID_QUERY_LIMIT = 100
+
+/**
+ * The order an undelivered command is about, when it is about one. A bill-only
+ * command — `pay_now`, `correct_bill_payment`, `void_bill` — and the end-of-day
+ * confirmation name no order.
+ */
+function envelopeOrderId(command: BillingCommand): string | null {
+  switch (command.type) {
+    case 'create_order':
+    case 'revise_order':
+    case 'cancel_order':
+    case 'manager_cancel_order':
+    case 'pay_order':
+    case 'set_order_preparation':
+    case 'void_order_payment':
+    case 'cancel_paid_order':
+      return command.payload.orderId
+    default:
+      return null
+  }
+}
+
+/**
+ * What the rail holds, asked of the server instead of asked of the rows it
+ * already sent.
+ *
+ * `counter-billing` keeps an order on the rail until it is BOTH prepared and
+ * paid, which is exactly the predicate `inPipeline` applies after the read — so
+ * asking for it here changes nothing on screen. What it changes is the wire:
+ * `paid` is terminal, so without this the read carries every order the outlet
+ * has ever sold, and grows for as long as the outlet trades.
+ *
+ * **The envelope ids are the correctness half, not an optimisation.**
+ * `projectOrders` only overlays rows the query returned, so an order that is
+ * paid AND prepared — off the rail, and therefore outside the predicate — would
+ * never be fetched for an undelivered `void_order_payment` or reprepare to
+ * reopen. The overlay's `if (current)` guard would drop the unwind silently and
+ * the card would never come back. Naming those ids is what keeps that visible.
+ *
+ * Returns null when there is nothing safe to narrow to, and the caller sends
+ * the unnarrowed read.
+ */
+function pipelineFilter(envelopes: readonly BillingDeliveryEnvelopeRecord[] | null): string | null {
+  const touched = [
+    ...new Set(
+      (envelopes ?? [])
+        .map((envelope) => envelopeOrderId(envelope.command))
+        .filter((id): id is string => id !== null),
+    ),
+  ]
+  if (touched.length > ENVELOPE_ID_QUERY_LIMIT) return null
+  const clauses = ['status.eq.open', 'and(status.eq.paid,prepared_at.is.null)']
+  if (touched.length > 0) clauses.push(`id.in.(${touched.join(',')})`)
+  return clauses.join(',')
+}
+
+/**
  * Billing's live adapter. Tablet writes cross the IndexedDB commit boundary and
  * return immediately; the one drain leader delivers them later. Manager writes
  * are online personal-device commands and never create a second local outbox.
@@ -736,8 +803,17 @@ export function createSupabaseBillingAdapter(
       )
       .eq('outlet_id', outletId)
       .order('ordered_at', { ascending: false })
-    // Both money states come back and `inPipeline` decides below.
-    if (pipelineOnly) query = query.in('status', ['open', 'paid'])
+    // The server is asked for the rail, plus whatever a pending command is
+    // about. `inPipeline` still decides below: a row fetched only because an
+    // envelope named it must still leave if the overlay leaves it prepared and
+    // paid.
+    if (pipelineOnly) {
+      const filter = pipelineFilter(local)
+      // The fallback is the read this replaced, not an unfiltered one: a tablet
+      // deep enough offline to reach the limit should pay yesterday's price,
+      // not more than it.
+      query = filter ? query.or(filter) : query.in('status', ['open', 'paid'])
+    }
     const { data, error } = await query
     let orders: BillingOrder[]
     if (error) {

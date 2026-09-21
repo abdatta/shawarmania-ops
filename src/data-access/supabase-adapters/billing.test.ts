@@ -24,7 +24,7 @@ import {
 } from '../../../shared/billing-command'
 
 import { RECEIPT_BASE_URL } from '@/lib/receipt-link'
-import { createSupabaseBillingAdapter } from './billing'
+import { createSupabaseBillingAdapter, ENVELOPE_ID_QUERY_LIMIT } from './billing'
 import { createSupabaseBillingCommandAdapter } from './billing-command'
 
 /**
@@ -90,6 +90,7 @@ function offlineClient() {
   const query = {
     select: () => query,
     eq: () => query,
+    or: () => query,
     in: () => query,
     order: () => query,
     maybeSingle: () => Promise.resolve(failed),
@@ -103,6 +104,7 @@ function emptyReadableClient() {
   const query = {
     select: () => query,
     eq: () => query,
+    or: () => query,
     in: () => query,
     limit: () => query,
     order: () => query,
@@ -854,6 +856,7 @@ function raceOrdersClient(row: { id: string }, duringRead: () => Promise<void>) 
       const query: Record<string, unknown> = {
         select: () => query,
         eq: () => query,
+        or: () => query,
         in: () => query,
         order: () => query,
         maybeSingle: () => duringRead().then(() => ({ data: row, error: null })),
@@ -867,6 +870,7 @@ function raceOrdersClient(row: { id: string }, duringRead: () => Promise<void>) 
     const other: Record<string, unknown> = {
       select: () => other,
       eq: () => other,
+      or: () => other,
       in: () => Promise.resolve({ data: [], error: null }),
       limit: () => other,
       order: () => other,
@@ -1063,5 +1067,253 @@ describe('the delivery handoff cannot lose accepted work', () => {
     // flight missed, the read after it carries.
     const after = await billing.listOpenOrders('outlet-1')
     expect(unpaidPrepared(after)).toHaveLength(0)
+  })
+})
+
+/*
+ * ---------------------------------------------------------------------------
+ * The pipeline read asks for the pipeline.
+ *
+ * `paid` is a terminal status, so `status in ('open','paid')` grows for as long
+ * as the outlet trades: production measured 1,917 orders crossing the wire for
+ * a screen that kept none of them. The predicate the rail actually applies is
+ * `inPipeline`, and these pin that it now travels to the server instead of
+ * being applied to rows that have already arrived.
+ *
+ * The fake below is a SERVER, not a spy. It parses the `or=` filter and serves
+ * only the rows that match, because a spy that records the argument while
+ * serving everything would pass just as happily with the envelope-id clause
+ * missing — and that clause is the correctness half of this change.
+ * ---------------------------------------------------------------------------
+ */
+
+type FakeOrderRow = {
+  id: string
+  status: 'open' | 'paid' | 'cancelled'
+  prepared_at: string | null
+}
+
+let testUuidCounter = 0
+function newTestUuid() {
+  testUuidCounter += 1
+  return `10000000-0000-4000-a000-${String(testUuidCounter).padStart(12, '0')}`
+}
+
+function orderRow(row: FakeOrderRow) {
+  return {
+    id: row.id,
+    outlet_id: 'outlet-1',
+    device_id: session.device.deviceId,
+    order_number: 42,
+    business_date: '2026-08-11',
+    ordered_at: '2026-08-11T12:00:00.000Z',
+    prepared_at: row.prepared_at,
+    status: row.status,
+    created_by: 'person-1',
+    creator: { full_name: 'Counter operator' },
+    canceller: null,
+    customer_name: null,
+    customer_phone: null,
+    order_items: [],
+    order_discounts: [],
+    rounding_paise: 0,
+    total_paise: 48_000,
+    cancel_reason: null,
+    cancelled_at: null,
+    paid_at: row.status === 'paid' ? '2026-08-11T12:05:00.000Z' : null,
+    bill_id: null,
+  }
+}
+
+/** The `or=` grammar this adapter emits, evaluated the way PostgREST would. */
+function matchesOrFilter(filter: string, row: FakeOrderRow): boolean {
+  if (filter.includes('status.eq.open') && row.status === 'open') return true
+  if (
+    filter.includes('and(status.eq.paid,prepared_at.is.null)') &&
+    row.status === 'paid' &&
+    row.prepared_at === null
+  ) {
+    return true
+  }
+  const named = /id\.in\.\(([^)]*)\)/.exec(filter)
+  return named?.[1] ? named[1].split(',').includes(row.id) : false
+}
+
+function pipelineServer(rows: readonly FakeOrderRow[]) {
+  const filters: (string | null)[] = []
+  const from = vi.fn((table: string) => {
+    if (table !== 'orders') {
+      const other: Record<string, unknown> = {
+        select: () => other,
+        eq: () => other,
+        or: () => other,
+        in: () => Promise.resolve({ data: [], error: null }),
+        limit: () => other,
+        order: () => other,
+        maybeSingle: () => Promise.resolve({ data: null, error: null }),
+        then: (resolve: (value: unknown) => unknown) =>
+          Promise.resolve({ data: [], error: null }).then(resolve),
+      }
+      return other
+    }
+    let filter: string | null = null
+    const served = () => {
+      filters.push(filter)
+      const visible = rows.filter((row) => filter === null || matchesOrFilter(filter, row))
+      return { data: visible.map(orderRow), error: null }
+    }
+    const query: Record<string, unknown> = {
+      select: () => query,
+      eq: () => query,
+      or: (value: string) => {
+        filter = value
+        return query
+      },
+      in: () => query,
+      limit: () => query,
+      order: () => query,
+      maybeSingle: () => Promise.resolve({ data: null, error: null }),
+      then: (resolve: (value: unknown) => unknown) => Promise.resolve(served()).then(resolve),
+    }
+    return query
+  })
+  const client = {
+    rpc: vi.fn(async (name: string) =>
+      name === 'billing_event_device_labels'
+        ? { data: [], error: null }
+        : { data: null, error: null },
+    ),
+    from,
+  } as unknown as SupabaseClient<Database>
+  return { client, filters }
+}
+
+const PAID_AND_PREPARED = '10000000-0000-4000-a000-0000000000c1'
+const STILL_OWED = '10000000-0000-4000-a000-0000000000c2'
+
+async function queueUnwind(orderId: string) {
+  const database = new BillingDeliveryDatabase()
+  const store = new BillingDeliveryStore(database)
+  const command = await createBillingCommand({
+    commandId: newTestUuid(),
+    tabletId: session.device.deviceId,
+    shiftId: session.shift!.id,
+    type: 'void_order_payment',
+    createdAt: '2026-08-11T12:30:00.000Z',
+    payload: {
+      orderId,
+      billId: '10000000-0000-4000-a000-0000000000b9',
+      reason: 'Charged the wrong ticket',
+    },
+  })
+  await store.accept({
+    command,
+    tabletId: session.device.deviceId,
+    outletId: 'outlet-1',
+    businessDate: '2026-08-11',
+    chainId: orderId,
+    eligibleAtMs: 0,
+    nowMs: 0,
+  })
+  return database
+}
+
+async function queuePreparation(
+  orderId: string,
+  prepared: boolean,
+  database?: BillingDeliveryDatabase,
+) {
+  const owned = database ?? new BillingDeliveryDatabase()
+  const store = new BillingDeliveryStore(owned)
+  const command = await createBillingCommand({
+    commandId: newTestUuid(),
+    tabletId: session.device.deviceId,
+    shiftId: session.shift!.id,
+    type: 'set_order_preparation',
+    createdAt: '2026-08-11T12:30:00.000Z',
+    payload: { orderId, prepared },
+  })
+  await store.accept({
+    command,
+    tabletId: session.device.deviceId,
+    outletId: 'outlet-1',
+    businessDate: '2026-08-11',
+    chainId: orderId,
+    eligibleAtMs: 0,
+    nowMs: 0,
+  })
+  return owned
+}
+
+describe('the pipeline read asks the server for the pipeline', () => {
+  it('sends the rail predicate as a filter instead of fetching every settled order', async () => {
+    const { client, filters } = pipelineServer([
+      { id: STILL_OWED, status: 'paid', prepared_at: null },
+      { id: PAID_AND_PREPARED, status: 'paid', prepared_at: '2026-08-11T12:10:00.000Z' },
+    ])
+    const billing = createSupabaseBillingAdapter(client, session)
+
+    const orders = await billing.listOpenOrders('outlet-1')
+
+    expect(filters[0]).toContain('status.eq.open')
+    expect(filters[0]).toContain('and(status.eq.paid,prepared_at.is.null)')
+    // The settled-and-handed-over order never crossed the wire at all.
+    expect(orders.map((order) => order.id)).toEqual([STILL_OWED])
+  })
+
+  it('still fetches a paid and prepared order that a pending unwind reopens', async () => {
+    // Off the rail as far as the server is concerned, so the predicate alone
+    // will not fetch it — and `projectOrders` only overlays rows it was given.
+    const database = await queueUnwind(PAID_AND_PREPARED)
+    try {
+      const { client, filters } = pipelineServer([
+        { id: PAID_AND_PREPARED, status: 'paid', prepared_at: '2026-08-11T12:10:00.000Z' },
+      ])
+      const billing = createSupabaseBillingAdapter(client, session)
+
+      const orders = await billing.listOpenOrders('outlet-1')
+
+      expect(filters[0]).toContain(`id.in.(${PAID_AND_PREPARED})`)
+      expect(orders).toMatchObject([{ id: PAID_AND_PREPARED, status: 'open', paidAt: null }])
+    } finally {
+      database.close()
+    }
+  })
+
+  it('still fetches a paid and prepared order that a pending reprepare reopens', async () => {
+    const database = await queuePreparation(PAID_AND_PREPARED, false)
+    try {
+      const { client } = pipelineServer([
+        { id: PAID_AND_PREPARED, status: 'paid', prepared_at: '2026-08-11T12:10:00.000Z' },
+      ])
+      const billing = createSupabaseBillingAdapter(client, session)
+
+      const orders = await billing.listOpenOrders('outlet-1')
+
+      expect(orders).toMatchObject([{ id: PAID_AND_PREPARED, preparedAt: null, status: 'paid' }])
+    } finally {
+      database.close()
+    }
+  })
+
+  it('asks for everything rather than risk a 414 once the outbox is deep enough', async () => {
+    // A tablet offline long enough to queue this many orders pays the old
+    // unbounded read. Slow and correct beats cheap and broken.
+    let database: BillingDeliveryDatabase | undefined
+    try {
+      for (let index = 0; index <= ENVELOPE_ID_QUERY_LIMIT; index += 1) {
+        database = await queuePreparation(newTestUuid(), true, database)
+      }
+      const { client, filters } = pipelineServer([
+        { id: PAID_AND_PREPARED, status: 'paid', prepared_at: '2026-08-11T12:10:00.000Z' },
+      ])
+      const billing = createSupabaseBillingAdapter(client, session)
+
+      await billing.listOpenOrders('outlet-1')
+
+      expect(filters[0]).toBeNull()
+    } finally {
+      database?.close()
+    }
   })
 })

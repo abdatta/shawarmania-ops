@@ -1127,7 +1127,48 @@ Deliberately minimal at this scale — the useful signals are operational rather
   `email-sign-in` non-2xx rates plus email-sign-in abuse limits. Logs may name
   an action/result but never a raw account email, password, Auth alias, token
   hash or invite code.
+- **Egress**: the free plan allows 5 GB a month, and a read that over-fetches
+  spends it long before the business grows into it. See below for how to find
+  out which endpoint is spending it.
 - Supabase's built-in error and usage dashboards cover the rest.
+
+### Attributing an egress spike
+
+Reported 2026-09-21: 2.75 GB in one cycle against a 51 MB database and seven
+monthly active users. The route from *"the number is wrong"* to *"this line of
+code"* is two steps, and worth keeping because the answer was four levels down.
+
+**1. Which service.** Dashboard → **Usage** → hover a bar on *Egress per day*.
+The tooltip splits it by PostgREST, Realtime, Auth, Functions and Storage. Only
+one of those is ever the answer; on the day above PostgREST was 99.2%, which
+ruled out realtime and the aggregator sync before any code was read.
+
+**2. Which endpoint.** Dashboard → **Logs** → *Explorer*. `response.headers.
+content_length` is absent on chunked responses — exactly the large ones — so
+rank by rows returned via `content_range` instead of by bytes:
+
+```sql
+select
+  log_attributes['request.path'] as path,
+  count(*) as requests,
+  sum(toUInt64OrZero(substring(cr, position(cr,'-')+1, position(cr,'/')-position(cr,'-')-1)) + 1) as rows_sent
+from (
+  select log_attributes, coalesce(log_attributes['response.headers.content_range'],'') as cr
+  from logs
+  where source = 'edge_logs' and log_attributes['request.path'] like '/rest/v1/%'
+)
+group by path
+order by rows_sent desc
+limit 30
+```
+
+Group by `log_attributes['request.search']` to get the exact query shape once a
+path stands out. Free-plan log retention is one day, so run it while the spike
+is still recent.
+
+Note the trap: a `\d` inside a SQL string literal reaches the engine as a bare
+`d`, so a regex written the obvious way silently matches nothing and returns a
+tidy, wrong answer. The `substring`/`position` form above avoids it.
 
 No third-party analytics or session-recording tooling. The app handles customer PII and employee location; sending that to an analytics vendor is not a trade worth making.
 

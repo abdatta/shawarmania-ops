@@ -214,6 +214,17 @@ What a tablet reads is wider than what it owns. The preparation pipeline is the
 may not act on and refuses them locally rather than capturing a command destined
 to fail. Ownership stays the database's, and stays per tablet.
 
+Wider is not unbounded. **A list's read asks for the list**: a predicate the
+screen applies after the rows arrive belongs in the query, because the rows it
+discards were still paid for on the wire. The pipeline read learnt this the
+expensive way — it asked for `status in ('open','paid')`, `paid` is terminal, and
+so a screen showing a handful of unfinished tickets was downloading every order
+the outlet had ever sold, on every refresh, for 99% of the project's egress
+(`the-pipeline-asks-only-for-the-pipeline`). Where such a narrowing meets an
+offline overlay, it must also fetch the rows a **pending command names**:
+`projectOrders` only overlays rows the query returned, so an order that left the
+rail cannot be put back by a queued unwind it never fetched.
+
 The drain and reporter are enrolled-device services, not children of the
 billing workspace. They stay subscribed while the tablet is showing its
 no-shift request screen, so retained work can finish without granting that
