@@ -27,16 +27,26 @@ import { holdsRole } from '@/session/session'
 
 export function DevicesSurface() {
   const { counter, outlets } = useAdapters()
-  // Several outlets at once, like attendance [owner, 2026-08-09]. "Is every
-  // counter healthy?" is a question about the business rather than about one
-  // shop, and answering it by switching outlets one at a time is how a tablet
-  // that stopped reporting two days ago goes unnoticed.
-  // `devices/:outletId` opens on the outlet its card named (#51). The bare
-  // `devices` path is unchanged and still opens on the remembered selection,
-  // so no link anybody holds changes meaning.
+  // One outlet at a time [owner, 2026-09-20], reversing the several-at-once
+  // decision of 2026-08-09. That one existed so "is every counter healthy?"
+  // could be asked of the whole business at once, and it was right for two
+  // owner-run shops holding one tablet each. `multiple-billing-devices` (#35)
+  // made an outlet hold several, so the page became outlet, then its tills,
+  // then the next outlet, then its tills — the reader scrolls past the shop
+  // they came for. And the question itself is losing its asker: the business is
+  // converging on one outlet, and further outlets are expected to be
+  // franchise-owned, where watching every counter across every franchise is
+  // nobody's job here. What makes this cheap is that the three conditions this
+  // screen was watched for — no tablet, a tablet gone quiet, a tablet holding
+  // unsent bills — are already reported per outlet on Outlets (#51), and
+  // switching outlets is one tap on a chip already on screen.
+  // `devices/:outletId` opens on the outlet its card named (#51), which reads
+  // more plainly in this mode than it did in the other: a link addressed to one
+  // outlet now opens on that outlet and nothing else. The bare `devices` path
+  // is unchanged and still opens on the remembered selection, so no link
+  // anybody holds changes meaning.
   const { outletId: fromAddress } = useParams()
   const { outletIds, selector, managed } = useOutletScope({
-    multiple: true,
     openOn: fromAddress ?? null,
   })
   // The owner administers tablets everywhere, unlike the drawer: both privileged
@@ -288,11 +298,20 @@ export function DevicesSurface() {
         <LoadingFigures label="tablets and their counters" rows={outletIds.map(() => 7)} />
       ) : (
         /*
-          Grouped by outlet, and every tablet at each one, rather than a flat
-          list of the tablets that happen to exist. With several outlets selected
-          the two questions are different: a list of tablets answers "what is out
-          there", and this answers "is every counter covered" — which is the one
-          an outlet with no tablet is the interesting answer to.
+          Every tablet at the outlet in scope, rather than a flat list of the
+          tablets that happen to exist. The two questions are different: a list
+          of tablets answers "what is out there", and this answers "is this
+          counter covered" — which is the one an outlet with no tablet at all is
+          the interesting answer to, and an absence cannot be a row in a list of
+          tills.
+
+          Still a loop over `outletIds` though it runs once since
+          tablets-one-outlet-at-a-time. That list is the scope hook's answer, and
+          reading it is how this stays correct without asserting its length. The
+          outlet's name is not printed above its own tablets: the chip that chose
+          it is on the same screen, directly above. The empty state keeps the
+          name inside its sentence, because a sentence about a missing tablet is
+          the one somebody acts on and it should say which shop.
 
           An outlet holds as many tablets as it has tills since
           multiple-billing-devices, so this filters where it used to `find`. A
@@ -306,9 +325,6 @@ export function DevicesSurface() {
             const outletDevices = inScope.filter((candidate) => candidate.outletId === outletId)
             return (
               <li key={outletId} className="space-y-3">
-                {outletDevices.length > 0 && (
-                  <h2 className="text-sm font-semibold text-content-muted">{outletName}</h2>
-                )}
                 {outletDevices.map((device) => (
                   <Card key={device.id}>
                     <CardTitle>{device.label}</CardTitle>

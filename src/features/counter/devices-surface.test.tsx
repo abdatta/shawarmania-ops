@@ -13,6 +13,7 @@ import {
 } from '@/data-access/mock'
 import { SessionContext } from '@/session/context'
 import type { Role } from '@/session/session'
+import { chooseOutlet, expectOutletChosen, outletChip } from '@/test/outlet-scope'
 import { demoSessionFor } from '@/test/session'
 
 import { DevicesSurface } from './devices-surface'
@@ -29,26 +30,12 @@ import { DevicesSurface } from './devices-surface'
  */
 
 /**
- * The switcher is multi-select here, like attendance: a chip toggles rather than
- * replaces, so a test adds and removes outlets from the selection rather than
- * choosing one.
+ * The switcher is single-select here since tablets-one-outlet-at-a-time, so this
+ * file drives it with the same shared helpers every other single-outlet surface
+ * uses: `chooseOutlet` moves the surface to an outlet rather than adding one to
+ * a selection, and `expectOutletChosen` asserts both halves of the rule — the
+ * chip reports itself pressed, and it cannot be cleared.
  */
-async function addOutlet(outletId: string): Promise<void> {
-  await userEvent.click(await screen.findByTestId(`surface-outlet-${outletId}`))
-  await waitFor(() => {
-    expect(screen.getByTestId(`surface-outlet-${outletId}`)).toHaveAttribute('aria-pressed', 'true')
-  })
-}
-
-async function removeOutlet(outletId: string): Promise<void> {
-  await userEvent.click(await screen.findByTestId(`surface-outlet-${outletId}`))
-  await waitFor(() => {
-    expect(screen.getByTestId(`surface-outlet-${outletId}`)).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    )
-  })
-}
 
 function renderSurface(role: Role, adapters: DataAdapters) {
   return render(
@@ -104,9 +91,11 @@ describe('the Tablets surface', () => {
   it('marks telemetry that has stopped moving rather than showing it as current', async () => {
     const adapters = createMockAdapters('super_admin', createDemoData())
     renderSurface('super_admin', adapters)
-    // Several outlets at once, so both counters are on screen and the one that
-    // stopped talking is visible without switching to it.
-    await addOutlet(OUTLET_KANCHRAPARA_ID)
+    // Kanchrapara's tablet is the one that stopped talking in the demo data, so
+    // the surface is moved to that outlet to have something stale to mark. One
+    // outlet at a time since tablets-one-outlet-at-a-time: this replaces the
+    // outlet being read rather than adding to it.
+    await chooseOutlet(OUTLET_KANCHRAPARA_ID)
 
     const rows = await screen.findAllByTestId('device-telemetry')
     const text = rows.map((row) => row.textContent ?? '').join(' ')
@@ -159,6 +148,69 @@ describe('the Tablets surface', () => {
     ).toBeInTheDocument()
   })
 
+  /**
+   * One outlet at a time, since tablets-one-outlet-at-a-time.
+   *
+   * The surface read several at once for six weeks, for a reason recorded on the
+   * call site. What ended it is that an outlet now holds as many tablets as it
+   * has tills, so several outlets meant outlet-then-tills-then-outlet-then-tills
+   * and the reader scrolled past the shop they came for — and the cross-business
+   * question that justified it is answered on the Outlets surface per outlet.
+   * These four assert the reversal rather than leaving it as the absence of the
+   * old behaviour.
+   */
+  it('lists only the chosen outlet, and does not repeat its name as a heading', async () => {
+    const adapters = createMockAdapters('super_admin', createDemoData())
+    renderSurface('super_admin', adapters)
+
+    // Kalyani's two tills, and neither of Kanchrapara's.
+    expect(await screen.findAllByTestId('device-telemetry')).toHaveLength(2)
+    await waitFor(() => expectOutletChosen(OUTLET_KALYANI_ID))
+    expect(screen.queryByText('Kanchrapara counter')).not.toBeInTheDocument()
+
+    // The chip that chose the outlet is directly above the list, so a heading
+    // saying the same word is the second place it appears on one screen. The
+    // chip itself still carries the name, which is why this looks for a heading
+    // specifically rather than for the text.
+    expect(screen.queryByRole('heading', { name: /Shawarmania Kalyani/i })).not.toBeInTheDocument()
+  })
+
+  it('replaces the outlet being read rather than adding to it', async () => {
+    const adapters = createMockAdapters('super_admin', createDemoData())
+    renderSurface('super_admin', adapters)
+    expect(await screen.findAllByTestId('device-telemetry')).toHaveLength(2)
+
+    await chooseOutlet(OUTLET_KANCHRAPARA_ID)
+
+    // Kanchrapara's one till, on its own — not three tills across two outlets.
+    await waitFor(() => expect(screen.getAllByTestId('device-telemetry')).toHaveLength(1))
+    expect(outletChip(OUTLET_KALYANI_ID)).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('will not let the outlet being read be cleared', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('super_admin', createDemoData())
+    renderSurface('super_admin', adapters)
+    await screen.findAllByTestId('device-telemetry')
+
+    // Disabled rather than swallowing the press: a surface scoped to nothing is
+    // a blank screen asking a question nobody asked, and saying so before the
+    // press beats saying it after.
+    await waitFor(() => expectOutletChosen(OUTLET_KALYANI_ID))
+    await user.click(outletChip(OUTLET_KALYANI_ID))
+    expectOutletChosen(OUTLET_KALYANI_ID)
+    expect(screen.getAllByTestId('device-telemetry')).toHaveLength(2)
+  })
+
+  it('offers a manager with one outlet no picker at all', async () => {
+    const adapters = createMockAdapters('franchise_admin', createDemoData())
+    renderSurface('franchise_admin', adapters)
+    await screen.findAllByTestId('device-telemetry')
+
+    expect(screen.queryByTestId('surface-outlet')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('surface-outlets')).not.toBeInTheDocument()
+  })
+
   it('names the tablet on every action that acts on one', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters('super_admin', createDemoData())
@@ -198,7 +250,7 @@ describe('the Tablets surface', () => {
     )
   })
 
-  it('confirms an outlet move, preserves the session identity, and regroups the card', async () => {
+  it('confirms an outlet move, preserves the session identity, and lets the tablet leave', async () => {
     const user = userEvent.setup()
     const data = createDemoData()
     const device = data.counter.devices.find((candidate) => candidate.label === 'Takeaway counter')!
@@ -207,7 +259,7 @@ describe('the Tablets surface', () => {
     device.lastSeenAt = new Date().toISOString()
     const adapters = createMockAdapters('super_admin', data)
     renderSurface('super_admin', adapters)
-    await addOutlet(OUTLET_KANCHRAPARA_ID)
+    await waitFor(() => expectOutletChosen(OUTLET_KALYANI_ID))
 
     await user.click(await screen.findByRole('button', { name: 'Edit Takeaway counter' }))
     const sheet = screen.getByRole('dialog', { name: 'Edit Takeaway counter' })
@@ -226,13 +278,24 @@ describe('the Tablets surface', () => {
     await user.click(within(confirm).getByRole('button', { name: 'Move tablet' }))
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(await screen.findByText('Kalyani Counter 2')).toBeInTheDocument()
+
+    // The tablet is at Kanchrapara now, and Kanchrapara is not the outlet being
+    // read — so it leaves the list rather than being followed there. The
+    // confirmation above is what said that would happen, before it did.
+    expectOutletChosen(OUTLET_KALYANI_ID)
+    await waitFor(() => expect(screen.queryByText('Kalyani Counter 2')).not.toBeInTheDocument())
+    expect(screen.queryByText('Takeaway counter')).not.toBeInTheDocument()
     expect(device).toMatchObject({
       id: originalId,
       setUpAt: originalSetUpAt,
       outletId: OUTLET_KANCHRAPARA_ID,
       label: 'Kalyani Counter 2',
     })
+
+    // It went somewhere rather than nowhere: the same tablet is at the outlet
+    // the move named, under its new name, one tap away.
+    await chooseOutlet(OUTLET_KANCHRAPARA_ID)
+    expect(await screen.findByText('Kalyani Counter 2')).toBeInTheDocument()
   })
 
   it('keeps the edit sheet open with an actionable refusal', async () => {
@@ -260,7 +323,7 @@ describe('the Tablets surface', () => {
     )
   })
 
-  it('names the outlet with no tablet, beside the ones that have one', async () => {
+  it('names the outlet with no tablet, rather than saying "this outlet"', async () => {
     const adapters = createMockAdapters('super_admin', createDemoData())
     const devices = await adapters.counter.listDevices()
     for (const device of devices.filter((d) => d.outletId === OUTLET_KANCHRAPARA_ID)) {
@@ -268,24 +331,27 @@ describe('the Tablets surface', () => {
     }
 
     renderSurface('super_admin', adapters)
-    await addOutlet(OUTLET_KANCHRAPARA_ID)
+    await chooseOutlet(OUTLET_KANCHRAPARA_ID)
 
-    // Both outlets on one screen: one covered by two counters, one not covered
-    // at all, and the empty one says which shop it is rather than "this outlet".
-    // That is the whole reason the surface takes several outlets at once.
-    expect(await screen.findAllByTestId('device-telemetry')).toHaveLength(2)
+    // An outlet with no counter at all is the interesting answer this surface
+    // carries, and an absence cannot be a row in a list of tills. The chosen
+    // chip is a glance above, but this sentence is the one somebody acts on, so
+    // it names the shop inside itself rather than saying "this outlet".
+    expect(screen.queryByTestId('device-telemetry')).not.toBeInTheDocument()
     expect(
       await screen.findByText(/No tablet is set up at Shawarmania Kanchrapara yet/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /Set up a tablet at Shawarmania Kanchrapara/i }),
     ).toBeInTheDocument()
   })
 
   it('says plainly when a tablet has nobody holding its counter', async () => {
     const adapters = createMockAdapters('super_admin', createDemoData())
     renderSurface('super_admin', adapters)
-    await addOutlet(OUTLET_KANCHRAPARA_ID)
 
-    // Kalyani's second counter and Kanchrapara's are both unheld, so this asks
-    // for the first of several rather than the only one.
+    // Kalyani's second counter is unheld while its first has somebody on it, so
+    // this asks for the first of several rather than the only one.
     const [unheld] = await screen.findAllByText('Nobody is at this counter.')
     const emptyCounter = unheld!.closest('section')!
     expect(within(emptyCounter).queryByText('Bills rung')).not.toBeInTheDocument()
@@ -312,10 +378,7 @@ describe('the Tablets surface', () => {
   it('keeps the newest outlet scope when an earlier read answers late', async () => {
     const adapters = createMockAdapters('super_admin', createDemoData())
     const firstScope = await adapters.counter.readDeviceOperations([OUTLET_KALYANI_ID])
-    const secondScope = await adapters.counter.readDeviceOperations([
-      OUTLET_KALYANI_ID,
-      OUTLET_KANCHRAPARA_ID,
-    ])
+    const secondScope = await adapters.counter.readDeviceOperations([OUTLET_KANCHRAPARA_ID])
     let resolveFirst!: (value: typeof firstScope) => void
     const delayedFirst = new Promise<typeof firstScope>((resolve) => {
       resolveFirst = resolve
@@ -330,16 +393,18 @@ describe('the Tablets surface', () => {
     await waitFor(() => expect(read).toHaveBeenCalledTimes(1))
     expect(screen.getByRole('button', { name: 'Reading…' })).toBeDisabled()
 
-    await addOutlet(OUTLET_KANCHRAPARA_ID)
+    await chooseOutlet(OUTLET_KANCHRAPARA_ID)
     await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
-    // Kalyani's two counters plus Kanchrapara's one.
-    await waitFor(() => expect(screen.getAllByTestId('device-telemetry')).toHaveLength(3))
+    // Kanchrapara's one counter, and neither of Kalyani's two.
+    await waitFor(() => expect(screen.getAllByTestId('device-telemetry')).toHaveLength(1))
 
     await act(async () => resolveFirst(firstScope))
 
-    // The old Kalyani-only answer cannot erase Kanchrapara or briefly claim it
-    // has no tablet after the wider question has already been answered.
-    expect(screen.getAllByTestId('device-telemetry')).toHaveLength(3)
+    // The old Kalyani answer arrives after the reader has moved on. It is still
+    // a coherent snapshot, but it is no longer the answer to the question the
+    // surface is asking, so it may not publish Kalyani's tills under
+    // Kanchrapara's name or claim Kanchrapara has none.
+    expect(screen.getAllByTestId('device-telemetry')).toHaveLength(1)
     expect(
       screen.queryByText(/No tablet is set up at Shawarmania Kanchrapara/i),
     ).not.toBeInTheDocument()
@@ -416,10 +481,9 @@ describe('the Tablets surface', () => {
     renderSurface('super_admin', adapters)
 
     // Kanchrapara's tablet is the one carrying three unsent, which is the number
-    // somebody will ask about afterwards. It is named on its own button now, so
-    // Kalyani no longer has to be deselected to remove the ambiguity.
-    await addOutlet(OUTLET_KANCHRAPARA_ID)
-    await removeOutlet(OUTLET_KALYANI_ID)
+    // somebody will ask about afterwards, so the surface is moved to read that
+    // outlet. One tap: Kalyani leaves on its own.
+    await chooseOutlet(OUTLET_KANCHRAPARA_ID)
     await screen.findAllByTestId('device-telemetry')
     await user.click(await screen.findByRole('button', { name: /^remove counter tablet$/i }))
 
