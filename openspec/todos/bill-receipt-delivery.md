@@ -1,6 +1,6 @@
 # Bill Receipt Delivery
 
-**Type**: Feature · **Status**: Anticipated · **Area**: Billing
+**Type**: Feature · **Status**: **Promoted 2026-09-21** — seeded as [`bill-receipt-delivery`](../changes/bill-receipt-delivery/proposal.md) (#59) · **Area**: Billing
 
 ## Expectation
 
@@ -63,9 +63,30 @@ become near-compulsory once links are delivered — the exact inverse of the fie
 an earlier draft of #54 planned to display. #54 deliberately did not make that
 billing-UI change; delivery motivates it.
 
-## Trigger to promote
+## Trigger to promote — fired 2026-09-21
 
 The owner decides which channel, and accepts a consent and opt-in position. Until
 both are settled this is research rather than a change.
 
-**Dependencies when seeded**: `public-bill-receipt` (#54), archived.
+**Both were settled on 2026-09-21, and not as a plan.** The channel is **RCS**
+through Telinfy (GreenAds Global), registered as a Transactional agent; consent is
+taken verbally at the counter when the number is given; sending is automatic, one
+message per bill. Those positions are not internal notes — they are published at
+`shawarmania.in/messages/`, `/privacy/` and `/terms/`, and those URLs were filed
+with the RCS registration.
+
+Two of this note's open questions are therefore closed, one moved, and one is
+still open and now harder:
+
+- **Channel**: answered, and it was neither option listed here. RCS falls back to
+  SMS where handsets cannot receive it, so **the DLT concern survives on the
+  fallback path** rather than being dissolved by the choice.
+- **Opt-in per bill, or automatic**: automatic, once consented.
+- **Where consent is recorded**: at the counter, in published words.
+- **The mistyped number**: still open, and worse — automatic delivery makes
+  misdelivery systematic, and #58 puts the customer's name back on the receipt
+  page. Together they undo #54's "one order, never a person" bound. The seed
+  carries the argument.
+
+**Dependencies when seeded**: `public-bill-receipt` (#54), archived; and
+`a-customer-is-a-phone-number` (#56), which is where suppression belongs.
