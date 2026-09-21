@@ -28,15 +28,29 @@
  * sharing a port between a preview left open and a suite that must rebuild
  * produces a test result that depends on what ran before it.
  *
- * `.claude/launch.json` carries three of these as literals, because JSON cannot
- * import. It is the one place that has to be edited alongside this file.
+ * `.claude/launch.json` carries two of these as literals — `preview` and
+ * `previewAlt` — because JSON cannot import. It is the one place that has to be
+ * edited alongside this file, and **it is gitignored**, so no diff will ever
+ * show it drifting and a fresh clone or worktree has none at all. It sat on
+ * Vite's default 4173 — the one port this block exists to avoid — until
+ * 2026-09-21, which is what an untracked mirror buys you.
+ *
+ * **An agent gets its own server and never borrows the owner's.** `dev` is the
+ * owner's to run by hand, so an agent that attached to it would be reading a
+ * hot-reloaded working tree while reporting on a production build, and would
+ * take the app down with it on exit. The launch config therefore starts
+ * `preview`, and the two coexist: 7412 the owner's, 7413 the agent's.
  */
 export const PORTS = {
   /** `npm run dev`. */
   dev: 7412,
   /** `npm run preview` — a human looking at a production build. */
   preview: 7413,
-  /** A second preview, for holding two builds side by side. */
+  /**
+   * A second preview, for holding two builds side by side — and the one a
+   * **worktree** uses, because the main tree's preview has 7413 and an agent in
+   * a worktree must not evict it.
+   */
   previewAlt: 7414,
   /** The demo E2E suite (`playwright.config.ts`). */
   e2e: 7415,
