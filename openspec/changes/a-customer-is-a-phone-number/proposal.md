@@ -24,23 +24,23 @@ on the kitchen pipeline card
 ([`pipeline-card.tsx:246`](../../../src/features/billing/pipeline-card.tsx)) and
 on every row of Bills this shift
 ([`shift-bill-list.tsx:159`](../../../src/features/billing/shift-bill-list.tsx)).
-So a biller who wants **an order label** is handed a **customer profile field**
-to type it into. How much of the rubbish that is, rather than plain evasion, is
-measured below — the answer is *some of it, not most of it*. But the split is
-real, and a change that treats the field as purely evaded would answer only half
-of what the field is being asked to do.
+So a biller with no customer details to enter is handed a **customer profile
+field** they must put something in. What comes out of it is measured below.
 
-This change separates the two jobs.
+This change asks for the customer's details at the one moment they exist, and
+asks for nothing when they do not.
 
 - **The phone is the identity.** It goes to the directory, it is what a returning
   customer is recognised by, and later it is what carries a membership.
-- **The name is the label on this order.** It lives on the bill snapshot, it dies
-  with the bill, and it means nothing to anybody tomorrow.
+- **The name is the customer's own name**, given along with their number. It is
+  snapshotted onto the bill as it stood at the sale, and it is asked for at the
+  one moment it means something: saving a number nobody has seen before.
 
 And then **Skip is not a hole punched through the form** — it is a useful place to
-go. A skipped order still gets its label, so the kitchen still works, and nothing
-reaches the customer directory. That is the version a biller will use honestly,
-which is the only kind of rule worth shipping.
+go. An order for a customer who gave no number is called by its order number, the
+way the kitchen already works, and nothing reaches the customer directory. That is
+the version a biller will use honestly, which is the only kind of rule worth
+shipping.
 
 ## What production actually says
 
@@ -66,15 +66,14 @@ or two characters** — 562 of one, 1192 of two — and 225 distinct values cove
 lot. The most used are `As` (264 bills), `Kk` (166), `Jj` (143), `A` (93), `S`
 (63). Nothing in the top of that list is a person.
 
-### Label or evasion? Mostly evasion.
+### Is any of this the customer's name? Almost none of it.
 
-The owner challenged the labelling reading on 2026-09-18 — *the order already has
-a number, so what do they need a label for* — and it was tested rather than
-argued.
+The owner settled this on 2026-09-18 — *the order already has a number* — and it
+was measured rather than argued.
 
-A label has to distinguish. If one biller types the same string on two orders in
-the same hour, it is telling nobody anything apart. Same biller, same hour, same
-string:
+A string that told anybody anything would have to distinguish. If one biller types
+the same string on two orders in the same hour, it is telling nobody anything
+apart. Same biller, same hour, same string:
 
 ```
 name unique within that biller-hour ......... 1110 bills
@@ -85,21 +84,21 @@ shared with four ..............................  70
 shared with five or more .....................  67   (up to nine on one string)
 ```
 
-So **about 40% of the names cannot be labels**, because they did not distinguish
-anything at the moment they were typed. And the per-biller vocabularies differ
+So **about 40% of these strings distinguished nothing** at the moment they were
+typed. And the per-biller vocabularies differ
 sharply — one biller used 78 distinct strings across 816 bills, another 160
 across 441 — which is two different behaviours, not one practice.
 
-**The honest reading: the dominant behaviour is typing the shortest thing that
-turns the button green.** Labelling is a real secondary effect — 60% did
-distinguish, the name genuinely is displayed on three surfaces, and one biller
-clearly varies it on purpose — but it is not the main story, and an earlier draft
-of this proposal overstated it.
+**The honest reading: the behaviour is typing the shortest thing that turns the
+button green.** These strings are what a required field extracts from people who
+have nothing to put in it — which is what `docs/BUSINESS_CONTEXT.md` predicted
+when it said a required customer name "would get filled with "a" a hundred times
+a day and destroy the customer data it was meant to create."
 
-Two things follow for the design, and they pull in opposite directions.
-
-**Skip must still carry a label**, because a meaningful minority are using the
-field that way and taking it from them would break something that works.
+What follows for the design is that **the field should stop being required at
+all**, rather than being made easier to satisfy. A customer's name is worth
+recording when it comes with their number; on its own it is the cost of the
+blocker and nothing more.
 
 **And skip must be understood as cheaper than what it replaces.** Today, evading
 costs two keystrokes. After this change it costs **one tap**. This change removes
@@ -161,14 +160,11 @@ including the one not meant to be capturing anything. That is the enforcement
 working as designed, but it means two extra taps on every bill at Kalyani for the
 weeks before the Cafe opens, with no benefit to that counter.
 
-**And the same push takes their labels away.** The preparation card and Bills
-this shift currently print whatever the biller typed; after this change a skipped
-order carries nothing and those cards identify by reference alone. At Kalyani one
-biller used 78 distinct strings across 816 bills, so somebody there is genuinely
-labelling orders — and they lose that at the outlet that will use the new flow
-least. Either accept it for the pre-Cafe window, or put the label back behind the
-dialog, or hold the push until the Cafe opens. It is the owner's call and it
-should be made deliberately rather than discovered at the counter.
+**And the same push stops those strings being typed.** The preparation card and
+Bills this shift currently print whatever the biller typed; after this change an
+order for a customer who gave no number carries nothing, and those cards identify
+it by its order number — which is what the kitchen already calls it by. The
+counter loses nothing it was actually using.
 
 **The Cafe starts blind, including for customers the business already knows.**
 Partial matching is scoped to customers *this outlet* has served, so a regular
@@ -293,8 +289,8 @@ reader will helpfully unify them and put the bound back in front of the money.
 
 Contrary to what this proposal first assumed. The composer and the dialog remain
 the bulk of the work, and `bills.customer_id`, `customer_name` and
-`customer_phone` remain independent nullable columns — "skipped with a label" is
-still a row the schema accepts today. But the resolve, the internal function and
+`customer_phone` remain independent nullable columns — a row carrying a name and
+no number is still one the schema accepts today. But the resolve, the internal function and
 the decision about existing rows are database work, and they belong here rather
 than in #57, because #57 is the change that would otherwise discover it.
 
@@ -309,7 +305,7 @@ are replaced by **one full-width row with three states**:
 ```
 empty      [ 👤+  Customer ]
 chosen     [ 👤   Rahul · +91 98765 43210   ⭐  ✕ ]
-skipped    [ 👤   Rahul (label only)            ✕ ]
+skipped    [ 👤   Skipped Customer Info            ✕ ]
 ```
 
 - Tapping the row opens the dialog. Tapping ✕ clears back to empty.
@@ -351,8 +347,8 @@ no spinner, no explanatory copy:
 - Choosing a customer writes **`customer_id`, `customer_name` and
   `customer_phone` onto the order and the bill snapshot** — not the id alone.
   A receipt with an id and no name is #58's failure and this change's fault.
-- Skipping writes the label to `customer_name` with `customer_id` and
-  `customer_phone` null.
+- Skipping writes no customer facts at all: `customer_id`, `customer_name` and
+  `customer_phone` are all null, and the order is called by its order number.
 - The saved directory profile is **never** rewritten from the till. A different
   name typed at the counter snapshots onto that bill only. This is an existing
   rule in `global-customer-identity`; it must survive.
@@ -432,13 +428,13 @@ thing that stops it.
 
 ## How to run the gate
 
-- Walk it at `/demo` as a Biller: match, no-match-then-save, skip-with-label,
-  skip-with-nothing, ✕ and re-choose, and a mistyped nine-digit number.
+- Walk it at `/demo` as a Biller: match, no-match-then-save, skip, reopening an
+  order rung before this change, ✕ and re-choose, and a mistyped nine-digit number.
 - On a real tablet-width viewport, one-handed. The pad is for a thumb.
 - Light and dark both.
 - Offline: aeroplane mode, a remembered number and an unknown one.
-- Confirm a skipped bill reaches the kitchen card and Bills this shift carrying
-  its label, and creates no directory row.
+- Confirm a skipped bill reaches the kitchen card and Bills this shift identified
+  by its order number, and creates no directory row.
 - Confirm a chosen customer lands `customer_name` **and** `customer_phone` on the
   bill, not just the id.
 

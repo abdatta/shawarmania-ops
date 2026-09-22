@@ -1,25 +1,28 @@
 ## RENAMED Requirements
 
 - FROM: `### Requirement: Customer identity is optional to the database and prompted by the counter`
-- TO: `### Requirement: The phone is the customer and the name is the order's label`
+- TO: `### Requirement: A customer is identified by their phone, and their name is recorded with it`
 
 - FROM: `### Requirement: Exact phone lookup offers form-local autofill`
 - TO: `### Requirement: A complete number resolves itself inside the customer dialog`
 
 ## MODIFIED Requirements
 
-### Requirement: The phone is the customer and the name is the order's label
+### Requirement: A customer is identified by their phone, and their name is recorded with it
 
 Both customer snapshots SHALL remain nullable, and the **database** SHALL never
 require either: a bill or order carrying no customer at all is valid, and nothing
 downstream may assume one.
 
-The counter SHALL treat the two facts as different things. The **phone is the
-identity** — it is what resolves a returning customer and what a customer record
-is created against. The **name is the label this order is called by** — it is
-snapshotted onto the order and the bill, it is what the preparation pipeline and
-the shift bill list display, and by itself it identifies nobody and creates
-nothing.
+The **phone is the identity** — it is what resolves a returning customer and what
+a customer record is created against. The **name is that customer's own name**,
+given along with their number and snapshotted onto the order and the bill as it
+stood at the sale.
+
+A name SHALL be recorded only for a customer identified by phone. The counter
+SHALL NOT request or store a name for an order whose customer gave no number:
+such an order is identified by its own order number, which is what the
+preparation pipeline and the shift's bill list display for it.
 
 The counter SHALL require that the biller has **made a decision** — identified a
 customer, or deliberately skipped — before Order or Mark Paid. It SHALL NOT
@@ -35,17 +38,17 @@ number as malformed while it is still being typed.
 - **WHEN** a bill or order is written with both customer fields null
 - **THEN** the database accepts it, because the requirement is the counter's habit and not the schema's promise
 
-#### Scenario: A name alone no longer identifies anybody
-- **WHEN** the biller supplies only a label, by skipping
-- **THEN** the order carries that label, no customer record is created or matched, and the bill's customer id and phone are null
+#### Scenario: An order is rung for a customer who gave no number
+- **WHEN** the biller skips customer identification
+- **THEN** the order carries no customer name, no phone and no customer id, no customer record is created or matched, and the order is identified by its order number
 
 #### Scenario: An identified customer is snapshotted whole
 - **WHEN** the biller identifies a customer and the order is accepted
 - **THEN** the order and the bill carry the customer id, the canonical phone and the name, not the id alone
 
 #### Scenario: The saved profile is never rewritten from the till
-- **WHEN** a label differing from the matched customer's saved name is carried on the order
-- **THEN** that label is snapshotted onto this order and bill only, and the saved global profile is unchanged
+- **WHEN** a name differing from the matched customer's saved name is given at the counter
+- **THEN** that name is snapshotted onto this order and bill only, and the saved global profile is unchanged
 
 ### Requirement: A complete number resolves itself inside the customer dialog
 
@@ -55,10 +58,10 @@ number rather than one per keystroke.
 
 The dialog SHALL present the outcome without the biller asking for it: a match
 SHALL show the saved name and offer to use it; a complete number with no match
-SHALL offer to save it with an optional name; an incomplete number SHALL show
-nothing at all. Accepting a match SHALL affect only this order. A number saved
-this way SHALL be created when the order or paid bill is accepted, and SHALL NOT
-block the sale.
+SHALL offer to save it, asking for the customer's name, which is the one moment
+a saved profile's name is set; an incomplete number SHALL show nothing at all.
+Accepting a match SHALL affect only this order. A number saved this way SHALL be
+created when the order or paid bill is accepted, and SHALL NOT block the sale.
 
 A match served from the tablet's last successful read SHALL be distinguished from
 one read live, and SHALL say that it will be checked again on sync.
@@ -73,7 +76,7 @@ occurred.
 
 #### Scenario: An unknown number is offered for saving
 - **WHEN** a complete phone matches nobody
-- **THEN** the dialog offers one optional name field and the action offers to save it
+- **THEN** the dialog asks for the customer's name and will not save the number without one
 
 #### Scenario: Nine digits say nothing
 - **WHEN** fewer than ten digits have been entered
@@ -118,7 +121,7 @@ in the bill column, and both paths SHALL carry whatever discount results.
 - **THEN** Order and Mark Paid remain disabled, the control is the only thing that resolves it, and no database constraint is added
 
 #### Scenario: The biller skipped
-- **WHEN** the biller has skipped, with or without a label
+- **WHEN** the biller has skipped customer identification
 - **THEN** both terminal actions become available
 
 ## ADDED Requirements
@@ -152,10 +155,11 @@ SHALL carry that.
 - **WHEN** the biller enters a number in the dialog
 - **THEN** every digit is entered from the on-screen pad, and no device keyboard is required
 
-### Requirement: Skipping the customer is deliberate, one tap, and keeps the order's label
+### Requirement: Skipping customer identification is deliberate and takes one tap
 
-The dialog SHALL offer a skip that records no customer identity and still allows
-the order to carry a label for preparation and for the shift's bill list.
+The dialog SHALL offer a skip that records no customer facts at all. The order
+SHALL then be identified by its order number, which is what the preparation
+pipeline and the shift's bill list display for it.
 
 Skip SHALL be reachable only from inside the dialog, and SHALL NOT appear as a
 control on the composer beside the customer row.
@@ -164,12 +168,12 @@ Skipping SHALL NOT prompt for a reason, SHALL NOT require an approval, and SHALL
 NOT be limited in number.
 
 #### Scenario: A customer gives no number
-- **WHEN** the biller skips and types a label
-- **THEN** the order and bill carry that label, no customer record is created, and both terminal actions become available
+- **WHEN** the biller skips
+- **THEN** the order is accepted carrying no customer name and no phone, no customer record is created, both terminal actions become available, and the preparation card identifies the order by its order number
 
-#### Scenario: Nothing at all is supplied
-- **WHEN** the biller skips without typing a label
-- **THEN** the order is accepted carrying no customer facts, and the preparation card identifies it by its reference alone
+#### Scenario: An order rung before this change is reopened
+- **WHEN** an order carrying a name but no phone is reopened at the counter
+- **THEN** the name it was rung under is preserved unchanged, and nothing about it identifies a customer or creates a record
 
 #### Scenario: Skip is not reachable from the composer
 - **WHEN** the composer is displayed with a bill in progress

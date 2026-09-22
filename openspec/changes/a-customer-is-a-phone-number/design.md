@@ -2,21 +2,22 @@
 
 ## The idea in one line
 
-The phone is who the customer **is**; the name is what this **order** is called.
-Every decision below follows from separating those two.
+The phone is who the customer **is**, and their name is recorded with it. An
+order taken without a number is called by its order number, as it already is.
+Every decision below follows from that.
 
 ## Why the current field fails
 
 `bill-composer-footer.tsx` presents *Customer name* and *Phone number* side by
-side and accepts either. The name is not only identity — it is printed on the
-open-order card, the kitchen pipeline card and the shift bill list, so it is
-**also the order's label**, and it is the only label there is.
+side and accepts either, so one of the two must be filled before the bill can be
+settled.
 
 A biller types whatever makes the button go green. In production that is `As`,
 `Kk`, `Jj`, `A`, `S` — 95% of 1840 bills carry a name of one or two characters,
-and about 40% of them repeat within the same biller's own hour, so they are not
-distinguishing anything. The measurement is in the proposal; the conclusion is
-that **most of this is evasion and some of it is labelling**.
+and about 40% of them repeat within the same biller's own hour. The measurement is
+in the proposal; the conclusion is that **the field is producing the junk that
+`docs/BUSINESS_CONTEXT.md` warned a required name field would produce**, and that
+none of it is a customer's name.
 
 Adding validation to the same field fixes neither. It would still be one box
 asking two questions, and a stricter version of it pushes a biller from `Kk` to
@@ -36,7 +37,7 @@ The two inputs become a single full-width control in the composer footer.
 |---|---|---|
 | empty | person-plus icon, `Customer` | tap → dialog |
 | chosen | `Rahul · +91 98765 43210`, ⭐ when #57 lands | tap → dialog, ✕ → empty |
-| skipped | `Rahul (label only)` | tap → dialog, ✕ → empty |
+| skipped | `Skipped Customer Info`, or `Rahul · no number` for an order rung before this change | tap → dialog, ✕ → empty |
 
 The red *"Add a customer name or phone to continue"* line is removed. A disabled
 Paid button beside an untouched row is the message; a sentence under it is a
@@ -85,10 +86,11 @@ enforcement mechanism on offer. What is expected to actually move capture is
 |---|---|---|
 | identity | `customer_id` | only when a customer was chosen or created |
 | snapshot phone | `customer_phone` | the canonical `+91…`, when chosen or created |
-| label | `customer_name` | always, when the biller typed one |
+| snapshot name | `customer_name` | the customer's own name, when chosen or created |
 
-A **skipped** order is `customer_name` set (or null), `customer_id` null,
-`customer_phone` null. That is a row the schema already accepts today.
+A **skipped** order is `customer_id`, `customer_name` and `customer_phone` all
+null. An order rung before this change keeps the name it was rung under, with
+both other columns null. Both are rows the schema already accepts today.
 
 **A chosen customer must write all three.** Writing `customer_id` alone would
 leave `the-receipt-names-its-customer` (#58) with an id and nothing to print, and
@@ -259,19 +261,17 @@ It is not called *No customer*: there is still a customer, and the thing being
 declined is their number. The row reads `Skipped`. The row can be tapped again afterwards, so nothing about it is
 final.
 
-**A skipped order carries nothing, and "order label" was never a real idea.**
-The confirmation step that was removed was also the only place a name could be
-typed without a number, so a skipped order now carries nothing at all and the
-preparation card and the shift bill list identify it by its reference alone.
+**A skipped order carries no customer facts.** The confirmation step that was
+removed was also the only place a name could be typed without a number, so a
+skipped order carries nothing at all, and the preparation card and the shift bill
+list identify it by its order number.
 
-**The proposal's labelling argument is withdrawn.** It read the `As`/`Kk`/`Jj`
-strings as partly a demand for an order label and built a feature to serve it.
-The owner challenged that reading on 2026-09-18, and settled it on 2026-09-19:
+**What the `As`/`Kk`/`Jj` strings are, settled by the owner on 2026-09-19:**
 *"we don't rely on the labels today, they are ways to evade the customer info
-blocker."* The 60%-distinguished figure measured a side effect of evasion, not a
-need. **"Label" was the proposal's word, never the owner's, and nothing in the
-product should use it** — a later session reading it as a requirement would
-rebuild something nobody asked for.
+blocker."* They are what a required field extracted from billers who had no
+customer details to enter — exactly the outcome `docs/BUSINESS_CONTEXT.md`
+predicted — and the business has never read them. An earlier draft of this
+proposal built a feature to preserve them; it was dropped.
 
 What survives is narrower and concrete: a `name` on the skipped variant, because
 every order rung *before* this change carries a name and no number — all 1840 of
@@ -353,7 +353,7 @@ who pauses mid-number still gets an answer as they do.
 ## Alternatives rejected
 
 **Keep one field and validate it harder.** Rejected: the field is overloaded, so
-stricter validation makes the label harder to type without making identity more
+stricter validation makes the junk harder to type without making identity more
 likely. It would push billers from `aaa` to `9999999999`, which is strictly
 worse — a junk global identity that can collide with a real person's number, and
 there is no delete or merge path in the app by design.
