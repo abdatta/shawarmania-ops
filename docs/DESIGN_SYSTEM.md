@@ -38,7 +38,7 @@ Taken from the live site's own CSS, so the portal and the storefront cannot drif
 | `--brand-veg` | `#16a34a` |
 | `--brand-nonveg` | `#b91c1c` |
 
-The portal consumes a subset of these directly — `--brand-flame-orange`, `--brand-veg`, `--brand-nonveg`, and `--brand-bg` as the app icon's field. The rest stay recorded because this block is the **brand of record**: it is what a franchise re-skin replaces, and what keeps the portal and the storefront from drifting apart even where a value is not currently drawn.
+The portal consumes a subset of these directly — `--brand-flame-orange`, `--brand-flame-gold` (the gold member's star), `--brand-veg`, `--brand-nonveg`, and `--brand-bg` as the app icon's field. The rest stay recorded because this block is the **brand of record**: it is what a franchise re-skin replaces, and what keeps the portal and the storefront from drifting apart even where a value is not currently drawn.
 
 ### The mark
 
@@ -110,6 +110,8 @@ Values the ops portal needs that the marketing site has no equivalent for. They 
 | `--color-on-warning` | `#ffffff` | |
 | `--color-marker-veg` | `#16a34a` | The veg dot — non-text (3.3:1), so the brand green stands |
 | `--color-marker-nonveg` | `#b91c1c` | The non-veg dot |
+| `--color-member` | `#b45309` | The gold member star's outline — what carries its 3:1 against a card |
+| `--color-member-fill` | `#ffc53d` | The star's gold fill; decoration, not gated |
 
 ### Dark theme — for phones in the evening
 
@@ -131,6 +133,8 @@ Values the ops portal needs that the marketing site has no equivalent for. They 
 | `--color-on-warning` | `#1c1917` | Ink on amber, never white |
 | `--color-marker-veg` | `#4ade80` | |
 | `--color-marker-nonveg` | `#f87171` | |
+| `--color-member` | `#ffc53d` | Gold carries itself on a dark ground |
+| `--color-member-fill` | `#ffc53d` | |
 
 The primary colour deliberately differs between themes, and the reason is contrast rather than taste. Semantic tokens name a *role*, not a colour; the role "the thing you press" is served by the deepened ember on a light ground and by the brand orange itself on a dark one, because each is what clears AA against the surface it sits on.
 

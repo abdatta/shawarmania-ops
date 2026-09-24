@@ -1218,6 +1218,8 @@ export interface BillDraft {
   discounts?: BillDiscountDraft[]
   customerName?: string | null
   customerPhone?: string | null
+  /** What the counter knew about the customer's membership when it rang this. */
+  customerTier?: CustomerTier | null
 }
 
 /**
@@ -1282,6 +1284,13 @@ export interface BillingOrder {
   deviceLabel: string | null
   customerName: Tables<'orders'>['customer_name']
   customerPhone: Tables<'orders'>['customer_phone']
+  /**
+   * The customer's membership **as it stood when the order was rung** — a fact
+   * about the sale, like a line's unit price, and never a live join. Every mark
+   * drawn against this order reads it. Optional because a record written before
+   * memberships existed has none; absent reads as not a member.
+   */
+  customerTier?: CustomerTier | null
   lines: BillLineDraft[]
   /**
    * Discounts applied to the whole order. Menu discounts ride the lines.
@@ -1316,6 +1325,8 @@ export interface SaveOrderInput {
   customerId?: string | null
   customerName?: string | null
   customerPhone?: string | null
+  /** What the counter knew about the customer's membership when it rang this. */
+  customerTier?: CustomerTier | null
 }
 
 export interface BillingBill {
@@ -1366,6 +1377,8 @@ export interface BillingBill {
   attributionReview?: BillingAttributionReview | null
   customerName: Tables<'bills'>['customer_name']
   customerPhone: Tables<'bills'>['customer_phone']
+  /** The membership the bill was rung under. Final once it is a bill. See `BillingOrder`. */
+  customerTier?: CustomerTier | null
   lines: BillLineDraft[]
   /** Discounts applied to the whole bill. Menu discounts ride the lines. */
   discounts: BillDiscountDraft[]
@@ -1543,7 +1556,7 @@ export interface BillingAdapter {
     orderId: string,
     input: Pick<
       SaveOrderInput,
-      'lines' | 'discounts' | 'customerId' | 'customerName' | 'customerPhone'
+      'lines' | 'discounts' | 'customerId' | 'customerName' | 'customerPhone' | 'customerTier'
     >,
   ): Promise<BillingOrder>
   listOpenOrders(outletId: string): Promise<BillingOrder[]>
@@ -1811,9 +1824,25 @@ export interface CustomerIdentity {
   phone: string
   /** The saved billing name, which plenty of customers never give. */
   name: string | null
+  /**
+   * Whether this customer holds a membership **now**, and nothing else about it
+   * (a-gold-member-is-a-label). No date, no actor, no history: the counter is
+   * told the state so a biller can act on it, and is told nothing it could use
+   * to reason about the customer's trade.
+   *
+   * Optional because a remembered result written before memberships existed has
+   * none, and absent reads as not a member, which is what it meant.
+   */
+  tier?: CustomerTier | null
   /** Set only when an offline counter reused this exact result from its last read. */
   remembered?: true
 }
+
+/**
+ * The only membership there is. A union of one, so a second tier is a type
+ * change rather than a redesign — and so nothing ships pretending there are two.
+ */
+export type CustomerTier = 'gold'
 
 /**
  * A refusal from the customer directory.
@@ -1903,6 +1932,155 @@ export interface CustomersAdapter {
    * was given by the person it belongs to.
    */
   suggestByPartialPhone(partial: string): Promise<PartialPhoneMatch | null>
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The owner's customers: a separate boundary, and a separate adapter.
+
+/**
+ * One customer as the owner's lists present them.
+ *
+ * `visits30d` is derived when the list is read — one non-void bill is one visit
+ * — and is never a column on the customer (#32 removed exactly those). Spend is
+ * deliberately absent from a list: a list of people ranked by money is a league
+ * table, and money is read on the card, one person at a time.
+ */
+export interface DirectoryCustomerRow {
+  id: string
+  phone: string
+  name: string | null
+  tier: CustomerTier | null
+  visits30d: number
+}
+
+/**
+ * The two lists the Customers surface opens on, as tabs [owner, 2026-09-24].
+ *
+ * - `regulars` — everybody seen in the last thirty days, most visits first,
+ *   ties to the most recent visit. The first tab: it is where the owner finds
+ *   who to make gold.
+ * - `members` — everybody holding a membership now, newest grant first.
+ *
+ * Both are paged rather than bounded. Thirty or forty gold members is expected,
+ * and a list drawn whole would push everything under it off a phone screen.
+ */
+export type DirectoryList = 'regulars' | 'members'
+
+/** One page of a list. `next` is where the following page starts, or null at the end. */
+export interface DirectoryCustomerPage {
+  rows: DirectoryCustomerRow[]
+  next: number | null
+}
+
+/** Rows per page of a list. */
+export const DIRECTORY_PAGE_SIZE = 20
+
+/**
+ * One customer's card.
+ *
+ * `memberSince` is the **newest** grant: a customer who lost gold and got it
+ * back reads from the second grant, and earlier spells are on no screen. The
+ * thirty-day figures and `lastSeenAt` come from bills at read time; voided
+ * bills count for nothing.
+ */
+export interface DirectoryCustomerCard {
+  id: string
+  phone: string
+  name: string | null
+  memberSince: string | null
+  visits30d: number
+  spend30dPaise: number
+  lastSeenAt: string | null
+  /**
+   * For the owner, when the customer was first saved anywhere. For a manager,
+   * their **first visit at the manager's own outlets** — the business-wide date
+   * would say when somebody first bought at another shop.
+   */
+  customerSince: string
+  /**
+   * Whose directory this card was read from: `business` is the owner, reading
+   * every outlet's bills; `outlets` is a manager, whose figures count only their
+   * own outlets' bills.
+   */
+  scope: DirectoryScope
+  /**
+   * Whether this reader may correct the name and grant or revoke gold.
+   *
+   * Always for the owner. For a manager, **only while every outlet this customer
+   * has ever been served at is one of theirs** [owner, 2026-09-24]: a manager
+   * must never change a customer another outlet also serves, because the name
+   * and the membership are the same at every outlet. Decided by the server from
+   * the customer's whole history, and decided again at the moment of any write,
+   * so a customer who visits a second outlet between the card opening and the
+   * tap is refused rather than changed.
+   */
+  editable: boolean
+}
+
+/** See `DirectoryCustomerCard.scope`. */
+export type DirectoryScope = 'business' | 'outlets'
+
+/** At most this many search results, and a count of the rest. */
+export const DIRECTORY_SEARCH_LIMIT = 20
+
+/**
+ * What a search found (a-gold-member-is-a-label, owner, 2026-09-24).
+ *
+ * `more` is how many matched beyond the limit — a count, so the owner knows to
+ * keep typing, and nothing else about them.
+ */
+export interface DirectoryCustomerSearch {
+  matches: DirectoryCustomerRow[]
+  more: number
+}
+
+/**
+ * The management customer path (a-gold-member-is-a-label): the owner's, and a
+ * manager's over their own outlets.
+ *
+ * **Deliberately not methods on `CustomersAdapter`.** #32 wrote the till's
+ * lookup and the owner's directory as separate database functions with
+ * separate authority checks so that widening one could never widen the other;
+ * one adapter holding both would be the place they quietly merged.
+ *
+ * **One reader, two scopes** [owner, 2026-09-24]. The owner reads every
+ * outlet's bills; a Franchise Admin reads only the customers who have bought at
+ * the outlets their assignments name, with every figure counted from those
+ * outlets' bills alone. The scope comes from the caller's own authority and
+ * never from an argument, and it is applied in one place underneath every read,
+ * so search, lists and card cannot disagree about who a manager may see.
+ *
+ * **A manager writes only to customers wholly their own.** The owner may grant,
+ * revoke and rename anybody. A manager may do the same only for a customer who
+ * has never been served anywhere but the manager's own outlets — see
+ * `DirectoryCustomerCard.editable` — and is refused for anybody else. A Biller,
+ * an Employee or a tablet is refused all of it.
+ */
+export interface CustomerDirectoryAdapter {
+  /**
+   * One page of a list, from `offset`. The order is total — ties broken down to
+   * the customer id — so consecutive pages neither repeat nor skip anybody while
+   * nothing changes underneath them.
+   */
+  list(which: DirectoryList, offset: number): Promise<DirectoryCustomerPage>
+  /**
+   * Customers by **name or part of their number** — permissible here and
+   * nowhere else, because the owner already reads every bill at every outlet
+   * [owner, 2026-09-24]. The matching rules are `@/domain/customer-search`:
+   * digits anywhere in the number, a name fragment anywhere in the name, and —
+   * only while exact name matches leave room — the same letters in order with
+   * gaps. Exact matches first, each kind most recently seen first, at most
+   * `DIRECTORY_SEARCH_LIMIT`. Below the minimums it answers with nothing rather than
+   * with the whole directory.
+   *
+   * The till has no such path, and this one is never widened to reach it.
+   */
+  search(query: string): Promise<DirectoryCustomerSearch>
+  card(customerId: string): Promise<DirectoryCustomerCard>
+  /** Correct a saved name. Refuses an empty one: a name is corrected, never erased. */
+  rename(customerId: string, name: string): Promise<DirectoryCustomerCard>
+  grantMembership(customerId: string): Promise<DirectoryCustomerCard>
+  revokeMembership(customerId: string): Promise<DirectoryCustomerCard>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2148,6 +2326,8 @@ export interface DataAdapters {
   /** Tablets, and the handshake that opens a shift on one (#9). */
   counter: CounterAdapter
   customers: CustomersAdapter
+  /** The owner's customers: search, two lists, a card, and membership (#57). */
+  customerDirectory: CustomerDirectoryAdapter
   expenses: ExpensesAdapter
   expenseCategories: ExpenseCategoriesAdapter
   insights: InsightsAdapter

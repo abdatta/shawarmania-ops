@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
+import { MemberMark } from '@/components/ui/member-mark'
 import { Modal } from '@/components/ui/modal'
 import { Money } from '@/components/ui/money'
 import { DayField, PeriodBar } from '@/components/ui/period-bar'
@@ -626,8 +627,11 @@ export function ManagerBillingHistory() {
                                 <dt className="text-xs font-semibold text-content-muted">
                                   Customer name
                                 </dt>
-                                <dd className="mt-0.5 text-sm font-semibold text-content">
-                                  {order.customerName || 'Not provided'}
+                                <dd className="mt-0.5 flex items-center gap-1.5 text-sm font-semibold text-content">
+                                  <span className="min-w-0 break-words">
+                                    {order.customerName || 'Not provided'}
+                                  </span>
+                                  {order.customerTier === 'gold' && <MemberMark />}
                                 </dd>
                               </div>
                               <div>

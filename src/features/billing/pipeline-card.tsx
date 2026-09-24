@@ -2,6 +2,7 @@ import { MoreVertical, UserRound } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { MemberMark } from '@/components/ui/member-mark'
 import { Modal } from '@/components/ui/modal'
 import { Shimmer } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
@@ -122,6 +123,7 @@ export function PipelineCard({
   const grossPaise = order.lines.reduce((sum, line) => sum + line.unitPricePaise * line.quantity, 0)
   const discounted = grossPaise > totalPaise
   const awaitingNumber = isAwaitingOrderNumber(order.orderNumber)
+  const member = order.customerTier === 'gold'
   const reference = awaitingNumber ? UNSENT_ORDER_REFERENCE : `Order #${order.orderNumber}`
   const isPaid = order.status === 'paid'
   const prepared = order.preparedAt !== null
@@ -262,10 +264,18 @@ export function PipelineCard({
           )}
         </span>
         <div className="min-w-0 flex-1 self-center">
-          {order.customerName && (
+          {(order.customerName || member) && (
             <div className="flex min-w-0 items-center gap-1 text-sm font-black leading-5 text-content">
               <UserRound aria-hidden className="shrink-0 text-accent-text" size={14} />
-              <span className="max-w-40 truncate">{order.customerName}</span>
+              {order.customerName && (
+                <span className="max-w-40 truncate">{order.customerName}</span>
+              )}
+              {/*
+                Read from the order's own snapshot, never the live membership:
+                the kitchen acts on "was a member when they ordered", and a
+                revocation tonight must not change a card already being made.
+              */}
+              {member && <MemberMark />}
             </div>
           )}
           <div

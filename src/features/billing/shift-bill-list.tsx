@@ -2,6 +2,7 @@ import { ChevronDown, Pencil } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { MemberMark } from '@/components/ui/member-mark'
 import { Money } from '@/components/ui/money'
 import type { BillingBill } from '@/data-access/adapters'
 import { formatDayTime, lineTotalPaise } from '@/domain'
@@ -92,6 +93,11 @@ function BillRow({
                   Order {bill.orderNumber}
                 </span>
               )}
+              {/*
+                In the row a biller scans rather than behind the expander, and
+                from the bill's own snapshot: this is what the sale was.
+              */}
+              {bill.customerTier === 'gold' && <MemberMark className="self-center" />}
               {onEditPayment && bill.paymentEditable && (
                 <PaymentEditIndicator
                   editableUntil={bill.paymentEditableUntil}

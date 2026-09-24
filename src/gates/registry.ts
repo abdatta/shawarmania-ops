@@ -3,6 +3,7 @@ import {
   Banknote,
   Bike,
   CalendarCheck,
+  Contact,
   IndianRupee,
   Home,
   KeyRound,
@@ -199,6 +200,28 @@ const defs = {
     state: 'live',
   },
   /**
+   * The business's customers, and who among them is a gold member
+   * (a-gold-member-is-a-label).
+   *
+   * **Directly after People** [owner, 2026-09-18]: the two lists of people the
+   * owner curates, side by side.
+   *
+   * The owner's reads every outlet; `admin-customers` below is the same surface
+   * for a manager, over their own outlets. No counter has anything like it. A
+   * customer opens as a card **over** this surface and never at an address of
+   * their own — a URL naming a person and their phone number would sit in
+   * browser history and paste into a chat.
+   *
+   * `demo` until the change's database section writes the membership table and
+   * the owner's reads; the live adapter refuses until then.
+   */
+  'owner-customers': {
+    role: 'super_admin',
+    path: 'customers',
+    nav: { label: 'Customers', icon: Contact, order: 3, group: 'setup' },
+    state: 'demo',
+  },
+  /**
    * What the outlet took, **directly above what should be in its drawer**.
    *
    * This sat at order 12 — behind People, Compare and Alerts — and none of those
@@ -322,7 +345,8 @@ const defs = {
     nav: {
       label: 'Delivery',
       icon: Bike,
-      order: 3,
+      // After Customers, which took People's neighbouring place (#57).
+      order: 4,
       group: 'setup',
       attention: 'delivery-needs-you',
     },
@@ -433,7 +457,9 @@ const defs = {
   'admin-menu': {
     role: 'franchise_admin',
     path: 'menu',
-    nav: { label: 'Menu', icon: UtensilsCrossed, order: 4, group: 'setup' },
+    // After the owner's Customers and Delivery, which share this Setup group in
+    // the drawer of anybody holding both roles (#57 moved Delivery to 4).
+    nav: { label: 'Menu', icon: UtensilsCrossed, order: 5, group: 'setup' },
     state: 'live',
   },
   /**
@@ -541,6 +567,22 @@ const defs = {
    * staff exist only as accounts (staff-as-accounts). Creating a person here
    * is one act: login, staff-list membership, issued code.
    */
+  /**
+   * The same Customers surface as `owner-customers`, over the outlets this
+   * manager's assignments name [owner, 2026-09-24]: only customers those
+   * outlets have served, and every figure counted from those outlets' bills.
+   * A manager may change a customer's name and gold only while that customer
+   * has never been served anywhere else.
+   *
+   * Same label and group as the owner's entry, so somebody holding both roles
+   * gets the owner's one door, which reads the whole business.
+   */
+  'admin-customers': {
+    role: 'franchise_admin',
+    path: 'customers',
+    nav: { label: 'Customers', icon: Contact, order: 3, group: 'setup' },
+    state: 'demo',
+  },
   'admin-people': {
     role: 'franchise_admin',
     path: 'people',

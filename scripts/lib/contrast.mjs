@@ -96,6 +96,21 @@ export const CHECKS = [
     min: AA_NON_TEXT,
     note: 'non-veg marker (shape carries meaning too)',
   },
+  // The gold member's star is read wherever a customer is: on a card, on a
+  // raised pipeline card and in a dialog. Its outline is what must be seen; the
+  // gold fill inside it is decoration and is not gated.
+  {
+    fg: '--member',
+    bg: '--surface',
+    min: AA_NON_TEXT,
+    note: 'gold member star on a card',
+  },
+  {
+    fg: '--member',
+    bg: '--surface-raised',
+    min: AA_NON_TEXT,
+    note: 'gold member star on a pipeline card',
+  },
 
   // The primary button's boundary must be identifiable against the page. In
   // light that comes from the ink border, not the orange fill (2.8:1); in dark

@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import { CustomerActionError, type AppRole } from '../adapters'
 import { createDemoCustomers, createMockCustomersAdapter } from './customers'
-import { DEMO_RETURNING_CUSTOMER_PHONE, DEMO_UNNAMED_CUSTOMER_PHONE } from './fixtures/customers'
+import {
+  customerFixtures,
+  DEMO_RETURNING_CUSTOMER_PHONE,
+  DEMO_UNNAMED_CUSTOMER_PHONE,
+} from './fixtures/customers'
 
 function billerAdapter() {
   const customers = createDemoCustomers()
@@ -75,7 +79,7 @@ describe('saving a customer from the counter', () => {
     const second = await adapter.createOrGet({ phone: '+91 98765 43210' })
 
     expect(second.id).toBe(first.id)
-    expect(customers.byPhone.size).toBe(3)
+    expect(customers.byPhone.size).toBe(customerFixtures.length + 1)
   })
 
   it('never rewrites a saved profile from a till', async () => {

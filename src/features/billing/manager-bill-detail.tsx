@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { MemberMark } from '@/components/ui/member-mark'
 import { Modal } from '@/components/ui/modal'
 import { Money } from '@/components/ui/money'
 import type { BillingAttributionOutcome, BillingBill, CounterBiller } from '@/data-access/adapters'
@@ -285,7 +286,17 @@ export function ManagerBillDetail({
 
           <CollapsibleSection icon={UserRound} title="Customer details">
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
-              <Fact label="Customer name">{bill.customerName || 'Not provided'}</Fact>
+              <Fact label="Customer name">
+                {/*
+                  The bill's snapshot of the membership, and only the mark: a
+                  manager reading their own outlet's bills learns nothing about
+                  the customer's trade anywhere else by seeing it.
+                */}
+                <span className="inline-flex max-w-full items-center gap-1.5">
+                  <span className="break-words">{bill.customerName || 'Not provided'}</span>
+                  {bill.customerTier === 'gold' && <MemberMark />}
+                </span>
+              </Fact>
               <Fact label="Customer phone">{bill.customerPhone || 'Not provided'}</Fact>
             </dl>
           </CollapsibleSection>

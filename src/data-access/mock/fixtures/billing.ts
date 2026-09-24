@@ -1,4 +1,9 @@
 import type { Tables } from '../../database.types'
+import {
+  DEMO_MEMBER_CUSTOMER_PHONE,
+  DEMO_REGULAR_CUSTOMER_PHONE,
+  DEMO_RETURNING_CUSTOMER_PHONE,
+} from './customers'
 import { menuItemId, type MenuItemKey } from './menu'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from './outlets'
 
@@ -127,6 +132,12 @@ export interface BillSeed {
   lines: BillLineSeed[]
   customerName?: string
   /**
+   * The customer this sale was rung for, by the phone the counter was given.
+   * Resolved against the customer fixtures when the store materialises it, and
+   * the saved name and the membership of the day are snapshotted from there.
+   */
+  customerPhone?: string
+  /**
    * This bill reached the server *after* its business day was closed — the
    * reconciliation exception the whole daily-cash chain exists to protect
    * against. The closed figures do not move; the surface says so.
@@ -190,6 +201,7 @@ export const billSeeds: BillSeed[] = [
     time: '19:30',
     paymentMethod: 'cash',
     lines: [{ item: 'mozzarella', quantity: 2 }],
+    customerPhone: DEMO_MEMBER_CUSTOMER_PHONE,
   },
   {
     daysAgo: 3,
@@ -207,6 +219,7 @@ export const billSeeds: BillSeed[] = [
     time: '12:15',
     paymentMethod: 'cash',
     lines: [{ item: 'classic', quantity: 3 }],
+    customerPhone: DEMO_REGULAR_CUSTOMER_PHONE,
   },
   {
     daysAgo: 2,
@@ -270,6 +283,7 @@ export const billSeeds: BillSeed[] = [
     time: '20:05',
     paymentMethod: 'upi',
     lines: [{ item: 'classic', quantity: 4 }],
+    customerPhone: DEMO_REGULAR_CUSTOMER_PHONE,
   },
   {
     daysAgo: 1,
@@ -332,7 +346,9 @@ export const billSeeds: BillSeed[] = [
       { item: 'classic', quantity: 2 },
       { item: 'burger', quantity: 1 },
     ],
-    customerName: 'Demo Regular',
+    // A member, rung at lunch: her gold rides on this bill and on the order it
+    // settled, and stays there if the owner takes it away tonight.
+    customerPhone: DEMO_RETURNING_CUSTOMER_PHONE,
   },
   {
     daysAgo: 0,
@@ -443,6 +459,8 @@ export const billSeeds: BillSeed[] = [
       { item: 'classic', quantity: 3 },
       { item: 'mayo', quantity: 1 },
     ],
+    // The same member at the other outlet. One membership, business-wide.
+    customerPhone: DEMO_RETURNING_CUSTOMER_PHONE,
   },
   {
     outletId: OUTLET_KANCHRAPARA_ID,
@@ -459,6 +477,7 @@ export const billSeeds: BillSeed[] = [
     time: '12:05',
     paymentMethod: 'cash',
     lines: [{ item: 'classic', quantity: 2 }],
+    customerPhone: DEMO_REGULAR_CUSTOMER_PHONE,
   },
   {
     outletId: OUTLET_KANCHRAPARA_ID,

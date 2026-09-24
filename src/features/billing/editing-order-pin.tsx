@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-import type { BillLineDraft, BillingOrder } from '@/data-access/adapters'
+import type { BillLineDraft, BillingOrder, CustomerTier } from '@/data-access/adapters'
 
 import { OpenOrderCardBody } from './open-order-card-body'
 
@@ -32,11 +32,14 @@ export function EditingOrderPin({
   order,
   lines,
   customerName,
+  customerTier = null,
   footer,
 }: {
   order: BillingOrder
   lines: BillLineDraft[]
   customerName: string
+  /** What the composer currently says about the customer's membership. */
+  customerTier?: CustomerTier | null
   footer: ReactNode
 }) {
   return (
@@ -48,6 +51,7 @@ export function EditingOrderPin({
         orderNumber={order.orderNumber}
         orderedAt={order.orderedAt}
         customerName={customerName.trim() === '' ? null : customerName}
+        customerTier={customerTier}
         lines={lines}
         showLines={false}
       />

@@ -8,7 +8,11 @@ import { createMockAttendanceAdapter } from './attendance'
 import { createMockBillingAdapter } from './billing'
 import { createMockCashDrawerAdapter } from './cash-drawer'
 import { createDemoCounter, createMockCounterAdapter, type DemoCounter } from './counter'
-import { createDemoCustomers, createMockCustomersAdapter } from './customers'
+import {
+  createDemoCustomers,
+  createMockCustomersAdapter,
+  createMockCustomerDirectoryAdapter,
+} from './customers'
 import { createMockExpensesAdapter } from './expenses'
 import { createMockExpenseCategoriesAdapter } from './expense-categories'
 import { createMockInsightsAdapter } from './insights'
@@ -62,11 +66,14 @@ export interface DemoData {
 }
 
 export function createDemoData(): DemoData {
+  const store = createDemoStore({ billingLifecycle: true })
   return {
     accounts: createDemoAccounts(),
-    store: createDemoStore({ billingLifecycle: true }),
+    store,
     attendance: createMockAttendanceAdapter(),
-    customers: createDemoCustomers(),
+    // Measured against the store's own today, so the customers' thirty days
+    // and the bills they are counted from agree about which day it is.
+    customers: createDemoCustomers(store.today),
     counter: createDemoCounter(),
   }
 }
@@ -173,6 +180,15 @@ export function createMockAdapters(
     // The role reaches the customer mock so it refuses everybody the database
     // refuses: only a billing context may resolve a phone at all.
     customers: createMockCustomersAdapter(data.customers, role),
+    // The owner's path over the same directory, and a separate adapter with its
+    // own refusal: the till's widening can never widen this, nor the reverse.
+    customerDirectory: createMockCustomerDirectoryAdapter(
+      data.customers,
+      store,
+      role,
+      assignedOutlets(persona.assignments),
+      persona.profile.id,
+    ),
     expenses: createMockExpensesAdapter(
       store,
       role,

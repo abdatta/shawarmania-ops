@@ -104,16 +104,60 @@ a year-old receipt, and what makes per-outlet reporting free under a global mode
 
 ### What the biller sees
 
-⭐ and nothing else. On the composer's customer row, on the open-order card, on
-the **kitchen pipeline card** — the owner's explicit reason being that a gold
-order may be prepared sooner or treated differently — and on the shift bill list.
+⭐ and nothing else. On the composer's customer row, on the match inside the
+keypad dialog — **including the partial-number suggestion `#56` added**, which
+surfaces a customer too and would otherwise be the one place a member arrived
+unmarked — on the open-order card, on the **kitchen pipeline card** (the owner's
+explicit reason being that a gold order may be prepared sooner or treated
+differently) and on the shift bill list.
 
 Never the grant date, never who granted it, never the history, never spend.
 
+### And in Billing history
+
+The same ⭐, read from the same snapshot, on the owner's and the manager's bill
+and order detail (owner, 2026-09-23). It costs nothing — the tier is already on
+the row — and it is where *"how many gold orders did we serve this week"* gets
+answered by looking rather than by querying. The mark is a fact about the sale,
+so a manager reading their own outlet's bills learns nothing about any other
+outlet by seeing it.
+
 ### What the owner gets
 
-A search-by-complete-phone surface, and **a card that opens over the results as a
+A surface that finds a customer **two ways**, and **a card that opens over it as a
 modal — deliberately not a route.**
+
+- **Search by name or by part of the number** (owner, 2026-09-24) — letters
+  match anywhere in a saved name, digits match anywhere in the number, three of
+  either to start, and at most twenty results with a count of the rest. This started as
+  complete-phone only; the owner asked why they could not search their own
+  customers by name, and the honest answer was that nothing forbids it at their
+  boundary. Names were typed at a counter, so the number search stays for the
+  customers whose name is misspelt or missing.
+- **Two lists, with no search at all** (owner, 2026-09-23), shown as **two tabs,
+  Regulars first**, each loading twenty at a time as the reader scrolls
+  (owner, 2026-09-24):
+  - **Regulars** — everybody seen in the last thirty days, however few visits,
+    most visits first, each with their visit count. One-visit customers are
+    there too; they simply rank at the bottom.
+  - **Gold** — everyone who holds a membership now, newest grant first.
+
+  Tabs rather than two stacked lists because thirty or forty gold members is
+  expected, and a gold list drawn above the regulars would push them off a phone
+  screen — the list the owner actually finds new members from. Tabs rather than
+  two short scrolling boxes because a box that scrolls inside a page that scrolls
+  catches a thumb.
+
+The second list is the one that makes the feature usable. The owner decides to
+make somebody gold because they *notice they keep coming*, and nobody knows a
+regular's phone number by heart — a surface that could only be entered by typing
+one would leave the owner unable to find the very people it exists for. The
+ranking is derived at read time from bills, under the owner's own authority,
+exactly like the card's figures; nothing is stored to produce it.
+
+This is a browse path, and it is **permissible here and nowhere else**: the owner
+already reads every bill at every outlet. The counter's boundary is untouched —
+no till gains a list, a prefix over the directory, or a count.
 
 ```
   Rahul Sharma                       ✎
@@ -141,7 +185,9 @@ or, when they are not a member:
   → a star (tap to grant); a member → a crossed-out star (tap to revoke). The
   text row already says the state.
 - **Rename in place**: the pencil turns the name into an input and itself into a
-  tick.
+  tick. **A name can be corrected, never erased** (owner, 2026-09-23) — the same
+  rule `#56` enforces when a number is first saved, and for the same reason: a
+  profile with no name is a number nobody can recognise on a list.
 - **Toggling membership confirms**, both directions, through the existing
   `ConfirmDialog`. Asymmetric confirmation — one direction asking and the other
   not — is where people slip.
@@ -213,17 +259,67 @@ spending, that is a weak signal about activity across the boundary. It is small,
 it is worth the trade, and the spec should say so out loud rather than let it
 arrive by accident.
 
+The same field rides on the **outlet-scoped partial-number suggestion** `#56`
+built (`customer_suggest_at_outlet`). That function only ever reaches a customer
+this counter has already served, so the mark on it discloses less than the mark
+on the exact lookup does.
+
 Everything else about that boundary is unchanged and must stay so: complete exact
-phone only, no browse or prefix or list, the same rate bound, no phone numbers in
+phone across the business, a partial number only within the caller's own outlet
+and one match at most, no browse or list, the same rate bound, no phone numbers in
 the attempt log, and a customer id still conferring no access to any bill.
+
+**Correcting the living spec while it is open.** `global-customer-identity` still
+says no outlet role may have *any* prefix path, which stopped being true when
+`#56` shipped the outlet-scoped suggestion without amending it. This change
+rewrites that exact requirement, so it writes the exception in with its reason
+rather than leave the contract contradicting the code. Likewise the
+`counter-billing` requirement for the customer control still describes a
+*"single action that clears it back to nothing chosen"* — the ✕ the owner had
+removed at `#56`'s checkpoint. Its text and its scenario are removed here.
+
+### The manager's view
+
+Added 2026-09-24, when the owner chose to build it in this change rather than
+later. It is the **same surface and the same card**, which is what dropping the
+outlet split bought — scoped to the outlets the manager's assignments name:
+
+- **Who they can find:** only customers their outlets have served — search, both
+  lists and the card. A customer of another outlet answers exactly as a customer
+  who does not exist.
+- **What the card counts:** only their outlets' bills. *Customer since* becomes
+  *First visit here*, because the business-wide date would say when somebody
+  first bought at another shop.
+- **What they can change** (owner, 2026-09-24): name and gold, **only while every
+  outlet the customer has ever been served at is one of theirs.** A customer who
+  also buys elsewhere is read-only to them, with one sentence saying why. The
+  server decides it from the customer's whole history and decides again at the
+  moment of the write, so a customer who visits a second outlet between the card
+  opening and the tap is refused rather than changed. The owner can change
+  anybody.
+
+**The price, stated once:** a read-only card tells a manager one fact about
+another outlet — *this customer also buys somewhere else*. Not where, not when,
+not what. It is the unavoidable shadow of the rule, and the owner accepted it with
+the rule.
+
+**Latency and upkeep** (asked by the owner, 2026-09-24). The counter's path is
+untouched by any of this. The manager's reads are the owner's reads with an outlet
+filter, so they read fewer rows, not more. And the filter is written **once**: a
+single "which bills may this reader see" rule sits under search, lists, figures,
+last seen and first visit, so no read can forget it and there is no second copy to
+drift.
+
+**One known gap, from the consolidation.** The replacement outlet opens under a new
+outlet id, so a manager assigned only to it sees nobody at first — the history sits
+under the two closing outlets. The owner sees everybody throughout.
 
 ### Where it lives
 
-**Setup group, labelled `Customers`, after People** (owner, 2026-09-18) — a
-Super Admin surface in [`src/gates/registry.ts`](../../../src/gates/registry.ts).
-Franchise Admin gets no entry in this change; if one is ever added it is the
-*same* card counting only their own outlets, which is what dropping the outlet
-split bought.
+**Setup group, labelled `Customers`, after People** (owner, 2026-09-18) — for the
+Super Admin and, over their own outlets, the Franchise Admin, as two entries in
+[`src/gates/registry.ts`](../../../src/gates/registry.ts) sharing one label so a
+person holding both roles gets the owner's one door.
 
 ### Two supporting pieces
 
@@ -231,9 +327,9 @@ split bought.
   bills by customer. The thirty-day figures need it, across outlets.
 - **Owner search needs its own path.** `customer_directory()` returns the *entire*
   directory ordered by `created_at`, unpaginated, written when the table had zero
-  rows. It needs a phone argument. The owner's boundary is separate from
-  billing's, so prefix and name search would be *permissible* here — but v1 is
-  **exact phone plus a recent list**, which is what the owner asked for.
+  rows. It needs a bounded search by name or partial number, and the two bounded
+  lists above. The owner's boundary is separate from billing's, which is what
+  makes name and partial-number search permissible here and nowhere else.
 
 ## Non-goals
 
@@ -267,16 +363,22 @@ get.
 ## How to run the gate
 
 - As Super Admin at `/demo` and then for real: search a number, open the card,
-  grant, confirm, reopen, revoke, re-grant, rename.
-- Confirm a Franchise Admin, a Biller and an Employee are refused the owner path,
-  by **hand-crafted request with a valid session**, not by an absent button.
+  grant, confirm, reopen, revoke, re-grant, rename. Open a customer from each of
+  the two lists without typing anything, and confirm a grant moves them onto the
+  gold list.
+- Confirm a Biller, an Employee and a counter device are refused the whole
+  management path, and a Franchise Admin is refused any customer another outlet
+  has served — reading one they have never served, and changing one another
+  outlet also serves — by **hand-crafted request with a valid session**, not by an
+  absent button.
 - Confirm the till's lookup returns the tier and still returns nothing else, and
   that no browse, prefix or list path has appeared anywhere.
 - Confirm the thirty-day figures match bills across both outlets and that nothing
   aggregate was written to `customers`.
 - Ring an order for a gold member and confirm ⭐ reaches the composer row, the
-  open-order card, the kitchen pipeline card and the shift bill list — and that
-  the snapshot holds when membership is revoked mid-shift.
+  dialog's match and its partial-number suggestion, the open-order card, the
+  kitchen pipeline card, the shift bill list and Billing history's detail — and
+  that the snapshot holds when membership is revoked mid-shift.
 - Light and dark, on a phone-width viewport for the owner surface.
 
 ## User-only gate steps

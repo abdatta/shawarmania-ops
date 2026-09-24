@@ -116,6 +116,14 @@
   --marker-veg: var(--brand-veg);
   --marker-nonveg: var(--brand-nonveg);
 
+  /* The gold member's star (a-gold-member-is-a-label). A gold fill for what it
+     means, drawn inside an amber outline that carries the 3:1 non-text contrast
+     the pale gold cannot carry on white by itself. Its own token rather than
+     --warning, because a member is not a warning and the two must be free to
+     move apart. */
+  --member: var(--brand-amber-deep);
+  --member-fill: var(--brand-flame-gold);
+
   /* A scannable code is an encoding, not a colour choice: most readers will
      not decode an inverted one, so this pair is identical in both themes and
      that is the point of it existing. Naming it as a token keeps the rule
@@ -152,6 +160,10 @@
 
   --marker-veg: var(--brand-veg-soft);
   --marker-nonveg: var(--brand-nonveg-soft);
+
+  /* On a dark ground the gold carries itself, outline and fill alike. */
+  --member: var(--brand-flame-gold);
+  --member-fill: var(--brand-flame-gold);
 
   /* Deliberately NOT inverted for dark mode — see the light block. */
   --qr-module: var(--brand-stone-950);

@@ -17,6 +17,7 @@ import { createSupabaseLedgerStatementAdapter } from './ledger-statement'
 import { createSupabaseMenuAdapter } from './menu'
 import { createSupabaseOverviewAdapter } from './overview'
 import { createSupabaseOutletsAdapter } from './outlets'
+import { createSupabaseCustomerDirectoryAdapter } from './customer-directory'
 import { createSupabaseInsightsAdapter } from './oversight'
 import type { CounterDeviceSession } from '@/session/counter-session'
 import { CounterResumeCoordinator } from '@/outbox'
@@ -64,6 +65,9 @@ export function createSupabaseAdapters(
     // directory is REAL from today, because the boundary that protects it is.
     // The billing surfaces that call it are still `demo`-gated (#31, #10).
     customers: createSupabaseCustomersAdapter(client, resumeCoordinator, offlineResume),
+    // Not connected until a-gold-member-is-a-label's database section; the
+    // Customers surface that reads it is `demo`-gated until then.
+    customerDirectory: createSupabaseCustomerDirectoryAdapter(),
     expenses: createSupabaseExpensesAdapter(client, counterSession),
     expenseCategories: createSupabaseExpenseCategoriesAdapter(client),
     // Legacy outlet-day insights remain unavailable in live mode. Overview

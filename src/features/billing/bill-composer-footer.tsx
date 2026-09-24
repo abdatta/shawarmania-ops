@@ -1,6 +1,7 @@
 import { Check, ListPlus, UserRound, UserRoundPlus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { MemberMark } from '@/components/ui/member-mark'
 import { Money } from '@/components/ui/money'
 import type { BillLineDraft } from '@/data-access/adapters'
 import { billTotals } from '@/domain'
@@ -186,11 +187,23 @@ export function CustomerRow({
       ) : (
         <>
           <UserRound aria-hidden size={18} className="shrink-0 text-primary" />
-          <span className="truncate">{customerRowLabel(customer)}</span>
-          {/*
-            a-gold-member-is-a-label (#57) draws its ⭐ here, beside the name it
-            belongs to. It is deliberately not drawn yet.
-          */}
+          {customer.kind === 'identified' && customer.tier === 'gold' ? (
+            /*
+              The member's star, beside the name it belongs to rather than at
+              the end of the number (a-gold-member-is-a-label). The name is the
+              part that gives way on a narrow panel; the star and the number
+              stay whole.
+            */
+            <>
+              {customer.name !== '' && <span className="truncate">{customer.name}</span>}{' '}
+              <MemberMark />
+              <span className="shrink-0">
+                {customer.name !== '' && '· '}+91 {formatIndianPhone(customer.phone)}
+              </span>
+            </>
+          ) : (
+            <span className="truncate">{customerRowLabel(customer)}</span>
+          )}
         </>
       )}
     </button>

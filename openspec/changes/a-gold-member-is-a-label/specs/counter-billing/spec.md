@@ -4,17 +4,24 @@
 
 > Extended from `a-customer-is-a-phone-number` (#56), which built this control
 > and deliberately left the mark's place on it empty.
+>
+> **Also corrected here.** The previous text required *"a single action that
+> clears it back to nothing chosen"*. That was the ✕ the owner had removed at
+> #56's checkpoint on 2026-09-19 — it returned the row to a state the biller then
+> had to leave again through the same dialog — and the requirement outlived it. A
+> decision is revised by reopening the control and making a different one.
 
 The composer SHALL present customer identification as **one control**, not as
 separate name and phone inputs, reading in three states: nothing chosen, a
 customer chosen, or deliberately skipped. It SHALL show the chosen customer's
-name and canonical phone, and SHALL offer a single action that clears it back to
-nothing chosen.
+name and canonical phone. It SHALL NOT carry a separate action beside it; tapping
+the control SHALL reopen the dialog, and a decision SHALL be revised by making a
+different one there.
 
 Where the chosen customer holds a membership, the control SHALL carry the member
-mark, and the dialog SHALL carry it on the resolved match before the biller
-accepts it, so that membership is known while there is still a choice to make
-about the order.
+mark, and the dialog SHALL carry it on the resolved match and on a partial-number
+suggestion before the biller accepts either, so that membership is known while
+there is still a choice to make about the order.
 
 The control SHALL open a dialog carrying an on-screen numeric keypad built in the
 same idiom as tender capture, so a number is entered by thumb without a system
@@ -33,9 +40,13 @@ SHALL carry that.
 - **WHEN** a complete phone matches a customer holding a membership
 - **THEN** the match carries the member mark before it is accepted, and shows no date, actor or figure
 
-#### Scenario: A chosen customer is cleared
-- **WHEN** the biller clears the chosen customer
-- **THEN** the control returns to nothing chosen and the terminal actions are unavailable again until a decision is made
+#### Scenario: A member is suggested from a partial number
+- **WHEN** a partial number suggests a customer this outlet has served who holds a membership
+- **THEN** the suggestion carries the member mark, and shows no date, actor or figure
+
+#### Scenario: A chosen customer is changed
+- **WHEN** the biller taps the chosen customer's control
+- **THEN** the dialog reopens, and the choice changes only when a different number is accepted or the biller skips
 
 #### Scenario: The number is entered without a system keyboard
 - **WHEN** the biller enters a number in the dialog

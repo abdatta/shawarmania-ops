@@ -65,9 +65,15 @@ need to know that a human took this membership away, so that it does not hand it
 straight back. Deleting the grant would destroy the only fact that could stop it.
 
 **Re-granting is normal**, and the card reads *member since* the newest grant.
-Earlier spells stay in the table and appear on no screen — which is a deliberate
-asymmetry: the record is for the system's future reasoning, not for the owner to
-browse.
+Earlier spells stay in the table and appear on no screen **in this change**.
+
+**The history is kept so it can be shown later** (owner, 2026-09-24). The owner
+expects a future view answering *was this person ever gold, and when* — and it
+needs nothing more than this change already stores: every spell with its grant
+and its end, never deleted, plus the tier snapshotted on every order and bill,
+which says which visits were made as a member. Building that view is a later
+change; losing the data it needs is the only mistake this one could make, and
+the records-not-a-flag design is what prevents it.
 
 ## The tier snapshot
 
@@ -138,6 +144,75 @@ Three rules it is built on:
 The `+91` prefix is shown so the number is unmistakably a phone number rather
 than a reference.
 
+### Searching by name or part of a number
+
+Settled 2026-09-24. The first sketch was complete-phone only, carried over from
+the counter's rule, and the owner asked the right question: why can they not
+search their own customers by name? The counter's rule exists because a till
+listing the business-wide directory is a leak across outlets. The owner is not
+across any boundary — they read every bill at every outlet already — so a name
+search discloses nothing new to them.
+
+One box takes either. Anything with a letter in it matches anywhere in the saved
+name, ignoring case. Digits (spaces, dashes and a pasted `+91` tolerated) match
+anywhere in the ten-digit number, so the last few digits somebody remembers are
+enough. **Three of either** starts a search (owner, 2026-09-24) — one minimum, so
+nobody has to remember which kind needs how many. At most twenty results, most recently seen
+first, with a count of the rest and no way to page past it: the way to the rest
+is a longer query. While a search is on screen the two lists step aside, and the
+part of each result that matched is bold.
+
+**A loose fallback, for names only** (owner, 2026-09-24). When the exact name
+matches leave room under twenty, the same letters **in order with gaps** fill it —
+`mmta` finds `Moumta` — and always rank below every exact match, so a name typed
+correctly is never pushed down by a near-miss. Not for numbers: three digits in
+order occur somewhere in most ten-digit numbers, so a loose number match would
+answer with nearly everybody. One module (`src/domain/customer-search.ts`) holds
+the rule, and both the adapter's matching and the screen's bolding read it.
+
+**The limit that stays:** names were typed at a counter, so some are misspelt and
+some customers never gave one. The number search is what finds those.
+
+### Finding somebody without their number
+
+Settled 2026-09-23. Exact-phone search alone would leave the owner unable to find
+the people this feature is for: they decide to make somebody gold because they
+notice them coming back, and nobody knows a regular's number by heart. So the
+surface opens on **two lists** that need no typing, as two tabs with Regulars
+first (owner, 2026-09-24):
+
+- **Regulars** — everybody seen in the last thirty days, however few their visits,
+  each row carrying its visit count; most visits first, ties to the most recent
+  visit, then the customer id so the order is total.
+- **Gold** — everyone holding a membership now, newest grant first, then id.
+
+**Paged, not bounded.** Each loads twenty rows and the next twenty as the reader
+nears the bottom — the sentinel the Delivery run history already uses. The first
+version capped regulars at twenty and drew every member above them; with the
+thirty or forty members the owner expects, that pushed the regulars off the phone
+screen. Neither tab carries a count (owner, 2026-09-24): Regulars is everybody seen
+this month and Gold is everybody who is gold, so a number would only restate the
+length of the list below it. A change on a card is laid over the rows
+already on screen rather than reloading them, so the owner is not thrown back to
+the top of a list forty names down. The thirty days are rolling, not the calendar
+month, so the list does not empty on the first of the month.
+
+Both are derived at read time under the owner's authority, like the card. They are a browse path, which is **the reason they exist only
+at the owner's boundary**: the owner already reads every bill at every outlet, so
+a ranking of customers by visit discloses nothing they could not already sum. No
+counter gains a list, and the two functions stay two.
+
+A row shows the name, the phone and — on the regulars list — the thirty-day visit
+count, with the member mark where it applies. Spend is on the card only; a list
+of people ranked by money is a different and less comfortable screen.
+
+### Correcting a name
+
+A name can be **corrected and never erased** (owner, 2026-09-23). The tick is
+disabled while the input is blank. It is `#56`'s first-save rule seen from the
+other side: a profile without a name is a number nobody can recognise on the
+lists above.
+
 ### The statistics
 
 **Thirty days, not lifetime.** A lifetime total makes a customer who stopped
@@ -172,10 +247,11 @@ around it.
 
 Two consequences for this card:
 
-- if `#56` decides **not** to backfill existing bills, these figures begin at
-  that release rather than at the beginning of trading. Thirty days is a short
-  enough window that it stops mattering within a month, but it must be true
-  before the card is believed.
+- `#56` decided **not** to backfill existing bills (one historical bill carried a
+  phone; lifting `bills_append_only` for it was out of proportion). So these
+  figures begin at `#56`'s release on 2026-09-22 rather than at the beginning of
+  trading. Thirty days is a short enough window that it stops mattering within a
+  month, but it must be said before the card is believed.
 - the join is on `customer_id`, not on the snapshotted phone. Both would work
   arithmetically; the id is right because it survives a corrected number and
   because a membership row keyed on a phone would put PII in a second table.
@@ -194,6 +270,42 @@ But the moment an aggregate becomes a **column on the global profile**, it is on
 careless widening of the billing lookup away from a shared tablet. `#32` removed
 `bill_count` and `total_spend_paise` from that table for precisely this reason.
 They must not come back under a new name.
+
+## The manager's view
+
+Added 2026-09-24, when the owner chose to build it in this change rather than
+later. It is the **same surface and the same card**, which is what dropping the
+outlet split bought — scoped to the outlets the manager's assignments name:
+
+- **Who they can find:** only customers their outlets have served — search, both
+  lists and the card. A customer of another outlet answers exactly as a customer
+  who does not exist.
+- **What the card counts:** only their outlets' bills. *Customer since* becomes
+  *First visit here*, because the business-wide date would say when somebody
+  first bought at another shop.
+- **What they can change** (owner, 2026-09-24): name and gold, **only while every
+  outlet the customer has ever been served at is one of theirs.** A customer who
+  also buys elsewhere is read-only to them, with one sentence saying why. The
+  server decides it from the customer's whole history and decides again at the
+  moment of the write, so a customer who visits a second outlet between the card
+  opening and the tap is refused rather than changed. The owner can change
+  anybody.
+
+**The price, stated once:** a read-only card tells a manager one fact about
+another outlet — *this customer also buys somewhere else*. Not where, not when,
+not what. It is the unavoidable shadow of the rule, and the owner accepted it with
+the rule.
+
+**Latency and upkeep** (asked by the owner, 2026-09-24). The counter's path is
+untouched by any of this. The manager's reads are the owner's reads with an outlet
+filter, so they read fewer rows, not more. And the filter is written **once**: a
+single "which bills may this reader see" rule sits under search, lists, figures,
+last seen and first visit, so no read can forget it and there is no second copy to
+drift.
+
+**One known gap, from the consolidation.** The replacement outlet opens under a new
+outlet id, so a manager assigned only to it sees nobody at first — the history sits
+under the two closing outlets. The owner sees everybody throughout.
 
 ## RLS and the boundary
 
@@ -230,6 +342,19 @@ membership tracks spending, that is a weak signal about trade across the boundar
 
 It is small, it is worth it, and the spec says so out loud. A widening that
 arrives without its cost written down is how the next one gets easier.
+
+**The partial-number suggestion carries the same field.** `#56` shipped
+`customer_suggest_at_outlet`, which answers four or more digits with the one
+customer this outlet served most recently. It returns an identity too, so without
+the mark a member found that way would arrive unmarked — and a biller who taps
+the suggestion is the common case, not the edge. Its disclosure is strictly
+smaller than the exact lookup's: it can only reach somebody this counter already
+served.
+
+`#56` also left the living `global-customer-identity` spec saying no outlet role
+may have *any* prefix path, which its own suggestion contradicts. This change
+rewrites that requirement anyway, so it states the outlet-scoped exception and
+its reason there instead of leaving the contract behind the code.
 
 ## Money
 
@@ -314,6 +439,10 @@ one hard, but inventing silver now would be inventing a rule nobody has asked fo
 
 **A route for the customer card.** Argued above.
 
+**A lifetime or a spend-ranked list.** The regulars list ranks by thirty-day
+visits because the question is *who comes back*, and a ranking by money reads as
+a league table of customers. Spend stays on the card, one person at a time.
+
 **Showing the membership history on the card.** Rejected: the record exists for a
 future rule to reason with, not for browsing. Showing it would invite corrections
 to it, which is a flow nobody has designed.
@@ -323,6 +452,36 @@ shared number remains the known limitation it already is. Rename is added here
 because `#56` lets billers create customers with names, which makes typos
 permanent, and rename is the smallest correction that answers it — its question
 *does history follow?* has a clean answer: **no**, bills snapshot.
+
+## What the owner settled at the checkpoint, 2026-09-23 to 2026-09-24
+
+Section 2's stop, and it moved more than the sketch did. Each point is argued in
+its own section above; this is the list, so the database work reads what it is
+building against rather than the first sketch.
+
+- **Finding people.** The sketch had complete-phone search and "a recent list".
+  It became **one box for a name or part of a number**, three characters of
+  either, matching anywhere, with a loose in-order fallback for names only and
+  the matched part in bold; and **two tabs, Regulars first** — everybody seen in
+  the last thirty days, most visits first, and everybody who is gold — each
+  loading twenty at a time, neither carrying a count. While a search is on
+  screen the tabs step aside.
+- **The card.** As sketched, plus *Spent* labelling the rupee figure. A name can
+  be corrected and never erased.
+- **The mark.** A drawn star icon on its own gold token rather than the ⭐ emoji,
+  so it is one star on every device and theme. It sits beside the name on #56's
+  composer row — the name gives way on a narrow panel and the star and number
+  stay whole — and on the dialog's match **and its partial-number suggestion**,
+  the open-order card, the pipeline card, the shift bill list, and Billing
+  history's bill and order detail.
+- **Managers.** The sketch had none. The same surface now serves a Franchise
+  Admin over their own outlets, read-only for any customer another outlet also
+  serves, and able to change name and gold only for a customer wholly theirs.
+- **Membership history** is kept for a later screen; nothing about it is shown
+  yet.
+- **Two contract corrections** carried in from #56: the customer control's
+  removed clear action, and the outlet-scoped partial-number path the living
+  spec had not admitted.
 
 ## Task ordering
 

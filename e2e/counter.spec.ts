@@ -836,7 +836,12 @@ test.describe('the counter', () => {
     // customer directory is the path this product does not have.
     await expect(dialog.getByTestId('customer-suggestion')).toHaveCount(1)
     await expect(dialog.getByTestId('customer-suggestion')).toContainText('Ritika Sen')
-    await expect(dialog.getByTestId('customer-suggestion-others')).toHaveText('+1 more')
+    // She is a gold member, and the suggestion says so before it is taken.
+    await expect(
+      dialog.getByTestId('customer-suggestion').getByRole('img', { name: 'Gold member' }),
+    ).toBeVisible()
+    // Every demo customer's number opens `9000`, so the rest are counted.
+    await expect(dialog.getByTestId('customer-suggestion-others')).toHaveText('+6 more')
 
     // The digits still to be checked are the ones drawn strongly.
     await expect(dialog.getByTestId('customer-suggestion').getByText('0 00101')).toHaveClass(

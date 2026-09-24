@@ -122,3 +122,13 @@ export {
   type DiscountedLine,
   type MenuDiscountGroup,
 } from './discount-rows'
+export {
+  CUSTOMER_SEARCH_MIN_DIGITS,
+  CUSTOMER_SEARCH_MIN_LETTERS,
+  customerMatchStrength,
+  highlightName,
+  highlightPhone,
+  parseCustomerQuery,
+  type CustomerQuery,
+  type MatchSegment,
+} from './customer-search'

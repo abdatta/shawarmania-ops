@@ -24,6 +24,7 @@ import {
   type CounterBiller,
   type CounterShift,
   type CounterState,
+  type CustomerTier,
   type PaymentAllocation,
   type QueuedBill,
   type SaveOrderInput,
@@ -391,6 +392,9 @@ export function createMockBillingAdapter(
       deviceLabel: deviceLabelAt(row.device_id, row.ordered_at),
       customerName: row.customer_name,
       customerPhone: row.customer_phone,
+      // The snapshot, never the live membership: a revocation tonight does not
+      // take the mark off an order rung at lunch.
+      customerTier: store.orderTiers.get(row.id) ?? null,
       lines: store.orderItems
         .filter((line) => line.order_id === row.id)
         .map((line) => ({
@@ -494,6 +498,7 @@ export function createMockBillingAdapter(
       attributionReview: attributionReviews.get(row.id) ?? null,
       customerName: row.customer_name,
       customerPhone: row.customer_phone,
+      customerTier: store.billTiers.get(row.id) ?? null,
       lines: store.billItems
         .filter((line) => line.bill_id === row.id)
         .map((line) => ({
@@ -685,6 +690,8 @@ export function createMockBillingAdapter(
       draft.clientId,
       paymentCorrections.get(draft.clientId)?.at(-1) ?? payments,
     )
+    // Rung and paid in one act, so the bill states what the counter knew.
+    if (draft.customerTier) store.billTiers.set(draft.clientId, draft.customerTier)
 
     for (const [index, line] of draft.lines.entries()) {
       store.billItems.push({
@@ -753,6 +760,7 @@ export function createMockBillingAdapter(
       cancelled_shift_id: null,
     }
     store.orders.push(row)
+    if (input.customerTier) store.orderTiers.set(row.id, input.customerTier)
     replaceOrderLines(row.id, input.lines, input.discounts ?? [])
   }
 
@@ -767,6 +775,11 @@ export function createMockBillingAdapter(
     row.customer_id = record.input.customerId ?? null
     row.customer_name = record.input.customerName?.trim() || null
     row.customer_phone = record.input.customerPhone?.trim() || null
+    // An open order restates its customer on revision, and the tier follows
+    // the customer it now names. Nothing is computed from it, so a snapshot
+    // that can still move while the order is open is harmless here.
+    if (record.input.customerTier) store.orderTiers.set(row.id, record.input.customerTier)
+    else store.orderTiers.delete(row.id)
     row.subtotal_paise = totals.subtotalPaise
     row.discount_paise = 0
     row.tax_paise = 0
@@ -857,6 +870,9 @@ export function createMockBillingAdapter(
     }
     store.bills.push(bill)
     store.billPayments.set(billId, payments)
+    // Carried from the order, and final from here: a bill is append-only.
+    const tier = store.orderTiers.get(row.id)
+    if (tier) store.billTiers.set(billId, tier)
     // The edit window runs from the money's own clock — for an upfront payer
     // that is when they handed the cash over, not when the kitchen finished.
     acceptedPaymentTimes.set(billId, Date.parse(paidAt))
@@ -1001,6 +1017,7 @@ export function createMockBillingAdapter(
             deviceLabel: null,
             customerName: input.customerName?.trim() || null,
             customerPhone: input.customerPhone?.trim() || null,
+            customerTier: input.customerTier ?? null,
             lines: structuredClone(input.lines),
             discounts: structuredClone(input.discounts ?? []),
             roundingPaise: totalsOf(input.lines, input.discounts ?? []).roundingPaise,
@@ -1021,6 +1038,7 @@ export function createMockBillingAdapter(
             ...current,
             customerName: record.input.customerName?.trim() || null,
             customerPhone: record.input.customerPhone?.trim() || null,
+            customerTier: record.input.customerTier ?? null,
             lines: structuredClone(record.input.lines),
             // A revision restates the whole order, discounts included, so the
             // projection has to carry them or an edit reads as having dropped
@@ -1204,6 +1222,7 @@ export function createMockBillingAdapter(
       payments: PaymentAllocation[]
       customerName: string | null
       customerPhone: string | null
+      customerTier: CustomerTier | null
       lines: BillLineDraft[]
       totalPaise: number
       orderId: string | null
@@ -1255,6 +1274,7 @@ export function createMockBillingAdapter(
       tillLabel: null,
       customerName: content.customerName,
       customerPhone: content.customerPhone,
+      customerTier: content.customerTier,
       // Normalised to the shape a delivered bill reads back as. A draft line
       // may omit the discount facts because they are optional on the way in;
       // a line read from `bill_items` never can. Passing the draft through
@@ -1515,6 +1535,7 @@ export function createMockBillingAdapter(
         payments,
         customerName: source?.customerName?.trim() || order?.customerName || null,
         customerPhone: source?.customerPhone?.trim() || order?.customerPhone || null,
+        customerTier: source ? (source.customerTier ?? null) : (order?.customerTier ?? null),
         lines: source?.lines ?? order?.lines ?? [],
         totalPaise,
         orderId: orderPayment?.orderId ?? null,
@@ -1562,6 +1583,7 @@ export function createMockBillingAdapter(
         deviceLabel: null,
         customerName: input.customerName?.trim() || null,
         customerPhone: input.customerPhone?.trim() || null,
+        customerTier: input.customerTier ?? null,
         lines: structuredClone(input.lines),
         discounts: structuredClone(input.discounts ?? []),
         roundingPaise: totalsOf(input.lines, input.discounts ?? []).roundingPaise,
@@ -1622,6 +1644,7 @@ export function createMockBillingAdapter(
         ...projected,
         customerName: input.customerName?.trim() || null,
         customerPhone: input.customerPhone?.trim() || null,
+        customerTier: input.customerTier ?? null,
         lines: structuredClone(input.lines),
         totalPaise: totalsOf(input.lines, input.discounts ?? []).totalPaise,
       }
@@ -1847,6 +1870,7 @@ export function createMockBillingAdapter(
         payments,
         customerName: projected.customerName,
         customerPhone: projected.customerPhone,
+        customerTier: projected.customerTier ?? null,
         lines: projected.lines,
         totalPaise: projected.totalPaise,
         orderId: projected.id,
@@ -1939,6 +1963,7 @@ export function createMockBillingAdapter(
               payments: draft.payments,
               customerName: draft.customerName?.trim() || null,
               customerPhone: draft.customerPhone?.trim() || null,
+              customerTier: draft.customerTier ?? null,
               lines: draft.lines,
               totalPaise: totalsOf(draft.lines, draft.discounts ?? []).totalPaise,
               orderId: null,
@@ -1959,6 +1984,7 @@ export function createMockBillingAdapter(
             payments: record.payments,
             customerName: order?.customerName ?? null,
             customerPhone: order?.customerPhone ?? null,
+            customerTier: order?.customerTier ?? null,
             lines: order?.lines ?? [],
             totalPaise: order?.totalPaise ?? 0,
             orderId: record.orderId,

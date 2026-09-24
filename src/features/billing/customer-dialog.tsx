@@ -3,10 +3,12 @@ import { useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { MemberMark } from '@/components/ui/member-mark'
 import { Modal } from '@/components/ui/modal'
 import {
   PARTIAL_PHONE_MIN_DIGITS,
   type CustomerIdentity,
+  type CustomerTier,
   type PartialPhoneMatch,
 } from '@/data-access/adapters'
 import { formatIndianPhone, normalizeIndianPhone } from '../../../shared/phone'
@@ -44,6 +46,12 @@ export type CustomerSelection =
       phone: string
       /** Snapshotted onto this order and bill, never onto the saved profile. */
       name: string
+      /**
+       * Whether the directory said they are a member when they were identified.
+       * Snapshotted onto the order like the name; absent for a customer saved
+       * for the first time, who cannot be one yet.
+       */
+      tier?: CustomerTier | null
     }
   | {
       kind: 'skipped'
@@ -262,6 +270,9 @@ function OpenCustomerDialog({
         kind: 'identified',
         phone: match.phone,
         name: match.name ?? name.trim(),
+        // Only a member carries the field, so a stranger's selection reads
+        // exactly as it did before memberships existed.
+        ...(match.tier ? { tier: match.tier } : {}),
       })
       return
     }
@@ -350,7 +361,15 @@ function OpenCustomerDialog({
                   looking for a person, and a heading saying what kind of row this
                   is pushes the one fact they want down the card.
                 */}
-              <p className="truncate font-bold text-content">{match.name ?? 'No saved name'}</p>
+              {/*
+                  The mark sits on the match **before** it is accepted, while
+                  there is still a choice to make about the order — which is
+                  the whole of its use at a counter. No date and nothing else.
+                */}
+              <p className="flex min-w-0 items-center gap-1.5 font-bold text-content">
+                <span className="truncate">{match.name ?? 'No saved name'}</span>
+                {match.tier === 'gold' && <MemberMark />}
+              </p>
               <p className="text-sm tabular-nums text-content-muted">
                 +91 {formatIndianPhone(match.phone)}
               </p>
@@ -377,8 +396,9 @@ function OpenCustomerDialog({
             >
               <UserRoundCheck aria-hidden className="shrink-0 text-primary" size={18} />
               <span className="min-w-0 flex-1">
-                <span className="block truncate font-bold text-content">
-                  {suggestion.customer.name ?? 'No saved name'}
+                <span className="flex min-w-0 items-center gap-1.5 font-bold text-content">
+                  <span className="truncate">{suggestion.customer.name ?? 'No saved name'}</span>
+                  {suggestion.customer.tier === 'gold' && <MemberMark />}
                 </span>
                 {/*
                   The digits already typed are dimmed and the rest are not

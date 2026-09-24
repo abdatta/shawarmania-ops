@@ -1,8 +1,9 @@
 import { UserRound } from 'lucide-react'
 
 import { Shimmer } from '@/components/ui/loading'
+import { MemberMark } from '@/components/ui/member-mark'
 import { Money } from '@/components/ui/money'
-import type { BillLineDraft } from '@/data-access/adapters'
+import type { BillLineDraft, CustomerTier } from '@/data-access/adapters'
 import { formatRecentAge, isAwaitingOrderNumber, UNSENT_ORDER_REFERENCE } from '@/domain'
 
 /**
@@ -23,6 +24,7 @@ export function OpenOrderCardBody({
   orderNumber,
   orderedAt,
   customerName,
+  customerTier = null,
   creatorName,
   lines,
   showLines = true,
@@ -30,6 +32,8 @@ export function OpenOrderCardBody({
   orderNumber: number
   orderedAt: string
   customerName: string | null
+  /** The order's own snapshot of the customer's membership — never the live one. */
+  customerTier?: CustomerTier | null
   /** Omitted for the current shift holder — they know who took the order. */
   creatorName?: string | undefined
   lines: BillLineDraft[]
@@ -42,21 +46,23 @@ export function OpenOrderCardBody({
 }) {
   const totalPaise = lines.reduce((sum, line) => sum + line.unitPricePaise * line.quantity, 0)
   const awaitingNumber = isAwaitingOrderNumber(orderNumber)
+  const member = customerTier === 'gold'
   const reference = awaitingNumber ? UNSENT_ORDER_REFERENCE : `Order #${orderNumber}`
 
   return (
     <>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          {customerName && (
+          {(customerName || member) && (
             <p className="flex items-start gap-1.5 text-base font-black leading-5 text-content">
               <UserRound aria-hidden className="mt-0.5 shrink-0 text-accent-text" size={17} />
-              <span>{customerName}</span>
+              {customerName && <span>{customerName}</span>}
+              {member && <MemberMark className="mt-0.5" />}
             </p>
           )}
           <div
             className={
-              customerName
+              customerName || member
                 ? 'mt-1 flex flex-wrap items-center gap-1.5'
                 : 'flex flex-wrap items-center gap-1.5'
             }

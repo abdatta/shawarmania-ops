@@ -24,6 +24,7 @@ import {
   type DiscountPreset,
   type BillLineDraft,
   type BillingOrder,
+  type CustomerTier,
   type MenuCategoryWithItems,
   type MenuDiscount,
   type PaymentAllocation,
@@ -111,10 +112,19 @@ interface Restorable {
 function customerSnapshots(customer: CustomerSelection | null): {
   customerName: string
   customerPhone: string
+  customerTier: CustomerTier | null
 } {
-  if (customer === null) return { customerName: '', customerPhone: '' }
-  if (customer.kind === 'skipped') return { customerName: customer.name, customerPhone: '' }
-  return { customerName: customer.name, customerPhone: customer.phone }
+  if (customer === null) return { customerName: '', customerPhone: '', customerTier: null }
+  if (customer.kind === 'skipped') {
+    return { customerName: customer.name, customerPhone: '', customerTier: null }
+  }
+  // The membership the counter was told when it identified them. Carried as a
+  // snapshot, like the name, so the order keeps it whatever happens later.
+  return {
+    customerName: customer.name,
+    customerPhone: customer.phone,
+    customerTier: customer.tier ?? null,
+  }
 }
 
 /**
@@ -126,7 +136,14 @@ function customerSnapshots(customer: CustomerSelection | null): {
  */
 function customerFromOrder(order: BillingOrder): CustomerSelection {
   const phone = normalizeIndianPhone(order.customerPhone)
-  if (phone !== null) return { kind: 'identified', phone, name: order.customerName ?? '' }
+  if (phone !== null) {
+    return {
+      kind: 'identified',
+      phone,
+      name: order.customerName ?? '',
+      tier: order.customerTier ?? null,
+    }
+  }
   return { kind: 'skipped', name: order.customerName ?? '' }
 }
 
@@ -933,6 +950,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
                 order={editingOrder}
                 lines={lines}
                 customerName={customerSnapshots(customer).customerName}
+                customerTier={customerSnapshots(customer).customerTier}
                 footer={composerFooter}
               />
             )

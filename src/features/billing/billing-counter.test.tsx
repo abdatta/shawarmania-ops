@@ -7,6 +7,7 @@ import type { BillDraft, DataAdapters } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters, createDemoStore } from '@/data-access/mock'
 import { DEMO_MORNING_BILLER_ID } from '@/data-access/mock/fixtures/billing'
+import { customerFixtures } from '@/data-access/mock/fixtures/customers'
 import {
   MENU_ITEM_BURGER_ID,
   MENU_ITEM_CLASSIC_ID,
@@ -831,6 +832,11 @@ describe('BillingCounter', () => {
     // The saved name is this order's label. Nothing was typed to get it, and
     // nothing about the saved profile was touched to give it.
     expect(screen.getByTestId('customer-row')).toHaveTextContent('Ritika Sen · +91 90000 00101')
+    // She is a gold member in the demo directory, so the row carries the mark —
+    // and nothing else about her membership.
+    expect(
+      within(screen.getByTestId('customer-row')).getByRole('img', { name: 'Gold member' }),
+    ).toBeInTheDocument()
   })
 
   it('refuses a phone that is not a phone, rather than offering to save it', async () => {
@@ -902,13 +908,16 @@ describe('BillingCounter', () => {
       await person.click(within(dialog).getByRole('button', { name: digit }))
     }
 
-    // The demo outlet has served both fixture customers, and both numbers open
-    // `9000`. One is offered and the other is a count — never a list, because a
-    // list over the customer directory is the thing this product refuses to
-    // build.
+    // The demo outlet has served every fixture customer, and all their numbers
+    // open `9000`. One is offered and the rest are a count — never a list,
+    // because a list over the customer directory is the thing this product
+    // refuses to build.
     const offered = await within(dialog).findByTestId('customer-suggestion')
     expect(offered).toHaveTextContent('Ritika Sen')
-    expect(within(dialog).getByTestId('customer-suggestion-others')).toHaveTextContent('+1 more')
+    expect(within(offered).getByRole('img', { name: 'Gold member' })).toBeInTheDocument()
+    expect(within(dialog).getByTestId('customer-suggestion-others')).toHaveTextContent(
+      `+${customerFixtures.length - 1} more`,
+    )
 
     await person.click(offered)
     expect(await within(dialog).findByTestId('customer-match')).toHaveTextContent('Ritika Sen')

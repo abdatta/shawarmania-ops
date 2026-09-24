@@ -14,6 +14,7 @@ import type { Tables } from '../database.types'
 import type {
   BillDiscountDraft,
   BillDraft,
+  CustomerTier,
   DiscountPreset,
   MenuDiscount,
   PaymentAllocation,
@@ -37,6 +38,7 @@ import { manualLedgerDaySeeds, manualLedgerExpenseSeeds } from './fixtures/retir
 import { menuCategoryFixtures, menuDiscountFixtures, menuItemFixtures } from './fixtures/menu'
 import { expenseSeeds, OPENING_CASH_PAISE } from './fixtures/operations'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID, outletFixtures } from './fixtures/outlets'
+import { customerFixtures, DEMO_MEMBER_CUSTOMER_PHONE, seededTierAt } from './fixtures/customers'
 import { personaFixtures } from './fixtures/personas'
 
 /**
@@ -124,6 +126,18 @@ export interface DemoStore {
    */
   orderDiscounts: Map<string, BillDiscountDraft[]>
   billDiscounts: Map<string, BillDiscountDraft[]>
+  /**
+   * The membership each order and bill was rung under, keyed by its id
+   * (a-gold-member-is-a-label).
+   *
+   * Beside the row rather than on it for one reason: the `customer_tier`
+   * column is written by that change's database section, and a mock row typed
+   * from `Tables<'orders'>` cannot carry a column the schema does not have yet.
+   * It is a snapshot all the same — written once when the row is created and
+   * never recomputed from the live membership.
+   */
+  orderTiers: Map<string, CustomerTier>
+  billTiers: Map<string, CustomerTier>
   /** Per-outlet, per-business-date order-number counters. */
   orderNumbers: Map<string, number>
   /** Server-side command metadata used by read-only manager diagnostics. */
@@ -419,6 +433,8 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
   const orders: Tables<'orders'>[] = []
   const orderItems: Tables<'order_items'>[] = []
   const orderNumbers = new Map<string, number>()
+  const orderTiers = new Map<string, CustomerTier>()
+  const billTiers = new Map<string, CustomerTier>()
   const billingCommands: Tables<'billing_commands'>[] = []
   const billingQueueSeeds: BillDraft[] = []
 
@@ -433,6 +449,17 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     const date = businessDate(seed.daysAgo)
     const createdAt = instantAt(date, seed.time)
     const billId = `d7000000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`
+    // A seed naming a customer is linked the way #56's server links a sale: by
+    // the phone it carries, to the one directory row that holds it, with the
+    // saved name snapshotted and the membership as it then stood.
+    const customer = seed.customerPhone
+      ? customerFixtures.find((row) => row.phone === seed.customerPhone)
+      : undefined
+    if (seed.customerPhone && !customer) {
+      throw new Error(`Demo fixture drift: no customer holds ${seed.customerPhone}.`)
+    }
+    const tier = customer ? seededTierAt(customer.phone, seed.daysAgo) : null
+    if (tier) billTiers.set(billId, tier)
 
     const lines = seed.lines.map((line) => {
       const itemId = billSeedItemId(seed, line)
@@ -493,9 +520,9 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       synced_at: seed.arrivedAfterClose
         ? instantAt(businessDate(seed.daysAgo - 1), '08:30')
         : createdAt,
-      customer_id: null,
-      customer_name: seed.customerName ?? null,
-      customer_phone: null,
+      customer_id: customer?.id ?? null,
+      customer_name: customer?.name ?? seed.customerName ?? null,
+      customer_phone: customer?.phone ?? null,
       payment_method: seed.paymentMethod,
       pricing_mode: 'no_tax',
       status: 'settled',
@@ -617,6 +644,8 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     reason?: string
     createdBy?: string
     preparedAtTime?: string | null
+    /** An order still being made for a customer, so the pipeline can carry a mark. */
+    customerPhone?: string
   }> = [
     { status: 'paid', bill: lifecycleBills[0] ?? null },
     { status: 'paid', bill: lifecycleBills[1] ?? null },
@@ -627,7 +656,8 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       createdBy: DEMO_MORNING_BILLER_ID,
       preparedAtTime: '18:45',
     },
-    { status: 'open', bill: null, preparedAtTime: null },
+    // Still being made, for a member — the card the kitchen acts on.
+    { status: 'open', bill: null, preparedAtTime: null, customerPhone: DEMO_MEMBER_CUSTOMER_PHONE },
   ]
   lifecycle.forEach((seed, index) => {
     const number = index + 101
@@ -650,6 +680,17 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       })),
     )
     const cancelled = seed.status === 'cancelled'
+    const orderCustomer = seed.customerPhone
+      ? customerFixtures.find((row) => row.phone === seed.customerPhone)
+      : undefined
+    // The order carries the tier its bill carries, or — with no bill yet — the
+    // membership as it stands today, which is when it was rung.
+    const orderTier = sourceBill
+      ? (billTiers.get(sourceBill.id) ?? null)
+      : orderCustomer
+        ? seededTierAt(orderCustomer.phone, 0)
+        : null
+    if (orderTier) orderTiers.set(id, orderTier)
     const preparedAt =
       seed.preparedAtTime !== undefined
         ? seed.preparedAtTime === null
@@ -669,9 +710,10 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       changed_at: null,
       changed_by: null,
       changed_shift_id: null,
-      customer_id: null,
-      customer_name: sourceBill?.customer_name ?? (index === 3 ? 'Demo Customer' : null),
-      customer_phone: sourceBill?.customer_phone ?? null,
+      customer_id: sourceBill?.customer_id ?? orderCustomer?.id ?? null,
+      customer_name:
+        sourceBill?.customer_name ?? orderCustomer?.name ?? (index === 3 ? 'Demo Customer' : null),
+      customer_phone: sourceBill?.customer_phone ?? orderCustomer?.phone ?? null,
       pricing_mode: 'no_tax',
       subtotal_paise: totals.subtotalPaise,
       // Read off the totals, not hardcoded: the identity these three terms sit
@@ -1333,6 +1375,8 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     orderItems,
     orderDiscounts: new Map(),
     billDiscounts: new Map(),
+    orderTiers,
+    billTiers,
     orderNumbers,
     billingCommands,
     billingQueueSeeds,

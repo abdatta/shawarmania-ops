@@ -9,6 +9,7 @@ import { MyShiftSurface } from '@/features/billing/my-shift-surface'
 import { OpenOrdersSurface } from '@/features/billing/open-orders-surface'
 import { ShiftUnlock } from '@/features/billing/shift-unlock'
 import { CashDrawerSurface } from '@/features/cash/cash-drawer-surface'
+import { CustomersSurface } from '@/features/customers/customers-surface'
 import { LedgerStatementSurface } from '@/features/cash/ledger-statement-surface'
 import { DevicesSurface } from '@/features/counter/devices-surface'
 import { ExpenseCategoriesSurface } from '@/features/expense-categories/expense-categories-surface'
@@ -45,6 +46,14 @@ export const roleSurfaceRoutes: RouteObject[] = [
     element: (
       <GatedSurface path="people">
         <AccountsSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    path: 'customers',
+    element: (
+      <GatedSurface path="customers">
+        <CustomersSurface />
       </GatedSurface>
     ),
   },
