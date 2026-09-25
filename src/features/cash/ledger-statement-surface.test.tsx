@@ -1,17 +1,26 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import type { DataAdapters, LedgerStatementMonth } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters } from '@/data-access/mock'
+import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from '@/data-access/mock/fixtures/outlets'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
+import { chooseOutlet } from '@/test/outlet-scope'
+import { demoSessionFor } from '@/test/session'
 
-import { readMonth, type MonthDayInput } from '@/domain'
+import {
+  formatBusinessDate,
+  readMonth,
+  resolveBusinessDate,
+  shiftBusinessDate,
+  type MonthDayInput,
+} from '@/domain'
 
 import { LedgerStatementSurface } from './ledger-statement-surface'
 
@@ -646,5 +655,205 @@ describe('what the month and the day gave away', () => {
 
     const section = await screen.findByTestId('month-discounts')
     expect(section).toHaveTextContent(/both figures are ceilings while a commission is waiting/i)
+  })
+})
+
+/**
+ * The ledger keeps its place, and shows only the reading that is on screen
+ * (`the-ledger-reads-fast-and-keeps-its-place`).
+ *
+ * Every case here failed against the surface as it stood on 2026-09-24: an
+ * outlet switch threw away the chosen date and month, a slow outlet showed the
+ * previous one's figures under its own name, an error outlived the period it
+ * was about, a late verification reload stuck the skeleton over the date the
+ * reader had stepped to, and nothing was ever cancelled.
+ */
+describe('the ledger keeps its place and reads only what is on screen', () => {
+  const ownerSession = demoSessionFor('super_admin')
+
+  /** A promise the test settles when it chooses to. */
+  function deferred<T>() {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>((settle) => {
+      resolve = settle
+    })
+    return { promise, resolve }
+  }
+
+  type Ledger = DataAdapters['ledgerStatement']
+  type DayCall = { outletId: string; date: string; signal: AbortSignal | undefined }
+
+  /**
+   * The owner's Ledger over demo adapters, with the ledger reads replaceable and
+   * every day read recorded — which outlet, which date, which signal.
+   */
+  function renderOwnerLedger(
+    patch: (ledger: Ledger, calls: DayCall[]) => Partial<Ledger> = () => ({}),
+    outletsPatch: (
+      outlets: DataAdapters['outlets'],
+    ) => Partial<DataAdapters['outlets']> = () => ({}),
+  ) {
+    const adapters = createMockAdapters('super_admin')
+    const calls: DayCall[] = []
+    const overrides = patch(adapters.ledgerStatement, calls)
+    const getDay = overrides.getDay ?? adapters.ledgerStatement.getDay
+    const patched: DataAdapters = {
+      ...adapters,
+      outlets: { ...adapters.outlets, ...outletsPatch(adapters.outlets) },
+      ledgerStatement: {
+        ...adapters.ledgerStatement,
+        ...overrides,
+        getDay: (outletId, date, options) => {
+          calls.push({ outletId, date, signal: options?.signal })
+          return getDay(outletId, date, options)
+        },
+      },
+    }
+    render(
+      <MemoryRouter>
+        <SessionContext.Provider value={ownerSession}>
+          <AdaptersContext.Provider value={patched}>
+            <LedgerStatementSurface />
+          </AdaptersContext.Provider>
+        </SessionContext.Provider>
+      </MemoryRouter>,
+    )
+    return { calls }
+  }
+
+  const pickedDay = () => screen.getByTestId('statement-day-picker').getAttribute('value')
+  const pickedMonth = () => screen.getByTestId('statement-month-picker').dataset['month']
+
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  it('keeps a past date when the outlet changes', async () => {
+    const user = userEvent.setup()
+    const { calls } = renderOwnerLedger()
+    await chooseOutlet(OUTLET_KALYANI_ID)
+    await screen.findByTestId('ledger-revenue')
+    const today = pickedDay()!
+
+    await user.click(screen.getByTestId('statement-step-back'))
+    await user.click(screen.getByTestId('statement-step-back'))
+    const chosen = shiftBusinessDate(today, -2)
+    await waitFor(() => expect(pickedDay()).toBe(chosen))
+
+    await chooseOutlet(OUTLET_KANCHRAPARA_ID)
+    await screen.findByTestId('ledger-revenue')
+    expect(pickedDay()).toBe(chosen)
+    expect(calls.at(-1)).toMatchObject({ outletId: OUTLET_KANCHRAPARA_ID, date: chosen })
+    expect(screen.getByTestId('ledger-revenue')).toHaveTextContent(formatBusinessDate(chosen))
+  })
+
+  it('keeps a past month when the outlet changes', async () => {
+    const user = userEvent.setup()
+    renderOwnerLedger()
+    await chooseOutlet(OUTLET_KALYANI_ID)
+    await screen.findByTestId('ledger-revenue')
+
+    await user.click(screen.getByTestId('statement-view-month'))
+    const thisMonth = pickedMonth()!
+    await user.click(screen.getByTestId('statement-step-back'))
+    await user.click(screen.getByTestId('statement-step-back'))
+    await waitFor(() => expect(pickedMonth()).not.toBe(thisMonth))
+    const chosen = pickedMonth()
+
+    await chooseOutlet(OUTLET_KANCHRAPARA_ID)
+    await screen.findByTestId('month-drawer-tally')
+    expect(pickedMonth()).toBe(chosen)
+  })
+
+  it('brings a date back only as far as the new outlet’s own today', async () => {
+    // Kalyani's day turns at midnight and Kanchrapara's a minute before the
+    // next, so Kanchrapara's today is Kalyani's yesterday.
+    const cutovers: Record<string, string> = {
+      [OUTLET_KALYANI_ID]: '00:00:00',
+      [OUTLET_KANCHRAPARA_ID]: '23:59:00',
+    }
+    renderOwnerLedger(
+      () => ({}),
+      (outlets) => ({
+        getOutlet: async (id) => {
+          const outlet = await outlets.getOutlet(id)
+          return outlet && { ...outlet, business_day_cutover: cutovers[id] ?? '04:00:00' }
+        },
+      }),
+    )
+    await chooseOutlet(OUTLET_KALYANI_ID)
+    await screen.findByTestId('ledger-revenue')
+    expect(pickedDay()).toBe(resolveBusinessDate(new Date(), '00:00'))
+
+    await chooseOutlet(OUTLET_KANCHRAPARA_ID)
+    await waitFor(() => expect(pickedDay()).toBe(resolveBusinessDate(new Date(), '23:59')))
+  })
+
+  it('never shows one outlet’s figures under another while the other is read', async () => {
+    const pending = deferred<never>()
+    renderOwnerLedger((ledger) => ({
+      getDay: (outletId, date, options) =>
+        outletId === OUTLET_KANCHRAPARA_ID
+          ? pending.promise
+          : ledger.getDay(outletId, date, options),
+    }))
+    await chooseOutlet(OUTLET_KALYANI_ID)
+    await screen.findByTestId('ledger-revenue')
+
+    await chooseOutlet(OUTLET_KANCHRAPARA_ID)
+    expect(screen.getByTestId('ledger-loading')).toBeInTheDocument()
+    expect(screen.queryByTestId('ledger-revenue')).not.toBeInTheDocument()
+  })
+
+  it('withdraws a failure once the reader has moved on', async () => {
+    const user = userEvent.setup()
+    let failingDate: string | null = null
+    renderOwnerLedger((ledger) => ({
+      getDay: (outletId, date, options) => {
+        failingDate ??= date
+        return date === failingDate
+          ? Promise.reject(new Error('a timeout'))
+          : ledger.getDay(outletId, date, options)
+      },
+    }))
+    expect(await screen.findByTestId('ledger-error')).toHaveTextContent(/could not read that day/i)
+
+    await user.click(screen.getByTestId('statement-step-back'))
+    await screen.findByTestId('ledger-revenue')
+    expect(screen.queryByTestId('ledger-error')).not.toBeInTheDocument()
+  })
+
+  it('does not hand back the verified day to a reader who has stepped away', async () => {
+    const user = userEvent.setup()
+    const verified = deferred<void>()
+    renderOwnerLedger(() => ({ verifyDay: () => verified.promise }))
+    await chooseOutlet(OUTLET_KALYANI_ID)
+    await screen.findByTestId('ledger-revenue')
+    const yesterday = shiftBusinessDate(pickedDay()!, -1)
+
+    await user.click(screen.getByTestId('verify-day'))
+    await user.click(screen.getByTestId('statement-step-back'))
+    await screen.findByTestId('ledger-revenue')
+    verified.resolve()
+
+    await waitFor(() => expect(screen.getByTestId('verify-day')).not.toBeDisabled())
+    expect(pickedDay()).toBe(yesterday)
+    expect(screen.getByTestId('ledger-revenue')).toHaveTextContent(formatBusinessDate(yesterday))
+    expect(screen.queryByTestId('ledger-loading')).not.toBeInTheDocument()
+  })
+
+  it('cancels the read of a date the reader has stepped past', async () => {
+    const user = userEvent.setup()
+    const { calls } = renderOwnerLedger((ledger, recorded) => ({
+      getDay: (outletId, date, options) =>
+        recorded.length === 1
+          ? new Promise(() => undefined)
+          : ledger.getDay(outletId, date, options),
+    }))
+    await waitFor(() => expect(calls).toHaveLength(1))
+
+    await user.click(screen.getByTestId('statement-step-back'))
+    await screen.findByTestId('ledger-revenue')
+    expect(calls[0]!.signal?.aborted).toBe(true)
   })
 })

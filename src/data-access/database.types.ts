@@ -4512,6 +4512,15 @@ export type Database = {
           status: string
         }[]
       }
+      ledger_assert_reach: { Args: { p_outlet_id: string }; Returns: undefined }
+      ledger_drawer_balance_at: {
+        Args: { p_at: string; p_outlet_id: string }
+        Returns: number
+      }
+      ledger_month_inputs: {
+        Args: { p_month: string; p_outlet_id: string }
+        Returns: Json
+      }
       manager_cancel_billing_order: {
         Args: {
           p_command_id?: string

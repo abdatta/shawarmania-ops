@@ -1,14 +1,34 @@
+import { execSync } from 'node:child_process'
+
 import { defineConfig } from 'vitest/config'
 
+/** As `vitest.drawer-writes.config.ts`: the key cleans up, and does nothing else. */
+function serviceRoleKey(): string {
+  const configured = process.env['SUPABASE_SERVICE_ROLE_KEY']
+  if (configured) return configured
+  const status = JSON.parse(
+    execSync('npx supabase status -o json', { encoding: 'utf8' }),
+  ) as Record<string, unknown>
+  const discovered = status['SERVICE_ROLE_KEY']
+  if (typeof discovered !== 'string' || discovered.length === 0) {
+    throw new Error('The local Supabase service-role key could not be discovered')
+  }
+  return discovered
+}
+
 /**
- * Open question 3's measurement, in its own phase.
+ * The ledger's round-trip measurement, in its own phase.
  *
- * It reads only — no writes, nothing to clean up — but it is slow by nature and
- * its output is a number rather than a pass, so it is kept out of the ordinary
- * RLS phase where a two-minute file would look like a hang.
+ * It records a drawer anchor and a count per outlet so the measured day reads its
+ * balances, and removes them afterwards with the service-role key — the same
+ * shape as the drawer-writes phase, and for the same reason it cannot sit in the
+ * ordinary RLS phase, which only ever attempts denied writes.
  */
 export default defineConfig({
   test: {
+    env: {
+      SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey(),
+    },
     environment: 'node',
     include: ['supabase/tests/rest/zz-ledger-month-timing.test.ts'],
     fileParallelism: false,

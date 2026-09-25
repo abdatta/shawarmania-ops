@@ -8,6 +8,7 @@ import {
 } from '@/domain'
 
 import {
+  LedgerReadAborted,
   LedgerStatementActionError,
   toMonthDayInput,
   type LedgerDrawerEvent,
@@ -401,11 +402,16 @@ export function createMockLedgerStatementAdapter(
   }
 
   return {
-    async getDay(outletId, businessDate) {
+    async getDay(outletId, businessDate, { signal } = {}) {
+      // The demo answers at once, so only a read abandoned before it began can
+      // be abandoned — which is enough for the surface's tests to walk the same
+      // path the real adapter takes.
+      if (signal?.aborted) throw new LedgerReadAborted()
       return dayFor(outletId, businessDate)
     },
 
-    async getMonth(outletId, month) {
+    async getMonth(outletId, month, { signal } = {}) {
+      if (signal?.aborted) throw new LedgerReadAborted()
       const [year, monthNumber] = month.split('-').map(Number)
       if (!year || !monthNumber) {
         throw new LedgerStatementActionError('bad_month', 'That is not a month this reads.')

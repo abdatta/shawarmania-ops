@@ -3303,9 +3303,43 @@ export class LedgerStatementActionError extends DataActionError {
   }
 }
 
+/**
+ * How a ledger read may be abandoned.
+ *
+ * The reader steps past a date or a month mid-read constantly, and a read left
+ * running queues ahead of the one they actually want: on 2026-09-24 a month
+ * reached two skipped months late took 26 s rather than 15. So every read takes
+ * a signal, and aborting it cancels the requests rather than ignoring them.
+ */
+export interface LedgerReadOptions {
+  signal?: AbortSignal
+}
+
+/** What an abandoned ledger read rejects with — never a failure to report. */
+export class LedgerReadAborted extends Error {
+  constructor() {
+    super('The ledger read was abandoned.')
+    this.name = 'LedgerReadAborted'
+  }
+}
+
 export interface LedgerStatementAdapter {
-  getDay(outletId: string, businessDate: string): Promise<LedgerStatementDay>
-  getMonth(outletId: string, month: string): Promise<LedgerStatementMonth>
+  /**
+   * The day, or a rejection. **Never part of a day**: a source that could not
+   * be read fails the whole reading, because every one of them feeds a figure,
+   * a section or a word, and a missing one would render as nought.
+   */
+  getDay(
+    outletId: string,
+    businessDate: string,
+    options?: LedgerReadOptions,
+  ): Promise<LedgerStatementDay>
+  /** The month, or a rejection, on the same terms as `getDay`. */
+  getMonth(
+    outletId: string,
+    month: string,
+    options?: LedgerReadOptions,
+  ): Promise<LedgerStatementMonth>
   /**
    * An attributed acknowledgement. Freezes nothing, is required by nothing, and
    * does not stop a settlement restating the day afterwards.

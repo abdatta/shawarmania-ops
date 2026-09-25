@@ -1,5 +1,5 @@
 import { Settings2 } from 'lucide-react'
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 
 import { PageHeader } from '@/components/layout/page-header'
@@ -14,6 +14,7 @@ import { Explain } from '@/components/ui/why'
 import { useAdapters } from '@/data-access'
 import {
   DataActionError,
+  LedgerReadAborted,
   type LedgerDrawerEvent,
   type LedgerStatementDay,
   type LedgerStatementMonth,
@@ -93,8 +94,21 @@ export function LedgerStatementSurface() {
   const [day, setDay] = useState<LedgerStatementDay | null>(null)
   const [month, setMonth] = useState<LedgerStatementMonth | null>(null)
   const [monthKey, setMonthKey] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  /**
+   * A failure, and the reading it was about.
+   *
+   * **Keyed, so it cannot outlive its period.** It used to be a bare string
+   * that nothing but Verify cleared: a month that failed once went on saying so
+   * over every month read successfully after it. Now it shows only while the
+   * reader is still on the reading that failed, and a late failure from a
+   * reading they have left can never appear at all.
+   */
+  const [error, setError] = useState<{ key: string; message: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  /** Bumped after a verification, so the day re-reads through its own guarded path. */
+  const [dayRevision, setDayRevision] = useState(0)
+  /** The linked month last applied, so a new link applies and a kept choice survives. */
+  const appliedLink = useRef<string | null>(null)
 
   useEffect(() => {
     if (!outletId) return
@@ -104,81 +118,113 @@ export function LedgerStatementSurface() {
       .then((outlet) => {
         if (!active || !outlet) return
         const resolved = resolveBusinessDate(new Date(), outlet.business_day_cutover)
+        const thisMonth = resolved.slice(0, 7)
         setToday(resolved)
-        setBusinessDate(resolved)
-        setMonthKey(
-          linkedMonth &&
-            /^\d{4}-(0[1-9]|1[0-2])$/.test(linkedMonth) &&
-            linkedMonth <= resolved.slice(0, 7)
+        /*
+         * **The chosen period survives an outlet switch.** Each outlet has its
+         * own cutover, so its today is resolved again here — but that is no
+         * reason to throw away the date or month the reader navigated to, which
+         * is what this effect used to do. A choice is only brought back when it
+         * lies past this outlet's today, because the database refuses a future
+         * business date.
+         */
+        setBusinessDate((chosen) => (chosen === null || chosen > resolved ? resolved : chosen))
+        const link =
+          linkedMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(linkedMonth) && linkedMonth <= thisMonth
             ? linkedMonth
-            : resolved.slice(0, 7),
+            : null
+        const freshLink = link !== null && link !== appliedLink.current
+        appliedLink.current = link
+        setMonthKey((chosen) =>
+          freshLink ? link : chosen === null || chosen > thisMonth ? thisMonth : chosen,
         )
       })
       .catch(() => {
-        if (active) setError('Could not work out which day this is.')
+        if (active) {
+          setError({ key: `outlet:${outletId}`, message: 'Could not work out which day this is.' })
+        }
       })
     return () => {
       active = false
     }
   }, [outlets, outletId, linkedMonth])
 
-  const loadDay = useCallback(async () => {
-    if (!outletId || !businessDate) return
-    setDay(await adapter.getDay(outletId, businessDate))
-  }, [adapter, outletId, businessDate])
+  const dayKey = `${outletId}|day|${businessDate}`
+  const monthReadKey = `${outletId}|month|${monthKey}`
 
+  /*
+   * Each read is cancelled when the reader moves on — a step, a view, an outlet.
+   * Ignoring an abandoned read's answer is not enough: its requests keep
+   * queueing ahead of the reading the reader actually wants, which is how a
+   * month reached past two others took 26 s on 2026-09-24.
+   */
   useEffect(() => {
     if (!outletId || !businessDate || view !== 'day') return
-    let active = true
-    void adapter
-      .getDay(outletId, businessDate)
+    const controller = new AbortController()
+    const key = `${outletId}|day|${businessDate}`
+    adapter
+      .getDay(outletId, businessDate, { signal: controller.signal })
       .then((loaded) => {
-        if (active) setDay(loaded)
+        if (!controller.signal.aborted) setDay(loaded)
       })
-      .catch(() => {
-        if (active) setError('Could not read that day. Try again in a moment.')
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || cause instanceof LedgerReadAborted) return
+        setError({ key, message: 'Could not read that day. Try again in a moment.' })
       })
-    return () => {
-      active = false
-    }
-  }, [adapter, outletId, businessDate, view])
+    return () => controller.abort()
+  }, [adapter, outletId, businessDate, view, dayRevision])
 
   useEffect(() => {
     if (!outletId || !monthKey || view !== 'month') return
-    let active = true
-    void adapter
-      .getMonth(outletId, monthKey)
+    const controller = new AbortController()
+    const key = `${outletId}|month|${monthKey}`
+    adapter
+      .getMonth(outletId, monthKey, { signal: controller.signal })
       .then((loaded) => {
-        if (active) setMonth(loaded)
+        if (!controller.signal.aborted) setMonth(loaded)
       })
-      .catch(() => {
-        if (active) setError('Could not read that month. Try again in a moment.')
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || cause instanceof LedgerReadAborted) return
+        setError({ key, message: 'Could not read that month. Try again in a moment.' })
       })
-    return () => {
-      active = false
-    }
+    return () => controller.abort()
   }, [adapter, outletId, monthKey, view])
 
   async function verify() {
     if (!outletId || !businessDate) return
+    const key = dayKey
     setBusy(true)
     setError(null)
     try {
       await adapter.verifyDay(outletId, businessDate)
-      await loadDay()
+      // Re-read through the day's own effect rather than here, so a reader who
+      // has stepped to another date by now is not handed this one back.
+      setDayRevision((revision) => revision + 1)
     } catch (cause) {
-      setError(
-        cause instanceof DataActionError
-          ? cause.message
-          : 'That did not work. Try again in a moment.',
-      )
+      setError({
+        key,
+        message:
+          cause instanceof DataActionError
+            ? cause.message
+            : 'That did not work. Try again in a moment.',
+      })
     } finally {
       setBusy(false)
     }
   }
 
-  const dayReady = day !== null && day.businessDate === businessDate
-  const monthReady = month !== null && month.month === monthKey
+  /*
+   * A reading is shown only for the outlet AND the period on screen. Comparing
+   * the period alone showed the previous outlet's figures under the new one's
+   * name for as long as the new read took.
+   */
+  const dayReady = day !== null && day.outletId === outletId && day.businessDate === businessDate
+  const monthReady = month !== null && month.outletId === outletId && month.month === monthKey
+  const shownError =
+    error &&
+    (error.key === (view === 'day' ? dayKey : monthReadKey) || error.key === `outlet:${outletId}`)
+      ? error.message
+      : null
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -268,13 +314,13 @@ export function LedgerStatementSurface() {
         )}
       </div>
 
-      {error && (
+      {shownError && (
         <p
           role="alert"
           className="mb-3 text-sm font-semibold text-danger"
           data-testid="ledger-error"
         >
-          {error}
+          {shownError}
         </p>
       )}
 

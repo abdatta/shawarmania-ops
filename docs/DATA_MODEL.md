@@ -826,6 +826,17 @@ bills, expenses, `aggregator_channel_days`, drawer cash out and observations. Tw
 properties follow and both are worth the read cost: the row can never disagree
 with itself, and a day nobody touched still renders in full.
 
+Two server functions compute parts of that reading, because the cost of reading
+is round trips rather than database work (see LIMITATIONS). **Neither stores
+anything.** `ledger_drawer_balance_at(outlet, instant)` walks the drawer forward
+from the last observation at or before the instant, and returns null before the
+first. `ledger_month_inputs(outlet, month)` returns, for each date of the month,
+exactly what the month reading folds: cash and UPI from settled bills' effective
+allocations, discount, each channel day, the expense lines and the drawer's word
+for the date. Both are security definer and begin by raising unless
+`app_may_reach_drawer` admits the reader. Another outlet is therefore refused
+rather than answered as a quiet month.
+
 A reconciliation exception is derived the same way — a payment or occurrence
 instant inside an already-observed interval that arrived after the observation was
 recorded. Only the human act of acknowledging one is stored.

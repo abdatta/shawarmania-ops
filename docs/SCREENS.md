@@ -362,6 +362,8 @@ The drawer section is **ordered by instant rather than grouped by category**, wh
 
 A business date with no count marks both balances **`carried`** — the app's belief, unchecked, and the only word on the month view that says how much the numbers can be trusted. A date before the outlet's first count reads **`not tracked yet`** instead, which is a different claim: there is no belief there to leave unchecked.
 
+**The Ledger keeps its place.** Switching outlet keeps the chosen date and the chosen month. Only a choice later than the new outlet's own today is brought back to that today, because each outlet resolves its today through its own cutover. A day reads in two round trips and a month in one server read. A date or month stepped past mid-read is cancelled rather than left queueing. **A reading that could not be completed says so** rather than rendering the parts that arrived: a failed channel read no longer shows a day without its channels, and a failed count read no longer turns counted into carried. The message belongs to the reading it was about and goes when the reader moves on. Figures from one outlet are never shown under another's name while the other is read.
+
 **Zero editable fields.** The only controls are the date stepper, row expansion and Verify. A figure judged wrong is corrected at its source: a void and re-ring for a bill, a withdrawal and re-entry for an expense, an adjustment for a count.
 
 **Verifying a day is an attributed acknowledgement and freezes nothing.** Aggregator settlement legitimately restates a day's figures days later, and a verification that forbade that would be one nobody could use. A day whose inputs move afterwards says so, naming what moved. Each day joins a verification by its own tap — no select-all.

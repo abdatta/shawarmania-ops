@@ -834,16 +834,30 @@ queue draining later — and that case is already handled: it raises a
 reconciliation exception against the observation whose interval it fell in.
 Revisit only if a future device shows minute-scale drift.
 
-## The derived ledger month is measured, not assumed (#11)
+## The derived ledger is measured in round trips, not milliseconds
 
-A month view assembles thirty-one days from five sources with no stored row, which
-is deliberate: a stored day row can disagree with its sources, and this one cannot.
-The read cost is the trade, and it is **measured rather than assumed**: a whole
-month reads in 285 to 389 ms, and a single day in 51 to 87 ms, through the real
-adapter against a seeded August.
-`supabase/tests/rest/zz-ledger-month-timing.test.ts` runs as its own `test:rls`
-phase so that stays true.
+A day and a month are assembled from five sources with no stored row, which is
+deliberate: a stored day row can disagree with its sources, and this one cannot.
+The read cost is the trade, and **the cost is round trips, not database work.**
 
-If it ever stops holding, **the remedy is a materialised read model, never a
-stored day row.** The whole point of the derived reading is that it cannot be
-wrong about itself.
+That was learned the hard way. The first measurement (#11) timed a month at 285
+to 389 ms against a local stack and called it comfortable. On production on
+2026-09-24 the same month took 15 to 16.5 s, and a single day 4 to 5 s: every
+request from a phone costs about 300 ms whatever it asks, a day made thirteen of
+them one after another, and a month about six hundred. A local stack, where a
+request costs nothing, could not see any of it.
+
+`the-ledger-reads-fast-and-keeps-its-place` moved the work to where a request is
+cheap. A day now reads in two waves, with the drawer balance at an instant as one
+server read (`ledger_drawer_balance_at`); a month reads in one server call
+(`ledger_month_inputs`) plus the two small reads it always made. The budget is
+**at most two sequential round trips for either**, with a month's request count
+independent of its dates.
+
+`supabase/tests/rest/zz-ledger-month-timing.test.ts` holds that budget by delaying
+every request by 250 ms, so the clock measures round trips the way a phone does.
+It also holds the month and each of its days equal to the paisa, since the month's
+inputs are now computed in SQL and the day's in TypeScript.
+
+If it ever stops holding, **the remedy is still never a stored day row.** The
+whole point of the derived reading is that it cannot be wrong about itself.
