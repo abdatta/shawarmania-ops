@@ -395,6 +395,30 @@ export function shiftBusinessDate(businessDate: string, days: number): string {
 }
 
 /**
+ * Where a chosen period lands when the outlet under it changes.
+ *
+ * **The period is a fact about what the reader is reading, not about which
+ * outlet they are reading it at**, so a switch keeps it. Two exceptions, both
+ * because each outlet resolves its own today through its own cutover:
+ *
+ *   * a reader who was on the previous outlet's **today** meant today, and is
+ *     moved to the new outlet's;
+ *   * a choice **past** the new outlet's today is brought back to it, because the
+ *     database refuses a future business date.
+ *
+ * Nothing chosen yet opens on the new today. ISO strings compare in calendar
+ * order, so the same rule carries a `YYYY-MM-DD` date or a `YYYY-MM` month.
+ */
+export function carryPeriod(
+  chosen: string | null,
+  previousToday: string | null,
+  nextToday: string,
+): string {
+  if (chosen === null || chosen === previousToday || chosen > nextToday) return nextToday
+  return chosen
+}
+
+/**
  * How far back a platform calendar reaches: a year before the outlet's today,
  * to the first of that month. Steps may still reach further one day at a time —
  * this is a floor on the picker, which needs one, not on the history.

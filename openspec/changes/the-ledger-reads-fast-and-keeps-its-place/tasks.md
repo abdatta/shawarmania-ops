@@ -97,6 +97,23 @@ assertion written to pass.
   `getMonth` comment that promised a materialised read model if the month did not
   hold.
 
+## 4b. The same place kept on every surface with a period (folded in 2026-09-25)
+
+- [x] 4b.1 `carryPeriod` in `src/domain/datetime.ts`, exported from `@/domain`,
+  with unit cases: nothing chosen, on the previous today, past the new today, an
+  earlier date kept, a month key carried the same way.
+- [x] 4b.2 Ledger: carry `businessDate` and `monthKey` through `carryPeriod`
+  (today follows today), with a surface test for an outlet whose today is later.
+- [x] 4b.3 Billing history (`manager-billing-history.tsx`): `chosenDay` carries
+  the today it was chosen against rather than the outlet; test that a past date
+  survives a switch.
+- [x] 4b.4 Expenses (`outlet-expenses-surface.tsx`): the outlet effect carries the
+  chosen date; test that a past date survives a switch.
+- [x] 4b.5 Attendance day view (`outlet-attendance.tsx`): lift the chosen date out
+  of the re-keyed `OutletAxis`; test that a past date survives a chip change and
+  that the approval selection is still emptied by it.
+- [x] 4b.6 Each new surface test proved to fail against the pre-change surface.
+
 ## 5. Docs
 
 - [x] 5.1 `docs/LIMITATIONS.md` — rewrite *The derived ledger month is measured,
@@ -105,6 +122,8 @@ assertion written to pass.
 - [x] 5.2 `docs/TESTING.md` — the timing phase and the parity check.
 - [x] 5.3 `docs/SCREENS.md` — the Ledger paragraph: the period survives an outlet
   switch; a reading that could not be completed says so.
+- [x] 5.5 `docs/SCREENS.md` — the outlet-switcher paragraph: every surface with a
+  period keeps it across a switch, today following today.
 - [x] 5.4 `docs/DATA_MODEL.md` — the two read functions beside the drawer's
   existing ones.
 
@@ -115,6 +134,10 @@ assertion written to pass.
   `npm run contrast`, `npm run build`, `npm run test:e2e`.
   *2026-09-25:* all green — 1,893 unit tests, 284 e2e; plus
   `npm run test:e2e:auth` (28), which `verify.yml` also runs.
+  *Re-run after 4b:* 1,902 unit, 284 e2e, 28 auth e2e. The first auth run
+  failed two counter-billing specs on rows an earlier run had left in the shared
+  local stack; after `supabase db reset` all 28 passed, and nothing in 4b touches
+  the counter.
 - [x] 6.2 `npm run test:db` and `npm run test:rls` on a freshly reset stack
   (it is shared; reset again if another session touched it mid-run). Record the
   timing phase's "after" numbers beside task 1.2's "before".

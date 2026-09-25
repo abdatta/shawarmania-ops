@@ -89,6 +89,7 @@ export {
   QUIET_HOURS_UNTIL,
   resolveBusinessDate,
   shiftBusinessDate,
+  carryPeriod,
   TRADING_SESSION,
   type CutoverAdvice,
   type CutoverFiling,

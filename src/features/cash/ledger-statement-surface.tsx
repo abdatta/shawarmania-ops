@@ -20,6 +20,7 @@ import {
   type LedgerStatementMonth,
 } from '@/data-access/adapters'
 import {
+  carryPeriod,
   formatBusinessDate,
   formatDateTime,
   formatTime,
@@ -109,6 +110,8 @@ export function LedgerStatementSurface() {
   const [dayRevision, setDayRevision] = useState(0)
   /** The linked month last applied, so a new link applies and a kept choice survives. */
   const appliedLink = useRef<string | null>(null)
+  /** The today last resolved, so a switch can tell "on today" from a past date. */
+  const resolvedToday = useRef<string | null>(null)
 
   useEffect(() => {
     if (!outletId) return
@@ -119,16 +122,18 @@ export function LedgerStatementSurface() {
         if (!active || !outlet) return
         const resolved = resolveBusinessDate(new Date(), outlet.business_day_cutover)
         const thisMonth = resolved.slice(0, 7)
+        // Captured before it moves: the updaters below run later, and must see
+        // the today the reader's choice was made against.
+        const previousToday = resolvedToday.current
+        resolvedToday.current = resolved
         setToday(resolved)
         /*
-         * **The chosen period survives an outlet switch.** Each outlet has its
-         * own cutover, so its today is resolved again here — but that is no
-         * reason to throw away the date or month the reader navigated to, which
-         * is what this effect used to do. A choice is only brought back when it
-         * lies past this outlet's today, because the database refuses a future
-         * business date.
+         * **The chosen period survives an outlet switch** (`carryPeriod`). Each
+         * outlet has its own cutover, so its today is resolved again here — but
+         * that is no reason to throw away the date or month the reader navigated
+         * to, which is what this effect used to do.
          */
-        setBusinessDate((chosen) => (chosen === null || chosen > resolved ? resolved : chosen))
+        setBusinessDate((chosen) => carryPeriod(chosen, previousToday, resolved))
         const link =
           linkedMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(linkedMonth) && linkedMonth <= thisMonth
             ? linkedMonth
@@ -136,7 +141,7 @@ export function LedgerStatementSurface() {
         const freshLink = link !== null && link !== appliedLink.current
         appliedLink.current = link
         setMonthKey((chosen) =>
-          freshLink ? link : chosen === null || chosen > thisMonth ? thisMonth : chosen,
+          freshLink ? link : carryPeriod(chosen, previousToday?.slice(0, 7) ?? null, thisMonth),
         )
       })
       .catch(() => {

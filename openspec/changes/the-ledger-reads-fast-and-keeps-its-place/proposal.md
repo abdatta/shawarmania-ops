@@ -10,8 +10,9 @@
 > read produces a visible error instead of a nought or a missing section; the
 > error clears when the period or outlet changes; figures from one outlet or
 > period are never shown under another; switching outlet keeps the chosen date
-> and month, pulled back only to that outlet's today; and the month and each of
-> its days still agree to the paisa.
+> and month — on the Ledger, Billing history, Expenses and Attendance's day
+> view — following the new outlet's today only when the reader was on today or
+> past it; and the month and each of its days still agree to the paisa.
 
 ## Why
 
@@ -98,10 +99,21 @@ period is never shown under this one. The error message belongs to the period it
 was about and goes when the reader moves on. A read the reader has moved away from
 is cancelled, not left queuing.
 
-**Switching outlet keeps your place.** The chosen date and the chosen month stay
-where they are when the outlet changes. Only a date later than the new outlet's
-own today is pulled back to that today, because the database refuses a future
-business date.
+**Switching outlet keeps your place — on every screen that has both an outlet
+picker and a period.** The chosen date and the chosen month stay where they are
+when the outlet changes. A reader who was on today stays on today, the new
+outlet's; a date later than the new outlet's today is pulled back to it, because
+the database refuses a future business date.
+
+Asked about on the Ledger, and then found in three more places on 2026-09-25:
+**Billing history** and **Expenses** both drop their date back to today on a
+switch, and **Attendance's day view** rebuilds itself from scratch whenever the
+outlet chips change — deliberately, so a half-built approval selection cannot
+survive into other outlets — and takes the date with it. Attendance's
+person-and-month view already keeps its month, on purpose, and is the model for
+the rest. The owner chose to land all four in this change rather than a second
+one: the rule is one rule, so it is written once, in the shared outlet-picker
+contract (`app-shell`), rather than per screen.
 
 ## Non-goals
 
@@ -132,11 +144,13 @@ business date.
   round-trip budget that replaces the millisecond ceiling.
 - `docs/TESTING.md` — the latency-injected ledger timing check and the month/day
   parity check.
-- `docs/SCREENS.md` — the Ledger paragraph: the period survives an outlet switch,
-  and a reading that could not be completed says so.
+- `docs/SCREENS.md` — the Ledger paragraph (a reading that could not be
+  completed says so), and the outlet-switcher paragraph: every surface with a
+  period keeps it across an outlet switch.
 - `docs/DATA_MODEL.md` — the two new read functions, beside the drawer's existing
   ones.
-- `openspec/specs/ledger-statement/spec.md` — via the delta in this change folder.
+- `openspec/specs/ledger-statement/spec.md` and `openspec/specs/app-shell/spec.md`
+  — via the deltas in this change folder.
 
 ## How to run the gate
 

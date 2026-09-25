@@ -7,7 +7,7 @@ import { Money } from '@/components/ui/money'
 import { DayField, PeriodBar } from '@/components/ui/period-bar'
 import { useAdapters } from '@/data-access'
 import type { ExpenseRecord } from '@/data-access/adapters'
-import { earliestOffered, resolveBusinessDate, shiftBusinessDate } from '@/domain'
+import { carryPeriod, earliestOffered, resolveBusinessDate, shiftBusinessDate } from '@/domain'
 import { ExpenseList } from '@/features/expenses/expense-list'
 import { useOutletScope } from '@/features/outlet-scope'
 import { useSession } from '@/session/context'
@@ -122,7 +122,18 @@ export function OutletExpensesSurface() {
         // Through the outlet's cutover, never off the device clock: something
         // bought at 00:30 belongs to the trading day that is still running.
         const resolved = resolveBusinessDate(new Date(), outlet.business_day_cutover)
-        setDayContext({ outletId, today: resolved, businessDate: resolved })
+        // The reader keeps their place (app-shell): the date they stepped to
+        // survives a switch, and a reader who was on today stays on today — the
+        // new outlet's. This used to overwrite the date with today every time.
+        setDayContext((current) => ({
+          outletId,
+          today: resolved,
+          businessDate: carryPeriod(
+            current?.businessDate ?? null,
+            current?.today ?? null,
+            resolved,
+          ),
+        }))
         setErrorResult(null)
       })
       .catch(() => {

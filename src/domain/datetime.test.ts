@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  carryPeriod,
   describeCutover,
   formatBusinessDate,
   formatBusinessDateShort,
@@ -359,5 +360,28 @@ describe('instantOnBusinessDay', () => {
 
   it('refuses a time it cannot parse rather than guessing', () => {
     expect(() => instantOnBusinessDay('2026-07-25', '1pm', '04:00')).toThrow(TypeError)
+  })
+})
+
+describe('carryPeriod — the reader keeps their place when the outlet changes', () => {
+  it('opens on the new today when nothing was chosen', () => {
+    expect(carryPeriod(null, null, '2026-09-25')).toBe('2026-09-25')
+  })
+
+  it('keeps an earlier date', () => {
+    expect(carryPeriod('2026-09-12', '2026-09-25', '2026-09-25')).toBe('2026-09-12')
+  })
+
+  it('moves a reader who was on today to the new outlet’s today', () => {
+    expect(carryPeriod('2026-09-24', '2026-09-24', '2026-09-25')).toBe('2026-09-25')
+  })
+
+  it('brings a date past the new today back to it', () => {
+    expect(carryPeriod('2026-09-25', '2026-09-26', '2026-09-24')).toBe('2026-09-24')
+  })
+
+  it('carries a month key by the same rule', () => {
+    expect(carryPeriod('2026-06', '2026-09', '2026-09')).toBe('2026-06')
+    expect(carryPeriod('2026-09', '2026-09', '2026-10')).toBe('2026-10')
   })
 })

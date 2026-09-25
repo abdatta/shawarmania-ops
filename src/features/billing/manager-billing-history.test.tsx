@@ -1,14 +1,17 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters } from '@/data-access/mock'
+import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from '@/data-access/mock/fixtures/outlets'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
-import { formatPaise } from '@/domain'
+import { formatPaise, shiftBusinessDate } from '@/domain'
 import { SessionContext } from '@/session/context'
 import { deriveSessionScope, type Session } from '@/session/session'
+import { chooseOutlet } from '@/test/outlet-scope'
+import { demoSessionFor } from '@/test/session'
 
 import { averageBillPaise } from './day-totals'
 import { ManagerBillingHistory } from './manager-billing-history'
@@ -353,5 +356,39 @@ describe('a bill recorded after its operator left remotely', () => {
 
     expect(await screen.findByText(/Reviewed by/i)).toBeInTheDocument()
     expect(screen.getByText(/Recorded after the operator left remotely/i)).toBeInTheDocument()
+  })
+})
+
+/**
+ * The reader keeps their place when the outlet changes (app-shell). The day used
+ * to be carried with the outlet it was chosen at, so a switch fell back to today.
+ */
+describe('the day survives an outlet switch', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  it('keeps a past day when the owner changes outlet', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <SessionContext.Provider value={demoSessionFor('super_admin')}>
+          <AdaptersContext.Provider value={createMockAdapters('super_admin')}>
+            <ManagerBillingHistory />
+          </AdaptersContext.Provider>
+        </SessionContext.Provider>
+      </MemoryRouter>,
+    )
+    await chooseOutlet(OUTLET_KALYANI_ID)
+    const picker = await screen.findByTestId('billing-history-day-picker')
+    const today = picker.getAttribute('value')!
+
+    await user.click(screen.getByTestId('billing-history-step-back'))
+    await user.click(screen.getByTestId('billing-history-step-back'))
+    const chosen = shiftBusinessDate(today, -2)
+    expect(screen.getByTestId('billing-history-day-picker')).toHaveAttribute('value', chosen)
+
+    await chooseOutlet(OUTLET_KANCHRAPARA_ID)
+    expect(await screen.findByTestId('billing-history-day-picker')).toHaveAttribute('value', chosen)
   })
 })

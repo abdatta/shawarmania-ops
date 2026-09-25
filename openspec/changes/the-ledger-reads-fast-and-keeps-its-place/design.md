@@ -154,20 +154,35 @@ already aborted, so the surface's tests exercise the same path.
   date are still what they were when it started, and it passes a signal that the
   next navigation aborts.
 
-### D8. The period survives an outlet switch
+### D8. The period survives an outlet switch, on every surface that has one
 
-The outlet effect resolves the new outlet's `today` and sets it, as now. It then
-**updates rather than replaces** the selection:
+One rule, one function: `carryPeriod(chosen, previousToday, nextToday)` in
+`src/domain/datetime.ts`. It returns the new outlet's today when nothing was
+chosen, when the choice *was* the previous outlet's today, or when the choice lies
+past the new today; otherwise the choice. It compares ISO strings, so the same
+function carries a date or a month key.
 
-- `businessDate`: today if nothing is chosen yet; otherwise the chosen date, or
-  the new today if the chosen date is later than it.
-- `monthKey`: on the first resolution, the linked month when valid and not in the
-  future (unchanged behaviour); otherwise the chosen month, or the new today's
-  month if the chosen month is later.
+- **Ledger.** The outlet effect remembers the today it last resolved and carries
+  both `businessDate` and `monthKey` through `carryPeriod`. A linked month still
+  wins when the link is new.
+- **Billing history.** `chosenDay` stops carrying the outlet it was picked at —
+  that is what made a switch fall back to today — and carries the today it was
+  picked against instead. The date is derived, with no effect, as it already was.
+- **Expenses.** The outlet effect carries the previous context's `businessDate`
+  through `carryPeriod` rather than overwriting it with the new today.
+- **Attendance, day view.** `OutletAxis` is re-keyed on the outlet set on purpose:
+  that remount is what empties a half-built approval selection, and it stays. The
+  date is lifted out of it — the parent holds the reader's choice and the today
+  it was made against, and the remounted axis opens on `carryPeriod` of that.
+- **Attendance, person view** already keeps its month, and is unchanged.
 
-Two outlets' todays differ only when their cutovers straddle the moment of
-reading, so in practice the clamp touches only a selection of *today* — which is
-then still today at the new outlet.
+Drawer, Menu, Delivery and Tablets have an outlet picker and no period, and are
+untouched.
+
+**Why "on today follows today".** Two outlets' todays differ only while their
+cutovers straddle the moment, but in that window a reader on Kalyani's today who
+switches to Kanchrapara means Kanchrapara's today. Keeping the literal date would
+open them on a day that is already over there, or refused as future.
 
 ## Rejected alternatives
 
@@ -197,6 +212,13 @@ then still today at the new outlet.
 - **Caching readings by outlet and period.** A cache is a second place a figure
   can be stale, on the one surface whose whole claim is that it cannot disagree
   with its sources; two round trips make it unnecessary.
+- **A separate change for the other three surfaces.** Offered on 2026-09-25 and
+  declined by the owner: the rule is one rule, the Ledger change had not shipped,
+  and landing it on one screen first would leave the app disagreeing with itself
+  for a release.
+- **Keeping Attendance's day in the axis and dropping the remount.** The remount
+  is what guarantees a half-built approval selection never reaches another
+  outlet; losing that to keep a date would trade a guarantee for a convenience.
 - **Following each outlet's own cutover in the month read.** Correct in principle,
   but the day reader uses the 04:00 constant, and a month that bounded dates
   differently from its own days could disagree with them. Listed as a non-goal.

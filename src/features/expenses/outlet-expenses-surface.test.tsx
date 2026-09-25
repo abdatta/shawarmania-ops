@@ -1,15 +1,20 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { DataAdapters, ExpenseRecord } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters } from '@/data-access/mock'
-import { OUTLET_KALYANI_ID, outletFixtures } from '@/data-access/mock/fixtures/outlets'
+import {
+  OUTLET_KALYANI_ID,
+  OUTLET_KANCHRAPARA_ID,
+  outletFixtures,
+} from '@/data-access/mock/fixtures/outlets'
 import { formatPaise, resolveBusinessDate, shiftBusinessDate } from '@/domain'
 import { SessionContext } from '@/session/context'
 import type { Role } from '@/session/session'
+import { chooseOutlet } from '@/test/outlet-scope'
 import { demoSessionFor } from '@/test/session'
 
 import { OutletExpensesSurface } from './outlet-expenses-surface'
@@ -158,5 +163,35 @@ describe('the outlet expenses surface', () => {
     await userEvent.click(forward)
     expect(picker).toHaveValue(today)
     expect(forward).toBeDisabled()
+  })
+})
+
+/**
+ * The reader keeps their place when the outlet changes (app-shell). The outlet
+ * effect used to overwrite the chosen date with the new outlet's today.
+ */
+describe('the date survives an outlet switch', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  it('keeps a past date when the owner changes outlet', async () => {
+    const { adapters, listRecentExpenses } = adaptersFor('super_admin', () => [])
+    renderExpenses('super_admin', adapters)
+    await chooseOutlet(OUTLET_KALYANI_ID)
+    const picker = (await screen.findByTestId('expenses-day-picker')) as HTMLInputElement
+    const chosen = shiftBusinessDate(picker.value, -3)
+
+    fireEvent.change(picker, { target: { value: chosen } })
+    await waitFor(() => expect(screen.getByTestId('expenses-day-picker')).toHaveValue(chosen))
+
+    await chooseOutlet(OUTLET_KANCHRAPARA_ID)
+    await waitFor(() =>
+      expect(listRecentExpenses).toHaveBeenLastCalledWith(
+        OUTLET_KANCHRAPARA_ID,
+        expect.arrayContaining([chosen]),
+      ),
+    )
+    expect(screen.getByTestId('expenses-day-picker')).toHaveValue(chosen)
   })
 })

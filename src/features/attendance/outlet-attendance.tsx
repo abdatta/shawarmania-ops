@@ -35,6 +35,7 @@ import {
 } from '@/data-access/adapters'
 import { attentionChanged } from '@/features/attention/attention'
 import {
+  carryPeriod,
   evaluateFence,
   formatBusinessDate,
   instantOnBusinessDay,
@@ -203,6 +204,16 @@ export function OutletAttendance() {
   // each time, re-read the day, and re-rank a roll-call that is supposed to hold
   // still while somebody is approving down it.
   const scopeKey = [...outletIds].sort().join(',')
+  /**
+   * The day the reader chose, and the today they chose it against.
+   *
+   * Held here rather than in the day view, because the day view is re-keyed on
+   * the outlet set — deliberately, so a half-built approval selection can never
+   * survive into other outlets — and that remount used to take the date with it.
+   * The reader keeps their place (app-shell): the remounted view opens on this
+   * day through `carryPeriod`, and on today if today is what they were on.
+   */
+  const [chosenDay, setChosenDay] = useState<{ day: string; today: string } | null>(null)
   const selectedOutlets = useMemo(
     () => loaded?.outlets.filter((outlet) => scopeKey.split(',').includes(outlet.id)) ?? [],
     [loaded, scopeKey],
@@ -307,6 +318,8 @@ export function OutletAttendance() {
           outlets={selectedOutlets}
           people={selectedPeople}
           onError={setError}
+          chosenDay={chosenDay}
+          onChooseDay={setChosenDay}
         />
       ) : (
         // The narrowed people, and every outlet the reader may see. The chips
@@ -493,10 +506,15 @@ function OutletAxis({
   outlets,
   people,
   onError,
+  chosenDay,
+  onChooseDay,
 }: {
   outlets: readonly Tables<'outlets'>[]
   people: AccountSummary[]
   onError: (message: string | null) => void
+  /** The reader's day as the parent holds it, surviving this view's remount. */
+  chosenDay: { day: string; today: string } | null
+  onChooseDay: (choice: { day: string; today: string }) => void
 }) {
   const session = useSession()
   const { attendance } = useAdapters()
@@ -511,7 +529,13 @@ function OutletAxis({
     .map((outlet) => resolveBusinessDate(new Date(), outlet.business_day_cutover))
     .reduce((latest, candidate) => (candidate > latest ? candidate : latest), '')
 
-  const [businessDate, setBusinessDate] = useState(today)
+  const [businessDate, setBusinessDateHere] = useState(() =>
+    carryPeriod(chosenDay?.day ?? null, chosenDay?.today ?? null, today),
+  )
+  const setBusinessDate = (day: string) => {
+    setBusinessDateHere(day)
+    onChooseDay({ day, today })
+  }
   const [flow, setFlow] = useState<ApprovalFlow>({ kind: 'idle' })
   const [denialFlow, setDenialFlow] = useState<DenialFlow>({ kind: 'idle' })
   const [manualFor, setManualFor] = useState<AccountSummary | null>(null)

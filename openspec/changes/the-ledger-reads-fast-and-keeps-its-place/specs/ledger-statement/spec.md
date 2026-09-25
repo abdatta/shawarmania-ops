@@ -46,22 +46,6 @@ arrives late from an earlier choice.
 - **WHEN** a day is verified and the reader steps to another date before the reload finishes
 - **THEN** the other date's reading is shown and the verified day's reload does not replace it
 
-### Requirement: The chosen period survives an outlet switch
-
-Switching outlet SHALL keep the chosen date and the chosen month. Where the chosen
-date or month is later than the new outlet's own today, it SHALL be brought back
-to that today; it SHALL NOT otherwise be changed.
-
-#### Scenario: Reading an old month at two outlets
-
-- **WHEN** the reader is on June's month at one outlet and switches outlet
-- **THEN** June's month is read at the new outlet
-
-#### Scenario: Reading a past day at two outlets
-
-- **WHEN** the reader is on 12 September at one outlet and switches outlet
-- **THEN** 12 September is read at the new outlet
-
 ### Requirement: A ledger reading costs a bounded number of round trips
 
 A day SHALL be read in at most two sequential round trips to the server, and a

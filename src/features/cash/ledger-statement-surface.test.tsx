@@ -789,6 +789,31 @@ describe('the ledger keeps its place and reads only what is on screen', () => {
     await waitFor(() => expect(pickedDay()).toBe(resolveBusinessDate(new Date(), '23:59')))
   })
 
+  it('moves a reader who was on today to the new outlet’s today, even when it is later', async () => {
+    // The other way round: Kalyani's today is Kanchrapara's yesterday. A reader
+    // on Kalyani's today meant today, and keeping the literal date would open
+    // them on a day that is already over at Kanchrapara.
+    const cutovers: Record<string, string> = {
+      [OUTLET_KALYANI_ID]: '23:59:00',
+      [OUTLET_KANCHRAPARA_ID]: '00:00:00',
+    }
+    renderOwnerLedger(
+      () => ({}),
+      (outlets) => ({
+        getOutlet: async (id) => {
+          const outlet = await outlets.getOutlet(id)
+          return outlet && { ...outlet, business_day_cutover: cutovers[id] ?? '04:00:00' }
+        },
+      }),
+    )
+    await chooseOutlet(OUTLET_KALYANI_ID)
+    await screen.findByTestId('ledger-revenue')
+    expect(pickedDay()).toBe(resolveBusinessDate(new Date(), '23:59'))
+
+    await chooseOutlet(OUTLET_KANCHRAPARA_ID)
+    await waitFor(() => expect(pickedDay()).toBe(resolveBusinessDate(new Date(), '00:00')))
+  })
+
   it('never shows one outlet’s figures under another while the other is read', async () => {
     const pending = deferred<never>()
     renderOwnerLedger((ledger) => ({

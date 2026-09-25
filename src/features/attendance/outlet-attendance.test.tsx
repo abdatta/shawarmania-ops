@@ -1362,6 +1362,32 @@ describe('the outlet chips carry their unsettled days', () => {
     )
   })
 
+  it('keeps the day when the chips change, and still empties a half-built selection', async () => {
+    const user = userEvent.setup()
+    atPosition(AT_COUNTER)
+    renderAsOwner()
+    await screen.findByTestId('attendance-day')
+
+    // The remount on a chip change is deliberate — a set being built for one
+    // pair of outlets must not survive into another — and it stays.
+    await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
+    expect(screen.getByTestId('selection-bar')).toBeInTheDocument()
+    await user.click(screen.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`))
+    await screen.findByTestId('attendance-day')
+    expect(screen.queryByTestId('selection-bar')).not.toBeInTheDocument()
+
+    // What it no longer takes with it is the day (app-shell: the reader keeps
+    // their place). It used to open on today again.
+    await user.click(screen.getByRole('button', { name: 'Previous day' }))
+    await user.click(screen.getByRole('button', { name: 'Previous day' }))
+    const chosen = screen.getByTestId('day-label').textContent
+    expect(chosen).not.toBe('Today')
+
+    await user.click(screen.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`))
+    await screen.findByTestId('attendance-day')
+    expect(screen.getByTestId('day-label')).toHaveTextContent(chosen!)
+  })
+
   it('says nothing about an outlet holding nothing', async () => {
     const adapters = createMockAdapters()
     stageCounts(adapters, [

@@ -20,7 +20,13 @@ import {
   type BillingOrder,
   type CounterBiller,
 } from '@/data-access/adapters'
-import { earliestOffered, formatDayTime, resolveBusinessDate, shiftBusinessDate } from '@/domain'
+import {
+  carryPeriod,
+  earliestOffered,
+  formatDayTime,
+  resolveBusinessDate,
+  shiftBusinessDate,
+} from '@/domain'
 import { useOutletScope } from '@/features/outlet-scope'
 import { useSession } from '@/session/context'
 
@@ -122,17 +128,24 @@ export function ManagerBillingHistory() {
   // in the header, remembered between surfaces, conferring nothing.
   const { outletId, selector: outletSelector } = useOutletScope()
   /**
-   * The day, and the outlet it is a day of.
+   * The outlet's today, and the outlet it is the today of.
    *
-   * Both of these are answers about one outlet — its current business date
-   * through its own cutover, and a day chosen against that. Carrying the outlet
-   * alongside each of them means moving to another outlet makes both stale in
-   * the same instant, rather than leaving one frame in which the new outlet is
-   * read under the old outlet's day. It is why neither is reset by an effect:
-   * there is nothing to reset, only something that stops applying.
+   * Its current business date through its own cutover. Carrying the outlet
+   * means moving to another outlet makes it stale in the same instant, so there
+   * is no frame in which the new outlet is read against the old outlet's today,
+   * and nothing to reset by an effect — only something that stops applying.
    */
   const [resolvedToday, setResolvedToday] = useState<{ outletId: string; day: string } | null>(null)
-  const [chosenDay, setChosenDay] = useState<{ outletId: string; day: string } | null>(null)
+  /**
+   * The reader's day, and the today it was chosen against — **not the outlet**.
+   *
+   * It used to carry the outlet, which made a switch fall back to today: the
+   * reader stepped back to the 12th, changed outlet, and was on today again.
+   * The day is a fact about what they are reading, not where, so it survives a
+   * switch through `carryPeriod` — except that a reader who was on today stays
+   * on today, the new outlet's (app-shell: the reader keeps their place).
+   */
+  const [chosenDay, setChosenDay] = useState<{ day: string; today: string } | null>(null)
   const [view, setView] = useState<View>('bills')
   const [bills, setBills] = useState<BillingBill[]>([])
   const [orders, setOrders] = useState<BillingOrder[]>([])
@@ -150,11 +163,10 @@ export function ManagerBillingHistory() {
   // Empty until this outlet's own today has landed, which is what holds the day
   // bar behind its silhouette and the reads behind their guard.
   const today = resolvedToday?.outletId === outletId ? resolvedToday.day : ''
-  const businessDate = (chosenDay?.outletId === outletId ? chosenDay.day : '') || today
-  // No outlet, no day to be a day of. The control that calls this is only
-  // rendered once the outlet's today has landed, so this guard never fires in
-  // practice; it is here because the type says it can.
-  const setDate = (day: string) => outletId && setChosenDay({ outletId, day })
+  const businessDate = today && carryPeriod(chosenDay?.day ?? null, chosenDay?.today ?? null, today)
+  // The control that calls this is only rendered once the outlet's today has
+  // landed, so the day is always chosen against a real today.
+  const setDate = (day: string) => setChosenDay({ day, today })
   // Paid bills only, and derived rather than read again: the list is every bill
   // of this outlet-day, so the settled ones are already in hand. Cancelled bills
   // are listed but take part in no figure.
