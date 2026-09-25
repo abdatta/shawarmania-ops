@@ -115,7 +115,8 @@ the identity interval is display evidence, never an alternate route to rows.
 
 | Data | Whose | Why | Rules |
 |---|---|---|---|
-| Name, phone | Customer | Recognising a returning customer; future digital receipts | Optional at billing. **Business-wide, not per outlet** — one canonical phone is one customer. Never logged, never exported. No client may read the table; a counter resolves a complete phone through a rate-bounded function, and only the owner reads the directory |
+| Name, phone | Customer | Recognising a returning customer; future digital receipts | Optional at billing. **Business-wide, not per outlet** — one canonical phone is one customer. Never logged, never exported. No client may read the table; a counter resolves a complete phone through a rate-bounded function; the owner reads the directory, and a manager only the customers their own outlets served |
+| Gold membership: when granted, by whom, when ended | Customer | Recognising regulars at the counter | Global, like the customer. A counter sees gold-or-not and nothing more; the owner and a manager see "member since" on the card. The history is kept, never deleted, and shown nowhere yet. No client may read the table |
 | Name, phone, staff facts (code, role title, joining/leaving dates) | Staff | The staff record on their account | Visible to their outlet's admin and the owner. Never to other staff. No salary and no home address is stored anywhere |
 | Account email | Any account when explicitly associated; required for a live Super Admin | Alternate sign-in; foundation for future recovery or security features | Private, optional by default, required for Super Admin; no client table privilege; visible through the privileged owner-management response only |
 | Check-in coordinates, accuracy, distance | Employee | Attendance verification | Captured only at check-in. Never continuous |
@@ -144,11 +145,30 @@ retention policy.
 **One customer directory covers the whole business, and that is the sharpest privacy edge in this schema.** Every other personal record here belongs to one outlet, and the isolation policies do the protecting. `customers` belongs to none, so a single wrong grant would expose every customer the business has to any manager's token. Four things hold instead of a policy:
 
 - **No client session holds any privilege on the table.** Not select, not insert — not for a manager, a device, or the owner. The grant is revoked and RLS is enabled with no policy, which says it twice.
-- **The only billing path in is an exact, complete phone.** There is no prefix, wildcard, list or count verb in the database to call. A lookup answers a question about somebody who just gave their number; a browse would be the directory itself.
+- **The counter's paths in are an exact, complete phone, or four digits among its own outlet's customers.** There is no prefix, wildcard, list or count verb over the directory for a counter to call. A lookup answers a question about somebody who just gave their number; the partial-number suggestion returns at most one customer this outlet already served, plus a count of the others, so it discovers nobody; a browse would be the directory itself.
 - **Lookups are rate-bounded per caller**, so an exact-match oracle cannot be walked, and the counter behind that bound records no phone input in any form.
-- **The owner's directory read is a separate function with its own check**, so widening billing can never widen the owner's access and vice versa.
+- **The management path is separate functions with their own check**, so widening billing can never widen it and vice versa. It is a browse path — search by name or part of a number, and two paged lists — and exists only for the owner and a manager. Each function takes the reader's scope from their own assignments: the whole business for the owner, and for a manager only the customers their outlets have served, with anybody else indistinguishable from nobody. A manager changes a name or gold only for a customer served at no other outlet.
 
-Proved rather than asserted: `supabase/tests/20_global_customer_identity.sql` and the customer probes in `supabase/tests/rest/rls-probes.test.ts` issue the hand-crafted requests — `select=*`, a `like` filter, a HEAD count, and a customer id used to reach the other outlet's bills — and assert each is refused.
+**Two widenings, each with its cost stated** (`a-gold-member-is-a-label`, #57), because
+a widening recorded without its cost is how the next one gets easier:
+
+- **The counter's lookup now says whether a customer is gold.** A biller at one outlet
+  may therefore learn that a customer who has only ever shopped at another is a
+  member — and if gold tracks spending, that is a weak signal about trade across
+  the boundary. The owner accepted it on 2026-09-18: a biller who cannot see the
+  star cannot act on it. Nothing else about membership reaches a counter: no date,
+  no actor, no history.
+- **A manager's read-only card says "also buys at another outlet".** It is the
+  shadow of the rule that a manager may not change a shared customer, and it is one
+  bit: not which outlet, not when, not what. The owner accepted it with the rule on
+  2026-09-24.
+
+**No customer activity is stored.** Visits, spend, last seen and the regulars
+ranking are summed from bills under the reader's own authority when asked for.
+`bill_count` and `total_spend_paise` were removed from `customers` so they could
+never ride along in a counter's lookup (#32), and nothing has replaced them.
+
+Proved rather than asserted: `supabase/tests/20_global_customer_identity.sql`, `supabase/tests/59_a_gold_member_is_a_label.sql` and the customer probes in `supabase/tests/rest/rls-probes.test.ts` issue the hand-crafted requests — `select=*`, a `like` filter, a HEAD count, a customer id used to reach the other outlet's bills, a manager opening and changing customers their outlet did not serve or does not wholly serve, and every counter role calling the management path — and assert each is refused.
 
 ## Employee location monitoring
 

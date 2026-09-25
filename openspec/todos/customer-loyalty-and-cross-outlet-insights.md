@@ -14,7 +14,11 @@ is appointed by the owner from their phone.
 **What stays here**, unchanged and still waiting on its own trigger:
 
 - cross-outlet activity and spend **insight** as a reportable thing, beyond the
-  owner-only thirty-day figures #57 derives live inside one customer's card;
+  thirty-day figures #57 derives live inside one customer's card (the owner's
+  across the business, a manager's over their own outlets);
+- a **membership history** screen — who was gold, and when. #57 keeps every spell
+  and never deletes one, precisely so this can be built without a backfill, and
+  shows none of them yet;
 - **automated appointment** — a rule that decides who becomes gold, and what
   happens when a manual grant and a rule disagree;
 - any **benefit the system applies itself**, and with it the discount attribution
@@ -23,7 +27,11 @@ is appointed by the owner from their phone.
 - **consent and franchise-agreement language** before activity from separate
   outlets contributes to one brand-wide programme;
 - **merge, split and reassignment** of mistyped or reassigned numbers. #57 adds
-  rename and nothing else.
+  rename and nothing else;
+- a **franchise's own rules for gold**. #57 lets a manager change gold only for a
+  customer no other outlet serves, which answers "may a franchisee mark somebody
+  gold" for now; whether a franchisee must honour a brand-wide gold they did not
+  grant is still the franchise agreement's question.
 
 The open questions below remain open except the first, which #57 answered: the
 business action was a label, and nothing more.

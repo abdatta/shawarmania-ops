@@ -23,7 +23,7 @@ const ok = (rows: unknown) => vi.fn().mockResolvedValue({ data: rows, error: nul
 const fails = (code: string) =>
   vi.fn().mockResolvedValue({ data: null, error: { code, message: 'refused' } })
 
-const ROW = { id: 'c-1', phone: '+919876543210', name: 'Anjali' }
+const ROW = { id: 'c-1', phone: '+919876543210', name: 'Anjali', is_member: false }
 
 describe('looking a customer up', () => {
   it('sends the canonical phone, not the one somebody typed', async () => {
@@ -33,9 +33,14 @@ describe('looking a customer up', () => {
     expect(rpc).toHaveBeenCalledWith('customer_lookup_by_phone', { p_phone: '+919876543210' })
   })
 
-  it('returns the three columns the database is willing to disclose', async () => {
+  it('returns the four facts the database is willing to disclose', async () => {
     const found = await adapterWith(ok([ROW])).lookupByPhone('9876543210')
-    expect(found).toEqual({ id: 'c-1', phone: '+919876543210', name: 'Anjali' })
+    expect(found).toEqual({ id: 'c-1', phone: '+919876543210', name: 'Anjali', tier: null })
+  })
+
+  it('reads gold-or-not as the tier, and nothing else about the membership', async () => {
+    const found = await adapterWith(ok([{ ...ROW, is_member: true }])).lookupByPhone('9876543210')
+    expect(found).toEqual({ id: 'c-1', phone: '+919876543210', name: 'Anjali', tier: 'gold' })
   })
 
   it('reads no rows as "nobody has used this number"', async () => {
@@ -73,7 +78,13 @@ describe('looking a customer up', () => {
     const rpc = fails('08006')
     const resume = {
       rememberedCustomers: {
-        '+919876543210': { ...ROW, rememberedAt: '2026-09-01T12:00:00.000Z' },
+        '+919876543210': {
+          id: 'c-1',
+          phone: '+919876543210',
+          name: 'Anjali',
+          tier: 'gold',
+          rememberedAt: '2026-09-01T12:00:00.000Z',
+        },
       },
     } as unknown as CounterResumeRecord
     const adapter = createSupabaseCustomersAdapter(
@@ -82,8 +93,13 @@ describe('looking a customer up', () => {
       resume,
     )
 
+    // Offline, the till still knows she is gold, because it was told when it
+    // last looked her up (a-gold-member-is-a-label).
     await expect(adapter.lookupByPhone('98765 43210')).resolves.toEqual({
-      ...ROW,
+      id: 'c-1',
+      phone: '+919876543210',
+      name: 'Anjali',
+      tier: 'gold',
       remembered: true,
     })
     await expect(adapter.lookupByPhone('9876543211')).rejects.toMatchObject({ code: 'failed' })

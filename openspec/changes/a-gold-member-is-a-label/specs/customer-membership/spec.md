@@ -45,17 +45,24 @@ record.
 
 ### Requirement: An order and a bill snapshot the membership they were rung under
 
-An order and a bill SHALL record the customer's membership as it stood when the
-order was created, in the same way a line snapshots its unit price.
+An order and a bill SHALL record the customer's membership **as it stood at the
+moment of sale**, in the same way a line snapshots its unit price. The server
+SHALL determine it from the membership history at the instant the sale was rung,
+whenever the sale reaches it; no client SHALL be able to set it.
+
+> Replaces a narrower rule the design first carried, under which a sale rung
+> offline for a member the tablet had never seen, and paid on the spot, recorded
+> no membership because the counter did not know. Honouring that required the
+> tablet to send what it knew, which meant a new command version at the money
+> boundary. The owner chose the moment-of-sale rule on 2026-09-24, knowing the one
+> case it changes is rare.
+
+A bill that settles an order SHALL carry that order's membership. A revision of an
+open order that names the same customer SHALL keep the membership the order was
+rung under; one that names a different customer SHALL take that customer's.
 
 Every surface presenting a member mark against an order or a bill SHALL read that
 snapshot and SHALL NOT consult the live membership.
-
-Where a tablet could not know a customer's membership at the moment of sale, the
-recorded membership SHALL be resolved when the sale reaches the server **while it
-is still an open order**, so that an order still to be prepared is treated as the
-member's order it is. Once a sale has become a bill its recorded membership SHALL
-be final, and SHALL NOT be resolved, corrected or backfilled.
 
 #### Scenario: Membership is revoked mid-shift
 - **WHEN** a customer's membership is revoked after their order was created
@@ -69,13 +76,17 @@ be final, and SHALL NOT be resolved, corrected or backfilled.
 - **WHEN** an order is rung for a member the tablet already holds while the network is unreachable
 - **THEN** the mark is available from what the tablet holds, and the sale does not wait on a membership read
 
-#### Scenario: An offline order for an unknown member arrives while still open
-- **WHEN** an order rung offline against a member the tablet had never seen reaches the server and has not been paid
-- **THEN** its recorded membership is resolved, and the mark appears on its card in the preparation pipeline
+#### Scenario: An offline sale reaches the server hours later
+- **WHEN** a sale rung offline for a customer who was a member at that moment reaches the server after the membership has ended
+- **THEN** it records the membership as it stood when it was rung, and a sale rung before a grant records none
 
-#### Scenario: An offline sale for an unknown member arrives already paid
-- **WHEN** a sale rung and paid offline against a member the tablet had never seen reaches the server
-- **THEN** it is recorded without membership, because a bill states what the counter knew and did
+#### Scenario: A revision keeps the order's membership
+- **WHEN** an open order is revised after its customer's membership was revoked, still naming that customer
+- **THEN** the order keeps the membership it was rung under, so a card mid-preparation does not lose its mark
+
+#### Scenario: A client names a membership
+- **WHEN** any write to an order or a bill attempts to set its membership directly
+- **THEN** the write is refused or overruled, and the recorded membership is the one the history gives
 
 ### Requirement: The owner grants or revokes membership, and a manager only for a customer wholly theirs
 

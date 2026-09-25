@@ -14,7 +14,6 @@ import type { Tables } from '../database.types'
 import type {
   BillDiscountDraft,
   BillDraft,
-  CustomerTier,
   DiscountPreset,
   MenuDiscount,
   PaymentAllocation,
@@ -126,18 +125,6 @@ export interface DemoStore {
    */
   orderDiscounts: Map<string, BillDiscountDraft[]>
   billDiscounts: Map<string, BillDiscountDraft[]>
-  /**
-   * The membership each order and bill was rung under, keyed by its id
-   * (a-gold-member-is-a-label).
-   *
-   * Beside the row rather than on it for one reason: the `customer_tier`
-   * column is written by that change's database section, and a mock row typed
-   * from `Tables<'orders'>` cannot carry a column the schema does not have yet.
-   * It is a snapshot all the same — written once when the row is created and
-   * never recomputed from the live membership.
-   */
-  orderTiers: Map<string, CustomerTier>
-  billTiers: Map<string, CustomerTier>
   /** Per-outlet, per-business-date order-number counters. */
   orderNumbers: Map<string, number>
   /** Server-side command metadata used by read-only manager diagnostics. */
@@ -433,8 +420,6 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
   const orders: Tables<'orders'>[] = []
   const orderItems: Tables<'order_items'>[] = []
   const orderNumbers = new Map<string, number>()
-  const orderTiers = new Map<string, CustomerTier>()
-  const billTiers = new Map<string, CustomerTier>()
   const billingCommands: Tables<'billing_commands'>[] = []
   const billingQueueSeeds: BillDraft[] = []
 
@@ -458,8 +443,9 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     if (seed.customerPhone && !customer) {
       throw new Error(`Demo fixture drift: no customer holds ${seed.customerPhone}.`)
     }
+    // The membership as it stood on the day of the sale — what the server
+    // writes into `customer_tier` from the history at the moment of sale.
     const tier = customer ? seededTierAt(customer.phone, seed.daysAgo) : null
-    if (tier) billTiers.set(billId, tier)
 
     const lines = seed.lines.map((line) => {
       const itemId = billSeedItemId(seed, line)
@@ -523,6 +509,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       customer_id: customer?.id ?? null,
       customer_name: customer?.name ?? seed.customerName ?? null,
       customer_phone: customer?.phone ?? null,
+      customer_tier: tier,
       payment_method: seed.paymentMethod,
       pricing_mode: 'no_tax',
       status: 'settled',
@@ -686,11 +673,10 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     // The order carries the tier its bill carries, or — with no bill yet — the
     // membership as it stands today, which is when it was rung.
     const orderTier = sourceBill
-      ? (billTiers.get(sourceBill.id) ?? null)
+      ? sourceBill.customer_tier
       : orderCustomer
         ? seededTierAt(orderCustomer.phone, 0)
         : null
-    if (orderTier) orderTiers.set(id, orderTier)
     const preparedAt =
       seed.preparedAtTime !== undefined
         ? seed.preparedAtTime === null
@@ -714,6 +700,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       customer_name:
         sourceBill?.customer_name ?? orderCustomer?.name ?? (index === 3 ? 'Demo Customer' : null),
       customer_phone: sourceBill?.customer_phone ?? orderCustomer?.phone ?? null,
+      customer_tier: orderTier,
       pricing_mode: 'no_tax',
       subtotal_paise: totals.subtotalPaise,
       // Read off the totals, not hardcoded: the identity these three terms sit
@@ -1375,8 +1362,6 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     orderItems,
     orderDiscounts: new Map(),
     billDiscounts: new Map(),
-    orderTiers,
-    billTiers,
     orderNumbers,
     billingCommands,
     billingQueueSeeds,

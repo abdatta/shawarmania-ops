@@ -75,8 +75,11 @@ classified as (
       -- category tables did: which categories a person may not type is a fact
       -- about the business, not about an outlet, and reserving one retires a
       -- hand-entry path everywhere at once.
-      when tbl in ('customers', 'expense_categories', 'expense_category_operations',
-                   'reserved_expense_categories')
+      -- `customer_memberships` joins `customers` because a membership belongs
+      -- to the person, not to a shop (a-gold-member-is-a-label): the same
+      -- exception, so it carries the same teeth in section 6 below.
+      when tbl in ('customers', 'customer_memberships', 'expense_categories',
+                   'expense_category_operations', 'reserved_expense_categories')
         then 'global'
       -- Tenant-less: belongs to no outlet at all, because the thing it counts
       -- happens before anybody has an outlet. Listed by name rather than
@@ -217,6 +220,23 @@ select ok(
   'no client session holds any privilege on the global customer table'
 );
 
+-- The membership records are the same exception and carry the same teeth:
+-- nothing reads them but the security-definer functions that answer for them.
+select is(
+  (select count(*) from pg_policies
+    where schemaname = 'public' and tablename = 'customer_memberships'),
+  0::bigint,
+  'customer_memberships carries no policy: reads go through its functions or nowhere'
+);
+
+select ok(
+  not has_table_privilege('authenticated', 'public.customer_memberships', 'SELECT')
+  and not has_table_privilege('authenticated', 'public.customer_memberships', 'INSERT')
+  and not has_table_privilege('authenticated', 'public.customer_memberships', 'UPDATE')
+  and not has_table_privilege('authenticated', 'public.customer_memberships', 'DELETE'),
+  'no client session holds any privilege on the membership records'
+);
+
 select ok(
   not has_table_privilege('authenticated', 'public.customer_lookup_attempts', 'SELECT')
   and not has_table_privilege('authenticated', 'public.customer_lookup_attempts', 'INSERT'),
@@ -277,7 +297,12 @@ select is(
        join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public'
         and p.proname in ('customer_lookup_by_phone', 'customer_create_or_get',
-                          'customer_directory', 'app_may_look_up_customer')
+                          'app_may_look_up_customer',
+                          -- a-gold-member-is-a-label (#57): the management path
+                          -- that replaced the owner's unpaged directory read.
+                          'customer_directory_card', 'customer_directory_list',
+                          'customer_directory_search', 'customer_rename',
+                          'customer_membership_grant', 'customer_membership_revoke')
         and not p.prosecdef),
     ''),
   '',
@@ -289,10 +314,13 @@ select is(
      join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
       and p.proname in ('customer_lookup_by_phone', 'customer_create_or_get',
-                        'customer_directory', 'normalize_indian_phone',
-                        'app_may_look_up_customer')),
-  5::bigint,
-  'all five customer identity functions exist'
+                        'normalize_indian_phone', 'app_may_look_up_customer',
+                        'customer_directory_card', 'customer_directory_list',
+                        'customer_directory_search')),
+  7::bigint,
+  -- The owner's unpaged `customer_directory()` was replaced by the paged,
+  -- scoped management reads in a-gold-member-is-a-label (#57).
+  'all seven customer identity functions exist'
 );
 
 -- ---------------------------------------------------------------------------

@@ -181,8 +181,10 @@ select is(
           generate_subscripts(p.proargnames, 1) i
     where n.nspname = 'public' and p.proname = 'customer_lookup_by_phone'
       and p.proargmodes[i] = 't'),
-  'id,phone,name',
-  'the lookup returns exactly id, phone and name');
+  'id,phone,name,is_member',
+  -- Widened by exactly one column in a-gold-member-is-a-label (#57), with its
+  -- cost stated in the spec: gold-or-not, and never when, by whom, or why.
+  'the lookup returns exactly id, phone, name and gold-or-not');
 
 select throws_ok($q$
   select * from public.customer_lookup_by_phone('98765')
@@ -198,6 +200,17 @@ $q$, '22023', null, 'and neither is nothing at all');
 
 -- There is no listing function to call. The strongest form of "cannot
 -- enumerate" is that the verb does not exist.
+--
+-- **The management path was added on 2026-09-26, and it earns its place the
+-- same way** (`a-gold-member-is-a-label`, #57). Its search and lists ARE a
+-- browse path — deliberately, and only for the owner and for a Franchise Admin
+-- over the customers their own outlets have served. Every one of them takes its
+-- scope from `app_customer_directory_outlets()`, which derives it from the
+-- caller's assignments and refuses anybody else: no counter, device or Biller
+-- reaches any of them, which section 8 below and 59_a_gold_member_is_a_label
+-- prove by hand-crafted call. The internal pieces that take a scope as an
+-- argument are revoked from every client role. The owner's old unpaged
+-- `customer_directory()` is gone.
 --
 -- **Two verbs were added to this list on 2026-09-20 and each had to earn it**
 -- (`the-server-links-the-sale-to-the-customer`). Adding a third without the
@@ -222,11 +235,22 @@ select is(
     where n.nspname = 'public'
       and p.proname ~ 'customer'
       and p.proname not in ('customer_lookup_by_phone', 'customer_create_or_get',
-                            'customer_directory', 'customer_lookup_exceeded',
+                            'customer_lookup_exceeded',
                             'record_customer_lookup', 'app_may_look_up_customer',
-                            'customer_resolve_for_sale', 'customer_suggest_at_outlet')),
+                            'customer_resolve_for_sale', 'customer_suggest_at_outlet',
+                            -- a-gold-member-is-a-label (#57): membership and the
+                            -- scoped management path, argued above.
+                            'customer_tier_at', 'customer_is_member',
+                            'customer_memberships_guard',
+                            'orders_snapshot_customer_tier', 'bills_snapshot_customer_tier',
+                            'app_customer_directory_outlets', 'customer_directory_reach',
+                            'customer_directory_activity', 'customer_directory_may_edit',
+                            'customer_directory_require_editable',
+                            'customer_directory_card', 'customer_directory_list',
+                            'customer_directory_search', 'customer_rename',
+                            'customer_membership_grant', 'customer_membership_revoke')),
   0::bigint,
-  'no customer search, list, count or prefix function exists beyond the two argued for');
+  'no customer search, list, count or prefix function exists beyond those argued for');
 
 -- And the one prefix verb that does exist refuses anybody who is not standing
 -- at a counter. A Franchise Admin has every outlet-scoped read this product
@@ -363,27 +387,34 @@ $q$, '42501', null, 'the create-or-get path closes with it, through the same che
 reset role;
 
 -- ---------------------------------------------------------------------------
--- 8. The owner's directory is a separate door with a separate lock.
+-- 8. The management path is a separate door with a separate lock.
+--
+-- The owner reads anybody. A Franchise Admin reads only a customer their own
+-- outlets have served — the rest of the directory answers as nobody. A counter
+-- role has no key at all. (59_a_gold_member_is_a_label goes much further.)
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
-select ok(
-  (select count(*) from public.customer_directory()) >= 2,
-  'the owner reads the global directory');
+select is(
+  (select count(*) from public.customer_directory_card('80000000-0000-4000-a000-000000000002')),
+  1::bigint,
+  'the owner reads a customer no outlet has served');
 
 reset role;
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
-select throws_ok($q$ select * from public.customer_directory() $q$,
-  '42501', null, 'a Franchise Admin calling the owner path is refused');
+select is(
+  (select count(*) from public.customer_directory_card('80000000-0000-4000-a000-000000000002')),
+  0::bigint,
+  'a Franchise Admin cannot read a customer their outlet has never served');
 
 select pg_temp.impersonate('10000000-0000-4000-a000-00000000000a'::uuid);
-select throws_ok($q$ select * from public.customer_directory() $q$,
-  '42501', null, 'a Biller calling the owner path is refused');
+select throws_ok($q$ select * from public.customer_directory_list('regulars', 0) $q$,
+  '42501', null, 'a Biller calling the management path is refused');
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
-select throws_ok($q$ select * from public.customer_directory() $q$,
-  '42501', null, 'a counter device calling the owner path is refused');
+select throws_ok($q$ select * from public.customer_directory_search('9000') $q$,
+  '42501', null, 'a counter device calling the management path is refused');
 
 reset role;
 

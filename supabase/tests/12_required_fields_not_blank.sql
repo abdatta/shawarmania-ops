@@ -342,7 +342,11 @@ $$, $$ values
   -- none: the person is the session, and asking why the owner took the day's
   -- takings collects a column of the word "collection". Carried historical rows
   -- may hold one anyway, so the column stays nullable rather than being split.
-  ('drawer_cash_out_reason_not_blank')
+  ('drawer_cash_out_reason_not_blank'),
+  -- A membership's reason is OPTIONAL and unused by a-gold-member-is-a-label:
+  -- it is where a future automatic rule records why. Refused only when present
+  -- and empty, so a rule can never write a reason that says nothing.
+  ('customer_memberships_reason_not_blank')
  $$, 'every not-blank constraint in the schema is accounted for, and no others exist');
 
 -- The archived notebook's two cash-movement reasons are blank-checked too, under

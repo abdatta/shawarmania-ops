@@ -212,14 +212,15 @@ const defs = {
    * their own — a URL naming a person and their phone number would sit in
    * browser history and paste into a chat.
    *
-   * `demo` until the change's database section writes the membership table and
-   * the owner's reads; the live adapter refuses until then.
+   * Live since that change's database section: the membership records, the
+   * scoped management reads and the three writes are real, and the live adapter
+   * calls them.
    */
   'owner-customers': {
     role: 'super_admin',
     path: 'customers',
     nav: { label: 'Customers', icon: Contact, order: 3, group: 'setup' },
-    state: 'demo',
+    state: 'live',
   },
   /**
    * What the outlet took, **directly above what should be in its drawer**.
@@ -581,7 +582,7 @@ const defs = {
     role: 'franchise_admin',
     path: 'customers',
     nav: { label: 'Customers', icon: Contact, order: 3, group: 'setup' },
-    state: 'demo',
+    state: 'live',
   },
   'admin-people': {
     role: 'franchise_admin',

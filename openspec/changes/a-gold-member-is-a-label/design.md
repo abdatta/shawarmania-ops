@@ -378,34 +378,38 @@ The counter reads membership from **what it already holds**:
 - the mark on a pipeline card comes from the **order's own snapshot**, so it is
   correct offline by construction and needs no read at all;
 - a customer never seen by this tablet cannot be resolved offline, so the order
-  is rung with no mark. The biller carries on; identity is helpful and never a
-  condition of sale.
+  is drawn with no mark until the server's snapshot comes back. The biller carries
+  on; identity is helpful and never a condition of sale.
 
-### The one case where the snapshot is filled in later
+### What the sale records: the membership at the moment of sale
 
-That last bullet leaves a real gap: a member the tablet had never seen is served
-as an ordinary customer, and if nothing more happened, the record would say they
-were never recognised at all.
+Settled 2026-09-24, and it replaced the rule this section first carried.
 
-**The resolution is the order/bill boundary, which this repo already draws.**
-Orders are mutable until they are paid; bills are append-only. So:
+**The server writes it, from the history, for the instant the sale was rung.** A
+trigger on `orders` and `bills` calls `customer_tier_at(customer, instant)` with
+the command's own `created_at`, which the server already bounds. A sale delivered
+hours after it was rung offline records what was true while the customer stood at
+the counter. A bill settling an order copies the order's. A revision keeps an
+order's tier while it names the same customer. Nothing a tablet sends can set it —
+the order guard refuses a write that names it — so there is no forgery to defend
+against, and the command payload did not change.
 
-- an offline sale that arrives **still an open order** has its membership
-  resolved by the server, and the mark appears on its card. The food has not gone
-  out yet, so the kitchen can still act on it — which was the owner's reason for
-  putting the mark on that card in the first place.
-- an offline sale that arrives **already paid** is recorded without membership,
-  permanently. A bill states what the counter knew and did, and "we did not know"
-  is a true thing that happened.
+**What was replaced, and why.** The first rule (owner, 2026-09-18) recorded no
+membership for a sale rung offline for a member the tablet had never seen and
+paid on the spot, on the reasoning that a bill states what the counter knew.
+Implementing it needed the tablet to send what it knew, and the command boundary
+checks an exact key set named by the version — so it meant a third payload
+version with both shapes accepted, as #53 needed, on the money path. The owner
+chose the moment-of-sale rule instead, knowing the one case it changes: a member
+not among the tablet's remembered customers, paying immediately while the tablet
+is offline, now has the star on that bill though the counter did not show it.
 
-This was the owner's call on 2026-09-18, and it is better than either absolute.
-Always backfilling would badge a receipt (`#58`) for an order that was served as
-an ordinary one. Never backfilling would throw away a recognition that is still
-actionable while the food is being made.
+**The tablet's star before the server's.** A sale still in the queue is drawn with
+what the tablet was last told about that customer, from the customers it resolved
+itself; the server's snapshot replaces it on the next read.
 
 **It also means the member mark is not a money fact and must never become one.**
-A snapshot that can still change while an order is open would be intolerable on a
-price; it is fine here precisely because nothing is computed from it.
+Nothing is computed from it, which is what makes a label written this way safe.
 
 ## Alternatives rejected
 

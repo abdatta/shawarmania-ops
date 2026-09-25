@@ -54,6 +54,9 @@ export function createSupabaseCustomersAdapter(
             id: remembered.id,
             phone: remembered.phone,
             name: remembered.name,
+            // As it was when this till last read it. A record written before
+            // memberships existed has none, which reads as not a member.
+            tier: remembered.tier ?? null,
             remembered: true,
           }
         throw toCustomerError(error)
@@ -110,7 +113,7 @@ export function createSupabaseCustomersAdapter(
         const row = data?.[0]
         return row
           ? {
-              customer: { id: row.id, phone: row.phone, name: row.name },
+              customer: toIdentity(row),
               otherMatches: row.other_matches,
             }
           : null
@@ -136,6 +139,7 @@ export function createSupabaseCustomersAdapter(
               id: best.id,
               phone: best.phone,
               name: best.name,
+              tier: best.tier ?? null,
               remembered: true as const,
             },
             otherMatches: matching.length - 1,
@@ -145,7 +149,12 @@ export function createSupabaseCustomersAdapter(
   }
 }
 
-function toIdentity(row: { id: string; phone: string; name: string | null }): CustomerIdentity {
+function toIdentity(row: {
+  id: string
+  phone: string
+  name: string | null
+  is_member: boolean
+}): CustomerIdentity {
   return {
     id: row.id,
     // Belt and braces: the database returns canonical form, and anything else
@@ -153,6 +162,10 @@ function toIdentity(row: { id: string; phone: string; name: string | null }): Cu
     // a number somebody might dial.
     phone: normalizeIndianPhone(row.phone) ?? row.phone,
     name: row.name,
+    // Gold-or-not, and nothing else about the membership: no date, no actor, no
+    // history (a-gold-member-is-a-label). The till acts on it; it cannot reason
+    // about the customer's trade from it.
+    tier: row.is_member ? 'gold' : null,
   }
 }
 

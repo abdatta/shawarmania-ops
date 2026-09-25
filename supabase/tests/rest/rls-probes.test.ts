@@ -89,6 +89,9 @@ const SHARED_CUSTOMER = {
   phone: '+919000000001',
 } as const
 
+/** In the directory, and served at no outlet by the seed: nobody's outlet customer. */
+const UNSERVED_CUSTOMER_ID = '80000000-0000-4000-a000-000000000002'
+
 type Client = SupabaseClient<Database>
 
 function anonClient(): Client {
@@ -776,10 +779,16 @@ describe('the global customer directory', () => {
     })
     expect(error).toBeNull()
     expect(data).toEqual([
-      { id: SHARED_CUSTOMER.id, phone: SHARED_CUSTOMER.phone, name: 'Test Customer (Synthetic)' },
+      {
+        id: SHARED_CUSTOMER.id,
+        phone: SHARED_CUSTOMER.phone,
+        name: 'Test Customer (Synthetic)',
+        is_member: false,
+      },
     ])
-    // The whole disclosure, restated as a shape: no outlet, no bill, no spend.
-    expect(Object.keys(data?.[0] ?? {}).sort()).toEqual(['id', 'name', 'phone'])
+    // The whole disclosure, restated as a shape: no outlet, no bill, no spend —
+    // and of membership, gold-or-not and nothing else (a-gold-member-is-a-label).
+    expect(Object.keys(data?.[0] ?? {}).sort()).toEqual(['id', 'is_member', 'name', 'phone'])
   })
 
   it('every way of writing that number reaches the same one identity', async () => {
@@ -822,20 +831,75 @@ describe('the global customer directory', () => {
     expect(error?.code).toBe('42501')
   })
 
-  it('the owner reads the directory through their own separate path', async () => {
+  it('the owner reads any customer through the management path', async () => {
     const sa = (await session(PERSONAS.superAdmin.email)).client
-    const { data, error } = await sa.rpc('customer_directory')
+    const { data, error } = await sa.rpc('customer_directory_card', {
+      p_customer: SHARED_CUSTOMER.id,
+    })
     expect(error).toBeNull()
-    expect(data?.some((row) => row.id === SHARED_CUSTOMER.id)).toBe(true)
+    expect(data).toEqual([
+      expect.objectContaining({ id: SHARED_CUSTOMER.id, scope: 'business', editable: true }),
+    ])
+  })
+
+  // A manager's path is the same door with a narrower lock (#57): only the
+  // customers their own outlets have served, and a customer another outlet also
+  // serves is read-only to them. Every claim below is a hand-crafted request
+  // with the manager's real token — not an absent button.
+  it('a manager reads a customer their outlet served, and cannot change one another outlet also serves', async () => {
+    const fa = (await session(PERSONAS.faKalyani.email)).client
+    const { data, error } = await fa.rpc('customer_directory_card', {
+      p_customer: SHARED_CUSTOMER.id,
+    })
+    expect(error).toBeNull()
+    expect(data).toEqual([
+      expect.objectContaining({ id: SHARED_CUSTOMER.id, scope: 'outlets', editable: false }),
+    ])
+
+    const grant = await fa.rpc('customer_membership_grant', { p_customer: SHARED_CUSTOMER.id })
+    expect(grant.error?.code).toBe('42501')
+    const rename = await fa.rpc('customer_rename', {
+      p_customer: SHARED_CUSTOMER.id,
+      p_name: 'Renamed By A Manager',
+    })
+    expect(rename.error?.code).toBe('42501')
+  })
+
+  it('a manager cannot reach a customer their outlet has never served', async () => {
+    const fa = (await session(PERSONAS.faKalyani.email)).client
+    const card = await fa.rpc('customer_directory_card', { p_customer: UNSERVED_CUSTOMER_ID })
+    expect(card.error).toBeNull()
+    expect(card.data).toEqual([])
+    const grant = await fa.rpc('customer_membership_grant', { p_customer: UNSERVED_CUSTOMER_ID })
+    expect(grant.error?.code).toBe('P0002')
   })
 
   it.each([
-    ['a Franchise Admin', PERSONAS.faKalyani.email],
     ['a Biller', PERSONAS.billerKalyani.email],
     ['a counter device', PERSONAS.deviceKalyani.email],
-  ])('%s calling the owner path is refused', async (_who, email) => {
+    ['an Employee', PERSONAS.employeeKalyani.email],
+  ])('%s calling the management path is refused', async (_who, email) => {
     const client = (await session(email)).client
-    const { error } = await client.rpc('customer_directory')
+    for (const call of [
+      client.rpc('customer_directory_list', { p_list: 'regulars', p_offset: 0 }),
+      client.rpc('customer_directory_search', { p_query: '9000' }),
+      client.rpc('customer_directory_card', { p_customer: SHARED_CUSTOMER.id }),
+      client.rpc('customer_membership_grant', { p_customer: SHARED_CUSTOMER.id }),
+    ]) {
+      expect((await call).error?.code).toBe('42501')
+    }
+  })
+
+  it('no client reads the membership records directly', async () => {
+    const sa = (await session(PERSONAS.superAdmin.email)).client
+    const { data, error } = await sa.from('customer_memberships').select('*')
+    expect(error?.code).toBe('42501')
+    expect(data).toBeNull()
+  })
+
+  it('and the pieces that take a scope as an argument are callable by nobody', async () => {
+    const sa = (await session(PERSONAS.superAdmin.email)).client
+    const { error } = await sa.rpc('customer_directory_activity', { p_outlets: [] })
     expect(error?.code).toBe('42501')
   })
 

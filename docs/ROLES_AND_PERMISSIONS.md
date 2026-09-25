@@ -121,11 +121,14 @@ assignment cannot be ended by anyone, including its holder.
 | View bills | R all | R own outlet | R own shift | — |
 | Void a bill | ✓ | ✓ own outlet | — | — |
 | **Customers** (business-wide, see below) |
-| Retrieve a customer by their **complete** phone | — | — | ✓ | — |
+| Retrieve a customer by their **complete** phone, with whether they are gold | — | — | ✓ | — |
+| One suggestion from four digits, among customers this outlet served | — | — | ✓ | — |
 | Save a customer from a sale | — | — | ✓ | — |
-| Browse, search by prefix, or count the directory | — | — | — | — |
-| Read the directory | ✓ | — | — | — |
-| Edit or delete a customer | — | — | — | — |
+| See the gold star on a customer, an order or a bill | ✓ | ✓ own outlet | ✓ | — |
+| Search by name or part of a number; list regulars and gold members; open a card | ✓ | ✓ customers own outlet served | — | — |
+| Correct a name; grant or revoke gold | ✓ | ✓ only a customer no other outlet serves | — | — |
+| Browse, search or count from a counter | — | — | — | — |
+| Delete or merge a customer | — | — | — | — |
 | **Expenses** |
 | View | R all | ✓ own outlet | — | — |
 | Record | — | ✓ own outlet | — | — |
@@ -178,8 +181,20 @@ the absence of a grant rather than a policy that could be widened by accident,
 and repeated lookups are rate-bounded per caller. **A customer id widens
 nothing**: knowing it opens that customer's bills only at outlets the caller
 could already read, which `supabase/tests/20_global_customer_identity.sql`
-proves with a hand-crafted request. Editing a profile is nobody's capability
-today, deliberately — see [Limitations](LIMITATIONS.md).
+proves with a hand-crafted request.
+
+**Gold, and the management path** (`a-gold-member-is-a-label`, #57). The owner
+reads every customer and may correct any name and grant or revoke gold for
+anybody. A manager reads the same surface over **only the customers their own
+outlets have served** — anybody else answers exactly as a customer who does not
+exist — with every figure counted from their outlets' bills alone, and may change
+a name or gold **only for a customer served at no other outlet**, checked again at
+the moment of the write. The name and the membership are the same at every
+outlet, so a manager changing a shared customer would be changing another
+outlet's. The counter sees the star and nothing else: no date, no actor, no
+history, no spend. The counter's lookups and the management path are separate
+functions with separate authority checks, so widening one can never widen the
+other. Deleting or merging a customer is nobody's capability.
 
 **Deleting an outlet is the only delete anybody has.** Every other record in the system is voided, deactivated or corrected — the database grants `DELETE` to no client role on any other table. The exception is bounded by a precondition Postgres enforces rather than the screen: an outlet goes only while nothing anywhere references it, so one that ever traded cannot be deleted at all. It is for a shop created by mistake, and the app offers it only after the outlet is marked closed, so the reversible action always comes first.
 

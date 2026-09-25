@@ -219,6 +219,21 @@ walkthrough changes historical bills or orders.
 
 Then open **Attendance** from the owner's own navigation — no appointment, no switching, and the address stays inside the owner's shell. Use the outlet selector to move to **Kanchrapara**, the shop this owner holds no assignment at: one arrival is waiting there, and they settle it. The demo's emulated position is at Kalyani, so the rule asks for a reason first and records that the approver was not on site — the same rule the outlet's own manager answers to. Note who is *not* on that roll-call: the owner and the manager are not staff there, so nobody is pretending to record their arrival. Then open **Cash** at the same outlet: the day is all there, and the close and the withdrawal are not, because the drawer comes from the assignment. Switch the selector back to Kalyani, where the owner *is* the manager, and the same screen offers both — which is the whole boundary in one gesture. The outlet you last picked is where the next screen opens, so nobody answers that question twice.
 
+**Then Customers, from Setup** (#57). It opens on **Regulars** — everybody seen in
+the last thirty days, most visits first — and the top of it is *Moumta Ghosh*, the
+most frequent customer and not gold: the owner's obvious candidate. Open her card
+over the list, correct the misspelt name with the pencil, and make her gold with
+the star; the confirmation reads the same either way. Switch to the **Gold** tab
+and she is there, newest first. Search `ghosh`, then `0104`, then `mmta` — a name,
+the last digits of a number, and letters in order with gaps — and watch the
+matched part go bold. *Ritika Sen* lost gold once and got it back, so her card
+reads from the second grant; *Sourav Pal* is on no list, because nothing he did is
+in the last thirty days, yet his card still says when he was last seen. Now go to
+the counter as the Biller and key Ritika's or Moumita's number: the star is on the
+match before it is accepted, on the order's card and on the bill. Back as the
+owner, revoke Moumita's gold: the order already rung keeps its star, because it
+records what was true when it was rung.
+
 **2 — The manager, where the numbers come from** (Admin in the banner)
 
 **Overview** — the same page the owner just read, under the same name, and say so out loud: the manager did not get a lesser screen, they got the same one with the database answering it differently. One card instead of two, because `outlets_select` hands them the outlet their assignment names and nothing else. The page is titled for that shop rather than "All outlets", and there is no **Open** button — that leads to a Super Admin surface, and a button that ends in a not-found is worse than no button.
@@ -228,6 +243,13 @@ Then open **Attendance** from the owner's own navigation — no appointment, no 
 **Cash** — everything above the one input is worked out. Type a figure a couple of hundred short of the expected closing and watch the difference appear *as you type*, in words as well as sign. Then switch the day picker to yesterday: that day is closed, it was ₹240 short, and **a bill arrived after it was signed off** — reported as a reconciliation exception, with the closed figures untouched. That is the single most important thing this app does.
 
 **Outlets** — the manager reads the one shop they run, and nothing else. There is no Add, no Edit and no Delete, and that is the database's answer rather than the screen's. The **Tablets** button is the point of the surface: it is the only route to a counter setup code, so this is where a manager whose tablet died starts.
+
+**Customers** — the owner's surface over Kalyani's customers only. *Imran* and
+*Sourav* have only ever bought at Kanchrapara, so they cannot be found here at all.
+Open *Arjun Das*, who has only bought at Kalyani: the pencil and the star are
+there. Open *Ritika Sen*, who has bought at both: they are not, and one sentence
+says why. The card says *First visit here*, and its figures count Kalyani's bills
+alone.
 
 **3 — The counter, which never blocks** (Biller)
 

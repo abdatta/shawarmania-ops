@@ -1717,6 +1717,7 @@ export type Database = {
           customer_id: string | null
           customer_name: string | null
           customer_phone: string | null
+          customer_tier: Database["public"]["Enums"]["customer_tier"] | null
           discount_paise: number
           id: string
           order_id: string | null
@@ -1750,6 +1751,7 @@ export type Database = {
           customer_id?: string | null
           customer_name?: string | null
           customer_phone?: string | null
+          customer_tier?: Database["public"]["Enums"]["customer_tier"] | null
           discount_paise?: number
           id: string
           order_id?: string | null
@@ -1783,6 +1785,7 @@ export type Database = {
           customer_id?: string | null
           customer_name?: string | null
           customer_phone?: string | null
+          customer_tier?: Database["public"]["Enums"]["customer_tier"] | null
           discount_paise?: number
           id?: string
           order_id?: string | null
@@ -2169,6 +2172,58 @@ export type Database = {
           id?: never
         }
         Relationships: []
+      }
+      customer_memberships: {
+        Row: {
+          customer_id: string
+          granted_at: string
+          granted_by: string
+          id: string
+          reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+        }
+        Insert: {
+          customer_id: string
+          granted_at?: string
+          granted_by: string
+          id?: string
+          reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+        }
+        Update: {
+          customer_id?: string
+          granted_at?: string
+          granted_by?: string
+          id?: string
+          reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_memberships_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_memberships_granted_by_fkey"
+            columns: ["granted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_memberships_revoked_by_fkey"
+            columns: ["revoked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       customers: {
         Row: {
@@ -3137,6 +3192,7 @@ export type Database = {
           customer_id: string | null
           customer_name: string | null
           customer_phone: string | null
+          customer_tier: Database["public"]["Enums"]["customer_tier"] | null
           device_id: string
           discount_paise: number
           id: string
@@ -3171,6 +3227,7 @@ export type Database = {
           customer_id?: string | null
           customer_name?: string | null
           customer_phone?: string | null
+          customer_tier?: Database["public"]["Enums"]["customer_tier"] | null
           device_id: string
           discount_paise?: number
           id: string
@@ -3205,6 +3262,7 @@ export type Database = {
           customer_id?: string | null
           customer_name?: string | null
           customer_phone?: string | null
+          customer_tier?: Database["public"]["Enums"]["customer_tier"] | null
           device_id?: string
           discount_paise?: number
           id?: string
@@ -3764,6 +3822,7 @@ export type Database = {
       app_counter_shift: { Args: never; Returns: string }
       app_counter_shift_operator: { Args: never; Returns: string }
       app_counter_shift_outlet: { Args: never; Returns: string }
+      app_customer_directory_outlets: { Args: never; Returns: string[] }
       app_device_ok: { Args: never; Returns: boolean }
       app_distance_m: {
         Args: { lat1: number; lat2: number; lng1: number; lng2: number }
@@ -4259,24 +4318,77 @@ export type Database = {
         Args: { p_name?: string; p_phone: string }
         Returns: {
           id: string
+          is_member: boolean
           name: string
           phone: string
         }[]
       }
-      customer_directory: {
-        Args: never
+      customer_directory_activity: {
+        Args: { p_outlets: string[] }
         Returns: {
-          created_at: string
-          id: string
-          last_used_at: string
-          name: string
-          phone: string
+          customer_id: string
+          first_seen_at: string
+          last_seen_at: string
+          spend_30d_paise: number
+          visits_30d: number
         }[]
       }
+      customer_directory_card: {
+        Args: { p_customer: string }
+        Returns: {
+          customer_since: string
+          editable: boolean
+          id: string
+          last_seen_at: string
+          member_since: string
+          name: string
+          phone: string
+          scope: string
+          spend_30d_paise: number
+          visits_30d: number
+        }[]
+      }
+      customer_directory_list: {
+        Args: { p_list: string; p_offset?: number }
+        Returns: {
+          id: string
+          is_member: boolean
+          name: string
+          phone: string
+          visits_30d: number
+        }[]
+      }
+      customer_directory_may_edit: {
+        Args: { p_customer: string; p_outlets: string[] }
+        Returns: boolean
+      }
+      customer_directory_reach: {
+        Args: { p_outlets: string[] }
+        Returns: {
+          customer_id: string
+        }[]
+      }
+      customer_directory_require_editable: {
+        Args: { p_customer: string }
+        Returns: undefined
+      }
+      customer_directory_search: {
+        Args: { p_query: string }
+        Returns: {
+          id: string
+          is_member: boolean
+          matched: number
+          name: string
+          phone: string
+          visits_30d: number
+        }[]
+      }
+      customer_is_member: { Args: { p_customer: string }; Returns: boolean }
       customer_lookup_by_phone: {
         Args: { p_phone: string }
         Returns: {
           id: string
+          is_member: boolean
           name: string
           phone: string
         }[]
@@ -4290,6 +4402,51 @@ export type Database = {
         }
         Returns: boolean
       }
+      customer_membership_grant: {
+        Args: { p_customer: string }
+        Returns: {
+          customer_since: string
+          editable: boolean
+          id: string
+          last_seen_at: string
+          member_since: string
+          name: string
+          phone: string
+          scope: string
+          spend_30d_paise: number
+          visits_30d: number
+        }[]
+      }
+      customer_membership_revoke: {
+        Args: { p_customer: string }
+        Returns: {
+          customer_since: string
+          editable: boolean
+          id: string
+          last_seen_at: string
+          member_since: string
+          name: string
+          phone: string
+          scope: string
+          spend_30d_paise: number
+          visits_30d: number
+        }[]
+      }
+      customer_rename: {
+        Args: { p_customer: string; p_name: string }
+        Returns: {
+          customer_since: string
+          editable: boolean
+          id: string
+          last_seen_at: string
+          member_since: string
+          name: string
+          phone: string
+          scope: string
+          spend_30d_paise: number
+          visits_30d: number
+        }[]
+      }
       customer_resolve_for_sale: {
         Args: { p_name?: string; p_phone: string }
         Returns: string
@@ -4298,10 +4455,15 @@ export type Database = {
         Args: { p_partial: string }
         Returns: {
           id: string
+          is_member: boolean
           name: string
           other_matches: number
           phone: string
         }[]
+      }
+      customer_tier_at: {
+        Args: { p_at: string; p_customer: string }
+        Returns: Database["public"]["Enums"]["customer_tier"]
       }
       discount_presets_valid: { Args: { p_presets: Json }; Returns: boolean }
       drawer_cash_expenses_by_day: {
@@ -4984,6 +5146,7 @@ export type Database = {
       attendance_status: "present" | "absent" | "half_day" | "leave"
       bill_status: "settled" | "void"
       check_in_source: "phone" | "counter_tablet" | "manual"
+      customer_tier: "gold"
       discount_basis: "percent" | "amount"
       inventory_unit: "kg" | "litre" | "packet" | "piece"
       movement_type: "added" | "used" | "wasted" | "correction"
@@ -5146,6 +5309,7 @@ export const Constants = {
       attendance_status: ["present", "absent", "half_day", "leave"],
       bill_status: ["settled", "void"],
       check_in_source: ["phone", "counter_tablet", "manual"],
+      customer_tier: ["gold"],
       discount_basis: ["percent", "amount"],
       inventory_unit: ["kg", "litre", "packet", "piece"],
       movement_type: ["added", "used", "wasted", "correction"],

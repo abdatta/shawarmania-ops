@@ -204,8 +204,9 @@ Menu is per-outlet from day one. Two outlets may share item names and differ on 
 
 **`orders`** — `id` (client UUID), `outlet_id`, daily `order_number`, owning
 tablet, creator and counter shift, `ordered_at`, explicit `business_date`,
-customer-form snapshot, integer-paise totals, `status` (`open` | `paid` |
-`cancelled`), and separate revision, cancellation and payment attribution.
+customer-form snapshot and `customer_tier`, integer-paise totals, `status`
+(`open` | `paid` | `cancelled`), and separate revision, cancellation and payment
+attribution.
 
 An order is short-lived working state while food is prepared. Only `open` may
 be revised. Payment or cancellation makes it immutable. The order number is
@@ -220,8 +221,20 @@ snapshot through later menu changes.
 `id` (client UUID), `outlet_id`, permanent `bill_number`, optional source
 `order_id`, `ordered_at` and `business_date` (revenue), `paid_at` and
 `payment_business_date` (drawer), operator/tablet/counter-shift attribution,
-customer snapshot, integer-paise totals, optional single-method summary, status and void
-attribution.
+customer snapshot and `customer_tier`, integer-paise totals, optional
+single-method summary, status and void attribution.
+
+**`customer_tier` is the membership the sale was rung under** — `gold` or null —
+written by the server, never by a client. A trigger on each table reads the
+customer's membership history at the moment of sale (an order's `ordered_at`, a
+direct bill's): a sale rung offline and delivered hours later records what was
+true while the customer stood at the counter. A bill settling an order copies the
+order's, so the kitchen and the receipt agree. A revision keeps an order's tier
+while it names the same customer and takes the new customer's when it names
+somebody else. It is a fact about the sale, like the price charged, and never a
+join to live membership — a revocation tonight leaves lunch's order marked, and a
+year-old receipt never rewrites itself. Nothing is computed from it: no total,
+discount or tender anywhere depends on membership.
 
 `recorded_after_shift_end` and its paired `attribution_shift_ended_at` are
 server-stamped immutable facts. They are true only when a command from an
@@ -332,13 +345,53 @@ Access is correspondingly narrow, and none of it is a table grant:
 
 | Who | May | Through |
 |---|---|---|
-| A tablet holding a live shift, or the person holding that shift | Retrieve one customer by their **complete** phone; create one the first time a phone is seen | `customer_lookup_by_phone()`, `customer_create_or_get()` |
-| Super Admin | Read the directory | `customer_directory()` |
+| A tablet holding a live shift, or the person holding that shift | Retrieve one customer by their **complete** phone, with whether they are gold; create one the first time a phone is seen | `customer_lookup_by_phone()`, `customer_create_or_get()` |
+| The same | With four or more digits, the **one** customer their own outlet served most recently among those matching, and a count of the others | `customer_suggest_at_outlet()` |
+| Super Admin | Search by name or part of a number, list regulars and gold members, open a card; correct a name and grant or revoke gold for anybody | `customer_directory_search()`, `customer_directory_list()`, `customer_directory_card()`, `customer_rename()`, `customer_membership_grant()`, `customer_membership_revoke()` |
+| Franchise Admin | The same reads over **only the customers their own outlets have served**, figures from those outlets' bills alone; the same writes only for a customer served at **no other** outlet | The same six functions |
 | Everybody else, including a direct `select` from any role | Nothing | — |
 
-No client session holds `select` on the table itself, so there is no browse, prefix, wildcard or count path — and no database verb that could become one. `customer_create_or_get()` never overwrites a saved profile: a differing name typed at the counter goes onto that bill's own `customer_name` snapshot, which is history, and the global identity is left alone. Lookups are rate-bounded per caller through `customer_lookup_attempts`, which records who asked and when and **nothing about what was asked**.
+No client session holds `select` on the table itself. The counter's partial-number
+path reaches only customers its own outlet has served, and returns one of them or
+none, so it discovers nobody — which is why it may exist when a prefix over the
+directory may not. The management path is a browse path, and exists only for the
+owner and a manager: every one of its functions takes the reader's scope from
+their own assignments (`app_customer_directory_outlets()`), and the pieces
+underneath that take a scope as an argument are revoked from every client role.
+`customer_create_or_get()` never overwrites a saved profile: a differing name typed
+at the counter goes onto that bill's own `customer_name` snapshot, which is
+history, and the global identity is left alone. Counter lookups are rate-bounded per
+caller through `customer_lookup_attempts`, which records who asked and when and
+**nothing about what was asked**.
 
-The boundary is proved rather than asserted — `supabase/tests/20_global_customer_identity.sql` and the customer probes in `supabase/tests/rest/rls-probes.test.ts`, including that a customer id legitimately held at one outlet opens none of that customer's bills at the other.
+**Activity is read, never stored.** A card's thirty-day visits and spend, its last
+seen and first visit, and the regulars ranking are summed from settled bills when
+asked for — one bill a visit, a void counting for nothing, the window thirty
+business days at each bill's outlet. `bills_customer_idx` serves them. Nothing
+aggregate is written to `customers`.
+
+The boundary is proved rather than asserted —
+`supabase/tests/20_global_customer_identity.sql`,
+`supabase/tests/59_a_gold_member_is_a_label.sql` and the customer probes in
+`supabase/tests/rest/rls-probes.test.ts`, including that a customer id legitimately
+held at one outlet opens none of that customer's bills at the other.
+
+**`customer_memberships`** — `id`, `customer_id`, `granted_at`, `granted_by`,
+`revoked_at`, `revoked_by`, `reason` (nullable, unused yet).
+
+**Membership is records, not a flag.** A spell starts when gold is granted and
+ends, perhaps, when it is revoked; a re-grant is a new spell; at most one is in
+force per customer. A guard refuses a delete outright and accepts exactly one
+update — the end of a spell in force — so the history cannot be rewritten, even by
+the server. That history is what a later screen will show ("was this person ever
+gold, and when"), what an automatic rule will read before handing gold back to
+somebody a person took it from, and what the sale snapshot above is read from.
+`reason` is where such a rule will record why.
+
+It is **global, like `customers`**: a membership belongs to the person, not to a
+shop, so "a gold member" means the same at every outlet. It is the same deliberate
+exception and carries the same two locks — no client privilege at all, and RLS
+with no policy — asserted by name in `01_schema_coverage.sql`.
 
 ## The customer's receipt link
 

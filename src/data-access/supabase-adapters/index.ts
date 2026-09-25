@@ -65,9 +65,9 @@ export function createSupabaseAdapters(
     // directory is REAL from today, because the boundary that protects it is.
     // The billing surfaces that call it are still `demo`-gated (#31, #10).
     customers: createSupabaseCustomersAdapter(client, resumeCoordinator, offlineResume),
-    // Not connected until a-gold-member-is-a-label's database section; the
-    // Customers surface that reads it is `demo`-gated until then.
-    customerDirectory: createSupabaseCustomerDirectoryAdapter(),
+    // The owner's customers and a manager's over their own outlets (#57). Every
+    // call derives the reader's scope in the database from their assignments.
+    customerDirectory: createSupabaseCustomerDirectoryAdapter(client),
     expenses: createSupabaseExpensesAdapter(client, counterSession),
     expenseCategories: createSupabaseExpenseCategoriesAdapter(client),
     // Legacy outlet-day insights remain unavailable in live mode. Overview

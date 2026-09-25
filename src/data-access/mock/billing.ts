@@ -394,7 +394,7 @@ export function createMockBillingAdapter(
       customerPhone: row.customer_phone,
       // The snapshot, never the live membership: a revocation tonight does not
       // take the mark off an order rung at lunch.
-      customerTier: store.orderTiers.get(row.id) ?? null,
+      customerTier: row.customer_tier,
       lines: store.orderItems
         .filter((line) => line.order_id === row.id)
         .map((line) => ({
@@ -498,7 +498,7 @@ export function createMockBillingAdapter(
       attributionReview: attributionReviews.get(row.id) ?? null,
       customerName: row.customer_name,
       customerPhone: row.customer_phone,
-      customerTier: store.billTiers.get(row.id) ?? null,
+      customerTier: row.customer_tier,
       lines: store.billItems
         .filter((line) => line.bill_id === row.id)
         .map((line) => ({
@@ -673,6 +673,10 @@ export function createMockBillingAdapter(
       customer_id: null,
       customer_name: draft.customerName?.trim() || null,
       customer_phone: draft.customerPhone?.trim() || null,
+      // The real server reads this from the membership history at the moment
+      // of sale; the demo takes what the counter was told at that moment, which
+      // is the same answer everywhere a walkthrough can reach.
+      customer_tier: draft.customerTier ?? null,
       payment_method: payments.length === 1 ? payments[0]!.method : null,
       pricing_mode: 'no_tax',
       status: 'settled',
@@ -690,8 +694,6 @@ export function createMockBillingAdapter(
       draft.clientId,
       paymentCorrections.get(draft.clientId)?.at(-1) ?? payments,
     )
-    // Rung and paid in one act, so the bill states what the counter knew.
-    if (draft.customerTier) store.billTiers.set(draft.clientId, draft.customerTier)
 
     for (const [index, line] of draft.lines.entries()) {
       store.billItems.push({
@@ -737,6 +739,7 @@ export function createMockBillingAdapter(
       customer_id: input.customerId ?? null,
       customer_name: input.customerName?.trim() || null,
       customer_phone: input.customerPhone?.trim() || null,
+      customer_tier: input.customerTier ?? null,
       pricing_mode: 'no_tax',
       subtotal_paise: totals.subtotalPaise,
       // Read off the totals rather than written as nought. The identity
@@ -760,7 +763,6 @@ export function createMockBillingAdapter(
       cancelled_shift_id: null,
     }
     store.orders.push(row)
-    if (input.customerTier) store.orderTiers.set(row.id, input.customerTier)
     replaceOrderLines(row.id, input.lines, input.discounts ?? [])
   }
 
@@ -772,14 +774,15 @@ export function createMockBillingAdapter(
     row.changed_at = new Date().toISOString()
     row.changed_by = actor?.person_id ?? row.created_by
     row.changed_shift_id = actor?.id ?? row.created_shift_id
+    // As the database's snapshot trigger does: a revision naming the same
+    // customer keeps the tier the order was rung under, so a revocation between
+    // two edits does not take the mark off a card mid-preparation; a revision
+    // naming somebody else takes theirs.
+    const phone = record.input.customerPhone?.trim() || null
+    if (phone !== row.customer_phone) row.customer_tier = record.input.customerTier ?? null
     row.customer_id = record.input.customerId ?? null
     row.customer_name = record.input.customerName?.trim() || null
-    row.customer_phone = record.input.customerPhone?.trim() || null
-    // An open order restates its customer on revision, and the tier follows
-    // the customer it now names. Nothing is computed from it, so a snapshot
-    // that can still move while the order is open is harmless here.
-    if (record.input.customerTier) store.orderTiers.set(row.id, record.input.customerTier)
-    else store.orderTiers.delete(row.id)
+    row.customer_phone = phone
     row.subtotal_paise = totals.subtotalPaise
     row.discount_paise = 0
     row.tax_paise = 0
@@ -853,6 +856,8 @@ export function createMockBillingAdapter(
       customer_id: row.customer_id,
       customer_name: row.customer_name,
       customer_phone: row.customer_phone,
+      // Carried from the order, and final from here: a bill is append-only.
+      customer_tier: row.customer_tier,
       payment_method: payments.length === 1 ? payments[0]!.method : null,
       pricing_mode: 'no_tax',
       status: 'settled',
@@ -870,9 +875,6 @@ export function createMockBillingAdapter(
     }
     store.bills.push(bill)
     store.billPayments.set(billId, payments)
-    // Carried from the order, and final from here: a bill is append-only.
-    const tier = store.orderTiers.get(row.id)
-    if (tier) store.billTiers.set(billId, tier)
     // The edit window runs from the money's own clock — for an upfront payer
     // that is when they handed the cash over, not when the kitchen finished.
     acceptedPaymentTimes.set(billId, Date.parse(paidAt))

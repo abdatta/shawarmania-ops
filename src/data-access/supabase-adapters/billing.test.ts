@@ -470,6 +470,54 @@ describe('the live tablet acceptance boundary', () => {
     ])
   })
 
+  // a-gold-member-is-a-label: the command carries no tier — the server writes
+  // one from the membership history when the sale lands — so until then an
+  // offline till draws the star from what it was last told about the customer.
+  it('draws a queued order for a remembered gold member with the star, offline', async () => {
+    const resume = {
+      tabletId: session.device.deviceId,
+      schemaVersion: COUNTER_RESUME_SCHEMA_VERSION,
+      complete: true,
+      tablet: {
+        id: session.device.deviceId,
+        label: session.device.label,
+        outletId: session.device.outletId,
+      },
+      shift: { ...session.shift! },
+      outlet: { id: 'outlet-1', business_day_cutover: '04:00:00' },
+      menu: [],
+      pipeline: [],
+      bills: [],
+      rememberedCustomers: {
+        '+919876543210': {
+          id: 'c-1',
+          phone: '+919876543210',
+          name: 'Anjali',
+          tier: 'gold',
+          rememberedAt: '2026-08-11T11:00:00.000Z',
+        },
+      },
+      lastSuccessfulReadAt: '2026-08-11T12:00:00.000Z',
+      serverObservedAt: '2026-08-11T12:00:00.000Z',
+      deviceObservedAt: '2026-08-11T12:00:00.000Z',
+    } as unknown as CounterResumeRecord
+    const billing = createSupabaseBillingAdapter(offlineClient(), {
+      ...session,
+      offlineResume: resume,
+    })
+
+    const saved = await billing.saveOrder({
+      ...orderInput,
+      clientId: crypto.randomUUID(),
+      customerName: 'Anjali',
+      customerPhone: '+919876543210',
+    })
+    expect(saved.customerTier).toBe('gold')
+    await expect(billing.listOpenOrders(session.device.outletId)).resolves.toMatchObject([
+      { id: saved.id, customerTier: 'gold' },
+    ])
+  })
+
   it('reports an explicitly offline Finish Day check without waiting for a network timeout', async () => {
     const previous = Object.getOwnPropertyDescriptor(navigator, 'onLine')
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })

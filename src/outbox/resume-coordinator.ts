@@ -2,6 +2,7 @@ import type {
   BillingBill,
   BillingOrder,
   CustomerIdentity,
+  CustomerTier,
   MenuCategoryWithItems,
   OutletMenu,
 } from '@/data-access/adapters'
@@ -90,6 +91,15 @@ export class CounterResumeCoordinator {
     }
     this.rememberedCustomers = retainRememberedCustomers(this.rememberedCustomers)
     this.queueCommit()
+  }
+
+  /**
+   * What this till was last told about a customer's membership, by canonical
+   * phone — the star an order waiting in the queue is drawn with before the
+   * server's own snapshot comes back (a-gold-member-is-a-label).
+   */
+  rememberedTier(phone: string): CustomerTier | null {
+    return this.rememberedCustomers[phone]?.tier ?? null
   }
 
   noteServerTime(serverObservedAt: string, deviceObservedAt = new Date().toISOString()): void {

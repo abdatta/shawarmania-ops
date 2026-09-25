@@ -254,7 +254,7 @@ describe('gate registry', () => {
     }
   })
 
-  it('folds the owner’s sixteen entries into four top-level ones', () => {
+  it('folds the owner’s seventeen entries into four top-level ones', () => {
     // The gate, stated as a test: Overview, Finances, Attendance, Setup. The
     // production owner holds no manager assignment, so `Today` is not theirs.
     const tree = navTree(
@@ -275,6 +275,8 @@ describe('gate registry', () => {
     expect(setup?.kind === 'group' && setup.children.map((c) => c.nav?.label)).toEqual([
       'Outlets',
       'People',
+      // a-gold-member-is-a-label (#57): directly after People.
+      'Customers',
       'Delivery',
       'Menu',
     ])

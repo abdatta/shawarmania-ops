@@ -22,6 +22,7 @@ import {
   type BillingDeliveryDiagnostic,
   type BillingOrder,
   type CounterState,
+  type CustomerTier,
   type PaymentAllocation,
   type SaveOrderInput,
 } from '../adapters'
@@ -36,6 +37,7 @@ import {
 } from '@/domain'
 import { receiptLink } from '@/lib/receipt-link'
 import { newUuid } from '@/lib/uuid'
+import { normalizeIndianPhone } from '../../../shared/phone'
 import {
   BillingDeliveryDatabase,
   BillingDeliveryStore,
@@ -155,6 +157,9 @@ function orderView(row: OrderReadRow, historicalDeviceLabel: string | null): Bil
     deviceLabel: historicalDeviceLabel,
     customerName: row.customer_name,
     customerPhone: row.customer_phone,
+    // The server's snapshot, written from the membership history at the moment
+    // of sale. Never recomputed here.
+    customerTier: row.customer_tier,
     lines: row.order_items.map(lineView),
     discounts: (row.order_discounts ?? []).map((discount) => ({
       basis: discount.basis,
@@ -271,6 +276,7 @@ function billView(
       : null,
     customerName: row.customer_name,
     customerPhone: row.customer_phone,
+    customerTier: row.customer_tier,
     lines: row.bill_items.map(lineView),
     discounts: (row.bill_discounts ?? []).map((discount) => ({
       basis: discount.basis,
@@ -496,6 +502,25 @@ export function createSupabaseBillingAdapter(
     orderCache.set(order.id, structuredClone(order))
   }
 
+  /**
+   * The star a sale still in the queue is drawn with: what this till was last
+   * told about the customer (a-gold-member-is-a-label).
+   *
+   * The command carries no tier — the server writes one from the membership
+   * history when the sale lands, and nothing a tablet sends can set it — so
+   * until then the counter shows what it knows, from the customers it has
+   * resolved itself. The server's snapshot replaces it on the next read.
+   */
+  const knownTier = (phone: string | null | undefined): CustomerTier | null => {
+    const canonical = phone ? normalizeIndianPhone(phone) : null
+    if (!canonical) return null
+    return (
+      resumeCoordinator?.rememberedTier(canonical) ??
+      counterSession?.offlineResume?.rememberedCustomers[canonical]?.tier ??
+      null
+    )
+  }
+
   const notify = () => {
     for (const listener of [...listeners]) listener()
   }
@@ -649,6 +674,7 @@ export function createSupabaseBillingAdapter(
             deviceLabel: null,
             customerName: payload.customerName,
             customerPhone: payload.customerPhone,
+            customerTier: knownTier(payload.customerPhone),
             lines: payload.lines.map((line) => ({
               menuItemId: line.menuItemId ?? '',
               itemName: line.itemName,
@@ -677,6 +703,12 @@ export function createSupabaseBillingAdapter(
               ...current,
               customerName: payload.customerName,
               customerPhone: payload.customerPhone,
+              // As the server does: the same customer keeps the tier the order
+              // was rung under; a different one takes theirs.
+              customerTier:
+                payload.customerPhone === current.customerPhone
+                  ? (current.customerTier ?? null)
+                  : knownTier(payload.customerPhone),
               lines: payload.lines.map((line) => ({
                 menuItemId: line.menuItemId ?? '',
                 itemName: line.itemName,
@@ -985,6 +1017,10 @@ export function createSupabaseBillingAdapter(
           deviceLabel: previous?.deviceLabel ?? null,
           customerName: command.payload.customerName,
           customerPhone: command.payload.customerPhone,
+          customerTier:
+            previous && previous.customerPhone === command.payload.customerPhone
+              ? (previous.customerTier ?? null)
+              : knownTier(command.payload.customerPhone),
           lines: command.payload.lines.map((line) => ({
             menuItemId: line.menuItemId ?? '',
             itemName: line.itemName,
@@ -1035,6 +1071,7 @@ export function createSupabaseBillingAdapter(
           tillLabel: null,
           customerName: command.payload.customerName,
           customerPhone: command.payload.customerPhone,
+          customerTier: knownTier(command.payload.customerPhone),
           lines: command.payload.lines.map((line) => ({
             menuItemId: line.menuItemId ?? '',
             itemName: line.itemName,
@@ -1088,6 +1125,7 @@ export function createSupabaseBillingAdapter(
             tillLabel: null,
             customerName: order.customerName,
             customerPhone: order.customerPhone,
+            customerTier: order.customerTier ?? null,
             lines: order.lines,
             totalPaise: order.totalPaise,
             voidKind: null,
@@ -1520,6 +1558,7 @@ export function createSupabaseBillingAdapter(
         tillLabel: null,
         customerName: draft.customerName?.trim() || null,
         customerPhone: draft.customerPhone?.trim() || null,
+        customerTier: draft.customerTier ?? knownTier(draft.customerPhone),
         lines: [...draft.lines],
         totalPaise: totals.totalPaise,
         voidKind: null,
@@ -1617,6 +1656,7 @@ export function createSupabaseBillingAdapter(
         deviceLabel: null,
         customerName: input.customerName?.trim() || null,
         customerPhone: input.customerPhone?.trim() || null,
+        customerTier: input.customerTier ?? knownTier(input.customerPhone),
         lines: [...input.lines],
         discounts: [...(input.discounts ?? [])],
         // Computed with the discounts, not without them. A local order that
@@ -1745,6 +1785,7 @@ export function createSupabaseBillingAdapter(
         tillLabel: null,
         customerName: existing.customerName,
         customerPhone: existing.customerPhone,
+        customerTier: existing.customerTier ?? null,
         lines: existing.lines,
         totalPaise: existing.totalPaise,
         voidKind: null,
