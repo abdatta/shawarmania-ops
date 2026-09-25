@@ -289,6 +289,24 @@ cash summed from `effective_bill_payments`. Security invoker, for the same
 reason. It depends on the page of observations only for `late_after`, so it runs
 in the Drawer's second wave, and the third wave goes.
 
+### D17. Round three, corrected after it made both screens slower
+
+Measured on production right after it shipped: Billing history 1.0 s → 2.1 s and
+the Drawer 1.4 s → 1.9 s. Two mistakes, both found and fixed the same night.
+
+- **Both functions filtered the payments view with `bill_id in (select …)`.**
+  Postgres does not carry that semi-join into the view's two branches, so each
+  call walked every payment the caller can see through the policies: ~390 ms.
+  Written as `bill_id = any(array(select …))` the filter reaches both branches as
+  an index condition — 14 ms and 11 ms on production data, with output identical
+  to the shipped functions. **The rule for this view: filter it by an id list,
+  never by a subquery.**
+- **Billing history's extras were never sent alongside the bills.** A
+  supabase-js query is not sent until something awaits it, and the adapter
+  handed the bare builder on, so it went out after the bills returned. It is now
+  started with `.then` where it is created, and a unit test with a lazy mock
+  asserts it was sent before the bills answered — failing on the shipped code.
+
 ## Rejected alternatives
 
 - **A materialised read model or a stored day row.** The remedy the #11 comment

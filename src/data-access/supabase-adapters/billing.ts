@@ -1998,12 +1998,19 @@ export function createSupabaseBillingAdapter(
       // One outlet-day: its payments and till labels are asked for by outlet and
       // date, alongside the bills rather than one round trip after them
       // (the-ledger-reads-fast-and-keeps-its-place, design D15).
+      //
+      // Started here, with `.then`, rather than handed on as a builder: a
+      // supabase-js query is not sent until something awaits it, and handing
+      // the bare builder to `readBills` meant it went out only after the bills
+      // came back — which on production made the screen slower, not faster.
       const dayExtras =
         filters.outletId && filters.businessDate
-          ? client.rpc('billing_history_day_extras', {
-              p_outlet_id: filters.outletId,
-              p_business_date: filters.businessDate,
-            })
+          ? client
+              .rpc('billing_history_day_extras', {
+                p_outlet_id: filters.outletId,
+                p_business_date: filters.businessDate,
+              })
+              .then((response) => response)
           : undefined
       let bills = await readBills({
         ...(dayExtras && { dayExtras }),

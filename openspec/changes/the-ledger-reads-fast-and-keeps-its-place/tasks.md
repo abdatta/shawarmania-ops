@@ -166,6 +166,12 @@ assertion written to pass.
   284 e2e; `test:db` on a fresh reset (with `60_…`); all six `test:rls` phases;
   31 auth e2e. Production remeasure pending the owner's deploy.
 
+- [x] 8.6 Correct round three after production showed it slower (design D17): the
+  two functions filter by an id list (`20260926030000_…`), checked on production
+  data as identical to the shipped ones and 14/11 ms against ~390; the extras
+  request is started where it is created, pinned by a test that fails on the
+  shipped adapter.
+
 ## 5. Docs
 
 - [x] 5.1 `docs/LIMITATIONS.md` — rewrite *The derived ledger month is measured,

@@ -225,33 +225,60 @@ describe('the live tablet acceptance boundary', () => {
    */
   it('asks for one day’s payments and till labels alongside its bills, not after them', async () => {
     const { client, rpc } = managerHistoryClient()
-    const billing = createSupabaseBillingAdapter(client)
-    // Cast because the fixture's mock is typed by the by-id labels answer it
-    // gives the other tests; this one answers the day read instead.
-    rpc.mockImplementation((async (name: string) =>
+    // A supabase-js query goes out only when something awaits it, so the mock
+    // is lazy in the same way: `sent` flips when the request is actually made.
+    let sent = false
+    rpc.mockImplementation(((name: string) =>
       name === 'billing_history_day_extras'
         ? {
-            data: {
-              payments: [
-                {
-                  bill_id: 'bill-1',
-                  outlet_id: 'outlet-1',
-                  method: 'cash',
-                  amount_paise: 13900,
-                  revision: 0,
+            then: (resolve: (value: unknown) => unknown) => {
+              sent = true
+              return Promise.resolve({
+                data: {
+                  payments: [
+                    {
+                      bill_id: 'bill-1',
+                      outlet_id: 'outlet-1',
+                      method: 'cash',
+                      amount_paise: 13900,
+                      revision: 0,
+                    },
+                  ],
+                  labels: [{ event_id: 'bill-1', label: 'Historical counter name' }],
                 },
-              ],
-              labels: [{ event_id: 'bill-1', label: 'Historical counter name' }],
+                error: null,
+              }).then(resolve)
             },
-            error: null,
           }
-        : { data: [], error: null }) as never)
+        : Promise.resolve({ data: [], error: null })) as never)
+    // The bills answer only when the test says so.
+    let answerBills!: () => void
+    const billsAnswered = new Promise<void>((resolve) => {
+      answerBills = resolve
+    })
+    const from = client.from.bind(client)
+    ;(client as unknown as { from: unknown }).from = (table: string) => {
+      const query = from(table as never) as unknown as Record<string, unknown>
+      if (table !== 'bills') return query
+      const order = query['order'] as () => Promise<unknown>
+      query['order'] = () => billsAnswered.then(() => order())
+      return query
+    }
+    const billing = createSupabaseBillingAdapter(client)
 
-    await expect(
-      billing.listManagerHistory({ outletId: 'outlet-1', businessDate: '2026-09-22' }),
-    ).resolves.toMatchObject([{ id: 'bill-1', tillLabel: 'Historical counter name' }])
-    // One request for the day's extras, and no by-id reads waiting on the bills
+    const history = billing.listManagerHistory({
+      outletId: 'outlet-1',
+      businessDate: '2026-09-22',
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    // Sent before the bills came back: that is the whole point of the read
     // (the-ledger-reads-fast-and-keeps-its-place, design D15).
+    expect(sent).toBe(true)
+    answerBills()
+
+    await expect(history).resolves.toMatchObject([
+      { id: 'bill-1', tillLabel: 'Historical counter name' },
+    ])
     expect(rpc).toHaveBeenCalledOnce()
     expect(rpc).toHaveBeenCalledWith('billing_history_day_extras', {
       p_outlet_id: 'outlet-1',
