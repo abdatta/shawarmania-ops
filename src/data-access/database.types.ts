@@ -4159,6 +4159,10 @@ export type Database = {
         }
         Returns: Json
       }
+      billing_history_day_extras: {
+        Args: { p_business_date: string; p_outlet_id: string }
+        Returns: Json
+      }
       billing_next_order_number: {
         Args: { p_business_date: string; p_outlet_id: string }
         Returns: number
@@ -4502,6 +4506,10 @@ export type Database = {
       drawer_earliest_activity: {
         Args: { p_outlet_id: string }
         Returns: string
+      }
+      drawer_recent_cash_bills: {
+        Args: { p_late_after: string; p_outlet_id: string }
+        Returns: Json
       }
       edit_account_assignment_set: {
         Args: {

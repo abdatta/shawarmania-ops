@@ -873,5 +873,9 @@ rung, a second wave on the Ledger day and nine sequential reads on the Drawer. A
 Ledger day is now one round trip, outlet rows are remembered for the signed-in
 person and refreshed behind, and the Drawer reads in three waves.
 
+**Round three** took Billing history and the Drawer on: each asks for its
+dependent data by outlet and date instead of by the ids of an earlier read, and
+partial indexes stop their near-empty reads from walking every order and bill.
+
 If it ever stops holding, **the remedy is still never a stored day row.** The
 whole point of the derived reading is that it cannot be wrong about itself.

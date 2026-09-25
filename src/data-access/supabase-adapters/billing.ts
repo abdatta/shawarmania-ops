@@ -897,6 +897,16 @@ export function createSupabaseBillingAdapter(
     businessDate?: string
     status?: Tables<'bills'>['status']
     limit?: number
+    /**
+     * The day's effective payments and till labels, already asked for by outlet
+     * and date (`billing_history_day_extras`), so this read need not wait for
+     * bill ids before asking. Billing history only; every other caller reads
+     * them by id as before.
+     */
+    dayExtras?: PromiseLike<{
+      data: unknown
+      error: { message: string } | null
+    }>
   }): Promise<BillingBill[]> {
     let query = client
       .from('bills')
@@ -917,7 +927,16 @@ export function createSupabaseBillingAdapter(
     const ids = rows.map((row) => row.id)
     let effective: EffectivePaymentRow[] = []
     let deviceLabels = new Map<string, string>()
-    if (ids.length > 0) {
+    if (filters.dayExtras) {
+      const extras = await filters.dayExtras
+      if (extras.error) throw actionError(extras.error, 'Could not load bill payments.')
+      const day = extras.data as {
+        payments: EffectivePaymentRow[]
+        labels: { event_id: string; label: string }[]
+      }
+      effective = day.payments
+      deviceLabels = new Map(day.labels.map((row) => [row.event_id, row.label]))
+    } else if (ids.length > 0) {
       const [response, labels] = await Promise.all([
         client.from('effective_bill_payments').select('*').in('bill_id', ids),
         deviceLabelsFor('bill', ids),
@@ -1976,7 +1995,18 @@ export function createSupabaseBillingAdapter(
     },
 
     async listManagerHistory(filters) {
+      // One outlet-day: its payments and till labels are asked for by outlet and
+      // date, alongside the bills rather than one round trip after them
+      // (the-ledger-reads-fast-and-keeps-its-place, design D15).
+      const dayExtras =
+        filters.outletId && filters.businessDate
+          ? client.rpc('billing_history_day_extras', {
+              p_outlet_id: filters.outletId,
+              p_business_date: filters.businessDate,
+            })
+          : undefined
       let bills = await readBills({
+        ...(dayExtras && { dayExtras }),
         outletId: filters.outletId,
         ...(filters.businessDate && { businessDate: filters.businessDate }),
         ...(filters.status && filters.status !== 'all' && { status: filters.status }),

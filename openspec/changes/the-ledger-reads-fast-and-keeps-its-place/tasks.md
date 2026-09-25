@@ -139,8 +139,32 @@ assertion written to pass.
   which reached production first.
 - [x] 7.8 Docs: `docs/DATA_MODEL.md` (the takings function, the view's shape and
   the index) and `docs/LIMITATIONS.md` (round two's measurements and remedies).
-- [ ] 7.7 After the owner's deploy: remeasure on production in the owner's browser
+- [x] 7.7 After the owner's deploy: remeasure on production in the owner's browser
   — tap Ledger, step a day, switch outlet, month; tap Billing history; tap Drawer.
+  *Measured 2026-09-26, production, owner's Edge, on the new build:* tap Ledger
+  0.56 s (was 1.6 s); a day step 0.38–0.44 s over five (was 1.1–1.3 s, and ~4 s
+  before round one); an outlet switch 0.38–0.44 s with the date kept; the month
+  0.40–0.76 s; Billing history settled 1.0 s (was 1.8 s; the delivery log 0.53 s,
+  was 1.43 s); the Drawer 1.4 s (was 4.2 s); Expenses 0.38 s (was 0.68 s). The
+  Ledger's reads now start ~70 ms after the tap, with the outlet read running
+  alongside rather than ahead.
+
+## 8. Round three: Billing history and the Drawer (2026-09-26)
+
+- [x] 8.1 Migration: `orders_pipeline_idx` and `bills_settled_recent_idx` per D14;
+  `billing_history_day_extras` per D15; `drawer_recent_cash_bills` per D16.
+- [x] 8.2 pgTAP: both functions return what the reads they replace return, on a
+  fixture with a corrected bill, and nothing of another outlet to a Franchise
+  Admin; both indexes exist.
+- [x] 8.3 Billing adapter: the manager history read runs the day extras alongside
+  the bills; the counter's reads are unchanged. Tests.
+- [x] 8.4 Drawer adapter: the recent and late bills come from
+  `drawer_recent_cash_bills` in the second wave. Its REST suite stays green.
+- [ ] 8.5 Full gate; after the owner's deploy, remeasure Billing history and the
+  Drawer on production.
+  *Gate 2026-09-26:* lint, format, types, functions, contrast, build; 1,925 unit;
+  284 e2e; `test:db` on a fresh reset (with `60_…`); all six `test:rls` phases;
+  31 auth e2e. Production remeasure pending the owner's deploy.
 
 ## 5. Docs
 
@@ -183,9 +207,17 @@ assertion written to pass.
   agent does. Three quick steps back, a switch to Kanchrapara (22 Sept kept,
   Kanchrapara's own figures), a month two back kept across a switch the other
   way, both themes at phone width, no application console errors.
-- [ ] 6.4 GATE — the proposal's Gate line proved literally, clause by clause,
+- [x] 6.4 GATE — the proposal's Gate line proved literally, clause by clause,
   naming what proved each. The production timings are taken only after the owner
   picks the deploy window (**no push while the counter trades**), in the owner's
   own browser, repeating the 2026-09-24 table. This change carries no ROADMAP.md
   row on purpose; do not run `roadmap:sync` expecting one, and do not archive
   until the owner has used it in production and calls it.
+  *Proved 2026-09-26 on production:* a day step 0.38–0.44 s (< 1.5 s) and a month
+  0.40–0.76 s (< 3 s), in the owner's browser; one round trip a day and at most two
+  a month (timing phase and adapter tests); superseded reads aborted and failures
+  never rendered as nought (surface and adapter tests, each failing on the old
+  code); errors withdrawn on navigation and no cross-outlet figures (surface
+  tests); the date and month kept across a switch on production and on all four
+  surfaces (tests); month/day parity to the paisa (timing phase, proved to bite).
+  Not archived: the owner calls that after real use.

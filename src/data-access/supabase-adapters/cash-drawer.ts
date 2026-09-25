@@ -204,47 +204,6 @@ function toObservationRecord(
   }
 }
 
-/**
- * Cash allocations for a set of bills, read as their own select.
- *
- * **Not a PostgREST embed, and that is not a style choice.**
- * `effective_bill_payments` is a VIEW with no declared foreign key, so
- * `bills(..., effective_bill_payments(...))` fails outright with
- * *"Could not find a relationship between 'bills' and 'effective_bill_payments'
- * in the schema cache"*. The first version of these adapters used the embed; the
- * pgTAP suite passed (it tests SQL functions), the mock passed (it is not
- * PostgREST), and the surfaces would have failed on their first real read. The
- * derived-month measurement is what caught it.
- *
- * `src/data-access/supabase-adapters/billing.ts` already reads the view this
- * way, which is the convention this follows rather than reinvents.
- *
- * `amount_paise` is nullable on the view in the generated types, so it is
- * coalesced rather than asserted.
- */
-async function cashByBill(
-  client: Client,
-  billIds: readonly string[],
-): Promise<Map<string, number>> {
-  const cash = new Map<string, number>()
-  if (billIds.length === 0) return cash
-
-  const { data, error } = await client
-    .from('effective_bill_payments')
-    .select('bill_id, method, amount_paise')
-    .in('bill_id', [...billIds])
-  if (error) refuse(error)
-
-  for (const allocation of data ?? []) {
-    if (allocation.method !== 'cash' || !allocation.bill_id) continue
-    cash.set(
-      allocation.bill_id,
-      (cash.get(allocation.bill_id) ?? 0) + (allocation.amount_paise ?? 0),
-    )
-  }
-  return cash
-}
-
 export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapter {
   /** Names for attribution. Read once per load rather than joined per row. */
   async function namesFor(ids: readonly (string | null)[]): Promise<Map<string, string>> {
@@ -325,9 +284,8 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
         pageMovements,
         sinceMovements,
         adjustments,
-        nearbyResult,
         acknowledgements,
-        lateResult,
+        recentBills,
       ] = await Promise.all([
         client.rpc('drawer_cash_receipts_paise', {
           p_outlet_id: outletId,
@@ -381,29 +339,22 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
             'observation_id',
             observations.slice(0, DRAWER_HISTORY_PAGE).map((row) => row.id),
           ),
-        // The nearby cash bills, for the movable boundary and the coincidence
-        // report. Deliberately the bills themselves and never a candidate instant.
-        client
-          .from('bills')
-          .select('id, bill_number, paid_at')
-          .eq('outlet_id', outletId)
-          .eq('status', 'settled')
-          .order('paid_at', { ascending: false })
-          .limit(40),
         // Exceptions: derived from instants, never stored. A cash bill inside an
         // observed interval that arrived after the observation was recorded.
         client
           .from('drawer_reconciliation_acknowledgements')
           .select('*, acknowledger:profiles!acknowledged_by(full_name)')
           .eq('outlet_id', outletId),
-        client
-          .from('bills')
-          .select('id, bill_number, paid_at, synced_at')
-          .eq('outlet_id', outletId)
-          .eq('status', 'settled')
-          .gt('synced_at', observations.at(-1)?.recorded_at ?? now)
-          .order('paid_at', { ascending: false })
-          .limit(40),
+        // The nearby cash bills, for the movable boundary and the coincidence
+        // report — deliberately the bills themselves and never a candidate
+        // instant — and the ones that synced after the oldest count on the page
+        // was recorded, which is where an exception can come from. One server
+        // read with each bill's cash already split, rather than two bill reads
+        // and a round trip for their payments after them (design D16).
+        client.rpc('drawer_recent_cash_bills', {
+          p_outlet_id: outletId,
+          p_late_after: observations.at(-1)?.recorded_at ?? now,
+        }),
       ])
       if (receipts.error) refuse(receipts.error)
       if (expenses.error) refuse(expenses.error)
@@ -452,9 +403,8 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
       if (pageMovements.error) refuse(pageMovements.error)
       if (sinceMovements.error) refuse(sinceMovements.error)
       if (adjustments.error) refuse(adjustments.error)
-      if (nearbyResult.error) refuse(nearbyResult.error)
       if (acknowledgements.error) refuse(acknowledgements.error)
-      if (lateResult.error) refuse(lateResult.error)
+      if (recentBills.error) refuse(recentBills.error)
 
       const movements = pageMovements.data ?? []
       const ownOf = (observationId: string) =>
@@ -480,12 +430,22 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
         ownOf(last.id).reduce((sum, movement) => sum + movement.amount_paise, 0),
       )
 
-      // Wave 3: the cash split of every bill the second wave found, in one read.
-      const nearbyBills = nearbyResult.data ?? []
-      const lateBills = lateResult.data ?? []
-      const billCash = await cashByBill(client, [
-        ...new Set([...nearbyBills, ...lateBills].map((bill) => bill.id)),
-      ])
+      type RecentBill = {
+        id: string
+        bill_number: number
+        paid_at: string | null
+        synced_at?: string
+        cash_paise: number
+      }
+      const recentRows = (recentBills.data ?? { nearby: [], late: [] }) as unknown as {
+        nearby: RecentBill[]
+        late: (RecentBill & { synced_at: string })[]
+      }
+      const nearbyBills = recentRows.nearby
+      const lateBills = recentRows.late
+      const billCash = new Map(
+        [...nearbyBills, ...lateBills].map((bill) => [bill.id, Number(bill.cash_paise)]),
+      )
 
       const nearbyCashBills: NearbyCashBillRecord[] = nearbyBills
         .map((bill) => ({

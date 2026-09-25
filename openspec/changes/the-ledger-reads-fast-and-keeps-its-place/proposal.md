@@ -155,6 +155,29 @@ outlet, no longer asks for the outlet. The payment view and the delivery log are
 fast at any size. A Ledger day reads in one round trip, Billing history in two,
 the Drawer in three. Nothing on any screen looks or reads differently.
 
+## Round three: Billing history and the Drawer (2026-09-26)
+
+After round two, measured on production: Billing history 1.0 s, the Drawer 1.4 s.
+The owner asked for both to come down too. Measured, read-only, on production:
+
+- Billing history's pipeline read asks for open and unprepared paid orders —
+  of which production holds **none** — and takes 80 ms of database time to find
+  that out, because no index narrows to them: all 1,468 of Kalyani's orders go
+  through the policy first. Under the four reads the screen makes at once, that
+  read settled at 0.63–0.69 s.
+- The Drawer's two recent-bill reads ("the last forty settled", "the ones that
+  synced late") walk every settled bill at the outlet through the policy, 80 ms
+  and 60 ms, settling at 0.55–0.75 s.
+- Both screens then wait one more round trip for data keyed on what came back:
+  Billing history for each bill's effective payments and historical till label,
+  the Drawer for the cash split of the recent bills.
+
+**What changes.** Partial indexes let those reads touch only the rows they
+return. Billing history asks for the day's payments and till labels by outlet
+and date, alongside the bills rather than after them. The Drawer asks for its
+recent and late bills with their cash already split, in its second wave. Nothing
+on either screen reads differently.
+
 ## Non-goals
 
 - **No change to any figure, word, card or control on the Ledger.** The day and

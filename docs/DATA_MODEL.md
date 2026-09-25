@@ -905,6 +905,17 @@ every production payment), and one day's read went from 131 ms to 4 ms.
 delivery log's "latest hundred at an outlet", which otherwise read every command
 the outlet ever made.
 
+Two security-invoker reads serve Billing history and the Drawer by outlet rather
+than by id, so neither waits for one read's ids before asking the next:
+`billing_history_day_extras(outlet, date)` returns the day's effective payments
+and historical till labels, and `drawer_recent_cash_bills(outlet, late_after)`
+returns the forty newest settled bills and the forty newest that synced late,
+each with its effective cash. Being invoker, RLS decides what they return exactly
+as it did for the reads they replace. Two partial indexes keep reads that return
+almost nothing from touching everything: `orders_pipeline_idx` holds only open
+and unprepared paid orders, and `bills_settled_recent_idx` orders settled bills
+newest first per outlet.
+
 A reconciliation exception is derived the same way — a payment or occurrence
 instant inside an already-observed interval that arrived after the observation was
 recorded. Only the human act of acknowledging one is stored.

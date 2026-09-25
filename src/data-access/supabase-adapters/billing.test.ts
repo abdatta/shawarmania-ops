@@ -223,6 +223,42 @@ describe('the live tablet acceptance boundary', () => {
    * object rather than an array. Treating it as an array threw at read time and
    * emptied the whole surface, so these three cases pin the shape.
    */
+  it('asks for one day’s payments and till labels alongside its bills, not after them', async () => {
+    const { client, rpc } = managerHistoryClient()
+    const billing = createSupabaseBillingAdapter(client)
+    // Cast because the fixture's mock is typed by the by-id labels answer it
+    // gives the other tests; this one answers the day read instead.
+    rpc.mockImplementation((async (name: string) =>
+      name === 'billing_history_day_extras'
+        ? {
+            data: {
+              payments: [
+                {
+                  bill_id: 'bill-1',
+                  outlet_id: 'outlet-1',
+                  method: 'cash',
+                  amount_paise: 13900,
+                  revision: 0,
+                },
+              ],
+              labels: [{ event_id: 'bill-1', label: 'Historical counter name' }],
+            },
+            error: null,
+          }
+        : { data: [], error: null }) as never)
+
+    await expect(
+      billing.listManagerHistory({ outletId: 'outlet-1', businessDate: '2026-09-22' }),
+    ).resolves.toMatchObject([{ id: 'bill-1', tillLabel: 'Historical counter name' }])
+    // One request for the day's extras, and no by-id reads waiting on the bills
+    // (the-ledger-reads-fast-and-keeps-its-place, design D15).
+    expect(rpc).toHaveBeenCalledOnce()
+    expect(rpc).toHaveBeenCalledWith('billing_history_day_extras', {
+      p_outlet_id: 'outlet-1',
+      p_business_date: '2026-09-22',
+    })
+  })
+
   it('resolves a receipt link from the to-one embed PostgREST actually returns', async () => {
     const { client, selected } = managerHistoryClient()
     const billing = createSupabaseBillingAdapter(client)

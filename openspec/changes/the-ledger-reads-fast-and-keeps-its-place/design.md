@@ -256,6 +256,39 @@ one read, not two, alongside the acknowledgers' names. The arithmetic and the
 records are unchanged. The acknowledgements read, which ignored its error, now
 throws like the rest.
 
+## Round three (2026-09-26)
+
+### D14. Partial indexes for the reads that return almost nothing
+
+`orders_pipeline_idx on orders (outlet_id, ordered_at desc) where status = 'open'
+or (status = 'paid' and prepared_at is null)` — the manager's open-orders read
+asks exactly that predicate, and today it matches nothing, so the read touches
+nothing. `bills_settled_recent_idx on bills (outlet_id, paid_at desc) where
+status = 'settled'` — the Drawer's "last forty settled" walks it newest first and
+stops at forty; its "synced late" read, also ordered by `paid_at` and limited to
+forty, walks the same index. Checked locally with RLS applied: the planner uses
+both, with the policy evaluated only on the rows the index yields.
+
+### D15. Billing history's day extras arrive with the bills
+
+`billing_history_day_extras(outlet, date) returns jsonb` —
+`{ payments: [effective_bill_payments rows], labels: [{ event_id, label }] }` for
+the bills of that outlet and business date. **Security invoker**: it reads
+`effective_bill_payments` and `bills` as the caller, so RLS decides exactly as it
+does for the reads it replaces, and the till labels come from
+`billing_event_device_labels`, which keeps its own checks. The adapter's manager
+history path runs it alongside the bills read and hands its answer to the same
+`billView`; the counter's paths are untouched.
+
+### D16. The Drawer's recent bills arrive with their cash
+
+`drawer_recent_cash_bills(outlet, late_after) returns jsonb` —
+`{ nearby: [{id, bill_number, paid_at, cash_paise}], late: [{…, synced_at}] }`,
+the same two queries the adapter made (forty each, newest first) with each bill's
+cash summed from `effective_bill_payments`. Security invoker, for the same
+reason. It depends on the page of observations only for `late_after`, so it runs
+in the Drawer's second wave, and the third wave goes.
+
 ## Rejected alternatives
 
 - **A materialised read model or a stored day row.** The remedy the #11 comment
@@ -284,6 +317,11 @@ throws like the rest.
 - **Caching readings by outlet and period.** A cache is a second place a figure
   can be stale, on the one surface whose whole claim is that it cannot disagree
   with its sources; two round trips make it unnecessary.
+- **Security definer for the round-three functions.** They answer exactly
+  what the caller could already read row by row; invoker makes RLS decide that,
+  with no assertion to keep in step with the policies.
+- **Adding `business_date` to the payments view.** Every reader of the view
+  would pay for the join, and the till labels would still wait on bill ids.
 - **Caching the outlet list for the picker too.** The list is where a new outlet
   or a lost assignment has to appear, and it is not on anyone's critical path.
 - **An outlet cache keyed on the adapter instance.** It outlives a sign-out.
