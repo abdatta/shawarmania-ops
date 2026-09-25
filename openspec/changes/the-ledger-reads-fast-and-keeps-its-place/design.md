@@ -184,6 +184,78 @@ cutovers straddle the moment, but in that window a reader on Kalyani's today who
 switches to Kanchrapara means Kanchrapara's today. Keeping the literal date would
 open them on a day that is already over there, or refused as future.
 
+## Round two (2026-09-25)
+
+Measured on production after round one shipped; the proposal carries the table.
+
+### D9. Outlet rows are remembered for the signed-in person, and refreshed behind
+
+`createSupabaseOutletsAdapter` keeps the rows it has read — from `listOutlets` or
+`getOutlet` — and answers `getOutlet` from them at once, **refreshing in the
+background on every call** so a cutover edited elsewhere reaches the next read.
+A write through the adapter (create, update, location, delete) replaces or drops
+the row immediately.
+
+**Keyed on the signed-in user, not on the adapter.** The adapter set is built
+once per app session (`real-root.tsx`) and outlives a sign-out; a cache that did
+too would answer the next person on a shared phone with the last person's
+outlets. The key is the session's user id, read locally from supabase-js without
+a request, and a different id empties the cache.
+
+What is cached is an outlet's own row — name, cutover, address — never a figure,
+and RLS decided what reached it. `listOutlets` is not answered from the cache:
+the picker's list is where a newly created outlet or a lost assignment must show,
+and it is one parallel request that costs nothing a reader waits on.
+
+**Only answers that are safe to be a request stale.** A cutover edited on another
+device reaches the next `getOutlet` after the background refresh lands, and a
+full reload always reads fresh. The cutover field's own copy already says a new
+cutover applies to the next day resolved.
+
+### D10. The payment view looks corrections up per bill
+
+`effective_bill_payments` is re-created with the same columns, the same
+`security_invoker = true`, and the same meaning. The difference is the shape:
+the "latest correction per bill" was a CTE referenced twice and therefore
+materialised over **every** correction, whose policy then asked `bills` about
+every bill the reader can see (2,127 on production). Now the uncorrected branch
+is `NOT EXISTS` per payment row and the corrected branch a `DISTINCT ON`
+subquery, both of which accept the caller's `bill_id` filter. Measured on
+production data as the owner: identical rows over all 2,238 payments and over the
+16 corrected ones; 131 ms → 4 ms for one day's forty bills.
+
+**RLS, called out:** no policy changes and the view still runs as the caller, so
+exactly the same rows are visible to exactly the same people. The existing
+isolation cases for the view keep proving it.
+
+### D11. The delivery log is indexed for the question it asks
+
+`create index billing_commands_outlet_received_idx on billing_commands
+(outlet_id, received_at desc)`. The read is "the last hundred at an outlet"; the
+only outlet index was `(outlet_id, business_date, watermark)`, so every command
+the outlet ever made was read, filtered by policy and sorted. Index only.
+
+### D12. A Ledger day is one wave
+
+The payment split moves into the first wave through
+`ledger_day_takings(outlet, date)` — cash and UPI totals and bill counts, summed
+per bill exactly as `perBill` does, security definer with `ledger_assert_reach`.
+Names and adjustments move into the first wave as embeds (`profiles!recorded_by`
+and the like, `drawer_observation_adjustments` under the day's observations),
+which PostgREST resolves in the same request; the expenses view embeds through
+its foreign key too (probed). The second wave goes; `namesFor` stays for the
+month's spends.
+
+### D13. The Drawer is three waves
+
+After the page of observations, everything the Drawer reads depends only on
+those rows: names, the five interval readers, the page's and the since-count's
+movements, adjustments, the nearby bills, the acknowledgements, the late bills.
+They go out together. The cash split for the nearby and the late bills becomes
+one read, not two, alongside the acknowledgers' names. The arithmetic and the
+records are unchanged. The acknowledgements read, which ignored its error, now
+throws like the rest.
+
 ## Rejected alternatives
 
 - **A materialised read model or a stored day row.** The remedy the #11 comment
@@ -212,6 +284,13 @@ open them on a day that is already over there, or refused as future.
 - **Caching readings by outlet and period.** A cache is a second place a figure
   can be stale, on the one surface whose whole claim is that it cannot disagree
   with its sources; two round trips make it unnecessary.
+- **Caching the outlet list for the picker too.** The list is where a new outlet
+  or a lost assignment has to appear, and it is not on anyone's critical path.
+- **An outlet cache keyed on the adapter instance.** It outlives a sign-out.
+- **Fixing the correction policy instead of the view.** The policy is correct and
+  the cost came from the view's shape; a policy edit is a tenancy change with
+  nothing to gain here.
+- **Caching the day's figures.** A figure is exactly what must never be stale.
 - **A separate change for the other three surfaces.** Offered on 2026-09-25 and
   declined by the owner: the rule is one rule, the Ledger change had not shipped,
   and landing it on one screen first would leave the app disagreeing with itself

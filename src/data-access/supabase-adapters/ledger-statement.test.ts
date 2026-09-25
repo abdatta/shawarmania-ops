@@ -35,6 +35,9 @@ const OBSERVATION = {
   away_reason: null,
   note: null,
   updated_at: '2026-09-20T16:31:00+00:00',
+  recorder: { full_name: 'Someone' },
+  corrector: null,
+  drawer_observation_adjustments: [],
 }
 
 /** Enough rows that every read of both waves is made. */
@@ -54,6 +57,8 @@ function rowsFor(table: string): unknown {
       return []
     case 'rpc:ledger_drawer_balance_at':
       return 0
+    case 'rpc:ledger_day_takings':
+      return { cashPaise: 0, cashBills: 0, upiPaise: 0, upiBills: 0 }
     default:
       return []
   }
@@ -101,12 +106,16 @@ describe('a ledger day completes or throws', () => {
     .getDay('outlet-1', '2026-09-20')
     .then(() => [...made])
 
-  it('makes every read in two waves when nothing fails', async () => {
-    // Eleven in the first wave, three in the second.
-    expect(await reads).toHaveLength(14)
+  it('makes every read at once, with no second wave, when nothing fails', async () => {
+    // Twelve, all in one wave: the names and adjustments arrive embedded and
+    // the payment split comes from the server, so nothing waits on anything.
+    const made = await reads
+    expect(made).toHaveLength(12)
+    expect(made).not.toContain('profiles')
+    expect(made).not.toContain('effective_bill_payments')
   })
 
-  it.each(Array.from({ length: 14 }, (_, index) => index))(
+  it.each(Array.from({ length: 12 }, (_, index) => index))(
     'rejects the whole day when read %i fails',
     async (failing) => {
       const { client: failingClient, made: failingMade } = fakeClient(failing)

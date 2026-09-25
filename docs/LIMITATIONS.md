@@ -865,5 +865,13 @@ every request by 250 ms, so the clock measures round trips the way a phone does.
 It also holds the month and each of its days equal to the paisa, since the month's
 inputs are now computed in SQL and the day's in TypeScript.
 
+**Round two, measured after the first deploy.** Opening the Ledger from inside the
+app took 1.6 s, a day step 1.1–1.3 s, Billing history 1.8 s and the Drawer 4.2 s.
+What remained was one round trip to ask for the outlet's cutover before anything
+else, a payments view and a delivery log whose cost grew with every bill ever
+rung, a second wave on the Ledger day and nine sequential reads on the Drawer. A
+Ledger day is now one round trip, outlet rows are remembered for the signed-in
+person and refreshed behind, and the Drawer reads in three waves.
+
 If it ever stops holding, **the remedy is still never a stored day row.** The
 whole point of the derived reading is that it cannot be wrong about itself.

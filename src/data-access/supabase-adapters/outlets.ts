@@ -7,7 +7,7 @@ import {
   type OutletReference,
   type OutletsAdapter,
 } from '../adapters'
-import type { Database, TablesInsert, TablesUpdate } from '../database.types'
+import type { Database, Tables, TablesInsert, TablesUpdate } from '../database.types'
 import type { CounterResumeCoordinator, CounterResumeRecord } from '@/outbox'
 
 /**
@@ -96,28 +96,96 @@ export function createSupabaseOutletsAdapter(
 ): OutletsAdapter {
   const table = () => client.from('outlets')
 
+  /**
+   * Outlet rows already read, for the person signed in when they were read.
+   *
+   * **Why this exists.** Every outlet-scoped screen asked for its outlet before
+   * anything else, only to learn the cutover that says which day is today —
+   * about 0.35 s on a phone, on every open and every outlet switch, measured on
+   * production on 2026-09-25 (the-ledger-reads-fast-and-keeps-its-place, D9).
+   * A row read once now answers `getOutlet` at once, and is refreshed behind
+   * every such answer, so a cutover edited on another device reaches the read
+   * after next rather than never. A write through this adapter replaces or drops
+   * its row immediately.
+   *
+   * **Keyed on the signed-in user, never on this adapter.** The adapter set is
+   * built once per app session and outlives a sign-out; a cache that did too
+   * would answer the next person on a shared phone with the last person's
+   * outlets. The user id comes from supabase-js's own stored session, which is a
+   * local read, and a different id empties the cache.
+   *
+   * It holds an outlet's own row — a name, a cutover, an address — and never a
+   * figure. `listOutlets` always asks: it is where a new outlet or a lost
+   * assignment has to show, and nobody waits on it.
+   */
+  const remembered: { userId: string | null; rows: Map<string, Tables<'outlets'>> } = {
+    userId: null,
+    rows: new Map(),
+  }
+
+  async function rememberedRows(): Promise<Map<string, Tables<'outlets'>>> {
+    const { data } = await client.auth.getSession()
+    const userId = data.session?.user.id ?? null
+    if (userId !== remembered.userId) {
+      remembered.userId = userId
+      remembered.rows = new Map()
+    }
+    return remembered.rows
+  }
+
+  function remember(row: Tables<'outlets'>): void {
+    void rememberedRows().then((rows) => rows.set(row.id, row))
+  }
+
+  function forget(id: string): void {
+    void rememberedRows().then((rows) => rows.delete(id))
+  }
+
+  async function readOutlet(
+    id: string,
+    rows: Map<string, Tables<'outlets'>>,
+  ): Promise<Tables<'outlets'> | null> {
+    const { data, error } = await table().select('*').eq('id', id).maybeSingle()
+    if (error) {
+      if (offlineResume?.outlet.id === id) return structuredClone(offlineResume.outlet)
+      throw error
+    }
+    if (data) {
+      rows.set(id, data)
+      resumeCoordinator?.noteOutlet(data)
+    } else {
+      rows.delete(id)
+    }
+    return data
+  }
+
   return {
     async listOutlets(options = {}) {
+      const rows = await rememberedRows()
       const query = table().select('*').order('name')
       const { data, error } = await (options.includeInactive ? query : query.eq('is_active', true))
       if (error) throw error
+      for (const row of data) rows.set(row.id, row)
       return data
     },
 
     async getOutlet(id: string) {
-      const { data, error } = await table().select('*').eq('id', id).maybeSingle()
-      if (error) {
-        if (offlineResume?.outlet.id === id) return structuredClone(offlineResume.outlet)
-        throw error
-      }
-      if (data) resumeCoordinator?.noteOutlet(data)
-      return data
+      const rows = await rememberedRows()
+      const known = rows.get(id)
+      const fresh = readOutlet(id, rows)
+      if (!known) return fresh
+      // Answered now, refreshed behind. A refresh that fails leaves the
+      // remembered row in place; the next screen tries again.
+      fresh.catch(() => undefined)
+      resumeCoordinator?.noteOutlet(known)
+      return structuredClone(known)
     },
 
     async createOutlet(outlet: NewOutlet) {
       const insert = toColumns(outlet) as TablesInsert<'outlets'>
       const { data, error } = await table().insert(insert).select('*').single()
       if (error) throw asOutletError(error)
+      remember(data)
       return data
     },
 
@@ -128,6 +196,7 @@ export function createSupabaseOutletsAdapter(
         .select('*')
         .single()
       if (error) throw asOutletError(error)
+      remember(data)
       return data
     },
 
@@ -144,6 +213,7 @@ export function createSupabaseOutletsAdapter(
         .select('*')
         .single()
       if (error) throw error
+      remember(data)
       return data
     },
 
@@ -160,6 +230,7 @@ export function createSupabaseOutletsAdapter(
           'That outlet was not deleted. Only the owner can delete an outlet, and only from an account that is still active.',
         )
       }
+      forget(id)
     },
 
     async outletReferences(id: string) {

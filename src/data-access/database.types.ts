@@ -4675,6 +4675,10 @@ export type Database = {
         }[]
       }
       ledger_assert_reach: { Args: { p_outlet_id: string }; Returns: undefined }
+      ledger_day_takings: {
+        Args: { p_business_date: string; p_outlet_id: string }
+        Returns: Json
+      }
       ledger_drawer_balance_at: {
         Args: { p_at: string; p_outlet_id: string }
         Returns: number

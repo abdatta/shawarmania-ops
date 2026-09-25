@@ -142,14 +142,19 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
   ): Promise<LedgerStatementDay> {
     const { from, to } = dayBounds(businessDate)
 
-    // ── Wave 1: everything that depends on nothing ─────────────────────────
+    // ── One wave: nothing here waits for anything else ─────────────────────
     //
-    // Two of these replace reads that used to wait their turn. The count
-    // "previous to the covering one" is the last before the day starts, because
-    // the covering count is the day's first; and the balances and the last
-    // confirmed instant run whether or not the date precedes the anchor, their
-    // answers simply unused when it does.
+    // Round one made this two waves; round two (design D12) folds the second
+    // in. The payment split comes from `ledger_day_takings`, which needs no bill
+    // ids first, and every recorder's name and every adjustment arrive embedded
+    // in the rows they belong to, which PostgREST resolves in the same request.
+    //
+    // The count "previous to the covering one" is the last before the day
+    // starts, because the covering count is the day's first; and the balances and
+    // the last confirmed instant run whether or not the date precedes the
+    // anchor, their answers simply unused when it does.
     const [
+      takingsResult,
       billsResult,
       expensesResult,
       channelsResult,
@@ -162,13 +167,19 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
       openingPaise,
       closingPaise,
     ] = await Promise.all([
-      // No embed of `effective_bill_payments`: it is a VIEW with no declared
-      // foreign key, so PostgREST refuses the nesting outright. The allocations
-      // are read as their own select below and joined by bill id.
+      abortable(
+        client.rpc('ledger_day_takings', {
+          p_outlet_id: outletId,
+          p_business_date: businessDate,
+        }),
+        signal,
+      ),
+      // The discount only: the takings above are summed from the same settled
+      // bills on the server.
       abortable(
         client
           .from('bills')
-          .select('id, bill_number, business_date, paid_at, discount_paise')
+          .select('id, discount_paise')
           .eq('outlet_id', outletId)
           .eq('business_date', businessDate)
           .eq('status', 'settled'),
@@ -178,7 +189,7 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
       abortable(
         client
           .from('effective_expenses')
-          .select('*')
+          .select('*, recorder:profiles!recorded_by(full_name)')
           .eq('outlet_id', outletId)
           .eq('business_date', businessDate),
         signal,
@@ -196,7 +207,9 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
       abortable(
         client
           .from('drawer_observations')
-          .select('*')
+          .select(
+            '*, recorder:profiles!recorded_by(full_name), corrector:profiles!corrected_by(full_name), drawer_observation_adjustments(*, adjuster:profiles!adjusted_by(full_name))',
+          )
           .eq('outlet_id', outletId)
           .gte('counted_at', from)
           .lt('counted_at', to)
@@ -206,7 +219,7 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
       abortable(
         client
           .from('drawer_cash_out')
-          .select('*')
+          .select('*, recorder:profiles!recorded_by(full_name)')
           .eq('outlet_id', outletId)
           .gte('occurred_at', from)
           .lt('occurred_at', to),
@@ -224,7 +237,7 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
       abortable(
         client
           .from('ledger_day_verifications')
-          .select('*')
+          .select('*, verifier:profiles!verified_by(full_name)')
           .eq('outlet_id', outletId)
           .eq('business_date', businessDate),
         signal,
@@ -253,6 +266,12 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
       balanceAt(outletId, to, signal),
     ])
 
+    const takings = rowsOf(takingsResult, signal) as {
+      cashPaise: number
+      cashBills: number
+      upiPaise: number
+      upiBills: number
+    } | null
     const bills = rowsOf(billsResult, signal) ?? []
     const expenseRowsRaw = rowsOf(expensesResult, signal) ?? []
     const channelRows = rowsOf(channelsResult, signal) ?? []
@@ -263,72 +282,27 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
     const beforeDay = rowsOf(beforeDayResult, signal)?.[0] ?? null
     const lastConfirmedAt = rowsOf(lastConfirmedResult, signal)?.[0]?.counted_at ?? null
 
-    // ── Wave 2: what needs wave 1's ids, all at once ───────────────────────
-    const [allocationsResult, names, adjustmentsResult] = await Promise.all([
-      bills.length > 0
-        ? abortable(
-            client
-              .from('effective_bill_payments')
-              .select('bill_id, method, amount_paise')
-              .in(
-                'bill_id',
-                bills.map((bill) => bill.id),
-              ),
-            signal,
-          )
-        : null,
-      namesFor(
-        [
-          ...expenseRowsRaw.map((row) => row.recorded_by),
-          ...observations.map((row) => row.recorded_by),
-          ...observations.map((row) => row.corrected_by),
-          ...movements.map((row) => row.recorded_by),
-          ...verificationRows.map((row) => row.verified_by),
-        ],
-        signal,
-      ),
-      observations.length > 0
-        ? abortable(
-            client
-              .from('drawer_observation_adjustments')
-              .select('*')
-              .in(
-                'observation_id',
-                observations.map((row) => row.id),
-              ),
-            signal,
-          )
-        : null,
-    ])
-
-    const allocations = allocationsResult ? (rowsOf(allocationsResult, signal) ?? []) : []
-    const adjustmentRows = adjustmentsResult ? (rowsOf(adjustmentsResult, signal) ?? []) : []
-
-    let cashPaise = 0
-    let cashBills = 0
-    let upiPaise = 0
-    let upiBills = 0
-
-    const perBill = new Map<string, { cash: number; upi: number }>()
-    for (const allocation of allocations) {
-      if (!allocation.bill_id) continue
-      const entry = perBill.get(allocation.bill_id) ?? { cash: 0, upi: 0 }
-      // Nullable on the view in the generated types, so coalesced.
-      if (allocation.method === 'cash') entry.cash += allocation.amount_paise ?? 0
-      if (allocation.method === 'upi') entry.upi += allocation.amount_paise ?? 0
-      perBill.set(allocation.bill_id, entry)
+    // Every name on the day, from the rows it arrived embedded in.
+    const names = new Map<string, string>()
+    const known = (id: string | null, person: { full_name: string } | null) => {
+      if (id && person) names.set(id, person.full_name)
     }
-
-    for (const entry of perBill.values()) {
-      if (entry.cash > 0) {
-        cashPaise += entry.cash
-        cashBills += 1
-      }
-      if (entry.upi > 0) {
-        upiPaise += entry.upi
-        upiBills += 1
+    for (const row of expenseRowsRaw) known(row.recorded_by, row.recorder)
+    for (const row of observations) {
+      known(row.recorded_by, row.recorder)
+      known(row.corrected_by, row.corrector)
+      for (const adjustment of row.drawer_observation_adjustments) {
+        known(adjustment.adjusted_by, adjustment.adjuster)
       }
     }
+    for (const row of movements) known(row.recorded_by, row.recorder)
+    for (const row of verificationRows) known(row.verified_by, row.verifier)
+    const adjustmentRows = observations.flatMap((row) => row.drawer_observation_adjustments)
+
+    const cashPaise = Number(takings?.cashPaise ?? 0)
+    const cashBills = Number(takings?.cashBills ?? 0)
+    const upiPaise = Number(takings?.upiPaise ?? 0)
+    const upiBills = Number(takings?.upiBills ?? 0)
 
     const channels = channelRows.map((row) => ({
       channel: row.channel,

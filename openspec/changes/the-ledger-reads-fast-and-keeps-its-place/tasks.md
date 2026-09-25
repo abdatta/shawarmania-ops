@@ -114,6 +114,34 @@ assertion written to pass.
   that the approval selection is still emptied by it.
 - [x] 4b.6 Each new surface test proved to fail against the pre-change surface.
 
+## 7. Round two: what production showed after the first deploy (2026-09-25)
+
+- [x] 7.1 Migration: re-create `effective_bill_payments` per design D10;
+  `billing_commands_outlet_received_idx` per D11; `ledger_day_takings` per D12.
+- [x] 7.2 pgTAP: the rewritten view returns what the previous definition returned
+  on a fixture with an uncorrected bill, a corrected one and a twice-corrected one;
+  `ledger_day_takings` matches the per-bill rule and refuses a reader the drawer
+  does not admit; the index exists.
+- [x] 7.3 Outlets adapter cache per D9: answered at once and refreshed behind,
+  replaced on write, emptied when the signed-in user changes. Unit tests for each,
+  including a second user never receiving the first user's row.
+- [x] 7.4 Ledger day in one wave per D12; adapter unit tests updated (one wave,
+  every read still failing the whole day); the timing test's day budget tightened
+  to two round trips' time.
+- [x] 7.5 Drawer `getState` in three waves per D13; its tests still green, and the
+  acknowledgements read now fails loudly.
+- [x] 7.6 Regenerate types; full gate (`verify.yml`'s jobs, fresh stack for the
+  database suites).
+  *2026-09-25/26:* lint, format, types, functions, contrast, build; 1,924 unit;
+  284 e2e; `test:db` on a fresh reset; all six `test:rls` phases (a Ledger day
+  now 305–377 ms at 250 ms a request, one wave; a month 278–285 ms in 3);
+  31 auth e2e. The migration is dated after the gold change's `20260926000000`,
+  which reached production first.
+- [x] 7.8 Docs: `docs/DATA_MODEL.md` (the takings function, the view's shape and
+  the index) and `docs/LIMITATIONS.md` (round two's measurements and remedies).
+- [ ] 7.7 After the owner's deploy: remeasure on production in the owner's browser
+  — tap Ledger, step a day, switch outlet, month; tap Billing history; tap Drawer.
+
 ## 5. Docs
 
 - [x] 5.1 `docs/LIMITATIONS.md` — rewrite *The derived ledger month is measured,

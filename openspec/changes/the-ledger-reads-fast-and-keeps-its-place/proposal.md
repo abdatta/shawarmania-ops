@@ -115,6 +115,46 @@ the rest. The owner chose to land all four in this change rather than a second
 one: the rule is one rule, so it is written once, in the shared outlet-picker
 contract (`app-shell`), rather than per screen.
 
+## Round two, after the first deploy (2026-09-25)
+
+The first round shipped and was measured on production in the owner's browser,
+through the path people actually use — the app already open, then a tap:
+
+| Reading | Before | After round one |
+|---|---|---|
+| Tapping Ledger | — | 1.6 s |
+| Stepping a day | ~4 s | 1.1–1.3 s |
+| The month | 15–16.5 s | 0.4–0.8 s |
+| Tapping Billing history | — | 1.8 s |
+| Tapping Drawer | — | 4.2 s |
+
+The owner asked for the time to open the Ledger, and to switch its outlet, date
+or month, to come down further, and for any other page with the same problem to
+be fixed the same way. Four causes, each measured:
+
+- **Every outlet-scoped page asks for its outlet before anything else** (~0.35 s),
+  only to learn the outlet's cutover. The Ledger, Billing history, Expenses, the
+  Drawer and the outlet day view all do it, on every open and every switch.
+- **The effective payments view scans every bill the reader can see.** It resolves
+  each bill's latest payment correction up front, and the correction table's
+  policy then checks all 2,127 bills rather than the day's forty: 131 ms of
+  database work for one day, growing with every bill ever rung. The Ledger's day,
+  Billing history and the Drawer (twice) all read it. A rewrite that looks
+  corrections up per bill returns identical rows over every production bill, in
+  4 ms.
+- **Billing history's delivery log has no index for its own question** — the last
+  hundred commands at an outlet — so it reads all 4,304 of them, applies the
+  policy to each and sorts: 317 ms, growing with every bill.
+- **The Ledger's day still makes a second wave, and the Drawer makes nine.** The
+  day waits on its first wave for the payment split, the names and the
+  adjustments; the Drawer reads nine things one after another that depend only on
+  its first read.
+
+**What changes, round two.** A page opened a second time, or switched to another
+outlet, no longer asks for the outlet. The payment view and the delivery log are
+fast at any size. A Ledger day reads in one round trip, Billing history in two,
+the Drawer in three. Nothing on any screen looks or reads differently.
+
 ## Non-goals
 
 - **No change to any figure, word, card or control on the Ledger.** The day and
@@ -134,6 +174,11 @@ contract (`app-shell`), rather than per screen.
   Whether both should follow each outlet's own cutover is a separate question.
 - **No caching or prefetching of neighbouring days or months.** Two round trips
   make that unnecessary, and a cache is a second place a figure can be stale.
+  Round two caches outlet rows — a name, a cutover — and never a figure.
+- **No policy change.** The payment view is rewritten under the same
+  `security_invoker` and reads the same tables through the same policies; the
+  delivery log gains an index. The correction policy's harmless tautology
+  (`b.outlet_id = b.outlet_id`) is noted, not touched.
 - **No change to Overview**, which already reads through its own server functions.
 - **No offline path.** The Ledger is a reading and has never worked offline.
 

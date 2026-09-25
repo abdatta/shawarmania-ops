@@ -53,10 +53,13 @@ const DATES_SO_FAR = Number(THROUGH.slice(8, 10))
 /** What one request costs a phone in production, roughly (300 ms measured). */
 const LATENCY_MS = 250
 /**
- * Two sequential round trips is the budget (ledger-statement spec); the third
- * is headroom for the stack's own work, which is real but small.
+ * A day is one round trip (round two, design D12) and a month at most two — the
+ * month's second is naming the recorders of its spends, when it has any. Each
+ * budget carries one round trip of headroom for the stack's own work, which is
+ * real but small.
  */
-const ROUND_TRIP_BUDGET = 3
+const DAY_ROUND_TRIPS = 2
+const MONTH_ROUND_TRIPS = 3
 /** A month's requests do not grow with its dates. */
 const MONTH_REQUEST_CEILING = 6
 
@@ -191,8 +194,8 @@ describe('the derived ledger is read in a bounded number of round trips', () => 
           `(${LATENCY_MS} ms a request)`,
       )
 
-      expect(dayMs).toBeLessThan(ROUND_TRIP_BUDGET * LATENCY_MS)
-      expect(monthMs).toBeLessThan(ROUND_TRIP_BUDGET * LATENCY_MS)
+      expect(dayMs).toBeLessThan(DAY_ROUND_TRIPS * LATENCY_MS)
+      expect(monthMs).toBeLessThan(MONTH_ROUND_TRIPS * LATENCY_MS)
       expect(monthRequests).toBeLessThanOrEqual(MONTH_REQUEST_CEILING)
 
       // Overview must agree with the independently assembled Ledger.

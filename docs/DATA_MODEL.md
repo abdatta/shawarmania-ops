@@ -890,6 +890,21 @@ for the date. Both are security definer and begin by raising unless
 `app_may_reach_drawer` admits the reader. Another outlet is therefore refused
 rather than answered as a quiet month.
 
+`ledger_day_takings(outlet, date)` is the day's cash and UPI takings and bill
+counts, summed per bill exactly as the month sums them, so a Ledger day needs no
+bill ids before it can ask; it is security definer behind the same assertion.
+
+**`effective_bill_payments` looks corrections up per bill.** Its "latest
+correction per bill" used to be a CTE referenced twice, which Postgres
+materialised over every correction; the correction policy then checked every
+bill the reader could see. It is now a per-row `NOT EXISTS` and a `DISTINCT ON`
+subquery that a caller's `bill_id` filter reaches: the same columns, the same
+`security_invoker`, the same rows (checked against the previous definition over
+every production payment), and one day's read went from 131 ms to 4 ms.
+`billing_commands_outlet_received_idx (outlet_id, received_at desc)` serves the
+delivery log's "latest hundred at an outlet", which otherwise read every command
+the outlet ever made.
+
 A reconciliation exception is derived the same way — a payment or occurrence
 instant inside an already-observed interval that arrived after the observation was
 recorded. Only the human act of acknowledging one is stored.
