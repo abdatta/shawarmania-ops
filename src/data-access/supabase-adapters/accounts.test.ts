@@ -98,6 +98,7 @@ describe('the attendance roster', () => {
         {
           id: 'person-1',
           full_name: 'Two Outlets',
+          phone: null,
           is_active: true,
           role_title: 'Counter staff',
           assignments: [
@@ -125,6 +126,7 @@ describe('the attendance roster', () => {
       {
         id: 'person-1',
         fullName: 'Two Outlets',
+        phone: null,
         roleTitle: 'Counter staff',
         isActive: true,
         assignments: [
@@ -141,7 +143,7 @@ describe('the attendance roster', () => {
     expect(from).toHaveBeenCalledOnce()
     expect(from).toHaveBeenCalledWith('profiles')
     // No identifier, invite or fingerprint is asked for.
-    expect(select).toHaveBeenCalledWith(expect.not.stringMatching(/phone|username|email/))
+    expect(select).toHaveBeenCalledWith(expect.not.stringMatching(/username|email|invite/))
     expect(invoke).not.toHaveBeenCalled()
   })
 })

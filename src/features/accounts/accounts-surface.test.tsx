@@ -305,3 +305,67 @@ describe('explicit departure and failures', () => {
     expect(actions).toHaveFocus()
   })
 })
+
+/**
+ * Names first (people-shows-names-first). The names, jobs and outlets are one
+ * ordinary read; usernames, status and tasks come from the privileged account
+ * function, which was 2.4 s warm and usually cold on production. The list does
+ * not wait for it, and never shows a status it has not established.
+ */
+describe('People shows its people before their sign-in details', () => {
+  function holdIdentities(adapters: DataAdapters) {
+    let release!: () => void
+    const real = adapters.accounts.listIdentities.bind(adapters.accounts)
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    vi.spyOn(adapters.accounts, 'listIdentities').mockImplementation(async () => {
+      await held
+      return real()
+    })
+    return () => release()
+  }
+
+  it('lists names and outlets while the sign-in details are still loading', async () => {
+    const adapters = createMockAdapters('super_admin')
+    const release = holdIdentities(adapters)
+    renderSurface('super_admin', adapters)
+
+    const row = await rowFor('Demo Helper')
+    expect(within(row).getByTestId(/^assignments-/)).toBeInTheDocument()
+    expect(within(row).queryByTestId(/^username-/)).not.toBeInTheDocument()
+    expect(within(row).queryByText(/^Active/)).not.toBeInTheDocument()
+    expect(within(row).getByTestId(/^status-loading-/)).toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: /^Actions for / })).not.toBeInTheDocument()
+    // The menu's box and the username's line are held, so the row does not grow
+    // under the reader when they arrive.
+    expect(within(row).getByTestId(/^actions-reserved-/)).toBeInTheDocument()
+    expect(within(row).getByTestId(/^loading-username-/)).toBeInTheDocument()
+
+    release()
+    await waitFor(() => expect(within(row).getByTestId(/^username-/)).toBeInTheDocument())
+    expect(within(row).getByRole('button', { name: /^Actions for / })).toBeInTheDocument()
+  })
+
+  it('keeps the people listed and says so when sign-in details cannot load', async () => {
+    const adapters = createMockAdapters('super_admin')
+    vi.spyOn(adapters.accounts, 'listIdentities').mockRejectedValue(new Error('offline'))
+    renderSurface('super_admin', adapters)
+
+    const row = await rowFor('Demo Helper')
+    expect(await screen.findByText(/Could not load sign-in details/)).toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: /^Actions for / })).not.toBeInTheDocument()
+  })
+
+  it('lists a person who also works elsewhere to the manager, managed by the owner', async () => {
+    renderSurface('franchise_admin')
+
+    const row = await rowFor('Demo Both Outlets')
+    expect(await within(row).findByText('Managed by the owner')).toBeInTheDocument()
+    expect(within(row).queryByTestId(/^username-/)).not.toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: /^Actions for / })).not.toBeInTheDocument()
+    // Somebody wholly theirs is still theirs to manage.
+    const helper = await rowFor('Demo Helper')
+    expect(await within(helper).findByRole('button', { name: /^Actions for / })).toBeInTheDocument()
+  })
+})

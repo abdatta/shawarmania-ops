@@ -187,6 +187,38 @@ export function createMockAccountsAdapter(
     )
   }
 
+  /**
+   * Whose identity this viewer is answered for, on the account function's
+   * terms: the owner everyone, a Franchise Admin themselves and every account
+   * wholly inside the outlets they manage, anybody else nobody. The list itself
+   * is not narrowed by this — People decides who is listed from assignments
+   * (people-shows-names-first, design D2).
+   */
+  function identities(): Set<string> {
+    if (role === 'super_admin') return new Set(accounts.map((account) => account.id))
+    if (role !== 'franchise_admin') {
+      throw new AccountActionError('forbidden', 'You are not allowed to do that for this account.')
+    }
+    const managed = viewerManagedOutlets()
+    return new Set(
+      accounts
+        .filter((account) => {
+          if (account.id === viewerId) return true
+          const live = liveAssignments(account.assignments)
+          return (
+            live.length > 0 &&
+            live.every(
+              (assignment) =>
+                assignment.role !== 'super_admin' &&
+                assignment.outletId !== null &&
+                managed.has(assignment.outletId),
+            )
+          )
+        })
+        .map((account) => account.id),
+    )
+  }
+
   function ensureMayManage(
     account: AccountSummary,
     intended: readonly Pick<Assignment, 'role' | 'outletId'>[],
@@ -346,18 +378,34 @@ export function createMockAccountsAdapter(
   return {
     async listAccounts() {
       for (const account of accounts) account.lifecycle = lifecycleFor(account)
-      return structuredClone(accounts)
+      const identified = identities()
+      return structuredClone(accounts.filter((account) => identified.has(account.id)))
     },
 
     async listRoster() {
       return structuredClone(
-        accounts.map(({ id, fullName, roleTitle, isActive, assignments }) => ({
+        accounts.map(({ id, fullName, phone, roleTitle, isActive, assignments }) => ({
           id,
           fullName,
+          phone,
           roleTitle,
           isActive,
           assignments,
         })),
+      )
+    },
+
+    async listIdentities() {
+      const identified = identities()
+      return structuredClone(
+        Object.fromEntries(
+          accounts
+            .filter((account) => identified.has(account.id))
+            .map(({ id, username, accountEmail, hasSignedIn, invite, stateFingerprint }) => [
+              id,
+              { username, accountEmail, hasSignedIn, invite, stateFingerprint },
+            ]),
+        ),
       )
     },
 

@@ -106,18 +106,27 @@ test('the people states each say what is wrong and what to do', async ({ page })
   // Access cut without leaving: still on the list, plainly marked.
   await expect(page.getByRole('row', { name: /Demo Prep Cook/ })).toContainText('Deactivated')
 
-  // Somebody who works nowhere is off the working list, and one tap away —
-  // records kept, clutter gone. Its lifecycle still states the stronger truth:
-  // sign-in is deactivated, not merely that no outlet is assigned.
+  // Somebody who works nowhere is on no manager's list at all: a manager's
+  // People is the people live at their outlets (people-shows-names-first, D2),
+  // which is also all the database lets them read.
   await expect(page.getByText('Demo Former Staff')).toHaveCount(0)
-  await page.getByTestId('toggle-departed').click()
-  await expect(page.getByRole('row', { name: /Demo Former Staff/ })).toContainText('Deactivated')
+  await expect(page.getByTestId('toggle-departed')).toHaveCount(0)
 
   // And the person who left one outlet is still on the working list, because
   // they still work at the other.
   await expect(page.getByRole('row', { name: /Demo Returner/ })).toContainText(
     'Shawarmania Kalyani',
   )
+
+  // The owner's list is everyone, so there somebody who works nowhere is off the
+  // working list and one tap away — records kept, clutter gone. Its lifecycle
+  // still states the stronger truth: sign-in is deactivated, not merely that no
+  // outlet is assigned.
+  await page.goto('demo/owner/people')
+  await expect(page.getByRole('row', { name: /Demo Helper/ })).toBeVisible()
+  await expect(page.getByText('Demo Former Staff')).toHaveCount(0)
+  await page.getByTestId('toggle-departed').click()
+  await expect(page.getByRole('row', { name: /Demo Former Staff/ })).toContainText('Deactivated')
 })
 
 test('the whole setup walk stays inside the app origin', async ({ page, baseURL }) => {

@@ -2,7 +2,8 @@ import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 
 import {
   AccountActionError,
-  deriveAccountLifecycle,
+  joinAccount,
+  type AccountIdentity,
   type AccountSummary,
   type AccountsAdapter,
   type AccountHandover,
@@ -35,12 +36,6 @@ import { signalHumanSessionInvalid } from '../../session/human-session-invalid'
 // would let the list render somebody whose placement had not arrived yet.
 const PROFILE_COLUMNS =
   'id, full_name, phone, is_active, role_title, ' +
-  'assignments(id, role, outlet_id, started_on, ended_on)'
-
-// The roster's columns: the same person and placement, without the phone the
-// roll-call never shows.
-const ROSTER_COLUMNS =
-  'id, full_name, is_active, role_title, ' +
   'assignments(id, role, outlet_id, started_on, ended_on)'
 
 interface AssignmentRow {
@@ -149,66 +144,39 @@ async function callAdmin<T>(
 }
 
 export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>): AccountsAdapter {
-  type IdentifierFacts = {
-    username: string | null
-    accountEmail: string | null
-    hasSignedIn: boolean
-    invite: { purpose: 'activation' | 'password_reset'; expiresAt: string } | null
-    stateFingerprint: string
+  const toRosterPerson = (profile: ProfileRow): RosterPerson => ({
+    id: profile.id,
+    fullName: profile.full_name,
+    phone: profile.phone,
+    roleTitle: profile.role_title,
+    isActive: profile.is_active,
+    assignments: toAssignments(profile.assignments),
+  })
+
+  const roster = async (): Promise<RosterPerson[]> => {
+    const { data, error } = await client.from('profiles').select(PROFILE_COLUMNS).order('full_name')
+    if (error) throw error
+    return ((data ?? []) as unknown as ProfileRow[]).map(toRosterPerson)
   }
 
-  const toSummary = (profile: ProfileRow, identifier: IdentifierFacts): AccountSummary => {
-    const facts = {
-      isActive: profile.is_active,
-      hasSignedIn: identifier.hasSignedIn,
-      invite: identifier.invite,
-    }
-    return {
-      id: profile.id,
-      fullName: profile.full_name,
-      username: identifier.username,
-      accountEmail: identifier.accountEmail,
-      phone: profile.phone,
-      isActive: profile.is_active,
-      hasSignedIn: identifier.hasSignedIn,
-      roleTitle: profile.role_title,
-      assignments: toAssignments(profile.assignments),
-      invite: identifier.invite,
-      lifecycle: deriveAccountLifecycle(facts),
-      stateFingerprint: identifier.stateFingerprint,
-    }
-  }
+  const identities = async () =>
+    (
+      await callAdmin<{ identifiers: Record<string, AccountIdentity> }>(client, {
+        action: 'identifiers',
+      })
+    ).identifiers
 
   return {
     async listAccounts(): Promise<AccountSummary[]> {
-      const [{ data: profiles, error }, { identifiers }] = await Promise.all([
-        client.from('profiles').select(PROFILE_COLUMNS).order('full_name'),
-        callAdmin<{ identifiers: Record<string, IdentifierFacts> }>(client, {
-          action: 'identifiers',
-        }),
-      ])
-      if (error) throw error
-
-      return ((profiles ?? []) as unknown as ProfileRow[])
-        .filter((profile) => identifiers[profile.id] !== undefined)
-        .map((profile) => toSummary(profile, identifiers[profile.id]!))
+      const [people, identified] = await Promise.all([roster(), identities()])
+      return people
+        .filter((person) => identified[person.id] !== undefined)
+        .map((person) => joinAccount(person, identified[person.id]!))
     },
 
-    async listRoster(): Promise<RosterPerson[]> {
-      const { data, error } = await client
-        .from('profiles')
-        .select(ROSTER_COLUMNS)
-        .order('full_name')
-      if (error) throw error
+    listRoster: roster,
 
-      return ((data ?? []) as unknown as Omit<ProfileRow, 'phone'>[]).map((profile) => ({
-        id: profile.id,
-        fullName: profile.full_name,
-        roleTitle: profile.role_title,
-        isActive: profile.is_active,
-        assignments: toAssignments(profile.assignments),
-      }))
-    },
+    listIdentities: identities,
 
     async provision(account: NewAccount): Promise<IssuedCode> {
       return await callAdmin<IssuedCode>(client, {
@@ -335,17 +303,14 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
           'You are not allowed to do that for this account.',
         )
       }
-      const { identifiers } = await callAdmin<{
-        identifiers: Record<string, IdentifierFacts>
-      }>(client, { action: 'identifiers' })
-      const facts = identifiers[profileId]
+      const facts = (await identities())[profileId]
       if (!facts) {
         throw new AccountActionError(
           'forbidden',
           'You are not allowed to do that for this account.',
         )
       }
-      return toSummary(data as unknown as ProfileRow, facts)
+      return joinAccount(toRosterPerson(data as unknown as ProfileRow), facts)
     },
 
     /**

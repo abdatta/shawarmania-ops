@@ -104,6 +104,14 @@ displayed username plus a matching new password. A username mismatch consumes
 nothing. Unknown, expired, spent, superseded, and inactive-account codes remain
 indistinguishable.
 
+**`account_identifier_facts()`** — service-only, like `account_state_fingerprint`:
+every account's Auth alias, last sign-in, account email, live invite, active
+flag, live assignments and state fingerprint in one call, for People's
+identifier list. It decides nothing about who may see which row; the
+`admin-accounts` function filters every row by the caller's authority. The
+fingerprint column is `account_state_fingerprint` itself, so the list and an
+edit's stale-state check share one definition.
+
 **`account_emails`** — zero or one private associated email per account.
 `profile_id`, `email`, `created_at`, `updated_at`.
 

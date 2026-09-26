@@ -3744,6 +3744,20 @@ export type Database = {
         Args: { p_actor_id: string; p_desired: Json; p_profile_id: string }
         Returns: boolean
       }
+      account_identifier_facts: {
+        Args: never
+        Returns: {
+          account_email: string
+          auth_email: string
+          invite_expires_at: string
+          invite_purpose: string
+          is_active: boolean
+          last_sign_in_at: string
+          live_assignments: Json
+          profile_id: string
+          state_fingerprint: string
+        }[]
+      }
       account_state_fingerprint: {
         Args: { p_profile_id: string }
         Returns: string

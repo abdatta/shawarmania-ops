@@ -67,12 +67,19 @@ export function serviceClient(): SupabaseClient {
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
 }
 
+export type VerifiedUser =
+  | { kind: 'verified'; userId: string }
+  | { kind: 'session_invalid' }
+  | { kind: 'backend_failure'; error: unknown }
+
 /**
- * Resolve a human caller without collapsing a received backend failure into an
- * authentication refusal. Missing/rejected credentials and a deactivated
- * profile are definitive invalid sessions; a database fault is uncertainty.
+ * The token check alone: whose token this is, with the same classification
+ * `callerFrom` gives it. Split out so an action that reads the caller's own
+ * account as part of a larger read need not spend a round trip loading it first
+ * (people-shows-names-first, design D4). Whatever runs next must still establish
+ * that the account exists and is active.
  */
-export async function callerFrom(req: Request, service: SupabaseClient): Promise<CallerResolution> {
+export async function verifiedUserId(req: Request, service: SupabaseClient): Promise<VerifiedUser> {
   const header = req.headers.get('Authorization') ?? ''
   if (!header.toLowerCase().startsWith('bearer ')) return { kind: 'session_invalid' }
   const token = header.slice(7).trim()
@@ -86,9 +93,20 @@ export async function callerFrom(req: Request, service: SupabaseClient): Promise
       : { kind: 'backend_failure', error }
   }
   if (!data.user) return { kind: 'session_invalid' }
+  return { kind: 'verified', userId: data.user.id }
+}
+
+/**
+ * Resolve a human caller without collapsing a received backend failure into an
+ * authentication refusal. Missing/rejected credentials and a deactivated
+ * profile are definitive invalid sessions; a database fault is uncertainty.
+ */
+export async function callerFrom(req: Request, service: SupabaseClient): Promise<CallerResolution> {
+  const verified = await verifiedUserId(req, service)
+  if (verified.kind !== 'verified') return verified
 
   try {
-    const profile = await loadAccount(service, data.user.id)
+    const profile = await loadAccount(service, verified.userId)
     if (!profile || !profile.isActive) return { kind: 'session_invalid' }
 
     return {
@@ -100,15 +118,10 @@ export async function callerFrom(req: Request, service: SupabaseClient): Promise
   }
 }
 
-/** The columns an account's authority is judged from, one profile or all of them. */
+/** The columns an account's authority is judged from. */
 export const TARGET_ACCOUNT_COLUMNS = 'id, is_active, assignments(role, outlet_id, ended_on)'
 
-/**
- * One `profiles` row, read with `TARGET_ACCOUNT_COLUMNS`, as the account its
- * authority is judged against. Shared by `loadAccount` and the identifier
- * list's bulk read, so the per-account and all-accounts paths cannot come to
- * disagree about what a person may be managed as.
- */
+/** One `profiles` row, read with `TARGET_ACCOUNT_COLUMNS`, as the account its authority is judged against. */
 export function toTargetAccount(data: Record<string, unknown>): TargetAccount {
   // Live rows only. An ended assignment is history, and history confers
   // nothing — the same rule the database's own helpers apply.

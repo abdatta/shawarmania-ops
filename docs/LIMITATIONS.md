@@ -905,3 +905,13 @@ for the accounts the reader may *manage*, which for a manager excludes anybody
 who also works at another outlet — so those people were missing from that
 manager's roll-call on any day they had not checked in. Who is on a roll-call is
 who the reader may *see*.
+
+**People, after that.** The rewritten function still took 2.4 s warm on
+production on 2026-09-26, against 0.55 s for a function making one database
+call, and 4.5 s straight after a deploy: each call it made to the database cost
+about 0.3 s and it made four in a row, and a rarely used function starts cold.
+`people-shows-names-first` put the names on screen from the direct read, with
+the sign-in details following, and gave the function one database call for
+every account's facts after the token check. **A rarely opened screen should
+not put a privileged function on its critical path**: its start-up is a cost no
+change inside it can remove.

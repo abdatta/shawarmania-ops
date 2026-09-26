@@ -463,7 +463,14 @@ A manager can also **enter an arrival on someone's behalf** — past times only,
 
 **And the by-outlet selection does not narrow it either.** Who is offered here, and which outlets a person's month is assembled against, is everybody and everything the reader may see, whatever the chips on the other axis say. The surface used to hand this axis the list already filtered by the selection, so deselecting a shop emptied a picker that has nothing to do with shops — which is exactly the confusion separating the axes was meant to end.
 
-**People** — everyone the caller may manage, in one place. **Adding somebody is
+**People** — everyone working at the caller's outlets, in one place. **Names come
+first**: who each person is, their job and where they work are one ordinary read
+and are on screen at once; each row's username, status and actions follow when
+the account function answers, with a placeholder in the status column until
+then, and the list says so if they could not be loaded. Somebody who also works
+at an outlet this manager does not run is listed — they are part of this
+outlet's staff — but reads *Managed by the owner* and offers no actions, because
+their account is one login across both. **Adding somebody is
 one step**: required name, username, role and one or more managed outlets;
 optional phone, title and joining date. No ordinary-email field or
 placeholder-account state exists. The account and every selected assignment

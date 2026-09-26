@@ -305,8 +305,38 @@ export interface AccountSummary {
  */
 export type RosterPerson = Pick<
   AccountSummary,
-  'id' | 'fullName' | 'roleTitle' | 'isActive' | 'assignments'
+  'id' | 'fullName' | 'phone' | 'roleTitle' | 'isActive' | 'assignments'
 >
+
+/**
+ * What only the privileged account function may say about an account: how it
+ * signs in, whether it has, the handover waiting on it, and the token an edit
+ * must present. Present only for accounts the caller may manage, and themselves.
+ */
+export type AccountIdentity = Pick<
+  AccountSummary,
+  'username' | 'accountEmail' | 'hasSignedIn' | 'invite' | 'stateFingerprint'
+>
+
+/**
+ * A person and their identity, as the one `AccountSummary` People manages.
+ * The single place the two halves meet, so the list, the demo and every caller
+ * derive the lifecycle the same way (people-shows-names-first, design D1).
+ */
+export function joinAccount(
+  person: RosterPerson,
+  identity: AccountIdentity,
+  now: Date = new Date(),
+): AccountSummary {
+  return {
+    ...person,
+    ...identity,
+    lifecycle: deriveAccountLifecycle(
+      { isActive: person.isActive, hasSignedIn: identity.hasSignedIn, invite: identity.invite },
+      now,
+    ),
+  }
+}
 
 /**
  * A new person, and the one place they start working. Creating somebody is
@@ -481,6 +511,12 @@ export interface AccountsAdapter {
    * manage does not narrow it, and no identifier, invite or fingerprint is read.
    */
   listRoster(): Promise<RosterPerson[]>
+  /**
+   * The identity of every account the caller may manage, and their own, keyed
+   * by person — the privileged half of `listAccounts`, read on its own so People
+   * can list its people before it arrives.
+   */
+  listIdentities(): Promise<Record<string, AccountIdentity>>
   /** One step creates a working person: account, every assignment, issued code. */
   provision(account: NewAccount): Promise<IssuedCode>
   /** Issue or replace the purpose appropriate to the account's sign-in history. */

@@ -10,16 +10,17 @@ import {
 import { OUTLET_KALYANI_ID } from './fixtures/outlets'
 
 describe('mock accounts adapter', () => {
-  it('offers the roll-call the same people as the People list, with only its five facts', async () => {
+  it('offers the roll-call the same people as the People list, with only its roster facts', async () => {
     const adapter = createMockAccountsAdapter(createDemoAccounts())
 
     const roster = await adapter.listRoster()
     const people = await adapter.listAccounts()
 
     expect(roster).toEqual(
-      people.map(({ id, fullName, roleTitle, isActive, assignments }) => ({
+      people.map(({ id, fullName, phone, roleTitle, isActive, assignments }) => ({
         id,
         fullName,
+        phone,
         roleTitle,
         isActive,
         assignments,

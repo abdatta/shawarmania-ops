@@ -11,17 +11,20 @@ import { AddButton } from '@/components/ui/add-button'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Input } from '@/components/ui/input'
-import { LoadingTable } from '@/components/ui/loading'
+import { LoadingTable, Shimmer } from '@/components/ui/loading'
 import { Select } from '@/components/ui/select'
 import { useAdapters, type Tables } from '@/data-access'
 import {
   DataActionError,
   FAILED_ACTIVATION_NOTICE,
+  joinAccount,
   liveAssignments,
   STAFF_ROLES,
   type AccountHandover,
+  type AccountIdentity,
   type AccountSummary,
   type AppRole,
+  type RosterPerson,
 } from '@/data-access/adapters'
 import { useSession } from '@/session/context'
 import { holdsRole, ROLE_LABELS, sessionOutletsFor } from '@/session/session'
@@ -48,6 +51,13 @@ import { AccountHandoverPanel } from './account-handover'
  */
 
 const ROLE_ORDER: AppRole[] = ['super_admin', 'franchise_admin', 'biller', 'employee']
+
+/**
+ * One listed person, and their account once the identities have said who they
+ * are to the reader. `account` is null while those are loading, if they could
+ * not be read, and for somebody listed whom the reader may not manage.
+ */
+type PeopleRow = RosterPerson & { account: AccountSummary | null }
 
 interface Draft {
   fullName: string
@@ -95,7 +105,16 @@ export function AccountsSurface() {
     [isOwner],
   )
 
-  const [accounts, setAccounts] = useState<AccountSummary[] | null>(null)
+  // Two halves, read at once and shown as each lands (people-shows-names-first,
+  // design D1). The people are one ordinary read; their identities come from the
+  // privileged account function, which is slow and usually cold, so the list
+  // does not wait for it.
+  const [people, setPeople] = useState<RosterPerson[] | null>(null)
+  const [identities, setIdentities] = useState<
+    | { status: 'loading' }
+    | { status: 'ready'; byId: Record<string, AccountIdentity> }
+    | { status: 'failed' }
+  >({ status: 'loading' })
   const [outlets, setOutlets] = useState<Tables<'outlets'>[]>([])
   const [error, setError] = useState<string | null>(null)
   const [issued, setIssued] = useState<{
@@ -142,21 +161,38 @@ export function AccountsSurface() {
     return draft.outletIds.filter((outletId) => allowed.has(outletId))
   }, [draft.outletIds, provisionableOutlets])
 
+  // After an action. The rows stay on screen while both halves are re-read; a
+  // refresh never returns the list to its placeholder.
   const refresh = useCallback(async () => {
-    const list = await adapter.listAccounts()
-    setAccounts(list)
+    const [list, identified] = await Promise.all([
+      adapter.listRoster(),
+      adapter.listIdentities().then(
+        (byId) => ({ status: 'ready' as const, byId }),
+        () => ({ status: 'failed' as const }),
+      ),
+    ])
+    setPeople(list)
+    setIdentities(identified)
   }, [adapter])
 
   useEffect(() => {
     let active = true
-    void Promise.all([adapter.listAccounts(), outletsAdapter.listOutlets()])
+    void Promise.all([adapter.listRoster(), outletsAdapter.listOutlets()])
       .then(([list, outletList]) => {
         if (!active) return
-        setAccounts(list)
+        setPeople(list)
         setOutlets(outletList)
       })
       .catch(() => {
         if (active) setError('Could not load people. Try again in a moment.')
+      })
+    void adapter
+      .listIdentities()
+      .then((byId) => {
+        if (active) setIdentities({ status: 'ready', byId })
+      })
+      .catch(() => {
+        if (active) setIdentities({ status: 'failed' })
       })
     return () => {
       active = false
@@ -271,11 +307,28 @@ export function AccountsSurface() {
     }
   }
 
-  const list = accounts ?? []
+  // Who is listed is decided from the people alone, so the list never changes
+  // shape when the identities land (design D2). The owner lists everybody; a
+  // Franchise Admin lists everybody working at an outlet they manage — including
+  // somebody who also works elsewhere, whose account only the owner manages.
+  const byId = identities.status === 'ready' ? identities.byId : null
+  const list: PeopleRow[] = (people ?? [])
+    .filter(
+      (person) =>
+        isOwner ||
+        liveAssignments(person.assignments).some(
+          (assignment) => assignment.outletId !== null && managedOutletIds.has(assignment.outletId),
+        ),
+    )
+    .map((person) => {
+      const identity = byId?.[person.id]
+      return { ...person, account: identity ? joinAccount(person, identity) : null }
+    })
   // "Departed" is derived since multi-outlet-people: somebody has left the
   // business when they hold no live assignment anywhere. There is no column
   // saying so, because leaving ONE outlet is not leaving.
-  const hasLeft = (row: AccountSummary) => liveAssignments(row.assignments).length === 0
+  const hasLeft = (row: Pick<RosterPerson, 'assignments'>) =>
+    liveAssignments(row.assignments).length === 0
   const departedCount = list.filter(hasLeft).length
   const visible = showDeparted ? list : list.filter((row) => !hasLeft(row))
 
@@ -309,7 +362,7 @@ export function AccountsSurface() {
     }
   }
 
-  const columns: DataTableColumn<AccountSummary>[] = [
+  const columns: DataTableColumn<PeopleRow>[] = [
     {
       id: 'name',
       header: 'Name',
@@ -323,20 +376,27 @@ export function AccountsSurface() {
             <span className="block text-xs text-content-muted">{row.roleTitle}</span>
           )}
           {/* Read the username back so an admin can catch a typo. */}
-          {row.username && (
+          {/* The username's line, held while it loads, so rows do not grow under
+              the reader when it lands. */}
+          {!row.account && identities.status === 'loading' && (
+            <span data-testid={`loading-username-${row.id}`} className="block py-0.5">
+              <Shimmer className="h-3 w-20 rounded-md" />
+            </span>
+          )}
+          {row.account?.username && (
             <span
               data-testid={`username-${row.id}`}
               className="block break-all text-xs text-content-muted"
             >
-              {row.username}
+              {row.account.username}
             </span>
           )}
-          {row.accountEmail && (
+          {row.account?.accountEmail && (
             <span
               data-testid={`account-email-${row.id}`}
               className="block break-all text-xs text-content-muted"
             >
-              Email: {row.accountEmail}
+              Email: {row.account.accountEmail}
             </span>
           )}
         </span>
@@ -375,89 +435,125 @@ export function AccountsSurface() {
     {
       id: 'status',
       header: 'Status',
-      cell: (row) => (
-        <span>
-          {lifecycleLabel(row) === 'Not assigned to an outlet' ? (
-            <span data-testid={`departed-${row.id}`} className="font-semibold text-content-muted">
-              Not assigned to any outlet
+      cell: (row) => {
+        const account = row.account
+        // Never a status that has not been established: until the identities
+        // land there is a placeholder the height of the words it stands for.
+        if (!account) {
+          if (identities.status === 'loading') {
+            return (
+              <span data-testid={`status-loading-${row.id}`} className="block">
+                <Shimmer className="h-4 w-24 rounded-md" />
+              </span>
+            )
+          }
+          if (identities.status === 'failed') return null
+          return (
+            <span data-testid={`unmanaged-${row.id}`} className="text-content-muted">
+              {isOwner ? 'No sign-in account' : 'Managed by the owner'}
             </span>
-          ) : row.lifecycle.kind === 'deactivated' ? (
-            <span className="font-semibold text-danger">Deactivated</span>
-          ) : (
-            <span className="text-content-muted">{lifecycleLabel(row)}</span>
-          )}
-        </span>
-      ),
+          )
+        }
+        return (
+          <span>
+            {lifecycleLabel(account) === 'Not assigned to an outlet' ? (
+              <span data-testid={`departed-${row.id}`} className="font-semibold text-content-muted">
+                Not assigned to any outlet
+              </span>
+            ) : account.lifecycle.kind === 'deactivated' ? (
+              <span className="font-semibold text-danger">Deactivated</span>
+            ) : (
+              <span className="text-content-muted">{lifecycleLabel(account)}</span>
+            )}
+          </span>
+        )
+      },
     },
     {
       id: 'actions',
       header: 'Actions',
       align: 'right',
-      cell: (row) =>
-        row.id === session.userId ? (
-          <span className="text-xs text-content-muted"></span>
-        ) : (
+      cell: (row) => {
+        if (row.id === session.userId) {
+          return <span className="text-xs text-content-muted"></span>
+        }
+        // Every task needs the lifecycle or the fingerprint, so a row offers none
+        // until its identity has landed — or at all, if it is not theirs to manage.
+        const account = row.account
+        // The trigger's own box, empty, so a row is the same height with and
+        // without its menu and nothing moves when the identities land.
+        if (!account) {
+          return (
+            <span
+              aria-hidden
+              data-testid={`actions-reserved-${row.id}`}
+              className="ml-auto block size-[var(--size-control-phone)]"
+            />
+          )
+        }
+        return (
           <span className="flex justify-end">
             <RowActionsMenu
-              label={`Actions for ${row.fullName}`}
+              label={`Actions for ${account.fullName}`}
               actions={[
                 {
                   label: 'Edit',
                   disabled: busy,
-                  onSelect: () => setEditing(row),
+                  onSelect: () => setEditing(account),
                 },
                 {
                   label: 'Change username',
                   disabled: busy,
 
-                  onSelect: () => setCorrecting(row),
+                  onSelect: () => setCorrecting(account),
                 },
-                ...(handoverActionLabel(row)
+                ...(handoverActionLabel(account)
                   ? [
                       {
-                        label: handoverActionLabel(row)!,
+                        label: handoverActionLabel(account)!,
                         disabled: busy,
                         onSelect: () =>
                           void run(async () => {
-                            const handover = await adapter.issueHandover(row.id)
+                            const handover = await adapter.issueHandover(account.id)
                             setIssued({
                               handover,
-                              name: row.fullName,
+                              name: account.fullName,
                               replacement:
-                                row.lifecycle.kind === 'setup_link_issued' ||
-                                row.lifecycle.kind === 'password_reset_issued',
+                                account.lifecycle.kind === 'setup_link_issued' ||
+                                account.lifecycle.kind === 'password_reset_issued',
                             })
                           }),
                       },
                     ]
                   : []),
                 ...(isOwner &&
-                liveAssignments(row.assignments).some(
+                liveAssignments(account.assignments).some(
                   (assignment) => assignment.role === 'super_admin',
                 )
                   ? [
                       {
                         label: 'Change sign-in email',
                         disabled: busy,
-                        onSelect: () => setEmailTarget(row),
+                        onSelect: () => setEmailTarget(account),
                       },
                     ]
                   : []),
-                row.lifecycle.kind !== 'deactivated'
+                account.lifecycle.kind !== 'deactivated'
                   ? {
                       label: 'Deactivate',
                       disabled: busy,
-                      onSelect: () => setPendingDeactivation(row),
+                      onSelect: () => setPendingDeactivation(account),
                     }
                   : {
                       label: 'Reactivate',
                       disabled: busy,
-                      onSelect: () => void run(() => adapter.setActive(row.id, true)),
+                      onSelect: () => void run(() => adapter.setActive(account.id, true)),
                     },
               ]}
             />
           </span>
-        ),
+        )
+      },
     },
   ]
 
@@ -509,7 +605,18 @@ export function AccountsSurface() {
         </p>
       )}
 
-      {accounts === null ? (
+      {identities.status === 'failed' && people !== null && (
+        <p
+          role="status"
+          data-testid="identities-error"
+          className="mb-4 text-sm font-semibold text-danger"
+        >
+          Could not load sign-in details. The people are listed; try again in a moment to manage
+          their accounts.
+        </p>
+      )}
+
+      {people === null ? (
         // The people list is a `DataTable`, so it waits behind rows.
         <LoadingTable
           label="the people here"

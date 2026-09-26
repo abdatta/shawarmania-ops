@@ -15,10 +15,10 @@ import {
   mayManage,
   mayProvision,
   serviceClient,
-  TARGET_ACCOUNT_COLUMNS,
-  toTargetAccount,
+  verifiedUserId,
   type AppRole,
   type Caller,
+  type TargetAccount,
 } from '../_shared/authority.ts'
 import { json, preflight, readJson, str } from '../_shared/http.ts'
 import { generateCode, hashCode, INVITE_VALID_FOR, normaliseCode } from '../_shared/invite-code.ts'
@@ -246,74 +246,50 @@ async function setActive(
   return json({ profileId: target.id, isActive }, 200)
 }
 
+interface IdentifierFactsRow {
+  profile_id: string
+  auth_email: string | null
+  last_sign_in_at: string | null
+  account_email: string | null
+  invite_purpose: 'activation' | 'password_reset' | null
+  invite_expires_at: string | null
+  is_active: boolean
+  live_assignments: { role: AppRole; outlet_id: string | null }[]
+  state_fingerprint: string
+}
+
 /**
  * Usernames are parsed from Auth aliases before returning. Account email is
  * included only for a Super Admin looking at a Super Admin (their own email remains
  * read-only here); no outlet-scoped role can receive it.
+ *
+ * **Two round trips, whatever the number of accounts**: the token check, then
+ * `account_identifier_facts()`, which answers for every account at once —
+ * including the caller's own, which is what resolves them. It was four waves
+ * and 2.4 s warm on production on 2026-09-26 (people-shows-names-first, design
+ * D4). Who is answered for is decided here, row by row, exactly as before.
  */
-async function identifiers(service: SupabaseClient, caller: Caller): Promise<Response> {
-  if (!managesAnyone(caller)) return json({ error: 'forbidden' }, 403)
+async function identifiers(service: SupabaseClient, userId: string): Promise<Response> {
+  const { data, error } = await service.rpc('account_identifier_facts')
+  // Not knowing who the caller is, is uncertainty rather than a refusal — the
+  // same classification callerFrom gives a failed account read.
+  if (error) return json({ error: 'backend_failure' }, 503)
+  const rows = (data ?? []) as IdentifierFactsRow[]
+  if (rows.length >= 1000) return json({ error: 'too_many_accounts' }, 500)
 
-  // Two waves, whatever the number of accounts. This used to load each
-  // account, then ask for its fingerprint, one account after another: about
-  // sixty sequential round trips for thirty people, 6–10 s on production on
-  // 2026-09-25 (attendance-reads-its-staff-directly, design D3). Everything in
-  // this first wave depends on nothing but the caller.
-  const [users, emails, live, profiles] = await Promise.all([
-    service.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-    isOwner(caller)
-      ? service.from('account_emails').select('profile_id, email')
-      : Promise.resolve({ data: [], error: null }),
-    service
-      .from('account_invites')
-      .select('profile_id, purpose, expires_at')
-      .is('consumed_at', null)
-      .is('superseded_at', null)
-      .gt('expires_at', new Date().toISOString()),
-    service.from('profiles').select(TARGET_ACCOUNT_COLUMNS),
-  ])
-  if (users.error) return json({ error: 'lookup_failed' }, 500)
-  if (users.data.users.length >= 1000) return json({ error: 'too_many_accounts' }, 500)
-  if (emails.error || live.error || profiles.error) return json({ error: 'lookup_failed' }, 500)
-  // A page of profiles as long as the Auth page's limit may be a truncated one,
-  // and an account missing from it would be silently left off the list.
-  if ((profiles.data ?? []).length >= 1000) return json({ error: 'too_many_accounts' }, 500)
-
-  const accountEmails = new Map<string, string>()
-  for (const row of emails.data ?? []) {
-    accountEmails.set(row.profile_id as string, row.email as string)
-  }
-  const invites = new Map(
-    (live.data ?? []).map((invite) => [
-      invite.profile_id as string,
-      {
-        purpose: invite.purpose as 'activation' | 'password_reset',
-        expiresAt: invite.expires_at as string,
-      },
-    ]),
-  )
-  const accounts = new Map(
-    (profiles.data ?? []).map((row) => {
-      const account = toTargetAccount(row)
-      return [account.id, account]
-    }),
-  )
-
-  // Who this caller answers for, decided in memory by the same rule the loop
-  // applied: themselves, and every account they may manage. A user with no
-  // profile row is skipped, as `loadAccount` returning null skipped it.
-  const answered = users.data.users.flatMap((user) => {
-    const username = authAliasToUsername(user.email)
-    if (!username) return []
-    const target = user.id === caller.id ? null : (accounts.get(user.id) ?? null)
-    if (user.id !== caller.id && (!target || !mayManage(caller, target))) return []
-    return [{ user, username, target }]
+  const toAccount = (row: IdentifierFactsRow): TargetAccount => ({
+    id: row.profile_id,
+    isActive: row.is_active,
+    assignments: row.live_assignments.map((a) => ({ role: a.role, outletId: a.outlet_id })),
   })
 
-  // The second wave: every fingerprint at once.
-  const fingerprints = await Promise.all(
-    answered.map(({ user }) => service.rpc('account_state_fingerprint', { p_profile_id: user.id })),
-  )
+  // The caller is resolved from the same answer, on callerFrom's terms: no
+  // account, or a deactivated one, is not a session.
+  const own = rows.find((row) => row.profile_id === userId)
+  if (!own || !own.is_active) return json({ error: 'session_invalid' }, 401)
+  const self = toAccount(own)
+  const caller: Caller = { id: self.id, assignments: self.assignments }
+  if (!managesAnyone(caller)) return json({ error: 'forbidden' }, 403)
 
   const visible: Record<
     string,
@@ -325,20 +301,24 @@ async function identifiers(service: SupabaseClient, caller: Caller): Promise<Res
       stateFingerprint: string
     }
   > = {}
-  for (const [index, { user, username, target }] of answered.entries()) {
-    const { data: fingerprint, error: fingerprintError } = fingerprints[index]!
-    if (fingerprintError || typeof fingerprint !== 'string') {
-      return json({ error: 'lookup_failed' }, 500)
-    }
-    visible[user.id] = {
+  for (const row of rows) {
+    const username = authAliasToUsername(row.auth_email)
+    if (!username) continue
+
+    const target = row.profile_id === caller.id ? null : toAccount(row)
+    if (target && !mayManage(caller, target)) continue
+    if (typeof row.state_fingerprint !== 'string') return json({ error: 'lookup_failed' }, 500)
+
+    visible[row.profile_id] = {
       username,
       accountEmail:
-        user.id === caller.id || (target && isOwner(caller) && isOwner(target))
-          ? (accountEmails.get(user.id) ?? null)
+        isOwner(caller) && (target === null || isOwner(target)) ? row.account_email : null,
+      hasSignedIn: row.last_sign_in_at !== null,
+      invite:
+        row.invite_purpose && row.invite_expires_at
+          ? { purpose: row.invite_purpose, expiresAt: row.invite_expires_at }
           : null,
-      hasSignedIn: Boolean(user.last_sign_in_at),
-      invite: invites.get(user.id) ?? null,
-      stateFingerprint: fingerprint,
+      stateFingerprint: row.state_fingerprint,
     }
   }
 
@@ -693,12 +673,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
 
   const service = serviceClient()
+
+  // The one read-only list gets the short path: it resolves its caller from its
+  // own answer instead of loading their account first (design D4). Every other
+  // action resolves the caller in full before doing anything.
+  const body = await readJson(req)
+  if (body?.['action'] === 'identifiers') {
+    const verified = await verifiedUserId(req, service)
+    if (verified.kind === 'session_invalid') return json({ error: 'session_invalid' }, 401)
+    if (verified.kind === 'backend_failure') return json({ error: 'backend_failure' }, 503)
+    return await identifiers(service, verified.userId)
+  }
+
   const resolved = await callerFrom(req, service)
   if (resolved.kind === 'session_invalid') return json({ error: 'session_invalid' }, 401)
   if (resolved.kind === 'backend_failure') return json({ error: 'backend_failure' }, 503)
   const caller = resolved.caller
 
-  const body = await readJson(req)
   if (!body) return json({ error: 'invalid_request' }, 400)
 
   switch (body['action']) {
@@ -710,8 +701,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return await issueHandover(service, caller, body)
     case 'set-active':
       return await setActive(service, caller, body)
-    case 'identifiers':
-      return await identifiers(service, caller)
     case 'set-username':
       return await setUsername(service, caller, body)
     case 'set-account-email':
