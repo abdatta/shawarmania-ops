@@ -191,15 +191,29 @@ assertion written to pass.
   placeholders are the parts' own shapes. Existing tests moved off `getState`.
 - [x] 9.7 `docs/SCREENS.md` — the Cash drawer paragraph: each part appears when
   its own reading does, behind a placeholder in its own layout.
-- [ ] 9.6 Browser check in both themes at phone width; full gate; after deploy,
+- [x] 9.6 Browser check in both themes at phone width; full gate; after deploy,
   measure when each part appears on production.
   *Done locally 2026-09-26:* the placeholders were photographed against the real
   parts at phone width in both themes, using a throwaway build whose demo reads
   never finish (reverted before anything was committed). The balance placeholder
   matches the card's height exactly; the count rows' placeholder was reshaped to
   the closed row's three lines after that comparison. Gate: 1,929 unit, 284 e2e,
-  `test:db`, all six `test:rls` phases, 31 auth e2e. Production timing pending
-  the owner's deploy.
+  `test:db`, all six `test:rls` phases, 31 auth e2e.
+  *Production, 2026-09-26, after the 9.8 hotfix, five taps:* the recent counts
+  appeared at 0.45–0.50 s (everything used to wait for ~0.8 s); the balance and
+  Count & Collect at ~0.81 s in four of five, the fifth 3.35 s when three
+  unrelated requests stalled together for ~2.5 s. The balance is still two
+  waves; making it one is the remaining lever.
+
+- [x] 9.8 Hotfix after round four shipped (2026-09-26): production showed "Could
+  not read the recent counts". The surface asks for the first page as
+  `listObservations(outletId)` with no query, and the real adapter's reader
+  took the query without a default, so it threw before any request went out;
+  the demo adapter had the default, so every surface test passed. Defaulted,
+  and pinned by `cash-drawer.test.ts`, which calls the real adapter as the
+  surface does and fails on the shipped code. **The lesson: a surface test
+  over the demo adapter proves nothing about the real adapter's signature —
+  a new call shape needs a test against the real adapter too.**
 
 ## 5. Docs
 
