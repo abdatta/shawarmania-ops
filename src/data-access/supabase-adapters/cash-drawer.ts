@@ -268,7 +268,12 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
    * is measured against its counted total less that cash out, and leaving it out
    * would report a break that is not there.
    */
-  async function pageOf(outletId: string, query: ObservationPageQuery): Promise<ObservationPage> {
+  async function pageOf(
+    outletId: string,
+    // Defaulted, because the surface asks for the first page with no query at
+    // all — and without the default that call threw before any request went out.
+    query: ObservationPageQuery = {},
+  ): Promise<ObservationPage> {
     const limit = query.limit ?? DRAWER_HISTORY_PAGE
     let select = client
       .from('drawer_observations')
