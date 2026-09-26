@@ -459,9 +459,8 @@ arrives late from an earlier choice.
 
 ### Requirement: A ledger reading costs a bounded number of round trips
 
-A day SHALL be read in at most two sequential round trips to the server, and a
-month in at most two, with the number of requests a month makes independent of
-how many dates it holds. No stored day or month row SHALL be introduced to meet
+A day SHALL be read in one round trip to the server, and a month in at most two,
+with the number of requests a month makes independent of how many dates it holds. No stored day or month row SHALL be introduced to meet
 this: the month SHALL remain derived on read from the same sources as its days.
 
 The month and each of its days SHALL agree: every figure the month derives from a
@@ -474,7 +473,7 @@ period.
 #### Scenario: A month on a slow connection
 
 - **WHEN** every request to the server takes 250 ms
-- **THEN** a month settles in under three round trips' time, and a day likewise
+- **THEN** a day settles in under two round trips' time and a month in under three
 
 #### Scenario: A month agrees with its days
 

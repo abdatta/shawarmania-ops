@@ -32,7 +32,7 @@ import type { Database, Tables } from '../database.types'
  * counts** (`the-ledger-reads-fast-and-keeps-its-place`). Measured on production
  * on 2026-09-24, every request from a phone costs about 300 ms whatever it asks.
  * A day used to make thirteen of them one after another and a month about six
- * hundred; a day now makes two waves and a month one server read plus one. The
+ * hundred; a day now makes one wave and a month one server read plus one. The
  * figures did not move — the same rows reach the same code — only when each
  * request starts.
  *

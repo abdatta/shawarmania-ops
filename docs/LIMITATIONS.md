@@ -854,11 +854,13 @@ them one after another, and a month about six hundred. A local stack, where a
 request costs nothing, could not see any of it.
 
 `the-ledger-reads-fast-and-keeps-its-place` moved the work to where a request is
-cheap. A day now reads in two waves, with the drawer balance at an instant as one
-server read (`ledger_drawer_balance_at`); a month reads in one server call
-(`ledger_month_inputs`) plus the two small reads it always made. The budget is
-**at most two sequential round trips for either**, with a month's request count
-independent of its dates.
+cheap. A day reads in one round trip: every read starts at once, the drawer
+balance at an instant is one server read (`ledger_drawer_balance_at`), the
+payment split another (`ledger_day_takings`), and names and adjustments arrive
+embedded in their rows. A month reads in one server call (`ledger_month_inputs`)
+plus the two small reads it always made. The budget is **one round trip for a
+day and at most two for a month**, with a month's request count independent of
+its dates.
 
 `supabase/tests/rest/zz-ledger-month-timing.test.ts` holds that budget by delaying
 every request by 250 ms, so the clock measures round trips the way a phone does.
