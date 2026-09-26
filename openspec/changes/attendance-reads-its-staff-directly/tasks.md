@@ -84,7 +84,7 @@ current function before it is rewritten, so the rewrite is proved not to move it
   the rewritten function (one call, 200). No failed request on either page. Demo
   mode is covered by the surface tests and `test:e2e` (both themes, phone and
   desktop); the change has no visual difference to inspect.
-- [ ] 5.5 GATE — the proposal's Gate line proved literally, clause by clause,
+- [x] 5.5 GATE — the proposal's Gate line proved literally, clause by clause,
   naming what proved each. The production timings are taken only after the owner
   picks the deploy window (**no push while the counter trades**), in the owner's
   own browser, repeating the 2026-09-25 table. This change carries no ROADMAP.md
@@ -95,5 +95,12 @@ current function before it is rewritten, so the rewrite is proved not to move it
   revalidation (surface test, failing 3× before); the manager's roll-call lists the
   split-outlet staff member (browser; REST test); People's identifiers unchanged
   by rule (REST tests pinned green before the rewrite and after) in two waves (code
-  and 107-account timing). **Outstanding:** the production timings — Attendance
-  under 2.5 s cold and People — wait for the owner's deploy window.
+  and 107-account timing).
+  *Proved on production 2026-09-26*, deployed as 46ffb6c, in the owner's browser,
+  two cold loads of `/owner/attendance`: the day's reads settled at **2.33 s and
+  1.95 s** (against 9.8–10.2 s on 2026-09-25), with **no** `admin-accounts`
+  request and exactly one roster read each time. People's `identifiers` call:
+  4.5 s just after the deploy, then 3.4 s and 2.9 s (against 6–10 s). With seven
+  accounts the per-account loop was not most of People's cost; what remains is
+  the function itself (sign-in check, the Auth user list), outside this change.
+  Not archived: the owner calls that after real use.
