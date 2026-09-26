@@ -316,7 +316,7 @@ under the two closing outlets. The owner sees everybody throughout.
 
 ### Where it lives
 
-**Setup group, labelled `Customers`, after People** (owner, 2026-09-18) — for the
+**Setup group, labelled `Customers`, after Team** (owner, 2026-09-18) — for the
 Super Admin and, over their own outlets, the Franchise Admin, as two entries in
 [`src/gates/registry.ts`](../../../src/gates/registry.ts) sharing one label so a
 person holding both roles gets the owner's one door.

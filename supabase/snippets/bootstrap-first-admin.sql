@@ -3,7 +3,7 @@
 -- Account provisioning is deliberately closed: admin-accounts derives the
 -- caller from an existing live assignment, while profiles/account emails have
 -- no client insert path. On an empty database exactly one owner must therefore
--- be created out of band. Every later account goes through People.
+-- be created out of band. Every later account goes through Team.
 --
 -- HOW TO USE IT
 --
@@ -93,7 +93,7 @@ begin
        and a.ended_on is null
   ) then
     raise exception
-      'A live Super Admin already exists. Create further owners through People.';
+      'A live Super Admin already exists. Create further owners through Team.';
   end if;
 
   insert into public.profiles (id, full_name, phone, is_active, role_title)
@@ -113,4 +113,4 @@ $$;
 commit;
 
 -- NEXT: create outlets in Super Admin -> Outlets, capture each geofence while
--- standing at its counter, then create every other person through People.
+-- standing at its counter, then create every other person through Team.

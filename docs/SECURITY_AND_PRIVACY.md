@@ -217,7 +217,7 @@ Browser geolocation is spoofable — see [Limitations](LIMITATIONS.md). This mat
 - **Private account email is optional except for Super Admin.** It lives in
   `account_emails`, whose table privileges are revoked from every client role.
   A deferred database invariant prevents a live Super Admin without one;
-  another role may have zero or one. Ordinary People creation does not collect
+  another role may have zero or one. Creating an ordinary account on Team does not collect
   it. If present, it signs in to the same Auth user. For a live Super Admin it
   also provides the data foundation for a later recovery or security design.
 - **One-time handovers are purpose-bearing, single-use, short-lived, and delivered out-of-band** (in practice, over WhatsApp by an admin, usually as a link that carries the code). They are not passwords and must not be reusable. As built, the bearer code is ten Crockford-base32 characters (50 bits), valid for seven days. Each handover is either activation or password reset; a link is live only while unconsumed, unsuperseded, and unexpired. Replacing one supersedes the same purpose. An authorized assignment edit replaces a live activation handover only after the final placement exists, preserves a live reset handover, and never makes an unsolicited reset. **A link is the same bearer credential as the code it carries**, with the same lifetime and the same single use; expiry is what bounds its sitting in a chat thread.
@@ -232,7 +232,7 @@ Browser geolocation is spoofable — see [Limitations](LIMITATIONS.md). This mat
   and body. Specific weak-password, username-mismatch and rate-limit responses
   describe the request rather than revealing whether another account exists.
 - **Guessing is bounded at the endpoint, not per invite.** A code that identifies its own invite gives a wrong guess no invite to charge, so the old per-invite attempt counter cannot advance and is retired in place. In its stead the redemption endpoint counts **failures only** — successful activations cost nothing — over a rolling fifteen minutes: 20 per client address, 500 across the endpoint. The per-address half is best-effort, because `x-forwarded-for` can be prepended to; **the global bound is the one that cannot be evaded**, and it is deliberately loose, since a tight global bound would itself be an attack on everyone's ability to activate. Attempt records hold a **hash** of the address and never the address itself.
-- **A burst of failed activations is visible to the owner**, on People, above a threshold far below the hard limit — so somebody finds out well before anybody is refused. It is the only signal a targeted guessing attempt produces. No other role can read it.
+- **A burst of failed activations is visible to the owner**, on Team, above a threshold far below the hard limit — so somebody finds out well before anybody is refused. It is the only signal a targeted guessing attempt produces. No other role can read it.
 - **Forgotten-password recovery is admin-issued for every role.** An authorized
   administrator hands over a fresh one-time link; one Super Admin can help
   another. This version exposes no public email-recovery request and sends no
@@ -244,7 +244,7 @@ Browser geolocation is spoofable — see [Limitations](LIMITATIONS.md). This mat
   authority. The real-backend suite hand-crafts this attempt and proves the old
   alias remains.
 - **Provisioning authority is re-derived from the caller's own token** inside the privileged function, never taken from the request. A Franchise Admin cannot mint an administrator, cannot reach another outlet, and cannot deactivate themselves.
-- **People editing validates the whole transition at the privileged boundary.** It
+- **Editing on Team validates the whole transition at the privileged boundary.** It
   checks the target's complete current and intended assignment sets, rejects
   stale edits and self-edits, and changes facts, placements, and any activation
   replacement together or not at all. Franchise Admins may change only

@@ -64,7 +64,7 @@ async function openEdit(user: ReturnType<typeof userEvent.setup>, name: string) 
   return row
 }
 
-describe('People task menu and lifecycle', () => {
+describe('Team task menu and lifecycle', () => {
   it('uses recognizable lifecycle tasks and removes persistence primitives', async () => {
     const user = userEvent.setup()
     renderSurface('franchise_admin')
@@ -312,7 +312,7 @@ describe('explicit departure and failures', () => {
  * function, which was 2.4 s warm and usually cold on production. The list does
  * not wait for it, and never shows a status it has not established.
  */
-describe('People shows its people before their sign-in details', () => {
+describe('Team shows its people before their sign-in details', () => {
   function holdIdentities(adapters: DataAdapters) {
     let release!: () => void
     const real = adapters.accounts.listIdentities.bind(adapters.accounts)

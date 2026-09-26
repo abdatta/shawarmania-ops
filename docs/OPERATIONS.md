@@ -504,7 +504,7 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
 
 1. **Create the outlet** (Super Admin → Outlets → *Add outlet*): short code, name, location label, address, phone, business-day cutover. Use **Find the address** to fill the address block from a search rather than typing five fields — it fills the District from the PIN code, which is the part nobody remembers. Check what it filled before saving; OpenStreetMap data is contributed rather than surveyed, and this address is what a GST invoice will carry. If it finds nothing, type it: the search is a shortcut and never a step. **The business-day cutover is not the opening time** — it is where one trading day ends and the next begins, so it belongs in the quiet hours (04:00 is the default and the owner-confirmed value for both outlets). The form resolves a whole session against whatever you type and warns if it would split one night across two days; leave it at 04:00 unless you have a reason. On a brand-new installation this is the only thing there is to do, and the empty screen says so.
 2. **Capture the coordinates in the app, standing at the counter** (Super Admin → Outlets → *Capture position here*). Not from a map search, and not by typing them in — there is deliberately no field for that. The screen samples for a few seconds, keeps the tightest reading, and refuses to save a fix looser than ±50 m; step outside if the counter cannot produce one. Until an outlet is captured, its check-ins are recorded but not measured against any fence, and the Outlets screen shows it as unsurveyed.
-3. **Create the Franchise Admin** (Super Admin → People): name, username and
+3. **Create the Franchise Admin** (Super Admin → Team): name, username and
    every outlet they manage, plus any optional staff facts. No email is needed.
    Send the one activation link. The outlet must exist first; if the same admin
    runs several outlets, select all now — one account and code cover every
@@ -542,7 +542,7 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
    attributed to the outlet recorded on them, and the device cannot read its
    former outlet after the move. If the preconditions are not met, finish or
    cancel the counter work and re-read its state before trying again.
-7. **Add employees and billers** (People), sending each activation link.
+7. **Add employees and billers** (Team), sending each activation link.
    Creating a person requires name, username, one role and one or more outlets;
    job title, phone and joined date are optional. It writes the account and
    every selected assignment before showing one code, so the person appears on
@@ -908,7 +908,7 @@ linking this repo to it would run these migrations into someone else's data.
    time, not at page load.
 
 8. **Verify, in this order.** Sign in with the Super Admin username and then
-   its associated email → People lists that account and its own read-only
+   its associated email → Team lists that account and its own read-only
    email → provision a
    username-only Franchise Admin → open the activation link in a private window
    → type the displayed username and matching passwords → that admin sees only
@@ -1032,8 +1032,8 @@ Accounts are admin-provisioned; there is no self-service signup. Activation and
 reset links for every role are handed over by the administrator rather than
 sent by the app. This version sends no authentication mail.
 
-- **Super Admin → People** manages every account across all outlets.
-- **Franchise Admin → People** manages Billers and Employees only at the outlets where that admin holds a live Franchise Admin assignment. One managed outlet stays preselected; several become a checkbox list. The limits are enforced server-side from the caller's own session, not by the form.
+- **Super Admin → Team** manages every account across all outlets.
+- **Franchise Admin → Team** manages Billers and Employees only at the outlets where that admin holds a live Franchise Admin assignment. One managed outlet stays preselected; several become a checkbox list. The limits are enforced server-side from the caller's own session, not by the form.
 
 **To give someone access**: add the account with name, username, role and
 role-appropriate outlets. Phone, title and joining date are optional. Only a
@@ -1051,7 +1051,7 @@ one; that cancels the old one automatically.
 The same outstanding link immediately previews the correction and remains
 usable, although telling the person the correction is still necessary.
 
-**If the People screen says failed activations are unusually high** (owner only), somebody is trying codes. Nothing is at immediate risk — a code is 50 bits, single-use, and expires in a week — but it is worth knowing when it happens. Outstanding codes are unaffected by another person's guessing; the endpoint refuses the guesser, not the invite.
+**If the Team screen says failed activations are unusually high** (owner only), somebody is trying codes. Nothing is at immediate risk — a code is 50 bits, single-use, and expires in a week — but it is worth knowing when it happens. Outstanding codes are unaffected by another person's guessing; the endpoint refuses the guesser, not the invite.
 
 **To fix a wrong username**: *Change username* on their row. The current user
 ID, password, sessions, assignments and outstanding code remain. The old
@@ -1063,7 +1063,7 @@ associated email remains an alternate sign-in and does not currently grant
 self-service recovery.
 
 **To fix a Super Admin account email**: another Super Admin chooses *Change
-email*. One's own value is read-only in People; use another Super Admin or
+email*. One's own value is read-only in Team; use another Super Admin or
 the operator fallback rather than weakening the self-management boundary.
 
 **To remove access**: deactivate the account. Do not delete it — history references it, and reactivating is one tap if the person comes back.
@@ -1277,7 +1277,7 @@ online.
 
 **Cash does not reconcile** → check for late-synced bills against a closed day (they surface as reconciliation exceptions), then cash expenses recorded under the wrong business date, then withdrawals not recorded.
 
-**Someone cannot sign in** → read the username on their People row and confirm
+**Someone cannot sign in** → read the username on their Team row and confirm
 they type it without `@`, or use the associated email when one exists. Sign-in
 gives one message for an unknown username/email and wrong password alike.
 Correct a typo with *Change username*; an outstanding
@@ -1303,9 +1303,9 @@ email, or enable unreviewed authentication mail to solve the lockout.
 
 **An outlet was created by mistake** → Outlets → **Mark closed**, then **Delete**. Deletion is offered only on a closed outlet, so the reversible step comes first, and it cannot be undone. It will work only while nothing at all references the outlet; if anything does, the screen names what — staff, accounts, tablets, recorded days — and nothing is removed. Move or remove those and it becomes deletable on its own, with nothing to re-mark afterwards. **An outlet that ever traded cannot be deleted, by anyone, ever** — that is the point, not a limitation: its bills and attendance are the business's history. Mark it closed instead. And note that an outlet which has ever had a Franchise Admin cannot be emptied simply by deactivating them; see [Limitations](LIMITATIONS.md).
 
-**Someone must lose access now** → deactivate the account (People / Access). It takes effect on their very next request, without waiting for their session to expire, and their open app ends its session and says why. Reactivating restores it; their password still works.
+**Someone must lose access now** → deactivate the account (Team / Access). It takes effect on their very next request, without waiting for their session to expire, and their open app ends its session and says why. Reactivating restores it; their password still works.
 
-**An employee cannot check in** → in order: are they on People at this outlet, active, and not departed? A departed or deactivated person keeps their history but is not offered a check-in. Then: they are outside the geofence or GPS will not fix — which no longer blocks anything, so tell them to **record it anyway** and approve it yourself; or **enter the arrival for them** (Attendance → their row): past times only, on today's business day, recorded as entered by you and settled by the act of recording it. If check-in is refused outright with a message about the outlet being closed, somebody marked it closed on Outlets; reopening it is one tap and needs nothing else.
+**An employee cannot check in** → in order: are they on the Team list at this outlet, active, and not departed? A departed or deactivated person keeps their history but is not offered a check-in. Then: they are outside the geofence or GPS will not fix — which no longer blocks anything, so tell them to **record it anyway** and approve it yourself; or **enter the arrival for them** (Attendance → their row): past times only, on today's business day, recorded as entered by you and settled by the act of recording it. If check-in is refused outright with a message about the outlet being closed, somebody marked it closed on Outlets; reopening it is one tap and needs nothing else.
 
 **A day shows as absent and shouldn't** → in order: is an arrival recorded at all? If it is, nobody has approved it — the day counts for nothing until somebody does, so approve it from the attendance day (one tap from inside the outlet on the day itself, a typed reason otherwise). If there is no arrival, the day is *derived* absent rather than written that way: either record the arrival for them, or **mark the day as leave** if they were genuinely off. Nothing in the app knows a roster, so a weekly off reads as absent until somebody marks it ([Limitations](LIMITATIONS.md)).
 

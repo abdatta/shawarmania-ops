@@ -863,7 +863,7 @@ test.describe('the counter', () => {
     // Production mounts `/counter` as a leaf route, so nothing lives beneath it
     // there either — the tablet's surfaces are panels within one shell, not
     // addresses. A path a Biller has no entry for still gets the honest answer.
-    for (const path of ['demo/biller/billing', 'demo/biller/my-shift', 'demo/biller/people']) {
+    for (const path of ['demo/biller/billing', 'demo/biller/my-shift', 'demo/biller/team']) {
       await page.goto(path)
       await expect(page.getByRole('heading', { name: 'That page does not exist' })).toBeVisible()
       // Still unmistakably a demo while saying so.

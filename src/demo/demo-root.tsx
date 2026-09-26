@@ -120,7 +120,7 @@ export function DemoRoot() {
           {session.role === 'biller' ? (
             /*
               A tablet has exactly one screen. Production mounts `/counter` as a
-              leaf route, so `/counter/people` and `/counter/billing` are equally
+              leaf route, so `/counter/team` and `/counter/billing` are equally
               not pages there — the tablet's surfaces are panels within its shell,
               not addresses. Answering the same way here keeps the honest "that
               page does not exist" a Biller has always met, and stops the demo

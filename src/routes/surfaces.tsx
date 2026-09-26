@@ -42,13 +42,14 @@ export const roleSurfaceRoutes: RouteObject[] = [
     ),
   },
   {
-    path: 'people',
+    path: 'team',
     element: (
-      <GatedSurface path="people">
+      <GatedSurface path="team">
         <AccountsSurface />
       </GatedSurface>
     ),
   },
+
   {
     path: 'customers',
     element: (

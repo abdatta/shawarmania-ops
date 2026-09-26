@@ -105,8 +105,8 @@ import { useWaitingCounts, waitingAt, waitingLabel } from './waiting-counts'
  * afterwards.** One read of `listOutlets` and one of `listRoster`, neither
  * naming an outlet, both already scoped by policy: what comes back is exactly
  * every outlet this reader may see and everybody they may see. The roster, not
- * the People list: who a reader may *manage* never decided who is on a
- * roll-call, and the People list's privileged function cost 7–10 s an open
+ * the Team list: who a reader may *manage* never decided who is on a
+ * roll-call, and the Team list's privileged function cost 7–10 s an open
  * (attendance-reads-its-staff-directly). The chips
  * intersect that, for both axes — a filter applied after the policies have
  * decided, which widens nothing and is not a boundary.
@@ -1100,7 +1100,7 @@ function OutletAxis({
       ) : rows.length === 0 ? (
         <EmptyState
           icon={CalendarCheck}
-          title="Nobody is on these outlets' staff lists yet. Add people under People."
+          title="Nobody is on these outlets' staff lists yet. Add them under Team."
         />
       ) : (
         <div data-testid="attendance-day" className="space-y-2">
@@ -2377,7 +2377,7 @@ function StaffAxis({
     return (
       <EmptyState
         icon={CalendarCheck}
-        title="Nobody is on these outlets' staff lists yet. Add people under People."
+        title="Nobody is on these outlets' staff lists yet. Add them under Team."
       />
     )
   }

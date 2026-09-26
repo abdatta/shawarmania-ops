@@ -796,7 +796,7 @@ test('the attendance walk makes no request beyond the app origin', async ({ page
   await page.getByRole('button', { name: 'Save correction' }).click()
   await expect(page.getByText('Allowed another check-in')).toBeVisible()
 
-  await page.goto('demo/admin/people')
+  await page.goto('demo/admin/team')
   await expect(page.getByText('Demo Griller')).toBeVisible()
 
   await page.goto('demo/owner/outlets')

@@ -181,7 +181,7 @@ export function PhoneShell({
  * left a hand-opened card standing over a tab it had nothing to do with, for
  * every move between two entries that are both outside every group: open Setup
  * from Attendance, tap Overview, and Overview lights up under a card of
- * Outlets, People, Delivery and Menu, because the address named no group before
+ * Outlets, Team, Delivery and Menu, because the address named no group before
  * the move and names none after it. Keying on the address instead answers that
  * without touching the sibling case, which was the only reason the narrower
  * rule existed.

@@ -103,7 +103,7 @@ assignment cannot be ended by anyone, including its holder.
 | Create / edit / deactivate outlet | ✓ | — | — | — |
 | Capture an outlet's position | ✓ | — | — | — |
 | Delete an outlet | ✓ closed, and only while nothing references it | — | — | — |
-| **People** |
+| **Team** |
 | Manage Franchise Admins | ✓ other accounts only | — | — | — |
 | Manage Billers and Employees | ✓ other accounts only | ✓ only when every current and intended outlet is managed by the caller | — | — |
 | Edit a person's facts and complete assignment set | ✓ any permitted role/outlet on another account | ✓ Employee/Biller only at every managed current and intended outlet | — | — |
@@ -340,14 +340,14 @@ shows a save prompt remains browser-controlled.
 shown as `XXXXX-XXXXX` (50 bits; I, L, O and U are absent) create either an
 **activation** or a **password-reset** handover. A link is live only while it
 is unconsumed, unsuperseded, and unexpired; a historical or expired row never
-changes what People says. Replacing a handover supersedes one of the same
+changes what Team says. Replacing a handover supersedes one of the same
 purpose. Only its hash is stored, in a column no client role can read. Preview
 consumes nothing. A mistyped username does not consume the code; unknown,
 expired, spent, superseded and inactive-account codes remain indistinguishable.
 Failed callers are bounded over a rolling window without storing raw IP
 addresses.
 
-**People edits are one complete, guarded transition.** An authorized admin
+**Edits on Team are one complete, guarded transition.** An authorized admin
 submits permitted personal facts and the entire intended live assignment set
 together. Unchanged assignments retain their identity and start date; a
 promotion or transfer ends the prior row and adds the replacement without
@@ -409,11 +409,11 @@ the existing non-deliverable alias, so it cannot rewrite that alias. Admin
 username correction through the service-role boundary is the only supported
 rename path.
 
-Nobody manages their own account from People. A Super Admin can see their own
+Nobody manages their own account from Team. A Super Admin can see their own
 account email but changing it belongs to the later account-settings surface;
 another Super Admin or an operator is the fallback if that value is wrong.
 
-**People facts and placement share the privileged edit boundary.** Name, phone,
+**A person's facts and placement share the privileged edit boundary.** Name, phone,
 title, account email where permitted, and the complete intended assignment set
 are changed atomically after the caller's authority is re-derived. Username,
 active state, handover issuance, and departure remain distinct guarded actions.
@@ -532,7 +532,7 @@ Every attendance row stores the captured coordinates, the GPS accuracy, the comp
 - **No authority is carried in the access token.** `multi-outlet-people` dropped both claim helpers and emptied the custom access-token hook to a no-op; the hook function itself went once the project stopped registering it (2026-07-30), so no code path remains by which a token could be handed authority. Policies resolve scope from `public.assignments` through stable `security definer` helpers — `app_is_owner()`, `app_outlets_for(role)`, `app_has_role_at(role, outlet)` — whose definer rights are what keep a policy on `assignments` from recursing into itself (see the RLS recursion trap in [Architecture](ARCHITECTURE.md)). `app_outlets_for` is set-returning on purpose: `outlet_id in (select public.app_outlets_for('franchise_admin'))` is non-correlated, so Postgres hoists it to one lookup per query rather than the per-row profile sub-query the old claims existed to avoid.
 - **Held roles and reachable roles are two questions, and the code keeps them apart** (`owner-reaches-every-outlet`). `heldRoles(session)` answers what a person's live assignments confer, and it is what the account menu states — an owner who manages no outlet must never be told they do. `reachableRoles(session)` is held roles plus the outlet-level surfaces for the owner role, and it decides only which shells and navigation entries exist. It is not a role hierarchy: one specific reach for one specific role, and a manager assignment at Kalyani still confers nothing at Kanchrapara. Because reaching confers nothing, no policy changed for it and no migration was needed; the isolation suite gained the cases instead, so an owner-branch edited away fails a test rather than a screen.
 - Outstanding invitations belong to the account, not to one outlet. They have their own policy and isolation cases, are written only by privileged functions, and are readable only by admins who may manage the whole account.
-- Issuing and redeeming a handover are each a **single database function**, so "supersede then insert" and "check then consume" happen in one transaction. The complete People edit is likewise a service-only transaction: it validates, changes the assignment set, and conditionally replaces only a live activation handover in one commit. Doing either sequence across several Edge-Function round trips would leave a race, and the race is the attack.
+- Issuing and redeeming a handover are each a **single database function**, so "supersede then insert" and "check then consume" happen in one transaction. The complete edit on Team is likewise a service-only transaction: it validates, changes the assignment set, and conditionally replaces only a live activation handover in one commit. Doing either sequence across several Edge-Function round trips would leave a race, and the race is the attack.
 - Everything needing immediate effect — an assignment change, deactivating an account, revoking a device — is a lookup inside the policy. Nothing waits for a token.
 - **Self-assignment and the last owner** are the two rules a row policy cannot state, so they live in triggers on `assignments`: `assignments_self_grant_guard` refuses a self-granted `super_admin` from anybody and any self-grant from a non-owner; `assignments_guard` refuses ending the last live `super_admin` row, and freezes an assignment's identity so moving somebody is ending one and granting another.
 - Edge Functions verify the caller's JWT for identity, then re-derive authority from that person's live assignments. Being an Edge Function is not authorisation.

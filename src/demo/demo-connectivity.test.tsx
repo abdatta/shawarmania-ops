@@ -174,7 +174,7 @@ describe('demo connectivity', () => {
     })
 
     it('a Biller URL that resolves to no tablet offers none', async () => {
-      renderDemo('/demo/biller/people')
+      renderDemo('/demo/biller/team')
       await screen.findByTestId('demo-banner')
 
       // The banner renders beside the not-found page rather than inside the

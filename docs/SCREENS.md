@@ -4,10 +4,10 @@
 > associated email when present) and reach
 > their own assignment-derived shell: phone navigation for Super Admin,
 > Franchise Admin and Employee, and fixed tablet chrome for Biller. Sign in,
-> activation/reset, People, Outlets, Attendance and My
+> activation/reset, Team, Outlets, Attendance and My
 > attendance are built. Activation shows the current username and requires it
 > plus the same new password twice. `staff-as-accounts` (#21) collapsed the
-> former Staff and Access screens into People; `multi-outlet-hiring` (#23)
+> former Staff and Access screens into People (now Team); `multi-outlet-hiring` (#23)
 > creates every starting assignment before the one handover; #24 removes
 > ordinary staff email.
 >
@@ -32,7 +32,7 @@ not access control.
 
 Navigation had grown to sixteen flat entries, which on the owner's phone was a bottom bar that scrolled sideways with roughly half of it off the right edge and nothing saying it was there. **A tab you have to remember exists and scroll to find is not navigation**, so #51 both cut the surfaces the business had abandoned and folded what remained.
 
-The owner and a manager now see **four top-level entries**: **Overview**, **Finances** — Billing, Drawer, Expenses, Ledger — **Attendance**, and **Setup** — Outlets, People, Delivery, Menu. Finances rather than Sales, because it holds Expenses, which is money out. Setup is the things you change when something changes, rather than the things you read every evening. **Delivery is in Setup**, and the owner's reason is worth keeping: that page is less about revenue than about whether the Zomato and Swiggy sync is working, and setting it up again with an OTP when it is not; the figures it produces are read in the Ledger.
+The owner and a manager now see **four top-level entries**: **Overview**, **Finances** — Billing, Drawer, Expenses, Ledger — **Attendance**, and **Setup** — Outlets, Team, Delivery, Menu. Finances rather than Sales, because it holds Expenses, which is money out. Setup is the things you change when something changes, rather than the things you read every evening. **Delivery is in Setup**, and the owner's reason is worth keeping: that page is less about revenue than about whether the Zomato and Swiggy sync is working, and setting it up again with an OTP when it is not; the figures it produces are read in the Ledger.
 
 **Tablets is in neither, because it is not reached from navigation at all.** A tablet is administered from the outlet it stands in: every outlet card carries that counter's state and a button addressed to it. An entry beside Outlets would be a second door into one room, and it would undercut the reason the manager's Outlets surface exists — that surface *is* the door to the only screen that mints a setup code.
 
@@ -385,7 +385,7 @@ The chips scope who is read, not how a person's history is assembled. **The by-s
 
 This reverses half of #29, which cut the outlet choice out of the by-staff axis entirely. The half that mattered stands: the axis is still chosen freely, and the read still names no outlet, so the owner's actual question — *how many days did this person work in August* — never starts by naming one shop. What changed is that a control sitting above both axes now means what its position claims.
 
-**By day** is the staff of the selected outlets for one business date: who arrived, when, from where, how accurate the reading was, whether they were late, and which days are still waiting. **Everyone currently on the outlet's staff who was assigned there on the date appears, including those with nothing recorded** — a day view that listed only the rows that exist would quietly hide the people who never arrived. **Who is on the staff is who the reader may see there**, which the database decides — not who they may manage: a person who also works at another outlet is on the roll-call of a manager who runs only this one, though People does not offer that manager their account. A date before somebody joined is not painted as an absence. A departed person drops off the rowless day; a deactivated one still appears with the deactivation noted, because access and working there are different facts. A real historical record remains readable after its assignment ends.
+**By day** is the staff of the selected outlets for one business date: who arrived, when, from where, how accurate the reading was, whether they were late, and which days are still waiting. **Everyone currently on the outlet's staff who was assigned there on the date appears, including those with nothing recorded** — a day view that listed only the rows that exist would quietly hide the people who never arrived. **Who is on the staff is who the reader may see there**, which the database decides — not who they may manage: a person who also works at another outlet is on the roll-call of a manager who runs only this one, though Team does not offer that manager their account. A date before somebody joined is not painted as an absence. A departed person drops off the rowless day; a deactivated one still appears with the deactivation noted, because access and working there are different facts. A real historical record remains readable after its assignment ends.
 
 **Staff means staff.** A manager or the owner appears here only when they also hold an Employee assignment at the outlet; nobody records a manager's arrival, and listing them was a row to read past (#28). The one exception is somebody who **already carries a record on the day shown** — they stay listed whatever they hold, marked *not on this outlet's staff list*, and can be approved, because the waiting counts are computed from rows and a row inside a count and outside the screen would be a badge nobody could clear. They are offered no *Record arrival*: they already have one.
 
@@ -463,7 +463,7 @@ A manager can also **enter an arrival on someone's behalf** — past times only,
 
 **And the by-outlet selection does not narrow it either.** Who is offered here, and which outlets a person's month is assembled against, is everybody and everything the reader may see, whatever the chips on the other axis say. The surface used to hand this axis the list already filtered by the selection, so deselecting a shop emptied a picker that has nothing to do with shops — which is exactly the confusion separating the axes was meant to end.
 
-**People** — everyone working at the caller's outlets, in one place. **Names come
+**Team** — everyone working at the caller's outlets, in one place. **Names come
 first**: who each person is, their job and where they work are one ordinary read
 and are on screen at once; each row's username, status and actions follow when
 the account function answers, with a placeholder in the status column until
@@ -539,7 +539,7 @@ The same screen creates and edits an outlet: code, name, location label, address
 An outlet can also be **marked closed**. That means the shop is not trading: it disappears from the lists accounts are assigned from, and check-ins there are refused — while an approval is never refused for that reason, so a day worked before the shop closed can still be settled afterwards. Nothing cascades. Accounts and recorded attendance are untouched, no login is revoked, and reopening is one tap; the confirmation says all of that, because an owner expecting it to cut off access would be dangerously wrong.
 
 **Customers** *(#57)* — the business's customers, and who among them is gold, in
-Setup directly after People. **One search box takes a name or part of a number**:
+Setup directly after Team. **One search box takes a name or part of a number**:
 three characters of either, matching anywhere — letters in the saved name
 ignoring case, digits anywhere in the number, so the last few somebody remembers
 are enough — with the matched part in bold. Where fewer than twenty names match
@@ -563,7 +563,7 @@ gold member* with a star to grant — the icon carries the verb, the text the st
 and *Spent*, then last seen and customer since. A change on the card is laid over
 the rows already on screen rather than reloading the list.
 
-**People** — every person across all outlets. Create one account at one or
+**Team** — every person across all outlets. Create one account at one or
 several outlets, issue a fresh one-time code, correct another person's
 username, deactivate/reactivate, and manage assignments. Selecting Super Admin
 hides outlets and requires that owner's real account email; every other role
@@ -583,7 +583,7 @@ notice. One's own row offers no actions.
 
 **Ledger** — *the manual form is gone.* It existed from #36 because billing, expenses and the drawer were not live while August 2026 was trading; `cash-is-counted-not-closed` (#11) took the `Ledger` name and route with a derived statement that has no input fields, leaving the form at `ledger/notebook` as the fallback and as the reader of the trading period before each tablet existed. `retire-the-manual-ledger` (#12) carried those rows into the drawer and the one expense record and removed the surface, its route and its **Notebook** entry. What it used to answer is answered by the derived statement above, for every date the business has traded.
 
-**A Franchise Admin gets the derived Ledger too**, at the outlets they are assigned to, where it sits directly after Attendance and ahead of People. The capability was owner-only because production had two Super Admins and no live Franchise Admin at either outlet — the entry recorded that accident rather than a decision, and a manager who counts the drawer nightly but cannot read whether the month covered its costs is running half a shop. Outlet staff reach the expense list and nothing else, on their own screen; see **Expenses** under the Biller below.
+**A Franchise Admin gets the derived Ledger too**, at the outlets they are assigned to, where it sits directly after Attendance and ahead of Team. The capability was owner-only because production had two Super Admins and no live Franchise Admin at either outlet — the entry recorded that accident rather than a decision, and a manager who counts the drawer nightly but cannot read whether the month covered its costs is running half a shop. Outlet staff reach the expense list and nothing else, on their own screen; see **Expenses** under the Biller below.
 
 Which day or month is a **stepper in the same shape the attendance range picker uses** — a bordered strip with a step at each end — because they answer the same question and a second idiom for it would be a second thing to learn. Forward stops at the outlet's own today, since a business date in the future is refused by the database and a control that offers one is offering a failure. The day itself reads `Today`, or `03 Aug 2026` as every other screen writes a day, and it is **not typable**: pressing it opens the platform calendar, and the two steps do the rest. A bare `input type="date"` was the first attempt and lost on three counts — it prints the browser's locale format, it carries its own calendar glyph beside two arrows that already say what the control does, and a date half-typed into a control that reloads a day on every change is a reload per keystroke.
 

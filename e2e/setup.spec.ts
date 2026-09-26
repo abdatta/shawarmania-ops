@@ -63,7 +63,7 @@ test('an outlet marked closed keeps everything and can be reopened', async ({ pa
 })
 
 test('creating a person is one act that ends in a working handover', async ({ page }) => {
-  await page.goto('demo/admin/people')
+  await page.goto('demo/admin/team')
   await page.getByRole('button', { name: 'Add person' }).click()
 
   // One form: the account fields and the staff facts together, and never a
@@ -92,7 +92,7 @@ test('creating a person is one act that ends in a working handover', async ({ pa
 })
 
 test('the people states each say what is wrong and what to do', async ({ page }) => {
-  await page.goto('demo/admin/people')
+  await page.goto('demo/admin/team')
 
   // Ordinary staff have a username and no email-dependent repair state.
   await expect(page.getByTestId(`username-${DEMO_HELPER_ACCOUNT_ID}`)).toContainText('demo.helper')
@@ -107,7 +107,7 @@ test('the people states each say what is wrong and what to do', async ({ page })
   await expect(page.getByRole('row', { name: /Demo Prep Cook/ })).toContainText('Deactivated')
 
   // Somebody who works nowhere is on no manager's list at all: a manager's
-  // People is the people live at their outlets (people-shows-names-first, D2),
+  // Team is the people live at their outlets (people-shows-names-first, D2),
   // which is also all the database lets them read.
   await expect(page.getByText('Demo Former Staff')).toHaveCount(0)
   await expect(page.getByTestId('toggle-departed')).toHaveCount(0)
@@ -122,7 +122,7 @@ test('the people states each say what is wrong and what to do', async ({ page })
   // working list and one tap away — records kept, clutter gone. Its lifecycle
   // still states the stronger truth: sign-in is deactivated, not merely that no
   // outlet is assigned.
-  await page.goto('demo/owner/people')
+  await page.goto('demo/owner/team')
   await expect(page.getByRole('row', { name: /Demo Helper/ })).toBeVisible()
   await expect(page.getByText('Demo Former Staff')).toHaveCount(0)
   await page.getByTestId('toggle-departed').click()
@@ -146,7 +146,7 @@ test('the whole setup walk stays inside the app origin', async ({ page, baseURL 
   await page.getByRole('button', { name: 'Create outlet' }).click()
   await expect(page.getByTestId('outlet-barrackpore')).toBeVisible()
 
-  await page.goto('demo/admin/people')
+  await page.goto('demo/admin/team')
   await page.getByRole('button', { name: 'Add person' }).click()
   await page.getByLabel('Full name').fill('Demo Origin Probe')
   await page.getByLabel('Username', { exact: true }).fill('demo.origin.probe')

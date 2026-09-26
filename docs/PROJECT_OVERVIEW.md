@@ -10,7 +10,7 @@ The project exists because Shawarmania has outgrown running two counters on memo
 - **Menu management** — items, categories, prices, availability, per outlet.
 - **Inventory** — stock added, used, wasted, corrected, with low-stock warnings.
 - **Expenses** — categorised outlet spending with payment method and who recorded it.
-- **People and attendance** — staff as app accounts; an arrival recorded from the person's own phone with its location evidence, counted only once a manager approves it and records where they were themselves; a per-outlet arrival deadline producing late and absent readings; manager-entered attendance when a phone cannot; and attendance readable by day or by person over a range.
+- **Team and attendance** — staff as app accounts; an arrival recorded from the person's own phone with its location evidence, counted only once a manager approves it and records where they were themselves; a per-outlet arrival deadline producing late and absent readings; manager-entered attendance when a phone cannot; and attendance readable by day or by person over a range.
 - **Cash drawer** — the drawer as a running balance, observed whenever somebody counts it. What should be in it now, what has moved since, and the difference between what was expected and what was found. Counted mid-shift rather than at the end of a day, because that is when it is actually counted.
 - **Profit and loss** — basic outlet-level operational estimates, and cross-outlet comparison for the owner.
 - **Alerts** — outlet managers raise issues to the owner and get responses.

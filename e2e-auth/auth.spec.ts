@@ -321,7 +321,7 @@ test.describe('username sign-in and role routing', () => {
   })
 
   test('a deep link survives username sign-in', async ({ page }) => {
-    await page.goto('admin/people')
+    await page.goto('admin/team')
     await expect(page).toHaveURL(/\/sign-in$/)
 
     await page.getByLabel('Username or email', { exact: true }).fill(PERSONAS.admin.username)
@@ -329,8 +329,8 @@ test.describe('username sign-in and role routing', () => {
     await expect(page.getByLabel('Password')).toHaveAttribute('autocomplete', 'current-password')
     await page.getByRole('button', { name: 'Sign in' }).click()
 
-    await expect(page).toHaveURL(/\/admin\/people$/)
-    await expect(page.getByRole('heading', { name: 'People' })).toBeVisible()
+    await expect(page).toHaveURL(/\/admin\/team$/)
+    await expect(page.getByRole('heading', { name: 'Team' })).toBeVisible()
   })
 
   /**
@@ -432,7 +432,7 @@ test.describe('provisioning and admin-issued reset', () => {
   test('one username-only hire activates at two outlets', async ({ page, browser }) => {
     const person = freshPerson('starter')
     await signIn(page, PERSONAS.owner.username)
-    await page.goto('owner/people')
+    await page.goto('owner/team')
 
     const { link, panel } = await provisionEmployee(page, person, [
       'Shawarmania Kalyani',
@@ -466,7 +466,7 @@ test.describe('provisioning and admin-issued reset', () => {
     const person = freshPerson('rename')
     const renamed = `${person.username}.new`
     await signIn(page, PERSONAS.owner.username)
-    await page.goto('owner/people')
+    await page.goto('owner/team')
     const issued = await provisionEmployee(page, person)
     const activated = await activate(browser, issued.link, person.username)
     await expect(activated.page).toHaveURL(/\/staff$/)
@@ -522,7 +522,7 @@ test.describe('provisioning and admin-issued reset', () => {
   }) => {
     const person = freshPerson('transition')
     await signIn(page, PERSONAS.owner.username)
-    await page.goto('owner/people')
+    await page.goto('owner/team')
     const issued = await provisionEmployee(page, person)
     await issued.panel.getByRole('button', { name: 'Done' }).click()
 
@@ -535,7 +535,7 @@ test.describe('provisioning and admin-issued reset', () => {
     await context.setOffline(true)
     await editor.getByRole('button', { name: 'Save' }).click()
     await expect(editor.getByTestId('form-sheet-error')).toBeVisible()
-    await expect(page).toHaveURL(/\/owner\/people$/)
+    await expect(page).toHaveURL(/\/owner\/team$/)
     await context.setOffline(false)
 
     await editor.getByRole('button', { name: 'Save' }).click()
@@ -573,7 +573,7 @@ test.describe('provisioning and admin-issued reset', () => {
   }) => {
     const person = freshPerson('ownerguard')
     await signIn(page, PERSONAS.owner.username)
-    await page.goto('owner/people')
+    await page.goto('owner/team')
     const issued = await provisionEmployee(page, person)
     await issued.panel.getByRole('button', { name: 'Done' }).click()
 
@@ -624,7 +624,7 @@ test('a two-outlet hire whose phone finds no position records the day and waits'
 }) => {
   const person = freshPerson('unlocated')
   await signIn(page, PERSONAS.owner.username)
-  await page.goto('owner/people')
+  await page.goto('owner/team')
   const issued = await provisionEmployee(page, person, [
     'Shawarmania Kalyani',
     'Shawarmania Kanchrapara',
@@ -691,7 +691,7 @@ test('a two-outlet hire whose phone finds no position records the day and waits'
 test('deactivation ends an open username session immediately', async ({ page, browser }) => {
   const person = freshPerson('doomed')
   await signIn(page, PERSONAS.owner.username)
-  await page.goto('owner/people')
+  await page.goto('owner/team')
   const issued = await provisionEmployee(page, person)
   const activated = await activate(browser, issued.link, person.username)
   await expect(activated.page).toHaveURL(/\/staff$/)
@@ -721,7 +721,7 @@ test('demo mode remains isolated beside a real username session', async ({ page 
   await page.getByRole('button', { name: 'Continue to demo' }).click()
   await expect(page.getByTestId('demo-banner')).toBeVisible()
   await expect(page.getByTestId('account-menu')).toHaveCount(0)
-  await page.goto('demo/owner/people')
+  await page.goto('demo/owner/team')
   await expect(page.getByText('Demo Manager', { exact: true })).toBeVisible()
   await expect(page.getByTestId('demo-banner')).toBeVisible()
 })

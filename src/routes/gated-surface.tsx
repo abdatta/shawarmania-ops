@@ -11,10 +11,10 @@ import { NotFound } from './not-found'
  * this mode.
  *
  * Both role trees mount ONE branch (`/demo/:roleSegment/*` and
- * `/:roleSegment/*`), so a path like `people` is shared by more than one role.
+ * `/:roleSegment/*`), so a path like `team` is shared by more than one role.
  * This is what makes that safe: the path is looked up against the *current
  * session's* role, and anything that role has no entry for is not a page. A
- * Biller typing `/biller/people` gets not-found inside their own shell —
+ * Biller typing `/biller/team` gets not-found inside their own shell —
  * the same honest answer a `hidden` surface gives (docs/DEMO_MODE.md).
  */
 export function GatedSurface({ path, children }: { path: string; children: ReactNode }) {

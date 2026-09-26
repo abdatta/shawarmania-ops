@@ -31,7 +31,7 @@ once, and must not imply the reader has become somebody else.
 
 **The order is meaningful and hand-set.** Entries carry an explicit `order`
 because how often a tab is reached for is a real fact about this business: the
-ledger is opened nightly and People is opened when somebody joins. Grouping must
+ledger is opened nightly and Team is opened when somebody joins. Grouping must
 not quietly become alphabetical, and the ordering argument has to survive inside
 a group as well as between groups.
 

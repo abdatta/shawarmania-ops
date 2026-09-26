@@ -1867,7 +1867,7 @@ describe('a person who works at two outlets', () => {
  * What opening the surface costs.
  *
  * Measured on production on 2026-09-25: the roll-call waited 7–10 s on the
- * People list's privileged function for names and assignments it can read
+ * Team list's privileged function for names and assignments it can read
  * directly, and asked for it two or three times per open because a
  * revalidated session re-ran the read (attendance-reads-its-staff-directly).
  */
@@ -1884,7 +1884,7 @@ describe('opening attendance', () => {
     )
   }
 
-  it('reads the roster once and never the People list', async () => {
+  it('reads the roster once and never the Team list', async () => {
     const adapters = createMockAdapters()
     const accounts = vi.spyOn(adapters.accounts, 'listAccounts')
     const roster = vi.spyOn(adapters.accounts, 'listRoster')

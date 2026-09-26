@@ -10,7 +10,7 @@ import {
 import { OUTLET_KALYANI_ID } from './fixtures/outlets'
 
 describe('mock accounts adapter', () => {
-  it('offers the roll-call the same people as the People list, with only its roster facts', async () => {
+  it('offers the roll-call the same people as the Team list, with only its roster facts', async () => {
     const adapter = createMockAccountsAdapter(createDemoAccounts())
 
     const roster = await adapter.listRoster()

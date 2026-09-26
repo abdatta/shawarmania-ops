@@ -177,11 +177,11 @@ describe('demo mode safety', () => {
     expect(screen.queryByTestId('account-menu')).not.toBeInTheDocument()
   })
 
-  it('runs the promoted People surface off mock data, writes included', async () => {
+  it('runs the promoted Team surface off mock data, writes included', async () => {
     const user = userEvent.setup()
-    renderDemo('/demo/owner/people')
+    renderDemo('/demo/owner/team')
 
-    // `owner-people` is `live`, so it renders in demo mode too — served by the
+    // `owner-team` is `live`, so it renders in demo mode too — served by the
     // mock accounts adapter, with no path to Supabase.
     expect(await screen.findByText('Demo Manager')).toBeInTheDocument()
     expect(screen.getByText('Set-up link issued')).toBeInTheDocument()
@@ -197,7 +197,7 @@ describe('demo mode safety', () => {
   })
 
   it('keeps account management away from the roles that never issue codes', async () => {
-    renderDemo('/demo/biller/people')
+    renderDemo('/demo/biller/team')
     expect(await screen.findByText('That page does not exist')).toBeInTheDocument()
     expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
   })

@@ -205,7 +205,7 @@ export function assignedOutlets(assignments: readonly Assignment[]): string[] {
 }
 
 /**
- * One person on the People surface: the account, its invite state, its job
+ * One person on the Team surface: the account, its invite state, its job
  * title, and the assignments that place it. There is exactly one record per
  * person; a login and a staff-list membership are the same thing, and working
  * at two outlets does not make a second of either.
@@ -271,7 +271,7 @@ export interface AccountSummary {
   /**
    * Where this person works and as what — every assignment, live and ended.
    * Ended ones are kept because the rows they produced have to stay
-   * explicable, and because the People surface shows "left this outlet in
+   * explicable, and because the Team surface shows "left this outlet in
    * March" rather than nothing at all.
    *
    * A caller sees only the assignments their own authority reaches: a manager
@@ -298,7 +298,7 @@ export interface AccountSummary {
  * their account is on, and where they work.
  *
  * Deliberately not an `AccountSummary`. The rest of that shape — the username,
- * the invite, the fingerprint — is what People needs to manage an account, and
+ * the invite, the fingerprint — is what Team needs to manage an account, and
  * it lives behind the privileged account function. Attendance needs none of it,
  * and waiting on that function cost the roll-call 7–10 s on production
  * (attendance-reads-its-staff-directly).
@@ -319,7 +319,7 @@ export type AccountIdentity = Pick<
 >
 
 /**
- * A person and their identity, as the one `AccountSummary` People manages.
+ * A person and their identity, as the one `AccountSummary` Team manages.
  * The single place the two halves meet, so the list, the demo and every caller
  * derive the lifecycle the same way (people-shows-names-first, design D1).
  */
@@ -494,7 +494,7 @@ export class AccountActionError extends DataActionError {
 }
 
 /**
- * People management as the admin surfaces need it. Identity and access writes
+ * Team management as the admin surfaces need it. Identity and access writes
  * are privileged operations that run server-side with the service-role key —
  * the adapter is the seam in front of them, not the thing doing them. Facts
  * and placement cross the same atomic privileged boundary.
@@ -513,7 +513,7 @@ export interface AccountsAdapter {
   listRoster(): Promise<RosterPerson[]>
   /**
    * The identity of every account the caller may manage, and their own, keyed
-   * by person — the privileged half of `listAccounts`, read on its own so People
+   * by person — the privileged half of `listAccounts`, read on its own so Team
    * can list its people before it arrives.
    */
   listIdentities(): Promise<Record<string, AccountIdentity>>

@@ -191,7 +191,7 @@ export function createMockAccountsAdapter(
    * Whose identity this viewer is answered for, on the account function's
    * terms: the owner everyone, a Franchise Admin themselves and every account
    * wholly inside the outlets they manage, anybody else nobody. The list itself
-   * is not narrowed by this — People decides who is listed from assignments
+   * is not narrowed by this — Team decides who is listed from assignments
    * (people-shows-names-first, design D2).
    */
   function identities(): Set<string> {

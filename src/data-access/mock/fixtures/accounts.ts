@@ -34,7 +34,7 @@ const FIXTURE_CREATED_AT = '2026-07-26T00:00:00+00:00'
 
 /** An ordinary active colleague — the manual-entry demo records their check-out. */
 export const DEMO_GRILLER_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000006'
-/** An ordinary staff account used by People and attendance walkthroughs. */
+/** An ordinary staff account used by Team and attendance walkthroughs. */
 export const DEMO_HELPER_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000011'
 /** Deactivated while still assigned: the panic-button state, still on the day. */
 export const DEMO_PREP_COOK_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000013'
@@ -79,7 +79,7 @@ const colleagues = [
     created_at: FIXTURE_CREATED_AT,
   },
   {
-    // Someone provisioned but not yet activated: the state the People surface
+    // Someone provisioned but not yet activated: the state the Team surface
     // most needs to show honestly, and the one a screenshot never captures.
     id: 'd1000000-0000-4000-a000-000000000008',
     full_name: 'Demo New Starter',
@@ -175,7 +175,7 @@ export const accountFixtures: readonly Tables<'profiles'>[] = [
 /**
  * Who works where. One row per person per outlet, ended rows kept — the same
  * shape the database holds, so a mock that drifts from it is a mock that would
- * teach the wrong lesson about what the People surface can show.
+ * teach the wrong lesson about what the Team surface can show.
  */
 export const assignmentFixtures: Readonly<Record<string, Assignment[]>> = {
   [personaFixtures.super_admin.profile.id]: personaFixtures.super_admin.assignments,

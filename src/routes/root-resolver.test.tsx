@@ -262,7 +262,7 @@ describe('signing in lands on the shell, not back on sign-in', () => {
     })
 
     const router = createMemoryRouter(appRoutes, {
-      initialEntries: [{ pathname: '/sign-in', state: { from: '/admin/people' } }],
+      initialEntries: [{ pathname: '/sign-in', state: { from: '/admin/team' } }],
     })
     render(<RouterProvider router={router} />)
 
@@ -270,7 +270,7 @@ describe('signing in lands on the shell, not back on sign-in', () => {
     await user.type(screen.getByLabelText('Password'), 'a-real-password')
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/people'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/team'))
   })
 })
 

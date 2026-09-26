@@ -139,7 +139,7 @@ describe('sign in', () => {
     signInSucceeds()
     const router = createMemoryRouter(appRoutes, {
       // A demo-gated destination proves the redirect without mounting a real
-      // data surface. Mounting People here leaked a late, unauthenticated
+      // data surface. Mounting Team here leaked a late, unauthenticated
       // Supabase request after the redirect assertion had already passed.
       initialEntries: [{ pathname: '/sign-in', state: { from: '/admin/billing-history' } }],
     })

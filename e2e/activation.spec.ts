@@ -16,8 +16,8 @@ import { E2E_ORIGIN } from '../ports'
  * live bearer credential to a third party on the way to the screen.
  */
 test('an admin is handed one username-only activation link', async ({ page }) => {
-  await page.goto('demo/owner/people')
-  await expect(page.getByRole('heading', { name: 'People' })).toBeVisible()
+  await page.goto('demo/owner/team')
+  await expect(page.getByRole('heading', { name: 'Team' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Add person' }).click()
   await page.getByLabel('Full name').fill('Demo Fresh Hire')
@@ -63,7 +63,7 @@ test('producing the handover leaves the app origin alone', async ({ page, baseUR
     if (new URL(request.url()).origin !== origin) foreign.push(request.url())
   })
 
-  await page.goto('demo/owner/people')
+  await page.goto('demo/owner/team')
   await page.getByRole('button', { name: 'Add person' }).click()
   await page.getByLabel('Full name').fill('Demo Second Starter')
   await page.getByLabel('Username', { exact: true }).fill('demo.second.starter')

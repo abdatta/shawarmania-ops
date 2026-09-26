@@ -33,7 +33,7 @@ import { validateUsername, usernameErrorMessage } from '../../../shared/username
 import { AccountHandoverPanel } from './account-handover'
 
 /**
- * People — every person, for the Super Admin across all outlets and for a
+ * Team — every person, for the Super Admin across all outlets and for a
  * Franchise Admin their own. One component: the difference between the two is
  * entirely the caller's authority, and writing it twice would be writing the
  * authority rules twice.
@@ -184,7 +184,7 @@ export function AccountsSurface() {
         setOutlets(outletList)
       })
       .catch(() => {
-        if (active) setError('Could not load people. Try again in a moment.')
+        if (active) setError('Could not load the team. Try again in a moment.')
       })
     void adapter
       .listIdentities()
@@ -560,11 +560,11 @@ export function AccountsSurface() {
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader
-        title="People"
+        title="Team"
         subtitle={
           isOwner
             ? 'Everyone, across all outlets — accounts and staff list in one place.'
-            : 'This outlet’s people. Codes are handed over by you, never emailed.'
+            : 'This outlet’s team. Codes are handed over by you, never emailed.'
         }
         action={<AddButton label="Add person" onClick={() => setFormOpen(true)} />}
       />
@@ -618,12 +618,7 @@ export function AccountsSurface() {
 
       {people === null ? (
         // The people list is a `DataTable`, so it waits behind rows.
-        <LoadingTable
-          label="the people here"
-          rows={10}
-          rowHeight="h-16"
-          data-testid="accounts-loading"
-        />
+        <LoadingTable label="the team" rows={10} rowHeight="h-16" data-testid="accounts-loading" />
       ) : (
         <>
           <DataTable

@@ -83,17 +83,17 @@ describe('gate registry', () => {
   })
 
   it('makes account management reachable to admins only', () => {
-    // The one surface auth-and-roles adds: People for the owner, Access for a
+    // The one surface auth-and-roles adds: Team for the owner, Access for a
     // Franchise Admin, nothing for the two roles that never issue codes.
     for (const role of ['super_admin', 'franchise_admin'] as const) {
       expect(
-        visibleSurfaces([role], 'real').some((surface) => surface.path === 'people'),
+        visibleSurfaces([role], 'real').some((surface) => surface.path === 'team'),
         role,
       ).toBe(true)
     }
     for (const role of ['biller', 'employee'] as const) {
       expect(
-        surfaces.some((surface) => surface.role === role && surface.path === 'people'),
+        surfaces.some((surface) => surface.role === role && surface.path === 'team'),
         role,
       ).toBe(false)
     }
@@ -153,7 +153,7 @@ describe('gate registry', () => {
 
   /**
    * `visibleSurfaces` dedupes by label and the more senior role's entry wins.
-   * Without this, `owner-people` could sit in Setup while `admin-people` sat in
+   * Without this, `owner-team` could sit in Setup while `admin-team` sat in
    * Finances, the owner's would silently win, and the two readers would hold
    * different maps of one application while the code claimed a single source.
    */
@@ -274,8 +274,8 @@ describe('gate registry', () => {
     ])
     expect(setup?.kind === 'group' && setup.children.map((c) => c.nav?.label)).toEqual([
       'Outlets',
-      'People',
-      // a-gold-member-is-a-label (#57): directly after People.
+      'Team',
+      // a-gold-member-is-a-label (#57): directly after Team.
       'Customers',
       'Delivery',
       'Menu',
@@ -312,7 +312,7 @@ describe('gate registry', () => {
 
   it('puts the owner’s Billing directly above Drawer, inside Finances', () => {
     // The owner opens Billing to read what the outlet took, which is asked far
-    // more often than People — one of the entries it used to sit behind.
+    // more often than Team — one of the entries it used to sit behind.
     // Adjacency to Drawer is the point rather than a particular number: the two
     // are read together, a day's takings and what should be in the drawer
     // against them. Both are in Finances since #51, so the adjacency is now a

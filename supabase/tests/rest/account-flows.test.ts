@@ -1527,7 +1527,7 @@ describe('Super Admin account-email invariants over the privileged boundary', ()
  * The two reads of one set of people (attendance-reads-its-staff-directly).
  *
  * Attendance reads its roster straight from `profiles`, scoped by who the reader
- * may SEE; People reads identifiers through the privileged function, scoped by
+ * may SEE; Team reads identifiers through the privileged function, scoped by
  * who the reader may MANAGE. The roster must list the split-outlet staff member
  * to the Kalyani manager, whom they may not manage. And the identifier response
  * is pinned here by its rules, so rewriting how the function reads them is
@@ -1560,7 +1560,7 @@ describe('the attendance roster and the identifier response', () => {
     // The other outlet's assignment is the other outlet's data.
     expect(split!.assignments.some((a) => a.outlet_id === OUTLETS.kanchrapara)).toBe(false)
 
-    // Whom they may not manage, so People still does not offer them.
+    // Whom they may not manage, so Team still does not offer them.
     expect(Object.keys(await identifiersFor(faKalyaniToken))).not.toContain(PERSON_IDS.splitStaff)
   })
 

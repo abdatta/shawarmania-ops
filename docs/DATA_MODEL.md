@@ -106,7 +106,7 @@ indistinguishable.
 
 **`account_identifier_facts()`** — service-only, like `account_state_fingerprint`:
 every account's Auth alias, last sign-in, account email, live invite, active
-flag, live assignments and state fingerprint in one call, for People's
+flag, live assignments and state fingerprint in one call, for Team's
 identifier list. It decides nothing about who may see which row; the
 `admin-accounts` function filters every row by the caller's authority. The
 fingerprint column is `account_state_fingerprint` itself, so the list and an
@@ -119,7 +119,7 @@ The table has RLS enabled, no client policy, and no privileges for `anon` or
 `authenticated`. A deferred invariant makes the Super Admin requirement exact:
 every person with a live `super_admin` assignment has one row. Another role may
 have zero or one, so a future Franchise Admin email needs no new identity
-migration. Current ordinary People creation does not collect one. The email is
+migration. Creating an ordinary account on Team does not collect one. The email is
 a permanent alternate sign-in identifier; for a live Super Admin it is also
 the foundation for later recovery or security features. Ending that role
 retains the association until a separately authorized operation removes it.

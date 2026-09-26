@@ -19,7 +19,7 @@ correction.
 `username-sign-in-and-owner-recovery` (#24) makes username the everyday
 credential for every human role:
 
-- an authorized admin can correct another person's username from People;
+- an authorized admin can correct another person's username from Team;
 - every role that forgets a password asks an authorized admin for a one-time
   link; one Super Admin can help another;
 - a Super Admin can use their associated email as an alternate sign-in, while

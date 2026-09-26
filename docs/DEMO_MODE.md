@@ -154,7 +154,7 @@ Worth knowing before running one:
 
 - **Both outlets trade, and deliberately not identically.** Kalyani is busier and carries every awkward state; Kanchrapara turns over roughly half as much, is short of nothing, and closed yesterday exactly. Two outlets of the same shape would make the comparison screen unreadable — a difference is only legible against something that is not different.
 - **Each outlet numbers its own bills from 1**, mirroring the per-outlet sequence the database enforces.
-- **Every demo person has one canonical username.** People creation, correction
+- **Every demo person has one canonical username.** Account creation on Team, correction
   and activation handover use the same namespace and validation as live mode,
   but the mock adapter never calls Auth, a mail provider or any real endpoint.
 - **A shift is already open** for Demo Biller at Kalyani, so a walkthrough lands on the counter able to ring a bill. The whole shift lifecycle is walkable from there: **Hand over** on the tablet, **Leave counter** from the holder's phone, and **Finish day** with its readiness sheet — each ending the shift for a recorded reason, and each leaving the tablet on the request screen a real counter shows overnight. **Start again** puts the open shift back. Kanchrapara's shift has ended; no persona stands at that counter.

@@ -193,17 +193,17 @@ const defs = {
    * (staff-as-accounts), so this one surface is the account list *and* the
    * staff list — there is no separate roster page and no linking step.
    */
-  'owner-people': {
+  'owner-team': {
     role: 'super_admin',
-    path: 'people',
-    nav: { label: 'People', icon: Users, order: 2, group: 'setup' },
+    path: 'team',
+    nav: { label: 'Team', icon: Users, order: 2, group: 'setup' },
     state: 'live',
   },
   /**
    * The business's customers, and who among them is a gold member
    * (a-gold-member-is-a-label).
    *
-   * **Directly after People** [owner, 2026-09-18]: the two lists of people the
+   * **Directly after Team** [owner, 2026-09-18]: the two lists of people the
    * owner curates, side by side.
    *
    * The owner's reads every outlet; `admin-customers` below is the same surface
@@ -225,7 +225,7 @@ const defs = {
   /**
    * What the outlet took, **directly above what should be in its drawer**.
    *
-   * This sat at order 12 — behind People, Compare and Alerts — and none of those
+   * This sat at order 12 — behind Team, Compare and Alerts — and none of those
    * is reached as often as the day's money. The adjacency is the point rather
    * than the number: takings and drawer are read in one sitting, one against the
    * other, and a tab between them is a tab the reader scrolls past twice.
@@ -346,7 +346,7 @@ const defs = {
     nav: {
       label: 'Delivery',
       icon: Bike,
-      // After Customers, which took People's neighbouring place (#57).
+      // After Customers, which took Team's neighbouring place (#57).
       order: 4,
       group: 'setup',
       attention: 'delivery-needs-you',
@@ -495,9 +495,9 @@ const defs = {
    * counts the drawer nightly but cannot read whether the month covered its
    * costs is running half a shop (the-ledger-opens-to-the-outlet).
    *
-   * Directly after Attendance, and ahead of People, for the reason the owner's
+   * Directly after Attendance, and ahead of Team, for the reason the owner's
    * entry gives: nav order follows how often a tab is reached for, and this is
-   * opened every night while People is opened when somebody joins or leaves.
+   * opened every night while Team is opened when somebody joins or leaves.
    */
   /**
    * The manager's counterpart to `owner-cash-drawer`, scoped by assignment.
@@ -584,10 +584,10 @@ const defs = {
     nav: { label: 'Customers', icon: Contact, order: 3, group: 'setup' },
     state: 'live',
   },
-  'admin-people': {
+  'admin-team': {
     role: 'franchise_admin',
-    path: 'people',
-    nav: { label: 'People', icon: Users, order: 2, group: 'setup' },
+    path: 'team',
+    nav: { label: 'Team', icon: Users, order: 2, group: 'setup' },
     state: 'live',
   },
 
@@ -775,8 +775,8 @@ export function isRenderable(state: GateState, mode: SessionMode): boolean {
  * the proposal ruled out anything they would have to switch. Entries keep their
  * own role, so a link can be built against that role's path segment.
  *
- * Deduplicated by navigation label: `admin-people` and `owner-people` are the
- * same door with the same word on it, and two tabs reading "People" is a
+ * Deduplicated by navigation label: `admin-team` and `owner-team` are the
+ * same door with the same word on it, and two tabs reading "Team" is a
  * question nobody should have to answer. The more senior role's entry wins,
  * because it is the one whose surface reaches further.
  *
