@@ -2998,6 +2998,14 @@ export interface DrawerState {
   exceptions: DrawerExceptionRecord[]
 }
 
+/**
+ * The Drawer's balance: everything on `DrawerState` but the count history and the
+ * exceptions, which are read on their own so each part of the surface appears
+ * when its own reading lands (the-ledger-reads-fast-and-keeps-its-place, D18).
+ * The balance card, the count action and the count sheet's checks need only this.
+ */
+export type DrawerBalance = Omit<DrawerState, 'recentObservations' | 'exceptions'>
+
 export interface RecordObservationInput {
   outletId: string
   countedAt: string
@@ -3089,7 +3097,15 @@ export interface ObservationPage {
 }
 
 export interface CashDrawerAdapter {
+  /**
+   * The whole drawer in one answer, composed from the three reads below. The
+   * surface reads those separately; this stays for readers that want everything.
+   */
   getState(outletId: string): Promise<DrawerState>
+  /** The balance, for the balance card and the count action. */
+  getBalance(outletId: string): Promise<DrawerBalance>
+  /** Late arrivals inside an observed interval, derived and never stored. */
+  getExceptions(outletId: string): Promise<DrawerExceptionRecord[]>
   /**
    * A page of past counts, newest first. `getState` returns the first page; this
    * returns the ones after it (design D21).

@@ -178,6 +178,24 @@ and date, alongside the bills rather than after them. The Drawer asks for its
 recent and late bills with their cash already split, in its second wave. Nothing
 on either screen reads differently.
 
+## Round four: the Drawer shows each part as it arrives (2026-09-26)
+
+The owner asked for the Drawer to load the way Overview does — each part on
+screen as soon as its own data is in, rather than the whole page waiting for its
+slowest read — and for the loading placeholder to look like what replaces it.
+
+The Drawer has three independent parts: the **balance card** (and the Count &
+Collect action that works from it), the **recent counts**, and the **exceptions**
+card. They were one read, so the page showed nothing until all three were ready,
+and a single generic placeholder stood in for all of them.
+
+**What changes.** Each part is read on its own and appears when its read lands:
+the recent counts in one round trip, the balance and the exceptions in two, all
+at once. Each has a placeholder in its own shape — the balance card's headline,
+chips and three figures; the counts' rows — so nothing jumps when it arrives.
+Count & Collect is available as soon as the balance is. A part that fails to
+read says so in its own place and leaves the others on screen.
+
 ## Non-goals
 
 - **No change to any figure, word, card or control on the Ledger.** The day and

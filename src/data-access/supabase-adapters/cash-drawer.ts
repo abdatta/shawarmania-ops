@@ -7,6 +7,7 @@ import {
   DRAWER_HISTORY_PAGE,
   type CashDrawerAdapter,
   type DrawerAdjustmentRecord,
+  type DrawerBalance,
   type DrawerCashOutRecord,
   type DrawerEdit,
   type DrawerExceptionRecord,
@@ -204,6 +205,50 @@ function toObservationRecord(
   }
 }
 
+/**
+ * Every name a row carries, from the profiles embedded in it.
+ *
+ * The Drawer's reads embed each recorder, corrector and adjuster in the rows
+ * that name them, so a name never costs a round trip of its own.
+ */
+type Named = { full_name: string } | null
+type ObservationWithEmbeds = Tables<'drawer_observations'> & {
+  recorder: Named
+  corrector: Named
+  drawer_cash_out: (Tables<'drawer_cash_out'> & { recorder: Named })[]
+  drawer_observation_adjustments: (Tables<'drawer_observation_adjustments'> & {
+    adjuster: Named
+  })[]
+}
+
+function namesIn(rows: readonly ObservationWithEmbeds[]): Map<string, string> {
+  const names = new Map<string, string>()
+  for (const row of rows) {
+    if (row.recorder) names.set(row.recorded_by, row.recorder.full_name)
+    if (row.corrected_by && row.corrector) names.set(row.corrected_by, row.corrector.full_name)
+    for (const movement of row.drawer_cash_out) {
+      if (movement.recorder) names.set(movement.recorded_by, movement.recorder.full_name)
+    }
+    for (const adjustment of row.drawer_observation_adjustments) {
+      if (adjustment.adjuster) names.set(adjustment.adjusted_by, adjustment.adjuster.full_name)
+    }
+  }
+  return names
+}
+
+/** A count with everything that describes it, in the one request. */
+const OBSERVATION_WITH_EMBEDS =
+  '*, recorder:profiles!recorded_by(full_name), corrector:profiles!corrected_by(full_name), drawer_cash_out(*, recorder:profiles!recorded_by(full_name)), drawer_observation_adjustments(*, adjuster:profiles!adjusted_by(full_name))'
+
+/** What the recent-bills read returns, cash already split on the server. */
+type RecentBill = {
+  id: string
+  bill_number: number
+  paid_at: string | null
+  cash_paise: number
+}
+type RecentBills = { nearby: RecentBill[]; late: (RecentBill & { synced_at: string })[] }
+
 export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapter {
   /** Names for attribution. Read once per load rather than joined per row. */
   async function namesFor(ids: readonly (string | null)[]): Promise<Map<string, string>> {
@@ -213,80 +258,100 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
     return new Map((data ?? []).map((row) => [row.id, row.full_name]))
   }
 
-  return {
-    async getState(outletId) {
-      /*
-       * **Three waves, not nine** (the-ledger-reads-fast-and-keeps-its-place,
-       * design D13). Measured on production on 2026-09-25, the Drawer made nine
-       * requests one after another — 4.2 s on a phone — although everything
-       * after the first depends only on the page of observations. So: the page,
-       * with its recorders' names embedded; then every other read at once; then
-       * the cash split of the bills that second wave found. The records and the
-       * arithmetic are exactly what they were.
-       */
-      // One row beyond the page: it is the predecessor the oldest row on the
-      // page is measured against, and it is dropped before the page is returned.
-      const observationsResult = await client
+  /**
+   * A page of past counts, newest first, in one round trip.
+   *
+   * `limit + 1` rows, which answers both questions at once: whether there is
+   * another page, and what the oldest row on THIS page carries forward from. Each
+   * row arrives with its own cash out, adjustments and names embedded; the
+   * predecessor's own cash out matters too, because the break on the oldest row
+   * is measured against its counted total less that cash out, and leaving it out
+   * would report a break that is not there.
+   */
+  async function pageOf(outletId: string, query: ObservationPageQuery): Promise<ObservationPage> {
+    const limit = query.limit ?? DRAWER_HISTORY_PAGE
+    let select = client
+      .from('drawer_observations')
+      .select(OBSERVATION_WITH_EMBEDS)
+      .eq('outlet_id', outletId)
+      .order('counted_at', { ascending: false })
+      .limit(limit + 1)
+    // Exclusive, so a page continues from the oldest row already on screen and a
+    // count sharing that instant cannot be shown twice. The database keeps
+    // counted instants strictly increasing per outlet, so this is a total order.
+    if (query.before) select = select.lt('counted_at', query.before)
+
+    const rows = await select
+    if (rows.error) refuse(rows.error)
+
+    const observations = (rows.data ?? []) as unknown as ObservationWithEmbeds[]
+    const page = observations.slice(0, limit)
+    if (page.length === 0) return { observations: [], hasMore: false }
+
+    const movements = observations.flatMap((row) => row.drawer_cash_out)
+    const adjustments = page.flatMap((row) => row.drawer_observation_adjustments)
+    const names = namesIn(observations)
+    return {
+      observations: page.map((row, index) =>
+        toObservationRecord(row, observations[index + 1] ?? null, movements, adjustments, names),
+      ),
+      hasMore: observations.length > limit,
+    }
+  }
+
+  /**
+   * The balance: the last count and what has happened since. Two round trips —
+   * the last two counts (for the last one's own record and the break against its
+   * predecessor) alongside the nearby cash bills, then the interval readers,
+   * which need the last count's instant.
+   */
+  async function balanceFor(outletId: string): Promise<DrawerBalance> {
+    const now = new Date().toISOString()
+    const [lastTwo, recentBills] = await Promise.all([
+      client
         .from('drawer_observations')
-        .select(
-          '*, recorder:profiles!recorded_by(full_name), corrector:profiles!corrected_by(full_name)',
-        )
+        .select(OBSERVATION_WITH_EMBEDS)
         .eq('outlet_id', outletId)
         .order('counted_at', { ascending: false })
-        .limit(DRAWER_HISTORY_PAGE + 1)
-      if (observationsResult.error) refuse(observationsResult.error)
+        .limit(2),
+      // The nearby cash bills, for the movable boundary and the coincidence
+      // report — deliberately the bills themselves and never a candidate
+      // instant. Late bills are the exceptions' business; asking for those after
+      // `now` asks for none.
+      client.rpc('drawer_recent_cash_bills', { p_outlet_id: outletId, p_late_after: now }),
+    ])
+    if (lastTwo.error) refuse(lastTwo.error)
+    if (recentBills.error) refuse(recentBills.error)
 
-      const observations = observationsResult.data ?? []
-      const last = observations[0] ?? null
-
-      const names = new Map<string, string>()
-      for (const row of observations) {
-        if (row.recorder) names.set(row.recorded_by, row.recorder.full_name)
-        if (row.corrected_by && row.corrector) names.set(row.corrected_by, row.corrector.full_name)
+    const rows = (lastTwo.data ?? []) as unknown as ObservationWithEmbeds[]
+    const last = rows[0] ?? null
+    if (!last) {
+      // No anchor yet. The drawer is not tracked at all, and the surface says so
+      // rather than showing a zero it cannot justify (design D18).
+      return {
+        outletId,
+        lastObservation: null,
+        expectedNowPaise: null,
+        leftInDrawerPaise: null,
+        cashReceiptsSincePaise: 0,
+        cashReceiptsSinceCount: 0,
+        cashExpensesSincePaise: 0,
+        cashExpensesSinceCount: 0,
+        receiptsByDay: [],
+        cashExpensesByDay: [],
+        cashOutSincePaise: 0,
+        cashOutSinceCount: 0,
+        daysCovered: 0,
+        nearbyCashBills: [],
+        unsyncedDevices: { count: 0, since: null },
       }
+    }
 
-      if (!last) {
-        // No anchor yet. The drawer is not tracked at all, and the surface says
-        // so rather than showing a zero it cannot justify (design D18).
-        return {
-          outletId,
-          lastObservation: null,
-          expectedNowPaise: null,
-          leftInDrawerPaise: null,
-          cashReceiptsSincePaise: 0,
-          cashReceiptsSinceCount: 0,
-          cashExpensesSincePaise: 0,
-          cashExpensesSinceCount: 0,
-          receiptsByDay: [],
-          cashExpensesByDay: [],
-          cashOutSincePaise: 0,
-          cashOutSinceCount: 0,
-          daysCovered: 0,
-          recentObservations: [],
-          nearbyCashBills: [],
-          unsyncedDevices: { count: 0, since: null },
-          exceptions: [],
-        }
-      }
-
-      const now = new Date().toISOString()
-
-      // The three interval readers, called on the database rather than
-      // reimplemented here, so the pending figure and the figure the next count
-      // is measured against come from one piece of arithmetic.
-      const observationIds = observations.map((row) => row.id)
-      const [
-        receipts,
-        expenses,
-        cashOut,
-        receiptDays,
-        expenseDays,
-        pageMovements,
-        sinceMovements,
-        adjustments,
-        acknowledgements,
-        recentBills,
-      ] = await Promise.all([
+    // The three interval readers, called on the database rather than
+    // reimplemented here, so the pending figure and the figure the next count is
+    // measured against come from one piece of arithmetic.
+    const [receipts, expenses, cashOut, receiptDays, expenseDays, sinceMovements] =
+      await Promise.all([
         client.rpc('drawer_cash_receipts_paise', {
           p_outlet_id: outletId,
           p_from: last.counted_at,
@@ -317,228 +382,186 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
           p_from: last.counted_at,
           p_to: now,
         }),
-        // The page's movements by observation, and the movements since the last
-        // count by instant: two questions, two reads — see below.
-        client
-          .from('drawer_cash_out')
-          .select('*')
-          .eq('outlet_id', outletId)
-          .in('observation_id', observationIds),
+        // The movements since the last count, by instant: which is what
+        // `cashOutSinceCount` asks, and not the same question as a count's own
+        // movements (the page's movements answered it wrongly once).
         client
           .from('drawer_cash_out')
           .select('id, observation_id')
           .eq('outlet_id', outletId)
           .gt('occurred_at', last.counted_at),
-        // Scoped to the page for the same reason, and it had no bound at all:
-        // every adjustment the outlet had ever recorded, on every drawer open.
-        client
-          .from('drawer_observation_adjustments')
-          .select('*')
-          .eq('outlet_id', outletId)
-          .in(
-            'observation_id',
-            observations.slice(0, DRAWER_HISTORY_PAGE).map((row) => row.id),
-          ),
-        // Exceptions: derived from instants, never stored. A cash bill inside an
-        // observed interval that arrived after the observation was recorded.
-        client
-          .from('drawer_reconciliation_acknowledgements')
-          .select('*, acknowledger:profiles!acknowledged_by(full_name)')
-          .eq('outlet_id', outletId),
-        // The nearby cash bills, for the movable boundary and the coincidence
-        // report — deliberately the bills themselves and never a candidate
-        // instant — and the ones that synced after the oldest count on the page
-        // was recorded, which is where an exception can come from. One server
-        // read with each bill's cash already split, rather than two bill reads
-        // and a round trip for their payments after them (design D16).
-        client.rpc('drawer_recent_cash_bills', {
-          p_outlet_id: outletId,
-          p_late_after: observations.at(-1)?.recorded_at ?? now,
-        }),
       ])
-      if (receipts.error) refuse(receipts.error)
-      if (expenses.error) refuse(expenses.error)
-      if (cashOut.error) refuse(cashOut.error)
-      if (receiptDays.error) refuse(receiptDays.error)
-      if (expenseDays.error) refuse(expenseDays.error)
+    if (receipts.error) refuse(receipts.error)
+    if (expenses.error) refuse(expenses.error)
+    if (cashOut.error) refuse(cashOut.error)
+    if (receiptDays.error) refuse(receiptDays.error)
+    if (expenseDays.error) refuse(expenseDays.error)
+    if (sinceMovements.error) refuse(sinceMovements.error)
 
-      const receiptsByDay: DrawerReceiptsDay[] = (receiptDays.data ?? []).map((row) => ({
-        businessDate: row.business_date,
-        paise: Number(row.paise),
-        bills: row.bills,
+    const receiptsByDay: DrawerReceiptsDay[] = (receiptDays.data ?? []).map((row) => ({
+      businessDate: row.business_date,
+      paise: Number(row.paise),
+      bills: row.bills,
+    }))
+    const cashExpensesByDay: DrawerExpensesDay[] = (expenseDays.data ?? []).map((row) => ({
+      businessDate: row.business_date,
+      paise: Number(row.paise),
+      rows: row.rows,
+    }))
+
+    const movements = rows.flatMap((row) => row.drawer_cash_out)
+    const lastObservation = toObservationRecord(
+      last,
+      rows[1] ?? null,
+      movements,
+      last.drawer_observation_adjustments,
+      namesIn(rows),
+    )
+    const left = nextOpeningPaise(
+      last.counted_total_paise,
+      last.drawer_cash_out.reduce((sum, movement) => sum + movement.amount_paise, 0),
+    )
+
+    const nearbyCashBills: NearbyCashBillRecord[] = (
+      recentBills.data as unknown as RecentBills
+    ).nearby
+      .map((bill) => ({
+        billId: bill.id,
+        billNumber: bill.bill_number,
+        paidAt: bill.paid_at ?? '',
+        cashPaise: Number(bill.cash_paise),
       }))
-      const cashExpensesByDay: DrawerExpensesDay[] = (expenseDays.data ?? []).map((row) => ({
-        businessDate: row.business_date,
-        paise: Number(row.paise),
-        rows: row.rows,
-      }))
+      .filter((bill) => bill.cashPaise > 0 && bill.paidAt !== '')
+      .slice(0, 12)
 
-      /**
-       * **Two reads, because they answer two different questions**, and one of
-       * them used to answer both wrongly.
-       *
-       * This was a single read of the newest sixty movements at the outlet, and
-       * `listObservations` two hundred lines below already did it correctly —
-       * so the first page could lie while every later page told the truth. The
-       * sixty were ordered by instant across the whole outlet rather than scoped
-       * to the observations on the page, so a burst of spends could push an
-       * older row's own collection out of the window. Nothing failed; the row
-       * simply found no movements of its own, and **that is the shape of the
-       * bug worth stating**: `Collected` understated, `Left` overstated, and —
-       * because a carry-forward is the previous count less its own movements —
-       * `openingBreakPaise` computed against a figure that was too high and
-       * **reported a break that did not exist**. A fabricated discrepancy
-       * warning, in the one surface whose promise is to report and never invent.
-       *
-       * Unreachable in production until `retire-the-manual-ledger` (#12): each
-       * outlet held three counts, fewer than one page, so the list never paged
-       * and the window never had to stretch. Carrying August took each outlet to
-       * nineteen.
-       *
-       * So: the page's movements by observation, which is bounded by the page
-       * and served by `drawer_cash_out_observation_idx`; and the movements since
-       * the last count by instant, which is what `cashOutSinceCount` actually
-       * asks and is bounded by how recently the drawer was counted.
-       */
-      if (pageMovements.error) refuse(pageMovements.error)
-      if (sinceMovements.error) refuse(sinceMovements.error)
-      if (adjustments.error) refuse(adjustments.error)
-      if (acknowledgements.error) refuse(acknowledgements.error)
-      if (recentBills.error) refuse(recentBills.error)
+    return {
+      outletId,
+      lastObservation,
+      expectedNowPaise: expectedTotalPaise({
+        openingPaise: left,
+        cashReceiptsPaise: Number(receipts.data ?? 0),
+        cashExpensesPaise: Number(expenses.data ?? 0),
+        cashOutPaise: Number(cashOut.data ?? 0),
+      }),
+      leftInDrawerPaise: left,
+      cashReceiptsSincePaise: Number(receipts.data ?? 0),
+      // **The true count, from the grouped read.** It used to be the length of
+      // `nearbyCashBills`, which is capped at twelve and drawn from the last forty
+      // settled bills for a different job entirely — so forty cash bills since
+      // the last count reported twelve.
+      cashReceiptsSinceCount: receiptsByDay.reduce((sum, day) => sum + day.bills, 0),
+      cashExpensesSincePaise: Number(expenses.data ?? 0),
+      cashExpensesSinceCount: cashExpensesByDay.reduce((sum, day) => sum + day.rows, 0),
+      receiptsByDay,
+      cashExpensesByDay,
+      cashOutSincePaise: Number(cashOut.data ?? 0),
+      cashOutSinceCount: (sinceMovements.data ?? []).filter((row) => row.observation_id !== last.id)
+        .length,
+      daysCovered: daysCoveredBy([receiptsByDay, cashExpensesByDay]),
+      nearbyCashBills,
+      unsyncedDevices: { count: 0, since: null },
+    }
+  }
 
-      const movements = pageMovements.data ?? []
-      const ownOf = (observationId: string) =>
-        movements.filter((row) => row.observation_id === observationId)
-
-      // `observations` is newest-first, so the row AFTER an index is its
-      // predecessor in time. One row beyond the page was read for exactly this,
-      // and it is dropped from the page itself below.
-      const recent = observations
-        .slice(0, DRAWER_HISTORY_PAGE)
-        .map((row, index) =>
-          toObservationRecord(
-            row,
-            observations[index + 1] ?? null,
-            movements,
-            adjustments.data ?? [],
-            names,
-          ),
+  /**
+   * Late arrivals inside an observed interval: derived from instants, never
+   * stored. A cash bill inside an observed interval that arrived after the
+   * observation was recorded. Two round trips — the page's counts and the
+   * acknowledgements, then the bills that synced after the oldest count on the
+   * page was recorded, cash already split.
+   */
+  async function exceptionsFor(outletId: string): Promise<DrawerExceptionRecord[]> {
+    const [observationsResult, acknowledgements] = await Promise.all([
+      client
+        .from('drawer_observations')
+        .select(
+          'id, counted_at, recorded_at, is_anchor, expected_paise, counted_total_paise, difference_paise',
         )
+        .eq('outlet_id', outletId)
+        .order('counted_at', { ascending: false })
+        .limit(DRAWER_HISTORY_PAGE + 1),
+      client
+        .from('drawer_reconciliation_acknowledgements')
+        .select('*, acknowledger:profiles!acknowledged_by(full_name)')
+        .eq('outlet_id', outletId),
+    ])
+    if (observationsResult.error) refuse(observationsResult.error)
+    if (acknowledgements.error) refuse(acknowledgements.error)
 
-      const left = nextOpeningPaise(
-        last.counted_total_paise,
-        ownOf(last.id).reduce((sum, movement) => sum + movement.amount_paise, 0),
+    const observations = observationsResult.data ?? []
+    const oldest = observations.at(-1)
+    if (!oldest) return []
+
+    const recentBills = await client.rpc('drawer_recent_cash_bills', {
+      p_outlet_id: outletId,
+      p_late_after: oldest.recorded_at,
+    })
+    if (recentBills.error) refuse(recentBills.error)
+    const lateBills = (recentBills.data as unknown as RecentBills).late
+
+    const ackNames = new Map<string, string>()
+    for (const row of acknowledgements.data ?? []) {
+      if (row.acknowledger) ackNames.set(row.acknowledged_by, row.acknowledger.full_name)
+    }
+
+    const chronological = [...observations].reverse()
+    const exceptions: DrawerExceptionRecord[] = []
+    for (const bill of lateBills) {
+      const paidAt = bill.paid_at
+      if (!paidAt) continue
+      const cash = Number(bill.cash_paise)
+      if (cash === 0) continue
+
+      // Which observation's interval does this fall in? The earliest one whose
+      // counted instant is at or after the payment, and which was recorded
+      // before the bill landed.
+      const covering = chronological.find(
+        (row) => !row.is_anchor && row.counted_at >= paidAt && row.recorded_at < bill.synced_at,
+      )
+      if (!covering) continue
+
+      const acknowledgement = (acknowledgements.data ?? []).find(
+        (row) => row.observation_id === covering.id && row.source_id === bill.id,
       )
 
-      type RecentBill = {
-        id: string
-        bill_number: number
-        paid_at: string | null
-        synced_at?: string
-        cash_paise: number
-      }
-      const recentRows = (recentBills.data ?? { nearby: [], late: [] }) as unknown as {
-        nearby: RecentBill[]
-        late: (RecentBill & { synced_at: string })[]
-      }
-      const nearbyBills = recentRows.nearby
-      const lateBills = recentRows.late
-      const billCash = new Map(
-        [...nearbyBills, ...lateBills].map((bill) => [bill.id, Number(bill.cash_paise)]),
-      )
+      exceptions.push({
+        sourceKind: 'bill',
+        sourceId: bill.id,
+        label: `Bill ${bill.bill_number}`,
+        amountPaise: cash,
+        occurredAt: paidAt,
+        arrivedAt: bill.synced_at,
+        observationId: covering.id,
+        differenceWouldHaveBeenPaise:
+          covering.expected_paise === null
+            ? 0
+            : drawerDifferencePaise(covering.counted_total_paise, covering.expected_paise + cash),
+        explainsRecordedVariance: covering.difference_paise === cash,
+        acknowledgedAt: acknowledgement?.acknowledged_at ?? null,
+        acknowledgedByName: acknowledgement
+          ? (ackNames.get(acknowledgement.acknowledged_by) ?? null)
+          : null,
+        acknowledgementNote: acknowledgement?.note ?? null,
+      })
+    }
+    return exceptions
+  }
 
-      const nearbyCashBills: NearbyCashBillRecord[] = nearbyBills
-        .map((bill) => ({
-          billId: bill.id,
-          billNumber: bill.bill_number,
-          paidAt: bill.paid_at ?? '',
-          cashPaise: billCash.get(bill.id) ?? 0,
-        }))
-        .filter((bill) => bill.cashPaise > 0 && bill.paidAt !== '')
-        .slice(0, 12)
-
-      const ackNames = new Map<string, string>()
-      for (const row of acknowledgements.data ?? []) {
-        if (row.acknowledger) ackNames.set(row.acknowledged_by, row.acknowledger.full_name)
-      }
-
-      const exceptions: DrawerExceptionRecord[] = []
-      for (const bill of lateBills) {
-        const paidAt = bill.paid_at
-        if (!paidAt) continue
-        const cash = billCash.get(bill.id) ?? 0
-        if (cash === 0) continue
-
-        // Which observation's interval does this fall in? The earliest one whose
-        // counted instant is at or after the payment, and which was recorded
-        // before the bill landed.
-        const chronological = [...observations].reverse()
-        const covering = chronological.find(
-          (row) => !row.is_anchor && row.counted_at >= paidAt && row.recorded_at < bill.synced_at,
-        )
-        if (!covering) continue
-
-        const acknowledgement = (acknowledgements.data ?? []).find(
-          (row) => row.observation_id === covering.id && row.source_id === bill.id,
-        )
-
-        exceptions.push({
-          sourceKind: 'bill',
-          sourceId: bill.id,
-          label: `Bill ${bill.bill_number}`,
-          amountPaise: cash,
-          occurredAt: paidAt,
-          arrivedAt: bill.synced_at,
-          observationId: covering.id,
-          differenceWouldHaveBeenPaise:
-            covering.expected_paise === null
-              ? 0
-              : drawerDifferencePaise(covering.counted_total_paise, covering.expected_paise + cash),
-          explainsRecordedVariance: covering.difference_paise === cash,
-          acknowledgedAt: acknowledgement?.acknowledged_at ?? null,
-          acknowledgedByName: acknowledgement
-            ? (ackNames.get(acknowledgement.acknowledged_by) ?? null)
-            : null,
-          acknowledgementNote: acknowledgement?.note ?? null,
-        })
-      }
-
-      return {
-        outletId,
-        lastObservation: recent[0] ?? null,
-        expectedNowPaise: expectedTotalPaise({
-          openingPaise: left,
-          cashReceiptsPaise: Number(receipts.data ?? 0),
-          cashExpensesPaise: Number(expenses.data ?? 0),
-          cashOutPaise: Number(cashOut.data ?? 0),
-        }),
-        leftInDrawerPaise: left,
-        cashReceiptsSincePaise: Number(receipts.data ?? 0),
-        // **The true count, from the grouped read.** It used to be the length of
-        // `nearbyCashBills`, which is capped at twelve and drawn from the last
-        // forty settled bills for a different job entirely — so forty cash bills
-        // since the last count reported twelve. The cap on that list is
-        // deliberate and stays; only the count stops being derived from it.
-        cashReceiptsSinceCount: receiptsByDay.reduce((sum, day) => sum + day.bills, 0),
-        cashExpensesSincePaise: Number(expenses.data ?? 0),
-        // And this was the literal nought.
-        cashExpensesSinceCount: cashExpensesByDay.reduce((sum, day) => sum + day.rows, 0),
-        receiptsByDay,
-        cashExpensesByDay,
-        cashOutSincePaise: Number(cashOut.data ?? 0),
-        // Its own read, by instant: the movements since the last count are not
-        // the page's movements, and counting them out of the page's array is
-        // what made this figure disagree with the paise beside it.
-        cashOutSinceCount: (sinceMovements.data ?? []).filter(
-          (row) => row.observation_id !== last.id,
-        ).length,
-        daysCovered: daysCoveredBy([receiptsByDay, cashExpensesByDay]),
-        recentObservations: recent,
-        nearbyCashBills,
-        unsyncedDevices: { count: 0, since: null },
-        exceptions,
-      }
+  return {
+    async getState(outletId) {
+      // Everything at once, for readers that want the whole drawer. The surface
+      // reads the three parts separately so each appears when it lands (D18).
+      const [balance, page, exceptions] = await Promise.all([
+        balanceFor(outletId),
+        pageOf(outletId, {}),
+        exceptionsFor(outletId),
+      ])
+      return { ...balance, recentObservations: page.observations, exceptions }
     },
+
+    getBalance: balanceFor,
+
+    getExceptions: exceptionsFor,
 
     /**
      * A page of past counts, older than `before`, newest first.
@@ -548,68 +571,7 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
      * and the late arrivals to render ten more rows would be four round trips
      * for a list that has not changed.
      */
-    async listObservations(outletId, query: ObservationPageQuery = {}) {
-      const limit = query.limit ?? DRAWER_HISTORY_PAGE
-
-      // `limit + 1` rows, which answers both questions at once: whether there is
-      // another page, and what the oldest row on THIS page carries forward from.
-      let select = client
-        .from('drawer_observations')
-        .select('*')
-        .eq('outlet_id', outletId)
-        .order('counted_at', { ascending: false })
-        .limit(limit + 1)
-      // Exclusive, so a page continues from the oldest row already on screen and
-      // a count sharing that instant cannot be shown twice. The database keeps
-      // counted instants strictly increasing per outlet, so this is a total order.
-      if (query.before) select = select.lt('counted_at', query.before)
-
-      const rows = await select
-      if (rows.error) refuse(rows.error)
-
-      const observations = rows.data ?? []
-      const page = observations.slice(0, limit)
-      if (page.length === 0) return { observations: [], hasMore: false } satisfies ObservationPage
-
-      // The page's own rows AND the predecessor read beyond it. The break on the
-      // oldest row is measured against the predecessor's counted total less that
-      // observation's OWN cash out, so leaving its movements out would compute a
-      // carry-forward of the wrong figure and report a break that is not there.
-      const movementIds = observations.map((row) => row.id)
-      const adjustmentIds = page.map((row) => row.id)
-
-      const [movementRows, adjustmentRows] = await Promise.all([
-        client
-          .from('drawer_cash_out')
-          .select('*')
-          .eq('outlet_id', outletId)
-          .in('observation_id', movementIds),
-        client
-          .from('drawer_observation_adjustments')
-          .select('*')
-          .eq('outlet_id', outletId)
-          .in('observation_id', adjustmentIds),
-      ])
-      if (movementRows.error) refuse(movementRows.error)
-      if (adjustmentRows.error) refuse(adjustmentRows.error)
-
-      const movements = movementRows.data ?? []
-      const adjustments = adjustmentRows.data ?? []
-
-      const names = await namesFor([
-        ...page.map((row) => row.recorded_by),
-        ...page.map((row) => row.corrected_by),
-        ...movements.map((row) => row.recorded_by),
-        ...adjustments.map((row) => row.adjusted_by),
-      ])
-
-      return {
-        observations: page.map((row, index) =>
-          toObservationRecord(row, observations[index + 1] ?? null, movements, adjustments, names),
-        ),
-        hasMore: observations.length > limit,
-      } satisfies ObservationPage
-    },
+    listObservations: pageOf,
 
     async recordObservation(input: RecordObservationInput) {
       // Keys are OMITTED rather than set to undefined, so each absent argument

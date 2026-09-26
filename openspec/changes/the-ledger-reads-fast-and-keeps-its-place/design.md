@@ -307,6 +307,42 @@ the Drawer 1.4 s → 1.9 s. Two mistakes, both found and fixed the same night.
   started with `.then` where it is created, and a unit test with a lazy mock
   asserts it was sent before the bills answered — failing on the shipped code.
 
+## Round four (2026-09-26)
+
+### D18. The Drawer is three reads, and the screen shows each as it lands
+
+`CashDrawerAdapter` gains `getBalance(outletId)` — `DrawerBalance`, which is
+`DrawerState` without `recentObservations` and `exceptions` — and
+`getExceptions(outletId)`. The first page of counts is the existing
+`listObservations(outletId)`, which already answers `hasMore` exactly, so the
+"a full page means look again" guess goes. `getState` stays, composed from the
+three, for Overview's demo reading and the tests that read the whole state.
+
+Real reads, all started together:
+
+- **Recent counts**, one round trip: the page with its recorders, its own cash
+  out and its adjustments embedded (every foreign key exists).
+- **Balance**, two: the last two counts with their movements, adjustments and
+  names, and the nearby cash bills (`drawer_recent_cash_bills`); then the five
+  interval readers and the since-count movements, which need the last count's
+  instant.
+- **Exceptions**, two: the page's counts and the acknowledgements; then the late
+  bills after the oldest count on the page was recorded.
+
+The surface holds three readings keyed to the outlet, as it held one. Each part
+renders when its reading is in; the balance card, the Count & Collect action and
+the count sheet's checks need only the balance; the history and its paging only
+the counts. The exceptions card has no placeholder — it is usually absent, and a
+placeholder for it would be a box that is almost always wrong. After any write
+all three are read again.
+
+### D19. Placeholders shaped like what they hold
+
+The balance placeholder is the card's own layout — a label and a display figure
+on one line, a row of chips, a three-column strip of figures — and the counts'
+placeholder is a heading and three rows in the count row's grid. Both reuse the
+real cards' classes, so a later change to one is visibly a change to the other.
+
 ## Rejected alternatives
 
 - **A materialised read model or a stored day row.** The remedy the #11 comment
@@ -335,6 +371,10 @@ the Drawer 1.4 s → 1.9 s. Two mistakes, both found and fixed the same night.
 - **Caching readings by outlet and period.** A cache is a second place a figure
   can be stale, on the one surface whose whole claim is that it cannot disagree
   with its sources; two round trips make it unnecessary.
+- **One server function for the whole balance.** It would make the balance one
+  round trip, but move the since-count arithmetic that `drawer-arithmetic.ts`
+  and the interval readers share into a third place.
+- **A placeholder for the exceptions card.** Nearly always there is no card.
 - **Security definer for the round-three functions.** They answer exactly
   what the caller could already read row by row; invoker makes RLS decide that,
   with no assertion to keep in step with the policies.

@@ -34,9 +34,10 @@ import { Explain } from '@/components/ui/why'
 import { useAdapters, type Tables } from '@/data-access'
 import {
   DataActionError,
-  DRAWER_HISTORY_PAGE,
+  type DrawerBalance,
+  type DrawerExceptionRecord,
   type DrawerObservationRecord,
-  type DrawerState,
+  type ObservationPage,
 } from '@/data-access/adapters'
 import {
   APPROXIMATE_WINDOW_MINUTES,
@@ -197,28 +198,61 @@ function toLocalInput(at: Date): string {
   )
 }
 
-/** The drawer's loading silhouette, including the metric-bearing count rows. */
-function DrawerLoading() {
+/**
+ * The balance card's placeholder, in the card's own layout (design D19): the
+ * headline label with its display figure on one line, a row of chips, and the
+ * three-figure strip under a rule. Same card, same spacing, so the real card
+ * replaces it without anything below moving.
+ */
+function BalanceLoading() {
   return (
-    <LoadingRegion label="the drawer" className="space-y-3" data-testid="drawer-loading">
-      {[4, 4].map((rowCount, card) => (
-        <div key={card} className="rounded-xl border border-border bg-surface p-4 shadow-sm">
-          <div className="space-y-2">
-            {Array.from({ length: rowCount }, (_, index) => (
-              <Shimmer key={index} className="h-6" />
-            ))}
-          </div>
+    <LoadingRegion label="the balance" data-testid="drawer-balance-loading">
+      <Card className="space-y-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <Shimmer className="h-4 w-36" />
+          <Shimmer className="h-8 w-28" />
         </div>
-      ))}
+        <div className="flex gap-2">
+          <Shimmer className="h-6 w-28 rounded-full" />
+          <Shimmer className="h-6 w-20 rounded-full" />
+        </div>
+        <div className="grid grid-cols-3 gap-2 border-t border-border pt-2">
+          {[0, 1, 2].map((figure) => (
+            <div key={figure} className="flex flex-col items-center gap-1">
+              <Shimmer className="h-3 w-16" />
+              <Shimmer className="h-5 w-14" />
+              <Shimmer className="h-3 w-10" />
+            </div>
+          ))}
+        </div>
+      </Card>
+    </LoadingRegion>
+  )
+}
+
+/**
+ * The recent counts' placeholder: the section heading and three rows in the
+ * count row's own grid — on the left the counted amount, the verdict chip and
+ * the when-and-who line, as a closed row carries them; on the right the two
+ * figures and the disclosure mark.
+ */
+function CountsLoading() {
+  return (
+    <LoadingRegion
+      label="the recent counts"
+      className="space-y-3"
+      data-testid="drawer-counts-loading"
+    >
       <div className="px-1">
-        <Shimmer className="h-4 w-28" />
+        <Shimmer className="h-3 w-28" />
       </div>
       {[0, 1, 2].map((row) => (
         <Card key={row} className="overflow-hidden p-0">
           <div className="grid min-h-20 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-3">
             <div className="space-y-2">
-              <Shimmer className="h-4 w-40 max-w-full" />
-              <Shimmer className="h-3 w-48 max-w-full" />
+              <Shimmer className="h-5 w-36 max-w-full" />
+              <Shimmer className="h-5 w-24 rounded-full" />
+              <Shimmer className="h-4 w-44 max-w-full" />
             </div>
             <div className="flex items-center gap-2">
               <div className="grid grid-cols-2 gap-2">
@@ -238,12 +272,35 @@ function DrawerLoading() {
   )
 }
 
+/** A part of the drawer that could not be read, said in its own place. */
+function PartUnreadable({ what, testId }: { what: string; testId: string }) {
+  return (
+    <p role="alert" data-testid={testId} className="text-sm font-semibold text-danger">
+      Could not read {what}. Try again in a moment.
+    </p>
+  )
+}
+
 export function CashDrawerSurface() {
   const { cashDrawer: adapter, counter, outlets: outletsAdapter } = useAdapters()
   const { outletId, selector: outletSelector } = useOutletScope()
   const session = useSession()
 
-  const [state, setState] = useState<DrawerState | null>(null)
+  /*
+   * **Three readings, each on screen when it lands** (the-ledger-reads-fast-and-
+   * keeps-its-place, design D18). The balance, the first page of counts and the
+   * exceptions used to be one read, so the page showed nothing until the slowest
+   * part was ready. Null is "still reading"; a part that failed is named in
+   * `unreadable` and stays null, and the others render regardless.
+   */
+  const [balance, setBalance] = useState<DrawerBalance | null>(null)
+  const [firstPage, setFirstPage] = useState<ObservationPage | null>(null)
+  const [exceptions, setExceptions] = useState<DrawerExceptionRecord[] | null>(null)
+  const [unreadable, setUnreadable] = useState<{
+    balance?: boolean
+    counts?: boolean
+    exceptions?: boolean
+  }>({})
   const [outlet, setOutlet] = useState<Tables<'outlets'> | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -320,27 +377,50 @@ export function CashDrawerSurface() {
   const [readingFor, setReadingFor] = useState<string | null>(outletId)
   if (readingFor !== outletId) {
     setReadingFor(outletId)
-    setState(null)
+    setBalance(null)
+    setFirstPage(null)
+    setExceptions(null)
+    setUnreadable({})
     setOlder([])
     setExhausted(false)
   }
 
+  /** After a write: all three again, together. */
   const load = useCallback(async () => {
     if (!outletId) return
-    setState(await adapter.getState(outletId))
+    const [nextBalance, nextPage, nextExceptions] = await Promise.all([
+      adapter.getBalance(outletId),
+      adapter.listObservations(outletId),
+      adapter.getExceptions(outletId),
+    ])
+    setBalance(nextBalance)
+    setFirstPage(nextPage)
+    setOlder([])
+    setExhausted(false)
+    setExceptions(nextExceptions)
+    setUnreadable({})
   }, [adapter, outletId])
 
   useEffect(() => {
     if (!outletId) return
     let active = true
-    void adapter
-      .getState(outletId)
-      .then((loaded) => {
-        if (active) setState(loaded)
-      })
-      .catch(() => {
-        if (active) setError('Could not read the drawer. Try again in a moment.')
-      })
+    // Started together, settled separately: each part appears when its own read
+    // lands, and one that fails is said in its own place.
+    const settle = <T,>(
+      read: Promise<T>,
+      publish: (value: T) => void,
+      part: 'balance' | 'counts' | 'exceptions',
+    ) =>
+      void read
+        .then((value) => {
+          if (active) publish(value)
+        })
+        .catch(() => {
+          if (active) setUnreadable((was) => ({ ...was, [part]: true }))
+        })
+    settle(adapter.getBalance(outletId), setBalance, 'balance')
+    settle(adapter.listObservations(outletId), setFirstPage, 'counts')
+    settle(adapter.getExceptions(outletId), setExceptions, 'exceptions')
     return () => {
       active = false
     }
@@ -443,14 +523,14 @@ export function CashDrawerSurface() {
   // apparently recorded twice.
   const observations = useMemo(() => {
     const seen = new Set<string>()
-    return [...(state?.recentObservations ?? []), ...older]
+    return [...(firstPage?.observations ?? []), ...older]
       .filter((row) => {
         if (seen.has(row.id)) return false
         seen.add(row.id)
         return true
       })
       .sort((a, b) => b.countedAt.localeCompare(a.countedAt))
-  }, [state, older])
+  }, [firstPage, older])
 
   // The cursor lives in a ref so `loadMore` keeps one identity across pages —
   // the observer effect below re-subscribes on every change of it.
@@ -459,13 +539,8 @@ export function CashDrawerSurface() {
     cursor.current = observations.at(-1)?.countedAt ?? null
   }, [observations])
 
-  /**
-   * There is no `hasMore` on `DrawerState`, so a full first page is taken as a
-   * reason to look. The cost of guessing wrong is one read that returns nothing
-   * and settles the question; the cost of not looking is a history that ends
-   * silently at ten.
-   */
-  const mayHaveMore = !exhausted && (state?.recentObservations.length ?? 0) >= DRAWER_HISTORY_PAGE
+  /** From the first page's own answer, rather than guessed from a full page. */
+  const mayHaveMore = !exhausted && (firstPage?.hasMore ?? false)
 
   const loadMore = useCallback(async () => {
     if (!outletId) return
@@ -513,25 +588,25 @@ export function CashDrawerSurface() {
     counted.trim() !== '' && Number.isFinite(countedRupees) && countedRupees >= 0
 
   const advice = useMemo(() => {
-    if (!state || !countedUsable || state.lastObservation === null) return null
+    if (!balance || !countedUsable || balance.lastObservation === null) return null
     // Always approximate (design D19): a count takes minutes, the counter keeps
     // trading, and no instant a person supplies is the edge of that act.
-    return countAdvice(state, rupeesToPaise(countedRupees), countedAt, true)
-  }, [state, countedUsable, countedRupees, countedAt])
+    return countAdvice(balance, rupeesToPaise(countedRupees), countedAt, true)
+  }, [balance, countedUsable, countedRupees, countedAt])
 
   const boundary = useMemo(() => {
-    if (!state || state.lastObservation === null) return null
-    return expectedAtInstant(state, countedAt)
-  }, [state, countedAt])
+    if (!balance || balance.lastObservation === null) return null
+    return expectedAtInstant(balance, countedAt)
+  }, [balance, countedAt])
 
   /**
-   * What the two breakdowns need: the state, and two business dates resolved
+   * What the two breakdowns need: the balance, and two business dates resolved
    * through **the outlet's own cutover** rather than a constant this file used
    * to carry. Null until both the drawer and the outlet have arrived.
    */
   const breakdown = useMemo(
-    () => (state ? breakdownContext(state, outlet?.business_day_cutover ?? null) : null),
-    [state, outlet],
+    () => (balance ? breakdownContext(balance, outlet?.business_day_cutover ?? null) : null),
+    [balance, outlet],
   )
 
   /**
@@ -545,12 +620,12 @@ export function CashDrawerSurface() {
     const at = countedAt.getTime()
     if (Number.isNaN(at)) return 'Pick the date and time the drawer was counted.'
     if (at > clock) return 'A count cannot be taken in the future.'
-    const previous = state?.lastObservation?.countedAt
+    const previous = balance?.lastObservation?.countedAt
     if (previous && countedAt.toISOString() <= previous) {
       return `This drawer was already counted at ${formatDayTime(previous)}. Pick a later time.`
     }
     return null
-  }, [clock, countedAt, state])
+  }, [clock, countedAt, balance])
 
   /**
    * Business dates that have passed **since the one the last count belongs to**,
@@ -568,10 +643,10 @@ export function CashDrawerSurface() {
    * whole business date has passed with no count at all, which is the point the
    * next difference stops being attributable to one night.
    */
-  const uncountedDays = Math.max(0, (state?.daysCovered ?? 0) - 1)
+  const uncountedDays = Math.max(0, (balance?.daysCovered ?? 0) - 1)
 
   /** What the drawer should hold at the stated instant. Null before the anchor. */
-  const expectedPaise = boundary && state?.lastObservation ? boundary.expectedPaise : null
+  const expectedPaise = boundary && balance?.lastObservation ? boundary.expectedPaise : null
 
   const collectingRupees = Number(collecting.trim())
   const collectingUsable = collecting.trim() !== '' && Number.isFinite(collectingRupees)
@@ -749,7 +824,7 @@ export function CashDrawerSurface() {
    * thing `drawer-arithmetic.ts` exists to prevent.
    */
   const editMoved =
-    state && adjusting ? boundaryMove(state, new Date(adjusting.countedAt), editedAt) : null
+    balance && adjusting ? boundaryMove(balance, new Date(adjusting.countedAt), editedAt) : null
 
   /**
    * The recording bounds, asked by the field rather than by a round trip. The
@@ -782,94 +857,103 @@ export function CashDrawerSurface() {
         </p>
       )}
 
-      {state === null ? (
-        <DrawerLoading />
-      ) : (
-        <div className="space-y-3">
-          {state.exceptions.length > 0 && (
-            <Card className="space-y-2" data-testid="drawer-exception">
-              <ChipRow>
-                <Explain
-                  label="why a late arrival is not folded in"
-                  explanation={
-                    <>
-                      A count is what somebody saw. Work landing afterwards is reported here rather
-                      than folded in, because rewriting a recorded figure is the failure this whole
-                      chain exists to prevent.
-                    </>
-                  }
-                >
-                  <Chip tone="warn" icon={TriangleAlert}>
-                    Needs a look
-                  </Chip>
-                </Explain>
-              </ChipRow>
+      <div className="space-y-3">
+        {unreadable.exceptions && (
+          <PartUnreadable what="the late arrivals" testId="drawer-exceptions-unreadable" />
+        )}
+        {exceptions && exceptions.length > 0 && (
+          <Card className="space-y-2" data-testid="drawer-exception">
+            <ChipRow>
+              <Explain
+                label="why a late arrival is not folded in"
+                explanation={
+                  <>
+                    A count is what somebody saw. Work landing afterwards is reported here rather
+                    than folded in, because rewriting a recorded figure is the failure this whole
+                    chain exists to prevent.
+                  </>
+                }
+              >
+                <Chip tone="warn" icon={TriangleAlert}>
+                  Needs a look
+                </Chip>
+              </Explain>
+            </ChipRow>
 
-              {state.exceptions.map((exception) => (
-                <div
-                  key={exception.sourceId}
-                  className="space-y-1 border-t border-border pt-2"
-                  data-testid={`exception-${exception.sourceId}`}
-                >
-                  <p className="flex items-baseline justify-between gap-2 text-xs">
-                    <span className="text-content-muted">{exception.label}</span>
-                    <Money paise={exception.amountPaise} className="font-semibold" />
+            {exceptions.map((exception) => (
+              <div
+                key={exception.sourceId}
+                className="space-y-1 border-t border-border pt-2"
+                data-testid={`exception-${exception.sourceId}`}
+              >
+                <p className="flex items-baseline justify-between gap-2 text-xs">
+                  <span className="text-content-muted">{exception.label}</span>
+                  <Money paise={exception.amountPaise} className="font-semibold" />
+                </p>
+                <ChipRow>
+                  <Chip icon={Clock}>rung {formatTime(exception.occurredAt)}</Chip>
+                  <Chip icon={Clock}>arrived {formatDayTime(exception.arrivedAt)}</Chip>
+                  {exception.explainsRecordedVariance ? (
+                    <Chip tone="good" icon={Check}>
+                      explains that count
+                    </Chip>
+                  ) : (
+                    <Chip tone="neutral">
+                      would have been <Money paise={exception.differenceWouldHaveBeenPaise} />
+                    </Chip>
+                  )}
+                  {exception.acknowledgedAt && (
+                    <Chip tone="good" icon={Check}>
+                      accepted {formatDayTime(exception.acknowledgedAt)}
+                    </Chip>
+                  )}
+                </ChipRow>
+                {exception.acknowledgementNote && (
+                  <p className="text-xs italic text-content-muted">
+                    {exception.acknowledgementNote}
                   </p>
-                  <ChipRow>
-                    <Chip icon={Clock}>rung {formatTime(exception.occurredAt)}</Chip>
-                    <Chip icon={Clock}>arrived {formatDayTime(exception.arrivedAt)}</Chip>
-                    {exception.explainsRecordedVariance ? (
-                      <Chip tone="good" icon={Check}>
-                        explains that count
-                      </Chip>
-                    ) : (
-                      <Chip tone="neutral">
-                        would have been <Money paise={exception.differenceWouldHaveBeenPaise} />
-                      </Chip>
-                    )}
-                    {exception.acknowledgedAt && (
-                      <Chip tone="good" icon={Check}>
-                        accepted {formatDayTime(exception.acknowledgedAt)}
-                      </Chip>
-                    )}
-                  </ChipRow>
-                  {exception.acknowledgementNote && (
-                    <p className="text-xs italic text-content-muted">
-                      {exception.acknowledgementNote}
-                    </p>
-                  )}
-                  {!exception.acknowledgedAt && (
-                    <div className="flex gap-2">
-                      <Button
-                        size="phone"
-                        variant="secondary"
-                        disabled={busy}
-                        onClick={() =>
-                          void run(() =>
-                            adapter.acknowledgeException(
-                              exception.observationId,
-                              exception.sourceKind,
-                              exception.sourceId,
-                            ),
-                          )
-                        }
-                        data-testid={`accept-${exception.sourceId}`}
-                      >
-                        Accept
-                      </Button>
-                      <Button size="phone" variant="secondary" onClick={openCount}>
-                        Count again
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </Card>
-          )}
+                )}
+                {!exception.acknowledgedAt && (
+                  <div className="flex gap-2">
+                    <Button
+                      size="phone"
+                      variant="secondary"
+                      disabled={busy}
+                      onClick={() =>
+                        void run(() =>
+                          adapter.acknowledgeException(
+                            exception.observationId,
+                            exception.sourceKind,
+                            exception.sourceId,
+                          ),
+                        )
+                      }
+                      data-testid={`accept-${exception.sourceId}`}
+                    >
+                      Accept
+                    </Button>
+                    <Button size="phone" variant="secondary" onClick={openCount}>
+                      Count again
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </Card>
+        )}
 
-          {/* ── The balance ─────────────────────────────────────────────── */}
+        {/* ── The balance ─────────────────────────────────────────────── */}
+        {balance === null ? (
+          unreadable.balance ? (
+            <Card>
+              <PartUnreadable what="the drawer's balance" testId="drawer-balance-unreadable" />
+            </Card>
+          ) : (
+            <BalanceLoading />
+          )
+        ) : (
           <Card className="space-y-3" data-testid="drawer-balance">
-            {state.lastObservation === null ? (
+            {balance.lastObservation === null ? (
               // Before the anchor there is no balance to state, and inventing one
               // would be the fabricated figure decision 18 refuses.
               <div className="space-y-2" data-testid="drawer-not-tracked">
@@ -905,20 +989,20 @@ export function CashDrawerSurface() {
                   <p className="text-[0.9375rem] font-extrabold uppercase tracking-wide text-content-muted">
                     In the drawer now
                   </p>
-                  <Money paise={state.expectedNowPaise ?? 0} display data-testid="expected-now" />
+                  <Money paise={balance.expectedNowPaise ?? 0} display data-testid="expected-now" />
                 </div>
 
                 {/* Directly beneath it: these chips qualify that figure. */}
                 <ChipRow data-testid="balance-chips">
                   <Chip icon={Clock} data-testid="last-counted">
-                    {state.lastObservation.isLegacyImprecise
+                    {balance.lastObservation.isLegacyImprecise
                       ? legacyCountDay(
-                          state.lastObservation.countedAt,
+                          balance.lastObservation.countedAt,
                           outlet?.business_day_cutover ?? null,
                         )
-                      : formatDayTime(state.lastObservation.countedAt)}
+                      : formatDayTime(balance.lastObservation.countedAt)}
                   </Chip>
-                  {!state.lastObservation.onSite && (
+                  {!balance.lastObservation.onSite && (
                     <Chip tone="neutral" icon={MapPinOff}>
                       away
                     </Chip>
@@ -987,7 +1071,7 @@ export function CashDrawerSurface() {
                       one out [owner, 2026-08-30]. */}
                   <Figure
                     label="Last Left"
-                    paise={state.leftInDrawerPaise ?? 0}
+                    paise={balance.leftInDrawerPaise ?? 0}
                     testId="left"
                     onOpen={() => setSheet('left')}
                     openLabel="Last Left, from the count that produced it"
@@ -997,11 +1081,11 @@ export function CashDrawerSurface() {
                       in, which is the whole of the difference between them. */}
                   <Figure
                     label="Cash from Bills"
-                    paise={state.cashReceiptsSincePaise}
+                    paise={balance.cashReceiptsSincePaise}
                     rows={
-                      state.cashReceiptsSinceCount === 1
+                      balance.cashReceiptsSinceCount === 1
                         ? '1 bill'
-                        : `${state.cashReceiptsSinceCount} bills`
+                        : `${balance.cashReceiptsSinceCount} bills`
                     }
                     testId="receipts-since"
                     signed
@@ -1010,11 +1094,11 @@ export function CashDrawerSurface() {
                   />
                   <Figure
                     label="Cash Expenses"
-                    paise={-state.cashExpensesSincePaise}
+                    paise={-balance.cashExpensesSincePaise}
                     rows={
-                      state.cashExpensesSinceCount === 1
+                      balance.cashExpensesSinceCount === 1
                         ? '1 expense'
-                        : `${state.cashExpensesSinceCount} expenses`
+                        : `${balance.cashExpensesSinceCount} expenses`
                     }
                     testId="expenses-since"
                     signed
@@ -1025,8 +1109,9 @@ export function CashDrawerSurface() {
               </>
             )}
           </Card>
+        )}
 
-          {/* ── The action ──────────────────────────────────────────────
+        {/* ── The action ──────────────────────────────────────────────
               One control, and there is no longer a quieter row beneath it.
               Only Collect and Other Spend are gone (design D5): with no way to
               record a movement outside a count, every movement belongs to one
@@ -1039,75 +1124,87 @@ export function CashDrawerSurface() {
               are both things to look at, and the act between them earns a band
               of its own. Four rather than five: at five the button drifted away
               from the reading it acts on [owner, 2026-08-30]. */}
-          <Button className="my-4 w-full" onClick={openCount} data-testid="open-count">
-            <Banknote aria-hidden size={16} /> Count &amp; Collect
-          </Button>
+        {/* Available as soon as the balance is: the sheet's checks read it,
+              and nothing else (design D18). */}
+        <Button
+          className="my-4 w-full"
+          onClick={openCount}
+          disabled={balance === null}
+          data-testid="open-count"
+        >
+          <Banknote aria-hidden size={16} /> Count &amp; Collect
+        </Button>
 
-          {/* ── Recent counts ───────────────────────────────────────────── */}
-          {observations.length > 0 && (
-            <section className="space-y-3" data-testid="recent-counts">
-              <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-content-muted">
-                Recent counts
-              </h2>
-              {observations.map((observation) => (
-                <ObservationRow
-                  key={observation.id}
-                  observation={observation}
-                  cutover={outlet?.business_day_cutover ?? null}
-                  locked={observation.id !== newestId}
-                  onAdjust={() => {
-                    setAdjustingId(observation.id)
-                    setAdjustedAmount('')
-                    setAdjustReason('')
-                    setSheet('adjust')
-                  }}
-                  onEdit={() => {
-                    setAdjustingId(observation.id)
-                    // Prefilled with what is stored, because this sheet corrects
-                    // an observation rather than restating one: a blank note
-                    // field would be an invitation to clear a note nobody meant
-                    // to touch, which is the bug in the shape it replaces.
-                    setAdjustedAmount(String(observation.countedTotalPaise / 100))
-                    setEditedNote(observation.note ?? '')
-                    setEditedAt(new Date(observation.countedAt))
-                    setEditOpenedAt(Date.now())
-                    setClock(Date.now())
-                    setAdjustReason('')
-                    setSheet('edit')
-                  }}
-                />
-              ))}
+        {/* ── Recent counts ───────────────────────────────────────────── */}
+        {firstPage === null &&
+          (unreadable.counts ? (
+            <PartUnreadable what="the recent counts" testId="drawer-counts-unreadable" />
+          ) : (
+            <CountsLoading />
+          ))}
+        {observations.length > 0 && (
+          <section className="space-y-3" data-testid="recent-counts">
+            <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-content-muted">
+              Recent counts
+            </h2>
+            {observations.map((observation) => (
+              <ObservationRow
+                key={observation.id}
+                observation={observation}
+                cutover={outlet?.business_day_cutover ?? null}
+                locked={observation.id !== newestId}
+                onAdjust={() => {
+                  setAdjustingId(observation.id)
+                  setAdjustedAmount('')
+                  setAdjustReason('')
+                  setSheet('adjust')
+                }}
+                onEdit={() => {
+                  setAdjustingId(observation.id)
+                  // Prefilled with what is stored, because this sheet corrects
+                  // an observation rather than restating one: a blank note
+                  // field would be an invitation to clear a note nobody meant
+                  // to touch, which is the bug in the shape it replaces.
+                  setAdjustedAmount(String(observation.countedTotalPaise / 100))
+                  setEditedNote(observation.note ?? '')
+                  setEditedAt(new Date(observation.countedAt))
+                  setEditOpenedAt(Date.now())
+                  setClock(Date.now())
+                  setAdjustReason('')
+                  setSheet('edit')
+                }}
+              />
+            ))}
 
-              <div ref={sentinel} />
-              {mayHaveMore ? (
-                <Button
-                  variant="secondary"
-                  size="phone"
-                  className="w-full"
-                  disabled={paging}
-                  onClick={() => void loadMore()}
-                  data-testid="load-older-counts"
-                >
-                  {paging ? (
-                    <>
-                      <LoaderCircle aria-hidden size={14} className="animate-spin" /> Reading…
-                    </>
-                  ) : (
-                    'Show older counts'
-                  )}
-                </Button>
-              ) : (
-                <p
-                  className="pt-1 text-center text-[0.6875rem] text-content-muted"
-                  data-testid="counts-exhausted"
-                >
-                  That is every count at this outlet.
-                </p>
-              )}
-            </section>
-          )}
-        </div>
-      )}
+            <div ref={sentinel} />
+            {mayHaveMore ? (
+              <Button
+                variant="secondary"
+                size="phone"
+                className="w-full"
+                disabled={paging}
+                onClick={() => void loadMore()}
+                data-testid="load-older-counts"
+              >
+                {paging ? (
+                  <>
+                    <LoaderCircle aria-hidden size={14} className="animate-spin" /> Reading…
+                  </>
+                ) : (
+                  'Show older counts'
+                )}
+              </Button>
+            ) : (
+              <p
+                className="pt-1 text-center text-[0.6875rem] text-content-muted"
+                data-testid="counts-exhausted"
+              >
+                That is every count at this outlet.
+              </p>
+            )}
+          </section>
+        )}
+      </div>
 
       {/* ── Count & Collect ─────────────────────────────────────────────── */}
       <FormSheet
@@ -1349,13 +1446,13 @@ export function CashDrawerSurface() {
       <LastLeftBreakdown
         open={sheet === 'left'}
         onClose={() => closeIfCurrent('left')}
-        observation={state?.lastObservation ?? null}
+        observation={balance?.lastObservation ?? null}
         cutover={outlet?.business_day_cutover ?? null}
         // The same edit, from a second doorway. It swaps sheets rather than
         // stacking them: two bottom sheets over each other on a phone is one
         // sheet nobody can read, and the edit sheet is where the fields live.
         onFix={() => {
-          const newest = state?.lastObservation
+          const newest = balance?.lastObservation
           if (!newest) return
           setAdjustingId(newest.id)
           setAdjustedAmount(String(newest.countedTotalPaise / 100))

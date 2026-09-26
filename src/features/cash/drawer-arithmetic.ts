@@ -8,7 +8,7 @@ import {
   type BillRunCoincidence,
   type NearbyCashBill,
 } from '@/domain'
-import type { DrawerState, NearbyCashBillRecord } from '@/data-access/adapters'
+import type { DrawerBalance, NearbyCashBillRecord } from '@/data-access/adapters'
 
 /**
  * What the count sheet can say, and — more importantly — what it must not.
@@ -95,7 +95,7 @@ function billsBetween(
  * evidence they recognise**, and the difference is whatever that produces.
  */
 export function expectedAtInstant(
-  state: DrawerState,
+  state: DrawerBalance,
   countedAt: Date,
 ): { expectedPaise: number; excludedPaise: number; excludedBills: number } {
   if (state.leftInDrawerPaise === null || state.lastObservation === null) {
@@ -139,7 +139,7 @@ export function expectedAtInstant(
  * already holding as evidence, and it is deliberately not a second arithmetic.
  */
 export function boundaryMove(
-  state: DrawerState,
+  state: DrawerBalance,
   from: Date,
   to: Date,
 ): { direction: 'out' | 'in' | 'none'; paise: number; bills: number } {
@@ -166,7 +166,7 @@ export function boundaryMove(
  * is the default whenever it differs from now.
  */
 export function countAdvice(
-  state: DrawerState,
+  state: DrawerBalance,
   countedTotalPaise: number,
   countedAt: Date,
   approximate: boolean,

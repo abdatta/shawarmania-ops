@@ -521,6 +521,22 @@ export function createMockCashDrawerAdapter(
       return stateFor(outletId)
     },
 
+    // The demo answers everything from one computation, so the three reads the
+    // surface makes are slices of it — the same answers the real adapter gives
+    // from three separate reads.
+    async getBalance(outletId) {
+      const {
+        recentObservations: _history,
+        exceptions: _exceptions,
+        ...balance
+      } = stateFor(outletId)
+      return balance
+    },
+
+    async getExceptions(outletId) {
+      return stateFor(outletId).exceptions
+    },
+
     async listObservations(outletId, query = {}) {
       return pageOf(outletId, query)
     },

@@ -160,17 +160,46 @@ assertion written to pass.
   the bills; the counter's reads are unchanged. Tests.
 - [x] 8.4 Drawer adapter: the recent and late bills come from
   `drawer_recent_cash_bills` in the second wave. Its REST suite stays green.
-- [ ] 8.5 Full gate; after the owner's deploy, remeasure Billing history and the
+- [x] 8.5 Full gate; after the owner's deploy, remeasure Billing history and the
   Drawer on production.
   *Gate 2026-09-26:* lint, format, types, functions, contrast, build; 1,925 unit;
   284 e2e; `test:db` on a fresh reset (with `60_…`); all six `test:rls` phases;
-  31 auth e2e. Production remeasure pending the owner's deploy.
+  31 auth e2e.
+  *Production, 2026-09-26, after 8.6 shipped (the publish step was re-run once
+  for a GitHub OIDC timeout):* Billing history settled 0.39–0.65 s (1.0 s before
+  round three, 2.1 s while it was wrong), all in one wave; the Drawer
+  0.74–0.86 s (was 1.4 s).
 
 - [x] 8.6 Correct round three after production showed it slower (design D17): the
   two functions filter by an id list (`20260926030000_…`), checked on production
   data as identical to the shipped ones and 14/11 ms against ~390; the extras
   request is started where it is created, pinned by a test that fails on the
   shipped adapter.
+
+## 9. Round four: the Drawer shows each part as it arrives (2026-09-26)
+
+- [x] 9.1 Adapter interface: `DrawerBalance`, `getBalance`, `getExceptions`; the
+  arithmetic helpers take `DrawerBalance`.
+- [x] 9.2 Supabase adapter per D18: recent counts in one round trip, balance and
+  exceptions in two; `getState` composed from them. Its REST suite stays green.
+- [x] 9.3 Mock adapter: the same three reads, from its existing state.
+- [x] 9.4 Surface per D18/D19: three readings keyed to the outlet, each part and
+  its placeholder independent, Count & Collect gated on the balance only, paging
+  from `listObservations`'s own `hasMore`.
+- [x] 9.5 Surface tests: the balance shows while the counts are still reading and
+  the reverse; a failed part says so in place and leaves the others; the
+  placeholders are the parts' own shapes. Existing tests moved off `getState`.
+- [x] 9.7 `docs/SCREENS.md` — the Cash drawer paragraph: each part appears when
+  its own reading does, behind a placeholder in its own layout.
+- [ ] 9.6 Browser check in both themes at phone width; full gate; after deploy,
+  measure when each part appears on production.
+  *Done locally 2026-09-26:* the placeholders were photographed against the real
+  parts at phone width in both themes, using a throwaway build whose demo reads
+  never finish (reverted before anything was committed). The balance placeholder
+  matches the card's height exactly; the count rows' placeholder was reshaped to
+  the closed row's three lines after that comparison. Gate: 1,929 unit, 284 e2e,
+  `test:db`, all six `test:rls` phases, 31 auth e2e. Production timing pending
+  the owner's deploy.
 
 ## 5. Docs
 

@@ -840,15 +840,18 @@ describe('every count time is approximate', () => {
  * for.
  */
 describe('the count history is a paged list of disclosures', () => {
-  it('reserves the heading and metric-bearing card stack while the drawer loads', () => {
+  it('holds each part’s own shape while it loads', () => {
     renderDrawer()
 
-    const loading = screen.getByTestId('drawer-loading')
-    const visualBlocks = Array.from(loading.children).filter(
-      (child) => !child.classList.contains('sr-only'),
-    )
-    expect(visualBlocks).toHaveLength(6)
-    expect(loading.querySelectorAll('[class*="min-h-20"]')).toHaveLength(3)
+    // The balance card's layout: a headline line, a chip row, a three-figure
+    // strip under a rule (the-ledger-reads-fast-and-keeps-its-place, D19).
+    const balance = screen.getByTestId('drawer-balance-loading')
+    expect(balance.querySelectorAll('.grid-cols-3 > div')).toHaveLength(3)
+    expect(balance.querySelectorAll('.rounded-full')).toHaveLength(2)
+
+    // The counts: a heading and three rows in the count row's own grid.
+    const counts = screen.getByTestId('drawer-counts-loading')
+    expect(counts.querySelectorAll('[class*="min-h-20"]')).toHaveLength(3)
   })
 
   it('carries the verdict closed and everything else inside', async () => {
@@ -1068,10 +1071,6 @@ describe('the count history is a paged list of disclosures', () => {
       ...adapters,
       cashDrawer: {
         ...adapters.cashDrawer,
-        getState: async (outletId: string) => ({
-          ...(await adapters.cashDrawer.getState(outletId)),
-          recentObservations: older.slice(0, 10),
-        }),
         listObservations: async (_outletId: string, query = {}) => {
           const after = older.filter((row) => !query.before || row.countedAt < query.before)
           return { observations: after.slice(0, 10), hasMore: after.length > 10 }
@@ -1151,10 +1150,7 @@ describe('a carried count says which day it belongs to', () => {
       ...adapters,
       cashDrawer: {
         ...adapters.cashDrawer,
-        getState: async (outletId: string) => ({
-          ...(await adapters.cashDrawer.getState(outletId)),
-          recentObservations: [carried],
-        }),
+        listObservations: async () => ({ observations: [carried], hasMore: false }),
       },
     }
 
@@ -1329,7 +1325,7 @@ describe('the strip signs its figures by one rule', () => {
       ...adapters,
       cashDrawer: {
         ...adapters.cashDrawer,
-        getState: async () => ({
+        getBalance: async () => ({
           ...base,
           cashReceiptsSincePaise: receipts,
           cashExpensesSincePaise: expenses,
@@ -1412,7 +1408,7 @@ describe('the uncounted-days warning counts days nobody counted', () => {
     const base = await adapters.cashDrawer.getState(OUTLET_KALYANI_ID)
     return {
       ...adapters,
-      cashDrawer: { ...adapters.cashDrawer, getState: async () => ({ ...base, daysCovered }) },
+      cashDrawer: { ...adapters.cashDrawer, getBalance: async () => ({ ...base, daysCovered }) },
     }
   }
 
@@ -1673,5 +1669,95 @@ describe('the newest count is editable in full', () => {
     expect(await screen.findByTestId('edit-time-problem')).toHaveTextContent(/future/i)
     expect(screen.getByTestId('save-edit')).toBeDisabled()
     await user.click(screen.getByTestId('save-edit'))
+  })
+})
+
+/**
+ * Each part of the drawer appears when its own reading does
+ * (the-ledger-reads-fast-and-keeps-its-place, design D18). The balance, the
+ * recent counts and the late arrivals were one read, so the page waited for the
+ * slowest of them.
+ */
+describe('each part of the drawer appears when its own reading does', () => {
+  /** A read that settles only when the test says so. */
+  function held<T>() {
+    let settle!: (value: T) => void
+    let fail!: (reason: unknown) => void
+    const promise = new Promise<T>((resolve, reject) => {
+      settle = resolve
+      fail = reject
+    })
+    return { promise, settle, fail }
+  }
+
+  it('shows the balance, and lets a count begin, while the counts are still reading', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+    const counts = held<Awaited<ReturnType<typeof adapters.cashDrawer.listObservations>>>()
+    renderDrawer({
+      ...adapters,
+      cashDrawer: { ...adapters.cashDrawer, listObservations: () => counts.promise },
+    })
+
+    expect(await screen.findByTestId('drawer-balance')).toBeInTheDocument()
+    expect(screen.getByTestId('open-count')).toBeEnabled()
+    expect(screen.getByTestId('drawer-counts-loading')).toBeInTheDocument()
+    expect(screen.queryByTestId('recent-counts')).not.toBeInTheDocument()
+
+    counts.settle(await adapters.cashDrawer.listObservations(OUTLET_KALYANI_ID))
+    expect(await screen.findByTestId('recent-counts')).toBeInTheDocument()
+    expect(screen.queryByTestId('drawer-counts-loading')).not.toBeInTheDocument()
+  })
+
+  it('shows the counts while the balance is still reading, and holds the count back', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+    const balance = held<Awaited<ReturnType<typeof adapters.cashDrawer.getBalance>>>()
+    renderDrawer({
+      ...adapters,
+      cashDrawer: { ...adapters.cashDrawer, getBalance: () => balance.promise },
+    })
+
+    expect(await screen.findByTestId('recent-counts')).toBeInTheDocument()
+    expect(screen.getByTestId('drawer-balance-loading')).toBeInTheDocument()
+    // The count sheet's checks are made against the balance, so the action
+    // waits for it — and only for it.
+    expect(screen.getByTestId('open-count')).toBeDisabled()
+
+    balance.settle(await adapters.cashDrawer.getBalance(OUTLET_KALYANI_ID))
+    expect(await screen.findByTestId('drawer-balance')).toBeInTheDocument()
+    expect(screen.getByTestId('open-count')).toBeEnabled()
+  })
+
+  it('says in its own place that a part could not be read, and keeps the others', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+    renderDrawer({
+      ...adapters,
+      cashDrawer: {
+        ...adapters.cashDrawer,
+        getExceptions: () => Promise.reject(new Error('a timeout')),
+      },
+    })
+
+    expect(await screen.findByTestId('drawer-exceptions-unreadable')).toHaveTextContent(
+      /could not read the late arrivals/i,
+    )
+    expect(await screen.findByTestId('drawer-balance')).toBeInTheDocument()
+    expect(await screen.findByTestId('recent-counts')).toBeInTheDocument()
+    expect(screen.queryByTestId('drawer-error')).not.toBeInTheDocument()
+  })
+
+  it('says the balance could not be read rather than showing a nought', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+    renderDrawer({
+      ...adapters,
+      cashDrawer: {
+        ...adapters.cashDrawer,
+        getBalance: () => Promise.reject(new Error('a timeout')),
+      },
+    })
+
+    expect(await screen.findByTestId('drawer-balance-unreadable')).toBeInTheDocument()
+    expect(screen.queryByTestId('expected-now')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('drawer-balance-loading')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('recent-counts')).toBeInTheDocument()
   })
 })

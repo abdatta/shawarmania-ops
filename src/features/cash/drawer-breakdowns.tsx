@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Chip, ChipRow } from '@/components/ui/chip'
 import { Money } from '@/components/ui/money'
 import { useAdapters } from '@/data-access'
-import type { DrawerObservationRecord, DrawerState, ExpenseRecord } from '@/data-access/adapters'
+import type { DrawerBalance, DrawerObservationRecord, ExpenseRecord } from '@/data-access/adapters'
 import {
   formatBusinessDateShort,
   formatDayTime,
@@ -118,7 +118,7 @@ function instantOf(expense: ExpenseRecord): string {
 }
 
 export interface BreakdownContext {
-  state: DrawerState
+  state: DrawerBalance
   /** The outlet's own current business date, resolved through its own cutover. */
   today: string
   /** The business date the bounding count fell on, through the same cutover. */
@@ -127,7 +127,7 @@ export interface BreakdownContext {
 
 /** The context both breakdowns need, or null before there is anything to read. */
 export function breakdownContext(
-  state: DrawerState,
+  state: DrawerBalance,
   cutover: string | null,
 ): BreakdownContext | null {
   if (!state.lastObservation || !cutover) return null
