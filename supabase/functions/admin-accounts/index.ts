@@ -15,6 +15,8 @@ import {
   mayManage,
   mayProvision,
   serviceClient,
+  TARGET_ACCOUNT_COLUMNS,
+  toTargetAccount,
   type AppRole,
   type Caller,
 } from '../_shared/authority.ts'
@@ -252,36 +254,65 @@ async function setActive(
 async function identifiers(service: SupabaseClient, caller: Caller): Promise<Response> {
   if (!managesAnyone(caller)) return json({ error: 'forbidden' }, 403)
 
-  const { data, error } = await service.auth.admin.listUsers({ page: 1, perPage: 1000 })
-  if (error) return json({ error: 'lookup_failed' }, 500)
-  if (data.users.length >= 1000) return json({ error: 'too_many_accounts' }, 500)
+  // Two waves, whatever the number of accounts. This used to load each
+  // account, then ask for its fingerprint, one account after another: about
+  // sixty sequential round trips for thirty people, 6–10 s on production on
+  // 2026-09-25 (attendance-reads-its-staff-directly, design D3). Everything in
+  // this first wave depends on nothing but the caller.
+  const [users, emails, live, profiles] = await Promise.all([
+    service.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+    isOwner(caller)
+      ? service.from('account_emails').select('profile_id, email')
+      : Promise.resolve({ data: [], error: null }),
+    service
+      .from('account_invites')
+      .select('profile_id, purpose, expires_at')
+      .is('consumed_at', null)
+      .is('superseded_at', null)
+      .gt('expires_at', new Date().toISOString()),
+    service.from('profiles').select(TARGET_ACCOUNT_COLUMNS),
+  ])
+  if (users.error) return json({ error: 'lookup_failed' }, 500)
+  if (users.data.users.length >= 1000) return json({ error: 'too_many_accounts' }, 500)
+  if (emails.error || live.error || profiles.error) return json({ error: 'lookup_failed' }, 500)
+  // A page of profiles as long as the Auth page's limit may be a truncated one,
+  // and an account missing from it would be silently left off the list.
+  if ((profiles.data ?? []).length >= 1000) return json({ error: 'too_many_accounts' }, 500)
 
   const accountEmails = new Map<string, string>()
-  if (isOwner(caller)) {
-    const { data: rows, error: accountEmailError } = await service
-      .from('account_emails')
-      .select('profile_id, email')
-    if (accountEmailError) return json({ error: 'lookup_failed' }, 500)
-    for (const row of rows ?? []) {
-      accountEmails.set(row.profile_id as string, row.email as string)
-    }
+  for (const row of emails.data ?? []) {
+    accountEmails.set(row.profile_id as string, row.email as string)
   }
-
-  const { data: liveInvites, error: inviteError } = await service
-    .from('account_invites')
-    .select('profile_id, purpose, expires_at')
-    .is('consumed_at', null)
-    .is('superseded_at', null)
-    .gt('expires_at', new Date().toISOString())
-  if (inviteError) return json({ error: 'lookup_failed' }, 500)
   const invites = new Map(
-    (liveInvites ?? []).map((invite) => [
+    (live.data ?? []).map((invite) => [
       invite.profile_id as string,
       {
         purpose: invite.purpose as 'activation' | 'password_reset',
         expiresAt: invite.expires_at as string,
       },
     ]),
+  )
+  const accounts = new Map(
+    (profiles.data ?? []).map((row) => {
+      const account = toTargetAccount(row)
+      return [account.id, account]
+    }),
+  )
+
+  // Who this caller answers for, decided in memory by the same rule the loop
+  // applied: themselves, and every account they may manage. A user with no
+  // profile row is skipped, as `loadAccount` returning null skipped it.
+  const answered = users.data.users.flatMap((user) => {
+    const username = authAliasToUsername(user.email)
+    if (!username) return []
+    const target = user.id === caller.id ? null : (accounts.get(user.id) ?? null)
+    if (user.id !== caller.id && (!target || !mayManage(caller, target))) return []
+    return [{ user, username, target }]
+  })
+
+  // The second wave: every fingerprint at once.
+  const fingerprints = await Promise.all(
+    answered.map(({ user }) => service.rpc('account_state_fingerprint', { p_profile_id: user.id })),
   )
 
   const visible: Record<
@@ -294,16 +325,8 @@ async function identifiers(service: SupabaseClient, caller: Caller): Promise<Res
       stateFingerprint: string
     }
   > = {}
-  for (const user of data.users) {
-    const username = authAliasToUsername(user.email)
-    if (!username) continue
-
-    const target = user.id === caller.id ? null : await loadAccount(service, user.id)
-    if (user.id !== caller.id && (!target || !mayManage(caller, target))) continue
-    const { data: fingerprint, error: fingerprintError } = await service.rpc(
-      'account_state_fingerprint',
-      { p_profile_id: user.id },
-    )
+  for (const [index, { user, username, target }] of answered.entries()) {
+    const { data: fingerprint, error: fingerprintError } = fingerprints[index]!
     if (fingerprintError || typeof fingerprint !== 'string') {
       return json({ error: 'lookup_failed' }, 500)
     }

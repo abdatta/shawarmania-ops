@@ -90,3 +90,58 @@ describe('account lifecycle derivation', () => {
     ).toEqual({ kind: 'needs_setup' })
   })
 })
+
+describe('the attendance roster', () => {
+  it('is one read of profiles and never the privileged account function', async () => {
+    const order = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: 'person-1',
+          full_name: 'Two Outlets',
+          is_active: true,
+          role_title: 'Counter staff',
+          assignments: [
+            {
+              id: 'assignment-1',
+              role: 'employee',
+              outlet_id: 'outlet-1',
+              started_on: '2026-07-01',
+              ended_on: null,
+            },
+          ],
+        },
+      ],
+      error: null,
+    })
+    const select = vi.fn(() => ({ order }))
+    const from = vi.fn(() => ({ select }))
+    const invoke = vi.fn()
+    const adapter = createSupabaseAccountsAdapter({
+      from,
+      functions: { invoke },
+    } as unknown as SupabaseClient<Database>)
+
+    expect(await adapter.listRoster()).toEqual([
+      {
+        id: 'person-1',
+        fullName: 'Two Outlets',
+        roleTitle: 'Counter staff',
+        isActive: true,
+        assignments: [
+          {
+            id: 'assignment-1',
+            role: 'employee',
+            outletId: 'outlet-1',
+            startedOn: '2026-07-01',
+            endedOn: null,
+          },
+        ],
+      },
+    ])
+    expect(from).toHaveBeenCalledOnce()
+    expect(from).toHaveBeenCalledWith('profiles')
+    // No identifier, invite or fingerprint is asked for.
+    expect(select).toHaveBeenCalledWith(expect.not.stringMatching(/phone|username|email/))
+    expect(invoke).not.toHaveBeenCalled()
+  })
+})

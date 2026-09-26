@@ -22,9 +22,9 @@ import { Select } from '@/components/ui/select'
 import { FormSheet } from '@/components/layout/form-sheet'
 import { useAdapters, type Tables } from '@/data-access'
 import type {
-  AccountSummary,
   AttendanceCorrectionAction,
   AttendanceRecord,
+  RosterPerson,
   WaitingCount,
 } from '@/data-access/adapters'
 import {
@@ -102,9 +102,12 @@ import { useWaitingCounts, waitingAt, waitingLabel } from './waiting-counts'
  * ask without first naming one shop; that is still gone.
  *
  * **So the load is not scoped by the selection, and the selection narrows it
- * afterwards.** One read of `listOutlets` and one of `listAccounts`, neither
+ * afterwards.** One read of `listOutlets` and one of `listRoster`, neither
  * naming an outlet, both already scoped by policy: what comes back is exactly
- * every outlet this reader may see and everybody they may see. The chips
+ * every outlet this reader may see and everybody they may see. The roster, not
+ * the People list: who a reader may *manage* never decided who is on a
+ * roll-call, and the People list's privileged function cost 7–10 s an open
+ * (attendance-reads-its-staff-directly). The chips
  * intersect that, for both axes — a filter applied after the policies have
  * decided, which widens nothing and is not a boundary.
  *
@@ -168,15 +171,22 @@ export function OutletAttendance() {
   // not depend on it.
   const [loaded, setLoaded] = useState<{
     outlets: Tables<'outlets'>[]
-    people: AccountSummary[]
+    people: RosterPerson[]
   } | null>(null)
+
+  // Keyed on the outlets themselves, as a string, not on `mine`: a revalidated
+  // session is a new object with the same assignments, and re-reading on it made
+  // the roll-call wait on the second or third copy of this read. On production
+  // that was every open (attendance-reads-its-staff-directly, design D2).
+  const mineKey = [...mine].sort().join(',')
 
   useEffect(() => {
     let active = true
-    void Promise.all([outletsAdapter.listOutlets(), accounts.listAccounts()])
+    const assigned = mineKey.split(',')
+    void Promise.all([outletsAdapter.listOutlets(), accounts.listRoster()])
       .then(([all, list]) => {
         if (!active) return
-        const outlets = isOwner ? all : all.filter((outlet) => mine.includes(outlet.id))
+        const outlets = isOwner ? all : all.filter((outlet) => assigned.includes(outlet.id))
         setLoaded({
           outlets,
           // Everybody on some readable outlet's staff list — the people whose
@@ -194,7 +204,7 @@ export function OutletAttendance() {
     return () => {
       active = false
     }
-  }, [outletsAdapter, accounts, isOwner, mine])
+  }, [outletsAdapter, accounts, isOwner, mineKey])
 
   // The by-outlet axis's narrower view of the same two lists.
   //
@@ -510,7 +520,7 @@ function OutletAxis({
   onChooseDay,
 }: {
   outlets: readonly Tables<'outlets'>[]
-  people: AccountSummary[]
+  people: RosterPerson[]
   onError: (message: string | null) => void
   /** The reader's day as the parent holds it, surviving this view's remount. */
   chosenDay: { day: string; today: string } | null
@@ -538,7 +548,7 @@ function OutletAxis({
   }
   const [flow, setFlow] = useState<ApprovalFlow>({ kind: 'idle' })
   const [denialFlow, setDenialFlow] = useState<DenialFlow>({ kind: 'idle' })
-  const [manualFor, setManualFor] = useState<AccountSummary | null>(null)
+  const [manualFor, setManualFor] = useState<RosterPerson | null>(null)
   const [correctFor, setCorrectFor] = useState<AttendanceRecord | null>(null)
 
   /**
@@ -869,7 +879,7 @@ function OutletAxis({
     }
   }
 
-  async function recordManual(person: AccountSummary, outletId: string, at: string) {
+  async function recordManual(person: RosterPerson, outletId: string, at: string) {
     try {
       upsert([
         await attendance.recordManualEntry({
@@ -1442,7 +1452,7 @@ function SelectionBar({
 }
 
 /**
- * One row of the roll-call. Deliberately not an `AccountSummary`: a person listed
+ * One row of the roll-call. Deliberately not a `RosterPerson`: a person listed
  * only because they carry a record on this day (design D4) has no account behind
  * them here, and the row renders from the record itself.
  */
@@ -2185,7 +2195,7 @@ function ManualEntrySheet({
   onClose,
   onRecord,
 }: {
-  person: AccountSummary | null
+  person: RosterPerson | null
   /** The selected outlets this person is staff at. */
   outlets: readonly Tables<'outlets'>[]
   businessDate: string
@@ -2293,7 +2303,7 @@ function StaffAxis({
   /** Every outlet the reader may see — never the selection. */
   outlets: readonly Tables<'outlets'>[]
   /** Those of them staffed at a selected outlet. */
-  people: AccountSummary[]
+  people: RosterPerson[]
   onError: (message: string | null) => void
 }) {
   const { attendance } = useAdapters()

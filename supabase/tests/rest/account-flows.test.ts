@@ -1522,3 +1522,96 @@ describe('Super Admin account-email invariants over the privileged boundary', ()
     expect(retained.status).toBe(200)
   })
 })
+
+/**
+ * The two reads of one set of people (attendance-reads-its-staff-directly).
+ *
+ * Attendance reads its roster straight from `profiles`, scoped by who the reader
+ * may SEE; People reads identifiers through the privileged function, scoped by
+ * who the reader may MANAGE. The roster must list the split-outlet staff member
+ * to the Kalyani manager, whom they may not manage. And the identifier response
+ * is pinned here by its rules, so rewriting how the function reads them is
+ * proved not to move who it answers for.
+ */
+describe('the attendance roster and the identifier response', () => {
+  const ROSTER_COLUMNS =
+    'id, full_name, role_title, is_active, assignments(id, role, outlet_id, started_on, ended_on)'
+
+  type RosterRow = {
+    id: string
+    assignments: { role: string; outlet_id: string | null; ended_on: string | null }[]
+  }
+
+  async function rosterFor(token: string): Promise<RosterRow[]> {
+    const { data, error } = await clientWithToken(token)
+      .from('profiles')
+      .select(ROSTER_COLUMNS)
+      .order('full_name')
+    expect(error).toBeNull()
+    return (data ?? []) as unknown as RosterRow[]
+  }
+
+  it('lists a staff member who also works elsewhere to the manager, with only that outlet', async () => {
+    const roster = await rosterFor(faKalyaniToken)
+    const split = roster.find((person) => person.id === PERSON_IDS.splitStaff)
+    expect(split).toBeDefined()
+    const live = split!.assignments.filter((a) => a.ended_on === null)
+    expect(live.some((a) => a.role === 'employee' && a.outlet_id === OUTLETS.kalyani)).toBe(true)
+    // The other outlet's assignment is the other outlet's data.
+    expect(split!.assignments.some((a) => a.outlet_id === OUTLETS.kanchrapara)).toBe(false)
+
+    // Whom they may not manage, so People still does not offer them.
+    expect(Object.keys(await identifiersFor(faKalyaniToken))).not.toContain(PERSON_IDS.splitStaff)
+  })
+
+  it('answers the owner for every account, with emails only for owners', async () => {
+    const identifiers = await identifiersFor(superAdminToken)
+    const roster = await rosterFor(superAdminToken)
+    const rosterIds = new Set(roster.map((person) => person.id))
+
+    for (const id of Object.keys(identifiers)) expect(rosterIds.has(id)).toBe(true)
+    for (const id of [PERSON_IDS.superAdmin, PERSON_IDS.faKalyani, PERSON_IDS.splitStaff]) {
+      expect(identifiers[id]).toBeDefined()
+    }
+    const owners = new Set(
+      roster
+        .filter((person) =>
+          person.assignments.some((a) => a.role === 'super_admin' && a.ended_on === null),
+        )
+        .map((person) => person.id),
+    )
+    for (const [id, facts] of Object.entries(identifiers)) {
+      if (!owners.has(id)) expect(facts.accountEmail).toBeNull()
+      expect(typeof facts.stateFingerprint).toBe('string')
+      expect(facts.stateFingerprint.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('answers a manager for exactly themselves and the people wholly theirs', async () => {
+    const identifiers = await identifiersFor(faKalyaniToken)
+    // Everybody, as the owner sees them, so the rule can be applied to every
+    // assignment a person holds rather than only the ones the manager can read.
+    const everybody = await rosterFor(superAdminToken)
+    const ownerIdentifiers = await identifiersFor(superAdminToken)
+
+    const expected = new Set<string>([PERSON_IDS.faKalyani])
+    for (const person of everybody) {
+      if (person.id === PERSON_IDS.faKalyani) continue
+      if (ownerIdentifiers[person.id] === undefined) continue
+      const live = person.assignments.filter((a) => a.ended_on === null)
+      if (
+        live.length > 0 &&
+        live.every((a) => a.role !== 'super_admin' && a.outlet_id === OUTLETS.kalyani)
+      ) {
+        expected.add(person.id)
+      }
+    }
+
+    expect(new Set(Object.keys(identifiers))).toEqual(expected)
+    for (const [id, facts] of Object.entries(identifiers)) {
+      if (id !== PERSON_IDS.faKalyani) expect(facts.accountEmail).toBeNull()
+      // The same account's fingerprint does not depend on who asked for it.
+      expect(facts.stateFingerprint).toBe(ownerIdentifiers[id]!.stateFingerprint)
+    }
+  })
+})

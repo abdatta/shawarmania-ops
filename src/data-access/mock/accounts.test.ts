@@ -10,6 +10,23 @@ import {
 import { OUTLET_KALYANI_ID } from './fixtures/outlets'
 
 describe('mock accounts adapter', () => {
+  it('offers the roll-call the same people as the People list, with only its five facts', async () => {
+    const adapter = createMockAccountsAdapter(createDemoAccounts())
+
+    const roster = await adapter.listRoster()
+    const people = await adapter.listAccounts()
+
+    expect(roster).toEqual(
+      people.map(({ id, fullName, roleTitle, isActive, assignments }) => ({
+        id,
+        fullName,
+        roleTitle,
+        isActive,
+        assignments,
+      })),
+    )
+  })
+
   it('carries truthful setup, reset, active, and deactivated lifecycle fixtures', async () => {
     const accounts = createDemoAccounts()
     const adapter = createMockAccountsAdapter(accounts)

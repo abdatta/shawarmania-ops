@@ -100,18 +100,16 @@ export async function callerFrom(req: Request, service: SupabaseClient): Promise
   }
 }
 
-export async function loadAccount(
-  service: SupabaseClient,
-  profileId: string,
-): Promise<TargetAccount | null> {
-  const { data, error } = await service
-    .from('profiles')
-    .select('id, is_active, assignments(role, outlet_id, ended_on)')
-    .eq('id', profileId)
-    .maybeSingle()
-  if (error) throw error
-  if (!data) return null
+/** The columns an account's authority is judged from, one profile or all of them. */
+export const TARGET_ACCOUNT_COLUMNS = 'id, is_active, assignments(role, outlet_id, ended_on)'
 
+/**
+ * One `profiles` row, read with `TARGET_ACCOUNT_COLUMNS`, as the account its
+ * authority is judged against. Shared by `loadAccount` and the identifier
+ * list's bulk read, so the per-account and all-accounts paths cannot come to
+ * disagree about what a person may be managed as.
+ */
+export function toTargetAccount(data: Record<string, unknown>): TargetAccount {
   // Live rows only. An ended assignment is history, and history confers
   // nothing — the same rule the database's own helpers apply.
   const rows = (data.assignments ?? []) as {
@@ -126,6 +124,20 @@ export async function loadAccount(
       .map((a) => ({ role: a.role, outletId: a.outlet_id })),
     isActive: data.is_active as boolean,
   }
+}
+
+export async function loadAccount(
+  service: SupabaseClient,
+  profileId: string,
+): Promise<TargetAccount | null> {
+  const { data, error } = await service
+    .from('profiles')
+    .select(TARGET_ACCOUNT_COLUMNS)
+    .eq('id', profileId)
+    .maybeSingle()
+  if (error) throw error
+  if (!data) return null
+  return toTargetAccount(data)
 }
 
 /**

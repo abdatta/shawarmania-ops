@@ -349,6 +349,18 @@ export function createMockAccountsAdapter(
       return structuredClone(accounts)
     },
 
+    async listRoster() {
+      return structuredClone(
+        accounts.map(({ id, fullName, roleTitle, isActive, assignments }) => ({
+          id,
+          fullName,
+          roleTitle,
+          isActive,
+          assignments,
+        })),
+      )
+    },
+
     async provision(input: NewAccount): Promise<IssuedCode> {
       const id = `d1000000-0000-4000-b000-${String(nextId++).padStart(12, '0')}`
       const username = requireAvailableUsername(input.username)

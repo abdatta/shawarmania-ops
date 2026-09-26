@@ -294,6 +294,21 @@ export interface AccountSummary {
 }
 
 /**
+ * A person as the attendance roll-call places them: who, what they do, whether
+ * their account is on, and where they work.
+ *
+ * Deliberately not an `AccountSummary`. The rest of that shape — the username,
+ * the invite, the fingerprint — is what People needs to manage an account, and
+ * it lives behind the privileged account function. Attendance needs none of it,
+ * and waiting on that function cost the roll-call 7–10 s on production
+ * (attendance-reads-its-staff-directly).
+ */
+export type RosterPerson = Pick<
+  AccountSummary,
+  'id' | 'fullName' | 'roleTitle' | 'isActive' | 'assignments'
+>
+
+/**
  * A new person, and the one place they start working. Creating somebody is
  * still one act — it writes the account and their first assignment together,
  * and an account that reached the list with neither would be a person who
@@ -460,6 +475,12 @@ export interface AccountsAdapter {
    * Franchise Admin the people live at an outlet they manage.
    */
   listAccounts(): Promise<AccountSummary[]>
+  /**
+   * Everybody the caller may **see**, with what the roll-call needs to place
+   * them. One read, scoped by the row-level policies alone: who the caller may
+   * manage does not narrow it, and no identifier, invite or fingerprint is read.
+   */
+  listRoster(): Promise<RosterPerson[]>
   /** One step creates a working person: account, every assignment, issued code. */
   provision(account: NewAccount): Promise<IssuedCode>
   /** Issue or replace the purpose appropriate to the account's sign-in history. */

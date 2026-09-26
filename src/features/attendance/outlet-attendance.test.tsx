@@ -1457,8 +1457,8 @@ describe('the roll-call is the outlet’s staff', () => {
 
   it('lists a manager who is also staff at the outlet', async () => {
     const adapters = createMockAdapters()
-    const real = await adapters.accounts.listAccounts()
-    vi.spyOn(adapters.accounts, 'listAccounts').mockResolvedValue(
+    const real = await adapters.accounts.listRoster()
+    vi.spyOn(adapters.accounts, 'listRoster').mockResolvedValue(
       real.map((account) =>
         account.id === DEMO_MANAGER_ID
           ? {
@@ -1490,8 +1490,8 @@ describe('the roll-call is the outlet’s staff', () => {
   it('does not turn dates before a current employee joined into absences or manual-entry targets', async () => {
     const adapters = createMockAdapters()
     const today = await todayAt(adapters, OUTLET_KALYANI_ID)
-    const real = await adapters.accounts.listAccounts()
-    vi.spyOn(adapters.accounts, 'listAccounts').mockResolvedValue(
+    const real = await adapters.accounts.listRoster()
+    vi.spyOn(adapters.accounts, 'listRoster').mockResolvedValue(
       real.map((account) =>
         account.id === DEMO_HELPER_ACCOUNT_ID
           ? {
@@ -1860,5 +1860,45 @@ describe('a person who works at two outlets', () => {
 
     release([])
     await waitFor(() => expect(screen.queryByTestId('day-loading')).not.toBeInTheDocument())
+  })
+})
+
+/**
+ * What opening the surface costs.
+ *
+ * Measured on production on 2026-09-25: the roll-call waited 7–10 s on the
+ * People list's privileged function for names and assignments it can read
+ * directly, and asked for it two or three times per open because a
+ * revalidated session re-ran the read (attendance-reads-its-staff-directly).
+ */
+describe('opening attendance', () => {
+  function renderUnder(adapters: DataAdapters, session: Session) {
+    return (
+      <MemoryRouter>
+        <SessionContext.Provider value={session}>
+          <AdaptersContext.Provider value={adapters}>
+            <OutletAttendance />
+          </AdaptersContext.Provider>
+        </SessionContext.Provider>
+      </MemoryRouter>
+    )
+  }
+
+  it('reads the roster once and never the People list', async () => {
+    const adapters = createMockAdapters()
+    const accounts = vi.spyOn(adapters.accounts, 'listAccounts')
+    const roster = vi.spyOn(adapters.accounts, 'listRoster')
+
+    const view = render(renderUnder(adapters, managerSession))
+    await screen.findByTestId('attendance-day')
+
+    // A revalidated session is a new object holding the same assignments. It
+    // changes nothing about who is listed, so it must not read them again.
+    view.rerender(renderUnder(adapters, { ...managerSession }))
+    view.rerender(renderUnder(adapters, { ...managerSession }))
+    await screen.findByTestId('attendance-day')
+
+    expect(accounts).not.toHaveBeenCalled()
+    expect(roster).toHaveBeenCalledTimes(1)
   })
 })

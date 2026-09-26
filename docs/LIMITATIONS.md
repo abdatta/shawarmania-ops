@@ -881,3 +881,27 @@ partial indexes stop their near-empty reads from walking every order and bill.
 
 If it ever stops holding, **the remedy is still never a stored day row.** The
 whole point of the derived reading is that it cannot be wrong about itself.
+
+## A screen does not borrow another screen's privileged read
+
+Attendance opened in 8.6 to 9.7 s on production on 2026-09-25, measured in the
+owner's browser, while the day it shows read in half a second. The roll-call
+waited on the People list, which it used for names and assignments: that list
+also asks the `admin-accounts` function for usernames, invites and state
+fingerprints, and the function answered them one account after another — two
+database round trips per person, sixty for thirty people, 6 to 10 s. A
+revalidated session made the screen ask two or three times per open.
+
+`attendance-reads-its-staff-directly` gave Attendance its own read of what it
+shows (`listRoster`: one `profiles` read with assignments, scoped by policy), and
+rewrote the function to answer in two waves whatever the number of accounts.
+The rule it leaves: **a screen reads what it shows from the table that holds it**,
+and reaches for a privileged function only for what the policies deliberately
+keep from the client. The People list's identifiers are exactly that; a name and
+an assignment are not.
+
+The borrowed read had a second cost that no timing shows. The People list answers
+for the accounts the reader may *manage*, which for a manager excludes anybody
+who also works at another outlet — so those people were missing from that
+manager's roll-call on any day they had not checked in. Who is on a roll-call is
+who the reader may *see*.

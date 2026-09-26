@@ -12,6 +12,7 @@ import {
   type EditAccountCommand,
   type IssuedCode,
   type NewAccount,
+  type RosterPerson,
   type StaffFactsPatch,
 } from '../adapters'
 import { failureCode } from '../auth'
@@ -36,6 +37,12 @@ const PROFILE_COLUMNS =
   'id, full_name, phone, is_active, role_title, ' +
   'assignments(id, role, outlet_id, started_on, ended_on)'
 
+// The roster's columns: the same person and placement, without the phone the
+// roll-call never shows.
+const ROSTER_COLUMNS =
+  'id, full_name, is_active, role_title, ' +
+  'assignments(id, role, outlet_id, started_on, ended_on)'
+
 interface AssignmentRow {
   id: string
   role: AppRole
@@ -51,6 +58,16 @@ interface ProfileRow {
   is_active: boolean
   role_title: string | null
   assignments: AssignmentRow[] | null
+}
+
+function toAssignments(rows: AssignmentRow[] | null): Assignment[] {
+  return (rows ?? []).map((a) => ({
+    id: a.id,
+    role: a.role,
+    outletId: a.outlet_id,
+    startedOn: a.started_on,
+    endedOn: a.ended_on,
+  }))
 }
 
 /**
@@ -155,13 +172,7 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
       isActive: profile.is_active,
       hasSignedIn: identifier.hasSignedIn,
       roleTitle: profile.role_title,
-      assignments: (profile.assignments ?? []).map((a) => ({
-        id: a.id,
-        role: a.role,
-        outletId: a.outlet_id,
-        startedOn: a.started_on,
-        endedOn: a.ended_on,
-      })),
+      assignments: toAssignments(profile.assignments),
       invite: identifier.invite,
       lifecycle: deriveAccountLifecycle(facts),
       stateFingerprint: identifier.stateFingerprint,
@@ -181,6 +192,22 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
       return ((profiles ?? []) as unknown as ProfileRow[])
         .filter((profile) => identifiers[profile.id] !== undefined)
         .map((profile) => toSummary(profile, identifiers[profile.id]!))
+    },
+
+    async listRoster(): Promise<RosterPerson[]> {
+      const { data, error } = await client
+        .from('profiles')
+        .select(ROSTER_COLUMNS)
+        .order('full_name')
+      if (error) throw error
+
+      return ((data ?? []) as unknown as Omit<ProfileRow, 'phone'>[]).map((profile) => ({
+        id: profile.id,
+        fullName: profile.full_name,
+        roleTitle: profile.role_title,
+        isActive: profile.is_active,
+        assignments: toAssignments(profile.assignments),
+      }))
     },
 
     async provision(account: NewAccount): Promise<IssuedCode> {
