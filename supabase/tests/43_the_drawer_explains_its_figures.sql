@@ -278,6 +278,14 @@ select is(
 
 select pg_temp.set_cutover(:'KAL', time '04:00');
 
+-- Section 3 needs t-190 through now on ONE business date. Under the fixed 04:00
+-- cutover that fails whenever the suite runs between 06:00 and 07:00 IST — CI
+-- did, at 06:15 on 2026-09-27 — because t-180 then falls on the previous date.
+-- A cutover twelve hours back keeps every boundary out of the window, the way
+-- section 2 places its own. 04:00 is restored after the section.
+select (pg_temp.t(720) at time zone 'Asia/Kolkata')::time as fragment_cutover \gset
+select pg_temp.set_cutover(:'KAL', :'fragment_cutover'::time);
+
 -- ===========================================================================
 -- 3. The oldest group is a FRAGMENT of its business date (design D1).
 --
@@ -295,23 +303,26 @@ select pg_temp.impersonate(:'OWNER');
 
 select is(
   (select paise from public.drawer_cash_receipts_by_day(:'KAL', pg_temp.t(150), now())
-    where business_date = public.app_business_date(pg_temp.t(120), time '04:00')),
+    where business_date = public.app_business_date(pg_temp.t(120), :'fragment_cutover'::time)),
   (select coalesce(sum(e.amount_paise), 0)::bigint
      from public.bills b join public.effective_bill_payments e on e.bill_id = b.id
     where b.outlet_id = :'KAL' and b.status = 'settled' and e.method = 'cash'
       and b.paid_at > pg_temp.t(150) and b.paid_at <= now()
-      and public.app_business_date(b.paid_at, time '04:00')
-          = public.app_business_date(pg_temp.t(120), time '04:00')),
+      and public.app_business_date(b.paid_at, :'fragment_cutover'::time)
+          = public.app_business_date(pg_temp.t(120), :'fragment_cutover'::time)),
   'the group for the business date the count fell on holds only the part of '
   'that date AFTER the count, never the whole day');
 
 select ok(
   (select paise from public.drawer_cash_receipts_by_day(:'KAL', pg_temp.t(150), now())
-    where business_date = public.app_business_date(pg_temp.t(120), time '04:00'))
+    where business_date = public.app_business_date(pg_temp.t(120), :'fragment_cutover'::time))
   < (select paise from public.drawer_cash_receipts_by_day(:'KAL', pg_temp.t(190), now())
-      where business_date = public.app_business_date(pg_temp.t(120), time '04:00')),
+      where business_date = public.app_business_date(pg_temp.t(120), :'fragment_cutover'::time)),
   'and moving the count earlier grows that same group, which is what makes it a '
   'fragment of a date rather than the date itself');
+
+select pg_temp.unimpersonate();
+select pg_temp.set_cutover(:'KAL', time '04:00');
 
 -- ===========================================================================
 -- 4. The cutover is the outlet's own, read from its own row.
