@@ -38,6 +38,6 @@
 ## 4. Docs And Phase Gate
 
 - [x] 4.1 Update every page in the proposal's *Docs to update*. *(SCREENS, OPERATIONS, DEMO_MODE, GLOSSARY, ROLES_AND_PERMISSIONS, LIMITATIONS and ARCHITECTURE; OFFLINE_AND_SYNC named no Tablets page.)*
-- [ ] 4.1a At spec sync, reword *the Tablets surface* in `counter-device-sessions`, `billing-delivery` and `demo-mode` to the outlet page's Tablets section. The behaviour those requirements state is unchanged, but a reader should not go looking for a page that no longer exists.
-- [ ] 4.2 🧍 The owner uses the page on their own phone in production. Tasks complete is not the archive trigger; real use is.
-- [ ] 4.3 PHASE GATE: the gate in the proposal banner. (No roadmap row; the banner is its checkpoint.)
+- [x] 4.1a At spec sync, reword *the Tablets surface* in `counter-device-sessions`, `billing-delivery` and `demo-mode` to the outlet page's Tablets section. The behaviour those requirements state is unchanged, but a reader should not go looking for a page that no longer exists. *(Done at sync, 2026-09-26: two lines in `counter-device-sessions`, two in `demo-mode`, one in `billing-delivery`.)*
+- [x] 4.2 🧍 The owner uses the page on their own phone in production. Tasks complete is not the archive trigger; real use is. *(Deployed as `74bc73e` on 2026-09-26; the owner used it and signed off the same day.)*
+- [x] 4.3 PHASE GATE: the gate in the proposal banner. (No roadmap row; the banner is its checkpoint.) *(Met: every clause of the banner gate held in production.)*

@@ -47,7 +47,7 @@ write. Neither refusal SHALL disclose anything about another outlet.
 **A redeemed code creates a tablet that is not yet a counter.** Redemption and
 the browser establishing its session cannot share one transaction, so the row
 created by redemption SHALL NOT count as an active tablet, SHALL NOT appear on
-the Tablets surface, and SHALL reach nothing, until that session is proven. An
+the Tablets section of an outlet's page, and SHALL reach nothing, until that session is proven. An
 unproven row SHALL expire on its own without any administrative action.
 
 **An unproven row expires with the code that created it.** Its window SHALL be
@@ -496,7 +496,7 @@ tablet's shift SHALL NOT touch a shift on another tablet.
 
 ### Requirement: An authorised admin edits a tablet's name and current outlet
 
-The Tablets surface SHALL offer an Edit action for each tablet the signed-in
+The Tablets section of an outlet's page SHALL offer an Edit action for each tablet the signed-in
 administrator may administer. The edit SHALL be prefilled with the tablet's
 current name and outlet, the same two properties chosen at setup.
 

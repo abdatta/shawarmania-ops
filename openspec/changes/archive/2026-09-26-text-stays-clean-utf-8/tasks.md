@@ -6,4 +6,4 @@
 - [x] 4. `scripts/check-encoding.test.mjs`: clean text passes; a mangled en dash, em dash, middle dot and accented letter each fail on their line; a BOM fails; an allowed line and a binary file pass. Both files plain ASCII.
 - [x] 5. Wire `lint:encoding` into `npm run lint` and the prose-tier workflow, and say so in AGENTS.md (the Design rule and the Verification list).
 - [x] 6. `npm run typecheck`, the accounts and Zomato tests, the check's own tests, `lint:encoding`, `format:check` on the touched files.
-- [ ] 7. GATE: the hint reads *3–30*; `npm run lint:encoding` passes on the tree and failed on it before the fix; CI's lint and prose tiers both run it. The owner picks the deploy window; this commit is local until then.
+- [x] 7. GATE: the hint reads *3–30*; `npm run lint:encoding` passes on the tree and failed on it before the fix; CI's lint and prose tiers both run it. The owner picks the deploy window; this commit is local until then. *(Deployed as `97cbb00` on 2026-09-26: the Deploy run was green in every job, including lint with `lint:encoding`, and the Prose tier ran it too. The owner confirmed and asked for the archive.)*

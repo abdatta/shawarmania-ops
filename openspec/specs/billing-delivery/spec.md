@@ -133,7 +133,8 @@ holding its live shift, and both SHALL retain the refused trace.
 Removing a tablet SHALL stop ordinary reads, shifts and queue delivery without
 deleting local envelopes. There SHALL be no privileged upload path from a removed
 tablet; work left unsent on one is a recorded operational limitation, and the
-Tablets surface SHALL warn before removing a tablet reporting unsent work.
+Tablets section of an outlet's page SHALL warn before removing a tablet reporting
+unsent work.
 
 #### Scenario: A removed tablet attempts to drain
 - **WHEN** a removed tablet's leader attempts delivery

@@ -647,7 +647,7 @@ SHALL NOT place an identifier from the retired pre-tablet shift model into a
 column that references the live one. Confirming a shift request SHALL open a
 shift that billing attributes bills to; ending a shift from a phone and
 finishing the day SHALL close that same shift with distinguishable reasons; and
-the counter, the Tablets surface, every phone's live-shift card and the billing
+the counter, the Tablets section of an outlet's page, every phone's live-shift card and the billing
 figures SHALL agree about who holds the counter and since when. A demo shift's
 business date and expiry SHALL be resolved through its outlet's own cutover.
 
@@ -668,7 +668,7 @@ business date and expiry SHALL be resolved through its outlet's own cutover.
 #### Scenario: Tablets and the phone agree about the counter
 
 - **WHEN** a shift is open at the demo outlet
-- **THEN** the Tablets surface names its holder and opening time, and that same
+- **THEN** the Tablets section of an outlet's page names its holder and opening time, and that same
   person sees the live-shift card offering **Leave counter** on their own phone
 
 #### Scenario: A confirmed handshake opens a shift that takes money
