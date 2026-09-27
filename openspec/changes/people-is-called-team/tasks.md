@@ -45,6 +45,11 @@
   *Done:* exactly those, plus the outlets screen's deletion refusal counting
   "people — N" (ordinary English), and the living specs, which this folder's
   delta renames when it archives.
-- [ ] 4.4 GATE — the Gate line clause by clause. Archive
+- [x] 4.4 GATE — the Gate line clause by clause. Archive
   `people-shows-names-first` before this change. Commit locally; the owner picks
   the push.
+  *Proved on production 2026-09-27* (8293a0c): `/owner/team` titled Team with
+  the Setup tab reading Team, in the owner's browser. The first load after the
+  deploy served the cached previous build, which answered `/team` with
+  not-found; its own update adoption replaced it on the next load. Archive
+  after `people-shows-names-first`.

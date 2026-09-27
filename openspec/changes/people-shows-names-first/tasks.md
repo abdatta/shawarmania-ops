@@ -81,3 +81,11 @@ unchanged across the rewrite.
 - [ ] 5.5 GATE — the proposal's Gate line proved clause by clause. Production
   timings after the owner picks the deploy window, in the owner's browser. No
   ROADMAP.md row; not archived until the owner calls it.
+  *Measured on production 2026-09-27* (deployed as 8293a0c, owner's browser,
+  `/owner/team`): the roster read settled at 1.29, 2.48 and 1.57 s after
+  navigation start, so names were on screen before the sign-in details every
+  time; the account function took 3.27 s on the first call after the deploy,
+  then 2.51 s and 1.75 s warm, against 2.4–3.4 s warm before. Names first holds;
+  **the under-1.5 s warm clause does not** — two hops did not bring the function
+  near the 0.55 s one-query baseline, so most of its time is not database
+  round trips. Left unticked until that is understood.
