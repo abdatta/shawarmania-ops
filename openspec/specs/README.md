@@ -61,6 +61,7 @@ This alphabetical list maps every capability required now. For planned work, rea
 - [`counter-billing`](counter-billing/spec.md) — server-assigned bill numbers, append-only settlement history, snapshot line items, idempotent client UUIDs, and cutover-validated business dates.
 - [`counter-device-sessions`](counter-device-sessions/spec.md) — secure one-outlet counter-tablet enrollment and named-person shift opening from the employee's own phone.
 - [`cross-outlet-oversight`](cross-outlet-oversight/spec.md) — owner comparison of every permitted outlet from recorded rows and closed-day snapshots, without widening a switcher or exporting demo figures.
+- [`customer-membership`](customer-membership/spec.md) — a hand-granted, business-wide label recorded as grants and revocations, snapshotted onto every sale, shown at the counter as a mark only, and changing no total anywhere.
 - [`demo-mode`](demo-mode/spec.md) — a visibly fabricated, no-authentication four-role demo through typed adapters, structurally unable to write real data.
 - [`design-system`](design-system/spec.md) — semantic token layering, AA-verified light and dark themes, and shared money and date formatters.
 - [`expense-categories`](expense-categories/spec.md) — business-wide expense-category suggestions grown from use, with historical category text preserved and deliberate owner-led rewrites.
