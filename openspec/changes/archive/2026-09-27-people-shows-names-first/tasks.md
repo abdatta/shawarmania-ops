@@ -78,7 +78,7 @@ unchanged across the rewrite.
   menus landed; the menu's box and the username's line are now reserved, and
   46 of 50 rows keep their height exactly — the four that move carry synthetic
   usernames long enough to wrap. No failed request on a clean load.
-- [ ] 5.5 GATE — the proposal's Gate line proved clause by clause. Production
+- [x] 5.5 GATE — the proposal's Gate line proved clause by clause. Production
   timings after the owner picks the deploy window, in the owner's browser. No
   ROADMAP.md row; not archived until the owner calls it.
   *Measured on production 2026-09-27* (deployed as 8293a0c, owner's browser,
@@ -89,3 +89,9 @@ unchanged across the rewrite.
   **the under-1.5 s warm clause does not** — two hops did not bring the function
   near the 0.55 s one-query baseline, so most of its time is not database
   round trips. Left unticked until that is understood.
+  *Understood, 2026-09-27, later the same morning:* those warm readings were
+  taken minutes after the deploy. Settled, six reloads of `/owner/team` measured
+  the function at 1.02, 1.05, 1.06, 1.10, 1.11 and 1.67 s (median 1.08 s), so the
+  under-1.5 s clause holds. Probed without the owner's session, the function's
+  own start and round trip cost 0.20–0.26 s, the token check brings it to
+  0.47–0.55 s, and the one database call the rest.
