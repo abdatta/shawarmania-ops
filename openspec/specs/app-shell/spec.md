@@ -522,7 +522,7 @@ This signal SHALL NOT merge human account sessions with counter-tablet device se
 
 #### Scenario: Demo does not touch real authentication
 
-- **WHEN** the same People surface is walked in demo mode
+- **WHEN** the same Team surface is walked in demo mode
 - **THEN** no real-session validation, invalidation, or sign-out operation occurs
 
 ### Requirement: Navigation has two levels, and a group is not a destination

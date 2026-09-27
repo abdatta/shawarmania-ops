@@ -247,9 +247,9 @@ assignment (formerly "departed" — off every staff list, history intact), at
 least one whose assignment at one outlet has ended while another continues, and
 at least one deactivated person who still holds a live assignment.
 
-#### Scenario: The People surface demonstrates every unfinished state
+#### Scenario: The Team surface demonstrates every unfinished state
 
-- **WHEN** a demonstrator opens the People surface in demo mode
+- **WHEN** a demonstrator opens the Team surface in demo mode
 - **THEN** the placeholder-address, invite-outstanding, no-assignment,
   one-assignment-ended and deactivated states are all present and each states
   what is wrong and what to do next

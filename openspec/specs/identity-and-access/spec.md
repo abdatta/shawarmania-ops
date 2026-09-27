@@ -73,7 +73,7 @@ later self-service settings surface exists.
 #### Scenario: Ordinary creation does not require account email
 
 - **WHEN** an authorized admin creates an Employee, Biller, or Franchise Admin
-  through the People form
+  through the Team form
 - **THEN** no email is requested and no account-email row is required
 
 #### Scenario: A future ordinary-role email remains compatible
@@ -544,7 +544,7 @@ be refused.
 
 The complete requested outlet set SHALL be validated before any auth user,
 profile, assignment, or invite is written. Refusal SHALL apply to a
-hand-crafted privileged request regardless of what the People form offers.
+hand-crafted privileged request regardless of what the Team form offers.
 
 #### Scenario: A Franchise Admin cannot provision outside their outlets
 
@@ -601,7 +601,7 @@ The code SHALL expire after a bounded lifetime, SHALL be redeemable at most once
 #### Scenario: An expired row is not outstanding
 
 - **WHEN** an unused invite passes its expiry
-- **THEN** redemption is refused and People no longer treats the account as having a live handover
+- **THEN** redemption is refused and Team no longer treats the account as having a live handover
 
 #### Scenario: Repeated wrong codes are bounded
 
@@ -745,7 +745,7 @@ valid. No inactivity timeout SHALL force routine re-authentication.
 
 ### Requirement: Admins manage accounts from a task-based surface scoped to their authority
 
-The Super Admin SHALL have a People surface listing accounts across all outlets.
+The Super Admin SHALL have a Team surface listing accounts across all outlets.
 The Franchise Admin SHALL have one listing every person holding a live assignment
 at an outlet they manage, and SHALL be offered account tasks, usernames and
 account status only for the accounts they are permitted to manage; a listed
@@ -771,14 +771,14 @@ A newly issued handover SHALL be presented once through one reusable purpose-awa
 
 #### Scenario: The Franchise Admin list and controls are authority-scoped
 
-- **WHEN** a Franchise Admin opens People or hand-crafts an edit
+- **WHEN** a Franchise Admin opens Team or hand-crafts an edit
 - **THEN** they can switch Employee and Biller only at outlets they manage and cannot grant, alter, or remove Franchise Admin or Super Admin authority
 
 #### Scenario: A person who also works elsewhere is listed and not managed
 
 - **WHEN** a person holds a live Employee assignment at an outlet a Franchise Admin
   manages and another at an outlet they do not, and that Franchise Admin opens
-  People
+  Team
 - **THEN** the person is listed with the assignment the Franchise Admin can see,
   no username and no tasks, and the row states that the owner manages the account
 
@@ -787,9 +787,9 @@ A newly issued handover SHALL be presented once through one reusable purpose-awa
 - **WHEN** an admin issues account setup and separately issues password reset
 - **THEN** the same visual component presents the same QR/copy/security facts with distinct setup or reset headings and no misleading “New code” label
 
-### Requirement: People shows its people before their sign-in details
+### Requirement: Team shows its people before their sign-in details
 
-People SHALL present each listed person's name, job title and assignments as soon
+Team SHALL present each listed person's name, job title and assignments as soon
 as they are read, without waiting for usernames, account status or account
 tasks, which come from the privileged account function. Until those arrive a row
 SHALL show no username, no status and no task, and SHALL NOT show a status it has
@@ -800,7 +800,7 @@ Which people are listed SHALL NOT change when the sign-in details arrive.
 
 #### Scenario: Names before sign-in details
 
-- **WHEN** the owner opens People and the account function has not yet answered
+- **WHEN** the owner opens Team and the account function has not yet answered
 - **THEN** every person is listed by name with where they work, and no row shows a
   username, a status or a task
 
@@ -914,7 +914,7 @@ handed an empty identifier response.
 
 #### Scenario: A Franchise Admin sees only supported usernames
 
-- **WHEN** a Franchise Admin loads People
+- **WHEN** a Franchise Admin loads Team
 - **THEN** usernames are present only for people wholly within their management
   authority and no account email is present
 
@@ -924,13 +924,13 @@ handed an empty identifier response.
 - **THEN** that target's account email is available for correction without
   exposing it to any outlet-scoped role
 
-### Requirement: Every People surface states account readiness truthfully
+### Requirement: Every Team surface states account readiness truthfully
 
-People SHALL derive status from active state, successful sign-in history, live assignments, and a live unexpired handover purpose. A pending password reset SHALL NOT make an established account read as awaiting activation, and an expired invitation SHALL NOT create a pending status.
+Team SHALL derive status from active state, successful sign-in history, live assignments, and a live unexpired handover purpose. A pending password reset SHALL NOT make an established account read as awaiting activation, and an expired invitation SHALL NOT create a pending status.
 
 #### Scenario: A deactivated person reads as such
 
-- **WHEN** People lists a person whose account is deactivated
+- **WHEN** Team lists a person whose account is deactivated
 - **THEN** the row states Deactivated regardless of historical invitation rows
 
 #### Scenario: A new account is awaiting setup
@@ -946,11 +946,11 @@ People SHALL derive status from active state, successful sign-in history, live a
 #### Scenario: Expiry removes pending status
 
 - **WHEN** the only unused link is expired
-- **THEN** People does not describe that link as pending and offers the appropriate fresh setup or reset action
+- **THEN** Team does not describe that link as pending and offers the appropriate fresh setup or reset action
 
 #### Scenario: A person with no assignment reads as unplaced
 
-- **WHEN** People lists an active person with no live assignment
+- **WHEN** Team lists an active person with no live assignment
 - **THEN** the row states that they are not assigned to an outlet
 
 ### Requirement: An activation link carries the code and asks for username plus a new password
@@ -1170,12 +1170,12 @@ Two people with the same name are told apart by their job title and where
 they work; neither identifies a person with no name.
 
 The surface that writes the record SHALL refuse before writing and SHALL name
-the field that is missing, on the People surface's create and edit paths
+the field that is missing, on the Team surface's create and edit paths
 alike.
 
 #### Scenario: A person cannot be created without a name
 
-- **WHEN** an admin submits the People form with the full name empty or
+- **WHEN** an admin submits the Team form with the full name empty or
   containing only spaces
 - **THEN** no account is created, no one-time code is issued, and the form says
   which field is missing
