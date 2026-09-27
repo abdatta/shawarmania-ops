@@ -52,7 +52,7 @@ export function billingRetryDelayMs(attempt: number, random = Math.random): numb
 /**
  * One visible page schedules drain attempts. Web Locks is the primary mutex;
  * the renewable IndexedDB lease is the fallback. Browser connectivity events
- * only wake a retryâ€”reachability changes solely after an actual request.
+ * only wake a retry—reachability changes solely after an actual request.
  */
 export class BillingDrainCoordinator {
   private readonly now: () => number

@@ -689,7 +689,7 @@ export function AccountsSurface() {
               onChange={(event) => setDraft({ ...draft, username: event.target.value })}
             />
             <p className="text-xs text-content-muted">
-              3â€“30 lowercase letters, numbers, periods, or underscores. No @ sign.
+              3–30 lowercase letters, numbers, periods, or underscores. No @ sign.
             </p>
           </Field>
 

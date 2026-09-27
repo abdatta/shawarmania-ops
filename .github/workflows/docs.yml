@@ -97,6 +97,12 @@ jobs:
       - name: Agent instructions do not call a missing toolchain
         run: npm run lint:agents
 
+      # Prose is where two broken em dashes sat in living specs until
+      # 2026-09-26: a markdown-only commit rewritten through the wrong encoding
+      # never reaches the full suite, so the encoding check runs here too.
+      - name: Every tracked text file is clean UTF-8
+        run: npm run lint:encoding
+
       # Nothing else runs here on purpose. eslint, typecheck, the build and
       # every test suite take no input from any file this workflow's filter
       # admits — with `openspec/tools/**` excluded from that filter precisely

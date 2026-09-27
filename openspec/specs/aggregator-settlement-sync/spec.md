@@ -698,8 +698,8 @@ available regardless of state.
 
 ### Requirement: A half-successful reconnect is named at the moment it happens
 
-When a reconnect signs Zomato in but does not land a Hyperpure session â€” or
-the reverse, should a Hyperpure-only path ever exist â€” the surface SHALL name
+When a reconnect signs Zomato in but does not land a Hyperpure session — or
+the reverse, should a Hyperpure-only path ever exist — the surface SHALL name
 the channel that did not follow at that moment, on that channel's own health
 line, rather than reporting an unqualified success or leaving the manual
 upload as the only signal. Each channel's outcome SHALL be knowable

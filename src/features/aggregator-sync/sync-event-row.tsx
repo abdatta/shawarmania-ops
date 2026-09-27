@@ -293,7 +293,7 @@ export function SyncEventRow({
                       link carries the day so it opens on it. Two lines of text
                       out of context is not enough to decide by, the row sits
                       among that day's other costs, and withdrawing cannot be
-                      undone â€” it should be done looking at what it changes.
+                      undone — it should be done looking at what it changes.
                     */}
                     <Link
                       to={ledgerDayLink(row.event.synced.businessDate)}

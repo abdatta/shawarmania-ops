@@ -117,7 +117,7 @@ franchisee could repeat.
 **A category SHALL NOT be a thing a manager creates on its own.** The unit of work
 is the item; a category is the heading items are grouped under, entered as a
 free-form field on the item that suggests the outlet's existing categories and
-creates an unrecognised one on the way through â€” the pattern the expense list
+creates an unrecognised one on the way through — the pattern the expense list
 already uses. The surface SHALL therefore offer one add action, and SHALL NOT be
 able to leave an empty category behind.
 
@@ -129,14 +129,14 @@ same name spelled differently, a singular beside a plural, a transposition or a
 dropped or added letter, and one name sitting inside another. Where it finds
 candidates, the surface SHALL present them as selectable choices at the moment of
 confirmation, and choosing one SHALL file the item under that existing category
-under its existing spelling â€” the correction belongs where the mistake was caught,
+under its existing spelling — the correction belongs where the mistake was caught,
 not behind a cancel and a retype. Creating the typed category anyway SHALL be one
 of those choices rather than a separate route.
 
 Selecting a choice SHALL NOT commit it. One action SHALL commit whichever choice
 is selected, and SHALL be unavailable until one is, because a row that filed the
 item the instant it was touched would put it under the wrong heading on a
-mistaken tap â€” the fault this whole requirement exists to prevent. No choice SHALL
+mistaken tap — the fault this whole requirement exists to prevent. No choice SHALL
 be selected by default, so the category is one the manager picked rather than one
 the dialog did.
 
@@ -148,7 +148,7 @@ appear.
 
 **A newly added item or category SHALL be scrolled into view and briefly
 highlighted.** Appending puts new work at the bottom, off screen, and a manager who
-cannot see what they just added reads it as a failure and adds it again â€” so the
+cannot see what they just added reads it as a failure and adds it again — so the
 cost of not doing this is duplicate menu items, not mild confusion. The highlight
 SHALL be suppressed under a reduced-motion preference; the scroll SHALL NOT be,
 because it is orientation rather than decoration.
@@ -164,7 +164,7 @@ SHALL render that row in the same disabled treatment as a deleted expense row.
 
 #### Scenario: The first item at a new outlet
 - **WHEN** a manager adds an item and types a category that resembles none the outlet has
-- **THEN** the category exists with that item inside it and nothing was confirmed â€” with no separate step that could have created it empty
+- **THEN** the category exists with that item inside it and nothing was confirmed — with no separate step that could have created it empty
 
 #### Scenario: A near-miss on an existing category
 - **WHEN** the typed category differs from an existing one only by a character, a plural, capitalisation, an accent, punctuation or spacing

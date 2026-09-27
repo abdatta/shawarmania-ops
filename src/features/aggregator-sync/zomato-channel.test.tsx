@@ -319,9 +319,10 @@ describe('the Zomato sync surface', () => {
      *
      * This row is the one place on the surface where a person compares two
      * amounts and two dates and decides about money, so its punctuation is not
-     * cosmetic. From 24 Aug to 31 Aug it read `₹3,750 Â· 15 Aug Â· Hyperpure,
-     * paid online`: a commit rewrote the file through a tool that read its
-     * UTF-8 as Latin-1 and re-encoded the result, turning `·` into `Â·`.
+     * cosmetic. From 24 Aug to 31 Aug it read like this:
+     * `₹3,750 Â· 15 Aug Â· Hyperpure, paid online`. (encoding-check: allow)
+     * A commit rewrote the file through a tool that read its UTF-8 as Latin-1
+     * and re-encoded the result, turning `·` into `Â·`. (encoding-check: allow)
      *
      * Asserted on the rendered text rather than on the source, because that is
      * where the owner meets it, and by the mojibake's own leading character —
