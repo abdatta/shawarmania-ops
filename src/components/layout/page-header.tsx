@@ -9,6 +9,12 @@ interface PageHeaderProps {
   subtitle?: string | undefined
   /** Where the back affordance leads; omitted, there is no back affordance. */
   backTo?: string | undefined
+  /**
+   * A back affordance that does something rather than going somewhere — for a
+   * page that should step back through the reader's own history rather than to
+   * one fixed address. Takes precedence over `backTo`.
+   */
+  onBack?: (() => void) | undefined
   /** Primary action slot — a button or link, already styled. */
   action?: ReactNode
   /**
@@ -20,7 +26,7 @@ interface PageHeaderProps {
   scope?: ReactNode
 }
 
-export function PageHeader({ title, subtitle, backTo, action, scope }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, backTo, onBack, action, scope }: PageHeaderProps) {
   return (
     // Wraps rather than squeezing. An outlet selector is as wide as an outlet's
     // name, and beside it on a 390 px phone the title column collapsed to a few
@@ -30,7 +36,16 @@ export function PageHeader({ title, subtitle, backTo, action, scope }: PageHeade
     // two-outlet manager's. Nothing changes where there is room for one line.
     <header className="mb-4 flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
       <div className="flex min-w-0 items-center gap-2">
-        {backTo && (
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label="Back"
+            className={buttonVariants({ variant: 'ghost', size: 'phone' })}
+          >
+            <ArrowLeft aria-hidden size={18} />
+          </button>
+        ) : backTo ? (
           <Link
             to={backTo}
             aria-label="Back"
@@ -38,7 +53,7 @@ export function PageHeader({ title, subtitle, backTo, action, scope }: PageHeade
           >
             <ArrowLeft aria-hidden size={18} />
           </Link>
-        )}
+        ) : null}
         <div className="min-w-0">
           <h1 className="text-xl font-bold text-content">{title}</h1>
           {subtitle && <p className="mt-0.5 text-sm text-content-muted">{subtitle}</p>}

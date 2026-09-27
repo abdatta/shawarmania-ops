@@ -503,7 +503,7 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
 > is scheduled only after shadow billing succeeds.
 
 1. **Create the outlet** (Super Admin → Outlets → *Add outlet*): short code, name, location label, address, phone, business-day cutover. Use **Find the address** to fill the address block from a search rather than typing five fields — it fills the District from the PIN code, which is the part nobody remembers. Check what it filled before saving; OpenStreetMap data is contributed rather than surveyed, and this address is what a GST invoice will carry. If it finds nothing, type it: the search is a shortcut and never a step. **The business-day cutover is not the opening time** — it is where one trading day ends and the next begins, so it belongs in the quiet hours (04:00 is the default and the owner-confirmed value for both outlets). The form resolves a whole session against whatever you type and warns if it would split one night across two days; leave it at 04:00 unless you have a reason. On a brand-new installation this is the only thing there is to do, and the empty screen says so.
-2. **Capture the coordinates in the app, standing at the counter** (Super Admin → Outlets → *Capture position here*). Not from a map search, and not by typing them in — there is deliberately no field for that. The screen samples for a few seconds, keeps the tightest reading, and refuses to save a fix looser than ±50 m; step outside if the counter cannot produce one. Until an outlet is captured, its check-ins are recorded but not measured against any fence, and the Outlets screen shows it as unsurveyed.
+2. **Capture the coordinates in the app, standing at the counter** (Super Admin → Outlets → the outlet → **Capture** on its check-in fence). Not from a map search, and not by typing them in — there is deliberately no field for that. The screen samples for a few seconds, keeps the tightest reading, and refuses to save a fix looser than ±50 m; step outside if the counter cannot produce one. Until an outlet is captured, its check-ins are recorded but not measured against any fence, and the outlet's page shows its fence as *Not captured*.
 3. **Create the Franchise Admin** (Super Admin → Team): name, username and
    every outlet they manage, plus any optional staff facts. No email is needed.
    Send the one activation link. The outlet must exist first; if the same admin
@@ -515,11 +515,11 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
    check prices, category order and availability, then retire a test item and
    confirm historical captured lines do not change. Do this before a tablet is
    set up; a counter with an incomplete menu is not ready for shadow billing.
-6. **Set the counter tablet up**: on your own phone, open **Tablets**, choose
-   the outlet, name the tablet what is written on the back of it, and generate a
-   **setup code**. Walk to the counter, open the app on the tablet at
+6. **Set the counter tablet up**: on your own phone, open **Outlets**, tap the
+   outlet, and choose **Set up** on its Tablets. Name the tablet what is written
+   on the back of it, and generate a **setup code**. Walk to the counter, open the app on the tablet at
    `/counter/setup`, and type the code. The tablet is then that outlet's counter
-   and appears under Tablets.
+   and appears under that outlet's Tablets.
 
    Three things worth knowing before you do it. The code is shown **once**, is
    good for **fifteen minutes**, and works **once** — generate another if you
@@ -529,7 +529,7 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
    counters answering to the same label. Replacing one
    means removing the old one first, which is permanent and immediate.
 
-   **An enrolled tablet can later be edited from Tablets.** A Super Admin may
+   **An enrolled tablet can later be edited from its outlet's page.** A Super Admin may
    change its name and current outlet; a Franchise Admin may rename a tablet at
    an outlet they manage, while its outlet remains fixed in the form. Renaming
    does not require the counter to be idle. Moving an outlet is an atomic

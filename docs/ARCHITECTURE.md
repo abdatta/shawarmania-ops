@@ -258,7 +258,7 @@ mains-powered tablet stays on this screen for a whole shift, and its stale price
 or availability is charged to the customer rather than merely shown as a late
 count.
 
-The management **Tablets** surface follows the opposite freshness contract. One
+The **Tablets** section of an outlet's page follows the opposite freshness contract. One
 RLS-scoped database function returns each requested tablet, its live shift and
 operator, and that counter's bill count, effective Cash/UPI totals, waiting
 orders, drawer Cash and unresolved telemetry with one server reading time. The function admits only an

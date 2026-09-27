@@ -259,9 +259,9 @@ describe('progressive Overview', () => {
   })
 
   it.each([
-    ['all', 'Open', 'bg-success'],
-    ['some', 'Open', 'bg-warning'],
-    ['none', 'Closed', 'bg-danger'],
+    ['all', 'Online', 'bg-success'],
+    ['some', 'Online', 'bg-warning'],
+    ['none', 'Offline', 'bg-danger'],
   ] as const)(
     'renders %s tablets online with the matching dot and destination',
     async (kind, label, color) => {
@@ -280,16 +280,16 @@ describe('progressive Overview', () => {
       })
       const status = await screen.findByTestId(`open-outlet-${KAL}`)
       await within(screen.getByTestId(`outlet-card-${KAL}`)).findByRole('link', {
-        name: kind === 'some' ? /Open, some/ : label,
+        name: kind === 'some' ? /Online, some tablets offline/ : label,
       })
       expect(status).toHaveTextContent(label)
       expect(status.querySelector(`.${color}`)).not.toBeNull()
-      expect(status).toHaveAttribute('href', `/demo/owner/devices/${KAL}`)
+      expect(status).toHaveAttribute('href', `/demo/owner/outlets/${KAL}`)
       expect(screen.queryByText(/tablet offline/i)).toBeNull()
     },
   )
 
-  it('does not label pending or failed tablet reads Closed', async () => {
+  it('does not label pending or failed tablet reads Offline', async () => {
     const base = createMockAdapters('super_admin')
     setup({
       ...base,
@@ -300,7 +300,7 @@ describe('progressive Overview', () => {
       },
     })
     await screen.findByTestId(`sales-${KAL}`)
-    expect(screen.getByTestId(`open-outlet-${KAL}`)).not.toHaveTextContent('Closed')
+    expect(screen.getByTestId(`open-outlet-${KAL}`)).not.toHaveTextContent('Offline')
     expect(screen.getByTestId(`open-outlet-${KPA}`)).toHaveTextContent('Status unavailable')
   })
 
@@ -472,7 +472,7 @@ describe('progressive Overview', () => {
     )
     expect(screen.getByTestId(`open-outlet-${KAL}`)).toHaveAttribute(
       'href',
-      `/demo/owner/devices/${KAL}`,
+      `/demo/owner/outlets/${KAL}`,
     )
     const month = overviewPeriod(resolveBusinessDate(new Date(), '04:00')).month
     expect(within(card).getByRole('link', { name: /revenue/ })).toHaveAttribute(
@@ -549,7 +549,7 @@ describe('progressive Overview', () => {
     )
     expect(screen.getByTestId(`open-outlet-${KAL}`)).toHaveAttribute(
       'href',
-      `/admin/devices/${KAL}`,
+      `/admin/outlets/${KAL}`,
     )
     expect(screen.queryByTestId('overview-attention-delivery-needs-you')).toBeNull()
   })

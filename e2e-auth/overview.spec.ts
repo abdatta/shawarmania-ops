@@ -63,8 +63,10 @@ test('live Overview arrives independently and fits phone/tablet in both themes',
     }
   }
   await page.getByTestId(`open-outlet-${KAL}`).click()
-  await expect(page).toHaveURL(new RegExp(`devices/${KAL}`))
-  await expect(page.getByRole('heading', { name: 'Tablets', exact: true })).toBeVisible()
+  // The status opens the outlet's own page, where its tablets are
+  // (outlets-one-at-a-time).
+  await expect(page).toHaveURL(new RegExp(`outlets/${KAL}`))
+  await expect(page.getByTestId('outlet-tablets')).toBeVisible()
   expect(errors).toEqual([])
   expect(failedReads).toEqual([])
 })

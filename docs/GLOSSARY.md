@@ -6,6 +6,8 @@ Domain terms, defined once. When code, specs, or UI copy use these words, they m
 
 One physical Shawarmania counter — currently Kalyani or Kanchrapara. The unit of data isolation: nearly every table carries `outlet_id`, and nearly every permission question reduces to "which outlet?". A franchise is an outlet with an external owner; the software makes no structural distinction.
 
+**Open** and **Closed** say whether an outlet is trading, and only that: *Closed* is what **Mark closed** sets, and it stays until somebody reopens the outlet. They are never used for whether its tablets are reachable — see *Online / Offline*.
+
 ### Assignment
 
 **Where a person works, and as what.** One row per person per role per outlet —
@@ -67,6 +69,8 @@ The copy of `item_name` and `unit_price_paise` stored on a bill line at the mome
 The tablet **set up** to one outlet. It is a machine principal: its Auth user *is* its `counter_devices` row, and it has no profile and no assignment. It holds a long-lived session scoped by Row-Level Security to that outlet alone, and what it may reach comes from the shift open on it rather than from anything it is.
 
 An outlet may hold several active tablets. What a partial unique index enforces is that no two live counters at one outlet share a **label**. A tablet is a counter only once its browser has **proven a session**; until then the row reaches nothing and lapses with the code that created it. **Removal is permanent** — there is no paused state, and setting one up again costs a fresh setup code typed at the counter.
+
+**Online** and **Offline** say whether an outlet's tablets are reachable right now, from their heartbeats: *Online* when every tablet has reported within three minutes (a yellow dot when only some have), *Offline* when none has. Overview shows it with a coloured dot, because it is a live reading; an outlet's Open or Closed never carries one.
 
 Called a *counter device* before `counter-devices-and-offline`; the schema still says `counter_devices`, and the screens say Tablets, because a phone is a device too and every person reading those screens is holding one.
 

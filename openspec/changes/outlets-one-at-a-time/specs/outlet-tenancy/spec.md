@@ -1,75 +1,102 @@
 ## ADDED Requirements
 
-### Requirement: Outlets opens on one outlet at a time
+### Requirement: Outlets lists every outlet, and each opens a page of its own
 
-The Outlets surface SHALL show one outlet at a time, chosen with the shared
-single-select outlet picker. Choosing an outlet SHALL replace the one shown and
-SHALL NOT add to it.
+The Outlets surface SHALL list the outlets the reader may see, one row each,
+stating its name, short code, location label, whether it is open, and its
+tablets in one line. Selecting a row SHALL open that outlet's own page at
+`outlets/:outletId`, which SHALL show that outlet and no other and SHALL offer no
+outlet picker.
 
-A reader who may see only one outlet SHALL NOT be offered a picker.
+The owner's list SHALL include closed outlets, after the trading ones and marked
+closed. A manager's list SHALL NOT include a closed outlet.
 
-For the owner, the picker SHALL offer closed outlets as well as trading ones,
-and SHALL mark a closed outlet as closed. It SHALL do this without widening the
-outlets any other surface's picker offers.
+Whether an outlet is trading SHALL read Open or Closed, as plain words in a
+Status column drawn as Team draws a person's status, with no coloured dot: a dot
+names a live reading, and this is a setting somebody chose.
 
-The address `outlets/:outletId` SHALL open on that outlet when the reader may see
-it, and SHALL otherwise open on the reader's default outlet without an error.
+The list SHALL be shown even when the reader may see only one outlet.
 
-The chosen outlet SHALL confer no authority. Every write SHALL remain decided by
-the database from the writer's own assignments.
+The outlet's page SHALL offer a back action that returns the reader to the screen
+they came from. Where the page was the first screen the app opened, it SHALL go
+to the Outlets list instead of leaving the app.
 
-#### Scenario: The owner switches outlet
+An outlet the reader may not see SHALL read on its page exactly as one that does
+not exist, and SHALL show nothing about it.
 
-- **WHEN** the owner, seeing two outlets, taps the second outlet's chip
-- **THEN** the page shows only the second outlet, and the first is no longer shown
+The address confers no authority. Every write SHALL remain decided by the
+database from the writer's own assignments.
 
-#### Scenario: One outlet, no picker
+#### Scenario: A row opens its outlet
+
+- **WHEN** the owner selects Kanchrapara's row on Outlets
+- **THEN** Kanchrapara's page opens, showing only Kanchrapara
+
+#### Scenario: Back returns where the reader came from
+
+- **WHEN** a reader opens an outlet's page from Overview and presses back
+- **THEN** they are on Overview again
+
+#### Scenario: Back from a page opened first
+
+- **WHEN** an outlet's page is the first screen the app opened, and the reader presses back
+- **THEN** the Outlets list opens
+
+#### Scenario: A closed outlet is listed last
+
+- **WHEN** the owner opens Outlets while one outlet is closed
+- **THEN** it is listed after every trading outlet, marked closed, and its page offers reopening and deletion
+
+#### Scenario: One outlet is still a list
 
 - **WHEN** a reader who may see one outlet opens Outlets
-- **THEN** that outlet's page opens and no picker is drawn
+- **THEN** a list of that one outlet is shown, and selecting it opens its page
 
-#### Scenario: A closed outlet is reached
+#### Scenario: An outlet the reader may not see
 
-- **WHEN** the owner opens a closed outlet from the picker
-- **THEN** its chip reads as closed and its page offers reopening and deletion
+- **WHEN** a manager opens `outlets/:outletId` naming an outlet no assignment of theirs names
+- **THEN** the page says it is not an outlet they can see, and shows nothing about it
 
-#### Scenario: A link names an outlet
+#### Scenario: A new outlet opens on its page
 
-- **WHEN** a reader follows `outlets/:outletId` to an outlet they may see
-- **THEN** the page opens on that outlet
-
-#### Scenario: A link names an outlet the reader may not see
-
-- **WHEN** a manager follows `outlets/:outletId` naming an outlet no assignment of theirs names
-- **THEN** the page opens on their own default outlet, and nothing about the named outlet is shown
+- **WHEN** the owner adds an outlet from the list
+- **THEN** that outlet's page opens
 
 ## MODIFIED Requirements
 
 ### Requirement: An outlet is read alongside what it is raising and the tablet standing at it
 
-An outlet's page SHALL carry what that outlet is currently raising and the state
-of the counter tablet at it, so that the question "is this shop all right?" is
-answered where the shop is, rather than on a separate screen the reader has to
-know to visit.
+An outlet's page SHALL hold everything about it: its details,
+and the tablets standing at its counter with the state each last reported. So
+the question "is this shop all right?" is answered where the shop is, and no
+group of the outlet's things SHALL read as standing beside the outlet rather than
+within it.
 
-Administering that tablet SHALL be reached from the outlet it stands in, and
-SHALL open scoped to **that** outlet rather than to a picker the reader must then
-set.
+Administering those tablets SHALL be done on that page, for that outlet, and
+SHALL NOT need a separate page or a picker the reader must then set.
 
-Closing and deleting an outlet SHALL be offered apart from its ordinary actions,
-after them, so that neither sits among controls a person uses routinely.
+A tablet's state SHALL be what it last reported, and SHALL say so when the tablet
+is out of touch, so that figures nothing is reporting are never read as live.
 
-#### Scenario: The page says what the shop is raising
+Closing an outlet SHALL be offered once, at the foot of its page, apart from its
+routine actions. A trading outlet SHALL NOT offer deletion.
 
-- **WHEN** an outlet has something raised against it
-- **THEN** its page states it, without the reader opening another surface
+#### Scenario: The page says how the counter is
 
-#### Scenario: Tablet administration arrives already scoped
+- **WHEN** an outlet's tablet is holding bills it has not sent
+- **THEN** that tablet's card on the outlet's page states how many, and since when
 
-- **WHEN** a reader opens tablet administration from an outlet's page
-- **THEN** it opens on that outlet's tablets
+#### Scenario: A tablet gone quiet
 
-#### Scenario: Destructive actions are apart
+- **WHEN** a tablet has not reported recently
+- **THEN** its card leads with being out of touch, before anything else it last reported
 
-- **WHEN** the owner opens a trading outlet's page
-- **THEN** closing it is offered after every ordinary action, set apart from them
+#### Scenario: Tablets are administered on the page
+
+- **WHEN** a reader who may administer tablets sets one up, edits it or removes it
+- **THEN** they do it from that outlet's page, and it acts on that outlet
+
+#### Scenario: Closing is apart
+
+- **WHEN** the owner opens a trading outlet
+- **THEN** Mark closed is offered once at the page's foot, and deletion is not offered

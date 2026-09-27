@@ -11,12 +11,11 @@ import { ShiftUnlock } from '@/features/billing/shift-unlock'
 import { CashDrawerSurface } from '@/features/cash/cash-drawer-surface'
 import { CustomersSurface } from '@/features/customers/customers-surface'
 import { LedgerStatementSurface } from '@/features/cash/ledger-statement-surface'
-import { DevicesSurface } from '@/features/counter/devices-surface'
 import { ExpenseCategoriesSurface } from '@/features/expense-categories/expense-categories-surface'
 import { OutletExpensesSurface } from '@/features/expenses/outlet-expenses-surface'
 import { OutletDayView } from '@/features/insights/outlet-day-view'
 import { MenuSurface } from '@/features/menu/menu-surface'
-import { OutletsSurface } from '@/features/outlets/outlets-surface'
+import { OutletPage, OutletsSurface } from '@/features/outlets/outlets-surface'
 import { RoleHome } from '@/features/overview/role-home'
 import { DeliverySyncSurface } from '@/features/aggregator-sync/delivery-sync-surface'
 
@@ -63,6 +62,18 @@ export const roleSurfaceRoutes: RouteObject[] = [
     element: (
       <GatedSurface path="outlets">
         <OutletsSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    // One outlet's own page — its details and its tablets — opened from a row
+    // of the list, or from Overview (outlets-one-at-a-time). Gated against the
+    // parent pattern: the gate is a question about the surface, not about which
+    // of its addresses is being opened.
+    path: 'outlets/:outletId',
+    element: (
+      <GatedSurface path="outlets">
+        <OutletPage />
       </GatedSurface>
     ),
   },
@@ -209,36 +220,6 @@ export const roleSurfaceRoutes: RouteObject[] = [
    */
   { path: 'ledger/zomato', element: <Navigate to="../ledger/delivery/zomato" replace /> },
   { path: 'ledger/swiggy', element: <Navigate to="../ledger/delivery/swiggy" replace /> },
-  {
-    // One path, two roles: `admin-devices` carries navigation and
-    // `owner-devices` deliberately does not. Both reach this component, and the
-    // difference between them is what the privileged functions accept — the
-    // owner administers a tablet at any outlet, a manager only at theirs.
-    path: 'devices',
-    element: (
-      <GatedSurface path="devices">
-        <DevicesSurface />
-      </GatedSurface>
-    ),
-  },
-  {
-    // The same surface, opened on the outlet whose card sent the reader here
-    // (#51). Gated against the parent pattern, the way `ledger/delivery/:channel`
-    // is: the gate is a question about the surface, not about which of its
-    // addresses is being opened.
-    //
-    // A route rather than a query parameter on `devices`, because it is the
-    // stronger thing to hold: it survives a link being tidied, and the router
-    // asserts it. Tablet administration is reached from the outlet the tablet
-    // stands in, and must arrive already scoped to it rather than to a picker
-    // the reader has to set.
-    path: 'devices/:outletId',
-    element: (
-      <GatedSurface path="devices">
-        <DevicesSurface />
-      </GatedSurface>
-    ),
-  },
   {
     // The outlet switcher's destination. The parameter is part of the surface's
     // declared path, so the gate is looked up against the pattern rather than

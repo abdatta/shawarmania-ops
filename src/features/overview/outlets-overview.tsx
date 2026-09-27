@@ -163,11 +163,11 @@ function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
           </div>
         </div>
         <Link
-          to={`${base}/devices/${outlet.id}`}
+          to={`${base}/outlets/${outlet.id}`}
           data-testid={`open-outlet-${outlet.id}`}
           className="flex min-h-12 shrink-0 items-center rounded-xl text-sm font-semibold focus-visible:focus-ring"
           aria-label={
-            status === 'partial' ? 'Open, some tablets unavailable. View Tablets' : undefined
+            status === 'partial' ? 'Online, some tablets offline. View outlet' : undefined
           }
         >
           {tablets.error ? (
@@ -176,10 +176,10 @@ function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
             <Shimmer className="h-9 w-20 !rounded-xl" />
           ) : (
             <span className="flex items-center gap-2.5 rounded-xl border border-border px-3.5 py-2">
-              {status === 'closed' ? 'Closed' : 'Open'}
+              {status === 'offline' ? 'Offline' : 'Online'}
               <span
                 aria-hidden
-                className={`h-2.5 w-2.5 rounded-full ${status === 'closed' ? 'bg-danger' : status === 'partial' ? 'bg-warning' : 'bg-success'}`}
+                className={`h-2.5 w-2.5 rounded-full ${status === 'offline' ? 'bg-danger' : status === 'partial' ? 'bg-warning' : 'bg-success'}`}
               />
             </span>
           )}

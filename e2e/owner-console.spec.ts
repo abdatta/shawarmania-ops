@@ -72,8 +72,9 @@ test('Overview links preserve outlet and the displayed month on reload', async (
   await expect(page.getByTestId('manager-bill-list')).toBeVisible()
   await page.goto('demo/owner')
   await page.getByTestId(`open-outlet-${KPA}`).click()
-  await expect(page).toHaveURL(new RegExp(`devices/${KPA}`))
-  await expect(page.getByRole('heading', { name: 'Tablets' })).toBeVisible()
+  await expect(page).toHaveURL(new RegExp(`outlets/${KPA}`))
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Shawarmania Kanchrapara')
+  await expect(page.getByTestId('outlet-tablets')).toBeVisible()
   await page.goto('demo/owner')
   await page
     .getByTestId(`outlet-card-${KAL}`)
@@ -115,7 +116,7 @@ test('Overview and source pages stay inside demo with no external requests', asy
     'demo/owner',
     `demo/owner/drawer?outlet=${KAL}`,
     `demo/owner/ledger?outlet=${KPA}&view=month&month=2026-08`,
-    `demo/owner/devices/${KPA}`,
+    `demo/owner/outlets/${KPA}`,
     'demo/admin',
   ]) {
     await page.goto(path)
@@ -190,7 +191,7 @@ for (const viewport of [
       await page.setViewportSize(viewport)
       await page.goto('.')
       await page.evaluate((value) => localStorage.setItem('shawarmania.theme', value), theme)
-      await page.goto(`demo/owner/devices/${KAL}`)
+      await page.goto(`demo/owner/outlets/${KAL}`)
 
       await page.getByRole('button', { name: 'Edit Counter tablet' }).click()
       const sheet = page.getByRole('dialog', { name: 'Edit Counter tablet' })

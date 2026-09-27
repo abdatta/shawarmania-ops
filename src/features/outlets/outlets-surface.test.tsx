@@ -1,22 +1,31 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { DataAdapters } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
-import { createMockAdapters } from '@/data-access/mock'
+import {
+  createMockAdapters,
+  OUTLET_KALYANI_ID,
+  OUTLET_KANCHRAPARA_ID,
+  OUTLET_MISTAKE_ID,
+} from '@/data-access/mock'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
 
-import { OutletsSurface } from './outlets-surface'
+import { OutletPage, OutletsSurface } from './outlets-surface'
 
 /**
- * Capturing an outlet's position. The accuracy rules are the substance here:
- * this reading is judged once and then judges every future check-in, so a loose
- * fix must not be saveable by accident.
+ * Outlets: a list like Team, where each row opens that outlet's own page
+ * (outlets-one-at-a-time). The page is where an outlet is edited, captured,
+ * closed, reopened and deleted; the list is where one is added.
+ *
+ * The capture rules are still the substance of much of this file: a reading is
+ * judged once and then judges every future check-in, so a loose fix must not be
+ * saveable by accident.
  */
 
 let watchPosition: ReturnType<typeof vi.fn>
@@ -57,14 +66,31 @@ const ownerSession: Session = {
   persona: personaFixtures.super_admin,
 }
 
-function renderOutlets(adapters: DataAdapters = createMockAdapters()) {
+const ID: Record<string, string> = {
+  kalyani: OUTLET_KALYANI_ID,
+  kanchrapara: OUTLET_KANCHRAPARA_ID,
+  'demo-mistake': OUTLET_MISTAKE_ID,
+}
+
+/**
+ * The two screens under their real addresses, and one other screen to have come
+ * from. `entries` is the history the reader arrives with, its last entry open.
+ */
+function renderOutlets(
+  adapters: DataAdapters = createMockAdapters(),
+  entries: string[] = ['/outlets'],
+) {
   return {
     adapters,
     ...render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={entries} initialIndex={entries.length - 1}>
         <SessionContext.Provider value={ownerSession}>
           <AdaptersContext.Provider value={adapters}>
-            <OutletsSurface />
+            <Routes>
+              <Route path="/outlets" element={<OutletsSurface />} />
+              <Route path="/outlets/:outletId" element={<OutletPage />} />
+              <Route path="/elsewhere" element={<p>Somewhere else</p>} />
+            </Routes>
           </AdaptersContext.Provider>
         </SessionContext.Provider>
       </MemoryRouter>,
@@ -72,34 +98,173 @@ function renderOutlets(adapters: DataAdapters = createMockAdapters()) {
   }
 }
 
-/** Open the capture sheet for an outlet and let the sampling window close. */
-async function takeReading(user: ReturnType<typeof userEvent.setup>, outletName: RegExp) {
-  const cards = await screen.findByTestId('outlet-list')
-  const card = Array.from(cards.children).find((child) =>
-    outletName.test(child.textContent ?? ''),
-  ) as HTMLElement
-  await user.click(
-    within(card).getByRole('button', { name: /Capture position here|Capture again/ }),
-  )
+/** Open one outlet's page straight away, as a link from another screen would. */
+function renderPage(handle: string, adapters: DataAdapters = createMockAdapters()) {
+  return renderOutlets(adapters, ['/outlets', `/outlets/${ID[handle]}`])
+}
+
+/** Open an outlet's page from its row on the list. */
+async function openFromList(user: ReturnType<typeof userEvent.setup>, handle: string) {
+  await user.click(await screen.findByTestId(`open-${handle}`))
+  return screen.findByTestId(`outlet-${handle}`)
+}
+
+/** Open the capture sheet on an outlet's page and let the sampling window close. */
+async function takeReading(user: ReturnType<typeof userEvent.setup>, handle: string) {
+  await user.click(await screen.findByTestId(`capture-${handle}`))
   await user.click(await screen.findByTestId('take-reading'))
   await vi.advanceTimersByTimeAsync(8_000)
 }
 
-describe('the outlets surface', () => {
-  it('says which outlets have never been surveyed', async () => {
+async function addOutlet(
+  user: ReturnType<typeof userEvent.setup>,
+  fields: { name?: string; code?: string; label?: string },
+) {
+  await user.click(await screen.findByTestId('add-outlet'))
+  if (fields.name) await user.type(screen.getByLabelText('Name'), fields.name)
+  if (fields.code) await user.type(screen.getByLabelText('Short code'), fields.code)
+  if (fields.label) await user.type(screen.getByLabelText('Location label'), fields.label)
+  await user.click(screen.getByRole('button', { name: 'Create outlet' }))
+}
+
+async function markClosed(user: ReturnType<typeof userEvent.setup>, handle: string) {
+  await user.click(await screen.findByTestId(`close-${handle}`))
+  await user.click(
+    within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark closed' }),
+  )
+}
+
+describe('the list of outlets', () => {
+  it('lists every outlet, trading ones first, each with its status in plain words', async () => {
     renderOutlets()
 
-    await screen.findByTestId('outlet-list')
-    // Kanchrapara carries placeholder coordinates and no capture record.
-    expect(screen.getByTestId('uncaptured-kanchrapara')).toHaveTextContent('never captured on site')
-    expect(screen.queryByTestId('uncaptured-kalyani')).not.toBeInTheDocument()
+    const list = await screen.findByTestId('outlet-list')
+    const rows = within(list).getAllByRole('row').slice(1)
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringMatching(/Shawarmania Kalyani.*kalyani · Kalyani — Central Park.*Open/),
+      expect.stringMatching(/Shawarmania Kanchrapara.*Open/),
+      expect.stringMatching(/created by mistake.*Closed/),
+    ])
+    // Open and Closed are a setting somebody chose, not a live reading, so
+    // nothing on a row carries a coloured dot (design D6).
+    expect(list.querySelector('.rounded-full')).toBeNull()
   })
 
-  it('shows how good the surveyed fix was, and when it was taken', async () => {
+  it('says in one line how each outlet’s tablets are', async () => {
     renderOutlets()
 
+    // The demo tablets carry unsent bills on purpose.
+    expect(await screen.findByTestId('open-kalyani')).toBeInTheDocument()
+    const rows = within(screen.getByTestId('outlet-list')).getAllByRole('row')
+    expect(rows[1]).toHaveTextContent(/1 unsent/)
+    expect(rows[2]).toHaveTextContent(/3 unsent/)
+  })
+
+  it('says an outlet has no tablet, and never says so when the tablets could not be read', async () => {
+    const empty = createMockAdapters()
+    empty.counter.listDevices = () => Promise.resolve([])
+    const { unmount } = renderOutlets(empty)
+    const none = within(await screen.findByTestId('outlet-list'))
+    await waitFor(() => expect(none.getAllByText('None').length).toBeGreaterThan(0))
+    unmount()
+
+    const failing = createMockAdapters()
+    failing.counter.listDevices = () => Promise.reject(new Error('offline'))
+    renderOutlets(failing)
     await screen.findByTestId('outlet-list')
-    expect(screen.getByText(/Captured on site/)).toHaveTextContent('accurate to ±9 m')
+    await waitFor(() => expect(screen.getAllByText('Not read').length).toBeGreaterThan(0))
+    expect(screen.queryByText('None')).toBeNull()
+  })
+
+  it('opens an outlet’s own page from its row, with nothing of any other outlet on it', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets()
+
+    await openFromList(user, 'kanchrapara')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Shawarmania Kanchrapara')
+    expect(screen.getByText('kanchrapara')).toBeInTheDocument()
+    expect(screen.queryByText('Shawarmania Kalyani')).toBeNull()
+    expect(screen.queryByTestId('surface-outlet')).toBeNull()
+  })
+})
+
+describe('an outlet’s page', () => {
+  it('says whether the outlet is open in plain words, with no dot', async () => {
+    renderPage('kalyani')
+
+    await screen.findByTestId('outlet-kalyani')
+    const header = screen.getByRole('heading', { level: 1 }).closest('header')!
+    expect(header).toHaveTextContent('Open')
+    expect(header.querySelector('.rounded-full')).toBeNull()
+  })
+
+  it('goes back to where the reader came from', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets(createMockAdapters(), ['/elsewhere', `/outlets/${OUTLET_KALYANI_ID}`])
+
+    await screen.findByTestId('outlet-kalyani')
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(await screen.findByText('Somewhere else')).toBeInTheDocument()
+  })
+
+  it('goes back to the list when it was the first page opened, rather than out of the app', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets(createMockAdapters(), [`/outlets/${OUTLET_KALYANI_ID}`])
+
+    await screen.findByTestId('outlet-kalyani')
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(await screen.findByTestId('outlet-list')).toBeInTheDocument()
+  })
+
+  it('shows nothing about an outlet that does not exist', async () => {
+    renderOutlets(createMockAdapters(), ['/outlets/no-such-outlet'])
+
+    expect(await screen.findByText('This outlet is not one you can see.')).toBeInTheDocument()
+    expect(screen.queryByTestId(/^outlet-/)).toBeNull()
+  })
+
+  it('shows the details it edits, and the tablets standing at it', async () => {
+    renderPage('kalyani')
+
+    const page = await screen.findByTestId('outlet-kalyani')
+    for (const caption of ['Location', 'Phone', 'Address', 'Day ends', 'Staff check in by']) {
+      expect(within(page).getByText(caption)).toBeInTheDocument()
+    }
+    expect(within(page).getByText('04:00')).toBeInTheDocument()
+    expect(await within(page).findByTestId('outlet-tablets')).toBeInTheDocument()
+  })
+
+  it('offers every action the card and the Tablets page had, to the owner', async () => {
+    renderPage('kalyani')
+
+    await screen.findByTestId('outlet-kalyani')
+    for (const control of ['edit-kalyani', 'capture-kalyani', 'close-kalyani']) {
+      expect(screen.getByTestId(control)).toBeInTheDocument()
+    }
+    expect(await screen.findByTestId('add-tablet')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit Counter tablet' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove Counter tablet' })).toBeInTheDocument()
+  })
+})
+
+describe('capturing an outlet’s position', () => {
+  it('says which outlets have never been surveyed', async () => {
+    renderPage('kanchrapara')
+
+    // Kanchrapara carries placeholder coordinates and no capture record.
+    expect(await screen.findByTestId('uncaptured-kanchrapara')).toHaveTextContent('Not captured')
+    expect(screen.getByTestId('capture-kanchrapara')).toHaveTextContent('Capture')
+  })
+
+  it('shows how good the surveyed fix was, and keeps its button beside it', async () => {
+    renderPage('kalyani')
+
+    const fence = await screen.findByTestId('location-kalyani')
+    expect(fence).toHaveTextContent('150 m')
+    expect(fence).toHaveTextContent('±9 m')
+    // The button sits inside the tile it retakes (design D3).
+    expect(within(fence).getByTestId('capture-kalyani')).toHaveTextContent('Recapture')
+    expect(screen.queryByTestId('uncaptured-kalyani')).toBeNull()
   })
 
   it('keeps the tightest sample and saves a good fix', async () => {
@@ -108,8 +273,8 @@ describe('the outlets surface', () => {
     const save = vi.spyOn(adapters.outlets, 'saveLocation')
     samples(60, 8, 40)
 
-    renderOutlets(adapters)
-    await takeReading(user, /Kanchrapara/)
+    renderPage('kanchrapara', adapters)
+    await takeReading(user, 'kanchrapara')
 
     const result = await screen.findByTestId('capture-result')
     expect(result).toHaveAttribute('data-quality', 'good')
@@ -128,8 +293,8 @@ describe('the outlets surface', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     samples(38)
 
-    renderOutlets()
-    await takeReading(user, /Kanchrapara/)
+    renderPage('kanchrapara')
+    await takeReading(user, 'kanchrapara')
 
     const result = await screen.findByTestId('capture-result')
     expect(result).toHaveAttribute('data-quality', 'imprecise')
@@ -143,8 +308,8 @@ describe('the outlets surface', () => {
     const save = vi.spyOn(adapters.outlets, 'saveLocation')
     samples(180)
 
-    renderOutlets(adapters)
-    await takeReading(user, /Kanchrapara/)
+    renderPage('kanchrapara', adapters)
+    await takeReading(user, 'kanchrapara')
 
     const result = await screen.findByTestId('capture-result')
     expect(result).toHaveAttribute('data-quality', 'unusable')
@@ -157,14 +322,15 @@ describe('the outlets surface', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     samples(180)
 
-    renderOutlets()
-    await takeReading(user, /Kanchrapara/)
+    renderPage('kanchrapara')
+    await takeReading(user, 'kanchrapara')
     await screen.findByTestId('capture-result')
 
     // The footer and the result block both used to carry a retry, one labelled
     // "Take a reading" and the other "Take another reading" — the same call,
     // stacked in one sheet, reading as two different actions.
-    expect(screen.getAllByRole('button', { name: /reading/i })).toHaveLength(1)
+    const sheet = screen.getByRole('dialog')
+    expect(within(sheet).getAllByRole('button', { name: /reading/i })).toHaveLength(1)
     expect(screen.getByTestId('take-reading')).toHaveTextContent('Take another reading')
     expect(screen.queryByTestId('retake-reading')).not.toBeInTheDocument()
 
@@ -176,8 +342,8 @@ describe('the outlets surface', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     samples(12)
 
-    renderOutlets()
-    await takeReading(user, /Kanchrapara/)
+    renderPage('kanchrapara')
+    await takeReading(user, 'kanchrapara')
     await screen.findByTestId('capture-result')
 
     // Two controls here, but two genuinely different actions.
@@ -192,8 +358,8 @@ describe('the outlets surface', () => {
     const save = vi.spyOn(adapters.outlets, 'saveLocation')
     samples(10)
 
-    renderOutlets(adapters)
-    await takeReading(user, /Kanchrapara/)
+    renderPage('kanchrapara', adapters)
+    await takeReading(user, 'kanchrapara')
 
     const radius = await screen.findByLabelText('How far from here may staff check in?')
     await user.clear(radius)
@@ -215,23 +381,24 @@ describe('the outlets surface', () => {
       return 1
     })
 
-    renderOutlets()
-    await takeReading(user, /Kanchrapara/)
+    renderPage('kanchrapara')
+    await takeReading(user, 'kanchrapara')
 
     expect(await screen.findByTestId('capture-failed')).toHaveAttribute('data-failure', 'denied')
   })
 
-  it('shows the new position on the list after saving', async () => {
+  it('shows the new position on the page after saving', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     samples(11)
 
-    renderOutlets()
-    await takeReading(user, /Kanchrapara/)
+    renderPage('kanchrapara')
+    await takeReading(user, 'kanchrapara')
     await user.click(await screen.findByTestId('save-position'))
 
     await waitFor(() =>
       expect(screen.queryByTestId('uncaptured-kanchrapara')).not.toBeInTheDocument(),
     )
+    expect(screen.getByTestId('capture-kanchrapara')).toHaveTextContent('Recapture')
   })
 })
 
@@ -239,7 +406,7 @@ describe('the outlets surface', () => {
  * The empty database — the screen a new owner actually sees first, and the one
  * that used to be a dead end. Nothing here may assume a row exists.
  */
-describe('the outlets surface with nothing in it', () => {
+describe('the outlets list with nothing in it', () => {
   function emptyOutlets(): DataAdapters {
     const adapters = createMockAdapters()
     vi.spyOn(adapters.outlets, 'listOutlets').mockResolvedValue([])
@@ -258,12 +425,11 @@ describe('the outlets surface with nothing in it', () => {
     const create = vi.spyOn(adapters.outlets, 'createOutlet')
 
     renderOutlets(adapters)
-
-    await user.click(await screen.findByTestId('add-outlet'))
-    await user.type(screen.getByLabelText('Name'), 'Shawarmania Barrackpore')
-    await user.type(screen.getByLabelText('Short code'), 'barrackpore')
-    await user.type(screen.getByLabelText('Location label'), 'Barrackpore')
-    await user.click(screen.getByRole('button', { name: 'Create outlet' }))
+    await addOutlet(user, {
+      name: 'Shawarmania Barrackpore',
+      code: 'barrackpore',
+      label: 'Barrackpore',
+    })
 
     await waitFor(() =>
       expect(create).toHaveBeenCalledWith(
@@ -276,75 +442,71 @@ describe('the outlets surface with nothing in it', () => {
     renderOutlets(emptyOutlets())
 
     await screen.findByTestId('add-outlet')
-    expect(screen.queryByTestId('outlet-list')).not.toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
     expect(screen.queryByTestId('outlets-error')).not.toBeInTheDocument()
   })
 })
 
 describe('creating and editing an outlet', () => {
-  it('adds an outlet and shows it on the list', async () => {
+  it('adds an outlet and opens its page', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     renderOutlets()
 
-    await user.click(await screen.findByTestId('add-outlet'))
-    await user.type(screen.getByLabelText('Name'), 'Shawarmania Barrackpore')
-    await user.type(screen.getByLabelText('Short code'), 'barrackpore')
-    await user.type(screen.getByLabelText('Location label'), 'Barrackpore')
-    await user.click(screen.getByRole('button', { name: 'Create outlet' }))
+    await addOutlet(user, {
+      name: 'Shawarmania Barrackpore',
+      code: 'barrackpore',
+      label: 'Barrackpore',
+    })
 
     expect(await screen.findByTestId('outlet-barrackpore')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Shawarmania Barrackpore')
   })
 
   it('gives a new outlet no position, so it judges nobody until it is captured', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     renderOutlets()
 
-    await user.click(await screen.findByTestId('add-outlet'))
-    await user.type(screen.getByLabelText('Name'), 'Shawarmania Barrackpore')
-    await user.type(screen.getByLabelText('Short code'), 'barrackpore')
-    await user.type(screen.getByLabelText('Location label'), 'Barrackpore')
-    await user.click(screen.getByRole('button', { name: 'Create outlet' }))
+    await addOutlet(user, {
+      name: 'Shawarmania Barrackpore',
+      code: 'barrackpore',
+      label: 'Barrackpore',
+    })
 
-    expect(await screen.findByTestId('uncaptured-barrackpore')).toHaveTextContent(
-      'not measured against a geofence at all',
-    )
+    expect(await screen.findByTestId('uncaptured-barrackpore')).toHaveTextContent('Not captured')
   })
 
   it('refuses a code another outlet already uses, and says so', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     renderOutlets()
 
-    await user.click(await screen.findByTestId('add-outlet'))
-    await user.type(screen.getByLabelText('Name'), 'Shawarmania Kalyani Two')
-    await user.type(screen.getByLabelText('Short code'), 'kalyani')
-    await user.type(screen.getByLabelText('Location label'), 'Kalyani')
-    await user.click(screen.getByRole('button', { name: 'Create outlet' }))
+    await addOutlet(user, { name: 'Shawarmania Kalyani Two', code: 'kalyani', label: 'Kalyani' })
 
     expect(await screen.findByTestId('outlets-error')).toHaveTextContent('already used')
   })
 
   it('edits an existing outlet from its own values', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderOutlets()
+    renderPage('kalyani')
 
-    const card = await screen.findByTestId('outlet-kalyani')
-    await user.click(within(card).getByRole('button', { name: 'Edit' }))
-
+    await user.click(await screen.findByTestId('edit-kalyani'))
     const name = screen.getByLabelText('Name')
     expect(name).toHaveValue('Shawarmania Kalyani')
     await user.clear(name)
     await user.type(name, 'Shawarmania Kalyani Central')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByText('Shawarmania Kalyani Central')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+        'Shawarmania Kalyani Central',
+      ),
+    )
   })
 
   it('says the cutover cannot move anything already recorded', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderOutlets()
+    renderPage('kalyani')
 
-    const card = await screen.findByTestId('outlet-kalyani')
-    await user.click(within(card).getByRole('button', { name: 'Edit' }))
+    await user.click(await screen.findByTestId('edit-kalyani'))
 
     expect(screen.getByLabelText('The day rolls over at')).toHaveValue('04:00')
     expect(screen.getByText(/never moves anything already recorded/)).toBeInTheDocument()
@@ -352,10 +514,9 @@ describe('creating and editing an outlet', () => {
 
   it('names the cutover as a seam rather than an opening time', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderOutlets()
+    renderPage('kalyani')
 
-    const card = await screen.findByTestId('outlet-kalyani')
-    await user.click(within(card).getByRole('button', { name: 'Edit' }))
+    await user.click(await screen.findByTestId('edit-kalyani'))
 
     expect(screen.getByText(/Not the opening time/)).toBeInTheDocument()
     expect(screen.getByTestId('cutover-preview')).toHaveTextContent('04:00 to 03:59')
@@ -367,10 +528,9 @@ describe('creating and editing an outlet', () => {
   // month of days stamped one behind.
   it('warns while an opening time is being typed into the cutover', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderOutlets()
+    renderPage('kalyani')
 
-    const card = await screen.findByTestId('outlet-kalyani')
-    await user.click(within(card).getByRole('button', { name: 'Edit' }))
+    await user.click(await screen.findByTestId('edit-kalyani'))
 
     const cutover = screen.getByLabelText('The day rolls over at')
     await user.clear(cutover)
@@ -385,12 +545,19 @@ describe('creating and editing an outlet', () => {
 })
 
 describe('closing and reopening an outlet', () => {
+  it('offers closing once, at the foot of the page', async () => {
+    renderPage('kalyani')
+
+    const page = await screen.findByTestId('outlet-kalyani')
+    expect(within(page).getAllByRole('button', { name: 'Mark closed' })).toHaveLength(1)
+    expect(page.lastElementChild).toContainElement(screen.getByTestId('close-kalyani'))
+  })
+
   it('states what closing does not do before it happens', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderOutlets()
+    renderPage('kalyani')
 
-    const card = await screen.findByTestId('outlet-kalyani')
-    await user.click(within(card).getByRole('button', { name: 'Mark closed' }))
+    await user.click(await screen.findByTestId('close-kalyani'))
 
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent('anyone mid-shift can still check out')
@@ -400,33 +567,27 @@ describe('closing and reopening an outlet', () => {
 
   it('marks the outlet closed and offers to reopen it', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderOutlets()
+    renderPage('kalyani')
 
-    const card = await screen.findByTestId('outlet-kalyani')
-    await user.click(within(card).getByRole('button', { name: 'Mark closed' }))
-    await user.click(
-      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark closed' }),
-    )
+    await markClosed(user, 'kalyani')
 
-    expect(await screen.findByTestId('closed-kalyani')).toHaveTextContent('Nobody can check in')
+    const header = screen.getByRole('heading', { level: 1 }).closest('header')!
+    await waitFor(() => expect(header).toHaveTextContent('Closed'))
+    // A closed outlet has no counter to administer.
+    expect(screen.queryByTestId('outlet-tablets')).toBeNull()
 
-    await user.click(
-      within(screen.getByTestId('outlet-kalyani')).getByRole('button', { name: 'Reopen' }),
-    )
-    await waitFor(() => expect(screen.queryByTestId('closed-kalyani')).not.toBeInTheDocument())
+    await user.click(screen.getByTestId('reopen-kalyani'))
+    await waitFor(() => expect(header).toHaveTextContent('Open'))
+    expect(await screen.findByTestId('outlet-tablets')).toBeInTheDocument()
   })
 
-  it('keeps a closed outlet visible to the owner, or it could never be reopened', async () => {
+  it('keeps a closed outlet listed for the owner, or it could never be reopened', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     const adapters = createMockAdapters()
 
-    renderOutlets(adapters)
-    const card = await screen.findByTestId('outlet-kalyani')
-    await user.click(within(card).getByRole('button', { name: 'Mark closed' }))
-    await user.click(
-      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark closed' }),
-    )
-    await screen.findByTestId('closed-kalyani')
+    renderPage('kalyani', adapters)
+    await markClosed(user, 'kalyani')
+    await screen.findByTestId('reopen-kalyani')
 
     // And it is gone from the list every other surface asks for. The owner's
     // list still carries the closed mis-created outlet the fixtures start with.
@@ -439,7 +600,7 @@ describe('closing and reopening an outlet', () => {
  * Deleting an outlet — the one client-deletable table in the schema, and the
  * only screen that offers it.
  *
- * Two things carry these tests. Closing comes first, so an active outlet must
+ * Two things carry these tests. Closing comes first, so a trading outlet must
  * offer no way to delete at all; and a refused delete must say what is still
  * attached rather than reporting an error, because "profiles_outlet_id_fkey"
  * is not something anybody can act on.
@@ -449,26 +610,21 @@ describe('deleting an outlet', () => {
   const MISTAKE = 'demo-mistake'
 
   it('offers no delete on an outlet that is trading', async () => {
-    renderOutlets()
+    renderPage('kalyani')
 
-    const card = await screen.findByTestId('outlet-kalyani')
-    expect(within(card).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
-    expect(within(card).getByRole('button', { name: 'Mark closed' })).toBeInTheDocument()
+    await screen.findByTestId('outlet-kalyani')
+    expect(screen.queryByTestId('delete-kalyani')).not.toBeInTheDocument()
+    expect(screen.getByTestId('close-kalyani')).toBeInTheDocument()
   })
 
-  it('offers it once the outlet is closed, and says why closing came first', async () => {
+  it('offers it once the outlet is closed', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderOutlets()
+    renderPage('kalyani')
 
-    const card = await screen.findByTestId('outlet-kalyani')
-    await user.click(within(card).getByRole('button', { name: 'Mark closed' }))
-    await user.click(
-      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark closed' }),
-    )
+    await markClosed(user, 'kalyani')
 
-    const closed = await screen.findByTestId('outlet-kalyani')
-    expect(within(closed).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
-    expect(screen.getByTestId('closed-kalyani')).toHaveTextContent('should never have existed')
+    expect(await screen.findByTestId('delete-kalyani')).toHaveTextContent('Delete outlet')
+    expect(screen.queryByTestId('close-kalyani')).not.toBeInTheDocument()
   })
 
   it('deletes nothing until the confirmation is accepted', async () => {
@@ -476,10 +632,8 @@ describe('deleting an outlet', () => {
     const adapters = createMockAdapters()
     const remove = vi.spyOn(adapters.outlets, 'deleteOutlet')
 
-    renderOutlets(adapters)
-    await user.click(
-      within(await screen.findByTestId(`outlet-${MISTAKE}`)).getByTestId(`delete-${MISTAKE}`),
-    )
+    renderPage(MISTAKE, adapters)
+    await user.click(await screen.findByTestId(`delete-${MISTAKE}`))
 
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent('removed, not hidden')
@@ -487,7 +641,7 @@ describe('deleting an outlet', () => {
     expect(remove).not.toHaveBeenCalled()
 
     // And nothing is typed to get there: the outlet this exists to remove has
-    // no name and no code to type (design D4).
+    // no name and no code to type (outlet-deletion, design D4).
     expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument()
 
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
@@ -495,32 +649,28 @@ describe('deleting an outlet', () => {
     expect(screen.getByTestId(`outlet-${MISTAKE}`)).toBeInTheDocument()
   })
 
-  it('takes a deleted outlet off the list', async () => {
+  it('returns to the list, without the deleted outlet on it', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderOutlets()
+    renderPage(MISTAKE)
 
-    await user.click(
-      within(await screen.findByTestId(`outlet-${MISTAKE}`)).getByTestId(`delete-${MISTAKE}`),
-    )
+    await user.click(await screen.findByTestId(`delete-${MISTAKE}`))
     await user.click(
       within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete outlet' }),
     )
 
-    await waitFor(() => expect(screen.queryByTestId(`outlet-${MISTAKE}`)).not.toBeInTheDocument())
+    expect(await screen.findByTestId('outlet-list')).toBeInTheDocument()
+    await screen.findByTestId('open-kalyani')
+    expect(screen.queryByTestId(`open-${MISTAKE}`)).not.toBeInTheDocument()
     expect(screen.queryByTestId('outlets-error')).not.toBeInTheDocument()
   })
 
   it('names what is still attached when the database refuses, and keeps the outlet', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderOutlets()
+    renderPage('kanchrapara')
 
-    // Kanchrapara has a roster and accounts behind it, so it refuses — but it
-    // has to be closed before the action is even offered.
-    const card = await screen.findByTestId('outlet-kanchrapara')
-    await user.click(within(card).getByRole('button', { name: 'Mark closed' }))
-    await user.click(
-      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark closed' }),
-    )
+    // Kanchrapara has people and accounts behind it, so it refuses — but it has
+    // to be closed before the action is even offered.
+    await markClosed(user, 'kanchrapara')
     await user.click(await screen.findByTestId('delete-kanchrapara'))
     await user.click(
       within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete outlet' }),
@@ -536,19 +686,32 @@ describe('deleting an outlet', () => {
   })
 
   it('gives a nameless outlet something to aim at', async () => {
-    // The exact row this change exists to remove: created with the
+    // The exact row outlet-deletion exists to remove: created with the
     // placeholders still showing, so name, code and location label are all
-    // blank. A card that renders as nothing cannot be acted on.
+    // blank. A row that renders as nothing cannot be acted on.
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     const adapters = createMockAdapters()
     const [first] = await adapters.outlets.listOutlets({ includeInactive: true })
-    const nameless = { ...first!, id: 'blank-1', code: '  ', name: '   ', location_label: '' }
-    vi.spyOn(adapters.outlets, 'listOutlets').mockResolvedValue([{ ...nameless, is_active: false }])
+    const nameless = {
+      ...first!,
+      id: 'blank-1',
+      code: '  ',
+      name: '   ',
+      location_label: '',
+      is_active: false,
+    }
+    vi.spyOn(adapters.outlets, 'listOutlets').mockResolvedValue([nameless])
+    vi.spyOn(adapters.outlets, 'getOutlet').mockResolvedValue(nameless)
 
     renderOutlets(adapters)
+    const row = await screen.findByTestId('open-blank-1')
+    expect(row).toHaveTextContent('Outlet created without a name')
 
-    const card = await screen.findByTestId('outlet-blank-1')
-    expect(card).toHaveTextContent('Outlet created without a name')
-    expect(within(card).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    await openFromList(user, 'blank-1')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      'Outlet created without a name',
+    )
+    expect(screen.getByTestId('delete-blank-1')).toBeInTheDocument()
   })
 })
 
@@ -676,9 +839,7 @@ describe('filling an outlet address from a search', () => {
     await user.click(await screen.findByRole('option', { name: /Central Park/ }))
     await user.click(screen.getByRole('button', { name: 'Create outlet' }))
 
-    expect(await screen.findByTestId('uncaptured-barrackpore')).toHaveTextContent(
-      'not measured against a geofence at all',
-    )
+    expect(await screen.findByTestId('uncaptured-barrackpore')).toHaveTextContent('Not captured')
   })
 })
 
@@ -796,10 +957,9 @@ describe('refusing a blank required field on the outlet form', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     const adapters = createMockAdapters()
     const update = vi.spyOn(adapters.outlets, 'updateOutlet')
-    renderOutlets(adapters)
+    renderPage('kalyani', adapters)
 
-    const card = await screen.findByTestId('outlet-kalyani')
-    await user.click(within(card).getByRole('button', { name: 'Edit' }))
+    await user.click(await screen.findByTestId('edit-kalyani'))
     await user.clear(screen.getByLabelText('Name'))
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
@@ -841,9 +1001,3 @@ describe('placeholders on the outlet form', () => {
     }
   })
 })
-
-/**
- * The staff code prefix. It ends up on every staff code at the outlet forever,
- * so it arrives filled in rather than asked for — and stops being editable the
- * moment a code has been issued from it.
- */

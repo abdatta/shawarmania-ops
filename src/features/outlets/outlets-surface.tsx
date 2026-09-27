@@ -1,10 +1,16 @@
 import {
+  ChevronRight,
+  Clock,
   Crosshair,
   LoaderCircle,
+  LocateFixed,
   MapPin,
   MapPinOff,
+  Moon,
+  Pencil,
+  Phone,
   Store,
-  TabletSmartphone,
+  Tag,
   TriangleAlert,
 } from 'lucide-react'
 import {
@@ -18,6 +24,7 @@ import {
 } from 'react'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
+import { DataTable, type DataTableColumn } from '@/components/layout/data-table'
 import { EmptyState } from '@/components/layout/empty-state'
 import { FormSheet } from '@/components/layout/form-sheet'
 import { PageHeader } from '@/components/layout/page-header'
@@ -27,8 +34,8 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { LoadingList } from '@/components/ui/loading'
-import { Link } from 'react-router'
+import { LoadingRegion, LoadingTable, Shimmer } from '@/components/ui/loading'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 
 import { useAdapters, type Tables } from '@/data-access'
 import {
@@ -43,15 +50,16 @@ import {
   CAPTURE_ACCURACY_GOOD_M,
   CAPTURE_ACCURACY_MAX_M,
   describeCutover,
-  formatDateTime,
   formatMetres,
   isCounterTelemetryFresh,
   QUIET_HOURS_FROM,
   QUIET_HOURS_UNTIL,
 } from '@/domain'
+import { OutletTablets } from '@/features/counter/outlet-tablets'
+import { DANGER_OUTLINE, OutletSection } from '@/features/outlets/outlet-section'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/session/context'
-import { holdsRole } from '@/session/session'
+import { holdsRole, sessionOutletsFor } from '@/session/session'
 import {
   watchBestPosition,
   type GeolocationFailureKind,
@@ -187,91 +195,51 @@ function toPayload(draft: Draft): NewOutlet {
   }
 }
 
-export function OutletsSurface() {
-  const { outlets: adapter, counter } = useAdapters()
-  const session = useSession()
-  /**
-   * **The Super Admin writes; a Franchise Admin reads** (#51).
-   *
-   * The manager's Outlets surface exists because tablet administration is
-   * reached from the outlet the tablet stands in, and `admin-devices` is the
-   * only place a setup code is minted — so without this, a manager whose tablet
-   * dies has no door to the one screen that can replace it.
-   *
-   * This decides what is *offered*, never what is *allowed*. Create, edit,
-   * close, reopen, delete and capture are refused by `outlets_insert`,
-   * `outlets_update` and `outlets_delete` in Postgres, and the isolation suite
-   * proves it with a hand-crafted request. Hiding a control the database would
-   * refuse is courtesy; it is not the boundary (design D4).
-   */
-  const mayWrite = holdsRole(session, 'super_admin')
-  const [outlets, setOutlets] = useState<Tables<'outlets'>[] | null>(null)
-  const [devices, setDevices] = useState<CounterDeviceSummary[] | null>(null)
+/**
+ * Everything that changes an outlet, written once for the two screens that
+ * change one: the list adds an outlet, and the outlet's own page edits,
+ * captures, closes, reopens and deletes it. The sheets and dialogs are the ones
+ * the outlet card had, unchanged; only where they are opened from moved
+ * (outlets-one-at-a-time).
+ *
+ * **The Super Admin writes; a Franchise Admin reads** (#51). Whether a control
+ * is offered is decided by the caller from the session, and that is courtesy
+ * rather than the boundary: create, edit, close, reopen, delete and capture are
+ * refused by `outlets_insert`, `outlets_update` and `outlets_delete` in
+ * Postgres, and the isolation suite proves it with a hand-crafted request.
+ */
+function useOutletActions({
+  onSaved,
+  onDeleted,
+}: {
+  /** The row as the database returned it after a create, edit or capture. */
+  onSaved: (outlet: Tables<'outlets'>, created: boolean) => void
+  onDeleted?: (id: string) => void
+}) {
+  const { outlets: adapter } = useAdapters()
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const [capturing, setCapturing] = useState<Tables<'outlets'> | null>(null)
   const [editing, setEditing] = useState<Tables<'outlets'> | null>(null)
   const [formOpen, setFormOpen] = useState(false)
-  const [busy, setBusy] = useState(false)
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
   const [pendingClosure, setPendingClosure] = useState<Tables<'outlets'> | null>(null)
   const [pendingDeletion, setPendingDeletion] = useState<Tables<'outlets'> | null>(null)
   const [blocked, setBlocked] = useState<{ id: string; references: OutletReference[] } | null>(null)
 
-  /**
-   * The tablets, for the card's "is this shop all right?" line.
-   *
-   * A separate read from a separate adapter, and a failure of it is not a
-   * failure of this screen: the outlets still list, and the card says the
-   * tablet's state could not be read rather than claiming there is no tablet.
-   * Saying "no tablet at this counter" because a request failed would send
-   * somebody to mint a setup code for hardware that is standing there working.
-   */
-  useEffect(() => {
-    let active = true
-    void counter
-      .listDevices()
-      .then((list) => {
-        if (active) setDevices(list)
-      })
-      .catch(() => {
-        if (active) setDevices(null)
-      })
-    return () => {
-      active = false
-    }
-  }, [counter])
-
-  useEffect(() => {
-    let active = true
-    void adapter
-      // The owner's management view is the one place a closed outlet must
-      // still be visible — otherwise reactivating it would be impossible. A
-      // manager cannot reopen one, so a closed shop on their list would be a
-      // row with nothing to do about it.
-      .listOutlets({ includeInactive: mayWrite })
-      .then((list) => {
-        if (active) setOutlets(list)
-      })
-      .catch(() => {
-        if (active) setError('Could not load outlets. Try again in a moment.')
-      })
-    return () => {
-      active = false
-    }
-  }, [adapter, mayWrite])
-
-  async function run(action: () => Promise<unknown>) {
+  async function run(action: () => Promise<Tables<'outlets'>>, created = false) {
     setBusy(true)
     setError(null)
     try {
-      await action()
-      setOutlets(await adapter.listOutlets({ includeInactive: true }))
+      onSaved(await action(), created)
+      return true
     } catch (cause) {
       setError(
         cause instanceof DataActionError
           ? cause.message
           : 'That did not work. Try again in a moment.',
       )
+      return false
     } finally {
       setBusy(false)
     }
@@ -284,7 +252,7 @@ export function OutletsSurface() {
    * that would mean keeping a copy of the schema's foreign keys in this file —
    * the drift the database is enumerated to avoid everywhere else in this
    * repo. So the delete is tried, and a refusal is turned into the sentence
-   * the owner actually needs (design D2, D6).
+   * the owner actually needs (outlet-deletion, design D2, D6).
    */
   async function deleteOutlet(outlet: Tables<'outlets'>) {
     setBusy(true)
@@ -292,9 +260,7 @@ export function OutletsSurface() {
     setBlocked(null)
     try {
       await adapter.deleteOutlet(outlet.id)
-      // In place rather than a refetch: the row is gone, and asking the server
-      // to confirm what it just did is a round trip that can only agree.
-      setOutlets((current) => current?.filter((candidate) => candidate.id !== outlet.id) ?? current)
+      onDeleted?.(outlet.id)
     } catch (cause) {
       if (cause instanceof DataActionError && cause.code === 'outlet_in_use') {
         // A count that cannot be fetched degrades to the generic refusal
@@ -313,35 +279,20 @@ export function OutletsSurface() {
     }
   }
 
-  function openAdd() {
-    setEditing(null)
-    setDraft(EMPTY_DRAFT)
-    setError(null)
-    setFormOpen(true)
-  }
-
-  function openEdit(outlet: Tables<'outlets'>) {
-    setEditing(outlet)
-    setDraft(toDraft(outlet))
-    setError(null)
-    setFormOpen(true)
-  }
-
   /**
    * The first required field left blank, as a sentence — or null if none is.
    *
    * An outlet reached production with no name because three layers each
    * declined to check. This is the second of them. The `required` attributes on
-   * the inputs below do not validate anything: `noValidate` is on this form and
-   * on every other form in this app, deliberately, so that refusals are written
+   * the inputs do not validate anything: `noValidate` is on this form and on
+   * every other form in this app, deliberately, so that refusals are written
    * in this app's voice rather than drawn by the browser. `required` stays
    * because it also sets `aria-required`, which is the half of it that works
-   * (design D1).
+   * (blank-is-not-a-value, design D1).
    *
-   * One message per field rather than one for all three. The form has four
-   * required fields among ten, and a message that does not say which one is
-   * missing is close to useless on a phone, where the offending field is
-   * usually scrolled out of sight.
+   * One message per field rather than one for all three: a message that does
+   * not say which field is missing is close to useless on a phone, where the
+   * offending field is usually scrolled out of sight.
    */
   function firstBlankRequiredField(): string | null {
     if (draft.name.trim() === '') {
@@ -358,99 +309,27 @@ export function OutletsSurface() {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
-
     // Checked before `run()`, which clears the error it would otherwise be
-    // handed. The guard covers the edit path as well as create: this is one
-    // component for both, and clearing a name is the same mistake as never
-    // typing one. The database refuses it either way — that is the boundary,
-    // and this is the convenience.
+    // handed. The guard covers the edit path as well as create: clearing a name
+    // is the same mistake as never typing one. The database refuses it either
+    // way — that is the boundary, and this is the convenience.
     const blank = firstBlankRequiredField()
     if (blank) {
       setError(blank)
       return
     }
-
-    await run(async () => {
-      if (editing) {
-        await adapter.updateOutlet(editing.id, toPayload(draft))
-      } else {
-        await adapter.createOutlet(toPayload(draft))
-      }
-      setFormOpen(false)
-    })
+    const saved = await run(
+      () =>
+        editing
+          ? adapter.updateOutlet(editing.id, toPayload(draft))
+          : adapter.createOutlet(toPayload(draft)),
+      editing === null,
+    )
+    if (saved) setFormOpen(false)
   }
 
-  const addButton = <AddButton label="Add outlet" onClick={openAdd} data-testid="add-outlet" />
-
-  return (
-    <div className="mx-auto max-w-2xl">
-      <PageHeader
-        title="Outlets"
-        subtitle={
-          mayWrite
-            ? 'Where each outlet is, and how far staff may be when they check in.'
-            : 'The outlets you manage, and the tablet standing at each counter.'
-        }
-        action={mayWrite && outlets && outlets.length > 0 ? addButton : undefined}
-      />
-
-      {error && (
-        <p
-          role="alert"
-          data-testid="outlets-error"
-          className="mb-3 text-sm font-semibold text-danger"
-        >
-          {error}
-        </p>
-      )}
-
-      {outlets === null ? (
-        // The `space-y-3` stack of outlet cards, each holding the shop's name,
-        // its address and the actions on it.
-        <LoadingList
-          label="your outlets"
-          rows={3}
-          blockHeight="h-64"
-          data-testid="outlets-loading"
-        />
-      ) : outlets.length === 0 ? (
-        <EmptyState
-          icon={Store}
-          title={
-            mayWrite
-              ? 'Nothing exists yet — start with the shop. An outlet has to exist before anyone can be given an account, put on the staff list, or check in.'
-              : 'No outlets are assigned to you. A Super Admin assigns an outlet before it appears here.'
-          }
-          action={mayWrite ? addButton : undefined}
-        />
-      ) : (
-        <div data-testid="outlet-list" className="space-y-3">
-          {outlets.map((outlet) => (
-            <OutletCard
-              key={outlet.id}
-              outlet={outlet}
-              busy={busy}
-              mayWrite={mayWrite}
-              devices={devices}
-              tabletsHref={`${session.mode === 'demo' ? '/demo' : ''}/${
-                mayWrite ? 'owner' : 'admin'
-              }/devices/${outlet.id}`}
-              blockedBy={blocked?.id === outlet.id ? blocked.references : null}
-              onCapture={() => setCapturing(outlet)}
-              onEdit={() => openEdit(outlet)}
-              onDelete={() => {
-                setBlocked(null)
-                setPendingDeletion(outlet)
-              }}
-              onToggleActive={() => {
-                if (outlet.is_active) setPendingClosure(outlet)
-                else void run(() => adapter.updateOutlet(outlet.id, { isActive: true }))
-              }}
-            />
-          ))}
-        </div>
-      )}
-
+  const dialogs = (
+    <>
       {/* Keyed so opening the sheet for a different shop remounts rather than
           leaving a previous outlet's values behind. */}
       <OutletFormSheet
@@ -488,14 +367,14 @@ export function OutletsSurface() {
         irreversible action is to make the operator type the record's name, and
         the outlet that most needs deleting has neither a name nor a code to
         type. Requiring the outlet to be closed first is what supplies the
-        second moment instead (design D3, D4).
+        second moment instead (outlet-deletion, design D3, D4).
       */}
       <ConfirmDialog
         open={pendingDeletion !== null}
         title="Delete this outlet?"
         consequence={
           pendingDeletion
-            ? `${outletLabel(pendingDeletion)} is removed, not hidden. Marking it closed left it on this screen and let you reopen it; this takes the row away, and there is no undo. It will work only if nothing at all is attached to it — no staff, no accounts, no recorded days — and the database will refuse it otherwise.`
+            ? `${outletLabel(pendingDeletion)} is removed, not hidden. Marking it closed kept it and let you reopen it; this takes the row away, and there is no undo. It will work only if nothing at all is attached to it — no staff, no accounts, no recorded days — and the database will refuse it otherwise.`
             : ''
         }
         confirmLabel="Delete outlet"
@@ -517,71 +396,451 @@ export function OutletsSurface() {
         outlet={capturing}
         onClose={() => setCapturing(null)}
         onSaved={(saved) => {
-          setOutlets(
-            (current) =>
-              current?.map((outlet) => (outlet.id === saved.id ? saved : outlet)) ?? current,
-          )
+          onSaved(saved, false)
           setCapturing(null)
         }}
       />
+    </>
+  )
+
+  return {
+    error,
+    busy,
+    blocked,
+    dialogs,
+    add() {
+      setEditing(null)
+      setDraft(EMPTY_DRAFT)
+      setError(null)
+      setFormOpen(true)
+    },
+    edit(outlet: Tables<'outlets'>) {
+      setEditing(outlet)
+      setDraft(toDraft(outlet))
+      setError(null)
+      setFormOpen(true)
+    },
+    capture: setCapturing,
+    close: setPendingClosure,
+    reopen(outlet: Tables<'outlets'>) {
+      void run(() => adapter.updateOutlet(outlet.id, { isActive: true }))
+    },
+    remove(outlet: Tables<'outlets'>) {
+      setBlocked(null)
+      setPendingDeletion(outlet)
+    },
+  }
+}
+
+/**
+ * **Outlets: a list, like Team**, where each row opens that outlet's own page
+ * (outlets-one-at-a-time, owner 2026-09-26).
+ *
+ * It replaced a chip picker over one outlet at a time, which wrapped onto a
+ * second line at three outlets and could only get worse as franchises open.
+ * A row stays light — name, short code, area, whether it is open, and one line
+ * about its tablets — because Overview already carries the per-outlet summary,
+ * and this must not become a second Overview.
+ *
+ * Closed outlets are listed after the trading ones, dimmed, for the owner, who
+ * reopens and deletes them from their page. A manager cannot reopen one, so a
+ * closed shop on their list would be a row with nothing to do about it.
+ *
+ * With one outlet the list is still shown rather than skipped: skipping it
+ * would make Back land on a list that bounces straight forward again.
+ */
+export function OutletsSurface() {
+  const { outlets: adapter, counter } = useAdapters()
+  const session = useSession()
+  const navigate = useNavigate()
+  const mayWrite = holdsRole(session, 'super_admin')
+  const [outlets, setOutlets] = useState<Tables<'outlets'>[] | null>(null)
+  const [devices, setDevices] = useState<CounterDeviceSummary[] | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const actions = useOutletActions({
+    // A new outlet is the one the owner wants to look at next.
+    onSaved: (saved, created) => {
+      if (created) void navigate(saved.id)
+    },
+  })
+
+  useEffect(() => {
+    let active = true
+    void adapter
+      .listOutlets({ includeInactive: mayWrite })
+      .then((list) => {
+        if (active) setOutlets(list)
+      })
+      .catch(() => {
+        if (active) setLoadError('Could not load outlets. Try again in a moment.')
+      })
+    return () => {
+      active = false
+    }
+  }, [adapter, mayWrite])
+
+  /**
+   * The tablets, for each row's one line. A failure of this read is not a
+   * failure of the list: the outlets still list, and the line says the tablets
+   * could not be read rather than claiming there are none — "no tablet" would
+   * send somebody to mint a setup code for hardware standing there working.
+   */
+  useEffect(() => {
+    let active = true
+    void counter
+      .listDevices()
+      .then((list) => {
+        if (active) setDevices(list)
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [counter])
+
+  const ordered = useMemo(
+    () =>
+      outlets === null
+        ? null
+        : [...outlets.filter((o) => o.is_active), ...outlets.filter((o) => !o.is_active)],
+    [outlets],
+  )
+
+  const addButton = <AddButton label="Add outlet" onClick={actions.add} data-testid="add-outlet" />
+
+  const columns: DataTableColumn<Tables<'outlets'>>[] = [
+    {
+      id: 'outlet',
+      header: 'Outlet',
+      cell: (outlet) => (
+        // One link, stretched over its row, so the whole row is one tap and a
+        // screen reader still meets one link named for the outlet.
+        <Link
+          to={outlet.id}
+          data-testid={`open-${outletHandle(outlet)}`}
+          className="block py-2 after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:focus-ring"
+        >
+          <span
+            className={cn(
+              'block font-semibold',
+              outlet.is_active ? 'text-content' : 'text-content-muted',
+            )}
+          >
+            {outletLabel(outlet)}
+          </span>
+          <span className="block text-xs text-content-muted">
+            {[outlet.code.trim(), outlet.location_label.trim()].filter(Boolean).join(' · ')}
+          </span>
+        </Link>
+      ),
+    },
+    {
+      id: 'tablets',
+      header: 'Tablets',
+      cell: (outlet) => <TabletsSummary outlet={outlet} devices={devices} />,
+    },
+    {
+      id: 'status',
+      header: 'Status',
+      cell: (outlet) => <OutletStatus open={outlet.is_active} />,
+    },
+    {
+      id: 'open',
+      header: <span className="sr-only">Open the outlet</span>,
+      align: 'right',
+      cell: () => <ChevronRight aria-hidden size={16} className="inline text-content-muted" />,
+    },
+  ]
+
+  return (
+    <div className="mx-auto max-w-2xl">
+      <PageHeader
+        title="Outlets"
+        action={mayWrite && outlets && outlets.length > 0 ? addButton : undefined}
+      />
+
+      {/* A refused add is said here as well as in its sheet, as the card surface
+          did: the sheet closes, and the sentence should not go with it. */}
+      {(loadError ?? actions.error) && (
+        <p
+          role="alert"
+          data-testid="outlets-error"
+          className="mb-3 text-sm font-semibold text-danger"
+        >
+          {loadError ?? actions.error}
+        </p>
+      )}
+
+      {ordered === null ? (
+        loadError ? null : (
+          <LoadingTable
+            label="your outlets"
+            rows={2}
+            rowHeight="h-16"
+            data-testid="outlets-loading"
+          />
+        )
+      ) : (
+        <div data-testid="outlet-list">
+          <DataTable
+            columns={columns}
+            rows={ordered}
+            rowKey={(outlet) => outlet.id}
+            rowClassName={() => 'relative hover:bg-surface-raised'}
+            empty={
+              <EmptyState
+                icon={Store}
+                title={
+                  mayWrite
+                    ? 'Nothing exists yet — start with the shop. An outlet has to exist before anyone can be given an account, put on the staff list, or check in.'
+                    : 'No outlets are assigned to you. A Super Admin assigns an outlet before it appears here.'
+                }
+                action={mayWrite ? addButton : undefined}
+              />
+            }
+          />
+        </div>
+      )}
+
+      {actions.dialogs}
     </div>
   )
 }
 
-function OutletCard({
+/**
+ * One line about an outlet's tablets, for its row: how many, and the one thing
+ * worth knowing about them if there is one — bills not sent, or a tablet gone
+ * quiet. The detail lives on the outlet's page.
+ */
+function TabletsSummary({
+  outlet,
+  devices,
+}: {
+  outlet: Tables<'outlets'>
+  devices: CounterDeviceSummary[] | null
+}) {
+  if (!outlet.is_active) return <span className="text-content-muted">—</span>
+  if (devices === null) return <span className="text-content-muted">Not read</span>
+  const here = devices.filter((device) => device.outletId === outlet.id)
+  if (here.length === 0) {
+    return <span className="font-semibold text-warning">None</span>
+  }
+  const unsent = here.reduce((sum, device) => sum + device.lastReportedUnresolved, 0)
+  const quiet = here.filter((device) => !isCounterTelemetryFresh(device.lastSeenAt)).length
+  return (
+    <span className="block">
+      <span className="block text-content">{here.length}</span>
+      {unsent > 0 ? (
+        <span className="block text-xs font-semibold text-warning">{unsent} unsent</span>
+      ) : quiet > 0 ? (
+        <span className="block text-xs font-semibold text-warning">{quiet} out of touch</span>
+      ) : null}
+    </span>
+  )
+}
+
+/**
+ * Whether the outlet is trading, drawn exactly as Team draws a person's status
+ * (owner, 2026-09-26): the ordinary state in quiet words, and the one that
+ * stops things in red. No coloured dot — on this app a dot means a live
+ * reading, like Overview's Online / Offline for the tablets, and whether a shop
+ * is in business is a setting somebody chose.
+ */
+function OutletStatus({ open }: { open: boolean }) {
+  return open ? (
+    <span className="text-content-muted">Open</span>
+  ) : (
+    <span className="font-semibold text-danger">Closed</span>
+  )
+}
+
+/**
+ * **One outlet's own page** (outlets-one-at-a-time, owner 2026-09-26): its
+ * details, its tablets, and the settings later changes add, with nothing about
+ * any other outlet on it and so no picker.
+ *
+ * **Back steps back through the reader's own history**, like a browser's back,
+ * rather than always to the list: the page is reached from the list, from
+ * Overview, and later from the counter, and each reader should return where they
+ * came from. Opened with nothing before it in this app — a reload, a fresh tab —
+ * it goes to the list instead of out of the app.
+ *
+ * An outlet the reader may not see reads exactly like one that does not exist:
+ * the row is absent under their policy, and the page says so and nothing else.
+ */
+export function OutletPage() {
+  const { outlets: adapter } = useAdapters()
+  const session = useSession()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { outletId = '' } = useParams()
+  const mayWrite = holdsRole(session, 'super_admin')
+  // The owner administers tablets everywhere: both privileged functions carry an
+  // explicit `super_admin` branch. A manager, at the outlets they manage.
+  const mayAdminister = mayWrite || sessionOutletsFor(session, 'franchise_admin').includes(outletId)
+  const [outlet, setOutlet] = useState<Tables<'outlets'> | null | undefined>(undefined)
+  const [readFor, setReadFor] = useState<string | null>(null)
+
+  const toList = useCallback(
+    () => void navigate('..', { relative: 'path', replace: true }),
+    [navigate],
+  )
+  const back = useCallback(() => {
+    // `default` is the key of the entry the app was opened on: there is no
+    // earlier page of ours to return to.
+    if (location.key === 'default') toList()
+    else void navigate(-1)
+  }, [location.key, navigate, toList])
+
+  const actions = useOutletActions({
+    onSaved: (saved) => setOutlet(saved),
+    onDeleted: toList,
+  })
+
+  useEffect(() => {
+    let active = true
+    void adapter
+      .getOutlet(outletId)
+      .then((row) => {
+        if (!active) return
+        setOutlet(row)
+        setReadFor(outletId)
+      })
+      .catch(() => {
+        if (!active) return
+        setOutlet(null)
+        setReadFor(outletId)
+      })
+    return () => {
+      active = false
+    }
+  }, [adapter, outletId])
+
+  const shown = readFor === outletId ? outlet : undefined
+
+  return (
+    <div className="mx-auto max-w-2xl">
+      <PageHeader
+        onBack={back}
+        title={shown ? outletLabel(shown) : 'Outlet'}
+        // The short code, which no outlet screen showed before (owner, 2026-09-26).
+        subtitle={shown ? shown.code.trim() || 'No short code' : undefined}
+        action={
+          shown ? (
+            <span className="text-sm">
+              <OutletStatus open={shown.is_active} />
+            </span>
+          ) : undefined
+        }
+      />
+
+      {actions.error && (
+        <p
+          role="alert"
+          data-testid="outlets-error"
+          className="mb-3 text-sm font-semibold text-danger"
+        >
+          {actions.error}
+        </p>
+      )}
+
+      {shown === undefined ? (
+        // Details, then the Tablets label and two tablets: 316 and 297 px on a
+        // phone (design D5).
+        <LoadingRegion label="this outlet" className="space-y-4" data-testid="outlets-loading">
+          <Shimmer className="h-[19.75rem]" />
+          <Shimmer className="h-[18.5rem]" />
+        </LoadingRegion>
+      ) : shown === null ? (
+        <EmptyState icon={Store} title="This outlet is not one you can see." />
+      ) : (
+        <OutletBody
+          outlet={shown}
+          busy={actions.busy}
+          mayWrite={mayWrite}
+          blockedBy={actions.blocked?.id === shown.id ? actions.blocked.references : null}
+          onCapture={() => actions.capture(shown)}
+          onEdit={() => actions.edit(shown)}
+          onDelete={() => actions.remove(shown)}
+          onClose={() => actions.close(shown)}
+          onReopen={() => actions.reopen(shown)}
+        >
+          {/*
+            A closed outlet has no counter to administer: its tablets are moved
+            or removed from a trading outlet's page.
+          */}
+          {shown.is_active && (
+            <OutletTablets
+              key={`tablets-${shown.id}`}
+              outletId={shown.id}
+              outletName={outletLabel(shown)}
+              mayAdminister={mayAdminister}
+              isOwner={mayWrite}
+            />
+          )}
+        </OutletBody>
+      )}
+
+      {actions.dialogs}
+    </div>
+  )
+}
+
+/**
+ * Everything under the outlet's name on its page (outlets-one-at-a-time, owner
+ * 2026-09-26): **Details**, then its tablets, then its closing actions. Each
+ * group sits under a quiet label so none reads as standing beside the outlet.
+ *
+ * **Details** is tiles of a caption over a value, and is exactly what **Edit**
+ * changes (the name and short code in the page header are edited by it too).
+ * The check-in fence is a tile of its own with **Recapture** inside it, because
+ * a position is captured standing at the counter rather than typed.
+ *
+ * Closing sits alone at the foot, centred. On a closed outlet, Reopen and
+ * Delete stand there instead: a trading outlet never offers the one action that
+ * cannot be undone (outlet-deletion, design D3).
+ */
+function OutletBody({
   outlet,
   busy,
   mayWrite,
-  devices,
-  tabletsHref,
   blockedBy,
   onCapture,
   onEdit,
   onDelete,
-  onToggleActive,
+  onClose,
+  onReopen,
+  children,
 }: {
   outlet: Tables<'outlets'>
   busy: boolean
   /** Whether to offer the writes. The database is what refuses them. */
   mayWrite: boolean
-  /** Every tablet the reader can see; null while loading or unreadable. */
-  devices: CounterDeviceSummary[] | null
-  tabletsHref: string
   /** Non-null once a delete has been refused: what is still attached. */
   blockedBy: OutletReference[] | null
   onCapture: () => void
   onEdit: () => void
   onDelete: () => void
-  onToggleActive: () => void
+  onClose: () => void
+  onReopen: () => void
+  /** The groups after Details — today the tablets. */
+  children?: ReactNode
 }) {
   const surveyed = outlet.location_captured_at !== null
-  const positioned = outlet.latitude !== null && outlet.longitude !== null
   const handle = outletHandle(outlet)
-  const tablet = devices?.find((device) => device.outletId === outlet.id) ?? null
+  const address = [outlet.address_line1, outlet.address_line2, outlet.city, outlet.pincode]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(', ')
 
   return (
-    <Card className="space-y-3" data-testid={`outlet-${handle}`}>
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-bold text-content">{outletLabel(outlet)}</h2>
-        <span className="text-xs text-content-muted">{outlet.location_label}</span>
-      </div>
-
-      {!outlet.is_active && (
-        <p
-          data-testid={`closed-${handle}`}
-          className="rounded-lg border border-border bg-surface-raised p-2 text-xs font-semibold text-content-muted"
-        >
-          Marked closed. Nobody can check in here, and this outlet is not offered when accounts are
-          assigned. Everything recorded is still here. If this outlet should never have existed at
-          all, it can now be deleted — but only while nothing is attached to it.
-        </p>
-      )}
-
+    <div data-testid={`outlet-${handle}`} className="space-y-4">
       {blockedBy !== null && (
         <div
           role="alert"
           data-testid={`delete-blocked-${handle}`}
-          className="rounded-lg border border-danger bg-surface-raised p-2 text-xs text-content"
+          className="rounded-lg border border-danger bg-surface p-2 text-xs text-content"
         >
           <p className="font-semibold">
             This outlet was not deleted. Things are still attached to it:
@@ -597,182 +856,189 @@ function OutletCard({
               What is attached could not be listed just now. Nothing was deleted.
             </p>
           )}
-          <p className="mt-1 text-content-muted">
-            Move or remove them and the outlet can be deleted then — there is nothing here to
-            re-mark afterwards.
-          </p>
         </div>
       )}
 
-      {surveyed ? (
-        <div className="space-y-1 text-sm">
-          <p className="inline-flex items-center gap-1 text-content">
-            <MapPin aria-hidden size={14} />
-            {outlet.latitude?.toFixed(5)}, {outlet.longitude?.toFixed(5)}
-          </p>
-          <p className="text-xs text-content-muted">
-            Captured on site {formatDateTime(outlet.location_captured_at!)}
-            {outlet.location_accuracy_m !== null &&
-              ` · the fix was accurate to ±${formatMetres(outlet.location_accuracy_m)}`}
-          </p>
-        </div>
-      ) : (
-        <p
-          data-testid={`uncaptured-${handle}`}
-          className="inline-flex items-start gap-2 rounded-lg border border-warning bg-surface-raised p-2 text-xs text-content"
-        >
-          <MapPinOff aria-hidden size={14} className="mt-0.5 shrink-0 text-warning" />
-          <span>
-            {positioned
-              ? 'These coordinates were never captured on site, so they are a placeholder. Check-ins here are judged against a point nobody has stood on.'
-              : 'No position recorded. Check-ins here are not measured against a geofence at all.'}
-          </span>
-        </p>
-      )}
-
-      <OutletRaising outlet={outlet} devices={devices} tablet={tablet} handle={handle} />
-
-      <p className="text-xs text-content-muted">
-        Staff may check in within {formatMetres(outlet.geofence_radius_m)} of this point. The day
-        rolls over at {toTimeInput(outlet.business_day_cutover)}, and staff are expected by{' '}
-        {toTimeInput(outlet.arrival_deadline)}.
-      </p>
-
-      <div className="flex flex-wrap gap-2">
-        {/*
-          The way in to administer this counter, and **the only route to a setup
-          code for a manager** — `admin-devices` is where one is minted and
-          nowhere else. It carries the outlet in the address, so it opens on this
-          shop's tablets rather than on a picker the reader has to set.
-
-          **Not offered for a closed outlet.** A closed outlet is never in the
-          scope picker, so the address would be dropped on arrival and the
-          reader would land on a different shop's tablets without being told.
-          A button that goes somewhere other than where it says is worse than no
-          button, and a shop that is not trading has no counter to administer.
-        */}
-        {outlet.is_active && (
-          <Link
-            to={tabletsHref}
-            className={buttonVariants({ variant: 'secondary', size: 'phone' })}
-            data-testid={`tablets-${handle}`}
-          >
-            <TabletSmartphone aria-hidden size={16} />
-            Tablets
-          </Link>
-        )}
-        {mayWrite && (
-          <>
-            <Button variant={surveyed ? 'secondary' : 'primary'} size="phone" onClick={onCapture}>
-              <Crosshair aria-hidden size={16} />
-              {surveyed ? 'Capture again' : 'Capture position here'}
-            </Button>
-            <Button variant="ghost" size="phone" disabled={busy} onClick={onEdit}>
+      <OutletSection
+        id={`details-${outlet.id}`}
+        title="Details"
+        actions={
+          mayWrite ? (
+            <Button
+              variant="secondary"
+              size="phone"
+              disabled={busy}
+              onClick={onEdit}
+              data-testid={`edit-${handle}`}
+            >
+              <Pencil aria-hidden size={16} />
               Edit
             </Button>
-            <Button variant="ghost" size="phone" disabled={busy} onClick={onToggleActive}>
-              {outlet.is_active ? 'Mark closed' : 'Reopen'}
-            </Button>
-            {/*
-              Closed first. An active outlet gets the reversible action and
-              nothing else, so a mis-tap on a trading shop lands on Mark closed
-              rather than on the one thing that cannot be undone (design D3).
-            */}
-            {!outlet.is_active && (
+          ) : undefined
+        }
+      >
+        <Card className="space-y-3 p-3">
+          {/*
+            Every fact is a tile, a caption over a value, so the card reads as
+            one grid rather than lines of one kind and boxes of another (owner,
+            2026-09-26). The short pair leads, the address takes a row of its
+            own because it wraps, then the two times.
+          */}
+          <dl className="grid grid-cols-2 gap-2">
+            <Tile icon={Tag} caption="Location">
+              {outlet.location_label}
+            </Tile>
+            <Tile icon={Phone} caption="Phone">
+              {outlet.phone?.trim() || <span className="font-normal text-content-muted">None</span>}
+            </Tile>
+            <Tile icon={MapPin} caption="Address" wide>
+              {address || <span className="font-normal text-content-muted">None</span>}
+            </Tile>
+            <Tile icon={Moon} caption="Day ends">
+              {toTimeInput(outlet.business_day_cutover)}
+            </Tile>
+            <Tile icon={Clock} caption="Staff check in by">
+              {toTimeInput(outlet.arrival_deadline)}
+            </Tile>
+          </dl>
+
+          {/*
+            The position in a tile of its own, with its button **inside** that
+            tile: it is not what Edit changes (a position is captured standing at
+            the counter), and the button must sit with the value it retakes
+            rather than at the far edge of the card (owner, 2026-09-26).
+          */}
+          <div
+            data-testid={`location-${handle}`}
+            className={cn(
+              'flex items-center justify-between gap-3 rounded-lg px-3 py-2',
+              surveyed ? 'bg-surface-raised' : 'border border-warning bg-surface-raised',
+            )}
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              {surveyed ? (
+                <LocateFixed aria-hidden size={18} className="shrink-0 text-success" />
+              ) : (
+                <MapPinOff aria-hidden size={18} className="shrink-0 text-warning" />
+              )}
+              <div className="min-w-0">
+                <p className="text-xs text-content-muted">Check-in fence</p>
+                {surveyed ? (
+                  <p className="text-sm font-semibold text-content">
+                    {formatMetres(outlet.geofence_radius_m)}
+                    {outlet.location_accuracy_m !== null && (
+                      <span className="font-normal text-content-muted">
+                        {' '}
+                        · ±{formatMetres(outlet.location_accuracy_m)}
+                      </span>
+                    )}
+                  </p>
+                ) : (
+                  <p
+                    className="text-sm font-semibold text-content"
+                    data-testid={`uncaptured-${handle}`}
+                  >
+                    Not captured
+                  </p>
+                )}
+              </div>
+            </div>
+            {mayWrite && outlet.is_active && (
               <Button
-                variant="ghost"
+                variant={surveyed ? 'secondary' : 'primary'}
                 size="phone"
-                disabled={busy}
-                onClick={onDelete}
-                data-testid={`delete-${handle}`}
+                onClick={onCapture}
+                data-testid={`capture-${handle}`}
               >
-                Delete
+                <Crosshair aria-hidden size={16} />
+                {surveyed ? 'Recapture' : 'Capture'}
               </Button>
             )}
-          </>
-        )}
-      </div>
-    </Card>
+          </div>
+        </Card>
+      </OutletSection>
+
+      {children}
+
+      {mayWrite && (
+        <div className="flex flex-wrap justify-center gap-2" data-testid={`closing-${handle}`}>
+          {outlet.is_active ? (
+            <DangerButton disabled={busy} onClick={onClose} testId={`close-${handle}`}>
+              Mark closed
+            </DangerButton>
+          ) : (
+            <>
+              <DangerButton disabled={busy} onClick={onDelete} testId={`delete-${handle}`}>
+                Delete outlet
+              </DangerButton>
+              <Button
+                variant="primary"
+                size="phone"
+                disabled={busy}
+                onClick={onReopen}
+                data-testid={`reopen-${handle}`}
+              >
+                Reopen
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
-/**
- * **What this outlet is raising**, as text on the card (#51).
- *
- * The Alerts surface was deleted in the same change that added this, so it is
- * deliberately **not a link** — there is nowhere to click through to, and a chip
- * pointing at a screen that no longer exists is the exact thing that change was
- * getting rid of. What replaces the alert thread is not a smaller alert thread:
- * it is the conditions this app can already derive from rows that exist, said
- * plainly at the shop they are about.
- *
- * Nothing here is typed by anybody. An alert used to be a sentence somebody
- * wrote, which is why it needed a status machine and a thread — this needs
- * none, because every line resolves itself when the thing it describes stops
- * being true.
- *
- * **A quiet outlet says so.** An absent list would leave the reader unable to
- * tell "nothing wrong" from "not loaded", which is the one thing a screen
- * answering *is this shop all right?* must never be ambiguous about.
- */
-function OutletRaising({
-  outlet,
-  devices,
-  tablet,
-  handle,
+/** A caption over a value: every fact on the Details card. */
+function Tile({
+  icon: Icon,
+  caption,
+  wide,
+  children,
 }: {
-  outlet: Tables<'outlets'>
-  devices: CounterDeviceSummary[] | null
-  tablet: CounterDeviceSummary | null
-  handle: string
+  icon: typeof MapPin
+  caption: string
+  /** Takes the whole row, for a value that wraps. */
+  wide?: boolean
+  children: ReactNode
 }) {
-  const raised: string[] = []
-
-  if (devices === null) {
-    // Not "no tablet" — "no answer". Sending somebody to mint a setup code for
-    // hardware that is standing there working is worse than saying nothing.
-    raised.push('The tablet at this counter could not be read just now.')
-  } else if (!tablet) {
-    raised.push(
-      outlet.is_active
-        ? 'No tablet is set up at this counter, so nothing can be billed here. Tablets issues a setup code.'
-        : 'No tablet is set up at this counter.',
-    )
-  } else {
-    if (tablet.lastSeenAt === null) {
-      raised.push(`${tablet.label} was set up but has never reported in.`)
-    } else if (!isCounterTelemetryFresh(tablet.lastSeenAt)) {
-      raised.push(`${tablet.label} was last heard from ${formatDateTime(tablet.lastSeenAt)}.`)
-    }
-    if (tablet.lastReportedUnresolved > 0) {
-      raised.push(
-        tablet.lastReportedUnresolved === 1
-          ? `${tablet.label} is holding 1 bill it has not managed to send.`
-          : `${tablet.label} is holding ${tablet.lastReportedUnresolved} bills it has not managed to send.`,
-      )
-    }
-  }
-
   return (
-    <div className="space-y-1" data-testid={`raising-${handle}`}>
-      <h3 className="text-xs font-bold uppercase tracking-wide text-content-muted">
-        What this outlet is raising
-      </h3>
-      {raised.length === 0 ? (
-        <p className="text-xs text-content-muted">
-          Nothing. The counter tablet is reporting in and holding no unsent bills.
-        </p>
-      ) : (
-        <ul className="space-y-1 text-xs text-content">
-          {raised.map((line) => (
-            <li key={line} className="flex items-start gap-2">
-              <TriangleAlert aria-hidden size={14} className="mt-0.5 shrink-0 text-warning" />
-              <span>{line}</span>
-            </li>
-          ))}
-        </ul>
+    <div
+      className={cn(
+        'flex min-w-0 items-center gap-2 rounded-lg bg-surface-raised px-3 py-2',
+        wide && 'col-span-2',
       )}
+    >
+      <Icon aria-hidden size={18} className="shrink-0 text-accent-text" />
+      <div className="min-w-0">
+        <dt className="text-xs text-content-muted">{caption}</dt>
+        <dd className="break-words text-sm font-semibold text-content">{children}</dd>
+      </div>
     </div>
+  )
+}
+
+/** Outlined in the danger colour: visible, and never mistaken for a routine action. */
+function DangerButton({
+  disabled,
+  onClick,
+  testId,
+  children,
+}: {
+  disabled: boolean
+  onClick: () => void
+  testId: string
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      data-testid={testId}
+      className={cn(buttonVariants({ variant: 'secondary', size: 'phone' }), DANGER_OUTLINE)}
+    >
+      {children}
+    </button>
   )
 }
 

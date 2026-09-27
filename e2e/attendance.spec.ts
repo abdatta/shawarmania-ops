@@ -746,20 +746,19 @@ test('the by-staff picker follows the outlet chips', async ({ page }) => {
 
 test('the owner sees which outlets have never been surveyed', async ({ page }) => {
   await page.goto('demo/owner/outlets')
+  await page.getByTestId('open-kanchrapara').click()
+  await expect(page.getByTestId('uncaptured-kanchrapara')).toContainText('Not captured')
 
-  await expect(page.getByTestId('outlet-list')).toBeVisible()
-  await expect(page.getByTestId('uncaptured-kanchrapara')).toContainText('never captured on site')
-  await expect(page.getByText(/Captured on site/)).toBeVisible()
+  await page.getByRole('button', { name: 'Back' }).click()
+  await page.getByTestId('open-kalyani').click()
+  await expect(page.getByTestId('location-kalyani')).toContainText('±9 m')
+  await expect(page.getByTestId('uncaptured-kalyani')).toHaveCount(0)
 })
 
 test('the owner captures a position and the outlet stops being unsurveyed', async ({ page }) => {
   await page.goto('demo/owner/outlets')
-
-  const kanchrapara = page
-    .getByTestId('outlet-list')
-    .locator('> div')
-    .filter({ hasText: 'Kanchrapara' })
-  await kanchrapara.getByRole('button', { name: /Capture position here/ }).click()
+  await page.getByTestId('open-kanchrapara').click()
+  await page.getByTestId('capture-kanchrapara').click()
 
   await page.getByTestId('take-reading').click()
   // The sampling window is ~8s of real time.

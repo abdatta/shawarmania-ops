@@ -781,9 +781,9 @@ entry or a reachable route for any of them.**
   stricter than what Reports promised, not weaker.
 - **Alerts** — a thread a manager raised to the owner, with a status machine and
   responses. **Nothing reimplements it.** What an outlet is raising is read on
-  that outlet's card in Outlets, derived from rows that already exist — no
-  tablet at the counter, a tablet that has not reported, a tablet holding bills
-  it has not sent. An alert was a sentence somebody typed, which is why it
+  Outlets, derived from rows that already exist — no tablet at the counter, a
+  tablet that has not reported, a tablet holding bills it has not sent — on the
+  outlet's row in the list and on its tablets' cards on its page. An alert was a sentence somebody typed, which is why it
   needed a status machine; none of these does, because each resolves itself when
   the thing it describes stops being true. The thinking is kept in
   `openspec/todos/outlet-alerts-was-withdrawn.md`.

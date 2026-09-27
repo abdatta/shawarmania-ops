@@ -36,6 +36,12 @@ interface DataTableProps<T> {
   empty: ReactNode
   /** Row density from docs/DESIGN_SYSTEM.md: 40px on phones, 44px at the counter. */
   density?: 'phone' | 'counter'
+  /**
+   * Classes for one row. A table whose rows each open something gives its rows
+   * `relative` here and stretches one link over the row from inside a cell, so
+   * the whole row is one tap target and still one link to a screen reader.
+   */
+  rowClassName?: (row: T) => string | undefined
 }
 
 export function DataTable<T>({
@@ -44,6 +50,7 @@ export function DataTable<T>({
   rowKey,
   empty,
   density = 'phone',
+  rowClassName,
 }: DataTableProps<T>) {
   if (rows.length === 0) return <>{empty}</>
 
@@ -70,7 +77,10 @@ export function DataTable<T>({
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={rowKey(row)} className={cn(rowHeight, 'border-b border-border last:border-0')}>
+            <tr
+              key={rowKey(row)}
+              className={cn(rowHeight, 'border-b border-border last:border-0', rowClassName?.(row))}
+            >
               {columns.map((column) => (
                 <td
                   key={column.id}

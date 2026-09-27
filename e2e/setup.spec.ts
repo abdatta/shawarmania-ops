@@ -35,31 +35,34 @@ test('the owner creates an outlet from the app', async ({ page }) => {
   await page.getByLabel('Staff are expected by').fill('12:30')
   await page.getByRole('button', { name: 'Create outlet' }).click()
 
-  const card = page.getByTestId('outlet-barrackpore')
-  await expect(card).toBeVisible()
-  await expect(card).toContainText('staff are expected by 12:30')
+  // A new outlet opens on its own page.
+  const outlet = page.getByTestId('outlet-barrackpore')
+  await expect(outlet).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Shawarmania Barrackpore')
+  await expect(outlet).toContainText('Staff check in by')
+  await expect(outlet).toContainText('12:30')
   // A new outlet has never been stood in, and says so rather than judging
   // anyone against a point nobody has visited.
-  await expect(page.getByTestId('uncaptured-barrackpore')).toContainText(
-    'not measured against a geofence at all',
-  )
-  await expect(card.getByRole('button', { name: 'Capture position here' })).toBeVisible()
+  await expect(page.getByTestId('uncaptured-barrackpore')).toContainText('Not captured')
+  await expect(page.getByTestId('capture-barrackpore')).toHaveText('Capture')
 })
 
 test('an outlet marked closed keeps everything and can be reopened', async ({ page }) => {
   await openOwnerOutlets(page)
+  await page.getByTestId('open-kalyani').click()
 
-  const kalyani = page.getByTestId('outlet-kalyani')
-  await kalyani.getByRole('button', { name: 'Mark closed' }).click()
+  await page.getByTestId('close-kalyani').click()
 
   const dialog = page.getByRole('dialog')
   await expect(dialog).toContainText('anyone mid-shift can still check out')
   await expect(dialog).toContainText('Nothing is deleted')
   await dialog.getByRole('button', { name: 'Mark closed' }).click()
 
-  await expect(page.getByTestId('closed-kalyani')).toBeVisible()
-  await page.getByTestId('outlet-kalyani').getByRole('button', { name: 'Reopen' }).click()
-  await expect(page.getByTestId('closed-kalyani')).toHaveCount(0)
+  // Closed, in the page's own words, and offering the way back.
+  await expect(page.getByText('Closed', { exact: true })).toBeVisible()
+  await page.getByTestId('reopen-kalyani').click()
+  await expect(page.getByTestId('close-kalyani')).toBeVisible()
+  await expect(page.getByTestId('reopen-kalyani')).toHaveCount(0)
 })
 
 test('creating a person is one act that ends in a working handover', async ({ page }) => {
@@ -196,9 +199,7 @@ test('an address is filled from a search, and the search never leaves the origin
 
   // A picked address must never survey an outlet: the fence is captured on
   // site, and a rooftop centroid would mark somebody absent at their own counter.
-  await expect(page.getByTestId('uncaptured-barrackpore')).toContainText(
-    'not measured against a geofence at all',
-  )
+  await expect(page.getByTestId('uncaptured-barrackpore')).toContainText('Not captured')
 
   expect(foreign).toEqual([])
 })

@@ -383,20 +383,6 @@ const defs = {
     path: 'ledger/swiggy',
     state: 'hidden',
   },
-  /**
-   * The owner's counterpart to `admin-devices`, across every outlet.
-   *
-   * Two entries rather than one, for the reason the ledger has two: a surface
-   * belongs to exactly one role's shell here. **Neither declares navigation**
-   * since #51 — tablets are administered from the outlet they stand in, and
-   * every outlet card carries the button. What this entry does is make the path
-   * resolve inside the owner's shell.
-   */
-  'owner-devices': {
-    role: 'super_admin',
-    path: 'devices',
-    state: 'live',
-  },
   /** Drop into one outlet's Franchise Admin view, read-only. */
   'owner-outlet-view': {
     role: 'super_admin',
@@ -436,10 +422,9 @@ const defs = {
    * The outlets this manager runs, **read-only** (#51).
    *
    * They had none until that change, and the gap became a hole when Tablets
-   * stopped being a top-level entry: `admin-devices` is the only place a
-   * counter setup code is minted, so without a door to the outlet the tablet
-   * stands in, a manager whose tablet dies has no route to the one screen that
-   * can replace it. That is the one repair they cannot make anywhere else.
+   * stopped being a top-level entry. Since outlets-one-at-a-time the tablets
+   * are a section of this page, and it is the only place a counter setup code
+   * is minted, so a manager whose tablet dies repairs it here and nowhere else.
    *
    * Same label and same group as `owner-outlets`, so label dedup can only ever
    * produce one Outlets entry and it is always drawn in the same drawer. The
@@ -503,8 +488,8 @@ const defs = {
    * The manager's counterpart to `owner-cash-drawer`, scoped by assignment.
    *
    * A surface belongs to exactly one role's shell here, so the drawer needs two
-   * entries reaching one component — the same reason `owner-devices` and
-   * `admin-devices` are separate. What differs between them is nothing the
+   * entries reaching one component — the same reason `owner-outlets` and
+   * `admin-outlets` are separate. What differs between them is nothing the
    * screen can see: `app_may_reach_drawer()` grants a Super Admin every outlet
    * and a Franchise Admin the ones their live assignment names, and the database
    * is where that is decided.
@@ -530,37 +515,6 @@ const defs = {
     role: 'franchise_admin',
     path: 'ledger/expenses',
     nav: { label: 'Expenses', icon: Wallet, order: 3, group: 'finances' },
-    state: 'live',
-  },
-  /**
-   * The tablets standing at this outlet's counter (#9).
-   *
-   * `live` from this change, because a tablet cannot be set up any other way:
-   * the setup code is generated here and nowhere else, and a `demo` gate would
-   * mean production hardware with no door to it.
-   *
-   * Called **Tablets** rather than Devices. A phone is a device too, and every
-   * person reading this screen is holding one.
-   */
-  'admin-devices': {
-    role: 'franchise_admin',
-    path: 'devices',
-    // **No navigation entry, deliberately** (owner decision, 2026-09-01).
-    //
-    // A tablet is administered from the outlet it stands in. Every outlet card
-    // now carries that counter's state and a Tablets button addressed to it, so
-    // an entry here would be a second door into one room — the same thing
-    // `counter-billing` and `counter-my-shift` decline, for the same reason.
-    //
-    // It also restores the argument for the manager's Outlets surface. That
-    // surface exists *because* this one is only reachable through an outlet; an
-    // entry beside it would have made the door redundant while the reasoning
-    // still claimed it was the only one.
-    //
-    // The surface stays `live`: the gate is still what decides whether the path
-    // resolves, and it must, because this is the only place a counter setup code
-    // is minted. `devices/:outletId` is what the card links to, and the bare
-    // `devices` path still answers for anybody holding that link.
     state: 'live',
   },
   /**
@@ -721,7 +675,7 @@ const defs = {
    * The same surface as `counter-expenses`, reached from the Employee shell.
    *
    * Two entries rather than one, because a surface belongs to exactly one role's
-   * shell here — the same reason `owner-devices` and `admin-devices` are separate
+   * shell here — the same reason `owner-outlets` and `admin-outlets` are separate
    * entries reaching one component. The owner asked for "all staff", and an
    * Employee who goes to the market for vegetables is precisely the person the
    * change exists for.

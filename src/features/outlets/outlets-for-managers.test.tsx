@@ -1,23 +1,29 @@
 import { render, screen, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it } from 'vitest'
 
 import { AdaptersContext } from '@/data-access/adapters-context'
-import { createMockAdapters, OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from '@/data-access/mock'
+import {
+  createMockAdapters,
+  OUTLET_KALYANI_ID,
+  OUTLET_KANCHRAPARA_ID,
+  OUTLET_MISTAKE_ID,
+} from '@/data-access/mock'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
 import type { Role, Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
 
-import { OutletsSurface } from './outlets-surface'
+import { OutletPage, OutletsSurface } from './outlets-surface'
 
 /**
- * The Franchise Admin's Outlets surface, and what an outlet card says (#51).
+ * The Franchise Admin's Outlets surface (#51), as a list and a page per outlet
+ * since outlets-one-at-a-time.
  *
- * The manager had no Outlets surface at all until this change, and the gap
- * became a hole when Tablets stopped being a top-level entry: `admin-devices`
- * is the only place a counter setup code is minted, so this is their one route
- * to the repair they cannot make anywhere else.
+ * The manager had no Outlets surface at all until #51, and they have one because
+ * a counter setup code is minted nowhere else: since outlets-one-at-a-time the
+ * tablets are a section of the outlet's own page, so this is their one route to
+ * the repair they cannot make anywhere else.
  *
  * **Everything asserted here about what is *offered* is courtesy, not the
  * boundary.** Create, edit, close, reopen and delete are refused by
@@ -38,19 +44,22 @@ function sessionFor(role: Role): Session {
   }
 }
 
-function renderAs(role: Role) {
+function renderAs(role: Role, at = '/outlets') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[at]}>
       <SessionContext.Provider value={sessionFor(role)}>
         <AdaptersContext.Provider value={createMockAdapters(role)}>
-          <OutletsSurface />
+          <Routes>
+            <Route path="/outlets" element={<OutletsSurface />} />
+            <Route path="/outlets/:outletId" element={<OutletPage />} />
+          </Routes>
         </AdaptersContext.Provider>
       </SessionContext.Provider>
     </MemoryRouter>,
   )
 }
 
-const WRITES = [/Capture position here/, /Capture again/, /^Edit$/, /Mark closed/, /Reopen/]
+const OWNER_WRITES = ['edit-kalyani', 'capture-kalyani', 'close-kalyani', 'reopen-kalyani']
 
 describe('a manager’s outlets', () => {
   it('lists the outlets their assignments name, and no others', async () => {
@@ -63,14 +72,11 @@ describe('a manager’s outlets', () => {
     expect(within(list).queryByText('Shawarmania Kanchrapara')).toBeNull()
   })
 
-  it('offers no way to create, edit, close or delete one', async () => {
+  it('lists their one outlet as a list, not a page, so Back never bounces', async () => {
     renderAs('franchise_admin')
 
-    await screen.findByTestId('outlet-list')
-    expect(screen.queryByTestId('add-outlet')).toBeNull()
-    for (const write of WRITES) {
-      expect(screen.queryByRole('button', { name: write })).toBeNull()
-    }
+    const list = await screen.findByTestId('outlet-list')
+    expect(within(list).getAllByRole('link')).toHaveLength(1)
   })
 
   it('does not list a closed outlet they could not reopen', async () => {
@@ -80,155 +86,77 @@ describe('a manager’s outlets', () => {
     expect(within(list).queryByText(/created by mistake/i)).toBeNull()
   })
 
-  it('reaches the tablet administration for the outlet it stands in', async () => {
+  it('offers no way to create an outlet', async () => {
     renderAs('franchise_admin')
 
     await screen.findByTestId('outlet-list')
-    // Not the shared Tablets page with its picker still on it: the address
-    // names the outlet, so it opens on this counter.
-    expect(screen.getByTestId('tablets-kalyani')).toHaveAttribute(
-      'href',
-      `/demo/admin/devices/${OUTLET_KALYANI_ID}`,
-    )
+    expect(screen.queryByTestId('add-outlet')).toBeNull()
+  })
+
+  it('offers no way to edit, capture, close or delete their outlet on its page', async () => {
+    renderAs('franchise_admin', `/outlets/${OUTLET_KALYANI_ID}`)
+
+    await screen.findByTestId('outlet-kalyani')
+    for (const control of [...OWNER_WRITES, 'delete-kalyani']) {
+      expect(screen.queryByTestId(control)).toBeNull()
+    }
+  })
+
+  it('administers the tablets standing at their outlet, on its page', async () => {
+    renderAs('franchise_admin', `/outlets/${OUTLET_KALYANI_ID}`)
+
+    const tablets = await screen.findByTestId('outlet-tablets')
+    expect(await within(tablets).findByTestId('add-tablet')).toBeInTheDocument()
+    expect(within(tablets).getByRole('button', { name: 'Edit Counter tablet' })).toBeInTheDocument()
+    expect(
+      within(tablets).getByRole('button', { name: 'Remove Counter tablet' }),
+    ).toBeInTheDocument()
+  })
+
+  it('sees nothing of an outlet no assignment of theirs names', async () => {
+    renderAs('franchise_admin', `/outlets/${OUTLET_KANCHRAPARA_ID}`)
+
+    expect(await screen.findByText('This outlet is not one you can see.')).toBeInTheDocument()
+    expect(screen.queryByText('Shawarmania Kanchrapara')).toBeNull()
+    expect(screen.queryByTestId('outlet-tablets')).toBeNull()
   })
 })
 
 describe('the owner’s outlets', () => {
   it('keeps every write it had', async () => {
-    renderAs('super_admin')
+    renderAs('super_admin', `/outlets/${OUTLET_KALYANI_ID}`)
 
-    await screen.findByTestId('outlet-list')
-    expect(screen.getByTestId('add-outlet')).toBeInTheDocument()
-    for (const write of [/Capture/, /^Edit$/, /Mark closed|Reopen/]) {
-      expect(screen.getAllByRole('button', { name: write }).length).toBeGreaterThan(0)
+    await screen.findByTestId('outlet-kalyani')
+    for (const control of ['edit-kalyani', 'capture-kalyani', 'close-kalyani']) {
+      expect(screen.getByTestId(control)).toBeInTheDocument()
     }
   })
 
-  it('offers no Tablets button on an outlet that is not trading', async () => {
+  it('may add an outlet from the list', async () => {
     renderAs('super_admin')
 
-    await screen.findByTestId('outlet-list')
-    // A closed outlet is never in the scope picker, so the address would be
-    // dropped on arrival and the reader would land on another shop's tablets
-    // without being told. A button that goes somewhere other than where it says
-    // is worse than no button.
-    expect(screen.getByTestId('tablets-kalyani')).toBeInTheDocument()
-    expect(screen.queryByTestId('tablets-demo-mistake')).toBeNull()
+    expect(await screen.findByTestId('add-outlet')).toBeInTheDocument()
   })
 
-  it('reaches each outlet’s own tablets, not a shared page', async () => {
+  it('shows no tablets on an outlet that is not trading', async () => {
+    renderAs('super_admin', `/outlets/${OUTLET_MISTAKE_ID}`)
+
+    // A closed outlet has no counter to administer; its tablets are moved or
+    // removed from a trading outlet's page.
+    await screen.findByTestId('outlet-demo-mistake')
+    expect(screen.queryByTestId('outlet-tablets')).toBeNull()
+  })
+
+  it('opens each outlet’s own page from its row, not a shared one', async () => {
     renderAs('super_admin')
 
-    await screen.findByTestId('outlet-list')
-    expect(screen.getByTestId('tablets-kalyani')).toHaveAttribute(
+    expect(await screen.findByTestId('open-kalyani')).toHaveAttribute(
       'href',
-      `/demo/owner/devices/${OUTLET_KALYANI_ID}`,
+      `/outlets/${OUTLET_KALYANI_ID}`,
     )
-    expect(screen.getByTestId('tablets-kanchrapara')).toHaveAttribute(
+    expect(screen.getByTestId('open-kanchrapara')).toHaveAttribute(
       'href',
-      `/demo/owner/devices/${OUTLET_KANCHRAPARA_ID}`,
-    )
-  })
-})
-
-describe('what an outlet is raising', () => {
-  /**
-   * The Alerts surface was deleted in the same change, so this is text on the
-   * card and nothing to click through to. Asserted as such, because a chip
-   * pointing at a screen that no longer exists is what that change was getting
-   * rid of.
-   */
-  it('is stated on the card, and is not a link', async () => {
-    renderAs('super_admin')
-
-    await screen.findByTestId('outlet-list')
-    const raising = screen.getByTestId('raising-kalyani')
-    expect(raising).toHaveTextContent(/What this outlet is raising/i)
-    expect(within(raising).queryByRole('link')).toBeNull()
-    expect(within(raising).queryByRole('button')).toBeNull()
-  })
-
-  it('names what the counter tablet is holding', async () => {
-    renderAs('super_admin')
-
-    await screen.findByTestId('outlet-list')
-    // The demo tablets carry unsent bills on purpose, so the line has a
-    // subject from the moment the surface opens.
-    expect(await screen.findByTestId('raising-kalyani')).toHaveTextContent(
-      /holding 1 bill it has not managed to send/i,
-    )
-    expect(screen.getByTestId('raising-kanchrapara')).toHaveTextContent(
-      /holding 3 bills it has not managed to send/i,
-    )
-  })
-
-  it('says an outlet with no tablet cannot bill, and where the code comes from', async () => {
-    const adapters = createMockAdapters('super_admin')
-    adapters.counter.listDevices = () => Promise.resolve([])
-    render(
-      <MemoryRouter>
-        <SessionContext.Provider value={sessionFor('super_admin')}>
-          <AdaptersContext.Provider value={adapters}>
-            <OutletsSurface />
-          </AdaptersContext.Provider>
-        </SessionContext.Provider>
-      </MemoryRouter>,
-    )
-
-    expect(await screen.findByTestId('raising-kalyani')).toHaveTextContent(
-      /No tablet is set up at this counter.*Tablets issues a setup code/i,
-    )
-  })
-
-  it('says an unreadable tablet is unreadable, never that there is none', async () => {
-    const adapters = createMockAdapters('super_admin')
-    adapters.counter.listDevices = () => Promise.reject(new Error('offline'))
-    render(
-      <MemoryRouter>
-        <SessionContext.Provider value={sessionFor('super_admin')}>
-          <AdaptersContext.Provider value={adapters}>
-            <OutletsSurface />
-          </AdaptersContext.Provider>
-        </SessionContext.Provider>
-      </MemoryRouter>,
-    )
-
-    // Sending somebody to mint a setup code for hardware standing there working
-    // is worse than saying nothing.
-    const raising = await screen.findByTestId('raising-kalyani')
-    expect(raising).toHaveTextContent(/could not be read just now/i)
-    expect(raising).not.toHaveTextContent(/No tablet is set up/i)
-  })
-
-  it('says so plainly when an outlet is raising nothing', async () => {
-    const adapters = createMockAdapters('super_admin')
-    adapters.counter.listDevices = () =>
-      Promise.resolve([
-        {
-          id: 'device-1',
-          outletId: OUTLET_KALYANI_ID,
-          label: 'Counter tablet',
-          setUpAt: '2026-08-01T00:00:00Z',
-          lastSeenAt: new Date().toISOString(),
-          lastReportedUnresolved: 0,
-          lastReportedOldestUnresolvedAt: null,
-        },
-      ])
-    render(
-      <MemoryRouter>
-        <SessionContext.Provider value={sessionFor('super_admin')}>
-          <AdaptersContext.Provider value={adapters}>
-            <OutletsSurface />
-          </AdaptersContext.Provider>
-        </SessionContext.Provider>
-      </MemoryRouter>,
-    )
-
-    // An absent list would leave the reader unable to tell "nothing wrong" from
-    // "not loaded", on a screen whose whole question is whether the shop is
-    // all right.
-    expect(await screen.findByTestId('raising-kalyani')).toHaveTextContent(
-      /Nothing\. The counter tablet is reporting in and holding no unsent bills\./i,
+      `/outlets/${OUTLET_KANCHRAPARA_ID}`,
     )
   })
 })

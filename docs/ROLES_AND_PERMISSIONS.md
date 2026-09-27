@@ -272,9 +272,10 @@ for the stopgap and how it was discharged.
 ### A Franchise Admin reads their outlets, and writes none of them
 
 They had no Outlets surface at all until #51, and the gap became a hole in the
-same change: **Tablets left navigation entirely**, and `admin-devices` is the
-only place a counter setup code is minted. A Franchise Admin administers a
-tablet from an outlet they manage and from nowhere else; a Super Admin may
+same change: **Tablets left navigation entirely**, and since
+outlets-one-at-a-time the tablets are a section of the outlet's own page on
+Outlets, which is the only place a counter setup code is minted. A Franchise
+Admin administers a tablet from an outlet they manage and from nowhere else; a Super Admin may
 manage every outlet's tablet, including a controlled move between outlets. The
 surface exists for the counter, not for the outlet record.
 
@@ -431,7 +432,7 @@ placement by ending assignments.
 
 Two layers, because a shared device has a different threat model than a personal one — and **no password is ever typed on the tablet**, at setup or afterwards. That is the whole point of both of them.
 
-1. **Setup (once per tablet).** A Franchise Admin or Super Admin generates a **setup code** on their *own* phone, from the Tablets surface, and types it into the tablet at the counter. The privileged function re-derives the issuing admin's authority from the stored record, refuses a label a live counter at that outlet already holds, creates the machine Auth identity and the `counter_devices` row, and hands back the credential that establishes the device session. The tablet signs in with it and then **proves the session**, and only that makes the row a counter — so a lost response costs a code rather than a till. The code is stored only as a hash, is shown once, is single-use, and expires in fifteen minutes — exactly the shape `account_invites` already has, because it does the same job for a person.
+1. **Setup (once per tablet).** A Franchise Admin or Super Admin generates a **setup code** on their *own* phone, from the Tablets section of the outlet's page on Outlets, and types it into the tablet at the counter. The privileged function re-derives the issuing admin's authority from the stored record, refuses a label a live counter at that outlet already holds, creates the machine Auth identity and the `counter_devices` row, and hands back the credential that establishes the device session. The tablet signs in with it and then **proves the session**, and only that makes the row a counter — so a lost response costs a code rather than a till. The code is stored only as a hash, is shown once, is single-use, and expires in fifteen minutes — exactly the shape `account_invites` already has, because it does the same job for a person.
 
    The earlier design had an admin sign in on the tablet and destroyed that session afterwards. It was rejected: it types a personal password on the exact hardware this exists to keep passwords away from, and "we delete it immediately after" is a promise rather than a boundary.
 
@@ -444,7 +445,7 @@ Two layers, because a shared device has a different threat model than a personal
 **A tablet is not a person.** Its Auth user *is* its `counter_devices` row; it has no profile and no assignment, and the session path asks the tablet question before the profile one so a machine can never resolve as a person with some rows missing. Everything it reaches — the outlet, the menu, bills, the expense it may record — comes from `app_counter_shift_outlet()`, so **no shift means no reach at all**.
 
 **A tablet's outlet is a current assignment, not a permanent machine identity.**
-From Tablets, a Super Admin may edit its name and move it to another active
+From its outlet's page, a Super Admin may edit its name and move it to another active
 outlet in one atomic operation. A Franchise Admin may edit the name of a tablet
 at their own outlet, but the outlet is fixed and the database refuses a
 cross-outlet request even if somebody hand-crafts it. An outlet move requires no

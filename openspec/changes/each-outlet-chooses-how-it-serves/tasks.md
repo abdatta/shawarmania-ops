@@ -2,7 +2,7 @@
 
 > **Sequencing.** `outlets-one-at-a-time` builds the one-outlet page these
 > settings sit on. Walk its checkpoint first. #57 `a-gold-member-is-a-label`
-> must be **archived** before this archives, because this change modifies a
+> was archived on 2026-09-26, so nothing in it blocks this archive any longer, because this change modifies a
 > requirement #57's delta adds. It need not be archived before this one *starts*:
 > the tier snapshot and the counter's star are already live.
 
@@ -26,7 +26,7 @@
 ## 1. The Settings And The Counter, Against The Mock Only
 
 - [ ] 1.1 Add the settings to the typed adapter interface and the mock: the seven fields in design D1, with the mock enforcing the same consistency rules the database will. Add two demo outlets' worth of fixtures: one with every switch on (per bag ₹5, gold waiver, 8 tables) and one with every switch off. The live adapter returns all-off (D10).
-- [ ] 1.2 The Outlets page's **Orders** and **Packaging** sections, as sketched in the proposal: one switch each, and settings beneath that appear only while it is on. At least one type stays offered while the section is on. The table count is shown only with dine-in and tables. Per bag / flat switches the price label. Registered as a `demo`-gated part of the page so real users see nothing until section 5.
+- [ ] 1.2 The **Orders** and **Packaging** sections, as sketched in the proposal, **on the outlet's page** that `outlets-one-at-a-time` settled: each an `OutletSection` (`src/features/outlets/outlet-section.tsx`) placed between Details and Tablets, as tiles rather than sentences (that change's design D2 and D3 record why the owner turned sentences down): one switch each, and settings beneath that appear only while it is on. At least one type stays offered while the section is on. The table count is shown only with dine-in and tables. Per bag / flat switches the price label. Registered as a `demo`-gated part of the page so real users see nothing until section 5.
 - [ ] 1.3 A manager's page shows both sections **read-only**, for the outlets they manage and no others [owner, 2026-09-26]: each section states its current answers with no switches, chips or inputs, and a section that is off reads as off.
 - [ ] 1.4 The composer: type chips beside the customer control, only when offered. *Can skip* behaviour and the first-offered default (D9). Chips never block Save or Mark Paid.
 - [ ] 1.5 The table **popup** (D9) [owner, 2026-09-26], opened the way the customer keypad dialog opens: 1 to N, busy tables dimmed from the pipeline the tablet sees, tapping a busy table opens that order when this tablet owns it and otherwise says which tablet holds it, and *No table* closes it with dine-in and no table. The chip then reads *Dine-in · Table 4*, and tapping it reopens the popup.

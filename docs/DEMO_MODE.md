@@ -207,9 +207,9 @@ Both outlets are on one screen. Read the two sales figures aloud: they are diffe
 
 **Show the bar itself while you are here.** Four entries, all of them reachable with a thumb. Tap **Setup**: a card opens above the bar with a tail pointing at the tab that opened it, and the count that was sitting on Setup moves onto Delivery inside it. That is the rule worth naming out loud — folding a screen behind a heading must never fold what it is waiting on out of sight, so a shut group carries the sum and an open one shows the parts, and the two are never both on screen.
 
-Then open **Outlets** from inside Setup. Each card says what that shop is raising in words — a tablet holding bills it has not sent, a counter with no tablet at all — and carries a **Tablets** button that opens *that* outlet's tablet administration rather than a picker.
+Then open **Outlets** from inside Setup: a list, one row per outlet, each saying in one line how its tablets are — *1 unsent*, *3 unsent* — and whether the shop is Open or Closed, in plain words. Tap Kalyani: its own page, with its details as tiles and its **Tablets** underneath, all under its name. **Back** returns to the list; open the same page from Overview's *Online* link and Back returns to Overview instead.
 
-From **Tablets**, open **Edit** on one of the cards and rename it. Try moving a
+On that page's **Tablets**, open **Edit** on one of the cards and rename it. Try moving a
 card and read the confirmation before the default live/stale fixture refuses it;
 that refusal is the safety behavior. The component test supplies a fresh-zero
 idle fixture to cover the successful regrouping path. Switch to the manager
@@ -242,7 +242,7 @@ records what was true when it was rung.
 
 **Cash** — everything above the one input is worked out. Type a figure a couple of hundred short of the expected closing and watch the difference appear *as you type*, in words as well as sign. Then switch the day picker to yesterday: that day is closed, it was ₹240 short, and **a bill arrived after it was signed off** — reported as a reconciliation exception, with the closed figures untouched. That is the single most important thing this app does.
 
-**Outlets** — the manager reads the one shop they run, and nothing else. There is no Add, no Edit and no Delete, and that is the database's answer rather than the screen's. The **Tablets** button is the point of the surface: it is the only route to a counter setup code, so this is where a manager whose tablet died starts.
+**Outlets** — the manager's list holds the one shop they run, and nothing else. On its page there is no Edit, no Recapture and no Mark closed, and that is the database's answer rather than the screen's. Its **Tablets** section is the point of the surface: it is the only route to a counter setup code, so this is where a manager whose tablet died starts.
 
 **Customers** — the owner's surface over Kalyani's customers only. *Imran* and
 *Sourav* have only ever bought at Kanchrapara, so they cannot be found here at all.
