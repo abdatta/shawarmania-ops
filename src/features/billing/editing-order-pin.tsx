@@ -33,9 +33,12 @@ export function EditingOrderPin({
   lines,
   customerName,
   customerTier = null,
+  tableNumber = null,
   footer,
 }: {
   order: BillingOrder
+  /** The table the composer currently holds for it, which is what it is called. */
+  tableNumber?: number | null
   lines: BillLineDraft[]
   customerName: string
   /** What the composer currently says about the customer's membership. */
@@ -49,6 +52,7 @@ export function EditingOrderPin({
     >
       <OpenOrderCardBody
         orderNumber={order.orderNumber}
+        tableNumber={tableNumber}
         orderedAt={order.orderedAt}
         customerName={customerName.trim() === '' ? null : customerName}
         customerTier={customerTier}

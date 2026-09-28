@@ -3,18 +3,18 @@
 ### Requirement: An outlet chooses how it serves, and starts with nothing chosen
 
 Each outlet SHALL carry its own choices of: whether orders are marked dine-in,
-takeaway, or both; whether an order may be neither; whether dine-in orders take a
-table number, and how many tables there are; whether a packaging charge is added,
-per bag or as a flat amount per order, and at what price; and whether packaging
-is free for gold members.
+takeaway, or both; whether dine-in orders take a table number; whether a packaging charge is added to takeaway orders, as a
+flat amount per order or per bag, and at what price; and whether packaging is
+free for gold members.
 
 An outlet SHALL start with no order types offered, no tables and no packaging
 charge, and SHALL then bill exactly as an outlet did before these choices existed.
 
-The database SHALL refuse an inconsistent combination: a table count without
-dine-in offered, a packaging price without a packaging charge, a packaging price
-that is not a whole number of rupees from ₹1 to ₹500, or a gold waiver without a
-packaging charge.
+The database SHALL refuse an inconsistent combination: table numbers without
+dine-in offered, a packaging charge without takeaway offered, a packaging price
+without a packaging charge, a packaging price that is not a whole number of
+rupees of at least ₹1, or a gold waiver without a packaging charge. There SHALL be
+no upper limit on the packaging price.
 
 #### Scenario: A new outlet
 
@@ -23,85 +23,125 @@ packaging charge.
 
 #### Scenario: An inconsistent write
 
-- **WHEN** a request sets a table count on an outlet that does not offer dine-in
+- **WHEN** a request turns table numbers on at an outlet that does not offer dine-in
 - **THEN** the database refuses it
 
 ### Requirement: The settings page grows only with what is switched on
 
-The outlet's page SHALL show one switch for order types and one for packaging.
-The settings under a switch SHALL be shown only while that switch is on, and the
-table count only while dine-in is offered with tables on.
+The outlet's page SHALL show one switch for order types. The settings belonging
+to a switch SHALL be shown only while that switch is on, **inside** that switch's
+own area: the table-numbers switch while dine-in is offered, and the packaging charge
+while takeaway is offered.
 
 Turning order types on SHALL offer both types by default. Turning it off SHALL
-clear both types and the table count.
+clear both types, the table count and the packaging charge. Ceasing to offer
+takeaway SHALL clear the packaging charge. Turning the packaging charge on SHALL
+start at a flat amount per order.
 
 #### Scenario: A newcomer's page
 
 - **WHEN** the owner opens the page of an outlet with nothing chosen
-- **THEN** the two sections each show one switch, and nothing beneath them
+- **THEN** the page shows one switch, and nothing beneath it
 
 #### Scenario: Turning packaging on
 
-- **WHEN** the owner turns the packaging charge on
-- **THEN** the choice of per bag or flat, the price, and the gold waiver appear beneath it
+- **WHEN** the owner offers takeaway and turns its packaging charge on
+- **THEN** the choice of flat per order or per bag, with flat chosen, the price, and the gold waiver appear inside it
 
-### Requirement: Only the owner changes how an outlet serves
+#### Scenario: Takeaway is no longer offered
 
-The owner alone SHALL change an outlet's service choices. Every other principal,
-including a Franchise Admin of that outlet and a counter device, SHALL be refused
-by the database, however the request is made.
+- **WHEN** the owner stops offering takeaway at an outlet charging for packaging
+- **THEN** the packaging charge is cleared with it
 
-A Franchise Admin SHALL see the service choices of the outlets they manage,
-read-only, and SHALL see no other outlet's.
+### Requirement: The owner and the outlet's own managers change how it serves
 
-#### Scenario: A manager reads their own outlet's choices
+The owner SHALL be able to change any outlet's service choices, and a Franchise
+Admin SHALL be able to change those of the outlets they manage. Every other
+principal — a Franchise Admin of another outlet, a Biller, an Employee and a
+counter device — SHALL be refused by the database, however the request is made.
 
-- **WHEN** a Franchise Admin opens the page of an outlet they manage
-- **THEN** its order and packaging choices are shown with their current answers and no control to change them
+Allowing a manager to write these choices SHALL NOT allow them to write any other
+column of the outlet row, which the owner alone changes.
 
-#### Scenario: A manager's hand-crafted write
+#### Scenario: A manager changes their own outlet
 
-- **WHEN** a Franchise Admin sends a valid-session request setting their own outlet's packaging price
+- **WHEN** a Franchise Admin sets their own outlet's packaging price
+- **THEN** it is stored
+
+#### Scenario: A manager's hand-crafted write elsewhere
+
+- **WHEN** a Franchise Admin sends a valid-session request setting another outlet's packaging price
 - **THEN** the database refuses it and nothing changes
 
-### Requirement: An order is marked dine-in or takeaway, or neither where the outlet allows
+#### Scenario: A manager reaches past the service choices
 
-At an outlet offering order types, the counter SHALL offer each offered type as
-one tap. Where the outlet allows an order to be neither, no type SHALL need to be
-chosen, and the chosen type SHALL be clearable. Where it does not, the order SHALL
-start on the first offered type.
+- **WHEN** a Franchise Admin sends a valid-session request changing their own outlet's business-day cutover
+- **THEN** the database refuses it and nothing changes
 
-Marking an order SHALL never block saving or payment.
+### Requirement: The counter asks where the food goes only where there is a choice, and the answer is owed
 
-#### Scenario: Skipping is allowed
+The counter SHALL ask where the food goes, as one tap per offered type, exactly
+where there is a choice: at an outlet offering both types, and at an outlet
+offering dine-in with tables. It SHALL preselect nothing there, and the order
+SHALL NOT be saved or paid until the biller has answered: a type, and for
+dine-in with tables, a table or no table. An answer SHALL be changeable, and the
+biller SHALL be able to take it back by choosing the same type again, which
+leaves the order unanswered and SHALL again hold saving and payment.
 
-- **WHEN** a biller at an outlet allowing neither saves an order without marking it
-- **THEN** the order is saved as neither
+At an outlet offering exactly one type with nothing to choose within it, the
+counter SHALL show no choice, and every order SHALL be that type: takeaway at
+an outlet offering takeaway alone, and dine-in without a table at an outlet
+offering dine-in alone without tables.
 
-#### Scenario: Skipping is not allowed
+An order SHALL record neither only at an outlet offering no type, and for every
+order rung before these choices existed.
 
-- **WHEN** a biller at an outlet not allowing neither starts an order
-- **THEN** the order is already marked with the first offered type
+#### Scenario: Both types offered
 
-### Requirement: A dine-in order takes a table, and a busy table opens its order
+- **WHEN** a biller at an outlet offering both types adds items and identifies the customer without marking the order
+- **THEN** it cannot be saved or paid until dine-in or takeaway is chosen
 
-At an outlet with tables, marking an order dine-in SHALL open a popup offering
-the table numbers from one to the outlet's count. A table SHALL be shown busy while an open order at
-the outlet, as far as the tablet can see, carries it. Choosing a busy table SHALL
-open that order to add to it when this tablet owns it, and SHALL otherwise say
-the table is open on another tablet.
+#### Scenario: Takeaway alone
+
+- **WHEN** a biller at an outlet offering only takeaway starts an order
+- **THEN** no choice is shown and the order is takeaway
+
+#### Scenario: Dine-in alone, with tables
+
+- **WHEN** a biller at an outlet offering only dine-in, with tables, starts an order
+- **THEN** the order cannot be saved or paid until a table or no table is chosen
+
+### Requirement: A dine-in order takes a keyed table, and a busy table is refused
+
+At an outlet with table numbers, marking an order dine-in SHALL open a number pad
+on which the biller keys the table: one to three digits, 1 to 999, with no
+decimal point, no `00` and no leading nought. The outlet SHALL keep no count of
+its tables. A table SHALL be busy while an open order at the outlet, as far as
+the tablet can see, carries it. Keying a busy table SHALL be refused, shown in
+red with the reason, and the order SHALL NOT take it; an order being edited
+SHALL never be refused its own table.
 
 A table SHALL free when its order is paid or cancelled.
 
-Choosing a table SHALL be optional. A dine-in order without one SHALL be called by
-its order number.
+The biller SHALL answer with a table or with no table. A dine-in order without
+one SHALL be called by its order number.
 
 The database SHALL NOT refuse a second open order carrying the same table.
 
-#### Scenario: More food for table 4
+#### Scenario: A table already open
 
-- **WHEN** a biller marks a new order dine-in and taps table 4, which holds an open order this tablet owns
-- **THEN** that open order opens for editing, and no second order is started
+- **WHEN** a biller keys table 4 for a new order while table 4 holds an open order
+- **THEN** the pad shows 4 in red, says Table 4 is already open, offers a way to edit that order, and Done stays disabled
+
+#### Scenario: Going to the open table's order
+
+- **WHEN** the biller, refused table 4, takes the refusal's way to its order
+- **THEN** table 4's order opens for editing exactly as its own Edit would open it, and the bill that was in progress is kept and returns when the edit ends
+
+#### Scenario: Any number
+
+- **WHEN** a biller keys 120 at an outlet that has never said how many tables it has
+- **THEN** the order takes table 120
 
 #### Scenario: A table frees on payment
 
@@ -111,17 +151,24 @@ The database SHALL NOT refuse a second open order carrying the same table.
 #### Scenario: Two tablets seated one table offline
 
 - **WHEN** two orders for table 4 reach the server from tablets that could not see each other
-- **THEN** both are recorded, and the pipeline shows both as Table 4
+- **THEN** both are recorded, and the pipeline shows both as Table 4, each marked 1 of 2 or 2 of 2, oldest first
 
-### Requirement: Packaging is a line added to every order that is not dine-in
+#### Scenario: A payment taken back after the table was seated again
 
-At an outlet with a packaging charge, every order not marked dine-in SHALL carry
-one packaging line named *Packaging*, added automatically. Per bag, it SHALL start at one bag at
-the outlet's price per bag and change by the line's own quantity controls. Flat,
-it SHALL be one line at the outlet's amount.
+- **WHEN** a paid table-4 order is reopened by taking its payment back while another order is open at table 4
+- **THEN** both stay open at table 4 and each card says which of the two it is, until one is paid or cancelled
 
-The biller SHALL be able to remove it. Marking the order dine-in SHALL remove it,
-and marking it takeaway SHALL add it.
+### Requirement: Packaging is a line added to every takeaway order
+
+At an outlet with a packaging charge, every order marked takeaway SHALL carry one
+packaging line named *Packaging*, added automatically, and no other order SHALL.
+Per bag, it SHALL start at one bag at the outlet's price per bag and change by
+the line's own quantity controls. Flat, it SHALL be one line at the outlet's
+amount.
+
+The biller SHALL NOT be able to remove it or change its price. Per bag, the
+biller SHALL be able to change the number of bags, down to one. Marking the
+order dine-in SHALL remove it, and marking it takeaway SHALL add it.
 
 A packaging line SHALL snapshot its name and price like every line, SHALL be
 recorded as packaging rather than as a menu item, and SHALL NOT be reached by any

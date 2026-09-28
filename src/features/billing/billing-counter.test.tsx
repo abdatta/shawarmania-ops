@@ -21,6 +21,8 @@ import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
 
+import { ALL_OFF_SERVICE_SETTINGS, type OutletServiceSettings } from '@/domain'
+
 import { BillingCounter } from './billing-counter'
 
 /**
@@ -37,7 +39,31 @@ const billerSession: Session = {
   persona: personaFixtures.biller,
 }
 
-function renderCounter(adapters: DataAdapters = createMockAdapters('biller')) {
+/**
+ * Render the counter at an outlet serving the way `serving` says.
+ *
+ * **All-off unless a test asks otherwise.** The demo's Kalyani charges packaging
+ * and seats tables (#60), and almost everything in this file is about something
+ * else — discounts, customers, edits — asserted against the counter as it bills
+ * at an outlet that has chosen nothing. Pinning that here, rather than relying
+ * on a fixture, is also the claim that such an outlet's counter is unchanged.
+ */
+function renderCounter(
+  adapters: DataAdapters = createMockAdapters('biller'),
+  { serving = ALL_OFF_SERVICE_SETTINGS }: { serving?: OutletServiceSettings } = {},
+) {
+  const menu = adapters.menu
+  adapters = {
+    ...adapters,
+    menu: {
+      ...menu,
+      // Called on the original, so a spy a test put on it still sees the read.
+      readOutletMenu: async (outletId) => ({
+        ...(await menu.readOutletMenu(outletId)),
+        service: { ...serving },
+      }),
+    },
+  }
   return {
     adapters,
     ...render(
@@ -1207,5 +1233,415 @@ describe('BillingCounter — a discount survives the whole journey', () => {
     await person.click(screen.getByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
     expect(screen.getByTestId('bill-total')).toHaveTextContent('₹139')
     expect(screen.queryByTestId('discount-row-bill-0')).not.toBeInTheDocument()
+  })
+})
+
+describe('BillingCounter — how the outlet serves (#60)', () => {
+  /** Kalyani in the demo: every switch on. */
+  const SERVING: OutletServiceSettings = {
+    dineInOffered: true,
+    takeawayOffered: true,
+    tableNumbers: true,
+    packagingMode: 'per_bag',
+    packagingPricePaise: 500,
+    packagingFreeForGold: true,
+  }
+
+  function tableDialog() {
+    return screen.getByRole('dialog', { name: 'Which table' })
+  }
+
+  /** Key a table on the pad and confirm it, as a biller does. */
+  async function keyTable(person: ReturnType<typeof user>, digits: string) {
+    for (const digit of digits) {
+      await person.click(within(tableDialog()).getByRole('button', { name: digit }))
+    }
+    await person.click(within(tableDialog()).getByTestId('table-confirm'))
+  }
+
+  it('shows no chip and adds no packaging at an outlet that has chosen nothing', async () => {
+    const person = user()
+    renderCounter()
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    expect(screen.queryByTestId('service-chip-dine_in')).toBeNull()
+    expect(screen.queryByTestId('service-chip-takeaway')).toBeNull()
+    expect(screen.queryByTestId('bill-line-packaging')).toBeNull()
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹139')
+  })
+
+  it('adds one bag, last, when the order is marked takeaway, and counts bags like any line', async () => {
+    const person = user()
+    const { adapters } = renderCounter(createMockAdapters('biller'), { serving: SERVING })
+    const saveOrder = vi.spyOn(adapters.billing, 'saveOrder')
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    // Nothing is preselected, and a neither order carries no packaging.
+    expect(screen.getByTestId('service-chip-takeaway')).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByTestId('service-chip-dine_in')).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.queryByTestId('bill-line-packaging')).toBeNull()
+
+    await person.click(screen.getByTestId('service-chip-takeaway'))
+    expect(screen.getByTestId('service-chip-takeaway')).toHaveAttribute('aria-pressed', 'true')
+    const lines = within(screen.getByTestId('bill-lines')).getAllByRole('listitem')
+    expect(lines.at(-1)).toHaveAttribute('data-testid', 'bill-line-packaging')
+    expect(screen.getByTestId('bill-quantity-packaging')).toHaveTextContent('1')
+    await person.click(screen.getByRole('button', { name: 'One more Packaging' }))
+    expect(screen.getByTestId('bill-quantity-packaging')).toHaveTextContent('2')
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹149')
+
+    await skipCustomer(person)
+    await person.click(screen.getByTestId('save-order'))
+    const input = saveOrder.mock.calls[0]![0]
+    expect(input.serviceType).toBe('takeaway')
+    expect(input.tableNumber).toBeNull()
+    expect(input.lines.at(-1)).toMatchObject({
+      kind: 'packaging',
+      menuItemId: '',
+      itemName: 'Packaging',
+      unitPricePaise: 500,
+      quantity: 2,
+      discountPaise: 0,
+    })
+  })
+
+  it('takes the packaging off for dine-in and puts it back for takeaway', async () => {
+    const person = user()
+    renderCounter(createMockAdapters('biller'), {
+      serving: { ...SERVING, tableNumbers: false },
+    })
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.click(screen.getByTestId('service-chip-dine_in'))
+    expect(screen.queryByTestId('bill-line-packaging')).toBeNull()
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹139')
+
+    await person.click(screen.getByTestId('service-chip-takeaway'))
+    expect(screen.getByTestId('bill-quantity-packaging')).toHaveTextContent('1')
+
+    // The counter never removes packaging: bags count down to one and stop.
+    expect(screen.getByRole('button', { name: 'One fewer Packaging' })).toBeDisabled()
+    await person.click(screen.getByRole('button', { name: 'One more Packaging' }))
+    await person.click(screen.getByRole('button', { name: 'One fewer Packaging' }))
+    expect(screen.getByTestId('bill-quantity-packaging')).toHaveTextContent('1')
+    // Tapping the chosen chip again takes a mistaken tap back, packaging and all.
+    await person.click(screen.getByTestId('service-chip-takeaway'))
+    expect(screen.getByTestId('service-chip-takeaway')).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.queryByTestId('bill-line-packaging')).toBeNull()
+  })
+
+  it('preselects nothing, and holds Order and Paid until a type is chosen', async () => {
+    const person = user()
+    renderCounter(createMockAdapters('biller'), {
+      serving: { ...SERVING, tableNumbers: false },
+    })
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    expect(screen.getByTestId('service-chip-dine_in')).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByTestId('service-chip-takeaway')).toHaveAttribute('aria-pressed', 'false')
+    await skipCustomer(person)
+    expect(screen.getByTestId('save-order')).toBeDisabled()
+    expect(screen.getByTestId('settle')).toBeDisabled()
+
+    await person.click(screen.getByTestId('service-chip-dine_in'))
+    expect(screen.getByTestId('save-order')).toBeEnabled()
+    // A mistaken tap is taken back by tapping again, and the answer is owed again.
+    await person.click(screen.getByTestId('service-chip-dine_in'))
+    expect(screen.getByTestId('service-chip-dine_in')).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByTestId('save-order')).toBeDisabled()
+    expect(screen.getByTestId('settle')).toBeDisabled()
+  })
+
+  it('asks nothing at a takeaway-only shop: every order is takeaway, with its packaging', async () => {
+    const person = user()
+    const { adapters } = renderCounter(createMockAdapters('biller'), {
+      serving: { ...SERVING, dineInOffered: false, tableNumbers: false },
+    })
+    const saveOrder = vi.spyOn(adapters.billing, 'saveOrder')
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    expect(screen.queryByTestId('service-chip-takeaway')).toBeNull()
+    expect(screen.getByTestId('bill-quantity-packaging')).toHaveTextContent('1')
+    await skipCustomer(person)
+    await person.click(screen.getByTestId('save-order'))
+    expect(saveOrder.mock.calls[0]![0].serviceType).toBe('takeaway')
+  })
+
+  it('asks nothing at a dine-in-only shop without tables: every order is dine-in', async () => {
+    const person = user()
+    const { adapters } = renderCounter(createMockAdapters('biller'), {
+      serving: {
+        ...ALL_OFF_SERVICE_SETTINGS,
+        dineInOffered: true,
+      },
+    })
+    const saveOrder = vi.spyOn(adapters.billing, 'saveOrder')
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    expect(screen.queryByTestId('service-chip-dine_in')).toBeNull()
+    await skipCustomer(person)
+    await person.click(screen.getByTestId('save-order'))
+    expect(saveOrder.mock.calls[0]![0]).toMatchObject({ serviceType: 'dine_in', tableNumber: null })
+  })
+
+  it('makes the biller answer the table at a dine-in-only shop with tables, No table included', async () => {
+    const person = user()
+    const { adapters } = renderCounter(createMockAdapters('biller'), {
+      serving: { ...ALL_OFF_SERVICE_SETTINGS, dineInOffered: true, tableNumbers: true },
+    })
+    const saveOrder = vi.spyOn(adapters.billing, 'saveOrder')
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    expect(screen.getByTestId('service-chip-dine_in')).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.queryByTestId('service-chip-takeaway')).toBeNull()
+    await skipCustomer(person)
+    expect(screen.getByTestId('save-order')).toBeDisabled()
+
+    await person.click(screen.getByTestId('service-chip-dine_in'))
+    // Nothing to be neither of, so the popup offers no way out of dine-in.
+    expect(within(tableDialog()).queryByTestId('table-clear')).toBeNull()
+    await person.click(within(tableDialog()).getByTestId('table-none'))
+    expect(screen.getByTestId('service-chip-dine_in')).toHaveTextContent(/^No table$/)
+    expect(screen.getByTestId('save-order')).toBeEnabled()
+    await person.click(screen.getByTestId('save-order'))
+    expect(saveOrder.mock.calls[0]![0]).toMatchObject({ serviceType: 'dine_in', tableNumber: null })
+  })
+
+  it('makes a gold member free of packaging, and charges it again for somebody else', async () => {
+    const person = user()
+    const { adapters } = renderCounter(createMockAdapters('biller'), { serving: SERVING })
+    const saveOrder = vi.spyOn(adapters.billing, 'saveOrder')
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.click(screen.getByTestId('service-chip-takeaway'))
+    await identifyCustomer(person, '9000000101')
+    expect(screen.getByTestId('bill-line-packaging')).toHaveAttribute('data-waived')
+    expect(screen.getByTestId('bill-line-packaging')).toHaveTextContent('Free')
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹139')
+    // No row claims a menu discount the owner never ran.
+    expect(screen.queryByTestId('bill-discount-rows')).toBeNull()
+
+    await skipCustomer(person)
+    expect(screen.getByTestId('bill-line-packaging')).not.toHaveAttribute('data-waived')
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹144')
+
+    await identifyCustomer(person, '9000000101')
+    await person.click(screen.getByTestId('save-order'))
+    expect(saveOrder.mock.calls[0]![0].lines.at(-1)).toMatchObject({
+      kind: 'packaging',
+      discountPaise: 500,
+      discountPercentBp: 10_000,
+    })
+  })
+
+  it('says which of two open orders at one table each card is, oldest first', async () => {
+    const person = user()
+    const store = createDemoStore()
+    const [older, newer] = [104, 105].map((number) =>
+      store.orders.find((order) => order.order_number === number)!,
+    )
+    // Reachable for real: a payment taken back after the table was seated again.
+    for (const order of [older!, newer!]) {
+      store.orderService.set(order.id, { serviceType: 'dine_in', tableNumber: 8 })
+    }
+    renderCounter(
+      { ...createMockAdapters('biller'), billing: createMockBillingAdapter(store) },
+      { serving: SERVING },
+    )
+
+    const rail = await screen.findByTestId('counter-activity-rail')
+    expect(await within(rail).findByTestId(`order-shared-table-${older!.id}`)).toHaveTextContent(
+      '1 of 2',
+    )
+    expect(within(rail).getByTestId(`order-shared-table-${newer!.id}`)).toHaveTextContent('2 of 2')
+
+    // Paid, the newer one has freed the table, and the older stands alone again.
+    const newerCard = within(rail).getByTestId('open-order-105')
+    await person.click(within(newerCard).getByRole('button', { name: /^Paid$/ }))
+    const payment = screen.getByRole('dialog', { name: 'Record payment' })
+    await person.click(within(payment).getByRole('button', { name: 'Cash' }))
+    await person.click(within(payment).getByRole('button', { name: 'Paid' }))
+    await waitFor(() =>
+      expect(within(rail).queryByTestId(`order-shared-table-${older!.id}`)).toBeNull(),
+    )
+  })
+
+  it('seats a table from the popup, and calls the order by it', async () => {
+    const person = user()
+    const { adapters } = renderCounter(createMockAdapters('biller'), { serving: SERVING })
+    const saveOrder = vi.spyOn(adapters.billing, 'saveOrder')
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.click(screen.getByTestId('service-chip-dine_in'))
+    // A number pad: no count of tables, no decimal point, no double nought.
+    const pad = within(tableDialog())
+    expect(pad.queryByRole('button', { name: '.' })).toBeNull()
+    expect(pad.queryByRole('button', { name: '00' })).toBeNull()
+    expect(pad.getByTestId('table-confirm')).toBeDisabled()
+    await keyTable(person, '3')
+
+    // The chip reads the answer alone.
+    expect(screen.getByTestId('service-chip-dine_in')).toHaveTextContent(/^Table 3$/)
+    expect(screen.queryByTestId('bill-line-packaging')).toBeNull()
+    await skipCustomer(person)
+    await person.click(screen.getByTestId('save-order'))
+    expect(saveOrder.mock.calls[0]![0]).toMatchObject({ serviceType: 'dine_in', tableNumber: 3 })
+
+    const rail = await screen.findByTestId('counter-activity-rail')
+    const reference = await within(rail).findByText('Table 3')
+    // The table replaces the number; it does not sit beside it.
+    expect(reference.textContent).toBe('Table 3')
+  })
+
+  it('takes any table up to three digits, and never a leading nought', async () => {
+    const person = user()
+    const { adapters } = renderCounter(createMockAdapters('biller'), { serving: SERVING })
+    const saveOrder = vi.spyOn(adapters.billing, 'saveOrder')
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.click(screen.getByTestId('service-chip-dine_in'))
+    const pad = within(tableDialog())
+    await person.click(pad.getByRole('button', { name: '0' }))
+    expect(pad.getByTestId('table-readout')).toHaveTextContent(/^Table\s*$/)
+    for (const digit of '1204') await person.click(pad.getByRole('button', { name: digit }))
+    // The fourth digit is not taken.
+    expect(pad.getByTestId('table-readout')).toHaveTextContent('Table 120')
+    await person.click(pad.getByTestId('table-confirm'))
+    expect(screen.getByTestId('service-chip-dine_in')).toHaveTextContent(/^Table 120$/)
+
+    await skipCustomer(person)
+    await person.click(screen.getByTestId('save-order'))
+    expect(saveOrder.mock.calls[0]![0]).toMatchObject({ serviceType: 'dine_in', tableNumber: 120 })
+  })
+
+  it('refuses a table that already has an open order, in red, and seats no second order', async () => {
+    const person = user()
+    const { adapters } = renderCounter(createMockAdapters('biller'), { serving: SERVING })
+    const saveOrder = vi.spyOn(adapters.billing, 'saveOrder')
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.click(screen.getByTestId('service-chip-dine_in'))
+    await keyTable(person, '4')
+    await skipCustomer(person)
+    await person.click(screen.getByTestId('save-order'))
+    await within(await screen.findByTestId('counter-activity-rail')).findByText('Table 4')
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_MAYO_ID}`))
+    await person.click(screen.getByTestId('service-chip-dine_in'))
+    const pad = within(tableDialog())
+    await person.click(pad.getByRole('button', { name: '4' }))
+
+    const refusal = await pad.findByTestId('table-busy')
+    // One line: what is wrong, and a way to the order that has the table.
+    expect(refusal).toHaveTextContent('Table 4 is already open. Edit here.')
+    expect(within(refusal).getByRole('button', { name: 'Edit here.' })).toBeInTheDocument()
+    expect(pad.getByTestId('table-busy')).toHaveAttribute('role', 'alert')
+    expect(pad.getByTestId('table-confirm')).toBeDisabled()
+
+    // A different table is fine.
+    await person.click(pad.getByRole('button', { name: 'Delete last digit' }))
+    await keyTable(person, '5')
+    expect(screen.getByTestId('service-chip-dine_in')).toHaveTextContent(/^Table 5$/)
+    expect(saveOrder).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens the busy table’s order from the refusal, exactly as its Edit does', async () => {
+    const person = user()
+    renderCounter(createMockAdapters('biller'), { serving: SERVING })
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.click(screen.getByTestId('service-chip-dine_in'))
+    await keyTable(person, '4')
+    await skipCustomer(person)
+    await person.click(screen.getByTestId('save-order'))
+    await within(await screen.findByTestId('counter-activity-rail')).findByText('Table 4')
+
+    // A new bill in progress, then table 4 keyed again.
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_MAYO_ID}`))
+    await person.click(screen.getByTestId('service-chip-dine_in'))
+    await person.click(within(tableDialog()).getByRole('button', { name: '4' }))
+    await person.click(await within(tableDialog()).findByTestId('table-open-order'))
+
+    // Table 4's order is on the composer, as its card's Edit would put it.
+    expect(screen.queryByRole('dialog', { name: 'Which table' })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Editing Table 4' })).toBeInTheDocument()
+    expect(screen.getByTestId(`bill-line-${MENU_ITEM_CLASSIC_ID}`)).toBeInTheDocument()
+    expect(screen.queryByTestId(`bill-line-${MENU_ITEM_MAYO_ID}`)).toBeNull()
+
+    // And the bill that was in progress comes back when the edit ends.
+    await person.click(screen.getByTestId('cancel-edit'))
+    expect(screen.getByTestId(`bill-line-${MENU_ITEM_MAYO_ID}`)).toBeInTheDocument()
+  })
+
+  it('only says what to do, while another order is being edited', async () => {
+    const person = user()
+    renderCounter(createMockAdapters('biller'), { serving: SERVING })
+
+    for (const table of ['4', '7']) {
+      await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+      await person.click(screen.getByTestId('service-chip-dine_in'))
+      await keyTable(person, table)
+      await skipCustomer(person)
+      await person.click(screen.getByTestId('save-order'))
+      await within(await screen.findByTestId('counter-activity-rail')).findByText(`Table ${table}`)
+    }
+
+    const rail = screen.getByTestId('counter-activity-rail')
+    const card = within(rail).getByText('Table 7').closest('article') as HTMLElement
+    await person.click(within(card).getByRole('button', { name: /^More actions for/ }))
+    await person.click(within(card).getByRole('menuitem', { name: 'Edit' }))
+    await person.click(screen.getByTestId('service-chip-dine_in'))
+    await person.click(within(tableDialog()).getByRole('button', { name: 'Delete last digit' }))
+    await person.click(within(tableDialog()).getByRole('button', { name: '4' }))
+
+    const refusal = await within(tableDialog()).findByTestId('table-busy')
+    // Nothing to do from inside another edit, so nothing is offered.
+    expect(refusal).toHaveTextContent(/^Table 4 is already open\.$/)
+    expect(within(refusal).queryByRole('button')).toBeNull()
+  })
+
+  it('lets an order being edited keep its own table', async () => {
+    const person = user()
+    renderCounter(createMockAdapters('biller'), { serving: SERVING })
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.click(screen.getByTestId('service-chip-dine_in'))
+    await keyTable(person, '7')
+    await skipCustomer(person)
+    await person.click(screen.getByTestId('save-order'))
+
+    const rail = await screen.findByTestId('counter-activity-rail')
+    const card = (await within(rail).findByText('Table 7')).closest('article')!
+    await person.click(
+      within(card as HTMLElement).getByRole('button', { name: /^More actions for/ }),
+    )
+    await person.click(within(card as HTMLElement).getByRole('menuitem', { name: 'Edit' }))
+    await person.click(screen.getByTestId('service-chip-dine_in'))
+
+    // Its own table reads as its own, not as busy.
+    expect(within(tableDialog()).getByTestId('table-readout')).toHaveTextContent('Table 7')
+    expect(within(tableDialog()).queryByTestId('table-busy')).toBeNull()
+    expect(within(tableDialog()).getByTestId('table-confirm')).toBeEnabled()
+  })
+
+  it('leaves a flat packaging charge alone: no count, no removal, no repricing', async () => {
+    const person = user()
+    renderCounter(createMockAdapters('biller'), {
+      serving: {
+        ...SERVING,
+        tableNumbers: false,
+        packagingMode: 'per_order',
+        packagingPricePaise: 1000,
+      },
+    })
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.click(screen.getByTestId('service-chip-takeaway'))
+    expect(screen.getByTestId('bill-line-packaging')).toHaveTextContent('₹10')
+    const line = screen.getByTestId('bill-line-packaging')
+    expect(within(line).queryByRole('button')).toBeNull()
+    // Only leaving takeaway takes it off.
+    await person.click(screen.getByTestId('service-chip-dine_in'))
+    expect(screen.queryByTestId('bill-line-packaging')).toBeNull()
   })
 })

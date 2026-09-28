@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/button'
 import { MemberMark } from '@/components/ui/member-mark'
 import { Money } from '@/components/ui/money'
 import type { BillingBill } from '@/data-access/adapters'
-import { formatDayTime, lineTotalPaise } from '@/domain'
+import { formatDayTime, tableLabel } from '@/domain'
 import { cn } from '@/lib/cn'
+
+import { LineAmount } from './line-amount'
 
 function methodLabel(method: BillingBill['paymentMethod']) {
   return method === 'upi' ? 'UPI' : method[0]!.toUpperCase() + method.slice(1)
@@ -88,10 +90,20 @@ function BillRow({
               <span className="font-bold">
                 {bill.billNumber > 0 ? `Bill ${bill.billNumber}` : 'Bill pending'}
               </span>
-              {bill.orderNumber !== null && (
-                <span className="text-xs font-semibold text-content-muted">
-                  Order {bill.orderNumber}
+              {/* A table replaces the order number [owner, 2026-09-26]. */}
+              {bill.tableNumber != null ? (
+                <span
+                  className="text-xs font-semibold text-content-muted"
+                  data-testid={`shift-bill-table-${bill.id}`}
+                >
+                  {tableLabel(bill.tableNumber)}
                 </span>
+              ) : (
+                bill.orderNumber !== null && (
+                  <span className="text-xs font-semibold text-content-muted">
+                    Order {bill.orderNumber}
+                  </span>
+                )
               )}
               {/*
                 In the row a biller scans rather than behind the expander, and
@@ -135,10 +147,7 @@ function BillRow({
                     {line.quantity} × <Money paise={line.unitPricePaise} />
                   </p>
                 </div>
-                <Money
-                  paise={lineTotalPaise(line.unitPricePaise, line.quantity)}
-                  className="self-center text-sm font-semibold"
-                />
+                <LineAmount line={line} className="self-center text-sm font-semibold" />
               </li>
             ))}
           </ul>

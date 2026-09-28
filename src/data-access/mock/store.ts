@@ -1,4 +1,5 @@
 import {
+  ALL_OFF_SERVICE_SETTINGS,
   billTotals,
   discountAmountPaise,
   instantOnBusinessDay,
@@ -6,6 +7,7 @@ import {
   normalizeCategory,
   resolveBusinessDate,
   shiftBusinessDate,
+  type OutletServiceSettings,
 } from '@/domain'
 
 import type { CounterResumeRecord } from '@/outbox'
@@ -17,6 +19,7 @@ import type {
   DiscountPreset,
   MenuDiscount,
   PaymentAllocation,
+  ServiceFacts,
 } from '../adapters'
 import {
   billSeedItemId,
@@ -83,6 +86,31 @@ export interface DemoStore {
    * and a slice with two owners is a design mistake rather than a convenience.
    */
   discountPresets: Map<string, DiscountPreset[]>
+  /**
+   * How each outlet serves (each-outlet-chooses-how-it-serves). Owned by the
+   * outlets adapter, which alone writes it; read by the menu adapter, which
+   * hands it to the counter with the menu (design D6). An outlet absent here has
+   * chosen nothing.
+   *
+   * **Kalyani has chosen nothing and Kanchrapara everything.** Kalyani is
+   * where the demo's counter stands, so a walkthrough — and every counter test —
+   * starts on the counter exactly as it bills today, and the owner turns
+   * Kalyani's switches on to show what they do there. Kanchrapara is the page
+   * already grown.
+   */
+  serviceSettings: Map<string, OutletServiceSettings>
+  /**
+   * How each order and bill was served, keyed by its id, and which order and
+   * bill lines are packaging.
+   *
+   * Beside the rows rather than on them because the schema has no such columns
+   * until the database section of #60, and fixtures are typed from the schema:
+   * a column invented here would be a fixture the database could not serve. The
+   * same shape #57 used for tiers before its migration.
+   */
+  orderService: Map<string, Required<ServiceFacts>>
+  billService: Map<string, Required<ServiceFacts>>
+  packagingLineIds: Set<string>
   /** Read-only here; #9 owns enrolment. */
   counterDevices: Tables<'counter_devices'>[]
   /** Effective-dated display identity; current authority stays on counterDevices. */
@@ -1362,6 +1390,25 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     orderItems,
     orderDiscounts: new Map(),
     billDiscounts: new Map(),
+    serviceSettings: new Map([
+      [DEMO_OUTLET_ID, { ...ALL_OFF_SERVICE_SETTINGS }],
+      [
+        DEMO_SECOND_OUTLET_ID,
+        {
+          dineInOffered: true,
+          takeawayOffered: true,
+          tableNumbers: true,
+          packagingMode: 'per_bag',
+          packagingPricePaise: 500,
+          packagingFreeForGold: true,
+        },
+      ],
+    ]),
+    // Empty: the seeded orders predate these choices, and read as neither. The
+    // walkthrough seats its own table before it adds to a busy one.
+    orderService: new Map(),
+    billService: new Map(),
+    packagingLineIds: new Set(),
     orderNumbers,
     billingCommands,
     billingQueueSeeds,

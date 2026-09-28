@@ -2,14 +2,18 @@ import { MoreVertical, UserRound } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { Chip } from '@/components/ui/chip'
 import { MemberMark } from '@/components/ui/member-mark'
 import { Modal } from '@/components/ui/modal'
 import { Shimmer } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import type { BillingOrder } from '@/data-access/adapters'
+import type { SharedTable } from '@/domain'
 import {
   formatRecentAge,
   isAwaitingOrderNumber,
+  serviceTypeLabel,
+  tableLabel,
   ticketEditDeadlineMs,
   UNSENT_ORDER_REFERENCE,
 } from '@/domain'
@@ -44,6 +48,7 @@ export function PipelineCard({
   busy = false,
   editDisabled = false,
   tenderLabel = null,
+  sharedTable = null,
   onEdit,
   onMarkPrepared,
   onUnprepare,
@@ -68,6 +73,11 @@ export function PipelineCard({
   editDisabled?: boolean
   /** Resolved from the bill when known, so the take-back can name what it returns. */
   tenderLabel?: string | null
+  /**
+   * Where another open order holds the same table, this one's place among them,
+   * oldest first. Allowed, never refused (design D5), so the card says so.
+   */
+  sharedTable?: SharedTable | null
   onEdit?: (order: BillingOrder) => void
   onMarkPrepared: (order: BillingOrder) => void
   onUnprepare: (order: BillingOrder) => void
@@ -122,9 +132,20 @@ export function PipelineCard({
   /** The list price, shown struck through only when a discount moved it. */
   const grossPaise = order.lines.reduce((sum, line) => sum + line.unitPricePaise * line.quantity, 0)
   const discounted = grossPaise > totalPaise
-  const awaitingNumber = isAwaitingOrderNumber(order.orderNumber)
+  /*
+    A table **replaces** the number on this card [owner, 2026-09-26]: the
+    kitchen takes the food to table 4, not to an order number. The number is still
+    allocated and stored, and an order with a table never waits on one.
+  */
+  const table = order.serviceType === 'dine_in' ? (order.tableNumber ?? null) : null
+  const awaitingNumber = table === null && isAwaitingOrderNumber(order.orderNumber)
   const member = order.customerTier === 'gold'
-  const reference = awaitingNumber ? UNSENT_ORDER_REFERENCE : `Order #${order.orderNumber}`
+  const reference =
+    table !== null
+      ? tableLabel(table)
+      : awaitingNumber
+        ? UNSENT_ORDER_REFERENCE
+        : `Order #${order.orderNumber}`
   const isPaid = order.status === 'paid'
   const prepared = order.preparedAt !== null
   /*
@@ -237,7 +258,9 @@ export function PipelineCard({
     <article
       data-flip-id={order.id}
       data-testid={
-        awaitingNumber ? `open-order-local-${order.id}` : `open-order-${order.orderNumber}`
+        isAwaitingOrderNumber(order.orderNumber)
+          ? `open-order-local-${order.id}`
+          : `open-order-${order.orderNumber}`
       }
       data-paid={isPaid || undefined}
       className="rounded-xl border border-border bg-surface-raised px-2 py-1.5"
@@ -259,10 +282,31 @@ export function PipelineCard({
               <Shimmer className="h-6 w-12 rounded-md" />
               <span className="sr-only">Order number not yet assigned</span>
             </>
+          ) : table !== null ? (
+            tableLabel(table)
           ) : (
             `#${order.orderNumber}`
           )}
         </span>
+        {/*
+          Two open orders on one table: both allowed, both shown, and each says
+          which it is — 1 is the older [owner, 2026-09-27]. The warning fill,
+          because it is the one thing on the card the biller has to sort out.
+        */}
+        {table !== null && sharedTable && (
+          <Chip
+            tone="warn"
+            className="shrink-0 self-center"
+            data-testid={`order-shared-table-${order.id}`}
+          >
+            <span aria-hidden>
+              {sharedTable.position} of {sharedTable.of}
+            </span>
+            <span className="sr-only">
+              Order {sharedTable.position} of {sharedTable.of} at {tableLabel(table)}
+            </span>
+          </Chip>
+        )}
         <div className="min-w-0 flex-1 self-center">
           {(order.customerName || member) && (
             <div className="flex min-w-0 items-center gap-1 text-sm font-black leading-5 text-content">
@@ -282,6 +326,19 @@ export function PipelineCard({
             data-testid={`order-metadata-${order.id}`}
             className="flex min-w-0 items-center gap-x-1.5 text-xs leading-4 text-content-muted"
           >
+            {/*
+              Where the food goes, so the kitchen can tell a plate from a parcel
+              (#60). A table already says dine-in in the reference, so only an
+              order without one needs the word.
+            */}
+            {order.serviceType && table === null && (
+              <span
+                className="font-semibold text-content"
+                data-testid={`order-service-${order.id}`}
+              >
+                {serviceTypeLabel(order.serviceType)} ·
+              </span>
+            )}
             <span>{formatRecentAge(order.orderedAt)}</span>
             {showCreator && <span className="truncate">· {order.creatorName}</span>}
             {otherTill && (

@@ -1,5 +1,5 @@
 import type { AppRole, AttendanceAdapter, DataAdapters } from '../adapters'
-import { assignedOutlets } from '../adapters'
+import { assignedOutlets, outletsForRole } from '../adapters'
 import { createMockAddressLookupAdapter } from './address-lookup'
 import { createMockAggregatorSyncAdapter } from './aggregator-sync'
 import { DEMO_OUTLET_ID, DEMO_SECOND_OUTLET_ID } from './store'
@@ -147,6 +147,17 @@ export function createMockAdapters(
       role === 'super_admin'
         ? null
         : persona.assignments.filter((a) => a.endedOn === null).map((a) => a.outletId ?? ''),
+      // How an outlet serves is written by the owner anywhere and by a manager
+      // at the outlets they manage [owner, 2026-09-27]; nobody else writes it.
+      {
+        settings: store.serviceSettings,
+        writable:
+          role === 'super_admin'
+            ? null
+            : role === 'franchise_admin'
+              ? outletsForRole(persona.assignments, 'franchise_admin')
+              : [],
+      },
     ),
     // The persona's role and id reach the accounts mock so it refuses a
     // manager assigning themselves exactly where the database will.

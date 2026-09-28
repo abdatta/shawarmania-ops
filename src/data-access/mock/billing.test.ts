@@ -918,4 +918,148 @@ describe('mock billing adapter', () => {
       ).toBe(false)
     })
   })
+
+  /**
+   * How an order was served, and its packaging (each-outlet-chooses-how-it-serves).
+   *
+   * The mock holds these beside the rows until the database carries them, so
+   * each test here reads them back through the adapter rather than off the
+   * store, which is where the live adapter will read them too.
+   */
+  describe('how an order was served (#60)', () => {
+    const bag = (quantity: number, waived = false) => ({
+      kind: 'packaging' as const,
+      menuItemId: '',
+      itemName: 'Packaging',
+      unitPricePaise: 500,
+      quantity,
+      discountPaise: waived ? 500 * quantity : 0,
+      discountPercentBp: waived ? 10_000 : null,
+      categoryName: null,
+    })
+
+    it('settles offline orders exactly once with their type, table, bags and waiver', async () => {
+      const store = createDemoStore()
+      const adapter = createMockBillingAdapter(store)
+      const unsubscribe = adapter.subscribeCounter(() => {})
+      const ordersBefore = store.orders.length
+      const billsBefore = store.bills.length
+      setOnline(false)
+
+      const table = await adapter.saveOrder({
+        ...orderDraft(store, '60000000-0000-4000-8000-000000000001'),
+        serviceType: 'dine_in',
+        tableNumber: 3,
+      })
+      const takeaway = await adapter.saveOrder({
+        ...orderDraft(store, '60000000-0000-4000-8000-000000000002'),
+        lines: [...orderDraft(store, 'x').lines, bag(1)],
+        serviceType: 'takeaway',
+      })
+      // Revised offline: a second bag, and a gold member identified, which
+      // makes both bags free.
+      await adapter.reviseOrder(takeaway.id, {
+        lines: [...orderDraft(store, 'x').lines, bag(2, true)],
+        customerName: 'Ritika Sen',
+        customerPhone: '+919000000101',
+        customerTier: 'gold',
+        serviceType: 'takeaway',
+        tableNumber: null,
+      })
+      // Offline, the pipeline already calls the first by its table.
+      const pipeline = await adapter.listOpenOrders(DEMO_OUTLET_ID)
+      expect(pipeline.find((order) => order.id === table.id)).toMatchObject({
+        serviceType: 'dine_in',
+        tableNumber: 3,
+      })
+
+      await adapter.markOrderPrepared(takeaway.id, true)
+      await adapter.payOrder(takeaway.id, [{ method: 'cash', amountPaise: 13900 }])
+      await adapter.settleBill({
+        ...draft(store, '60000000-0000-4000-8000-000000000003'),
+        payments: [{ method: 'upi', amountPaise: 14400 }],
+        lines: [...draft(store, 'x').lines, bag(1)],
+        serviceType: 'takeaway',
+      })
+
+      setOnline(true)
+      await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+
+      // Exactly once each: two orders and two bills, nothing duplicated.
+      expect(store.orders.length).toBe(ordersBefore + 2)
+      expect(store.bills.length).toBe(billsBefore + 2)
+
+      const open = await adapter.listOpenOrders(DEMO_OUTLET_ID)
+      expect(open.find((order) => order.id === table.id)).toMatchObject({
+        serviceType: 'dine_in',
+        tableNumber: 3,
+      })
+
+      const history = await adapter.listShiftHistory(DEMO_OPEN_SHIFT_ID)
+      const paidTakeaway = history.bills.find((bill) => bill.orderId === takeaway.id)
+      expect(paidTakeaway).toMatchObject({ serviceType: 'takeaway', tableNumber: null })
+      expect(paidTakeaway?.totalPaise).toBe(13900)
+      expect(paidTakeaway?.lines.at(-1)).toMatchObject({
+        kind: 'packaging',
+        menuItemId: '',
+        quantity: 2,
+        discountPaise: 1000,
+        discountPercentBp: 10_000,
+      })
+
+      const direct = history.bills.find(
+        (bill) => bill.id === '60000000-0000-4000-8000-000000000003',
+      )
+      expect(direct).toMatchObject({ serviceType: 'takeaway', totalPaise: 14400 })
+      expect(direct?.lines.at(-1)).toMatchObject({ kind: 'packaging', quantity: 1 })
+      unsubscribe()
+    })
+
+    it('records two open orders on one table, because refusing either would refuse a sale', async () => {
+      const store = createDemoStore()
+      const adapter = createMockBillingAdapter(store)
+      for (const id of [
+        '60000000-0000-4000-8000-000000000011',
+        '60000000-0000-4000-8000-000000000012',
+      ]) {
+        await adapter.saveOrder({
+          ...orderDraft(store, id),
+          serviceType: 'dine_in',
+          tableNumber: 4,
+        })
+      }
+      await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+
+      const atFour = (await adapter.listOpenOrders(DEMO_OUTLET_ID)).filter(
+        (order) => order.tableNumber === 4,
+      )
+      expect(atFour).toHaveLength(2)
+    })
+
+    it('refuses the shapes the boundary will refuse, and nothing is written', async () => {
+      const store = createDemoStore()
+      const adapter = createMockBillingAdapter(store)
+      const before = store.orders.length
+      const base = orderDraft(store, '60000000-0000-4000-8000-000000000021')
+
+      await expect(
+        adapter.saveOrder({ ...base, serviceType: 'takeaway', tableNumber: 4 }),
+      ).rejects.toMatchObject({ code: 'malformed' })
+      await expect(
+        adapter.saveOrder({ ...base, lines: [...base.lines, bag(1), bag(1)] }),
+      ).rejects.toMatchObject({ code: 'malformed' })
+      await expect(
+        adapter.saveOrder({ ...base, lines: [...base.lines, { ...bag(2), discountPaise: 500 }] }),
+      ).rejects.toMatchObject({ code: 'malformed' })
+      await expect(
+        adapter.saveOrder({
+          ...base,
+          lines: [...base.lines, { ...bag(1), menuItemId: MENU_ITEM_CLASSIC_ID }],
+        }),
+      ).rejects.toMatchObject({ code: 'malformed' })
+
+      await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+      expect(store.orders.length).toBe(before)
+    })
+  })
 })

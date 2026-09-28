@@ -57,6 +57,11 @@ import {
 } from '@/domain'
 import { OutletTablets } from '@/features/counter/outlet-tablets'
 import { DANGER_OUTLINE, OutletSection } from '@/features/outlets/outlet-section'
+import {
+  OutletServiceSections,
+  OutletServiceShimmer,
+} from '@/features/outlets/outlet-service-sections'
+import { getPartState, isRenderable } from '@/gates/registry'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/session/context'
 import { holdsRole, sessionOutletsFor } from '@/session/session'
@@ -681,6 +686,8 @@ export function OutletPage() {
   const mayAdminister = mayWrite || sessionOutletsFor(session, 'franchise_admin').includes(outletId)
   const [outlet, setOutlet] = useState<Tables<'outlets'> | null | undefined>(undefined)
   const [readFor, setReadFor] = useState<string | null>(null)
+  // Orders and Packaging, `demo` until #60's database section makes them real.
+  const showService = isRenderable(getPartState('outlet-service-choices'), session.mode)
 
   const toList = useCallback(
     () => void navigate('..', { relative: 'path', replace: true }),
@@ -750,6 +757,7 @@ export function OutletPage() {
         // phone (design D5).
         <LoadingRegion label="this outlet" className="space-y-4" data-testid="outlets-loading">
           <Shimmer className="h-[19.75rem]" />
+          {showService && <OutletServiceShimmer />}
           <Shimmer className="h-[18.5rem]" />
         </LoadingRegion>
       ) : shown === null ? (
@@ -770,6 +778,16 @@ export function OutletPage() {
             A closed outlet has no counter to administer: its tablets are moved
             or removed from a trading outlet's page.
           */}
+          {shown.is_active && showService && (
+            <OutletServiceSections
+              key={`service-${shown.id}`}
+              outletId={shown.id}
+              // The owner, and a manager at the outlets they manage [owner,
+              // 2026-09-27] — the same reach as the tablets below. Details stays
+              // the owner's alone.
+              mayWrite={mayAdminister}
+            />
+          )}
           {shown.is_active && (
             <OutletTablets
               key={`tablets-${shown.id}`}

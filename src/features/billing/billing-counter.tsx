@@ -30,14 +30,30 @@ import {
   type PaymentAllocation,
 } from '@/data-access/adapters'
 import {
+  ALL_OFF_SERVICE_SETTINGS,
   billTotals,
+  busyTables,
+  capturePackaging,
   discountAmountPaise,
+  initialServiceType,
   isAwaitingOrderNumber,
+  isPackagingLine,
+  packagingApplies,
+  packagingLine,
+  packagingWaived,
+  PACKAGING_LINE_KEY,
+  serviceChoiceRequired,
+  serviceChoiceShown,
+  tableLabel,
+  tablesOffered,
   UNSENT_ORDER_REFERENCE,
   lineTotalPaise,
   menuLineDiscount,
   resolveBusinessDate,
+  type CapturedPackaging,
   type MenuDiscountRule,
+  type OutletServiceSettings,
+  type ServiceType,
 } from '@/domain'
 import { useOnForeground } from '@/features/attention/attention'
 import { newUuid } from '@/lib/uuid'
@@ -46,7 +62,7 @@ import { SessionContext } from '@/session/context'
 import { CounterDeviceContext } from '@/session/counter-context'
 import { normalizeIndianPhone } from '../../../shared/phone'
 
-import { BillComposerFooter, CustomerRow } from './bill-composer-footer'
+import { BillComposerFooter, CustomerServiceRow } from './bill-composer-footer'
 import { BillDiscountRows } from './bill-discount-rows'
 import { CustomerDialog, type CustomerSelection } from './customer-dialog'
 import { DiscountDialog } from './discount-dialog'
@@ -57,6 +73,8 @@ import { EditingOrderPin } from './editing-order-pin'
 import { MenuGrid } from './menu-grid'
 import { MyShiftSurface } from './my-shift-surface'
 import { PaymentDialog } from './payment-dialog'
+import { ServiceChips } from './service-chips'
+import { TableDialog, type BusyTable } from './table-dialog'
 import { useCounterState } from './use-counter-state'
 
 /**
@@ -88,6 +106,7 @@ import { useCounterState } from './use-counter-state'
  */
 
 interface Restorable {
+  /** The item lines. Packaging is held apart, below, and derived back in. */
   lines: BillLineDraft[]
   /**
    * The bill-level discounts on the panel.
@@ -99,6 +118,43 @@ interface Restorable {
   discounts: readonly BillDiscountDraft[]
   customer: CustomerSelection | null
   payments: PaymentAllocation[]
+  /** How it is being served, and the packaging it captured (#60). */
+  serviceType: ServiceType | null
+  tableNumber: number | null
+  packaging: CapturedPackaging | null
+}
+
+/**
+ * A line at a new quantity, keeping the terms it was created under.
+ *
+ * The captured discount is re-applied at the new quantity rather than re-read
+ * from today's menu: the line keeps the deal it was sold under, and only its
+ * size changes.
+ */
+function withQuantity(line: BillLineDraft, quantity: number): BillLineDraft {
+  const scaled =
+    line.discountPercentBp != null
+      ? Math.round((line.unitPricePaise * quantity * line.discountPercentBp) / 10000)
+      : Math.round(((line.discountPaise ?? 0) / line.quantity) * quantity)
+  return { ...line, quantity, discountPaise: Math.min(scaled, line.unitPricePaise * quantity) }
+}
+
+/**
+ * A saved order's lines as the composer holds them: the items, and the
+ * packaging line's captured price and bags apart from them. The waiver is not
+ * carried — it is re-derived from the customer while the order is open.
+ */
+function splitPackaging(lines: readonly BillLineDraft[]): {
+  items: BillLineDraft[]
+  packaging: CapturedPackaging | null
+} {
+  const packaging = lines.find(isPackagingLine)
+  return {
+    items: lines.filter((line) => !isPackagingLine(line)),
+    packaging: packaging
+      ? { unitPricePaise: packaging.unitPricePaise, quantity: packaging.quantity }
+      : null,
+  }
 }
 
 /**
@@ -203,7 +259,25 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   const [discountDialog, setDiscountDialog] = useState<{ editingIndex: number | null } | null>(null)
   const [menuOffline, setMenuOffline] = useState(false)
   const [outlet, setOutlet] = useState<Tables<'outlets'> | null>(null)
+  /*
+    How this outlet serves, read with the menu (#60). All-off until it arrives,
+    and all-off for good at an outlet that has chosen nothing — which is today's
+    counter, unchanged.
+  */
+  const [serviceSettings, setServiceSettings] =
+    useState<OutletServiceSettings>(ALL_OFF_SERVICE_SETTINGS)
+  /** The item lines. The packaging line is `packaging`, derived into `billLines`. */
   const [lines, setLines] = useState<BillLineDraft[]>([])
+  const [serviceType, setServiceType] = useState<ServiceType | null>(null)
+  const [tableNumber, setTableNumber] = useState<number | null>(null)
+  /**
+   * The packaging this order carries: the price captured when it was added, and
+   * the bags. Null when there is none — dine-in, removed by the biller, or an
+   * outlet that does not charge.
+   */
+  const [packaging, setPackaging] = useState<CapturedPackaging | null>(null)
+  const [tableDialogOpen, setTableDialogOpen] = useState(false)
+  const [tableOrders, setTableOrders] = useState<BillingOrder[]>([])
   const [customer, setCustomer] = useState<CustomerSelection | null>(null)
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false)
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
@@ -301,6 +375,9 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
       setMenu(loaded.categories)
       setMenuDiscounts(loaded.discounts)
       setDiscountPresets(loaded.presets)
+      // On the menu's path, so a change reaches a running tablet at its next
+      // refresh and a cold start serves the way its outlet does (design D6).
+      setServiceSettings(loaded.service ?? ALL_OFF_SERVICE_SETTINGS)
       setMenuOffline(Boolean(resume))
       setError((current) =>
         current === 'Could not load the menu. Try again in a moment.' ? null : current,
@@ -402,6 +479,26 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     [menu],
   )
 
+  /** What the tablet knows about the customer's membership, right now. */
+  const knownTier = customer?.kind === 'identified' ? (customer.tier ?? null) : null
+
+  /**
+   * Every line on the bill: the items, then the packaging **last**, so the food
+   * reads first. The waiver is derived here rather than stored, because it
+   * follows the customer while the order is open — identifying a member makes
+   * the packaging free, clearing them charges it again (design D4).
+   *
+   * This is what the panel draws, what the totals add up and what every save
+   * and settle carries. The item lines alone are only ever the menu's business.
+   */
+  const billLines = useMemo<BillLineDraft[]>(
+    () =>
+      packaging === null
+        ? lines
+        : [...lines, packagingLine(packaging, packagingWaived(serviceSettings, knownTier))],
+    [lines, packaging, serviceSettings, knownTier],
+  )
+
   /**
    * What each bill-level discount comes to, against this order as it stands.
    *
@@ -414,7 +511,9 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
    * and the sequence they were applied in cannot change the total.
    */
   const billDiscounts = useMemo<BillDiscountDraft[]>(() => {
-    const subtotal = lines.reduce(
+    // The whole subtotal, packaging included (#60): a bill discount has always
+    // been a share of everything on the bill.
+    const subtotal = billLines.reduce(
       (sum, line) => sum + lineTotalPaise(line.unitPricePaise, line.quantity),
       0,
     )
@@ -425,7 +524,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
           ? discountAmountPaise({ basis: 'percent', percentBp: rule.valueBp ?? 0 }, subtotal, 1)
           : Math.min(rule.valuePaise ?? 0, subtotal),
     }))
-  }, [lines, billDiscountRules])
+  }, [billLines, billDiscountRules])
 
   /**
    * What this order comes to, discounts and rounding included.
@@ -437,12 +536,12 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
    */
   const totals = useMemo(
     () =>
-      billTotals(lines, {
+      billTotals(billLines, {
         discountPaise:
-          lines.reduce((sum, line) => sum + (line.discountPaise ?? 0), 0) +
+          billLines.reduce((sum, line) => sum + (line.discountPaise ?? 0), 0) +
           billDiscounts.reduce((sum, discount) => sum + discount.amountPaise, 0),
       }),
-    [lines, billDiscounts],
+    [billLines, billDiscounts],
   )
 
   /**
@@ -455,6 +554,21 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     (item: Tables<'menu_items'>) => {
       if (settling || !item.is_available) return
       setError(null)
+      if (lines.length === 0 && editingOrder === null) {
+        /*
+          A new bill is starting. Where the counter asks where the food goes, it
+          starts on nothing and the biller answers; where it does not, it starts
+          on the one type there is — with one bag at today's price if that is
+          takeaway (#60). At an outlet that has chosen nothing, all three stay
+          empty and this is today.
+        */
+        const initial = initialServiceType(serviceSettings)
+        setServiceType(initial)
+        setTableNumber(null)
+        setPackaging(
+          packagingApplies(serviceSettings, initial) ? capturePackaging(serviceSettings) : null,
+        )
+      }
       setLines((current) => {
         const existing = current.find((line) => line.menuItemId === item.id)
         if (existing) {
@@ -480,7 +594,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         ]
       })
     },
-    [settling, discountRules, categoryNameById],
+    [settling, discountRules, categoryNameById, lines.length, editingOrder, serviceSettings],
   )
 
   /**
@@ -492,6 +606,11 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     setBillDiscountRules([])
     setCustomer(null)
     setPaymentPreset([])
+    // How it was served goes with the bill, and so does its packaging: left
+    // behind, the next customer's first item would inherit a table.
+    setServiceType(null)
+    setTableNumber(null)
+    setPackaging(null)
     // The error too: it is a sentence about a bill, and it outlived the bill.
     // "That payment was not saved on this tablet. Nothing was cleared" reads as
     // a live warning over a panel the biller has just emptied themselves.
@@ -499,24 +618,28 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   }, [])
 
   const changeQuantity = useCallback(
-    (menuItemId: string, delta: number) => {
+    (key: string, delta: number) => {
       if (settling) return
+      if (key === PACKAGING_LINE_KEY) {
+        /*
+          Bags, counted like any line, down to one and never below: packaging is
+          neither removed nor repriced at the counter [owner, 2026-09-27]. It
+          goes only when the order stops being takeaway, and its captured price
+          never moves.
+        */
+        setPackaging((current) => {
+          if (current === null) return current
+          return { ...current, quantity: Math.max(1, current.quantity + delta) }
+        })
+        return
+      }
       const next = lines.flatMap((line) => {
-        if (line.menuItemId !== menuItemId) return [line]
+        if (line.menuItemId !== key) return [line]
         const quantity = line.quantity + delta
         // Below one there is no line: taking the last one off is how a line is
         // removed, so there is no separate delete to hunt for.
         if (quantity < 1) return []
-        // The captured terms are re-applied at the new quantity rather than
-        // re-read from today's menu: the line keeps the deal it was created
-        // under, and only its size changes.
-        const scaled =
-          line.discountPercentBp != null
-            ? Math.round((line.unitPricePaise * quantity * line.discountPercentBp) / 10000)
-            : Math.round(((line.discountPaise ?? 0) / line.quantity) * quantity)
-        return [
-          { ...line, quantity, discountPaise: Math.min(scaled, line.unitPricePaise * quantity) },
-        ]
+        return [withQuantity(line, quantity)]
       })
       setLines(next)
       /*
@@ -552,6 +675,9 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     setLines(structuredClone(draft.lines))
     setCustomer(draft.customer)
     setPaymentPreset(structuredClone(draft.payments))
+    setServiceType(draft.serviceType)
+    setTableNumber(draft.tableNumber)
+    setPackaging(draft.packaging)
     // Restored from the draft rather than cleared. Clearing dropped every
     // bill-level discount the order carried the moment it was reopened, and the
     // revision then wrote a total the customer had never been quoted.
@@ -571,13 +697,20 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
       discounts: billDiscounts,
       customer,
       payments: paymentPreset,
+      serviceType,
+      tableNumber,
+      packaging,
     }
+    const saved = splitPackaging(order.lines)
     setEditingOrder(order)
     putDraftOnPanel({
-      lines: order.lines,
+      lines: saved.items,
       discounts: order.discounts,
       customer: customerFromOrder(order),
       payments: [],
+      serviceType: order.serviceType ?? null,
+      tableNumber: order.tableNumber ?? null,
+      packaging: saved.packaging,
     })
     setPaymentDialogOpen(false)
     setError(null)
@@ -602,10 +735,12 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         outletId,
         shiftId: shift.id,
         businessDate: resolveBusinessDate(new Date(), outlet.business_day_cutover),
-        lines,
+        lines: billLines,
         discounts: billDiscounts,
         customerId: null,
         ...customerSnapshots(customer),
+        serviceType,
+        tableNumber: serviceType === 'dine_in' ? tableNumber : null,
       })
       clearPanel()
       setPipelineRefresh((value) => value + 1)
@@ -623,10 +758,12 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     setError(null)
     try {
       await billing.reviseOrder(editingOrder.id, {
-        lines,
+        lines: billLines,
         discounts: billDiscounts,
         customerId: null,
         ...customerSnapshots(customer),
+        serviceType,
+        tableNumber: serviceType === 'dine_in' ? tableNumber : null,
       })
       leaveOrderEdit()
       setPipelineRefresh((value) => value + 1)
@@ -671,9 +808,11 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         shiftId: shift.id,
         businessDate,
         payments,
-        lines,
+        lines: billLines,
         discounts: billDiscounts,
         ...customerSnapshots(customer),
+        serviceType,
+        tableNumber: serviceType === 'dine_in' ? tableNumber : null,
       })
       setPaymentDialogOpen(false)
       clearPanel()
@@ -688,6 +827,60 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
       setSettling(false)
     }
   }
+
+  /**
+   * Mark the order dine-in, takeaway or neither, and move its packaging with it
+   * (#60). Packaging belongs to takeaway [owner, 2026-09-27]: marking takeaway
+   * puts one bag on at today's price if there is none, and marking anything
+   * else takes it off. Never blocks anything.
+   */
+  function markServiceType(next: ServiceType | null, table: number | null) {
+    setServiceType(next)
+    setTableNumber(next === 'dine_in' ? table : null)
+    if (packagingApplies(serviceSettings, next)) {
+      setPackaging((current) => current ?? capturePackaging(serviceSettings))
+    } else {
+      setPackaging(null)
+    }
+  }
+
+  /**
+   * Open the table popup, reading which tables are busy from the pipeline this
+   * tablet can see — the live one, or the one it remembers offline.
+   */
+  function openTables() {
+    setTableDialogOpen(true)
+    if (!outletId) return
+    void billing
+      .listOpenOrders(outletId)
+      .then(setTableOrders)
+      .catch(() => setTableOrders([]))
+  }
+
+  const thisDeviceId = counterDevice?.device.deviceId ?? null
+  const busy = new Map<number, BusyTable>(
+    [...busyTables(tableOrders, editingOrder?.id ?? null)].map(([table, order]) => [
+      table,
+      {
+        orderId: order.id,
+        // Ownership is per tablet (#35). A tablet with no device context — a
+        // test harness — owns what it sees rather than refusing everything.
+        ownedHere: thisDeviceId === null || order.deviceId === thisDeviceId,
+        tillLabel: order.deviceLabel,
+      },
+    ]),
+  )
+
+  const serviceChips = serviceChoiceShown(serviceSettings) ? (
+    <ServiceChips
+      settings={serviceSettings}
+      serviceType={serviceType}
+      tableNumber={tableNumber}
+      disabled={settling}
+      onChoose={(next) => markServiceType(next, null)}
+      onOpenTables={openTables}
+    />
+  ) : null
 
   if (!shift) {
     return (
@@ -717,8 +910,9 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   */
   const composerFooter = (
     <BillComposerFooter
-      lines={lines}
+      lines={billLines}
       customer={customer}
+      service={serviceChips}
       settling={settling}
       editing={editingOrder !== null}
       onOpenCustomer={openCustomerDialog}
@@ -729,6 +923,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
       onSaveOrder={editingOrder ? saveEditedOrder : saveOrder}
       discountTotalPaise={totals.discountPaise}
       onCancelEdit={leaveOrderEdit}
+      serviceOwed={serviceChoiceRequired(serviceSettings, serviceType)}
     />
   )
 
@@ -832,8 +1027,9 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         {lines.length > 0 || editingOrder ? (
           <>
             <BillPanel
-              lines={lines}
+              lines={billLines}
               onChangeQuantity={changeQuantity}
+              packagingFlat={serviceSettings.packagingMode === 'per_order'}
               discountRows={
                 <BillDiscountRows
                   lines={lines}
@@ -865,16 +1061,27 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
               }
               {...(editingOrder
                 ? {
-                    editingOrderReference: isAwaitingOrderNumber(editingOrder.orderNumber)
-                      ? UNSENT_ORDER_REFERENCE
-                      : `order #${editingOrder.orderNumber}`,
+                    // A table replaces the number wherever the counter would
+                    // have shown it [owner, 2026-09-26].
+                    editingOrderReference:
+                      serviceType === 'dine_in' && tableNumber !== null
+                        ? tableLabel(tableNumber)
+                        : isAwaitingOrderNumber(editingOrder.orderNumber)
+                          ? UNSENT_ORDER_REFERENCE
+                          : `order #${editingOrder.orderNumber}`,
                     /*
                       The customer row keeps its place while the rest of the
                       footer is docked beside the order [owner, 2026-09-19]. A
                       biller who has just learnt where the customer goes should
                       not have to go looking for it again on the way back in.
                     */
-                    footer: <CustomerRow customer={customer} onOpen={openCustomerDialog} />,
+                    footer: (
+                      <CustomerServiceRow
+                        customer={customer}
+                        onOpen={openCustomerDialog}
+                        service={serviceChips}
+                      />
+                    ),
                   }
                 : { footer: composerFooter })}
             />
@@ -948,7 +1155,8 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
             editingOrder && (
               <EditingOrderPin
                 order={editingOrder}
-                lines={lines}
+                lines={billLines}
+                tableNumber={serviceType === 'dine_in' ? tableNumber : null}
                 customerName={customerSnapshots(customer).customerName}
                 customerTier={customerSnapshots(customer).customerTier}
                 footer={composerFooter}
@@ -969,6 +1177,35 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
           setCustomerDialogOpen(false)
         }}
       />
+
+      {tablesOffered(serviceSettings) && (
+        <TableDialog
+          open={tableDialogOpen}
+          currentTable={serviceType === 'dine_in' ? tableNumber : null}
+          busy={busy}
+          onChoose={(table) => {
+            markServiceType('dine_in', table)
+            setTableDialogOpen(false)
+          }}
+          onNoTable={() => {
+            markServiceType('dine_in', null)
+            setTableDialogOpen(false)
+          }}
+          onOpenOrder={
+            editingOrder
+              ? undefined
+              : (orderId) => {
+                  // Exactly what closing the pad and tapping Edit on that card
+                  // does [owner, 2026-09-27]: the bill in progress is set aside
+                  // and comes back when the edit ends.
+                  const order = tableOrders.find((candidate) => candidate.id === orderId)
+                  setTableDialogOpen(false)
+                  if (order) beginOrderEdit(order)
+                }
+          }
+          onClose={() => setTableDialogOpen(false)}
+        />
+      )}
 
       <PaymentDialog
         open={paymentDialogOpen}

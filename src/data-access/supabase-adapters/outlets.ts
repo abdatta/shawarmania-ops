@@ -8,6 +8,7 @@ import {
   type OutletsAdapter,
 } from '../adapters'
 import type { Database, Tables, TablesInsert, TablesUpdate } from '../database.types'
+import { ALL_OFF_SERVICE_SETTINGS } from '@/domain'
 import type { CounterResumeCoordinator, CounterResumeRecord } from '@/outbox'
 
 /**
@@ -240,6 +241,31 @@ export function createSupabaseOutletsAdapter(
         table: row.table_name,
         count: Number(row.row_count),
       }))
+    },
+
+    /*
+      **Deliberately not connected yet** (each-outlet-chooses-how-it-serves,
+      design D10). The columns these read and write arrive with that change's
+      database section; until then every live outlet has chosen nothing, which
+      is exactly how production bills today, and the settings sections that
+      would call the write are `demo`-gated on the outlet page.
+
+      When it is connected, the write goes through a narrow function the owner
+      and the outlet's own managers may call, never through `outlets_update`,
+      which stays the owner's alone for every other column.
+
+      The write refuses rather than pretending: a screen that somehow reached
+      it in live mode says so, instead of reporting a save nothing kept.
+    */
+    async getServiceSettings() {
+      return { ...ALL_OFF_SERVICE_SETTINGS }
+    },
+
+    async updateServiceSettings() {
+      throw new DataActionError(
+        'not_available',
+        'Choosing how an outlet serves is not available yet.',
+      )
     },
   }
 }

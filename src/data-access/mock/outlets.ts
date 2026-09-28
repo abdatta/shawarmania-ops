@@ -1,4 +1,11 @@
 import {
+  ALL_OFF_SERVICE_SETTINGS,
+  SERVICE_SETTINGS_PROBLEM_MESSAGES,
+  serviceSettingsProblem,
+  type OutletServiceSettings,
+} from '@/domain'
+
+import {
   DataActionError,
   type NewOutlet,
   type OutletPatch,
@@ -70,6 +77,18 @@ function trimmed(value: string | null | undefined): string | null {
 export function createMockOutletsAdapter(
   /** Null for the Super Admin, who reads all of them. */
   readable: readonly string[] | null = null,
+  /**
+   * The demo session's service choices, shared with the menu adapter that
+   * hands them to the counter, and the outlets whose choices this caller may
+   * write: every one for the owner (null), and the outlets a manager manages
+   * [owner, 2026-09-27] — the reach the narrow write function will check.
+   * Defaults to an owner over a private map, which is what a test of this
+   * adapter alone wants.
+   */
+  service: { settings: Map<string, OutletServiceSettings>; writable: readonly string[] | null } = {
+    settings: new Map(),
+    writable: null,
+  },
 ): OutletsAdapter {
   // Captures and edits mutate, so this mock keeps its own copy: a demo where
   // saving a position changes nothing would be demonstrating the wrong thing,
@@ -202,6 +221,31 @@ export function createMockOutletsAdapter(
 
     async outletReferences(id: string) {
       return referencesTo(id)
+    },
+
+    async getServiceSettings(id: string) {
+      // Outside the caller's reach reads exactly as an outlet that chose
+      // nothing — the row is absent under their policy, so there is nothing to
+      // read the choices from.
+      if (readable !== null && !readable.includes(id)) return { ...ALL_OFF_SERVICE_SETTINGS }
+      return { ...(service.settings.get(id) ?? ALL_OFF_SERVICE_SETTINGS) }
+    },
+
+    async updateServiceSettings(id, settings) {
+      if (service.writable !== null && !service.writable.includes(id)) {
+        throw new DataActionError(
+          'not_permitted',
+          'Only the owner or this outlet’s manager changes how it serves.',
+        )
+      }
+      find(id)
+      const problem = serviceSettingsProblem(settings)
+      if (problem !== null) {
+        throw new DataActionError(problem, SERVICE_SETTINGS_PROBLEM_MESSAGES[problem])
+      }
+      const stored = { ...settings }
+      service.settings.set(id, stored)
+      return { ...stored }
     },
   }
 }

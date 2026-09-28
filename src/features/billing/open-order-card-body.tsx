@@ -4,7 +4,12 @@ import { Shimmer } from '@/components/ui/loading'
 import { MemberMark } from '@/components/ui/member-mark'
 import { Money } from '@/components/ui/money'
 import type { BillLineDraft, CustomerTier } from '@/data-access/adapters'
-import { formatRecentAge, isAwaitingOrderNumber, UNSENT_ORDER_REFERENCE } from '@/domain'
+import {
+  formatRecentAge,
+  isAwaitingOrderNumber,
+  tableLabel,
+  UNSENT_ORDER_REFERENCE,
+} from '@/domain'
 
 /**
  * How an open order looks, in one place.
@@ -22,6 +27,7 @@ import { formatRecentAge, isAwaitingOrderNumber, UNSENT_ORDER_REFERENCE } from '
  */
 export function OpenOrderCardBody({
   orderNumber,
+  tableNumber = null,
   orderedAt,
   customerName,
   customerTier = null,
@@ -30,6 +36,12 @@ export function OpenOrderCardBody({
   showLines = true,
 }: {
   orderNumber: number
+  /**
+   * The order's table, which **replaces** its number here [owner, 2026-09-26].
+   * An order with a table needs no number to be called, so it never waits on
+   * one either.
+   */
+  tableNumber?: number | null
   orderedAt: string
   customerName: string | null
   /** The order's own snapshot of the customer's membership — never the live one. */
@@ -45,9 +57,14 @@ export function OpenOrderCardBody({
   showLines?: boolean
 }) {
   const totalPaise = lines.reduce((sum, line) => sum + line.unitPricePaise * line.quantity, 0)
-  const awaitingNumber = isAwaitingOrderNumber(orderNumber)
+  const awaitingNumber = tableNumber === null && isAwaitingOrderNumber(orderNumber)
   const member = customerTier === 'gold'
-  const reference = awaitingNumber ? UNSENT_ORDER_REFERENCE : `Order #${orderNumber}`
+  const reference =
+    tableNumber !== null
+      ? tableLabel(tableNumber)
+      : awaitingNumber
+        ? UNSENT_ORDER_REFERENCE
+        : `Order #${orderNumber}`
 
   return (
     <>

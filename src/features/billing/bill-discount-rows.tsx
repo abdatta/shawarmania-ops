@@ -3,7 +3,7 @@ import { Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Money } from '@/components/ui/money'
 import type { BillDiscountDraft, BillLineDraft } from '@/data-access/adapters'
-import { formatPaise, groupMenuDiscounts, menuDiscountLabel } from '@/domain'
+import { formatPaise, groupMenuDiscounts, isPackagingLine, menuDiscountLabel } from '@/domain'
 
 /**
  * What came off, as rows in the bill column beside the items.
@@ -43,7 +43,9 @@ interface DiscountRow {
  * the phrase at all.
  */
 function menuDiscountRows(lines: readonly BillLineDraft[], categoryCount: number): DiscountRow[] {
-  return groupMenuDiscounts(lines).map((group) => {
+  // Packaging is never a menu discount's: its only discount is the gold
+  // waiver, which the line itself shows as Free (#60).
+  return groupMenuDiscounts(lines.filter((line) => !isPackagingLine(line))).map((group) => {
     const label = menuDiscountLabel(group, formatPaise)
     return {
       key: `menu-${label}`,

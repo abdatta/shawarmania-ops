@@ -1,6 +1,6 @@
 # Proposal: each-outlet-chooses-how-it-serves
 
-> **Model**: Opus · **Wave**: F · **Depends on**: #57, #55, #53, and the unlisted `outlets-one-at-a-time` · **Gate**: each outlet chooses, on its own settings page, whether its orders are marked dine-in or takeaway, whether dine-in orders take a table number, and whether a packaging charge is added per bag or per order, with packaging optionally free for gold members. A new outlet starts with every switch off and bills exactly as today. With the switches on, a biller marks an order in one tap, a dine-in order is called by its table instead of its order number, a busy table opens the order already on it, and a takeaway order carries its packaging as a line on the bill that the biller can change or remove. Every one of those orders rung offline settles exactly once. The owner settled the settings page and the counter in the demo before any of it reached production, and the four-role demo walkthrough still walks.
+> **Model**: Opus · **Wave**: F · **Depends on**: #57, #55, #53, and the unlisted `outlets-one-at-a-time` · **Gate**: each outlet chooses, on its own settings page, whether its orders are marked dine-in or takeaway, whether dine-in orders take a keyed table number, and whether a packaging charge is added per bag or per order, with packaging optionally free for gold members. A new outlet starts with every switch off and bills exactly as today. With the switches on, the counter asks where the food goes only where there is a choice, and a biller answers it in one tap before the order is saved or paid, a dine-in order is called by its table instead of its order number, a table already open is refused, and a takeaway order carries its packaging as a line on the bill that the biller cannot remove or reprice. Every one of those orders rung offline settles exactly once. The owner settled the settings page and the counter in the demo before any of it reached production, and the four-role demo walkthrough still walks.
 
 ## Why
 
@@ -19,14 +19,14 @@ Three things the counter cannot say today:
 
 **Every one of these is a choice a shop makes, not a fact about Shawarmania.**
 The owner was explicit that a new outlet (or a franchise) may want none of it and
-bill exactly as today. It may have no seating, so dine-in means nothing there
-while packaging still applies. It may charge per bag, or a flat amount. It may
+bill exactly as today. It may have no seating, so it offers takeaway alone and
+charges for packaging on every order. It may charge per bag, or a flat amount. It may
 waive packaging for gold members, or not. So every rule here is **per outlet**,
 off by default, and set on that outlet's page. It does not ship as a behaviour
 of the app.
 
 **The settings page must stay simple for a newcomer.** An outlet setting itself
-up sees two switches. A switch opens its own settings underneath only when it is
+up sees one switch. A switch opens its own settings inside itself only when it is
 turned on, and folds them away when it is turned off. The page grows as the shop
 does.
 
@@ -47,51 +47,51 @@ does.
 
 ### The outlet's settings page
 
-Two new sections on the page `outlets-one-at-a-time` builds, each one switch
-until it is turned on. Sketch (the owner saw a live version of this on
-2026-09-26):
+One new section, **Orders**, on the page `outlets-one-at-a-time` builds: one
+switch until it is turned on. Each setting's own options open **inside** its
+tile. As settled at the checkpoint (owner, 2026-09-27; `design.md` records what
+changed from the first sketch):
 
 ```
 ORDERS
-  Dine-in and takeaway                          [ off ]
-      └ when on:
-        Offer            ( Dine-in ) ( Takeaway )     ← at least one
-        Can skip         [ on ]      order may be neither
-        Table numbers    [ off ]     only while Dine-in is offered
-            └ when on:   How many tables   [ 8 ]
-
-PACKAGING
-  Packaging charge                              [ off ]
-      └ when on:
-        Charge by        ( Per bag ) ( Flat per order )
-        Price per bag    ₹ [ 5 ]        (or "Charge per order ₹ [10]")
-        Free for gold members ⭐        [ off ]
+┌ Dine-in and takeaway                              [ off ] ┐
+│ ┌ Offer            ( Dine-in ) ( Takeaway )  at least one ┐│
+│ ┌ Table numbers    [ off ]     only while Dine-in is offered││
+│ ┌ Packaging charge [ off ]     only while Takeaway is offered│
+│ │ ┌ Charge by   ( Flat per order ) ( Per bag )           ┐ │
+│ │ ┌ Charge per order  ₹ [ 10 ]   (or "Price per bag")    ┐ │
+│ │ ┌ Free for gold members ⭐  [ off ]                     ┐ │
+└──────────────────────────────────────────────────────────┘
 ```
 
-Defaults when a switch is first turned on: both order types offered, *Can skip*
-on, no tables, packaging per bag at a price the owner types. The owner sets
-these. A manager sees them read-only, for the outlets they manage and no others
-(owner, 2026-09-26; see Non-goals).
+Defaults when a switch is first turned on: both order types offered, no tables,
+packaging flat per order at a price the owner types. The owner sets these
+for any outlet, and a manager for the outlets they manage (owner, 2026-09-27;
+see Non-goals).
 
 ### At the counter
 
-- **Marking an order.** When the outlet offers them, *Dine-in* and *Takeaway*
-  sit as two chips beside the customer control. One tap marks the order. When
-  *Can skip* is on, no chip needs to be chosen, and tapping the chosen one again
-  clears it. When it is off, the order starts on the first offered type.
-- **Tables.** Choosing *Dine-in* at an outlet with tables asks which table, in
-  a popup of numbered buttons 1 to N. A table with an open order is drawn busy.
-  Tapping a busy table opens **that order** to add to it, instead of starting a
-  second. The order is then called *Table 4* everywhere the counter used to show
+- **Marking an order.** Where there is a choice — both types offered, or dine-in
+  with tables — the offered types sit as chips on a row above the customer
+  control.
+  Nothing is preselected, one tap marks the order, and the order cannot be saved
+  or paid until it is marked, as it cannot until the customer is decided. An
+  outlet offering one type with nothing to choose shows no chip: every order
+  there is that type.
+- **Tables.** Choosing *Dine-in* at an outlet with table numbers asks which
+  table, on a number pad: the biller keys it, 1 to 999, and the outlet keeps no
+  count of its tables. A table that already has an open order is refused in
+  red, as an invalid mobile number is (owner, 2026-09-27). The order is then called *Table 4* everywhere the counter used to show
   *#105*: the composer while editing, the pipeline card and the shift's bill
   list. The order number is still allocated and still stored. It is simply not
   what anybody calls this order by.
 - **Packaging.** An outlet charging for packaging adds it automatically, **as a
-  line on the bill**, to every order that is not dine-in. Per bag, the line reads
+  line on the bill**, to every takeaway order, and to no other. Per bag, the line reads
   *Packaging × 1* with the same − / + controls every line has, starting at one.
-  Flat, it reads *Packaging* at the outlet's amount. Either can be removed like any
-  line, for the customer who brings their own bag. Switching an order to dine-in
-  removes the line. Switching it to takeaway adds it.
+  Flat, it reads *Packaging* at the outlet's amount. The biller cannot remove
+  it or change its price (owner, 2026-09-27); per bag, the count goes down to one
+  and no further. Switching an order to dine-in removes the line. Switching it to
+  takeaway adds it.
 - **Gold.** At an outlet waiving packaging for gold members, identifying a gold
   member makes the packaging line free, shown struck through as ₹5 → Free.
   Identifying someone else, or clearing the customer, charges it again. Once the
@@ -112,12 +112,12 @@ stored rows. It is never inferred.
 
 ## Non-goals
 
-- **A manager cannot change these settings.** The owner alone writes an outlet
-  row today (`outlets_update`). Opening these columns to a Franchise Admin is a
-  new write path on that row, and it waits until a franchise actually asks. A
-  manager sees the settings read-only.
+- **A manager changes nothing else on the outlet.** A manager changes these
+  settings for the outlets they manage (owner, 2026-09-27), through a narrow
+  write that reaches these settings alone. The rest of the outlet row — name,
+  address, day cutover, check-in fence, closing — stays the owner's.
 - **No floor plan, table layout, table names or merging tables.** Tables are
-  numbers 1 to N.
+  numbers, keyed, 1 to 999.
 - **No different menu prices for dine-in and takeaway.**
 - **No more than one packaging product.** There is one bag price or one flat
   amount, with no small-bag and large-box.

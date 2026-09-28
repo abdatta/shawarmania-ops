@@ -4,7 +4,9 @@
 
 An outlet's service choices SHALL be readable by the principals that may read that
 outlet's row, and by a counter device for its own outlet only. They SHALL be
-writable by the owner alone.
+writable by the owner, and by a Franchise Admin for the outlets they manage, and
+by nobody else; a manager's write SHALL reach these choices and no other column
+of the outlet row.
 
 An order's and a bill's type and table, and a line's kind, SHALL be readable by
 exactly the principals that may read that order, bill or line, and by no other.

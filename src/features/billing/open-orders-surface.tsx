@@ -10,7 +10,7 @@ import {
   type BillingOrder,
   type PaymentAllocation,
 } from '@/data-access/adapters'
-import { isAwaitingOrderNumber, UNSENT_ORDER_REFERENCE } from '@/domain'
+import { isAwaitingOrderNumber, sharedTables, UNSENT_ORDER_REFERENCE } from '@/domain'
 import { SessionContext } from '@/session/context'
 import { CounterDeviceContext } from '@/session/counter-context'
 
@@ -183,6 +183,9 @@ export function OpenOrdersSurface({
     correction happens in the first seconds after saving, so the order just
     taken has to be under the biller's thumb.
   */
+  // From every order read, not just those listed, so a card knows its table
+  // is shared even when the other order is filtered out of view.
+  const shared = sharedTables(orders ?? [])
   const listed = (orders ?? [])
     .filter((order) => order.id !== editingOrderId && order.status !== 'cancelled')
     /*
@@ -312,6 +315,7 @@ export function OpenOrdersSurface({
                   busy={busy}
                   {...(onEditOrder ? { onEdit: onEditOrder } : {})}
                   tenderLabel={order.billId ? (tenders.get(order.billId) ?? null) : null}
+                  sharedTable={shared.get(order.id) ?? null}
                   onMarkPrepared={(target) =>
                     void act(() => billing.markOrderPrepared(target.id, true))
                   }

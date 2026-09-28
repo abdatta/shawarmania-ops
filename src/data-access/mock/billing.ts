@@ -4,7 +4,9 @@ import {
   UNSENT_ORDER_REFERENCE,
   billTotals,
   classifySync,
+  isPackagingLine,
   lineTotalPaise,
+  isTableNumber,
   ticketEditDeadlineMs,
 } from '@/domain'
 import { demoReceiptToken, receiptLink } from '@/lib/receipt-link'
@@ -28,6 +30,7 @@ import {
   type PaymentAllocation,
   type QueuedBill,
   type SaveOrderInput,
+  type ServiceFacts,
 } from '../adapters'
 import type { Tables } from '../database.types'
 import { liveAssignments } from '../adapters'
@@ -395,17 +398,8 @@ export function createMockBillingAdapter(
       // The snapshot, never the live membership: a revocation tonight does not
       // take the mark off an order rung at lunch.
       customerTier: row.customer_tier,
-      lines: store.orderItems
-        .filter((line) => line.order_id === row.id)
-        .map((line) => ({
-          menuItemId: line.menu_item_id ?? line.id,
-          itemName: line.item_name,
-          unitPricePaise: line.unit_price_paise,
-          quantity: line.quantity,
-          discountPaise: line.discount_paise,
-          discountPercentBp: line.discount_percent_bp,
-          categoryName: line.category_name,
-        })),
+      ...serviceOf(store.orderService.get(row.id)),
+      lines: store.orderItems.filter((line) => line.order_id === row.id).map(lineView),
       discounts: (store.orderDiscounts.get(row.id) ?? []).map((discount) => ({ ...discount })),
       roundingPaise: row.rounding_paise,
       totalPaise: row.total_paise,
@@ -499,17 +493,8 @@ export function createMockBillingAdapter(
       customerName: row.customer_name,
       customerPhone: row.customer_phone,
       customerTier: row.customer_tier,
-      lines: store.billItems
-        .filter((line) => line.bill_id === row.id)
-        .map((line) => ({
-          menuItemId: line.menu_item_id ?? line.id,
-          itemName: line.item_name,
-          unitPricePaise: line.unit_price_paise,
-          quantity: line.quantity,
-          discountPaise: line.discount_paise,
-          discountPercentBp: line.discount_percent_bp,
-          categoryName: line.category_name,
-        })),
+      ...serviceOf(store.billService.get(row.id)),
+      lines: store.billItems.filter((line) => line.bill_id === row.id).map(lineView),
       discounts: (store.billDiscounts.get(row.id) ?? []).map((discount) => ({ ...discount })),
       roundingPaise: row.rounding_paise,
       totalPaise: row.total_paise,
@@ -589,12 +574,16 @@ export function createMockBillingAdapter(
     lines: BillLineDraft[],
     discounts: readonly BillDiscountDraft[] = [],
   ) {
+    for (const line of store.orderItems) {
+      if (line.order_id === orderId) store.packagingLineIds.delete(line.id)
+    }
     store.orderItems = store.orderItems.filter((line) => line.order_id !== orderId)
-    lines.forEach((line, index) =>
+    lines.forEach((line, index) => {
+      if (isPackagingLine(line)) store.packagingLineIds.add(`${orderId}-${index}`)
       store.orderItems.push({
         id: `${orderId}-${index}`,
         order_id: orderId,
-        menu_item_id: line.menuItemId,
+        menu_item_id: line.menuItemId || null,
         item_name: line.itemName,
         unit_price_paise: line.unitPricePaise,
         quantity: line.quantity,
@@ -605,8 +594,8 @@ export function createMockBillingAdapter(
         discount_paise: line.discountPaise ?? 0,
         discount_percent_bp: line.discountPercentBp ?? null,
         category_name: line.categoryName ?? null,
-      }),
-    )
+      })
+    })
     // A revision restates the whole order, so its discounts are replaced rather
     // than merged — the same rule the real `revise_order` command follows.
     store.orderDiscounts.set(
@@ -632,6 +621,61 @@ export function createMockBillingAdapter(
           discounts.reduce((sum, discount) => sum + discount.amountPaise, 0),
       },
     )
+  }
+
+  /**
+   * How an order or bill was served, as stored beside its row. A record from
+   * before these choices existed has none, which reads as neither, no table.
+   */
+  function serviceOf(facts: ServiceFacts | undefined): Required<ServiceFacts> {
+    const serviceType = facts?.serviceType ?? null
+    return {
+      serviceType,
+      // A table only ever travels with dine-in, as the database's check will say.
+      tableNumber: serviceType === 'dine_in' ? (facts?.tableNumber ?? null) : null,
+    }
+  }
+
+  /** A stored line read back, with the packaging line marked as what it is. */
+  function lineView(line: Tables<'order_items'> | Tables<'bill_items'>): BillLineDraft {
+    const packaging = store.packagingLineIds.has(line.id)
+    return {
+      menuItemId: packaging ? '' : (line.menu_item_id ?? line.id),
+      itemName: line.item_name,
+      unitPricePaise: line.unit_price_paise,
+      quantity: line.quantity,
+      discountPaise: line.discount_paise,
+      discountPercentBp: line.discount_percent_bp,
+      categoryName: line.category_name,
+      ...(packaging ? { kind: 'packaging' as const } : {}),
+    }
+  }
+
+  /**
+   * The shape the command boundary will check (design D8), refused here first
+   * so a demo cannot accept what the database will not: a table only with
+   * dine-in and in range, at most one packaging line, and a packaging line with
+   * no menu item, no category and a discount of nothing or all of it.
+   *
+   * **Never** against the outlet's current choices: an offline tablet may have
+   * rung the order before the owner changed them.
+   */
+  function refuseMalformedService(input: ServiceFacts & { lines: BillLineDraft[] }) {
+    const malformed = () =>
+      new BillingActionError('malformed', 'This order could not be read. Nothing was saved.')
+    const { tableNumber, serviceType } = input
+    if (tableNumber != null) {
+      if (serviceType !== 'dine_in') throw malformed()
+      if (!isTableNumber(tableNumber)) throw malformed()
+    }
+    const packaging = input.lines.filter(isPackagingLine)
+    if (packaging.length > 1) throw malformed()
+    for (const line of packaging) {
+      const total = lineTotalPaise(line.unitPricePaise, line.quantity)
+      const discount = line.discountPaise ?? 0
+      if (line.menuItemId !== '' || line.categoryName) throw malformed()
+      if (discount !== 0 && discount !== total) throw malformed()
+    }
   }
 
   // ── Delivery effects ────────────────────────────────────────────────────────
@@ -694,21 +738,26 @@ export function createMockBillingAdapter(
       draft.clientId,
       paymentCorrections.get(draft.clientId)?.at(-1) ?? payments,
     )
+    store.billService.set(draft.clientId, serviceOf(draft))
 
     for (const [index, line] of draft.lines.entries()) {
+      if (isPackagingLine(line)) store.packagingLineIds.add(`${draft.clientId}-${index}`)
       store.billItems.push({
         id: `${draft.clientId}-${index}`,
         bill_id: draft.clientId,
-        menu_item_id: line.menuItemId,
+        menu_item_id: line.menuItemId || null,
         // The snapshot the counter took when the line was created, carried
         // through untouched — never re-read from the live menu.
         item_name: line.itemName,
         unit_price_paise: line.unitPricePaise,
         quantity: line.quantity,
         line_total_paise: lineTotalPaise(line.unitPricePaise, line.quantity),
-        discount_paise: 0,
-        discount_percent_bp: null,
-        category_name: null,
+        // The line's own discount, as `replaceOrderLines` writes it. Noughts
+        // here dropped a direct sale's menu discount and a gold member's
+        // packaging waiver from the bill's lines while its total kept them.
+        discount_paise: line.discountPaise ?? 0,
+        discount_percent_bp: line.discountPercentBp ?? null,
+        category_name: line.categoryName ?? null,
       })
     }
     pendingPayNowDrafts.delete(draft.clientId)
@@ -763,6 +812,7 @@ export function createMockBillingAdapter(
       cancelled_shift_id: null,
     }
     store.orders.push(row)
+    store.orderService.set(row.id, serviceOf(input))
     replaceOrderLines(row.id, input.lines, input.discounts ?? [])
   }
 
@@ -787,6 +837,9 @@ export function createMockBillingAdapter(
     row.discount_paise = 0
     row.tax_paise = 0
     row.total_paise = totals.totalPaise
+    // Both may change while the order is open, and are fixed once it is paid:
+    // this path is reached only for an open order.
+    store.orderService.set(row.id, serviceOf(record.input))
     replaceOrderLines(row.id, record.input.lines, record.input.discounts ?? [])
   }
 
@@ -875,12 +928,15 @@ export function createMockBillingAdapter(
     }
     store.bills.push(bill)
     store.billPayments.set(billId, payments)
+    // Copied from the order, and final from here: a bill is append-only.
+    store.billService.set(billId, serviceOf(store.orderService.get(row.id)))
     // The edit window runs from the money's own clock — for an upfront payer
     // that is when they handed the cash over, not when the kitchen finished.
     acceptedPaymentTimes.set(billId, Date.parse(paidAt))
     store.orderItems
       .filter((line) => line.order_id === row.id)
-      .forEach((line, index) =>
+      .forEach((line, index) => {
+        if (store.packagingLineIds.has(line.id)) store.packagingLineIds.add(`${billId}-${index}`)
         store.billItems.push({
           id: `${billId}-${index}`,
           bill_id: billId,
@@ -892,8 +948,8 @@ export function createMockBillingAdapter(
           discount_paise: line.discount_paise,
           discount_percent_bp: line.discount_percent_bp,
           category_name: line.category_name,
-        }),
-      )
+        })
+      })
     row.bill_id = billId
     return billId
   }
@@ -1020,6 +1076,7 @@ export function createMockBillingAdapter(
             customerName: input.customerName?.trim() || null,
             customerPhone: input.customerPhone?.trim() || null,
             customerTier: input.customerTier ?? null,
+            ...serviceOf(input),
             lines: structuredClone(input.lines),
             discounts: structuredClone(input.discounts ?? []),
             roundingPaise: totalsOf(input.lines, input.discounts ?? []).roundingPaise,
@@ -1041,6 +1098,7 @@ export function createMockBillingAdapter(
             customerName: record.input.customerName?.trim() || null,
             customerPhone: record.input.customerPhone?.trim() || null,
             customerTier: record.input.customerTier ?? null,
+            ...serviceOf(record.input),
             lines: structuredClone(record.input.lines),
             // A revision restates the whole order, discounts included, so the
             // projection has to carry them or an edit reads as having dropped
@@ -1225,6 +1283,7 @@ export function createMockBillingAdapter(
       customerName: string | null
       customerPhone: string | null
       customerTier: CustomerTier | null
+      service: ServiceFacts | undefined
       lines: BillLineDraft[]
       totalPaise: number
       orderId: string | null
@@ -1277,6 +1336,7 @@ export function createMockBillingAdapter(
       customerName: content.customerName,
       customerPhone: content.customerPhone,
       customerTier: content.customerTier,
+      ...serviceOf(content.service),
       // Normalised to the shape a delivered bill reads back as. A draft line
       // may omit the discount facts because they are optional on the way in;
       // a line read from `bill_items` never can. Passing the draft through
@@ -1538,6 +1598,7 @@ export function createMockBillingAdapter(
         customerName: source?.customerName?.trim() || order?.customerName || null,
         customerPhone: source?.customerPhone?.trim() || order?.customerPhone || null,
         customerTier: source ? (source.customerTier ?? null) : (order?.customerTier ?? null),
+        service: source ?? order ?? undefined,
         lines: source?.lines ?? order?.lines ?? [],
         totalPaise,
         orderId: orderPayment?.orderId ?? null,
@@ -1554,6 +1615,7 @@ export function createMockBillingAdapter(
       if (input.lines.length === 0) {
         throw new BillingActionError('empty_order', 'There is nothing on this order.')
       }
+      refuseMalformedService(input)
       if (
         pending.has(input.clientId) ||
         store.orders.some((order) => order.id === input.clientId)
@@ -1586,6 +1648,7 @@ export function createMockBillingAdapter(
         customerName: input.customerName?.trim() || null,
         customerPhone: input.customerPhone?.trim() || null,
         customerTier: input.customerTier ?? null,
+        ...serviceOf(input),
         lines: structuredClone(input.lines),
         discounts: structuredClone(input.discounts ?? []),
         roundingPaise: totalsOf(input.lines, input.discounts ?? []).roundingPaise,
@@ -1627,6 +1690,7 @@ export function createMockBillingAdapter(
       }
       if (input.lines.length === 0)
         throw new BillingActionError('empty_order', 'There is nothing on this order.')
+      refuseMalformedService(input)
       const commandId = crypto.randomUUID()
       const inputCopy = structuredClone({
         ...input,
@@ -1647,6 +1711,7 @@ export function createMockBillingAdapter(
         customerName: input.customerName?.trim() || null,
         customerPhone: input.customerPhone?.trim() || null,
         customerTier: input.customerTier ?? null,
+        ...serviceOf(input),
         lines: structuredClone(input.lines),
         totalPaise: totalsOf(input.lines, input.discounts ?? []).totalPaise,
       }
@@ -1873,6 +1938,7 @@ export function createMockBillingAdapter(
         customerName: projected.customerName,
         customerPhone: projected.customerPhone,
         customerTier: projected.customerTier ?? null,
+        service: projected,
         lines: projected.lines,
         totalPaise: projected.totalPaise,
         orderId: projected.id,
@@ -1966,6 +2032,7 @@ export function createMockBillingAdapter(
               customerName: draft.customerName?.trim() || null,
               customerPhone: draft.customerPhone?.trim() || null,
               customerTier: draft.customerTier ?? null,
+              service: draft,
               lines: draft.lines,
               totalPaise: totalsOf(draft.lines, draft.discounts ?? []).totalPaise,
               orderId: null,
@@ -1987,6 +2054,7 @@ export function createMockBillingAdapter(
             customerName: order?.customerName ?? null,
             customerPhone: order?.customerPhone ?? null,
             customerTier: order?.customerTier ?? null,
+            service: order,
             lines: order?.lines ?? [],
             totalPaise: order?.totalPaise ?? 0,
             orderId: record.orderId,

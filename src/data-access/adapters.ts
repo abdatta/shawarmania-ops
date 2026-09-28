@@ -1,4 +1,12 @@
-import type { BillingCommandResult, MonthDayInput, MonthReading, SyncStateKind } from '@/domain'
+import type {
+  BillingCommandResult,
+  LineKind,
+  MonthDayInput,
+  MonthReading,
+  OutletServiceSettings,
+  ServiceType,
+  SyncStateKind,
+} from '@/domain'
 import type { PositionReading } from '@/lib/geolocation'
 
 import type { BillingCommand } from '../../shared/billing-command'
@@ -132,6 +140,20 @@ export interface OutletsAdapter {
    * deletable right now. Super Admin only.
    */
   outletReferences(id: string): Promise<OutletReference[]>
+  /**
+   * How this outlet serves: order types, tables and packaging
+   * (each-outlet-chooses-how-it-serves). Readable by whoever reads the outlet;
+   * all-off for an outlet that has chosen nothing, which bills exactly as
+   * today.
+   */
+  getServiceSettings(id: string): Promise<OutletServiceSettings>
+  /**
+   * Replace an outlet's service choices as one write. Super Admin only — the
+   * owner alone writes an outlet row, and no path is added for a manager. An
+   * inconsistent combination is refused with the problem's own code, exactly
+   * where the database's check constraints will refuse it.
+   */
+  updateServiceSettings(id: string, settings: OutletServiceSettings): Promise<OutletServiceSettings>
 }
 
 export type AppRole = Tables<'assignments'>['role']
@@ -1061,6 +1083,16 @@ export interface OutletMenu {
   discounts: MenuDiscount[]
   /** The counter panel's presets, in order. Between none and four. */
   presets: DiscountPreset[]
+  /**
+   * How this outlet serves, on the same path as the menu so a running tablet
+   * picks up a change at its next refresh and a cold start with no backend
+   * serves the way its outlet does (design D6).
+   *
+   * **Absent reads as all-off**, which is today's counter. A menu persisted
+   * before these choices existed has none, and so does every live read until
+   * the database carries them (design D10).
+   */
+  service?: OutletServiceSettings
 }
 
 export interface NewMenuCategory {
@@ -1220,6 +1252,10 @@ export interface CounterShift {
  * these two columns at all.
  */
 export interface BillLineDraft {
+  /**
+   * `''` where the line has no menu item — which since #60 includes the
+   * packaging line — and written back as null.
+   */
   menuItemId: string
   itemName: string
   unitPricePaise: number
@@ -1238,6 +1274,23 @@ export interface BillLineDraft {
   discountPercentBp?: number | null
   /** Snapshotted for the same reason `itemName` is: a bill never joins the menu. */
   categoryName?: string | null
+  /**
+   * An item from the menu, or the packaging line. Absent is an item: every line
+   * captured before packaging existed was one.
+   */
+  kind?: LineKind
+}
+
+/**
+ * How an order was served, as the counter chose it (design D2). A snapshot like
+ * the lines: no later change to the outlet's choices rewrites it, and it is
+ * fixed at payment. Absent on a record from before these choices existed, which
+ * reads as neither, with no table.
+ */
+export interface ServiceFacts {
+  serviceType?: ServiceType | null
+  /** Only ever with dine-in. What the counter calls the order, in place of its number. */
+  tableNumber?: number | null
 }
 
 /**
@@ -1259,7 +1312,7 @@ export interface BillDiscountDraft extends BillDiscountRule {
   amountPaise: number
 }
 
-export interface BillDraft {
+export interface BillDraft extends ServiceFacts {
   /**
    * Client-generated, and the bill's identity from the moment it exists. The
    * queue may deliver it more than once; the same id must store one bill.
@@ -1302,7 +1355,7 @@ export type OrderStatus = Tables<'orders'>['status']
 export type BillStatus = Tables<'bills'>['status']
 
 /** A saved order as the counter and manager surfaces read it. */
-export interface BillingOrder {
+export interface BillingOrder extends ServiceFacts {
   id: Tables<'orders'>['id']
   outletId: Tables<'orders'>['outlet_id']
   deviceId: Tables<'orders'>['device_id']
@@ -1371,7 +1424,7 @@ export interface BillingOrder {
 /** Which kind of act voided a settled bill, stamped by the performing transaction. */
 export type BillVoidKind = NonNullable<Tables<'bills'>['void_kind']>
 
-export interface SaveOrderInput {
+export interface SaveOrderInput extends ServiceFacts {
   clientId: string
   outletId: string
   shiftId: string
@@ -1386,7 +1439,7 @@ export interface SaveOrderInput {
   customerTier?: CustomerTier | null
 }
 
-export interface BillingBill {
+export interface BillingBill extends ServiceFacts {
   id: Tables<'bills'>['id']
   outletId: Tables<'bills'>['outlet_id']
   billNumber: Tables<'bills'>['bill_number']
@@ -1613,7 +1666,14 @@ export interface BillingAdapter {
     orderId: string,
     input: Pick<
       SaveOrderInput,
-      'lines' | 'discounts' | 'customerId' | 'customerName' | 'customerPhone' | 'customerTier'
+      | 'lines'
+      | 'discounts'
+      | 'customerId'
+      | 'customerName'
+      | 'customerPhone'
+      | 'customerTier'
+      | 'serviceType'
+      | 'tableNumber'
     >,
   ): Promise<BillingOrder>
   listOpenOrders(outletId: string): Promise<BillingOrder[]>

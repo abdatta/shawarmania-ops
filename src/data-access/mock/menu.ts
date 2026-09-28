@@ -1,3 +1,5 @@
+import { ALL_OFF_SERVICE_SETTINGS } from '@/domain'
+
 import type { AppRole } from '../adapters'
 import {
   MenuActionError,
@@ -274,6 +276,9 @@ export function createMockMenuAdapter(store: DemoStore, role: AppRole): MenuAdap
         categories: await this.listMenu(outletId),
         discounts: await this.listDiscounts(outletId),
         presets: (store.discountPresets.get(outletId) ?? []).map((preset) => ({ ...preset })),
+        // On the menu's own path, so a switch turned on at the outlet page
+        // reaches the tablet at its next refresh (design D6).
+        service: { ...(store.serviceSettings.get(outletId) ?? ALL_OFF_SERVICE_SETTINGS) },
       }
     },
 

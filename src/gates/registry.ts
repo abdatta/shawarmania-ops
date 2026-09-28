@@ -711,6 +711,32 @@ export function getSurface(id: SurfaceId): Surface {
 }
 
 /**
+ * **Parts of a surface that are gated on their own**, because the surface they
+ * sit on is already live.
+ *
+ * The registry above gates whole surfaces by route. A change that builds
+ * something *inside* a live surface against the mock first — UI first, then
+ * made real — needs the same three states for that part alone, or the live
+ * surface would show real users controls whose adapter is not connected yet.
+ * Promoting a part is the same one-line edit as promoting a surface.
+ */
+const partDefs = {
+  /**
+   * The Orders and Packaging sections of an outlet's page
+   * (each-outlet-chooses-how-it-serves, #60). `demo` until that change's
+   * database section writes the settings, when it goes `live` with the swap of
+   * the settings adapter.
+   */
+  'outlet-service-choices': { state: 'demo' },
+} as const satisfies Record<string, { state: GateState }>
+
+export type PartId = keyof typeof partDefs
+
+export function getPartState(id: PartId): GateState {
+  return partDefs[id].state
+}
+
+/**
  * Whether a surface renders at all in the given mode. `hidden` renders
  * nowhere; `demo` renders only in demo mode; `live` renders everywhere.
  */

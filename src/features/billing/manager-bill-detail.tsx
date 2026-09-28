@@ -7,9 +7,10 @@ import { MemberMark } from '@/components/ui/member-mark'
 import { Modal } from '@/components/ui/modal'
 import { Money } from '@/components/ui/money'
 import type { BillingAttributionOutcome, BillingBill, CounterBiller } from '@/data-access/adapters'
-import { formatBusinessDate, formatDayTime, lineTotalPaise } from '@/domain'
+import { formatBusinessDate, formatDayTime, serviceTypeLabel, tableLabel } from '@/domain'
 
 import { BillDiscountRows } from './bill-discount-rows'
+import { LineAmount } from './line-amount'
 import { BillReceiptShare } from './bill-receipt-share'
 
 const CANCELLATION_REASONS = ['Duplicate bill', 'Mistaken entry'] as const
@@ -242,10 +243,7 @@ export function ManagerBillDetail({
                     {line.quantity} × <Money paise={line.unitPricePaise} /> each
                   </p>
                 </div>
-                <Money
-                  paise={lineTotalPaise(line.unitPricePaise, line.quantity)}
-                  className="self-center font-bold"
-                />
+                <LineAmount line={line} className="self-center font-bold" />
               </li>
             ))}
           </ul>
@@ -313,6 +311,17 @@ export function ManagerBillDetail({
                 {bill.orderNumber === null ? 'Paid directly' : `Order ${bill.orderNumber}`}
               </Fact>
               <Fact label="Bill reference">Bill {bill.billNumber}</Fact>
+              {/*
+                How it was served, beside the numbers that identify it (#60).
+                Manager surfaces keep the numbers: a table is what the counter
+                calls an order, never what history files it under.
+              */}
+              {bill.serviceType && (
+                <Fact label="Served">
+                  {serviceTypeLabel(bill.serviceType)}
+                  {bill.tableNumber != null && ` · ${tableLabel(bill.tableNumber)}`}
+                </Fact>
+              )}
             </dl>
           </CollapsibleSection>
         </div>

@@ -1,4 +1,5 @@
 import { Check, ListPlus, UserRound, UserRoundPlus } from 'lucide-react'
+import type { ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { MemberMark } from '@/components/ui/member-mark'
@@ -46,6 +47,8 @@ export function BillComposerFooter({
   onSaveOrder,
   onCancelEdit,
   discountTotalPaise = 0,
+  service,
+  serviceOwed = false,
 }: {
   lines: BillLineDraft[]
   /** What the biller decided, or null while they have decided nothing. */
@@ -63,10 +66,18 @@ export function BillComposerFooter({
    * and charging another.
    */
   discountTotalPaise?: number
+  /** Dine-in and takeaway, where the outlet offers them, beside the customer. */
+  service?: ReactNode
+  /**
+   * Where the food goes is still unanswered and the outlet requires an answer
+   * [owner, 2026-09-27]. Held exactly like the customer decision: the terminal
+   * actions wait, and the chips standing unpressed beside them are the reminder.
+   */
+  serviceOwed?: boolean
 }) {
   const totals = billTotals(lines, { discountPaise: discountTotalPaise })
 
-  const canComplete = !settling && lines.length > 0 && customer !== null
+  const canComplete = !settling && lines.length > 0 && customer !== null && !serviceOwed
 
   return (
     <div className="space-y-3">
@@ -87,7 +98,9 @@ export function BillComposerFooter({
         itself, in the place it always sits. Rendering it here too would be two
         of one control — which is the failure this footer's own doc warns about.
       */}
-      {!editing && <CustomerRow customer={customer} onOpen={onOpenCustomer} />}
+      {!editing && (
+        <CustomerServiceRow customer={customer} onOpen={onOpenCustomer} service={service} />
+      )}
 
       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
         <Button
@@ -144,6 +157,30 @@ function customerRowLabel(customer: CustomerSelection): string {
   }
   const phone = `+91 ${formatIndianPhone(customer.phone)}`
   return customer.name === '' ? phone : `${customer.name} · ${phone}`
+}
+
+/**
+ * The type chips on a row of their own, **above** the customer control
+ * [owner, 2026-09-27] (each-outlet-chooses-how-it-serves): where the food goes
+ * first, then who it is for. At an outlet where the counter asks nothing this
+ * is the customer row alone, exactly as before.
+ */
+export function CustomerServiceRow({
+  customer,
+  onOpen,
+  service,
+}: {
+  customer: CustomerSelection | null
+  onOpen: () => void
+  service?: ReactNode
+}) {
+  if (!service) return <CustomerRow customer={customer} onOpen={onOpen} />
+  return (
+    <div className="space-y-3" data-testid="customer-service-row">
+      {service}
+      <CustomerRow customer={customer} onOpen={onOpen} />
+    </div>
+  )
 }
 
 /**

@@ -217,6 +217,21 @@ persona to show that the outlet is fixed for a Franchise Admin and only the name
 can be changed. **Start again** restores the original grouping. No part of this
 walkthrough changes historical bills or orders.
 
+**How each outlet serves** (#60, demo only until its database section lands).
+Kalyani's page has **Orders** between Details and Tablets: one switch and nothing
+beneath it. That is what a new outlet sees, and it is why the counter so far has
+billed exactly as it always has. Turn **Dine-in and takeaway** on and the page
+grows, each option opening inside the tile it belongs to, on the other of the two
+surface tones: the two types, **Table numbers** inside dine-in's reach — turn it
+on; there is no count to type — and **Packaging charge**, offered only because takeaway is.
+Turn packaging on: *Flat per order* is first and chosen; pick **Per bag**, type
+**5**, and turn **Free for gold members** on. Save refuses to start charging until
+a price is typed. Take **Takeaway** off and the packaging goes with it; put it
+back and press **Cancel** to return to what is stored, then **Save**.
+**Kanchrapara**'s page shows the same section already grown. Switch to the manager and open Kalyani: the same section, and they can change it too —
+but the Details card above it has no Edit, because the cutover and the check-in
+fence stay the owner's.
+
 Then open **Attendance** from the owner's own navigation — no appointment, no switching, and the address stays inside the owner's shell. Use the outlet selector to move to **Kanchrapara**, the shop this owner holds no assignment at: one arrival is waiting there, and they settle it. The demo's emulated position is at Kalyani, so the rule asks for a reason first and records that the approver was not on site — the same rule the outlet's own manager answers to. Note who is *not* on that roll-call: the owner and the manager are not staff there, so nobody is pretending to record their arrival. Then open **Cash** at the same outlet: the day is all there, and the close and the withdrawal are not, because the drawer comes from the assignment. Switch the selector back to Kalyani, where the owner *is* the manager, and the same screen offers both — which is the whole boundary in one gesture. The outlet you last picked is where the next screen opens, so nobody answers that question twice.
 
 **Then Customers, from Setup** (#57). It opens on **Regulars** — everybody seen in
@@ -263,6 +278,27 @@ A shift is already open. Ring a direct sale—tap tiles, decide the customer fro
 Ring another item, decide the customer and choose the primary **Order** action. It appears directly in the Counter's compact **Open orders** rail—there is no separate one-slot latest-order card. Its complete preparation lines and amounts, optional customer and total lead the card; `Order #xyz` is only a small reference, today's timestamp is relative, and the current biller's name is not repeated. Mark it paid, or cancel after a preset fills the editable reason field; the paid bill moves below the divider into **Bills this shift**, where Cash and UPI totals remain visible at zero, rows read **Today** with the time, and each bill expands to immutable details. Tap the customer row to open the keypad. Key `9000` to see the outlet's own recent customer suggested with a count of the others; tap it to fill the number, and the saved name resolves. Key `5003801867` instead to see a ten-digit number the mobile rule refuses turn red and offer no save. **Skip** takes one tap and confirms nothing. Swiggy, Zomato, Card and Other never appear as payment categories; aggregator trade is demonstrated in the Ledger instead.
 
 **Edit an order, and watch what the workspace does about it.** Tap the pencil. The composer takes the accent outline and names the order; that order leaves the list and its own card slides left to meet the composer's edge, so the two read as one piece of work. The composer's footer—total, customer fields, Save changes and Cancel edit—**moves onto the card**, leaving the composer as the items alone; there is never a second copy of either. Scroll the rail through this shift's bills: the card holds its place until scrolling would lose it, pins at the edge, and comes back. Add an item, change the customer, save, and see the draft you had in progress restored exactly.
+
+**Then serve it the way Kalyani now does** (#60, after the owner's switches
+above — the counter reads them at its next menu refresh, which a role switch
+is). Tap an item. **Dine-in** and **Takeaway** sit above the customer row, neither
+chosen, and **Order** and **Paid** wait for one, as they wait for the customer;
+tapping a chosen chip again takes it back.
+Tap **Takeaway**: a **Packaging × 1** line joins the bill, last. **+** makes it two
+bags; **−** stops at one, because the counter never removes packaging. Key
+Ritika's number (`9000000101`): she is gold, so the bags read *₹10* struck through
+and *Free*, and the total drops by exactly that; decide *Skip* instead and they
+are charged again. Tap **Dine-in**: the packaging goes, and a popup asks which
+table on a number pad. Key **3** and *Done*, and the chip reads *Table 3*; save it with
+**Order**, and the rail calls it *Table 3*, never by its number. Now tap another
+item, **Dine-in** again, and key **3**: it turns red — *Table 3 is already open.* — and *Done* will not take
+it. Tap **Edit here.** and table 3's order opens for
+editing, as its card's Edit would; *Cancel edit* brings back the bill you had
+started. Or key **12** instead, which any number up to 999 may be. Save, then mark it Prepared and Paid: its bill reads *Table 3* under Bills
+this shift, and table 3 is free again. Have the owner offer **Takeaway** alone and
+come back: no chip at all, and every order is takeaway with its packaging.
+**Start again** puts Kalyani back to nothing chosen, and the counter back to the
+one it always was.
 
 **Narrow the window** until three columns no longer fit. Nothing rearranges and nothing becomes a tab—the workspace scrolls sideways, each column about a phone's width. That is why there is no Open orders, My shift or Menu entry in this shell: all three are columns that never leave the screen. On a busy evening the middle column scrolls **beneath** its Cash and UPI totals, which stay pinned, and anything needing attention sits above the bills rather than under all of them.
 

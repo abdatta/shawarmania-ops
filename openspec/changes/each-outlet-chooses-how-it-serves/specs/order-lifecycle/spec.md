@@ -28,3 +28,20 @@ order by.
 
 - **WHEN** any caller attempts to change the type or table of a paid order
 - **THEN** the database refuses it
+
+### Requirement: An order records that it shared its table
+
+Whenever a write leaves two or more open orders at one outlet on the same table,
+each of those orders SHALL be marked as having shared its table, by the server,
+in the same transaction as the write. The mark SHALL never be removed, including
+by payment or cancellation, and SHALL never cause a write to be refused.
+
+#### Scenario: A payment taken back after the table was seated again
+
+- **WHEN** a paid table-4 order is reopened by taking its payment back while another order is open at table 4
+- **THEN** both orders are marked as having shared their table, and stay marked after either is paid
+
+#### Scenario: The same number at another outlet
+
+- **WHEN** table 4 is open at two different outlets
+- **THEN** neither order is marked

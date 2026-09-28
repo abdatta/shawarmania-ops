@@ -140,6 +140,31 @@
   }
 }
 
+/*
+ * The Orders section saying it saved (each-outlet-chooses-how-it-serves). All
+ * three are entry animations whose resting state is the final one, for the
+ * reason `dock-in` gives: a tab with no animation frame must still end up
+ * showing the right thing — a drawn tick, a settled pill, a card without glow.
+ */
+@keyframes tick-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+
+@keyframes saved-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+
+@keyframes saved-glow {
+  from {
+    box-shadow: 0 0 0 3px var(--color-primary);
+  }
+}
+
 @utility focus-ring {
   outline: none;
   box-shadow:

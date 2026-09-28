@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Money } from '@/components/ui/money'
 import type { BillLineDraft } from '@/data-access/adapters'
-import { lineTotalPaise } from '@/domain'
+import { isPackagingLine, isWaivedPackaging, lineKey, lineTotalPaise } from '@/domain'
 import { cn } from '@/lib/cn'
 
 /**
@@ -30,13 +30,20 @@ import { cn } from '@/lib/cn'
 export function BillPanel({
   lines,
   onChangeQuantity,
+  packagingFlat = false,
   editingOrderReference,
   footer,
   discountRows,
   addDiscount,
 }: {
   lines: BillLineDraft[]
-  onChangeQuantity: (menuItemId: string, delta: number) => void
+  /** Keyed by `lineKey`, so the packaging line is changed like any other. */
+  onChangeQuantity: (lineKey: string, delta: number) => void
+  /**
+   * The outlet charges packaging flat per order, so its line is one charge
+   * that is removed rather than counted up and down.
+   */
+  packagingFlat?: boolean
   editingOrderReference?: string
   /** The composer footer, when this panel is the one holding it. */
   footer?: ReactNode
@@ -86,55 +93,87 @@ export function BillPanel({
           </p>
         ) : (
           <ul className="divide-y divide-border">
-            {lines.map((line, index) => (
-              <li
-                key={`${line.menuItemId}-${index}`}
-                data-testid={`bill-line-${line.menuItemId}`}
-                className="flex items-center gap-2 py-2"
-              >
-                {/* Wraps rather than truncating: this column is a fixed width, and
-                    the end of an item's name is the part that distinguishes it. */}
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold leading-tight text-content">
-                    {line.itemName}
-                  </p>
-                  <Money paise={line.unitPricePaise} className="text-xs text-content-muted" />
-                </div>
+            {lines.map((line, index) => {
+              const key = lineKey(line)
+              const packaging = isPackagingLine(line)
+              const totalPaise = lineTotalPaise(line.unitPricePaise, line.quantity)
+              // The gold waiver: the packaging line's whole amount as its own
+              // discount (design D4). Nothing else can discount this line.
+              const waived = isWaivedPackaging(line)
+              return (
+                <li
+                  key={`${key}-${index}`}
+                  data-testid={`bill-line-${key}`}
+                  data-waived={waived || undefined}
+                  className="flex items-center gap-2 py-2"
+                >
+                  {/* Wraps rather than truncating: this column is a fixed width, and
+                      the end of an item's name is the part that distinguishes it. */}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold leading-tight text-content">
+                      {line.itemName}
+                    </p>
+                    <Money paise={line.unitPricePaise} className="text-xs text-content-muted" />
+                  </div>
 
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button
-                    variant="secondary"
-                    size="phone"
-                    className="w-10 px-0"
-                    aria-label={`One fewer ${line.itemName}`}
-                    onClick={() => onChangeQuantity(line.menuItemId, -1)}
-                  >
-                    <Minus aria-hidden size={16} />
-                  </Button>
-                  <span
-                    data-numeric=""
-                    data-testid={`bill-quantity-${line.menuItemId}`}
-                    className="w-6 text-center text-sm font-bold"
-                  >
-                    {line.quantity}
-                  </span>
-                  <Button
-                    variant="secondary"
-                    size="phone"
-                    className="w-10 px-0"
-                    aria-label={`One more ${line.itemName}`}
-                    onClick={() => onChangeQuantity(line.menuItemId, 1)}
-                  >
-                    <Plus aria-hidden size={16} />
-                  </Button>
-                </div>
+                  {packaging && packagingFlat ? (
+                    /*
+                      A flat charge is one thing, not a count, and the counter
+                      neither changes nor removes it [owner, 2026-09-27]: it goes
+                      only when the order stops being takeaway. No control, so
+                      none can be reached for.
+                    */
+                    <span aria-hidden className="w-28 shrink-0" />
+                  ) : (
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        variant="secondary"
+                        size="phone"
+                        className="w-10 px-0"
+                        aria-label={`One fewer ${line.itemName}`}
+                        // Bags count down to one and no further: packaging is
+                        // never removed at the counter [owner, 2026-09-27].
+                        disabled={packaging && line.quantity <= 1}
+                        onClick={() => onChangeQuantity(key, -1)}
+                      >
+                        <Minus aria-hidden size={16} />
+                      </Button>
+                      <span
+                        data-numeric=""
+                        data-testid={`bill-quantity-${key}`}
+                        className="w-6 text-center text-sm font-bold"
+                      >
+                        {line.quantity}
+                      </span>
+                      <Button
+                        variant="secondary"
+                        size="phone"
+                        className="w-10 px-0"
+                        aria-label={`One more ${line.itemName}`}
+                        onClick={() => onChangeQuantity(key, 1)}
+                      >
+                        <Plus aria-hidden size={16} />
+                      </Button>
+                    </div>
+                  )}
 
-                <Money
-                  paise={lineTotalPaise(line.unitPricePaise, line.quantity)}
-                  className="w-20 shrink-0 text-right text-sm font-semibold"
-                />
-              </li>
-            ))}
+                  {waived ? (
+                    <span className="flex w-20 shrink-0 flex-col items-end leading-tight">
+                      <Money
+                        paise={totalPaise}
+                        className="text-xs text-content-muted line-through"
+                      />
+                      <span className="text-sm font-semibold text-success">Free</span>
+                    </span>
+                  ) : (
+                    <Money
+                      paise={totalPaise}
+                      className="w-20 shrink-0 text-right text-sm font-semibold"
+                    />
+                  )}
+                </li>
+              )
+            })}
           </ul>
         )}
 
