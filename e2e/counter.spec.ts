@@ -218,6 +218,14 @@ test.describe('the counter', () => {
     await page.getByRole('button', { name: 'Mayonnaise Chicken Shawarma', exact: true }).click()
     // Identified, because the cards are found below by the name they carry.
     await identifyCustomer(page, '9000000888', 'Asha')
+    /*
+      The network goes before the order does, so everything below about the
+      unsent card is asserted while delivery is held rather than raced. Online,
+      the demo delivers after a short latency and the card changes identity —
+      `open-order-local-*` becomes `open-order-<number>` — so on a slow run the
+      assertions used to find nothing, whatever the counter did.
+    */
+    await setConnectivity(page, 'network-dropped')
     await page.getByTestId('save-order').click()
     await expect(page.getByTestId('saved-order-confirmation')).toHaveCount(0)
 
@@ -245,7 +253,26 @@ test.describe('the counter', () => {
     ).toHaveAttribute('aria-pressed', 'true')
     // Prepared then Paid, in that order, at that size, whatever is recorded.
     await expect(preparedCard.getByRole('button', { name: 'Reprepare' })).toHaveCount(0)
-    const paid = preparedCard.getByRole('button', { name: 'Paid', exact: true })
+    await expect(preparedCard.getByRole('button', { name: 'Paid', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+
+    // Back online, the order is delivered and numbered — by the server, and
+    // only then — and the preparation recorded offline came with it.
+    await setConnectivity(page, 'online')
+    await expect(rail.getByTestId(/^open-order-local-/)).toHaveCount(0, { timeout: 15_000 })
+    const delivered = rail
+      .getByTestId('pipeline-list')
+      .getByTestId(/^open-order-\d+$/)
+      .filter({ hasText: 'Asha' })
+    await expect(delivered).toContainText(/#\d/)
+    await expect(delivered).toContainText('₹298')
+    await expect(delivered.getByRole('button', { name: 'Prepared', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    const paid = delivered.getByRole('button', { name: 'Paid', exact: true })
     await expect(paid).toHaveAttribute('aria-pressed', 'false')
 
     // And then the money, which flies left into Bills this shift. The dialog
