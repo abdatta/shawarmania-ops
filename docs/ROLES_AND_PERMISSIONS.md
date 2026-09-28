@@ -103,6 +103,7 @@ assignment cannot be ended by anyone, including its holder.
 | Create / edit / deactivate outlet | ✓ | — | — | — |
 | Capture an outlet's position | ✓ | — | — | — |
 | Delete an outlet | ✓ closed, and only while nothing references it | — | — | — |
+| Choose how an outlet serves: dine-in, takeaway, table numbers, packaging *(#60)* | ✓ any outlet | ✓ the outlets they manage | R own outlet, on the counter | — |
 | **Team** |
 | Manage Franchise Admins | ✓ other accounts only | — | — | — |
 | Manage Billers and Employees | ✓ other accounts only | ✓ only when every current and intended outlet is managed by the caller | — | — |
@@ -269,7 +270,7 @@ corrupt; that allowance ended with the notebook. See
 [Limitations](LIMITATIONS.md#the-manual-ledger-was-a-stopgap-and-it-is-discharged)
 for the stopgap and how it was discharged.
 
-### A Franchise Admin reads their outlets, and writes none of them
+### A Franchise Admin reads their outlets, and writes only how they serve
 
 They had no Outlets surface at all until #51, and the gap became a hole in the
 same change: **Tablets left navigation entirely**, and since
@@ -291,6 +292,19 @@ never went near a screen, and watches both touch no rows.
 
 The surface offering fewer buttons is courtesy. **A control's absence is not a
 permission**, and this table is the boundary.
+
+**The one thing of the row they write is how the outlet serves** *(#60, owner,
+2026-09-27)*. A manager runs the shop, and whether it seats customers, numbers
+its tables or charges for bags is the shop's business — so the Orders section of
+the outlet's page is theirs to save for the outlets they manage, as it is the
+owner's for all of them. It reaches the database through
+`set_outlet_service_settings`, a narrow function that re-derives the caller's
+authority and writes those six columns and nothing else. `outlets_update` was
+**not** widened: it would have handed a manager the business-day cutover and the
+check-in fence, which judges their own staff's attendance. The isolation suite
+proves both halves — a manager's direct update of the row still touches nothing,
+and the function refuses the other outlet's manager, a biller, an employee and a
+counter tablet. Details stays the owner's.
 
 Two deliberate asymmetries worth noting. **The Super Admin cannot create bills** — billing is a counter action tied to a set-up tablet and a live shift, and letting the owner ring up a sale from their phone would corrupt attribution and cash reconciliation. **The Biller only sees their own shift's bills**, not the outlet's whole history; reviewing the day is a manager's job, and it keeps a shared tablet from exposing the outlet's takings to whoever is standing at it. A bill accepted after its operator remotely left is therefore review work for that outlet's Franchise Admin or the Super Admin, never an alert for the next biller. Their append-only decision qualifies the immutable original attribution; it does not rewrite it.
 

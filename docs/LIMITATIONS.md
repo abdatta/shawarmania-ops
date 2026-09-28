@@ -340,6 +340,7 @@ Customers are business-wide since `global-customer-identity` (#32): one normaliz
 
 Three consequences of gold being a label:
 
+- **One exception changes a total: packaging** (#60). Where an outlet makes packaging free for gold members, the counter waives the packaging line for a customer it knows is gold. That is the only place membership moves money, and it is attributable where the rest is not: on a packaging line a discount can mean nothing but the waiver, so *packaging given free to gold members* is one sum. The tablet decides from what it was last told, and the server does not second-guess it, so a grant or revocation racing a sale can leave the waiver and the bill's own tier snapshot disagreeing; the bill keeps both facts.
 - **What gold cost is unanswerable.** A discount a biller gives a member by hand is indistinguishable in the ledger from any other biller discount. A `membership` discount source was considered and cut by the owner; it becomes worth building the day gold becomes automatic, because bills are append-only and attribution cannot be added to settled ones.
 - **A tablet that has never seen a gold member cannot show them as gold offline.** It learns membership from the lookup; a customer it has identified before keeps their star from what it was last told, and anybody else is rung as an ordinary customer until the network returns. The sale itself still records the membership as it stood at the moment of sale, because the server reads that from the history when the sale lands.
 - **The figures start at #56's release.** Bills were first linked to customers on 2026-09-22 and nothing earlier was backfilled, so every card and the regulars list read thin for the first month.
@@ -559,6 +560,18 @@ review if the actual operator matters. That review can qualify attribution but
 cannot rewrite the bill. The system cannot infer who physically touched an
 offline shared tablet, and presents `operator unknown` as the honest outcome.
 
+### A table can be seated twice (#60)
+
+The counter refuses a table it can see is open. It cannot see what another
+tablet has not yet sent, or what its own remembered pipeline missed while it
+was offline, and a payment taken back reopens an order at a table somebody may
+have seated since. So two open orders can hold one table. The database accepts
+the second rather than refuse a sale the room has already served, marks both as
+having shared the table, and each card says which of the two it is, *1 of 2* or
+*2 of 2*, until one is paid or cancelled. Sorting it out is the biller's, in the
+room, which is the only place it can be sorted out. How often it happens is one
+query ([Operations](OPERATIONS.md)).
+
 ### A price change refuses an edit that still carries the old price
 
 The command boundary checks a **new** line against the menu as it stands when the
@@ -699,6 +712,14 @@ killing old links — that they would die when stale data was cleared — does n
 exist, because nothing is deleted here and bills are financial records. So the
 choice was a real expiry or none, and revocation won because it acts now rather
 than in a year and never breaks a receipt a customer legitimately kept.
+
+### The receipt page words the gold packaging waiver generically (#60)
+
+A gold member's waived packaging reaches the receipt as its own discount row,
+and the amounts add up. The page, in the landing repository, does not yet know
+that row by name and prints it as *Discount (100%) · Selected items*. It also
+does not yet say whether the bill was dine-in or takeaway, or at which table.
+Both are the receipt change's to render (#58, which carries the wording).
 
 ### Forgotten-password recovery requires an administrator
 

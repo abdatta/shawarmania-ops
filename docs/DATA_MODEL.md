@@ -25,6 +25,22 @@ Applied everywhere, without exception:
 
 Coordinates and radius exist for attendance verification. The cutover time is what makes cross-midnight trade reconcile correctly.
 
+**How the outlet serves** *(#60)* — six more columns, every one off by default, so
+a new outlet bills exactly as the counter always has: `dine_in_offered`,
+`takeaway_offered`, `table_numbers` (dine-in orders take a keyed table, 1 to 999;
+there is no count of tables), `packaging_mode` (`off` | `per_bag` | `per_order`),
+`packaging_price_paise` (whole rupees, at least ₹1, no ceiling, null exactly when
+packaging is off) and `packaging_free_for_gold`. Checks on the table refuse every
+combination that makes no sense — table numbers without dine-in, packaging
+without takeaway, a price without a charge or the reverse, a gold waiver with
+nothing to waive — so a hand-crafted request meets them as surely as the form.
+They are read wherever the row is read, a counter tablet included for its own
+outlet, and travel to the tablet with its menu. The owner writes them for any
+outlet and a Franchise Admin for the outlets they manage, and both only through
+`set_outlet_service_settings(outlet, …six values)`, which re-derives the caller's
+authority and writes these columns and no others: `outlets_update` stays the
+owner's, because widening it would hand a manager the cutover and the fence.
+
 There is no `billing_live_from`. It was the per-outlet handover after which the
 temporary ledger read Cash and UPI from bills, and it went with the ledger in
 `retire-the-manual-ledger` (#12): with one record of a trading day there is no
@@ -216,6 +232,18 @@ customer-form snapshot and `customer_tier`, integer-paise totals, `status`
 (`open` | `paid` | `cancelled`), and separate revision, cancellation and payment
 attribution.
 
+**How it was served** *(#60)*: `service_type` (`dine_in` | `takeaway`, null for
+neither), `table_number` (1 to 999, only on dine-in), and `table_shared`. The
+first two are snapshots like the lines — no later settings change rewrites them —
+that move while the order is open and are fixed at payment. A table is what the
+counter *calls* the order; the order number is still allocated and is still its
+identity. `table_shared` is set by the trigger `orders_mark_shared_table`
+whenever a write leaves two or more open orders at one outlet on one table, on
+every one of them, and is never unset. The database never refuses the second
+order (a table can be seated twice by two tablets that could not see each other,
+or by a payment taken back); it records it, which is the only reliable record of
+it — see [Operations](OPERATIONS.md) for the two queries.
+
 An order is short-lived working state while food is prepared. Only `open` may
 be revised. Payment or cancellation makes it immutable. The order number is
 allocated per outlet and business date, restarts at 1 after cutover, and never
@@ -225,12 +253,23 @@ touches the permanent bill-number counter.
 `unit_price_paise`, `quantity`, `line_total_paise`. Existing lines retain their
 snapshot through later menu changes.
 
+`kind` (`item` | `packaging`, default `item`) *(#60)*. A packaging line is named
+*Packaging*, has no `menu_item_id` and no category — so no menu discount can reach
+it — and carries the outlet's price per bag (its quantity is the bags) or flat
+(quantity 1). At most one per order, by a partial unique index. Its discount is
+nothing or its whole total at `discount_percent_bp = 10000`, and on a packaging
+line a discount means exactly one thing: the gold waiver. *"Packaging given free
+to gold members this month"* is one sum over these rows. `bill_items.kind` is the
+same, copied at payment.
+
 **`bills`**
 `id` (client UUID), `outlet_id`, permanent `bill_number`, optional source
 `order_id`, `ordered_at` and `business_date` (revenue), `paid_at` and
 `payment_business_date` (drawer), operator/tablet/counter-shift attribution,
 customer snapshot and `customer_tier`, integer-paise totals, optional
-single-method summary, status and void attribution.
+single-method summary, status and void attribution. `service_type` and
+`table_number` *(#60)*, copied from the order it settles, or taken from a direct
+sale's own payload.
 
 **`customer_tier` is the membership the sale was rung under** — `gold` or null —
 written by the server, never by a client. A trigger on each table reads the

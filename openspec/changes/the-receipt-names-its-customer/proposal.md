@@ -102,6 +102,32 @@ coordination in `tasks.md` rather than discovering it at deploy: per
 `no-pushes-while-the-counter-trades`, the owner picks the window, and two repos
 mean two pushes to sequence.
 
+## Also for the renderer, from #60
+
+`each-outlet-chooses-how-it-serves` (#60) put three new facts on a bill that the
+receipt renderer should show, and the reader already returns what they need:
+
+- **How it was served.** `bills.service_type` and `bills.table_number` —
+  *Dine-in · Table 4*, *Dine-in*, *Takeaway*, or nothing for a bill that is
+  neither (every bill before #60, and every bill at an outlet that chose
+  nothing).
+- **Packaging is an ordinary line**, named *Packaging*, and prints like any other.
+- **The gold waiver is its own discount row.** `bill_public_discount_rows` now
+  returns it with `source = 'packaging'` (the whole packaging line at 100%),
+  between the menu rows and the bill's own, so the printed rows still add up to
+  the stored discount. Word it **Gold member · packaging free**. It is not a menu
+  discount and must not be drawn as one.
+
+The reader does not yet return the bill's type and table; adding them to
+`bill_public_receipt` is part of this change's renderer work, not #60's.
+
+**Until then, what the live page does with the waiver.** The landing Worker
+types `source` as `'menu' | 'bill'` and checks it nowhere at runtime
+(`worker/src/content.ts`), so a `packaging` row falls through to the bill
+branch of the label and the menu branch of the detail: *Discount (100%) ·
+Selected items*, for the right amount. Nothing breaks and the rows still add
+up; the words are wrong until this change renders the row by name.
+
 ## Non-goals
 
 - **The biller's identity stays hidden.** #54 also refuses to name the biller, the

@@ -542,6 +542,14 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
    attributed to the outlet recorded on them, and the device cannot read its
    former outlet after the move. If the preconditions are not met, finish or
    cancel the counter work and re-read its state before trying again.
+
+   **Then choose how the counter serves** (the outlet's page → **Orders**). A new
+   outlet has chosen nothing and bills exactly as the counter always has, with no
+   question about dine-in or takeaway and no packaging line. Turn on what the shop
+   actually does — dine-in, takeaway, table numbers, a packaging charge per bag or
+   flat, free for gold members — and **Save**. The outlet's own manager can do this
+   too. The tablet picks it up at its next menu refresh, or at once on a reload.
+
 7. **Add employees and billers** (Team), sending each activation link.
    Creating a person requires name, username, one role and one or more outlets;
    job title, phone and joined date are optional. It writes the account and

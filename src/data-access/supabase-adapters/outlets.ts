@@ -8,7 +8,14 @@ import {
   type OutletsAdapter,
 } from '../adapters'
 import type { Database, Tables, TablesInsert, TablesUpdate } from '../database.types'
-import { ALL_OFF_SERVICE_SETTINGS } from '@/domain'
+import { serviceSettingsFromRow } from '../outlet-service-row'
+import {
+  ALL_OFF_SERVICE_SETTINGS,
+  SERVICE_SETTINGS_PROBLEM_MESSAGES,
+  serviceSettingsProblem,
+  type OutletServiceSettings,
+  type ServiceSettingsProblem,
+} from '@/domain'
 import type { CounterResumeCoordinator, CounterResumeRecord } from '@/outbox'
 
 /**
@@ -88,6 +95,50 @@ function asOutletError(error: { message: string; code?: string }): unknown {
     )
   }
   return error
+}
+
+/**
+ * Which rule a refused service-settings write broke, by the check constraint
+ * that refused it (each-outlet-chooses-how-it-serves, D1).
+ *
+ * The page refuses these before it ever sends, so reaching here means a request
+ * the page did not make, or a rule the two disagree about — and the owner still
+ * reads a sentence rather than a constraint name. Two constraints cover two
+ * mistakes each, told apart by the settings that were sent.
+ */
+function serviceSettingsRefusal(
+  error: { message: string; code?: string },
+  sent: OutletServiceSettings,
+): unknown {
+  if (error.code === '42501') {
+    return new DataActionError(
+      'not_permitted',
+      'Only the owner or this outlet’s manager changes how it serves.',
+    )
+  }
+  if (error.code === 'P0002') {
+    return new DataActionError('not_found', 'That outlet no longer exists.')
+  }
+  if (error.code !== '23514') return error
+
+  const constraint = /check constraint "([a-z_]+)"/.exec(error.message)?.[1]
+  const problem: ServiceSettingsProblem | null =
+    constraint === 'outlets_table_numbers_need_dine_in'
+      ? 'tables_without_dine_in'
+      : constraint === 'outlets_packaging_needs_takeaway'
+        ? 'packaging_without_takeaway'
+        : constraint === 'outlets_packaging_price_matches_charge'
+          ? sent.packagingMode === 'off'
+            ? 'packaging_price_without_charge'
+            : 'packaging_price_required'
+          : constraint === 'outlets_packaging_price_whole_rupees'
+            ? (sent.packagingPricePaise ?? 0) < 100
+              ? 'packaging_price_too_low'
+              : 'packaging_price_not_whole_rupees'
+            : constraint === 'outlets_gold_waiver_needs_charge'
+              ? 'gold_waiver_without_charge'
+              : null
+  return problem ? new DataActionError(problem, SERVICE_SETTINGS_PROBLEM_MESSAGES[problem]) : error
 }
 
 export function createSupabaseOutletsAdapter(
@@ -244,28 +295,48 @@ export function createSupabaseOutletsAdapter(
     },
 
     /*
-      **Deliberately not connected yet** (each-outlet-chooses-how-it-serves,
-      design D10). The columns these read and write arrive with that change's
-      database section; until then every live outlet has chosen nothing, which
-      is exactly how production bills today, and the settings sections that
-      would call the write are `demo`-gated on the outlet page.
-
-      When it is connected, the write goes through a narrow function the owner
-      and the outlet's own managers may call, never through `outlets_update`,
-      which stays the owner's alone for every other column.
-
-      The write refuses rather than pretending: a screen that somehow reached
-      it in live mode says so, instead of reporting a save nothing kept.
+      How an outlet serves (each-outlet-chooses-how-it-serves, D1, D10). Read
+      off the outlet's own row, so whoever may read the row reads its choices;
+      an outlet outside the reader's reach answers as one that chose nothing,
+      because that is all the reader may know about it.
     */
-    async getServiceSettings() {
-      return { ...ALL_OFF_SERVICE_SETTINGS }
+    async getServiceSettings(id) {
+      const { data, error } = await table()
+        .select(
+          'dine_in_offered, takeaway_offered, table_numbers, packaging_mode, packaging_price_paise, packaging_free_for_gold',
+        )
+        .eq('id', id)
+        .maybeSingle()
+      if (error) throw error
+      return data ? serviceSettingsFromRow(data) : { ...ALL_OFF_SERVICE_SETTINGS }
     },
 
-    async updateServiceSettings() {
-      throw new DataActionError(
-        'not_available',
-        'Choosing how an outlet serves is not available yet.',
-      )
+    /*
+      Never through `outlets_update`, which stays the owner's alone for every
+      other column: through `set_outlet_service_settings`, which the owner and
+      the outlet's own managers may call, re-derives the caller's authority, and
+      writes these six columns and nothing else.
+    */
+    async updateServiceSettings(id, settings) {
+      const problem = serviceSettingsProblem(settings)
+      if (problem !== null) {
+        throw new DataActionError(problem, SERVICE_SETTINGS_PROBLEM_MESSAGES[problem])
+      }
+      const { data, error } = await client.rpc('set_outlet_service_settings', {
+        p_outlet: id,
+        p_dine_in_offered: settings.dineInOffered,
+        p_takeaway_offered: settings.takeawayOffered,
+        p_table_numbers: settings.tableNumbers,
+        p_packaging_mode: settings.packagingMode,
+        // The generator types every function argument as non-null; this one is
+        // null exactly when packaging is off, which the table checks.
+        p_packaging_price_paise: settings.packagingPricePaise as number,
+        p_packaging_free_for_gold: settings.packagingFreeForGold,
+      })
+      if (error) throw serviceSettingsRefusal(error, settings)
+      const row = data as Tables<'outlets'>
+      remember(row)
+      return serviceSettingsFromRow(row)
     },
   }
 }

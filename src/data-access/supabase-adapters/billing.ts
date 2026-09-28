@@ -142,7 +142,28 @@ function lineView(row: Tables<'order_items'> | Tables<'bill_items'>): BillLineDr
     discountPaise: row.discount_paise,
     discountPercentBp: row.discount_percent_bp,
     categoryName: row.category_name,
+    kind: row.kind,
   }
+}
+
+/**
+ * A queued command's lines, drawn as the tablet's own view of them before the
+ * server has answered. Every fact the line carries comes across — its discount
+ * and its kind included — so an order drawn from the queue reads exactly as it
+ * will once the server has it.
+ */
+function lineDrafts(lines: readonly BillingLineSnapshot[]): BillLineDraft[] {
+  return lines.map((line) => ({
+    menuItemId: line.menuItemId ?? '',
+    itemName: line.itemName,
+    unitPricePaise: line.unitPricePaise,
+    quantity: line.quantity,
+    discountPaise: line.discountPaise,
+    discountPercentBp: line.discountPercentBp,
+    categoryName: line.categoryName,
+    // Absent on a command queued before #60, which knew only items.
+    kind: line.kind ?? 'item',
+  }))
 }
 
 function orderView(row: OrderReadRow, historicalDeviceLabel: string | null): BillingOrder {
@@ -163,6 +184,8 @@ function orderView(row: OrderReadRow, historicalDeviceLabel: string | null): Bil
     // The server's snapshot, written from the membership history at the moment
     // of sale. Never recomputed here.
     customerTier: row.customer_tier,
+    serviceType: row.service_type,
+    tableNumber: row.table_number,
     lines: row.order_items.map(lineView),
     discounts: (row.order_discounts ?? []).map((discount) => ({
       basis: discount.basis,
@@ -280,6 +303,8 @@ function billView(
     customerName: row.customer_name,
     customerPhone: row.customer_phone,
     customerTier: row.customer_tier,
+    serviceType: row.service_type,
+    tableNumber: row.table_number,
     lines: row.bill_items.map(lineView),
     discounts: (row.bill_discounts ?? []).map((discount) => ({
       basis: discount.basis,
@@ -706,15 +731,9 @@ export function createSupabaseBillingAdapter(
             customerName: payload.customerName,
             customerPhone: payload.customerPhone,
             customerTier: knownTier(payload.customerPhone),
-            lines: payload.lines.map((line) => ({
-              menuItemId: line.menuItemId ?? '',
-              itemName: line.itemName,
-              unitPricePaise: line.unitPricePaise,
-              quantity: line.quantity,
-              discountPaise: line.discountPaise,
-              discountPercentBp: line.discountPercentBp,
-              categoryName: line.categoryName,
-            })),
+            serviceType: payload.serviceType ?? null,
+            tableNumber: payload.tableNumber ?? null,
+            lines: lineDrafts(payload.lines),
             discounts: payload.discounts.map((discount) => ({ ...discount })),
             roundingPaise: payload.roundingPaise,
             totalPaise: payload.totalPaise,
@@ -740,12 +759,15 @@ export function createSupabaseBillingAdapter(
                 payload.customerPhone === current.customerPhone
                   ? (current.customerTier ?? null)
                   : knownTier(payload.customerPhone),
-              lines: payload.lines.map((line) => ({
-                menuItemId: line.menuItemId ?? '',
-                itemName: line.itemName,
-                unitPricePaise: line.unitPricePaise,
-                quantity: line.quantity,
-              })),
+              // A revision queued before #60 says nothing of type or table,
+              // and the server leaves them as they were; so does this.
+              ...(payload.serviceType !== undefined && {
+                serviceType: payload.serviceType,
+                tableNumber: payload.tableNumber,
+              }),
+              lines: lineDrafts(payload.lines),
+              discounts: (payload.discounts ?? []).map((discount) => ({ ...discount })),
+              roundingPaise: payload.roundingPaise ?? 0,
               totalPaise: payload.totalPaise,
             })
           }
@@ -1071,15 +1093,16 @@ export function createSupabaseBillingAdapter(
             previous && previous.customerPhone === command.payload.customerPhone
               ? (previous.customerTier ?? null)
               : knownTier(command.payload.customerPhone),
-          lines: command.payload.lines.map((line) => ({
-            menuItemId: line.menuItemId ?? '',
-            itemName: line.itemName,
-            unitPricePaise: line.unitPricePaise,
-            quantity: line.quantity,
-            discountPaise: line.discountPaise,
-            discountPercentBp: line.discountPercentBp,
-            categoryName: line.categoryName,
-          })),
+          ...(command.payload.serviceType !== undefined
+            ? {
+                serviceType: command.payload.serviceType,
+                tableNumber: command.payload.tableNumber,
+              }
+            : {
+                serviceType: previous?.serviceType ?? null,
+                tableNumber: previous?.tableNumber ?? null,
+              }),
+          lines: lineDrafts(command.payload.lines),
           discounts: command.payload.discounts.map((discount) => ({ ...discount })),
           roundingPaise: command.payload.roundingPaise,
           totalPaise: command.payload.totalPaise,
@@ -1122,12 +1145,9 @@ export function createSupabaseBillingAdapter(
           customerName: command.payload.customerName,
           customerPhone: command.payload.customerPhone,
           customerTier: knownTier(command.payload.customerPhone),
-          lines: command.payload.lines.map((line) => ({
-            menuItemId: line.menuItemId ?? '',
-            itemName: line.itemName,
-            unitPricePaise: line.unitPricePaise,
-            quantity: line.quantity,
-          })),
+          serviceType: command.payload.serviceType ?? null,
+          tableNumber: command.payload.tableNumber ?? null,
+          lines: lineDrafts(command.payload.lines),
           totalPaise: command.payload.totalPaise,
           voidKind: null,
           voidReason: null,
@@ -1176,6 +1196,8 @@ export function createSupabaseBillingAdapter(
             customerName: order.customerName,
             customerPhone: order.customerPhone,
             customerTier: order.customerTier ?? null,
+            serviceType: order.serviceType ?? null,
+            tableNumber: order.tableNumber ?? null,
             lines: order.lines,
             totalPaise: order.totalPaise,
             voidKind: null,
@@ -1600,6 +1622,7 @@ export function createSupabaseBillingAdapter(
         customerName: draft.customerName?.trim() || null,
         customerPhone: draft.customerPhone?.trim() || null,
         customerTier: draft.customerTier ?? knownTier(draft.customerPhone),
+        ...serviceFacts(draft),
         lines: [...draft.lines],
         totalPaise: totals.totalPaise,
         voidKind: null,
@@ -1698,6 +1721,7 @@ export function createSupabaseBillingAdapter(
         customerName: input.customerName?.trim() || null,
         customerPhone: input.customerPhone?.trim() || null,
         customerTier: input.customerTier ?? knownTier(input.customerPhone),
+        ...serviceFacts(input),
         lines: [...input.lines],
         discounts: [...(input.discounts ?? [])],
         // Computed with the discounts, not without them. A local order that
@@ -1827,6 +1851,8 @@ export function createSupabaseBillingAdapter(
         customerName: existing.customerName,
         customerPhone: existing.customerPhone,
         customerTier: existing.customerTier ?? null,
+        serviceType: existing.serviceType ?? null,
+        tableNumber: existing.tableNumber ?? null,
         lines: existing.lines,
         totalPaise: existing.totalPaise,
         voidKind: null,

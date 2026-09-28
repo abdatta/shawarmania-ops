@@ -539,6 +539,60 @@ describe('the live tablet acceptance boundary', () => {
     database.close()
   })
 
+  it('draws an offline order by its table, with its bags and discount, from the queue alone', async () => {
+    const billing = createSupabaseBillingAdapter(offlineClient(), session)
+    const bags = {
+      kind: 'packaging',
+      menuItemId: '',
+      itemName: 'Packaging',
+      unitPricePaise: 500,
+      quantity: 2,
+      discountPaise: 1000,
+      discountPercentBp: 10_000,
+      categoryName: null,
+    } as const
+
+    await billing.saveOrder({ ...orderInput, serviceType: 'dine_in', tableNumber: 3 })
+    await expect(billing.listOpenOrders(session.device.outletId)).resolves.toMatchObject([
+      { id: orderInput.clientId, serviceType: 'dine_in', tableNumber: 3 },
+    ])
+
+    await billing.reviseOrder(orderInput.clientId, {
+      lines: [...draft.lines, bags],
+      discounts: [{ basis: 'amount', valueBp: null, valuePaise: 2000, amountPaise: 2000 }],
+      customerName: 'Asha',
+      customerPhone: null,
+      serviceType: 'takeaway',
+      tableNumber: null,
+    })
+    const [open] = await billing.listOpenOrders(session.device.outletId)
+    expect(open).toMatchObject({
+      serviceType: 'takeaway',
+      tableNumber: null,
+      discounts: [{ amountPaise: 2000 }],
+      totalPaise: 11_900,
+    })
+    expect(open?.lines.at(-1)).toMatchObject({
+      kind: 'packaging',
+      quantity: 2,
+      discountPaise: 1000,
+      discountPercentBp: 10_000,
+    })
+
+    // And after a restart, from IndexedDB with nothing held in memory. The
+    // queue's redraw of a revision dropped its line and bill discounts before
+    // #60, so a restarted tablet showed a discounted order at full price.
+    const restarted = createSupabaseBillingAdapter(offlineClient(), session)
+    const [cold] = await restarted.listOpenOrders(session.device.outletId)
+    expect(cold).toMatchObject({
+      serviceType: 'takeaway',
+      tableNumber: null,
+      discounts: [{ amountPaise: 2000 }],
+      totalPaise: 11_900,
+    })
+    expect(cold?.lines.at(-1)).toMatchObject({ kind: 'packaging', discountPaise: 1000 })
+  })
+
   it('overlays new durable commands onto the persisted server base after a cold start', async () => {
     const rememberedOrder: BillingOrder = {
       id: orderInput.clientId,

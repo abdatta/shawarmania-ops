@@ -508,3 +508,14 @@ And three choices the design left open:
 6. A version-1 or version-2 revision leaves an order's type and table as they
    are rather than clearing them: it was written by a till that knew nothing of
    them.
+
+**2026-09-28, section 5, going live** — the screen did not change, as the mock
+promised. One more defect surfaced and went: a restarted tablet redrew an
+offline-revised order from its queue without the revision's line and bill
+discounts (its total was right, its lines and discount rows were not). Every
+local view drawn from a queued command now goes through one helper, which is
+also how the type, the table and each line's kind reach an offline pipeline.
+The receipt page in the landing repository types a discount row's `source` and
+checks it nowhere, so until #58 it prints the waiver as *Discount (100%) ·
+Selected items*: the right amount, the wrong words; recorded in LIMITATIONS and
+in #58's proposal.

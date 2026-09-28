@@ -217,7 +217,7 @@ persona to show that the outlet is fixed for a Franchise Admin and only the name
 can be changed. **Start again** restores the original grouping. No part of this
 walkthrough changes historical bills or orders.
 
-**How each outlet serves** (#60, demo only until its database section lands).
+**How each outlet serves** (#60). The same section, and the same counter, run live against the real settings; here they run against the demo store, where the choices live on the fixture outlets.
 Kalyani's page has **Orders** between Details and Tablets: one switch and nothing
 beneath it. That is what a new outlet sees, and it is why the counter so far has
 billed exactly as it always has. Turn **Dine-in and takeaway** on and the page

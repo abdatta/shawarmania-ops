@@ -28,6 +28,20 @@ which is one instant, not two: `counter_shifts.expires_at` is authored by
 `app_next_cutover` when the shift opens, and the tablet reads that stored value
 rather than recomputing a cutover of its own.
 
+**How the outlet serves travels with its menu** (#60). The six choices — dine-in,
+takeaway, table numbers, packaging and its price, free for gold — are read from
+the outlet's own row on the same refresh as the menu and persisted in the resume
+record beside it, so a tablet cold-started with no backend asks the same
+questions and adds the same packaging it did online. A record written before #60
+carries none, which reads as an outlet that chose nothing. Orders rung offline
+carry their type, table, packaging line and gold waiver in the queued payload
+(version 3), and settle exactly once like any other command; the waiver is
+decided from what the tablet last knew of the customer, and the server does not
+second-guess it. The busy-table check reads the remembered pipeline, so an
+offline tablet can seat a table another till already holds. The server records
+that rather than refusing it: both orders are marked as having shared the table,
+and each card says which of the two it is.
+
 A resume record answers a **cold start** only. A tablet already trading with a
 server-resolved shift keeps that session through a failed revalidation; it does
 not fall back to remembered projections because one request blinked.

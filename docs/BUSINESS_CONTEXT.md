@@ -95,6 +95,18 @@ There is no deposit and no partially paid order. A fully paid bill may use exact
 
 **Discounts are real.** A biller takes an amount or a percentage off the order in front of them, and the owner runs discounts across chosen menu categories from the Menu screen. Every discount is stored beside the price it reduces, carrying the basis that produced it, so a bill settled months ago still says what it gave away and why without the menu being consulted. A bill never falls below ₹1: a fully discounted order records the whole giveaway and the rounding line carries the total to the floor, which is why a free meal is visible in a day's takings as the odd rupee on the end.
 
+**Where the food goes is each outlet's choice** (#60). An outlet may mark its
+orders dine-in or takeaway, key a dine-in order to a table, and charge for
+packaging on takeaway orders, per bag or flat per order, optionally free for
+gold members. Every outlet starts with all of it off and bills exactly as the
+counter always has; the owner, or the outlet's own manager, switches on what
+the shop actually does. Where there is a choice the biller answers it in one tap
+before the order is saved, because a kitchen that cannot tell a plate from a
+parcel packs the wrong one. A dine-in order with a table is called by its table
+rather than its number, since that is what the person carrying the tray needs.
+Packaging is a line on the bill like any other, never removed or repriced at the
+counter, so it reaches the day's takings without anybody remembering to add it.
+
 Two consequences worth stating plainly:
 
 - **Optional fields must be genuinely optional.** A required customer name would get filled with "a" a hundred times a day and destroy the customer data it was meant to create.

@@ -12,6 +12,7 @@ import {
   type NewMenuItemWithCategory,
 } from '../adapters'
 import type { Database, Json, Tables } from '../database.types'
+import { serviceSettingsFromRow } from '../outlet-service-row'
 import type { CounterResumeCoordinator, CounterResumeRecord } from '@/outbox'
 
 function menuError(error: PostgrestError): MenuActionError {
@@ -250,13 +251,23 @@ export function createSupabaseMenuAdapter(
       try {
         const [discounts, outlet] = await Promise.all([
           this.listDiscounts(outletId),
-          client.from('outlets').select('discount_presets').eq('id', outletId).single(),
+          client
+            .from('outlets')
+            .select(
+              'discount_presets, dine_in_offered, takeaway_offered, table_numbers, packaging_mode, packaging_price_paise, packaging_free_for_gold',
+            )
+            .eq('id', outletId)
+            .single(),
         ])
         if (outlet.error) throw menuError(outlet.error)
         const menu = {
           categories,
           discounts,
           presets: (outlet.data.discount_presets ?? []) as unknown as DiscountPreset[],
+          // How the outlet serves travels with its menu and is persisted with
+          // it, so a tablet cold-started offline serves the way its outlet does
+          // (each-outlet-chooses-how-it-serves, D6).
+          service: serviceSettingsFromRow(outlet.data),
         }
         resumeCoordinator?.noteOutletMenu(outletId, menu)
         return menu

@@ -55,6 +55,32 @@ immutable bill; cancellation keeps attributed history and consumes no bill numbe
 
 The small number called to the customer. Sequential per outlet and business
 date, restarting after cutover. It is never a bill number; pay-now has none.
+A dine-in order with a table is called by its [table](#table) instead, though it
+still has a number.
+
+### Service type
+
+Where the food goes: **dine-in**, **takeaway**, or neither (#60). An outlet chooses
+which it offers, and an outlet that offers neither never asks. Where it offers
+both, the biller answers before the order is saved; where it offers one, every
+order is that one. A snapshot on the order and its bill, fixed at payment.
+
+### Table
+
+The number, 1 to 999, a dine-in order is keyed to at an outlet that has *table
+numbers* on (#60). There is no count of tables; the pad takes whatever the biller
+keys. A table is **busy** while an open order carries it, and the counter refuses
+a busy table it can see, offering **Edit here** to that order. The database never
+refuses one: two open orders on one table are recorded, marked `table_shared`,
+and each card says which of the two it is — *1 of 2*, *2 of 2*.
+
+### Packaging
+
+A line on a takeaway order at an outlet that charges for it (#60): *Packaging*,
+per bag (the line's quantity is the bags, never fewer than one) or flat per order.
+Added and removed by the order's type, never by the biller, and never repriced.
+Its only possible discount is the **gold waiver**, the whole line at 100%, where
+the outlet makes packaging free for gold members.
 
 ### Bill number
 

@@ -722,12 +722,12 @@ export function getSurface(id: SurfaceId): Surface {
  */
 const partDefs = {
   /**
-   * The Orders and Packaging sections of an outlet's page
-   * (each-outlet-chooses-how-it-serves, #60). `demo` until that change's
-   * database section writes the settings, when it goes `live` with the swap of
-   * the settings adapter.
+   * The Orders section of an outlet's page (each-outlet-chooses-how-it-serves,
+   * #60). Live since the live outlets adapter reads and writes the settings;
+   * every outlet starts with nothing chosen, so until somebody chooses, the
+   * counter bills exactly as it did before.
    */
-  'outlet-service-choices': { state: 'demo' },
+  'outlet-service-choices': { state: 'live' },
 } as const satisfies Record<string, { state: GateState }>
 
 export type PartId = keyof typeof partDefs
