@@ -20,7 +20,7 @@ function command(): BillingCommand {
   const commandId = crypto.randomUUID()
   return {
     commandId,
-    schemaVersion: 2,
+    schemaVersion: 3,
     tabletId: 'tablet-1',
     shiftId: 'shift-1',
     type: 'cancel_order',

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   BILLING_COMMAND_RPC,
+  BILLING_COMMAND_SCHEMA_VERSIONS,
   billingCommandRpcArguments,
   billingPayloadHash,
   canonicalBillingJson,
@@ -24,6 +25,8 @@ const payload: PayNowPayload = {
   totalPaise: 13900,
   pricingMode: 'no_tax',
   discounts: [],
+  serviceType: null,
+  tableNumber: null,
   payments: [{ method: 'cash', amountPaise: 13900 }],
   lines: [
     {
@@ -36,6 +39,7 @@ const payload: PayNowPayload = {
       discountPaise: 0,
       discountPercentBp: null,
       categoryName: null,
+      kind: 'item',
     },
   ],
 }
@@ -147,6 +151,88 @@ describe('billing command canonical identity', () => {
     const bare = await billingPayloadHash(payload as unknown as Record<string, never>)
     const discounted = await billingPayloadHash(withDiscounts as unknown as Record<string, never>)
     expect(discounted).not.toBe(bare)
+  })
+
+  /**
+   * Version 3 (#60): how the order was served. The SQL half of these two is in
+   * `supabase/tests/63_orders_carry_how_they_were_served.sql`.
+   */
+  const shawarmaLine = {
+    id: '30000000-0000-4000-a000-000000000031',
+    menuItemId: '31000000-0000-4000-a000-000000000001',
+    itemName: 'Classic Chicken Shawarma',
+    unitPricePaise: 13900,
+    quantity: 1,
+    lineTotalPaise: 13900,
+    discountPaise: 0,
+    discountPercentBp: null,
+    categoryName: 'Shawarma',
+    kind: 'item',
+  } as const
+  const takeaway = {
+    orderId: '40000000-0000-4000-a000-000000000003',
+    businessDate: '2026-09-28',
+    customerId: null,
+    customerName: 'Asha',
+    customerPhone: '+919876543210',
+    subtotalPaise: 14900,
+    discountPaise: 1000,
+    taxPaise: 0,
+    roundingPaise: 0,
+    totalPaise: 13900,
+    pricingMode: 'no_tax',
+    discounts: [],
+    serviceType: 'takeaway',
+    tableNumber: null,
+    lines: [
+      shawarmaLine,
+      {
+        id: '30000000-0000-4000-a000-000000000032',
+        menuItemId: null,
+        itemName: 'Packaging',
+        unitPricePaise: 500,
+        quantity: 2,
+        lineTotalPaise: 1000,
+        discountPaise: 1000,
+        discountPercentBp: 10000,
+        categoryName: null,
+        kind: 'packaging',
+      },
+    ],
+  } as const
+
+  it('hashes a version-3 gold takeaway with its waived bags as PostgreSQL does', async () => {
+    expect(await billingPayloadHash(takeaway as unknown as Record<string, never>)).toBe(
+      'f248fc64bb6b24d3e92bd37fdfdd59bae3b04c97456c2ea6cde61a5489e1535c',
+    )
+  })
+
+  it('hashes a version-3 dine-in order at a table as PostgreSQL does', async () => {
+    const dineIn = {
+      ...takeaway,
+      orderId: '40000000-0000-4000-a000-000000000004',
+      serviceType: 'dine_in',
+      tableNumber: 4,
+      subtotalPaise: 13900,
+      discountPaise: 0,
+      lines: [shawarmaLine],
+    }
+    expect(await billingPayloadHash(dineIn as unknown as Record<string, never>)).toBe(
+      '213a531bb9610dfb0f1df506528c207835fe4f53a93398d16933c04b94864bae',
+    )
+  })
+
+  it('stamps every new envelope version 3', async () => {
+    const command = await createBillingCommand({
+      commandId: '10000000-0000-4000-a000-000000000003',
+      tabletId: null,
+      shiftId: null,
+      type: 'cancel_order',
+      createdAt: '2026-09-28T12:00:00.000Z',
+      payload: { orderId: takeaway.orderId, reason: 'Test' },
+    })
+    expect(command.schemaVersion).toBe(3)
+    expect(BILLING_COMMAND_SCHEMA_VERSIONS).toEqual([3, 2, 1])
   })
 
   it('sorts the new keys into the canonical order like every other key', () => {

@@ -66,6 +66,7 @@ function line(id: string) {
     discountPaise: 0,
     discountPercentBp: null,
     categoryName: null,
+    kind: 'item',
   } as const
 }
 
@@ -84,6 +85,8 @@ function payNowPayload(billId: string, lineId: string, businessDate: string): Pa
     totalPaise: 13900,
     pricingMode: 'no_tax',
     discounts: [],
+    serviceType: null,
+    tableNumber: null,
     payments: [{ method: 'cash', amountPaise: 13900 }],
     lines: [line(lineId)],
   }
@@ -282,6 +285,8 @@ describe.sequential('billing command races over PostgREST', () => {
       totalPaise: 13900,
       pricingMode: 'no_tax',
       discounts: [],
+      serviceType: null,
+      tableNumber: null,
       lines: [line('fa600000-0000-4000-a000-000000000001')],
     }
     const create = await createBillingCommand({
@@ -410,6 +415,8 @@ describe.sequential('billing command races over PostgREST', () => {
         totalPaise: 13900,
         pricingMode: 'no_tax',
         discounts: [],
+        serviceType: null,
+        tableNumber: null,
         lines: [line('fa600000-0000-4000-a000-000000000020')],
       },
     })

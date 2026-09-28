@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import cases from './discount-row-cases.json'
-import { groupMenuDiscounts, menuDiscountLabel } from './discount-rows'
+import { groupMenuDiscounts, menuDiscountLabel, type DiscountedLine } from './discount-rows'
 import { formatPaise } from './money'
 
 /**
@@ -13,7 +13,8 @@ import { formatPaise } from './money'
  */
 describe('grouping menu discounts into rows', () => {
   it.each(cases.cases.map((c) => [c.name, c] as const))('%s', (_name, testCase) => {
-    expect(groupMenuDiscounts(testCase.lines)).toEqual(testCase.rows)
+    // JSON widens `kind` to a string; the case file only ever says item or packaging.
+    expect(groupMenuDiscounts(testCase.lines as readonly DiscountedLine[])).toEqual(testCase.rows)
   })
 
   /*
@@ -24,7 +25,10 @@ describe('grouping menu discounts into rows', () => {
   it.each(cases.cases.map((c) => [c.name, c] as const))(
     'the %s case is a bill the database would accept',
     (_name, testCase) => {
-      const lineDiscounts = testCase.lines.reduce((sum, line) => sum + line.discountPaise, 0)
+      // The packaging waiver is never a menu row (#60), so it is not in the sum.
+      const lineDiscounts = testCase.lines
+        .filter((line) => !('kind' in line) || line.kind !== 'packaging')
+        .reduce((sum, line) => sum + line.discountPaise, 0)
       const rowTotal = testCase.rows.reduce((sum, row) => sum + row.amountPaise, 0)
       expect(rowTotal).toBe(lineDiscounts)
     },

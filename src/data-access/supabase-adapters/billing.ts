@@ -4,7 +4,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   createBillingCommand,
   type BillingCommand,
+  type BillingLineSnapshot,
   type BillingPaymentAllocation,
+  type BillingServiceFacts,
   type OrderContentPayload,
 } from '../../../shared/billing-command'
 import {
@@ -25,6 +27,7 @@ import {
   type CustomerTier,
   type PaymentAllocation,
   type SaveOrderInput,
+  type ServiceFacts,
 } from '../adapters'
 import type { Database, Tables } from '../database.types'
 import {
@@ -336,38 +339,66 @@ function discountTotalPaise(
   )
 }
 
+/** Each line as the command carries it, its kind included (#60). */
+function lineSnapshots(lines: readonly BillLineDraft[]): BillingLineSnapshot[] {
+  return lines.map((line) => ({
+    id: newUuid(),
+    menuItemId: line.menuItemId || null,
+    itemName: line.itemName,
+    unitPricePaise: line.unitPricePaise,
+    quantity: line.quantity,
+    lineTotalPaise: lineTotalPaise(line.unitPricePaise, line.quantity),
+    discountPaise: line.discountPaise ?? 0,
+    discountPercentBp: line.discountPercentBp ?? null,
+    categoryName: line.categoryName ?? null,
+    kind: line.kind ?? 'item',
+  }))
+}
+
+/** How the order was served, with a table only ever on dine-in. */
+function serviceFacts(facts: ServiceFacts): BillingServiceFacts {
+  const serviceType = facts.serviceType ?? null
+  return {
+    serviceType,
+    tableNumber: serviceType === 'dine_in' ? (facts.tableNumber ?? null) : null,
+  }
+}
+
+/**
+ * An order's whole content, as a create or a revision states it.
+ *
+ * Takes the input whole rather than piece by piece. Until #60 the bill-level
+ * discounts were a trailing parameter both callers left out, so every saved
+ * order reached the server at full price while the tablet showed it discounted.
+ */
 function orderPayload(
   orderId: string,
   businessDate: string,
-  lines: readonly BillLineDraft[],
-  customer: {
-    customerId?: string | null
-    customerName?: string | null
-    customerPhone?: string | null
-  },
-  discounts: readonly BillDiscountDraft[] = [],
+  input: Pick<
+    SaveOrderInput,
+    | 'lines'
+    | 'discounts'
+    | 'customerId'
+    | 'customerName'
+    | 'customerPhone'
+    | 'serviceType'
+    | 'tableNumber'
+  >,
 ): OrderContentPayload {
+  const { lines } = input
+  const discounts = input.discounts ?? []
   const totals = billTotals(lines, { discountPaise: discountTotalPaise(lines, discounts) })
   return {
     orderId,
     businessDate,
-    customerId: customer.customerId ?? null,
-    customerName: customer.customerName?.trim() || null,
-    customerPhone: customer.customerPhone?.trim() || null,
+    customerId: input.customerId ?? null,
+    customerName: input.customerName?.trim() || null,
+    customerPhone: input.customerPhone?.trim() || null,
     ...totals,
     pricingMode: 'no_tax',
-    lines: lines.map((line) => ({
-      id: newUuid(),
-      menuItemId: line.menuItemId || null,
-      itemName: line.itemName,
-      unitPricePaise: line.unitPricePaise,
-      quantity: line.quantity,
-      lineTotalPaise: lineTotalPaise(line.unitPricePaise, line.quantity),
-      discountPaise: line.discountPaise ?? 0,
-      discountPercentBp: line.discountPercentBp ?? null,
-      categoryName: line.categoryName ?? null,
-    })),
+    lines: lineSnapshots(lines),
     discounts: discounts.map((discount) => ({ ...discount })),
+    ...serviceFacts(input),
   }
 }
 
@@ -1536,18 +1567,9 @@ export function createSupabaseBillingAdapter(
           ...totals,
           pricingMode: 'no_tax',
           payments: requirePayments(draft.payments, totals.totalPaise),
-          lines: draft.lines.map((line) => ({
-            id: newUuid(),
-            menuItemId: line.menuItemId || null,
-            itemName: line.itemName,
-            unitPricePaise: line.unitPricePaise,
-            quantity: line.quantity,
-            lineTotalPaise: lineTotalPaise(line.unitPricePaise, line.quantity),
-            discountPaise: line.discountPaise ?? 0,
-            discountPercentBp: line.discountPercentBp ?? null,
-            categoryName: line.categoryName ?? null,
-          })),
+          lines: lineSnapshots(draft.lines),
           discounts: (draft.discounts ?? []).map((discount) => ({ ...discount })),
+          ...serviceFacts(draft),
         },
       })
       await accept(command, draft.outletId, draft.businessDate, draft.clientId)
@@ -1658,7 +1680,7 @@ export function createSupabaseBillingAdapter(
         shiftId: shift.id,
         type: 'create_order',
         createdAt: new Date().toISOString(),
-        payload: orderPayload(input.clientId, input.businessDate, input.lines, input),
+        payload: orderPayload(input.clientId, input.businessDate, input),
       })
       await accept(command, input.outletId, input.businessDate, input.clientId)
       const localOrder: BillingOrder = {
@@ -1708,7 +1730,7 @@ export function createSupabaseBillingAdapter(
         shiftId: shift.id,
         type: 'revise_order',
         createdAt: new Date().toISOString(),
-        payload: orderPayload(orderId, existing.businessDate, input.lines, input),
+        payload: orderPayload(orderId, existing.businessDate, input),
       })
       await accept(command, existing.outletId, existing.businessDate, orderId)
       const revisedTotals = billTotals(input.lines, {

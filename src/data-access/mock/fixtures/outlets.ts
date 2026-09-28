@@ -49,6 +49,14 @@ export const outletFixtures: Tables<'outlets'>[] = [
     ],
     hyperpure_delivery: true,
     is_active: true,
+    // Chosen nothing, as every outlet is after the #60 migration: the demo's
+    // counter stands here, so it starts exactly as it bills today.
+    dine_in_offered: false,
+    takeaway_offered: false,
+    table_numbers: false,
+    packaging_mode: 'off',
+    packaging_price_paise: null,
+    packaging_free_for_gold: false,
     created_at: FIXTURE_CREATED_AT,
     location_accuracy_m: 9,
     location_captured_at: '2026-07-24T09:15:00+00:00',
@@ -86,6 +94,16 @@ export const outletFixtures: Tables<'outlets'>[] = [
     ],
     hyperpure_delivery: false,
     is_active: true,
+    // Everything on — both types, keyed tables, ₹5 a bag, free for gold — so the
+    // settings page is already grown here while Kalyani shows it growing. The
+    // one place this departs from supabase/seed.sql, where no outlet has chosen
+    // anything: the local stack proves the default, the demo shows the choices.
+    dine_in_offered: true,
+    takeaway_offered: true,
+    table_numbers: true,
+    packaging_mode: 'per_bag',
+    packaging_price_paise: 500,
+    packaging_free_for_gold: true,
     created_at: FIXTURE_CREATED_AT,
     // Never surveyed, mirroring supabase/seed.sql — so the demo shows both
     // states of the owner's outlet screen without anyone travelling.
@@ -124,6 +142,12 @@ export const outletFixtures: Tables<'outlets'>[] = [
     ],
     hyperpure_delivery: false,
     is_active: false,
+    dine_in_offered: false,
+    takeaway_offered: false,
+    table_numbers: false,
+    packaging_mode: 'off',
+    packaging_price_paise: null,
+    packaging_free_for_gold: false,
     created_at: FIXTURE_CREATED_AT,
     location_accuracy_m: null,
     location_captured_at: null,

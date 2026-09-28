@@ -10,6 +10,8 @@ and SHALL be fixed at payment.
 
 Where an order has a table, the counter SHALL call it by its table where it would
 otherwise show the order number, and SHALL NOT show the order number beside it.
+Where an order has a type and no table, its pipeline card SHALL say whether it is
+dine-in or takeaway, so the kitchen can tell a plate from a parcel.
 The order number SHALL still be allocated and
 stored, and SHALL remain what history, voids and manager surfaces identify the
 order by.
@@ -18,6 +20,11 @@ order by.
 
 - **WHEN** an order for table 4 is on the pipeline
 - **THEN** its card reads Table 4, and the order still carries its daily order number
+
+#### Scenario: A parcel with no table
+
+- **WHEN** a takeaway order is on the pipeline
+- **THEN** its card says Takeaway beside its number
 
 #### Scenario: The outlet stops offering dine-in
 

@@ -87,8 +87,16 @@ select is(
   'malformed_payload',
   'a version-2 envelope missing the version-2 keys is refused');
 
+-- Version 3 (#60) adds how the order was served. Its own shapes are proved in
+-- `63_orders_carry_how_they_were_served.sql`; here, only that the earlier two
+-- are not mistaken for it.
 select is(
   pg_temp.envelope(3, pg_temp.legacy_payload()),
+  'malformed_payload',
+  'a version-3 envelope carrying the version-1 shape is refused');
+
+select is(
+  pg_temp.envelope(4, pg_temp.legacy_payload()),
   'unsupported_schema',
   'a version nobody has written yet is refused as unsupported, not as malformed');
 

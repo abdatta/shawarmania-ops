@@ -8,17 +8,19 @@
 /**
  * The payload shape this build writes.
  *
- * Version 2 added the discount records and the rounding line. **The database
- * still accepts version 1**, and must: a till that went offline before this
- * release and reconnects after it is holding envelopes written under the old
- * shape, with hashes already computed over it, and refusing those would lose a
- * trading day to a deployment. A version-1 payload means no discounts and no
- * rounding, which is exactly what it meant when it was written.
+ * Version 2 added the discount records and the rounding line; version 3 (#60)
+ * adds how the order was served — its type, its table, and each line's kind.
+ * **The database still accepts versions 1 and 2**, and must: a till that went
+ * offline before a release and reconnects after it is holding envelopes written
+ * under the old shape, with hashes already computed over it, and refusing those
+ * would lose a trading day to a deployment. A version-1 payload means no
+ * discounts and no rounding, and versions 1 and 2 mean neither type, no table
+ * and every line an item — exactly what they meant when they were written.
  */
-export const BILLING_COMMAND_SCHEMA_VERSION = 2 as const
+export const BILLING_COMMAND_SCHEMA_VERSION = 3 as const
 
 /** Every payload shape the boundary accepts, newest first. */
-export const BILLING_COMMAND_SCHEMA_VERSIONS = [2, 1] as const
+export const BILLING_COMMAND_SCHEMA_VERSIONS = [3, 2, 1] as const
 
 export type BillingCommandType =
   | 'create_order'
@@ -36,6 +38,10 @@ export type BillingCommandType =
 
 export type BillingPaymentMethod = 'cash' | 'upi'
 export type BillingPricingMode = 'no_tax'
+/** How an order was served. Null on a payload is neither. */
+export type BillingServiceType = 'dine_in' | 'takeaway'
+/** An item from the menu, or the packaging (#60). */
+export type BillingLineKind = 'item' | 'packaging'
 
 export interface BillingPaymentAllocation {
   readonly method: BillingPaymentMethod
@@ -62,6 +68,23 @@ export interface BillingLineSnapshot {
   readonly discountPaise: number
   readonly discountPercentBp: number | null
   readonly categoryName: string | null
+  /**
+   * A packaging line has no menu item and no category, and its discount is
+   * nothing or its whole total at 100% — the gold waiver, and nothing else.
+   */
+  readonly kind: BillingLineKind
+}
+
+/**
+ * How the order was served, snapshotted like everything else on it. The
+ * boundary checks these for shape only, never against what the outlet
+ * currently offers: an offline tablet may have rung the order before a setting
+ * changed.
+ */
+export interface BillingServiceFacts {
+  readonly serviceType: BillingServiceType | null
+  /** 1 to 999, and only on a dine-in order. */
+  readonly tableNumber: number | null
 }
 
 /** One discount applied to the whole bill rather than to any single line. */
@@ -74,7 +97,7 @@ export interface BillingDiscountSnapshot {
   readonly amountPaise: number
 }
 
-export interface OrderContentPayload {
+export interface OrderContentPayload extends BillingServiceFacts {
   readonly orderId: string
   readonly businessDate: string
   readonly customerId: string | null
@@ -106,7 +129,7 @@ export interface PayOrderPayload {
   readonly paymentBusinessDate: string
 }
 
-export interface PayNowPayload {
+export interface PayNowPayload extends BillingServiceFacts {
   readonly billId: string
   readonly businessDate: string
   readonly paymentBusinessDate: string

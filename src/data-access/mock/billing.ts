@@ -398,7 +398,8 @@ export function createMockBillingAdapter(
       // The snapshot, never the live membership: a revocation tonight does not
       // take the mark off an order rung at lunch.
       customerTier: row.customer_tier,
-      ...serviceOf(store.orderService.get(row.id)),
+      serviceType: row.service_type,
+      tableNumber: row.table_number,
       lines: store.orderItems.filter((line) => line.order_id === row.id).map(lineView),
       discounts: (store.orderDiscounts.get(row.id) ?? []).map((discount) => ({ ...discount })),
       roundingPaise: row.rounding_paise,
@@ -493,7 +494,8 @@ export function createMockBillingAdapter(
       customerName: row.customer_name,
       customerPhone: row.customer_phone,
       customerTier: row.customer_tier,
-      ...serviceOf(store.billService.get(row.id)),
+      serviceType: row.service_type,
+      tableNumber: row.table_number,
       lines: store.billItems.filter((line) => line.bill_id === row.id).map(lineView),
       discounts: (store.billDiscounts.get(row.id) ?? []).map((discount) => ({ ...discount })),
       roundingPaise: row.rounding_paise,
@@ -574,12 +576,8 @@ export function createMockBillingAdapter(
     lines: BillLineDraft[],
     discounts: readonly BillDiscountDraft[] = [],
   ) {
-    for (const line of store.orderItems) {
-      if (line.order_id === orderId) store.packagingLineIds.delete(line.id)
-    }
     store.orderItems = store.orderItems.filter((line) => line.order_id !== orderId)
     lines.forEach((line, index) => {
-      if (isPackagingLine(line)) store.packagingLineIds.add(`${orderId}-${index}`)
       store.orderItems.push({
         id: `${orderId}-${index}`,
         order_id: orderId,
@@ -594,6 +592,7 @@ export function createMockBillingAdapter(
         discount_paise: line.discountPaise ?? 0,
         discount_percent_bp: line.discountPercentBp ?? null,
         category_name: line.categoryName ?? null,
+        kind: line.kind ?? 'item',
       })
     })
     // A revision restates the whole order, so its discounts are replaced rather
@@ -636,9 +635,26 @@ export function createMockBillingAdapter(
     }
   }
 
+  /**
+   * The database's `orders_mark_shared_table`, done here: whenever an order is
+   * left open at a table another open order holds, every one of them is marked,
+   * and nothing ever unmarks it (design D11). Never a refusal.
+   */
+  function markSharedTable(row: Tables<'orders'>) {
+    if (row.status !== 'open' || row.table_number === null) return
+    const atTable = store.orders.filter(
+      (order) =>
+        order.outlet_id === row.outlet_id &&
+        order.table_number === row.table_number &&
+        order.status === 'open',
+    )
+    if (atTable.length < 2) return
+    for (const order of atTable) order.table_shared = true
+  }
+
   /** A stored line read back, with the packaging line marked as what it is. */
   function lineView(line: Tables<'order_items'> | Tables<'bill_items'>): BillLineDraft {
-    const packaging = store.packagingLineIds.has(line.id)
+    const packaging = line.kind === 'packaging'
     return {
       menuItemId: packaging ? '' : (line.menu_item_id ?? line.id),
       itemName: line.item_name,
@@ -721,6 +737,8 @@ export function createMockBillingAdapter(
       // of sale; the demo takes what the counter was told at that moment, which
       // is the same answer everywhere a walkthrough can reach.
       customer_tier: draft.customerTier ?? null,
+      service_type: serviceOf(draft).serviceType,
+      table_number: serviceOf(draft).tableNumber,
       payment_method: payments.length === 1 ? payments[0]!.method : null,
       pricing_mode: 'no_tax',
       status: 'settled',
@@ -738,10 +756,8 @@ export function createMockBillingAdapter(
       draft.clientId,
       paymentCorrections.get(draft.clientId)?.at(-1) ?? payments,
     )
-    store.billService.set(draft.clientId, serviceOf(draft))
 
     for (const [index, line] of draft.lines.entries()) {
-      if (isPackagingLine(line)) store.packagingLineIds.add(`${draft.clientId}-${index}`)
       store.billItems.push({
         id: `${draft.clientId}-${index}`,
         bill_id: draft.clientId,
@@ -758,6 +774,7 @@ export function createMockBillingAdapter(
         discount_paise: line.discountPaise ?? 0,
         discount_percent_bp: line.discountPercentBp ?? null,
         category_name: line.categoryName ?? null,
+        kind: line.kind ?? 'item',
       })
     }
     pendingPayNowDrafts.delete(draft.clientId)
@@ -810,10 +827,13 @@ export function createMockBillingAdapter(
       cancelled_by: null,
       cancelled_device_id: null,
       cancelled_shift_id: null,
+      service_type: serviceOf(input).serviceType,
+      table_number: serviceOf(input).tableNumber,
+      table_shared: false,
     }
     store.orders.push(row)
-    store.orderService.set(row.id, serviceOf(input))
     replaceOrderLines(row.id, input.lines, input.discounts ?? [])
+    markSharedTable(row)
   }
 
   function applyReviseOrder(record: { orderId: string; shiftId: string; input: SaveOrderInput }) {
@@ -833,14 +853,21 @@ export function createMockBillingAdapter(
     row.customer_id = record.input.customerId ?? null
     row.customer_name = record.input.customerName?.trim() || null
     row.customer_phone = phone
+    // Every term of the identity from the totals, as the create path writes
+    // them. Noughts here, with the rounding left as it was, stored a revised
+    // order whose discount and rounding no longer added up to its total.
     row.subtotal_paise = totals.subtotalPaise
-    row.discount_paise = 0
-    row.tax_paise = 0
+    row.discount_paise = totals.discountPaise
+    row.tax_paise = totals.taxPaise
+    row.rounding_paise = totals.roundingPaise
     row.total_paise = totals.totalPaise
     // Both may change while the order is open, and are fixed once it is paid:
     // this path is reached only for an open order.
-    store.orderService.set(row.id, serviceOf(record.input))
+    const service = serviceOf(record.input)
+    row.service_type = service.serviceType
+    row.table_number = service.tableNumber
     replaceOrderLines(row.id, record.input.lines, record.input.discounts ?? [])
+    markSharedTable(row)
   }
 
   function applyCancelOrder(record: { orderId: string; shiftId: string; reason: string }) {
@@ -911,6 +938,8 @@ export function createMockBillingAdapter(
       customer_phone: row.customer_phone,
       // Carried from the order, and final from here: a bill is append-only.
       customer_tier: row.customer_tier,
+      service_type: row.service_type,
+      table_number: row.table_number,
       payment_method: payments.length === 1 ? payments[0]!.method : null,
       pricing_mode: 'no_tax',
       status: 'settled',
@@ -928,15 +957,12 @@ export function createMockBillingAdapter(
     }
     store.bills.push(bill)
     store.billPayments.set(billId, payments)
-    // Copied from the order, and final from here: a bill is append-only.
-    store.billService.set(billId, serviceOf(store.orderService.get(row.id)))
     // The edit window runs from the money's own clock — for an upfront payer
     // that is when they handed the cash over, not when the kitchen finished.
     acceptedPaymentTimes.set(billId, Date.parse(paidAt))
     store.orderItems
       .filter((line) => line.order_id === row.id)
       .forEach((line, index) => {
-        if (store.packagingLineIds.has(line.id)) store.packagingLineIds.add(`${billId}-${index}`)
         store.billItems.push({
           id: `${billId}-${index}`,
           bill_id: billId,
@@ -948,6 +974,7 @@ export function createMockBillingAdapter(
           discount_paise: line.discount_paise,
           discount_percent_bp: line.discount_percent_bp,
           category_name: line.category_name,
+          kind: line.kind,
         })
       })
     row.bill_id = billId
@@ -1013,6 +1040,8 @@ export function createMockBillingAdapter(
     row.paid_by = null
     row.paid_shift_id = null
     // `prepared_at` untouched: the card returns to whichever section it came from.
+    // Open again, so it may now share its table with an order seated since.
+    markSharedTable(row)
   }
 
   function cancelPaidOrderRow(orderId: string, shiftId: string, reason: string) {

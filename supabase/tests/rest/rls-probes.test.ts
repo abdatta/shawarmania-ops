@@ -398,6 +398,60 @@ describe('a Franchise Admin session, hand-crafting requests for the other outlet
     expect(data?.every((row) => row.outlet_id === OUTLETS.kalyani)).toBe(true)
   })
 
+  // each-outlet-chooses-how-it-serves (#60): the new facts ride their rows'
+  // policies. Each probe reads its own outlet first, so an empty answer about
+  // the other outlet is isolation rather than a column that does not exist.
+  it('reads how its own outlet serves, and nothing of the other outlet', async () => {
+    const own = await fa
+      .from('outlets')
+      .select('dine_in_offered, takeaway_offered, table_numbers, packaging_mode')
+      .eq('id', OUTLETS.kalyani)
+    expect(own.error).toBeNull()
+    expect(own.data).toHaveLength(1)
+
+    const other = await fa
+      .from('outlets')
+      .select('dine_in_offered, packaging_price_paise, packaging_free_for_gold')
+      .eq('id', OUTLETS.kanchrapara)
+    expect(other.error).toBeNull()
+    expect(other.data).toEqual([])
+  })
+
+  it('reads the type and table of its own bills and orders, and none of the other outlet', async () => {
+    const own = await fa
+      .from('bills')
+      .select('service_type, table_number, bill_items(kind)')
+      .eq('outlet_id', OUTLETS.kalyani)
+    expect(own.error).toBeNull()
+    expect(own.data?.length).toBeGreaterThan(0)
+
+    for (const request of [
+      fa
+        .from('bills')
+        .select('service_type, table_number, bill_items(kind)')
+        .eq('outlet_id', OUTLETS.kanchrapara),
+      fa
+        .from('orders')
+        .select('service_type, table_number, table_shared, order_items(kind)')
+        .eq('outlet_id', OUTLETS.kanchrapara),
+    ]) {
+      const { data, error } = await request
+      expect(error).toBeNull()
+      expect(data).toEqual([])
+    }
+  })
+
+  it('cannot change how its outlet serves by writing the row directly', async () => {
+    const { data, error } = await fa
+      .from('outlets')
+      .update({ takeaway_offered: true })
+      .eq('id', OUTLETS.kalyani)
+      .select('id')
+    // The owner's policy stands: a manager's only door is the narrow function.
+    expect(error).toBeNull()
+    expect(data).toEqual([])
+  })
+
   it('reading a specific other-outlet row by id returns nothing', async () => {
     const { data, error } = await fa
       .from('menu_items')
@@ -1015,6 +1069,21 @@ describe('the counter handshake over HTTP', () => {
 
     const { data: outlets } = await tablet.from('outlets').select('id')
     expect(outlets?.map((row) => row.id)).toEqual([OUTLETS.kalyani])
+  })
+
+  it('reads how its own outlet serves, which is what it serves offline, and no other', async () => {
+    const tablet = (await session(PERSONAS.deviceKalyani.email)).client
+    const { data, error } = await tablet
+      .from('outlets')
+      .select('id, dine_in_offered, takeaway_offered, table_numbers, packaging_mode')
+    expect(error).toBeNull()
+    expect(data?.map((row) => row.id)).toEqual([OUTLETS.kalyani])
+
+    const other = await tablet
+      .from('outlets')
+      .select('packaging_price_paise')
+      .eq('id', OUTLETS.kanchrapara)
+    expect(other.data).toEqual([])
   })
 
   it('and sees no other tablet shift', async () => {

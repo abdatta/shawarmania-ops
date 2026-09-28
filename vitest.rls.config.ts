@@ -23,13 +23,16 @@ export default defineConfig({
       // Mutates counter telemetry and restores it with the service-role key.
       // Its dedicated phase also injects that key before Vitest collects it.
       'supabase/tests/rest/zz-counter-telemetry.test.ts',
-      // Imports the real adapter, which resolves `@/domain`. This config
-      // declares no alias, so collecting it here fails to load the module
-      // entirely — a red file with nothing to do with tenancy. It has its own
-      // phase: vitest.ledger-timing.config.ts.
+      // Writes drawer anchors and counts and removes them with the
+      // service-role key, so it has its own phase:
+      // vitest.ledger-timing.config.ts.
       'supabase/tests/rest/zz-ledger-month-timing.test.ts',
     ],
     testTimeout: 30_000,
     hookTimeout: 30_000,
   },
+  // The adapter probes import the real live adapters, which resolve `@/domain`
+  // (the outlets adapter since #60). Without the alias those files fail to
+  // load at all: a red file with nothing to do with tenancy.
+  resolve: { alias: { '@': new URL('./src', import.meta.url).pathname } },
 })

@@ -7,8 +7,8 @@ takeaway, or both; whether dine-in orders take a table number; whether a packagi
 flat amount per order or per bag, and at what price; and whether packaging is
 free for gold members.
 
-An outlet SHALL start with no order types offered, no tables and no packaging
-charge, and SHALL then bill exactly as an outlet did before these choices existed.
+An outlet SHALL start with no order types offered, no table numbers and no
+packaging charge, and SHALL then bill exactly as an outlet did before these choices existed.
 
 The database SHALL refuse an inconsistent combination: table numbers without
 dine-in offered, a packaging charge without takeaway offered, a packaging price
@@ -19,7 +19,7 @@ no upper limit on the packaging price.
 #### Scenario: A new outlet
 
 - **WHEN** an outlet is created
-- **THEN** it offers no order type, no tables and no packaging charge, and its counter shows none of them
+- **THEN** it offers no order type, no table numbers and no packaging charge, and its counter shows none of them
 
 #### Scenario: An inconsistent write
 
@@ -34,7 +34,7 @@ own area: the table-numbers switch while dine-in is offered, and the packaging c
 while takeaway is offered.
 
 Turning order types on SHALL offer both types by default. Turning it off SHALL
-clear both types, the table count and the packaging charge. Ceasing to offer
+clear both types, table numbers and the packaging charge. Ceasing to offer
 takeaway SHALL clear the packaging charge. Turning the packaging charge on SHALL
 start at a flat amount per order.
 
@@ -93,8 +93,10 @@ counter SHALL show no choice, and every order SHALL be that type: takeaway at
 an outlet offering takeaway alone, and dine-in without a table at an outlet
 offering dine-in alone without tables.
 
-An order SHALL record neither only at an outlet offering no type, and for every
-order rung before these choices existed.
+The counter SHALL leave an order neither only at an outlet offering no type.
+An order MAY still record neither where a tablet rang it before the outlet began
+offering types, and every order rung before these choices existed reads as
+neither.
 
 #### Scenario: Both types offered
 
@@ -188,17 +190,17 @@ menu discount.
 
 At an outlet waiving packaging for gold members, an order whose customer the
 tablet knows to be a gold member SHALL carry its packaging line's whole amount as
-that line's discount. Changing or clearing the customer on an open order SHALL
-re-derive the waiver. Once the order is paid, the waiver SHALL be fixed.
+that line's discount. Changing the customer on an open order, or skipping them,
+SHALL re-derive the waiver. Once the order is paid, the waiver SHALL be fixed.
 
 #### Scenario: A gold member's takeaway
 
 - **WHEN** a biller identifies a gold member on a takeaway order at a waiving outlet
 - **THEN** the packaging line reads as free, and the total excludes it
 
-#### Scenario: The customer is cleared
+#### Scenario: The customer is skipped instead
 
-- **WHEN** the biller then clears the customer
+- **WHEN** the biller then skips the customer, or identifies somebody who is not gold
 - **THEN** the packaging is charged again
 
 ### Requirement: The counter serves offline the way its outlet does
@@ -210,8 +212,8 @@ once on reconnect, carrying all of them.
 
 #### Scenario: A cold start with no backend
 
-- **WHEN** a tablet at an outlet with tables and packaging is reopened with no network
-- **THEN** it offers the same types, tables and packaging it offered before
+- **WHEN** a tablet at an outlet with table numbers and packaging is reopened with no network
+- **THEN** it offers the same types, table numbers and packaging it offered before
 
 #### Scenario: Offline takeaway for a member
 

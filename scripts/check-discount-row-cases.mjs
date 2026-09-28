@@ -59,9 +59,14 @@ for (const [index, testCase] of cases.entries()) {
     if (line.discountPaise > line.unitPricePaise * line.quantity) {
       throw new Error(`${context}: line ${lineIndex} is discounted past its own total`)
     }
-    lineDiscounts += line.discountPaise
+    const kind = line.kind ?? 'item'
+    if (kind !== 'item' && kind !== 'packaging') {
+      throw new Error(`${context}: line ${lineIndex} has a kind nobody defined: ${kind}`)
+    }
+    // A packaging line's discount is the gold waiver, never a menu row (#60).
+    if (kind === 'item') lineDiscounts += line.discountPaise
     lineRows.push(
-      `  (${quote(testCase.name)}, ${lineIndex}, ${quote(line.itemName)}, ` +
+      `  (${quote(testCase.name)}, ${lineIndex}, ${quote(kind)}, ${quote(line.itemName)}, ` +
         `${line.unitPricePaise}, ${line.quantity}, ${line.discountPaise}, ` +
         `${line.discountPercentBp === null ? 'null' : line.discountPercentBp}, ` +
         `${quote(line.categoryName)})`,

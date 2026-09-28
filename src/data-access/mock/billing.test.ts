@@ -999,6 +999,11 @@ describe('mock billing adapter', () => {
       const paidTakeaway = history.bills.find((bill) => bill.orderId === takeaway.id)
       expect(paidTakeaway).toMatchObject({ serviceType: 'takeaway', tableNumber: null })
       expect(paidTakeaway?.totalPaise).toBe(13900)
+      // The stored order and its bill carry the waiver in their discount. The
+      // mock's revision wrote nought here, beside a total that had taken it off.
+      const takeawayRow = store.orders.find((order) => order.id === takeaway.id)
+      expect(takeawayRow).toMatchObject({ discount_paise: 1000, rounding_paise: 0 })
+      expect(store.bills.find((bill) => bill.order_id === takeaway.id)?.discount_paise).toBe(1000)
       expect(paidTakeaway?.lines.at(-1)).toMatchObject({
         kind: 'packaging',
         menuItemId: '',
@@ -1034,6 +1039,10 @@ describe('mock billing adapter', () => {
         (order) => order.tableNumber === 4,
       )
       expect(atFour).toHaveLength(2)
+      // And marks both, as the database's trigger does (design D11).
+      expect(
+        store.orders.filter((order) => order.table_number === 4).map((order) => order.table_shared),
+      ).toEqual([true, true])
     })
 
     it('refuses the shapes the boundary will refuse, and nothing is written', async () => {

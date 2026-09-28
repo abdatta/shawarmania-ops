@@ -12,8 +12,8 @@ Three things the counter cannot say today:
 1. **Where the food goes.** Every order looks the same. The kitchen cannot tell
    a plate for table 4 from a parcel at the counter.
 2. **Which table.** A dine-in customer is called by an order number. At a shop
-   with tables, the table *is* the name: one table has at most one open order at
-   a time, and more food for that table is more lines on the same order.
+   with tables, the table *is* the name: the counter seats one open order at a
+   table, and more food for that table is more lines on the same order.
 3. **What the packaging cost.** Parcels use bags and boxes that cost money, and
    nothing on the bill recovers it.
 
@@ -94,7 +94,7 @@ see Non-goals).
   takeaway adds it.
 - **Gold.** At an outlet waiving packaging for gold members, identifying a gold
   member makes the packaging line free, shown struck through as ₹5 → Free.
-  Identifying someone else, or clearing the customer, charges it again. Once the
+  Identifying someone else, or skipping the customer, charges it again. Once the
   order is paid, it is fixed.
 
 ### What this does to gold
@@ -136,10 +136,14 @@ stored rows. It is never inferred.
 
 - `docs/BUSINESS_CONTEXT.md`: how the counter serves (dine-in, takeaway, tables,
   packaging) as per-outlet choices.
-- `docs/SCREENS.md`: the Outlets page's two new sections, and the counter's
-  chips, table popup and packaging line.
-- `docs/DATA_MODEL.md`: the outlet's service settings, the order's and bill's
-  service facts, and the packaging line kind.
+- `docs/SCREENS.md`: the outlet page's Orders section, and the counter's chips,
+  table pad (with its refusal and *Edit here*), packaging line and *1 of 2*
+  marker.
+- `docs/DATA_MODEL.md`: the outlet's six service settings, the order's and
+  bill's service facts, the packaging line kind, and `orders.table_shared`.
+- `docs/ROLES_AND_PERMISSIONS.md`: a manager changes their outlets' service
+  settings through `set_outlet_service_settings`, and nothing else of the
+  outlet row.
 - `docs/GLOSSARY.md`: *dine-in*, *takeaway*, *table*, *packaging charge*,
   *packaging waiver*.
 - `docs/OFFLINE_AND_SYNC.md`: settings in the resume record, and why a table is
@@ -147,5 +151,5 @@ stored rows. It is never inferred.
 - `docs/LIMITATIONS.md`: the gold waiver as #57's one exception; two tablets
   seating one table offline; packaging-price changes racing an offline tablet.
 - `docs/OPERATIONS.md`: onboarding a new outlet leaves these off, and where to
-  turn them on.
+  turn them on; the two D11 queries (shared tables, dine-in without a table).
 - `docs/DEMO_MODE.md`: the walkthrough's dine-in, table and packaging steps.

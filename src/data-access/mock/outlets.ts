@@ -163,6 +163,13 @@ export function createMockOutletsAdapter(
         // somebody captures it.
         location_accuracy_m: null,
         location_captured_at: null,
+        // And has chosen nothing about how it serves, so it bills as today.
+        dine_in_offered: false,
+        takeaway_offered: false,
+        table_numbers: false,
+        packaging_mode: 'off' as const,
+        packaging_price_paise: null,
+        packaging_free_for_gold: false,
       }
       outlets.push(created)
       return structuredClone(created)
@@ -238,13 +245,22 @@ export function createMockOutletsAdapter(
           'Only the owner or this outlet’s manager changes how it serves.',
         )
       }
-      find(id)
+      const outlet = find(id)
       const problem = serviceSettingsProblem(settings)
       if (problem !== null) {
         throw new DataActionError(problem, SERVICE_SETTINGS_PROBLEM_MESSAGES[problem])
       }
       const stored = { ...settings }
       service.settings.set(id, stored)
+      // The row too, so `getOutlet` never reads choices the page just replaced.
+      Object.assign(outlet, {
+        dine_in_offered: stored.dineInOffered,
+        takeaway_offered: stored.takeawayOffered,
+        table_numbers: stored.tableNumbers,
+        packaging_mode: stored.packagingMode,
+        packaging_price_paise: stored.packagingPricePaise,
+        packaging_free_for_gold: stored.packagingFreeForGold,
+      })
       return { ...stored }
     },
   }

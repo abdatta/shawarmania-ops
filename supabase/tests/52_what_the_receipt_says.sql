@@ -35,6 +35,7 @@ create function pg_temp.kalyani() returns uuid language sql immutable as
 create table pg_temp.discount_row_cases (
   case_name text,
   line_no integer,
+  kind text,
   item_name text,
   unit_price_paise bigint,
   quantity integer,
@@ -54,22 +55,24 @@ create table pg_temp.discount_row_expected (
 );
 
 insert into pg_temp.discount_row_cases
-  (case_name, line_no, item_name, unit_price_paise, quantity, discount_paise,
+  (case_name, line_no, kind, item_name, unit_price_paise, quantity, discount_paise,
    discount_percent_bp, category_name) values
 -- BEGIN GENERATED DISCOUNT ROW LINES
-  ('one percentage over one category', 0, 'Classic Chicken Shawarma', 13900, 1, 2085, 1500, 'Shawarma'),
-  ('one percentage over one category', 1, 'Cold Coffee', 9900, 1, 0, null, 'Drinks'),
-  ('one percentage over two categories combines into one row', 0, 'Classic Chicken Shawarma', 13900, 1, 1390, 1000, 'Shawarma'),
-  ('one percentage over two categories combines into one row', 1, 'Cold Coffee', 9900, 2, 1980, 1000, 'Drinks'),
-  ('two different percentages get a row each', 0, 'Classic Chicken Shawarma', 13900, 1, 2085, 1500, 'Shawarma'),
-  ('two different percentages get a row each', 1, 'Cold Coffee', 9900, 1, 990, 1000, 'Drinks'),
-  ('a rupee discount groups by its per-unit amount, not its line total', 0, 'Classic Chicken Shawarma', 13900, 3, 6000, null, 'Shawarma'),
-  ('a rupee discount groups by its per-unit amount, not its line total', 1, 'Cold Coffee', 9900, 1, 2000, null, 'Drinks'),
-  ('a percentage and a rupee discount are never one row', 0, 'Classic Chicken Shawarma', 13900, 1, 2000, null, 'Shawarma'),
-  ('a percentage and a rupee discount are never one row', 1, 'Cold Coffee', 9900, 1, 990, 1000, 'Drinks'),
-  ('a fractional percentage keeps its basis points and its exact paise', 0, 'Classic Chicken Shawarma', 13900, 1, 1043, 750, 'Shawarma'),
-  ('a line with no category still carries its reduction', 0, 'Classic Chicken Shawarma', 13900, 1, 1390, 1000, null),
-  ('an undiscounted bill has no rows at all', 0, 'Classic Chicken Shawarma', 13900, 1, 0, null, 'Shawarma');
+  ('one percentage over one category', 0, 'item', 'Classic Chicken Shawarma', 13900, 1, 2085, 1500, 'Shawarma'),
+  ('one percentage over one category', 1, 'item', 'Cold Coffee', 9900, 1, 0, null, 'Drinks'),
+  ('one percentage over two categories combines into one row', 0, 'item', 'Classic Chicken Shawarma', 13900, 1, 1390, 1000, 'Shawarma'),
+  ('one percentage over two categories combines into one row', 1, 'item', 'Cold Coffee', 9900, 2, 1980, 1000, 'Drinks'),
+  ('two different percentages get a row each', 0, 'item', 'Classic Chicken Shawarma', 13900, 1, 2085, 1500, 'Shawarma'),
+  ('two different percentages get a row each', 1, 'item', 'Cold Coffee', 9900, 1, 990, 1000, 'Drinks'),
+  ('a rupee discount groups by its per-unit amount, not its line total', 0, 'item', 'Classic Chicken Shawarma', 13900, 3, 6000, null, 'Shawarma'),
+  ('a rupee discount groups by its per-unit amount, not its line total', 1, 'item', 'Cold Coffee', 9900, 1, 2000, null, 'Drinks'),
+  ('a percentage and a rupee discount are never one row', 0, 'item', 'Classic Chicken Shawarma', 13900, 1, 2000, null, 'Shawarma'),
+  ('a percentage and a rupee discount are never one row', 1, 'item', 'Cold Coffee', 9900, 1, 990, 1000, 'Drinks'),
+  ('a fractional percentage keeps its basis points and its exact paise', 0, 'item', 'Classic Chicken Shawarma', 13900, 1, 1043, 750, 'Shawarma'),
+  ('a line with no category still carries its reduction', 0, 'item', 'Classic Chicken Shawarma', 13900, 1, 1390, 1000, null),
+  ('an undiscounted bill has no rows at all', 0, 'item', 'Classic Chicken Shawarma', 13900, 1, 0, null, 'Shawarma'),
+  ('a gold member''s waived packaging is never a menu discount', 0, 'item', 'Classic Chicken Shawarma', 13900, 1, 1390, 1000, 'Shawarma'),
+  ('a gold member''s waived packaging is never a menu discount', 1, 'packaging', 'Packaging', 500, 2, 1000, 10000, null);
 -- END GENERATED DISCOUNT ROW LINES
 
 insert into pg_temp.discount_row_expected
@@ -83,7 +86,8 @@ insert into pg_temp.discount_row_expected
   ('a percentage and a rupee discount are never one row', 0, 'amount', null, 2000, array['Shawarma']::text[], 2000),
   ('a percentage and a rupee discount are never one row', 1, 'percent', 1000, null, array['Drinks']::text[], 990),
   ('a fractional percentage keeps its basis points and its exact paise', 0, 'percent', 750, null, array['Shawarma']::text[], 1043),
-  ('a line with no category still carries its reduction', 0, 'percent', 1000, null, array[]::text[], 1390);
+  ('a line with no category still carries its reduction', 0, 'percent', 1000, null, array[]::text[], 1390),
+  ('a gold member''s waived packaging is never a menu discount', 0, 'percent', 1000, null, array['Shawarma']::text[], 1390);
 -- END GENERATED DISCOUNT ROW EXPECTATIONS
 
 -- ---------------------------------------------------------------------------
@@ -135,11 +139,11 @@ begin
 
   insert into public.bill_items (
     id, bill_id, item_name, unit_price_paise, quantity, line_total_paise,
-    discount_paise, discount_percent_bp, category_name)
+    discount_paise, discount_percent_bp, category_name, kind)
   select
     gen_random_uuid(), v_bill, item_name, unit_price_paise, quantity,
     unit_price_paise * quantity, discount_paise, discount_percent_bp,
-    category_name
+    category_name, kind::public.line_kind
   from pg_temp.discount_row_cases where case_name = p_case order by line_no;
 
   if p_bill_discount > 0 then
@@ -274,6 +278,48 @@ end;
 $$;
 
 select pass('every figure the receipt prints is the column it came from');
+
+-- ---------------------------------------------------------------------------
+-- A gold member's waived packaging (#60).
+--
+-- Not a menu discount, and not left out either: the receipt gives it a row of
+-- its own, between the menu rows and the bill's, so the printed rows still add
+-- up to the discount the bill stored. Rung beside a bill discount, which is
+-- computed against the whole subtotal, packaging included.
+
+do $$
+declare
+  v_bill uuid;
+  v_rows jsonb;
+  v_waived bigint;
+begin
+  v_bill := pg_temp.ring_case('a gold member''s waived packaging is never a menu discount', 2000);
+  v_rows := public.bill_public_discount_rows(v_bill);
+
+  select discount_paise into v_waived from public.bill_items
+   where bill_id = v_bill and kind = 'packaging';
+
+  if (select array_agg(row ->> 'source' order by ordinality)
+        from jsonb_array_elements(v_rows) with ordinality as t(row, ordinality))
+     is distinct from array['menu', 'packaging', 'bill'] then
+    raise exception 'expected a menu row, then the waiver, then the bill discount: %', v_rows;
+  end if;
+
+  if (select row from jsonb_array_elements(v_rows) as row where row ->> 'source' = 'packaging')
+     is distinct from jsonb_build_object(
+       'source', 'packaging', 'basis', 'percent', 'value_bp', 10000, 'value_paise', null,
+       'categories', '[]'::jsonb, 'amount_paise', v_waived) then
+    raise exception 'the waiver row is not the bag''s whole discount at 100%%: %', v_rows;
+  end if;
+
+  if (select sum((row ->> 'amount_paise')::bigint) from jsonb_array_elements(v_rows) as row)
+     is distinct from (select discount_paise from public.bills where id = v_bill) then
+    raise exception 'the printed rows, waiver included, do not sum to the stored discount';
+  end if;
+end;
+$$;
+
+select pass('a gold member''s waived packaging is its own receipt row, and the rows still add up');
 
 -- ---------------------------------------------------------------------------
 -- The one rupee floor.

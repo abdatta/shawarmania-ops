@@ -1,5 +1,4 @@
 import {
-  ALL_OFF_SERVICE_SETTINGS,
   billTotals,
   discountAmountPaise,
   instantOnBusinessDay,
@@ -13,13 +12,13 @@ import {
 import type { CounterResumeRecord } from '@/outbox'
 
 import type { Tables } from '../database.types'
+import { serviceSettingsFromRow } from '../outlet-service-row'
 import type {
   BillDiscountDraft,
   BillDraft,
   DiscountPreset,
   MenuDiscount,
   PaymentAllocation,
-  ServiceFacts,
 } from '../adapters'
 import {
   billSeedItemId,
@@ -97,20 +96,11 @@ export interface DemoStore {
    * starts on the counter exactly as it bills today, and the owner turns
    * Kalyani's switches on to show what they do there. Kanchrapara is the page
    * already grown.
+   *
+   * Seeded from the fixture rows' own columns rather than restated here, so the
+   * demo's choices cannot drift from the schema the rows are typed against.
    */
   serviceSettings: Map<string, OutletServiceSettings>
-  /**
-   * How each order and bill was served, keyed by its id, and which order and
-   * bill lines are packaging.
-   *
-   * Beside the rows rather than on them because the schema has no such columns
-   * until the database section of #60, and fixtures are typed from the schema:
-   * a column invented here would be a fixture the database could not serve. The
-   * same shape #57 used for tiers before its migration.
-   */
-  orderService: Map<string, Required<ServiceFacts>>
-  billService: Map<string, Required<ServiceFacts>>
-  packagingLineIds: Set<string>
   /** Read-only here; #9 owns enrolment. */
   counterDevices: Tables<'counter_devices'>[]
   /** Effective-dated display identity; current authority stays on counterDevices. */
@@ -550,6 +540,9 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       void_reason: null,
       voided_at: null,
       voided_by: null,
+      // Seeded before the demo chose how it serves, so neither and no table.
+      service_type: null,
+      table_number: null,
     })
     billPayments.set(billId, [{ method: seed.paymentMethod, amountPaise: totals.totalPaise }])
 
@@ -567,6 +560,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
         discount_paise: 0,
         discount_percent_bp: null,
         category_name: null,
+        kind: 'item',
       })
     })
   }
@@ -748,6 +742,10 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       cancelled_by: cancelled ? MANAGER_ID : null,
       cancelled_device_id: cancelled ? DEMO_COUNTER_DEVICE_ID : null,
       cancelled_shift_id: cancelled ? DEMO_OPEN_SHIFT_ID : null,
+      // The walkthrough seats its own table before it adds to a busy one.
+      service_type: null,
+      table_number: null,
+      table_shared: false,
     })
     sourceLines.forEach((line, lineIndex) =>
       orderItems.push({
@@ -761,6 +759,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
         discount_paise: line.discount_paise,
         discount_percent_bp: line.discount_percent_bp,
         category_name: line.category_name,
+        kind: line.kind,
       }),
     )
     if (sourceBill) sourceBill.order_id = id
@@ -1390,25 +1389,9 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     orderItems,
     orderDiscounts: new Map(),
     billDiscounts: new Map(),
-    serviceSettings: new Map([
-      [DEMO_OUTLET_ID, { ...ALL_OFF_SERVICE_SETTINGS }],
-      [
-        DEMO_SECOND_OUTLET_ID,
-        {
-          dineInOffered: true,
-          takeawayOffered: true,
-          tableNumbers: true,
-          packagingMode: 'per_bag',
-          packagingPricePaise: 500,
-          packagingFreeForGold: true,
-        },
-      ],
-    ]),
-    // Empty: the seeded orders predate these choices, and read as neither. The
-    // walkthrough seats its own table before it adds to a busy one.
-    orderService: new Map(),
-    billService: new Map(),
-    packagingLineIds: new Set(),
+    serviceSettings: new Map(
+      outletFixtures.map((outlet) => [outlet.id, serviceSettingsFromRow(outlet)]),
+    ),
     orderNumbers,
     billingCommands,
     billingQueueSeeds,

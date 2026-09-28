@@ -1194,6 +1194,7 @@ export type Database = {
           discount_percent_bp: number | null
           id: string
           item_name: string
+          kind: Database["public"]["Enums"]["line_kind"]
           line_total_paise: number
           menu_item_id: string | null
           quantity: number
@@ -1206,6 +1207,7 @@ export type Database = {
           discount_percent_bp?: number | null
           id?: string
           item_name: string
+          kind?: Database["public"]["Enums"]["line_kind"]
           line_total_paise: number
           menu_item_id?: string | null
           quantity: number
@@ -1218,6 +1220,7 @@ export type Database = {
           discount_percent_bp?: number | null
           id?: string
           item_name?: string
+          kind?: Database["public"]["Enums"]["line_kind"]
           line_total_paise?: number
           menu_item_id?: string | null
           quantity?: number
@@ -1729,10 +1732,12 @@ export type Database = {
           pricing_mode: Database["public"]["Enums"]["pricing_mode"]
           recorded_after_shift_end: boolean
           rounding_paise: number
+          service_type: Database["public"]["Enums"]["service_type"] | null
           shift_id: string | null
           status: Database["public"]["Enums"]["bill_status"]
           subtotal_paise: number
           synced_at: string
+          table_number: number | null
           tax_paise: number
           total_paise: number
           void_kind: string | null
@@ -1763,10 +1768,12 @@ export type Database = {
           pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
           recorded_after_shift_end?: boolean
           rounding_paise?: number
+          service_type?: Database["public"]["Enums"]["service_type"] | null
           shift_id?: string | null
           status?: Database["public"]["Enums"]["bill_status"]
           subtotal_paise: number
           synced_at?: string
+          table_number?: number | null
           tax_paise?: number
           total_paise: number
           void_kind?: string | null
@@ -1797,10 +1804,12 @@ export type Database = {
           pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
           recorded_after_shift_end?: boolean
           rounding_paise?: number
+          service_type?: Database["public"]["Enums"]["service_type"] | null
           shift_id?: string | null
           status?: Database["public"]["Enums"]["bill_status"]
           subtotal_paise?: number
           synced_at?: string
+          table_number?: number | null
           tax_paise?: number
           total_paise?: number
           void_kind?: string | null
@@ -3101,6 +3110,7 @@ export type Database = {
           discount_percent_bp: number | null
           id: string
           item_name: string
+          kind: Database["public"]["Enums"]["line_kind"]
           line_total_paise: number
           menu_item_id: string | null
           order_id: string
@@ -3113,6 +3123,7 @@ export type Database = {
           discount_percent_bp?: number | null
           id: string
           item_name: string
+          kind?: Database["public"]["Enums"]["line_kind"]
           line_total_paise: number
           menu_item_id?: string | null
           order_id: string
@@ -3125,6 +3136,7 @@ export type Database = {
           discount_percent_bp?: number | null
           id?: string
           item_name?: string
+          kind?: Database["public"]["Enums"]["line_kind"]
           line_total_paise?: number
           menu_item_id?: string | null
           order_id?: string
@@ -3205,8 +3217,11 @@ export type Database = {
           prepared_at: string | null
           pricing_mode: Database["public"]["Enums"]["pricing_mode"]
           rounding_paise: number
+          service_type: Database["public"]["Enums"]["service_type"] | null
           status: Database["public"]["Enums"]["order_status"]
           subtotal_paise: number
+          table_number: number | null
+          table_shared: boolean
           tax_paise: number
           total_paise: number
         }
@@ -3240,8 +3255,11 @@ export type Database = {
           prepared_at?: string | null
           pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
           rounding_paise?: number
+          service_type?: Database["public"]["Enums"]["service_type"] | null
           status?: Database["public"]["Enums"]["order_status"]
           subtotal_paise: number
+          table_number?: number | null
+          table_shared?: boolean
           tax_paise?: number
           total_paise: number
         }
@@ -3275,8 +3293,11 @@ export type Database = {
           prepared_at?: string | null
           pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
           rounding_paise?: number
+          service_type?: Database["public"]["Enums"]["service_type"] | null
           status?: Database["public"]["Enums"]["order_status"]
           subtotal_paise?: number
+          table_number?: number | null
+          table_shared?: boolean
           tax_paise?: number
           total_paise?: number
         }
@@ -3459,6 +3480,7 @@ export type Database = {
           city: string | null
           code: string
           created_at: string
+          dine_in_offered: boolean
           discount_presets: Json
           district: string | null
           geofence_radius_m: number
@@ -3471,8 +3493,13 @@ export type Database = {
           location_label: string
           longitude: number | null
           name: string
+          packaging_free_for_gold: boolean
+          packaging_mode: Database["public"]["Enums"]["packaging_mode"]
+          packaging_price_paise: number | null
           phone: string | null
           pincode: string | null
+          table_numbers: boolean
+          takeaway_offered: boolean
           zomato_res_id: string | null
         }
         Insert: {
@@ -3483,6 +3510,7 @@ export type Database = {
           city?: string | null
           code: string
           created_at?: string
+          dine_in_offered?: boolean
           discount_presets?: Json
           district?: string | null
           geofence_radius_m?: number
@@ -3495,8 +3523,13 @@ export type Database = {
           location_label: string
           longitude?: number | null
           name: string
+          packaging_free_for_gold?: boolean
+          packaging_mode?: Database["public"]["Enums"]["packaging_mode"]
+          packaging_price_paise?: number | null
           phone?: string | null
           pincode?: string | null
+          table_numbers?: boolean
+          takeaway_offered?: boolean
           zomato_res_id?: string | null
         }
         Update: {
@@ -3507,6 +3540,7 @@ export type Database = {
           city?: string | null
           code?: string
           created_at?: string
+          dine_in_offered?: boolean
           discount_presets?: Json
           district?: string | null
           geofence_radius_m?: number
@@ -3519,8 +3553,13 @@ export type Database = {
           location_label?: string
           longitude?: number | null
           name?: string
+          packaging_free_for_gold?: boolean
+          packaging_mode?: Database["public"]["Enums"]["packaging_mode"]
+          packaging_price_paise?: number | null
           phone?: string | null
           pincode?: string | null
+          table_numbers?: boolean
+          takeaway_offered?: boolean
           zomato_res_id?: string | null
         }
         Relationships: []
@@ -4154,6 +4193,7 @@ export type Database = {
           p_payload: Json
           p_payload_hash: string
           p_schema_version: number
+          p_v3_keys?: string[]
         }
         Returns: string
       }
@@ -5072,6 +5112,53 @@ export type Database = {
         Args: { p_channel: string; p_identifier: string }
         Returns: undefined
       }
+      set_outlet_service_settings: {
+        Args: {
+          p_dine_in_offered: boolean
+          p_outlet: string
+          p_packaging_free_for_gold: boolean
+          p_packaging_mode: Database["public"]["Enums"]["packaging_mode"]
+          p_packaging_price_paise: number
+          p_table_numbers: boolean
+          p_takeaway_offered: boolean
+        }
+        Returns: {
+          address_line1: string | null
+          address_line2: string | null
+          arrival_deadline: string
+          business_day_cutover: string
+          city: string | null
+          code: string
+          created_at: string
+          dine_in_offered: boolean
+          discount_presets: Json
+          district: string | null
+          geofence_radius_m: number
+          hyperpure_delivery: boolean
+          id: string
+          is_active: boolean
+          latitude: number | null
+          location_accuracy_m: number | null
+          location_captured_at: string | null
+          location_label: string
+          longitude: number | null
+          name: string
+          packaging_free_for_gold: boolean
+          packaging_mode: Database["public"]["Enums"]["packaging_mode"]
+          packaging_price_paise: number | null
+          phone: string | null
+          pincode: string | null
+          table_numbers: boolean
+          takeaway_offered: boolean
+          zomato_res_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "outlets"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       set_super_admin_account_email: {
         Args: { p_email: string; p_profile_id: string }
         Returns: undefined
@@ -5175,10 +5262,13 @@ export type Database = {
       customer_tier: "gold"
       discount_basis: "percent" | "amount"
       inventory_unit: "kg" | "litre" | "packet" | "piece"
+      line_kind: "item" | "packaging"
       movement_type: "added" | "used" | "wasted" | "correction"
       order_status: "open" | "paid" | "cancelled"
+      packaging_mode: "off" | "per_bag" | "per_order"
       payment_method: "cash" | "upi"
       pricing_mode: "no_tax" | "gst_inclusive" | "gst_exclusive"
+      service_type: "dine_in" | "takeaway"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -5338,10 +5428,13 @@ export const Constants = {
       customer_tier: ["gold"],
       discount_basis: ["percent", "amount"],
       inventory_unit: ["kg", "litre", "packet", "piece"],
+      line_kind: ["item", "packaging"],
       movement_type: ["added", "used", "wasted", "correction"],
       order_status: ["open", "paid", "cancelled"],
+      packaging_mode: ["off", "per_bag", "per_order"],
       payment_method: ["cash", "upi"],
       pricing_mode: ["no_tax", "gst_inclusive", "gst_exclusive"],
+      service_type: ["dine_in", "takeaway"],
     },
   },
 } as const

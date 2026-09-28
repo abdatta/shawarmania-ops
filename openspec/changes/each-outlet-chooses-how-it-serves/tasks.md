@@ -1,39 +1,34 @@
 # Tasks: each-outlet-chooses-how-it-serves
 
-> **Sequencing.** `outlets-one-at-a-time` builds the one-outlet page these
-> settings sit on. Walk its checkpoint first. #57 `a-gold-member-is-a-label`
-> was archived on 2026-09-26, so nothing in it blocks this archive any longer, because this change modifies a
-> requirement #57's delta adds. It need not be archived before this one *starts*:
-> the tier snapshot and the counter's star are already live.
+> **Sequencing.** `outlets-one-at-a-time` built the one-outlet page these
+> settings sit on, and #57 `a-gold-member-is-a-label` is archived; nothing
+> upstream blocks this change.
 
-> **UI first, and the owner is a hard stop.** Same instruction as #56 and #57.
-> **Section 2 is a gate, not a note.** No migration, no function, no policy, no
-> payload version and no spec reconciliation begins until the owner says the
-> settings page and the counter are settled. The four questions `design.md`
-> once left open were answered on 2026-09-26 and are built into section 1.
-> Build to those answers, and change them only if the owner does while walking
-> the demo.
+> **UI first, and the owner was the hard stop.** Sections 1 and 2 are done: the
+> owner settled the settings page and the counter on 2026-09-27, in two rounds
+> (`design.md`, Decisions). Build sections 3 onward to that design, and change it
+> only if the owner does.
 
-> **The live counter must not move until section 5.** The live settings adapter
-> returns all-off until then (design D10), so production renders exactly what it
-> renders today while the demo is reworked.
+> **The live counter must not move until section 5.** Until then the live
+> outlets adapter reads all-off and refuses the write, and the Orders section is
+> behind the `demo` part gate `outlet-service-choices`.
 
 > **Money, offline and the command boundary are all in play here.** None of it is
 > quickfix-lane work, and the full local gate set, including the Docker job, runs
-> before anything is pushed. Remember the owner picks the deploy window: commit
-> locally and let them choose when it ships.
+> before anything is pushed. The owner picks the deploy window: commit locally
+> and let them choose when it ships.
 
 ## 1. The Settings And The Counter, Against The Mock Only
 
-- [x] 1.1 Add the settings to the typed adapter interface and the mock: the six fields in design D1, with the mock enforcing the same consistency rules the database will. Add two demo outlets' worth of fixtures: one with every switch on (per bag ₹5, gold waiver, 8 tables) and one with every switch off. The live adapter returns all-off (D10).
-- [x] 1.2 The **Orders** and **Packaging** sections, as sketched in the proposal, **on the outlet's page** that `outlets-one-at-a-time` settled: each an `OutletSection` (`src/features/outlets/outlet-section.tsx`) placed between Details and Tablets, as tiles rather than sentences (that change's design D2 and D3 record why the owner turned sentences down): one switch each, and settings beneath that appear only while it is on. At least one type stays offered while the section is on. The table count is shown only with dine-in and tables. Per bag / flat switches the price label. Registered as a `demo`-gated part of the page so real users see nothing until section 5.
-- [x] 1.3 A manager can change these for the outlets they manage [owner, 2026-09-27, reversing read-only]; first built read-only, for the outlets they manage and no others [owner, 2026-09-26]: each section states its current answers with no switches, chips or inputs, and a section that is off reads as off.
-- [x] 1.4 The composer: type chips beside the customer control, only when offered. Chips only where there is a choice, nothing preselected, and the answer owed before Order or Paid (D9, owner 2026-09-27). Chips never block Save or Mark Paid.
-- [x] 1.5 The table **popup** (D9), opened the way the customer keypad dialog opens: a number pad [owner, 2026-09-27, replacing the 1-to-N grid], 1 to 999 with no `.`, `00` or leading nought; a table already open is refused in red; *No table* and *Done*. The chip then reads *Table 4* (or *No table*), and tapping it reopens the pad.
-- [x] 1.6 The packaging line, named *Packaging* in both modes [owner, 2026-09-26]: added to every takeaway order [owner, 2026-09-27], last among the lines, *Packaging × 1* to start (per bag) or one flat line, removable, removed when the order becomes dine-in and added when it becomes takeaway. It captures the price in force when added and never reprices.
-- [x] 1.7 The gold waiver: struck-through price and *Free* when the customer the tablet knows is gold and the outlet waives. It follows customer changes while the order is open.
-- [x] 1.8 *Table 4* **replaces** the order number [owner, 2026-09-26] on the composer's editing header, the pipeline card and the shift bill list, with the number not shown beside it. Manager history and bill detail show the type and table beside the order and bill numbers.
-- [x] 1.9 The demo walkthrough covers: turning each switch on at the all-off outlet and seeing the page grow; a dine-in order at a table; adding to a busy table; a takeaway with two bags; a gold member's takeaway with the waiver; clearing that customer; switching an order from takeaway to dine-in.
+- [x] 1.1 The six settings of design D1 on the typed adapter interface and the mock, with the mock enforcing the checks the database will. Demo fixtures: Kalyani, where the demo counter stands, has chosen nothing; Kanchrapara has everything on (both types, table numbers, ₹5 per bag, free for gold). The live adapter reads all-off (Demo first).
+- [x] 1.2 The **Orders** section on the outlet's page, between Details and Tablets (D10): one switch for a newcomer; each option opening inside its own tile on alternating tones; at least one type stays offered; *Table numbers* while dine-in is offered; *Packaging charge* inside takeaway's reach, flat per order first and default, a whole-rupee price, free for gold. One Save for the section, with its acknowledgement. Behind the `demo` part gate `outlet-service-choices`.
+- [x] 1.3 A manager changes the section for the outlets they manage, as the owner does [owner, 2026-09-27, reversing the 2026-09-26 read-only answer]; Details stays the owner's.
+- [x] 1.4 The composer's type chips, on a row above the customer control, only where there is a choice (D9); nothing preselected; the answer owed before Order or Paid; tapping a chosen chip takes it back. No chip at a one-type outlet, whose every order is that type.
+- [x] 1.5 The table pad (D9), opened the way the customer keypad opens: 1 to 999, no `.`, `00` or leading nought, *No table* and *Done*. A table already open is refused in red in one line, with **Edit here** to its order behaving exactly as the card's Edit (D5). The chip then reads *Table 4* or *No table*, and tapping it reopens the pad.
+- [x] 1.6 The packaging line, *Packaging* in both modes: on every takeaway order and no other, last among the lines, one bag to start (per bag) or one flat line; never removed or repriced by the biller, the bag count going down to one; taken off when the order stops being takeaway. It captures the price in force when added.
+- [x] 1.7 The gold waiver: struck-through price and *Free* when the customer the tablet knows is gold and the outlet waives. It follows the customer while the order is open.
+- [x] 1.8 *Table 4* **replaces** the order number on the composer's editing header, the pipeline card and Bills this shift; a card without a table says *Takeaway* or *Dine-in*. Two open orders at one table read *1 of 2* / *2 of 2*. Manager bill detail shows the type and table beside the order and bill numbers.
+- [x] 1.9 The demo walkthrough (`docs/DEMO_MODE.md`) covers: turning each switch on at Kalyani and seeing the page grow; a manager changing it; a takeaway with two bags; a gold member's takeaway with the waiver, then skipping that customer; a dine-in order at a table; keying a busy table and taking *Edit here*; paying the table's order and the table freeing.
 - [x] 1.10 SECTION GATE: at `/demo`, on phone and tablet widths in both themes, every step in 1.9 walks. At the all-off demo outlet the counter is indistinguishable from today's.
 
 ## 2. 🧍 OWNER CHECKPOINT — STOP HERE
@@ -44,39 +39,40 @@
 
 ## 3. The Settings In The Database
 
-- [ ] 3.1 Write the failing tests first (pgTAP): an outlet defaults to all-off; each inconsistent combination in D1 is refused, table numbers without dine-in included; the whole-rupee rule and the ₹1 floor hold, packaging without takeaway is refused; the owner writes any outlet's settings and a Franchise Admin writes their own outlet's [owner, 2026-09-27]; a Franchise Admin of another outlet, a Biller, an Employee and a counter device are each refused by hand-crafted request; and a Franchise Admin is still refused every other outlet column (cutover, fence, name, closing) through `outlets_update`.
-- [ ] 3.2 The migration: the enum and six columns on `outlets` with their checks (D1), and `set_outlet_service_settings` (RLS), the one write path for them — `outlets_update` is not widened. Existing outlets take the defaults. Assert inside the migration that no production outlet ends it with anything on.
-- [ ] 3.3 How a counter device reads its own outlet's settings (D6). Check the device's current access to `outlets` first. If a read function is needed, it returns these columns for the device's own outlet and nothing else. Add isolation cases: a device of the other outlet gets nothing, and an Employee gets nothing.
-- [ ] 3.4 Regenerate schema types and commit the diff.
-- [ ] 3.5 SECTION GATE: `test:db` and `test:rls` green from a fresh reset; the owner and a manager of that outlet each round-trip every setting, and every other principal is refused every write.
+- [x] 3.1 Failing tests first (pgTAP, `supabase/tests/62_each_outlet_chooses_how_it_serves.sql`): every outlet defaults to all-off, a new one included; each inconsistent combination of D1 is refused by the table itself (table numbers without dine-in, packaging without takeaway, a charge without a price, a price without a charge, part-rupees, below ₹1, a gold waiver without a charge) and a whole-rupee price has no ceiling; the owner writes any outlet's settings and a manager their own outlet's, through `set_outlet_service_settings`; the other outlet's manager, a biller, an employee and a counter device are each refused it; a manager's direct update of the row — the settings, the cutover, the fence — still touches nothing.
+- [x] 3.2 The migration: the `packaging_mode` enum and the six columns on `outlets` with their checks (D1), and `set_outlet_service_settings` (RLS) as the one write path a manager has. `outlets_update` is not widened. Existing outlets take the defaults, and the migration asserts none ends it with anything on.
+- [x] 3.3 The counter device's read (D6). Checked: `outlets_select` already lets a device read its own outlet row, so no read function is needed. Isolation cases: a device reads its own outlet's settings and nothing of the other outlet's; a person reads nothing of an outlet they do not work at. (The first draft of this task said an employee reads nothing; the spec gives the settings the outlet row's readers, and an employee reads their own outlet's row.)
+- [x] 3.4 Regenerate schema types and commit the diff. The mock's outlet fixtures are typed from the schema, so they now carry the six columns: Kalyani and the closed outlet all-off, Kanchrapara everything on (the one departure from `supabase/seed.sql`). The demo store's slice is seeded from those rows through `serviceSettingsFromRow` (`src/data-access/outlet-service-row.ts`), which the live adapter reuses in 5.1. `vitest.rls.config.ts` gained the `@` alias the other adapter phases already declared: the outlets adapter now resolves `@/domain`, and without it three adapter probes failed to load.
+- [x] 3.5 SECTION GATE: `test:db` and `test:rls` green from a fresh reset; the owner and a manager of that outlet each round-trip every setting, and every other principal is refused every write.
 
 ## 4. Orders And Bills Carry How They Were Served
 
-- [ ] 4.1 Write the failing tests first: service facts are snapshotted and fixed at payment; `table_number` is refused without dine-in; the bill copies the order's; `kind` defaults to item; at most one packaging line per order and per bill; a packaging line with a menu id, a category, or a partial discount is refused; a full waiver counts in the parent's discount and passes every existing parts-equal-the-whole guard; a second open order on the same table **is accepted** (D5).
-- [ ] 4.2 The migration: the service-type enum, `service_type` and `table_number` on `orders` and `bills`, the line-kind enum and `kind` on `order_items` and `bill_items`, and the partial unique indexes (D2, D3).
-- [ ] 4.2a `orders.table_shared` (D11) [owner, 2026-09-27]: failing tests first — two open orders seated at one table by create, by revision and by a payment taken back each set it on both orders and on no other; paying or cancelling never unsets it; a neighbouring outlet's order on the same table number never sets it. Then the column, set by the command boundary in the write's own transaction. Add both D11 queries to `docs/OPERATIONS.md`.
-- [ ] 4.3 The command boundary (D7, D8): accept payload v3; check service facts for shape only; check a new packaging line's name and price against the outlet's packaging charge by the same rule and timing as a new menu line. **Read what the menu path does when an offline tablet's captured price no longer matches, apply the same, and record it in `docs/LIMITATIONS.md`.** Existing packaging lines are compared by identity.
-- [ ] 4.4 `shared/billing-command.ts`: `BILLING_COMMAND_SCHEMA_VERSION` to 3, and the v3 shape. The boundary still accepts v1 and v2 as *neither, no table, every line an item*. Add cross-runtime canonical-JSON and hash vectors for v3, and keep the v1 and v2 vectors passing.
-- [ ] 4.5 `lint:discount-rows`: add the waiver case (a full-line discount on a packaging line, alongside a bill discount) to the shared cases, so both runtimes agree. Confirm `lint:totals` needs no new case because the identity did not move (design, Money arithmetic).
-- [ ] 4.6 Isolation cases for the new columns: a neighbouring outlet's manager and device cannot read another outlet's orders' type and table or its lines' kind.
-- [ ] 4.7 Regenerate schema types and commit the diff.
-- [ ] 4.8 SECTION GATE: a v3 order with a table, two bags and a waiver round-trips create, revise and pay at the database. A v1 and a v2 command queued before the release each settle exactly once. The full DB and RLS suites are green from a fresh reset.
+- [x] 4.1 Failing tests first: service facts are snapshotted and fixed at payment; `table_number` is refused without dine-in and outside 1 to 999; the bill copies the order's; `kind` defaults to item; at most one packaging line per order and per bill; a packaging line with a menu id, a category, or a partial discount is refused; a full waiver counts in the parent's discount and passes every existing parts-equal-the-whole guard; a second open order on the same table **is accepted** (D5).
+- [x] 4.2 The migration: the `service_type` enum, `service_type` and `table_number` on `orders` and `bills`, the `line_kind` enum and `kind` on `order_items` and `bill_items`, and the partial unique indexes (D2, D3).
+- [x] 4.3 `orders.table_shared` (D11): failing tests first — two open orders seated at one table by create, by revision and by a payment taken back each set it on both orders and on no other; paying or cancelling never unsets it; the same table number at another outlet never sets it. Then the column, set by the command boundary in the write's own transaction. Add both D11 queries to `docs/OPERATIONS.md`. Done as a trigger on `orders` (`orders_mark_shared_table`), which the create, the revision and the payment taken back all reach inside their own transaction; see design, Decisions 2026-09-28 item 4.
+- [x] 4.4 The command boundary (D7, D8): accept payload v3; check service facts for shape only; check a new packaging line's name and price against the outlet's packaging charge by the same rule and timing as a new menu line. **Read what the menu path does when an offline tablet's captured price no longer matches, apply the same, and record it in `docs/LIMITATIONS.md`.** Existing packaging lines are compared by identity. Read: a new line not matching the current menu is a terminal `arithmetic_invalid`, and the live counter re-sends every line as new on every save, so a price change refuses edits and offline work carrying the old price. Recorded in `docs/LIMITATIONS.md`; design D8.
+- [x] 4.5 `shared/billing-command.ts`: `BILLING_COMMAND_SCHEMA_VERSION` to 3, and the v3 shape. The boundary still accepts v1 and v2 as *neither, no table, every line an item*. Cross-runtime canonical-JSON and hash vectors for v3; the v1 and v2 vectors keep passing.
+- [x] 4.6 `lint:discount-rows`: add the waiver case (a full-line discount on a packaging line, alongside a bill discount) to the shared cases, so both runtimes agree. Confirm `lint:totals` needs no new case because the identity did not move. `groupMenuDiscounts` itself now leaves packaging out, so the counter no longer filters before calling it; the receipt gives the waiver its own `packaging` row.
+- [x] 4.7 Isolation cases for the new columns: a neighbouring outlet's manager and device cannot read another outlet's orders' type, table or `table_shared`, or its lines' kind.
+- [x] 4.8 Regenerate schema types and commit the diff.
+- [x] 4.9 SECTION GATE: a v3 order with a table, two bags and a waiver round-trips create, revise and pay at the database. A v1 and a v2 command queued before the release each settle exactly once. The full DB and RLS suites are green from a fresh reset. `supabase/tests/63_orders_carry_how_they_were_served.sql` (103 assertions) holds it. Building this section found three defects already in production (design, Decisions 2026-09-28), each fixed and pinned.
 
 ## 5. The Counter Goes Live
 
-- [ ] 5.1 Swap the live settings adapter for the real one, and promote the Outlets sections' gate from `demo` to `live`. Per AGENTS.md this **does not redesign the screen**: if it has to, the mock was the wrong shape, so fix the mock and record why.
-- [ ] 5.2 Settings reach the counter on its menu refresh and in the resume record (D6). A cold-started offline tablet serves its outlet's types, tables and packaging.
-- [ ] 5.3 The client computes the packaging line and waiver in `billTotals()` territory with integer paise only, and the float guard still throws.
-- [ ] 5.4 Offline path, exercised for real rather than asserted: go offline, ring a dine-in order at table 3, a takeaway with two bags, and a gold member's takeaway with the waiver. Revise one, pay two, come back online, and confirm each settles exactly once with its type, table, lines and waiver, and no duplicates.
-- [ ] 5.5 Two tablets: seat table 4 on each while one is offline, reconnect, and confirm both orders are recorded and both read Table 4 on the pipeline (D5).
-- [ ] 5.6 Run the full gate list from `AGENTS.md`, including the Docker job and `test:e2e:auth`.
-- [ ] 5.7 SECTION GATE: every suite green. At an outlet with everything off, the live counter is unchanged. At one with everything on, 5.4 and 5.5 hold against the real backend.
+- [ ] 5.1 The live outlets adapter reads the six columns and writes through `set_outlet_service_settings`, mapping each check's refusal to its problem code; the live menu read carries `service`; promote the part gate `outlet-service-choices` from `demo` to `live`. Per AGENTS.md this **does not redesign the screen**: if it has to, the mock was the wrong shape, so fix the mock and record why.
+- [ ] 5.2 The live billing adapter writes and reads the v3 facts: `serviceType`, `tableNumber`, line `kind`, the waiver, and the table sharing the pipeline marks.
+- [ ] 5.3 Settings reach the counter on its menu refresh and in the resume record (D6). A cold-started offline tablet serves its outlet's types, table numbers and packaging.
+- [ ] 5.4 The client computes the packaging line and waiver in `billTotals()` territory with integer paise only, and the float guard still throws.
+- [ ] 5.5 Offline path, exercised for real rather than asserted: go offline, ring a dine-in order at table 3, a takeaway with two bags, and a gold member's takeaway with the waiver. Revise one, pay two, come back online, and confirm each settles exactly once with its type, table, lines and waiver, and no duplicates.
+- [ ] 5.6 Two tablets: seat table 4 on each while one is offline, reconnect, and confirm both orders are recorded, both read *Table 4* marked *1 of 2* / *2 of 2*, and both carry `table_shared` (D5, D11).
+- [ ] 5.7 Run the full gate list from `AGENTS.md`, including the Docker job and `test:e2e:auth`.
+- [ ] 5.8 SECTION GATE: every suite green. At an outlet with everything off, the live counter is unchanged. At one with everything on, 5.5 and 5.6 hold against the real backend.
 
 ## 6. Demo, Docs And Phase Gate
 
 - [ ] 6.1 Walk the four-role demo end to end.
-- [ ] 6.2 Update every page named in the proposal's *Docs to update*: `docs/BUSINESS_CONTEXT.md`, `docs/SCREENS.md`, `docs/DATA_MODEL.md`, `docs/GLOSSARY.md`, `docs/OFFLINE_AND_SYNC.md`, `docs/LIMITATIONS.md`, `docs/OPERATIONS.md`, `docs/DEMO_MODE.md`.
+- [ ] 6.2 Update every page named in the proposal's *Docs to update*: `docs/BUSINESS_CONTEXT.md`, `docs/SCREENS.md`, `docs/DATA_MODEL.md`, `docs/ROLES_AND_PERMISSIONS.md`, `docs/GLOSSARY.md`, `docs/OFFLINE_AND_SYNC.md`, `docs/LIMITATIONS.md`, `docs/OPERATIONS.md`, `docs/DEMO_MODE.md`.
 - [ ] 6.3 Add a note to #58 `the-receipt-names-its-customer` for the receipt renderer: name the waiver *Gold member · packaging free*, and show *Dine-in · Table 4* / *Takeaway*.
-- [ ] 6.4 Update the Configuration Surfaces row in `ROADMAP.md` if the settled UI moved where these settings are made.
-- [ ] 6.5 🧍 The owner turns the settings on for the real outlet, and a biller serves real dine-in and takeaway orders with them. Tasks complete is not the archive trigger; real use is. Archive only after #57 has archived.
+- [x] 6.4 Update the Configuration Surfaces row in `ROADMAP.md` to where the settings are made and by whom.
+- [ ] 6.5 🧍 The owner turns the settings on for the real outlet, and a biller serves real dine-in and takeaway orders with them. Tasks complete is not the archive trigger; real use is.
 - [ ] 6.6 PHASE GATE (#60): each outlet chooses, on its own settings page, whether its orders are marked dine-in or takeaway, whether dine-in orders take a keyed table number, and whether a packaging charge is added per bag or per order, with packaging optionally free for gold members. A new outlet starts with every switch off and bills exactly as today. With the switches on, the counter asks where the food goes only where there is a choice, and a biller answers it in one tap before the order is saved or paid, a dine-in order is called by its table instead of its order number, a table already open is refused, and a takeaway order carries its packaging as a line on the bill that the biller cannot remove or reprice. Every one of those orders rung offline settles exactly once. The owner settled the settings page and the counter in the demo before any of it reached production, and the four-role demo walkthrough still walks.

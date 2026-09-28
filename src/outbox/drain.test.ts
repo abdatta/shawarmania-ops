@@ -24,7 +24,7 @@ function databaseName(): string {
 function command(commandId: string, orderId: string): BillingCommand {
   return {
     commandId,
-    schemaVersion: 2,
+    schemaVersion: 3,
     tabletId: 'tablet-1',
     shiftId: 'shift-1',
     type: 'cancel_order',
@@ -40,7 +40,7 @@ function createOrderCommand(
 ): Extract<BillingCommand, { type: 'create_order' }> {
   return {
     commandId,
-    schemaVersion: 2,
+    schemaVersion: 3,
     tabletId: 'tablet-1',
     shiftId: 'shift-1',
     type: 'create_order',
@@ -58,6 +58,8 @@ function createOrderCommand(
       totalPaise: 13_900,
       pricingMode: 'no_tax',
       discounts: [],
+      serviceType: null,
+      tableNumber: null,
       lines: [
         {
           id: crypto.randomUUID(),
@@ -69,6 +71,7 @@ function createOrderCommand(
           discountPaise: 0,
           discountPercentBp: null,
           categoryName: null,
+          kind: 'item',
         },
       ],
     },

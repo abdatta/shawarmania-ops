@@ -325,7 +325,7 @@ Every live capability needs configuration rows before it does anything, and **a 
 | An outlet's billing go-live date | none | **#10**, and **dropped by #12**. Its only reader was the manual ledger form's decision to ask for typed Cash and UPI; the derived statement reads bills at every outlet without it |
 | Opening cash float | #11 | **#11**, once per outlet, as the anchor for that outlet's first drawer observation. Every later opening is the previous observation's carry-forward, stored rather than derived |
 | First tracked day's opening cash and aggregator commission rates | #36 readings | **#36** (day form; every later day inherited the previous day's count and rates, editable). **Retired by #12**: the day form is gone, commission is a measured amount rather than a rate, and an outlet's first drawer count is its anchor |
-| An outlet's service choices (order types, tables, packaging charge, gold waiver) | #60 at the counter | **#60**, on the outlet's own settings page, by the owner. Every outlet starts with all of them off, which is today's counter |
+| An outlet's service choices (order types, table numbers, packaging charge, gold waiver) | #60 at the counter | **#60**, in the Orders section of the outlet's own page, by the owner for any outlet and by a manager for the outlets they manage. Every outlet starts with all of them off, which is today's counter |
 
 ## Standing Principles
 

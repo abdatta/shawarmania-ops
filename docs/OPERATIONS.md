@@ -793,6 +793,48 @@ schedule change leaves older rows reading correctly.
 writes away, so it says nothing about the figures and is not part of this
 record.
 
+## How often a table was shared, and dine-in went without one *(#60)*
+
+Two numbers the owner asked for once outlets choose how they serve. Both are read
+from the SQL editor; neither has a screen.
+
+**Two open orders on one table.** The counter refuses a busy table, but the
+database never does: two tablets that could not see each other, a tablet working
+from a stale pipeline, and a payment taken back after the table was seated again
+can each put a second open order on it, and by then the food may be served. So
+the server marks every order involved as it happens, in the write's own
+transaction, and never unmarks one. An order does not remember its table's
+history, so this mark is the only reliable record.
+
+```sql
+-- How many incidents, per outlet and day: one row per table that was shared.
+select o.name as outlet, r.business_date, r.table_number, count(*) as orders
+  from public.orders r join public.outlets o on o.id = r.outlet_id
+ where r.table_shared
+ group by o.name, r.business_date, r.table_number
+ order by r.business_date desc, o.name, r.table_number;
+```
+
+`count(*) where table_shared` alone is the number of orders that shared a table.
+The mark survives payment and cancellation, so a day's figure does not shrink as
+its orders are settled.
+
+**Dine-in with no table.** Nothing is recorded specially; the order says so.
+
+```sql
+select o.name as outlet, r.business_date,
+       count(*) filter (where r.table_number is null) as without_a_table,
+       count(*) as dine_in
+  from public.orders r join public.outlets o on o.id = r.outlet_id
+ where r.service_type = 'dine_in' and r.status <> 'cancelled'
+ group by o.name, r.business_date
+ order by r.business_date desc, o.name;
+```
+
+An order does not record whether its outlet had table numbers switched on when it
+was rung, so *No table* chosen at the pad and an outlet with no table numbers
+read alike. Read the figure against the outlet's settings, which change rarely.
+
 ## First production deploy
 
 Once, per environment. Until it is done the deployed site is **demo-only**: the

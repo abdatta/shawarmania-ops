@@ -1,5 +1,5 @@
 {
-  "note": "One case table for two implementations of one grouping rule: groupMenuDiscounts() in src/domain/discount-rows.ts, for the counter's draft, and public.bill_public_discount_rows() in SQL, for the customer's receipt. A draft has no rows in the database, and the receipt must do no arithmetic on the page, so neither can be the other. This file is what holds them together. src/domain/discount-rows.test.ts runs it through the function; supabase/tests/rest/zz-public-receipt.test.ts writes the same lines as a real bill and runs it through the database. Every subtotal here is the sum of its lines and every discount the sum of the rows, so a case that could not be a bill is refused before it can be asserted.",
+  "note": "One case table for two implementations of one grouping rule: groupMenuDiscounts() in src/domain/discount-rows.ts, for the counter's draft, and public.bill_public_discount_rows() in SQL, for the customer's receipt. A draft has no rows in the database, and the receipt must do no arithmetic on the page, so neither can be the other. This file is what holds them together. src/domain/discount-rows.test.ts runs it through the function; supabase/tests/rest/zz-public-receipt.test.ts writes the same lines as a real bill and runs it through the database. Every subtotal here is the sum of its lines and every discount the sum of the rows, so a case that could not be a bill is refused before it can be asserted. A line may say `\"kind\": \"packaging\"` (#60); its discount is the gold waiver, which is never a menu row, so it is left out of the rows and out of the sum they are checked against.",
   "cases": [
     {
       "name": "one percentage over one category",
@@ -222,6 +222,37 @@
         }
       ],
       "rows": []
+    },
+    {
+      "name": "a gold member's waived packaging is never a menu discount",
+      "lines": [
+        {
+          "itemName": "Classic Chicken Shawarma",
+          "unitPricePaise": 13900,
+          "quantity": 1,
+          "discountPaise": 1390,
+          "discountPercentBp": 1000,
+          "categoryName": "Shawarma"
+        },
+        {
+          "kind": "packaging",
+          "itemName": "Packaging",
+          "unitPricePaise": 500,
+          "quantity": 2,
+          "discountPaise": 1000,
+          "discountPercentBp": 10000,
+          "categoryName": null
+        }
+      ],
+      "rows": [
+        {
+          "basis": "percent",
+          "valueBp": 1000,
+          "valuePaise": null,
+          "categories": ["Shawarma"],
+          "amountPaise": 1390
+        }
+      ]
     }
   ]
 }

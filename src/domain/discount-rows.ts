@@ -26,6 +26,8 @@
 
 /** One line as this grouping needs to see it. */
 export interface DiscountedLine {
+  /** Absent reads as an item: every line before #60 was one. */
+  kind?: 'item' | 'packaging' | undefined
   quantity: number
   discountPaise?: number | null | undefined
   discountPercentBp?: number | null | undefined
@@ -48,6 +50,10 @@ export function groupMenuDiscounts(lines: readonly DiscountedLine[]): MenuDiscou
   const groups = new Map<string, MenuDiscountGroup>()
 
   for (const line of lines) {
+    // A packaging line's discount is the gold waiver, never a menu discount
+    // (#60, D4): it has no category for one to reach it through. It is its own
+    // row, drawn by whoever reads the line.
+    if (line.kind === 'packaging') continue
     const paise = line.discountPaise ?? 0
     if (paise <= 0) continue
 

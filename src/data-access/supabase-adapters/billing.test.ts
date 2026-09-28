@@ -475,6 +475,70 @@ describe('the live tablet acceptance boundary', () => {
     database.close()
   })
 
+  it('queues a saved order with its bill discount, its table and its bags', async () => {
+    const billing = createSupabaseBillingAdapter(offlineClient(), session)
+    const tenPercent = {
+      basis: 'percent',
+      valueBp: 1000,
+      valuePaise: null,
+      amountPaise: 1440,
+    } as const
+    const bags = {
+      kind: 'packaging',
+      menuItemId: '',
+      itemName: 'Packaging',
+      unitPricePaise: 500,
+      quantity: 1,
+      discountPaise: 0,
+      discountPercentBp: null,
+      categoryName: null,
+    } as const
+
+    await billing.saveOrder({
+      ...orderInput,
+      lines: [...draft.lines, bags],
+      discounts: [tenPercent],
+      serviceType: 'takeaway',
+      tableNumber: null,
+    })
+    await billing.reviseOrder(orderInput.clientId, {
+      lines: [draft.lines[0]!],
+      discounts: [{ ...tenPercent, amountPaise: 1390 }],
+      customerName: 'Asha',
+      customerPhone: null,
+      serviceType: 'dine_in',
+      tableNumber: 4,
+    })
+
+    const database = new BillingDeliveryDatabase()
+    const [created, revised] = (await database.envelopes.toArray()).sort(
+      (left, right) => left.createdAtMs - right.createdAtMs,
+    )
+    // The bill discount was dropped here before #60: the counter passed it and
+    // the payload never carried it, so the server stored the order at full price.
+    expect(created?.command.payload).toMatchObject({
+      discountPaise: 1440,
+      discounts: [tenPercent],
+      roundingPaise: 40,
+      totalPaise: 13_000,
+      serviceType: 'takeaway',
+      tableNumber: null,
+      lines: [
+        { kind: 'item', menuItemId: 'item-1' },
+        { kind: 'packaging', menuItemId: null, itemName: 'Packaging', quantity: 1 },
+      ],
+    })
+    expect(revised?.command).toMatchObject({ schemaVersion: 3, type: 'revise_order' })
+    expect(revised?.command.payload).toMatchObject({
+      discountPaise: 1390,
+      discounts: [{ amountPaise: 1390 }],
+      serviceType: 'dine_in',
+      tableNumber: 4,
+      lines: [{ kind: 'item' }],
+    })
+    database.close()
+  })
+
   it('overlays new durable commands onto the persisted server base after a cold start', async () => {
     const rememberedOrder: BillingOrder = {
       id: orderInput.clientId,

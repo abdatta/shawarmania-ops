@@ -1442,7 +1442,8 @@ describe('BillingCounter — how the outlet serves (#60)', () => {
     )
     // Reachable for real: a payment taken back after the table was seated again.
     for (const order of [older!, newer!]) {
-      store.orderService.set(order.id, { serviceType: 'dine_in', tableNumber: 8 })
+      order.service_type = 'dine_in'
+      order.table_number = 8
     }
     renderCounter(
       { ...createMockAdapters('biller'), billing: createMockBillingAdapter(store) },
