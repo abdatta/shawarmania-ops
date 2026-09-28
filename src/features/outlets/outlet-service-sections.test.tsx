@@ -243,11 +243,13 @@ describe('the outlet page’s Orders', () => {
     expect(screen.queryByTestId('service-orders')).toBeNull()
   })
 
-  it('is absent for real users until the database carries it', async () => {
+  it('is there for real users, now that the database carries it', async () => {
     renderPage(OUTLET_KALYANI_ID, { mode: 'real' })
 
-    await screen.findByTestId('outlet-kalyani')
-    expect(screen.queryByTestId('service-orders')).toBeNull()
+    // Awaited, not queried: the section draws once its settings are read, a
+    // moment after the heading. The test this replaced asserted absence right
+    // after the heading and passed on whichever machine checked first.
+    expect(await screen.findByTestId('service-orders')).toBeVisible()
   })
 })
 
