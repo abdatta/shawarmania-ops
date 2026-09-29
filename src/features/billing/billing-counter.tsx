@@ -54,8 +54,14 @@ import {
   type MenuDiscountRule,
   type OutletServiceSettings,
   type ServiceType,
+  ALL_OFF_LOYALTY_SETTINGS,
+  POINT_VALUE_PAISE,
+  pointsLabel,
+  pointsUsableMax,
+  type OutletLoyaltySettings,
 } from '@/domain'
 import { useOnForeground } from '@/features/attention/attention'
+import { getPartState, isRenderable } from '@/gates/registry'
 import { newUuid } from '@/lib/uuid'
 import { declareUnsavedWork } from '@/pwa/occupancy'
 import { SessionContext } from '@/session/context'
@@ -66,6 +72,7 @@ import { BillComposerFooter, CustomerServiceRow } from './bill-composer-footer'
 import { BillDiscountRows } from './bill-discount-rows'
 import { CustomerDialog, type CustomerSelection } from './customer-dialog'
 import { DiscountDialog } from './discount-dialog'
+import { PointsDialog } from './points-dialog'
 import { OfflineFillHint } from './offline-fill-hint'
 import { BillPanel } from './bill-panel'
 import { CounterActivityRail } from './counter-activity-rail'
@@ -117,6 +124,13 @@ interface Restorable {
    */
   discounts: readonly BillDiscountDraft[]
   customer: CustomerSelection | null
+  /**
+   * Points already on a saved order when it was opened for editing
+   * (a-regular-earns-points-and-gold). The balance the till is shown leaves
+   * them out, since they are held by this very order, so they are added back
+   * to what may be used. Nought for a new bill.
+   */
+  heldPoints: number
   payments: PaymentAllocation[]
   /** How it is being served, and the packaging it captured (#60). */
   serviceType: ServiceType | null
@@ -203,6 +217,18 @@ function customerFromOrder(order: BillingOrder): CustomerSelection {
   return { kind: 'skipped', name: order.customerName ?? '' }
 }
 
+/**
+ * Why Use points is not available, in one line under it. Points need a balance
+ * the server gave while this order's customer was being identified (#62, D10).
+ */
+function pointsUnavailableReason(customer: CustomerSelection | null, available: number): string {
+  if (customer?.kind === 'identified' && !customer.pointsFresh && available <= 0) {
+    return 'Points need a fresh check online. Tap the customer to look them up again.'
+  }
+  if (available <= 0) return 'No points to use yet.'
+  return 'This bill is too small to use points on.'
+}
+
 const COUNTER_COLUMN_RESIZE_STEP = 16
 const COUNTER_COLUMN_WIDTHS_KEY = 'shawarmania.counter-column-widths'
 // `gap-3` sits between each pair of the three workspace tracks.
@@ -266,6 +292,17 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   */
   const [serviceSettings, setServiceSettings] =
     useState<OutletServiceSettings>(ALL_OFF_SERVICE_SETTINGS)
+  /*
+    This outlet's points and gold rules, read with the menu (#62, D12). All off
+    until they arrive, and all off for good at an outlet that chose nothing.
+  */
+  const [loyaltySettings, setLoyaltySettings] =
+    useState<OutletLoyaltySettings>(ALL_OFF_LOYALTY_SETTINGS)
+  /** The points the biller asked to use on this order, before the cap is applied. */
+  const [pointsRequested, setPointsRequested] = useState(0)
+  /** See `Restorable.heldPoints`. */
+  const [heldPoints, setHeldPoints] = useState(0)
+  const [pointsDialogOpen, setPointsDialogOpen] = useState(false)
   /** The item lines. The packaging line is `packaging`, derived into `billLines`. */
   const [lines, setLines] = useState<BillLineDraft[]>([])
   const [serviceType, setServiceType] = useState<ServiceType | null>(null)
@@ -378,6 +415,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
       // On the menu's path, so a change reaches a running tablet at its next
       // refresh and a cold start serves the way its outlet does (design D6).
       setServiceSettings(loaded.service ?? ALL_OFF_SERVICE_SETTINGS)
+      setLoyaltySettings(loaded.loyalty ?? ALL_OFF_LOYALTY_SETTINGS)
       setMenuOffline(Boolean(resume))
       setError((current) =>
         current === 'Could not load the menu. Try again in a moment.' ? null : current,
@@ -446,6 +484,11 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   */
   const lookupCustomer = useCallback((phone: string) => customers.lookupByPhone(phone), [customers])
   const openCustomerDialog = useCallback(() => setCustomerDialogOpen(true), [])
+  /** Upgrade to Gold at the counter, once the customer agreed (#62, D4). Online only. */
+  const grantGold = useCallback(
+    (customerId: string) => customers.grantGoldAtCounter(customerId),
+    [customers],
+  )
 
   /*
     The partial question, which reaches only this outlet's own customers. Handed
@@ -510,7 +553,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
    * Every rule reads the order's **gross** subtotal, so two of them are additive
    * and the sequence they were applied in cannot change the total.
    */
-  const billDiscounts = useMemo<BillDiscountDraft[]>(() => {
+  const billerDiscounts = useMemo<BillDiscountDraft[]>(() => {
     // The whole subtotal, packaging included (#60): a bill discount has always
     // been a share of everything on the bill.
     const subtotal = billLines.reduce(
@@ -525,6 +568,61 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
           : Math.min(rule.valuePaise ?? 0, subtotal),
     }))
   }, [billLines, billDiscountRules])
+
+  /*
+    Points (a-regular-earns-points-and-gold, design D7). Behind the
+    `outlet-points` part gate until the database makes them real, and only for
+    an outlet that has points on and a customer the tablet has a balance for.
+  */
+  const pointsShown =
+    isRenderable(getPartState('outlet-points'), session?.mode ?? 'real') &&
+    loyaltySettings.pointsEnabled &&
+    customer?.kind === 'identified' &&
+    customer.pointsBalance != null
+  /**
+   * What may be spent: the balance the server just gave, plus the points this
+   * order already holds (which that balance leaves out). A balance that is only
+   * remembered may keep what the order already has, and never add to it.
+   */
+  const pointsAvailable =
+    customer?.kind === 'identified'
+      ? (customer.pointsFresh ? (customer.pointsBalance ?? 0) : 0) + heldPoints
+      : 0
+  /** The order after every discount except points: what the cap is a share of. */
+  const netBeforePointsPaise =
+    billLines.reduce(
+      (sum, line) =>
+        sum + lineTotalPaise(line.unitPricePaise, line.quantity) - (line.discountPaise ?? 0),
+      0,
+    ) - billerDiscounts.reduce((sum, discount) => sum + discount.amountPaise, 0)
+  const pointsMax = pointsShown
+    ? pointsUsableMax({
+        settings: loyaltySettings,
+        balance: pointsAvailable,
+        gold: knownTier === 'gold',
+        netPaise: netBeforePointsPaise,
+      })
+    : 0
+  /** Lowered to the most allowed whenever the order shrinks beneath what was asked. */
+  const pointsUsed = Math.min(pointsRequested, pointsMax)
+
+  /** Every bill-level discount: the biller's, then the points row, which is last. */
+  const billDiscounts = useMemo<BillDiscountDraft[]>(
+    () =>
+      pointsUsed > 0
+        ? [
+            ...billerDiscounts,
+            {
+              source: 'points',
+              basis: 'amount',
+              valueBp: null,
+              valuePaise: pointsUsed * POINT_VALUE_PAISE,
+              amountPaise: pointsUsed * POINT_VALUE_PAISE,
+            },
+          ]
+        : billerDiscounts,
+    [billerDiscounts, pointsUsed],
+  )
 
   /**
    * What this order comes to, discounts and rounding included.
@@ -605,6 +703,8 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   const resetBillContext = useCallback(() => {
     setBillDiscountRules([])
     setCustomer(null)
+    setPointsRequested(0)
+    setHeldPoints(0)
     setPaymentPreset([])
     // How it was served goes with the bill, and so does its packaging: left
     // behind, the next customer's first item would inherit a table.
@@ -682,12 +782,19 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     // bill-level discount the order carried the moment it was reopened, and the
     // revision then wrote a total the customer had never been quoted.
     setBillDiscountRules(
-      (draft.discounts ?? []).map((discount) => ({
-        basis: discount.basis,
-        valueBp: discount.valueBp,
-        valuePaise: discount.valuePaise,
-      })),
+      (draft.discounts ?? [])
+        .filter((discount) => discount.source !== 'points')
+        .map((discount) => ({
+          basis: discount.basis,
+          valueBp: discount.valueBp,
+          valuePaise: discount.valuePaise,
+        })),
     )
+    const points = (draft.discounts ?? [])
+      .filter((discount) => discount.source === 'points')
+      .reduce((sum, discount) => sum + discount.amountPaise / POINT_VALUE_PAISE, 0)
+    setPointsRequested(points)
+    setHeldPoints(draft.heldPoints)
   }
 
   function beginOrderEdit(order: BillingOrder) {
@@ -696,6 +803,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
       lines,
       discounts: billDiscounts,
       customer,
+      heldPoints,
       payments: paymentPreset,
       serviceType,
       tableNumber,
@@ -707,6 +815,11 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
       lines: saved.items,
       discounts: order.discounts,
       customer: customerFromOrder(order),
+      // The points this order holds may be kept while it is edited, whatever
+      // the till knows about the balance now.
+      heldPoints: (order.discounts ?? [])
+        .filter((discount) => discount.source === 'points')
+        .reduce((sum, discount) => sum + discount.amountPaise / POINT_VALUE_PAISE, 0),
       payments: [],
       serviceType: order.serviceType ?? null,
       tableNumber: order.tableNumber ?? null,
@@ -1034,6 +1147,8 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
                 <BillDiscountRows
                   lines={lines}
                   discounts={billDiscounts}
+                  onEditPoints={() => setPointsDialogOpen(true)}
+                  onRemovePoints={() => setPointsRequested(0)}
                   categoryCount={(menu ?? []).length}
                   roundingPaise={totals.roundingPaise}
                   editable={!settling}
@@ -1047,16 +1162,48 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
               }
               addDiscount={
                 lines.length > 0 ? (
-                  <Button
-                    variant="secondary"
-                    size="phone"
-                    className="w-full"
-                    data-testid="add-discount"
-                    disabled={settling}
-                    onClick={() => setDiscountDialog({ editingIndex: null })}
-                  >
-                    Add discount
-                  </Button>
+                  <div className="space-y-1">
+                    <div
+                      className={pointsShown && pointsUsed === 0 ? 'grid grid-cols-2 gap-2' : ''}
+                    >
+                      <Button
+                        variant="secondary"
+                        size="phone"
+                        className="w-full"
+                        data-testid="add-discount"
+                        disabled={settling}
+                        onClick={() => setDiscountDialog({ editingIndex: null })}
+                      >
+                        Add discount
+                      </Button>
+                      {/*
+                        Beside Discount [owner, 2026-09-28], and gone once points
+                        are on the bill: the row itself then edits them.
+                      */}
+                      {pointsShown && pointsUsed === 0 && (
+                        <Button
+                          variant="secondary"
+                          size="phone"
+                          className="w-full"
+                          data-testid="use-points"
+                          disabled={settling || pointsMax < 1}
+                          onClick={() => setPointsDialogOpen(true)}
+                        >
+                          {/*
+                            The points this bill can take, on the button
+                            [owner, 2026-09-29]: the number it will use, which
+                            is the balance unless the cap is lower.
+                          */}
+                          {pointsMax >= 1 ? `Use ${pointsLabel(pointsMax)}` : 'Use points'}
+                        </Button>
+                      )}
+                    </div>
+                    {pointsShown && pointsUsed === 0 && pointsMax < 1 && (
+                      <p className="text-xs text-content-muted" data-testid="use-points-why">
+                        {pointsUnavailableReason(customer, pointsAvailable)}
+                      </p>
+                    )}
+                  </div>
                 ) : null
               }
               {...(editingOrder
@@ -1084,6 +1231,25 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
                     ),
                   }
                 : { footer: composerFooter })}
+            />
+
+            <PointsDialog
+              open={pointsDialogOpen}
+              netPaise={netBeforePointsPaise}
+              capPercent={
+                ((knownTier === 'gold' && loyaltySettings.goldEnabled
+                  ? loyaltySettings.goldUseCapBp
+                  : loyaltySettings.useCapBp) ?? 0) / 100
+              }
+              balance={pointsAvailable}
+              max={pointsMax}
+              current={pointsUsed > 0 ? pointsUsed : null}
+              busy={settling}
+              onClose={() => setPointsDialogOpen(false)}
+              onConfirm={(points) => {
+                setPointsRequested(points)
+                setPointsDialogOpen(false)
+              }}
             />
 
             <DiscountDialog
@@ -1171,8 +1337,25 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         selection={customer}
         lookup={lookupCustomer}
         suggest={suggestCustomer}
+        grantGold={
+          isRenderable(getPartState('counter-gold'), session?.mode ?? 'real') &&
+          loyaltySettings.goldCounterGrant
+            ? grantGold
+            : undefined
+        }
+        goldMonths={loyaltySettings.goldDurationMonths}
         onClose={() => setCustomerDialogOpen(false)}
         onChoose={(selection) => {
+          // The points belonged to the customer they were taken from: another
+          // customer, or a skip, takes them off the order (design D7).
+          const samePerson =
+            customer?.kind === 'identified' &&
+            selection.kind === 'identified' &&
+            customer.phone === selection.phone
+          if (!samePerson) {
+            setPointsRequested(0)
+            setHeldPoints(0)
+          }
           setCustomer(selection)
           setCustomerDialogOpen(false)
         }}

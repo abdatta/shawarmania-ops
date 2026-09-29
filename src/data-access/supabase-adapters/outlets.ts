@@ -10,6 +10,7 @@ import {
 import type { Database, Tables, TablesInsert, TablesUpdate } from '../database.types'
 import { serviceSettingsFromRow } from '../outlet-service-row'
 import {
+  ALL_OFF_LOYALTY_SETTINGS,
   ALL_OFF_SERVICE_SETTINGS,
   SERVICE_SETTINGS_PROBLEM_MESSAGES,
   serviceSettingsProblem,
@@ -317,6 +318,24 @@ export function createSupabaseOutletsAdapter(
       an outlet outside the reader's reach answers as one that chose nothing,
       because that is all the reader may know about it.
     */
+    /*
+      Points and gold (a-regular-earns-points-and-gold, #62). The columns and
+      `set_outlet_loyalty_settings` arrive with that change's database section
+      (tasks 4.2 and 5.3); until then every live outlet reads as having chosen
+      nothing, which bills exactly as today, and a write is refused rather than
+      pretending to store.
+    */
+    async getLoyaltySettings() {
+      return { ...ALL_OFF_LOYALTY_SETTINGS }
+    },
+
+    async updateLoyaltySettings() {
+      throw new DataActionError(
+        'not_available',
+        'Points and gold cannot be saved yet. They arrive with the next release.',
+      )
+    },
+
     async getServiceSettings(id) {
       const { data, error } = await table()
         .select(

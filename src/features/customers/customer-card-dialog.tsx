@@ -1,4 +1,4 @@
-import { Check, Pencil, Star, StarOff, X } from 'lucide-react'
+import { Check, Coins, Pencil, Star, StarOff, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
@@ -22,13 +22,20 @@ import { visitsLabel } from './visits-label'
  * ```
  *   Rahul Sharma                       ✎
  *   +91 98765 43210
- *   ⭐ Gold member since 12 Aug 2026    ⊘
+ *   ⭐ Gold until 12 Feb 2027          ⊘
+ *      Given at the counter by Priya
+ *   Points                         42
  *   ─────────────────────────────────
  *   Last 30 days
  *   14 visits              ₹9,240
  *   Last seen            14 Sep 2026
- *   Customer since       12 Mar 2026
+ *   First visit here     12 Mar 2026
  * ```
+ *
+ * **Everything on it belongs to one outlet** (a-regular-earns-points-and-gold,
+ * D13): gold, its end date and who gave it, the points balance, and every
+ * figure, all read for the outlet chosen on the Customers page. Only the name
+ * is the person's everywhere, which is why renaming alone keeps #57's rule.
  *
  * **Status rows, not buttons.** The name and the membership each read as a
  * line of text with one small icon-only control beside it, and there is no
@@ -45,10 +52,16 @@ import { visitsLabel } from './visits-label'
  * confirmation from closing the card beneath it.
  */
 export function CustomerCardDialog({
+  outletId,
+  goldOffered = true,
   customerId,
   onClose,
   onChanged,
 }: {
+  /** The outlet the Customers page is reading. */
+  outletId: string
+  /** Whether that outlet has gold members. Without them the card says nothing of gold. */
+  goldOffered?: boolean
   customerId: string | null
   onClose: () => void
   /** Something on the card changed; here is the card as it now reads. */
@@ -63,7 +76,9 @@ export function CustomerCardDialog({
     >
       {customerId !== null && (
         <CardBody
-          key={customerId}
+          key={`${outletId}:${customerId}`}
+          outletId={outletId}
+          goldOffered={goldOffered}
           customerId={customerId}
           onClose={onClose}
           onChanged={onChanged}
@@ -79,10 +94,14 @@ const ICON_BUTTON = cn(
 )
 
 function CardBody({
+  outletId,
+  goldOffered,
   customerId,
   onClose,
   onChanged,
 }: {
+  outletId: string
+  goldOffered: boolean
   customerId: string
   onClose: () => void
   onChanged: (card: DirectoryCustomerCard) => void
@@ -97,7 +116,7 @@ function CardBody({
   useEffect(() => {
     let current = true
     customerDirectory
-      .card(customerId)
+      .card(outletId, customerId)
       .then((next) => {
         if (current) setCard(next)
       })
@@ -107,7 +126,7 @@ function CardBody({
     return () => {
       current = false
     }
-  }, [customerDirectory, customerId])
+  }, [customerDirectory, outletId, customerId])
 
   async function run(action: () => Promise<DirectoryCustomerCard>, fallback: string) {
     setBusy(true)
@@ -134,7 +153,12 @@ function CardBody({
       setRenaming(null)
       return
     }
-    if (await run(() => customerDirectory.rename(card.id, next), 'The name could not be saved.')) {
+    if (
+      await run(
+        () => customerDirectory.rename(outletId, card.id, next),
+        'The name could not be saved.',
+      )
+    ) {
       setRenaming(null)
     }
   }
@@ -143,8 +167,8 @@ function CardBody({
     if (card === null || confirming === null) return
     const action =
       confirming === 'grant'
-        ? () => customerDirectory.grantMembership(card.id)
-        : () => customerDirectory.revokeMembership(card.id)
+        ? () => customerDirectory.grantMembership(outletId, card.id)
+        : () => customerDirectory.revokeMembership(outletId, card.id)
     await run(action, 'The membership could not be changed.')
     setConfirming(null)
   }
@@ -237,18 +261,33 @@ function CardBody({
             +91 {formatIndianPhone(card.phone)}
           </p>
 
-          {/* ── Membership, as a status row ───────────────────────────── */}
-          <div
-            data-testid="customer-card-membership"
-            className="mt-2 flex min-h-[var(--size-control-phone)] items-center gap-2"
-          >
-            {card.memberSince !== null ? (
-              <>
-                <MemberMark />
-                <p className="min-w-0 flex-1 text-sm font-semibold text-content">
-                  Gold member since {formatDate(card.memberSince)}
-                </p>
-                {card.editable && (
+          {/* ── Gold here, as a status row ─────────────────────────────── */}
+          {/*
+            Gold is this outlet's, so anybody who may read the outlet may change
+            it [owner, 2026-09-28]: the owner anywhere, a manager at the outlets
+            they manage. Renaming is the only thing a shared customer still
+            keeps from a manager.
+          */}
+          {goldOffered && (
+            <div
+              data-testid="customer-card-membership"
+              className="mt-2 flex min-h-[var(--size-control-phone)] items-center gap-2"
+            >
+              {card.memberSince !== null ? (
+                <>
+                  <MemberMark />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-content">
+                      {card.memberUntil
+                        ? `Gold until ${formatDate(card.memberUntil)}`
+                        : `Gold member since ${formatDate(card.memberSince)}`}
+                    </p>
+                    {card.grantedVia && (
+                      <p className="text-xs text-content-muted" data-testid="customer-card-given">
+                        {givenLine(card)}
+                      </p>
+                    )}
+                  </div>
                   <button
                     type="button"
                     aria-label="Remove gold membership"
@@ -259,17 +298,15 @@ function CardBody({
                   >
                     <StarOff aria-hidden size={18} />
                   </button>
-                )}
-              </>
-            ) : (
-              <>
-                <p className="min-w-0 flex-1 text-sm font-semibold text-content-muted">
-                  Not a gold member
-                </p>
-                {card.editable && (
+                </>
+              ) : (
+                <>
+                  <p className="min-w-0 flex-1 text-sm font-semibold text-content-muted">
+                    Not a gold member here
+                  </p>
                   <button
                     type="button"
-                    aria-label="Make gold member"
+                    aria-label="Upgrade to Gold"
                     data-testid="customer-card-grant"
                     disabled={busy}
                     onClick={() => setConfirming('grant')}
@@ -277,19 +314,38 @@ function CardBody({
                   >
                     <Star aria-hidden size={18} />
                   </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {card.pointsBalance !== null && (
+            <div
+              data-testid="customer-card-points"
+              className="flex min-h-[var(--size-control-phone)] items-center justify-between gap-2"
+            >
+              <span className="flex items-center gap-2 text-sm font-semibold text-content">
+                <Coins aria-hidden size={18} className="text-accent-text" />
+                Points
+              </span>
+              <span
+                className={cn(
+                  'text-lg font-black tabular-nums',
+                  card.pointsBalance < 0 ? 'text-danger' : 'text-content',
                 )}
-              </>
-            )}
-          </div>
+              >
+                {card.pointsBalance}
+              </span>
+            </div>
+          )}
 
           {/*
             A manager looking at a customer another outlet also serves sees why
-            the controls are missing, rather than wondering where they went. One
-            sentence, and nothing about which outlet or what was bought there.
+            the pencil is missing, rather than wondering where it went.
           */}
           {!card.editable && (
             <p className="mt-1 text-xs text-content-muted" data-testid="customer-card-read-only">
-              Also buys at another outlet, so only the owner can change their name or gold.
+              Also buys at another outlet, so only the owner can change their name.
             </p>
           )}
 
@@ -318,10 +374,8 @@ function CardBody({
               <dd className="text-right font-semibold text-content">
                 {card.lastSeenAt ? formatDate(card.lastSeenAt) : 'Not yet'}
               </dd>
-              {/* A manager's is their own outlets' first sale, and says so. */}
-              <dt className="text-content-muted">
-                {card.scope === 'business' ? 'Customer since' : 'First visit here'}
-              </dt>
+              {/* This outlet's first sale: every figure here is this outlet's. */}
+              <dt className="text-content-muted">First visit here</dt>
               <dd className="text-right font-semibold text-content">
                 {formatDate(card.customerSince)}
               </dd>
@@ -332,15 +386,15 @@ function CardBody({
             open={confirming !== null}
             title={
               confirming === 'grant'
-                ? `Make ${who} a gold member?`
+                ? `Upgrade ${who} to Gold?`
                 : `Remove ${who}’s gold membership?`
             }
             consequence={
               confirming === 'grant'
-                ? 'Billers will see a gold star beside them at every outlet, from their next order. Nothing is discounted automatically.'
-                : 'The star stops appearing at the counter from their next order. Orders and bills already rung keep theirs.'
+                ? 'Gold here, for this outlet’s gold duration: a star at this outlet’s counter from their next order, and this outlet’s higher points cap.'
+                : 'Gold here ends now. Orders and bills already rung keep their star.'
             }
-            confirmLabel={confirming === 'grant' ? 'Make gold member' : 'Remove gold'}
+            confirmLabel={confirming === 'grant' ? 'Upgrade to Gold' : 'Remove gold'}
             busy={busy}
             onConfirm={() => void changeMembership()}
             onClose={() => setConfirming(null)}
@@ -349,6 +403,12 @@ function CardBody({
       )}
     </div>
   )
+}
+
+/** Who gave the gold in force, and how: `At the counter by Priya` or `By you`. */
+function givenLine(card: DirectoryCustomerCard): string {
+  const by = card.grantedByName ?? 'somebody'
+  return card.grantedVia === 'counter' ? `Given at the counter by ${by}` : `Given by ${by}`
 }
 
 function messageOf(cause: unknown, fallback: string): string {

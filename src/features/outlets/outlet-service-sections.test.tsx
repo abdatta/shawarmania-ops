@@ -139,7 +139,9 @@ describe('the outlet page’s Orders', () => {
     expect(saved).toHaveTextContent('Saved')
     expect(screen.queryByTestId('service-save')).toBeNull()
     expect(screen.queryByTestId('service-cancel')).toBeNull()
-    expect(screen.getByRole('status')).toHaveTextContent('Orders saved.')
+    expect(screen.getAllByRole('status').some((node) => node.textContent === 'Orders saved.')).toBe(
+      true,
+    )
     expect(screen.getByTestId('service-save-bar')).toHaveAttribute('data-open')
 
     // Held long enough to read, then the bar folds and the words go.
@@ -299,5 +301,65 @@ describe('the mock refuses what the database will', () => {
       dineInOffered: false,
       packagingMode: 'off',
     })
+  })
+})
+
+describe('gold’s settings in both places (a-regular-earns-points-and-gold)', () => {
+  it('shows free packaging under Gold members too, as one value saved by Loyalty', async () => {
+    const user = userEvent.setup()
+    const data = createDemoData()
+    // Kanchrapara charges for packaging; give it gold, as Kalyani has.
+    data.store.loyaltySettings.set(
+      OUTLET_KANCHRAPARA_ID,
+      data.store.loyaltySettings.get(OUTLET_KALYANI_ID)!,
+    )
+    renderPage(OUTLET_KANCHRAPARA_ID, { data })
+
+    const inLoyalty = await screen.findByTestId('loyalty-gold-free-packaging')
+    const inOrders = screen.getByTestId('service-gold-free')
+    const before = inOrders.getAttribute('aria-checked')
+    expect(inLoyalty).toHaveAttribute('aria-checked', before)
+
+    await user.click(inLoyalty)
+    const after = before === 'true' ? 'false' : 'true'
+    expect(screen.getByTestId('service-gold-free')).toHaveAttribute('aria-checked', after)
+
+    await user.click(screen.getByTestId('loyalty-save'))
+    await waitFor(() =>
+      expect(data.store.serviceSettings.get(OUTLET_KANCHRAPARA_ID)?.packagingFreeForGold).toBe(
+        after === 'true',
+      ),
+    )
+  })
+
+  it('hides free packaging from Orders the moment gold is switched off', async () => {
+    const user = userEvent.setup()
+    const data = createDemoData()
+    data.store.loyaltySettings.set(
+      OUTLET_KANCHRAPARA_ID,
+      data.store.loyaltySettings.get(OUTLET_KALYANI_ID)!,
+    )
+    renderPage(OUTLET_KANCHRAPARA_ID, { data })
+
+    await screen.findByTestId('loyalty-gold-free-packaging')
+    expect(screen.getByTestId('service-gold-free')).toBeInTheDocument()
+    await user.click(screen.getByTestId('loyalty-gold-switch'))
+    expect(screen.queryByTestId('service-gold-free')).toBeNull()
+    expect(screen.queryByTestId('loyalty-gold-free-packaging')).toBeNull()
+  })
+})
+
+describe('the points multiplier in both places', () => {
+  it('is one value: typing in the Gold members copy changes the Points one', async () => {
+    const user = userEvent.setup()
+    renderPage(OUTLET_KALYANI_ID)
+
+    const copy = await screen.findByTestId('loyalty-multiplier-copy')
+    await user.clear(copy)
+    await user.type(copy, '1.5')
+    expect(screen.getByTestId('loyalty-multiplier')).toHaveValue('1.5')
+    expect(
+      screen.getByLabelText('Gold members points multiplier', { selector: '#' + copy.id }),
+    ).toBe(copy)
   })
 })

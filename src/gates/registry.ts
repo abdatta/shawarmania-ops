@@ -728,6 +728,17 @@ const partDefs = {
    * counter bills exactly as it did before.
    */
   'outlet-service-choices': { state: 'live' },
+  /**
+   * Points (a-regular-earns-points-and-gold, #62): the Loyalty section of an
+   * outlet's page, and the counter's balance and Use points. `demo` until the
+   * change's database section makes them real (tasks 6.4).
+   */
+  'outlet-points': { state: 'demo' },
+  /**
+   * Gold earned at the counter (#62): Upgrade to Gold on an eligible customer. `demo`
+   * until the counter grant is real (tasks 6.4).
+   */
+  'counter-gold': { state: 'demo' },
 } as const satisfies Record<string, { state: GateState }>
 
 export type PartId = keyof typeof partDefs

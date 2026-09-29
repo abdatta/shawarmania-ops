@@ -9,7 +9,9 @@ import { SessionContext } from '@/session/context'
 import { deriveSessionScope, type Role, type Session } from '@/session/session'
 import type { DataAdapters } from '@/data-access/adapters'
 import { createMockAdapters } from '@/data-access/mock'
+import { OUTLET_KALYANI_ID } from '@/data-access/mock/fixtures/outlets'
 import { createDemoData } from '@/data-access/mock'
+import { withGoldSwitched } from '@/domain'
 import {
   customerIdForPhone,
   DEMO_MEMBER_CUSTOMER_PHONE,
@@ -124,8 +126,12 @@ describe('CustomersSurface', () => {
       })
       data.customers.memberships.push({
         customerId: id,
+        outletId: OUTLET_KALYANI_ID,
         grantedAt: '2026-09-10T12:00:00.000Z',
         grantedBy: 'owner',
+        grantedVia: 'management',
+        counterDeviceId: null,
+        expiresAt: '2027-03-10T12:00:00.000Z',
         revokedAt: null,
         revokedBy: null,
       })
@@ -196,18 +202,18 @@ describe('CustomersSurface', () => {
     const card = await openCard(user, 'regulars', MOUMITA)
 
     expect(within(card).getByTestId('customer-card-membership')).toHaveTextContent(
-      'Not a gold member',
+      'Not a gold member here',
     )
-    await user.click(within(card).getByRole('button', { name: 'Make gold member' }))
+    await user.click(within(card).getByRole('button', { name: 'Upgrade to Gold' }))
 
-    const confirm = await screen.findByRole('dialog', { name: /a gold member\?$/ })
-    await user.click(within(confirm).getByRole('button', { name: 'Make gold member' }))
+    const confirm = await screen.findByRole('dialog', { name: /to Gold\?$/ })
+    await user.click(within(confirm).getByRole('button', { name: 'Upgrade to Gold' }))
 
+    // Gold here ends on the date the grant stored (a-regular-earns-points-and-gold).
     await waitFor(() =>
-      expect(within(card).getByTestId('customer-card-membership')).toHaveTextContent(
-        /Gold member since/,
-      ),
+      expect(within(card).getByTestId('customer-card-membership')).toHaveTextContent(/Gold until/),
     )
+    expect(within(card).getByTestId('customer-card-given')).toHaveTextContent('Given by')
     expect(within(card).getByRole('button', { name: 'Remove gold membership' })).toBeInTheDocument()
     // The Gold tab lists her when it is next opened.
     await user.click(within(card).getByRole('button', { name: 'Close' }))
@@ -229,9 +235,7 @@ describe('CustomersSurface', () => {
     await user.click(within(confirm).getByRole('button', { name: 'Cancel' }))
 
     // Still a member, and the card underneath is still open.
-    expect(within(card).getByTestId('customer-card-membership')).toHaveTextContent(
-      /Gold member since/,
-    )
+    expect(within(card).getByTestId('customer-card-membership')).toHaveTextContent(/Gold until/)
     expect(screen.getByTestId('customer-card')).toBeInTheDocument()
 
     await user.click(within(card).getByRole('button', { name: 'Remove gold membership' }))
@@ -266,9 +270,23 @@ describe('CustomersSurface', () => {
 
     const figures = within(card).getByTestId('customer-card-figures')
     expect(figures).toHaveTextContent('Last 30 days')
-    expect(figures).toHaveTextContent('9 visits')
+    // Her Kalyani visits: every figure is the outlet's own.
+    expect(figures).toHaveTextContent(/\d+ visits/)
     expect(figures).toHaveTextContent('Last seen')
-    expect(figures).toHaveTextContent('Customer since')
+    expect(figures).toHaveTextContent('First visit here')
+    // And her points there.
+    expect(within(card).getByTestId('customer-card-points')).toHaveTextContent('Points')
+  })
+
+  it('shows no gold at an outlet with gold off', async () => {
+    const data = createDemoData()
+    const settings = data.store.loyaltySettings.get(OUTLET_KALYANI_ID)!
+    data.store.loyaltySettings.set(OUTLET_KALYANI_ID, withGoldSwitched(settings, false))
+    renderSurface(createMockAdapters('super_admin', data))
+
+    const regulars = await screen.findByTestId('customer-list-regulars')
+    await waitFor(() => expect(screen.queryByTestId('customer-tabs')).toBeNull())
+    expect(within(regulars).queryAllByRole('img', { name: 'Gold member' })).toHaveLength(0)
   })
 
   describe('as a manager', () => {
@@ -279,10 +297,9 @@ describe('CustomersSurface', () => {
       asManager()
       const regulars = await screen.findByTestId('customer-list-regulars')
       expect(regulars).toHaveTextContent('Moumta Ghosh')
-      // Imran and Sourav have only ever bought at Kanchrapara.
-      expect(regulars).not.toHaveTextContent('Imran Sheikh')
+      // Sourav has only ever bought at Kanchrapara.
       expect(regulars).not.toHaveTextContent('Sourav Pal')
-      expect(screen.getByText(/at your outlet/)).toBeInTheDocument()
+      expect(screen.getByText(/Most visits here/)).toBeInTheDocument()
     })
 
     it('changes a customer who has only ever bought at their outlet', async () => {
@@ -296,14 +313,15 @@ describe('CustomersSurface', () => {
       )
     })
 
-    it('only reads a customer another outlet also serves, and says why', async () => {
+    it('changes gold for a customer another outlet also serves, but not their name', async () => {
       const user = userEvent.setup()
       asManager()
       const card = await openCard(user, 'members', RITIKA)
-      expect(within(card).queryByRole('button', { name: 'Remove gold membership' })).toBeNull()
+      // Gold is this outlet's (a-regular-earns-points-and-gold); the name is hers everywhere.
+      expect(within(card).getByRole('button', { name: 'Remove gold membership' })).toBeVisible()
       expect(within(card).queryByRole('button', { name: 'Correct the name' })).toBeNull()
       expect(within(card).getByTestId('customer-card-read-only')).toHaveTextContent(
-        'only the owner can change',
+        'only the owner can change their name',
       )
     })
   })

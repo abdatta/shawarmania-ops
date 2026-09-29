@@ -7,16 +7,19 @@ import { Button } from '@/components/ui/button'
 import { LoadingList, Shimmer } from '@/components/ui/loading'
 import { MemberMark } from '@/components/ui/member-mark'
 import { useAdapters } from '@/data-access'
+import { useOutletScope } from '@/features/outlet-scope'
+import { getPartState, isRenderable } from '@/gates/registry'
 import { useSession } from '@/session/context'
-import { holdsRole } from '@/session/session'
 import {
   DataActionError,
   type DirectoryCustomerCard,
   type DirectoryList,
   type DirectoryCustomerRow,
   type DirectoryCustomerSearch,
+  type DirectoryMemberOrder,
 } from '@/data-access/adapters'
 import {
+  formatDate,
   highlightName,
   highlightPhone,
   parseCustomerQuery,
@@ -45,11 +48,16 @@ import { visitsLabel } from './visits-label'
  * The search and the lists are a browse path, and that is exactly why they
  * exist here and nowhere else. The owner already reads every bill at every
  * outlet; no counter can list anybody.
+ *
+ * **One outlet at a time** (a-regular-earns-points-and-gold, D13), chosen with
+ * the remembered chips every outlet-scoped screen uses [owner, 2026-09-28].
+ * Gold, points, visits and spend are each a relationship between a person and
+ * a shop, so a list mixing outlets would have every row saying "gold here, not
+ * there". With one trading outlet it is a single chip nobody touches.
  */
 export function CustomersSurface() {
-  // Wording only. What a manager can see and change is the adapter's to decide,
-  // and it decides from the same assignments.
-  const wholeBusiness = holdsRole(useSession(), 'super_admin')
+  const { outletId, selector } = useOutletScope()
+  const goldOffered = useGoldOffered(outletId)
   /** Regulars first [owner, 2026-09-24]: it is where the owner finds who to make gold. */
   const [tab, setTab] = useState<DirectoryList>('regulars')
   const [openId, setOpenId] = useState<string | null>(null)
@@ -70,6 +78,7 @@ export function CustomersSurface() {
       new Map(current).set(card.id, {
         name: card.name,
         tier: card.memberSince === null ? null : 'gold',
+        memberUntil: card.memberUntil,
       }),
     )
     setRevision((value) => value + 1)
@@ -84,19 +93,75 @@ export function CustomersSurface() {
     <div className="mx-auto max-w-2xl">
       <PageHeader
         title="Customers"
-        subtitle={
-          wholeBusiness
-            ? 'Search by name or number, or open a regular from the lists below.'
-            : 'The customers your outlet has served. Search by name or number, or open a regular below.'
-        }
+        subtitle="The customers this outlet has served. Search by name or number, or open a regular below."
+        scope={selector}
       />
 
+      {outletId === null ? (
+        <LoadingList label="customers" rows={6} blockHeight="h-14" />
+      ) : (
+        <OutletCustomers
+          key={outletId}
+          outletId={outletId}
+          goldOffered={goldOffered}
+          tab={tab}
+          onTab={setTab}
+          query={query}
+          onQuery={setQuery}
+          revision={revision}
+          patch={patch}
+          onOpen={setOpenId}
+        />
+      )}
+
+      {outletId !== null && (
+        <CustomerCardDialog
+          outletId={outletId}
+          goldOffered={goldOffered}
+          customerId={openId}
+          onClose={() => setOpenId(null)}
+          onChanged={changed}
+        />
+      )}
+    </div>
+  )
+}
+
+/** Everything under the header, for the one outlet in scope. */
+function OutletCustomers({
+  outletId,
+  goldOffered,
+  tab,
+  onTab,
+  query,
+  onQuery,
+  revision,
+  patch,
+  onOpen,
+}: {
+  outletId: string
+  goldOffered: boolean
+  tab: DirectoryList
+  onTab: (tab: DirectoryList) => void
+  query: string
+  onQuery: (query: string) => void
+  revision: number
+  patch: (row: DirectoryCustomerRow) => DirectoryCustomerRow
+  onOpen: (id: string) => void
+}) {
+  /** The gold list's order: newest grant, or most visits lately [owner, 2026-09-28]. */
+  const [memberOrder, setMemberOrder] = useState<DirectoryMemberOrder>('newest')
+  // An outlet without gold members shows regulars only [owner, 2026-09-29].
+  const shownTab = goldOffered ? tab : 'regulars'
+  return (
+    <>
       <CustomerSearch
+        outletId={outletId}
         query={query}
-        onQuery={setQuery}
+        onQuery={onQuery}
         revision={revision}
         patch={patch}
-        onOpen={setOpenId}
+        onOpen={onOpen}
       />
 
       {/*
@@ -112,61 +177,130 @@ export function CustomersSurface() {
             tabpanel beneath it is a tablist that is not one (design D3).
             Regulars first [owner, 2026-09-24].
           */}
-          <div
-            role="group"
-            aria-label="Show"
-            data-testid="customer-tabs"
-            className="mb-3 grid grid-cols-2 gap-1 rounded-xl border border-border bg-surface p-1"
-          >
-            {LIST_ORDER.map((which) => (
-              <button
-                key={which}
-                type="button"
-                aria-pressed={tab === which}
-                data-testid={`tab-${which}`}
-                onClick={() => setTab(which)}
-                className={cn(
-                  'h-[var(--size-control-phone)] rounded-lg text-sm font-semibold focus-visible:focus-ring',
-                  tab === which
-                    ? 'bg-primary text-on-primary'
-                    : 'text-content-muted hover:bg-surface-raised hover:text-content',
-                )}
-              >
-                {/*
+          {goldOffered && (
+            <div
+              role="group"
+              aria-label="Show"
+              data-testid="customer-tabs"
+              className="mb-3 grid grid-cols-2 gap-1 rounded-xl border border-border bg-surface p-1"
+            >
+              {LIST_ORDER.map((which) => (
+                <button
+                  key={which}
+                  type="button"
+                  aria-pressed={tab === which}
+                  data-testid={`tab-${which}`}
+                  onClick={() => onTab(which)}
+                  className={cn(
+                    'h-[var(--size-control-phone)] rounded-lg text-sm font-semibold focus-visible:focus-ring',
+                    tab === which
+                      ? 'bg-primary text-on-primary'
+                      : 'text-content-muted hover:bg-surface-raised hover:text-content',
+                  )}
+                >
+                  {/*
                   No count [owner, 2026-09-24]: Regulars is everybody seen this
                   month and Gold is everybody who is gold, so a number beside
                   either would only restate the length of the list below it.
                 */}
-                {LIST_LABELS[which]}
-              </button>
-            ))}
-          </div>
-          <p className="mb-2 text-xs text-content-muted">
-            {tab === 'members'
-              ? 'Everyone who is gold now, newest first'
-              : wholeBusiness
-                ? 'Most visits in the last 30 days'
-                : 'Most visits at your outlet in the last 30 days'}
-          </p>
+                  {LIST_LABELS[which]}
+                </button>
+              ))}
+            </div>
+          )}
+          {shownTab === 'members' ? (
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-xs text-content-muted">Everyone who is gold here now</p>
+              {/*
+                Newest grant, or most visits lately [owner, 2026-09-28] — the
+                second is how one number sitting on top suspiciously often gets
+                noticed.
+              */}
+              <div
+                role="group"
+                aria-label="Order gold members by"
+                className="flex gap-1 rounded-lg border border-border bg-surface p-0.5"
+              >
+                {MEMBER_ORDERS.map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={memberOrder === value}
+                    data-testid={`members-order-${value}`}
+                    onClick={() => setMemberOrder(value)}
+                    className={cn(
+                      'rounded-md px-2 py-1 text-xs font-semibold focus-visible:focus-ring',
+                      memberOrder === value
+                        ? 'bg-primary text-on-primary'
+                        : 'text-content-muted hover:bg-surface-raised hover:text-content',
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="mb-2 text-xs text-content-muted">Most visits here in the last 30 days</p>
+          )}
 
           {/*
-            Keyed by tab: each tab reads its own list when opened, and the open
-            one keeps every page already scrolled through.
+            Keyed by tab and order: each reads its own list when opened, and the
+            open one keeps every page already scrolled through.
           */}
-          <CustomerListPanel key={tab} which={tab} patch={patch} onOpen={setOpenId} />
+          <CustomerListPanel
+            key={`${shownTab}:${memberOrder}`}
+            outletId={outletId}
+            which={shownTab}
+            order={memberOrder}
+            patch={patch}
+            onOpen={onOpen}
+          />
         </>
       )}
-
-      <CustomerCardDialog customerId={openId} onClose={() => setOpenId(null)} onChanged={changed} />
-    </div>
+    </>
   )
 }
+
+/**
+ * Whether this outlet has gold members, from its loyalty rules
+ * (a-regular-earns-points-and-gold, [owner, 2026-09-29]). Until those rules are
+ * part of the live app, gold is as #57 left it: on.
+ */
+function useGoldOffered(outletId: string | null): boolean {
+  const { outlets } = useAdapters()
+  const session = useSession()
+  const loyaltyShown = isRenderable(getPartState('outlet-points'), session.mode)
+  const [read, setRead] = useState<{ outletId: string; on: boolean } | null>(null)
+  useEffect(() => {
+    if (outletId === null || !loyaltyShown) return
+    let active = true
+    void outlets
+      .getLoyaltySettings(outletId)
+      .then((settings) => {
+        if (active) setRead({ outletId, on: settings.goldEnabled })
+      })
+      .catch(() => {
+        if (active) setRead({ outletId, on: true })
+      })
+    return () => {
+      active = false
+    }
+  }, [outlets, outletId, loyaltyShown])
+  if (!loyaltyShown) return true
+  return read?.outletId === outletId ? read.on : true
+}
+
+const MEMBER_ORDERS: readonly (readonly [DirectoryMemberOrder, string])[] = [
+  ['newest', 'Newest'],
+  ['visits', 'Recent visits'],
+]
 
 const LIST_ORDER: readonly DirectoryList[] = ['regulars', 'members']
 const LIST_LABELS: Record<DirectoryList, string> = { regulars: 'Regulars', members: 'Gold' }
 
 /** A name or a membership the card changed, until the row is next read. */
-type RowPatch = Pick<DirectoryCustomerRow, 'name' | 'tier'>
+type RowPatch = Pick<DirectoryCustomerRow, 'name' | 'tier' | 'memberUntil'>
 
 /** How long typing settles before a search is asked — one request per pause, not per key. */
 const SEARCH_SETTLE_MS = 250
@@ -187,12 +321,14 @@ type SearchAnswer =
  * gave one. That is why a number still finds them.
  */
 function CustomerSearch({
+  outletId,
   query,
   onQuery,
   revision,
   patch,
   onOpen,
 }: {
+  outletId: string
   query: string
   onQuery: (query: string) => void
   revision: number
@@ -210,7 +346,7 @@ function CustomerSearch({
     let current = true
     const timer = setTimeout(() => {
       customerDirectory
-        .search(trimmed)
+        .search(outletId, trimmed)
         .then((result) => {
           if (current) setAnswer({ query: trimmed, state: 'found', result })
         })
@@ -230,7 +366,7 @@ function CustomerSearch({
     }
     // `revision` re-asks after the card changed somebody, so a renamed or newly
     // gold customer does not sit in the results as they were.
-  }, [customerDirectory, trimmed, askable, revision])
+  }, [customerDirectory, outletId, trimmed, askable, revision])
 
   const shown = answer !== null && answer.query === trimmed ? answer : null
 
@@ -311,11 +447,15 @@ function CustomerSearch({
  * try again rather than stopping silently at a list that only looks complete.
  */
 function CustomerListPanel({
+  outletId,
   which,
+  order,
   patch,
   onOpen,
 }: {
+  outletId: string
   which: DirectoryList
+  order: DirectoryMemberOrder
   patch: (row: DirectoryCustomerRow) => DirectoryCustomerRow
   onOpen: (id: string) => void
 }) {
@@ -333,7 +473,7 @@ function CustomerListPanel({
     inFlight.current = true
     setFailed(false)
     customerDirectory
-      .list(which, next)
+      .list(outletId, which, next, order)
       .then((page) => {
         // Nobody twice, should the list have moved between two pages.
         setRows((current) => {
@@ -346,7 +486,7 @@ function CustomerListPanel({
       .finally(() => {
         inFlight.current = false
       })
-  }, [customerDirectory, which, next])
+  }, [customerDirectory, outletId, which, order, next])
 
   // The first page, read when the tab opens.
   useEffect(() => {
@@ -407,7 +547,12 @@ function CustomerListPanel({
       <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
         {rows.map((row) => (
           <li key={row.id}>
-            <CustomerButton row={patch(row)} showVisits={which === 'regulars'} onOpen={onOpen} />
+            <CustomerButton
+              row={patch(row)}
+              showVisits={which === 'regulars' || order === 'visits'}
+              showUntil={which === 'members'}
+              onOpen={onOpen}
+            />
           </li>
         ))}
         {next !== null && !failed && (
@@ -441,11 +586,14 @@ function CustomerListPanel({
 function CustomerButton({
   row,
   showVisits = false,
+  showUntil = false,
   query = null,
   onOpen,
 }: {
   row: DirectoryCustomerRow
   showVisits?: boolean
+  /** The date the gold ends, on the gold list [owner, 2026-09-28]. */
+  showUntil?: boolean
   query?: CustomerQuery | null
   onOpen: (id: string) => void
 }) {
@@ -479,9 +627,18 @@ function CustomerButton({
           )}
         </span>
       </span>
-      {showVisits && (
-        <span className="shrink-0 text-sm font-semibold tabular-nums text-content">
-          {visitsLabel(row.visits30d)}
+      {(showVisits || (showUntil && row.memberUntil)) && (
+        <span className="shrink-0 text-right">
+          {showVisits && (
+            <span className="block text-sm font-semibold tabular-nums text-content">
+              {visitsLabel(row.visits30d)}
+            </span>
+          )}
+          {showUntil && row.memberUntil && (
+            <span className="block text-xs text-content-muted" data-testid="member-until">
+              until {formatDate(row.memberUntil)}
+            </span>
+          )}
         </span>
       )}
       <ChevronRight aria-hidden size={18} className="shrink-0 text-content-muted" />

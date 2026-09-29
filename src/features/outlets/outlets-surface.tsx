@@ -64,6 +64,11 @@ import {
   OutletServiceSections,
   OutletServiceShimmer,
 } from '@/features/outlets/outlet-service-sections'
+import {
+  OutletLoyaltySection,
+  OutletLoyaltyShimmer,
+} from '@/features/outlets/outlet-loyalty-section'
+import { OutletSettingsLinkProvider } from '@/features/outlets/outlet-settings-link'
 import { getPartState, isRenderable } from '@/gates/registry'
 import { cn } from '@/lib/cn'
 import {
@@ -703,6 +708,14 @@ export function OutletPage() {
   const [readFor, setReadFor] = useState<string | null>(null)
   // Orders and Packaging, `demo` until #60's database section makes them real.
   const showService = isRenderable(getPartState('outlet-service-choices'), session.mode)
+  // Points and gold, `demo` until #62's database section makes them real.
+  const showLoyalty = isRenderable(getPartState('outlet-points'), session.mode)
+  /**
+   * Whether this outlet has gold, as its Loyalty section last read or saved it.
+   * Where that section is not shown yet, gold is as #57 and #60 left it, so
+   * Orders keeps its gold waiver exactly as it has it today.
+   */
+  const [loyaltyGold, setLoyaltyGold] = useState<{ outletId: string; on: boolean } | null>(null)
 
   const toList = useCallback(
     () => void navigate('..', { relative: 'path', replace: true }),
@@ -740,6 +753,9 @@ export function OutletPage() {
   }, [adapter, outletId])
 
   const shown = readFor === outletId ? outlet : undefined
+  const goldOffered = showLoyalty
+    ? loyaltyGold !== null && loyaltyGold.outletId === shown?.id && loyaltyGold.on
+    : true
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -774,46 +790,63 @@ export function OutletPage() {
         <LoadingRegion label="this outlet" className="space-y-4" data-testid="outlets-loading">
           <Shimmer className="h-[24.1875rem]" />
           {showService && <OutletServiceShimmer />}
+          {showLoyalty && <OutletLoyaltyShimmer />}
           <Shimmer className="h-[18.5rem]" />
         </LoadingRegion>
       ) : shown === null ? (
         <EmptyState icon={Store} title="This outlet is not one you can see." />
       ) : (
-        <OutletBody
-          outlet={shown}
-          busy={actions.busy}
-          mayWrite={mayWrite}
-          blockedBy={actions.blocked?.id === shown.id ? actions.blocked.references : null}
-          onCapture={() => actions.capture(shown)}
-          onEdit={() => actions.edit(shown)}
-          onDelete={() => actions.remove(shown)}
-          onClose={() => actions.close(shown)}
-          onReopen={() => actions.reopen(shown)}
-        >
-          {/*
+        // Orders and Loyalty show gold's settings in both places, as one value.
+        <OutletSettingsLinkProvider key={shown.id}>
+          <OutletBody
+            outlet={shown}
+            busy={actions.busy}
+            mayWrite={mayWrite}
+            blockedBy={actions.blocked?.id === shown.id ? actions.blocked.references : null}
+            onCapture={() => actions.capture(shown)}
+            onEdit={() => actions.edit(shown)}
+            onDelete={() => actions.remove(shown)}
+            onClose={() => actions.close(shown)}
+            onReopen={() => actions.reopen(shown)}
+          >
+            {/*
             A closed outlet has no counter to administer: its tablets are moved
             or removed from a trading outlet's page.
           */}
-          {shown.is_active && showService && (
-            <OutletServiceSections
-              key={`service-${shown.id}`}
-              outletId={shown.id}
-              // The owner, and a manager at the outlets they manage [owner,
-              // 2026-09-27] — the same reach as the tablets below. Details stays
-              // the owner's alone.
-              mayWrite={mayAdminister}
-            />
-          )}
-          {shown.is_active && (
-            <OutletTablets
-              key={`tablets-${shown.id}`}
-              outletId={shown.id}
-              outletName={outletLabel(shown)}
-              mayAdminister={mayAdminister}
-              isOwner={mayWrite}
-            />
-          )}
-        </OutletBody>
+            {shown.is_active && showService && (
+              <OutletServiceSections
+                key={`service-${shown.id}`}
+                outletId={shown.id}
+                // The owner, and a manager at the outlets they manage [owner,
+                // 2026-09-27] — the same reach as the tablets below. Details stays
+                // the owner's alone.
+                mayWrite={mayAdminister}
+                goldOffered={goldOffered}
+              />
+            )}
+            {shown.is_active && showLoyalty && (
+              <OutletLoyaltySection
+                key={`loyalty-${shown.id}`}
+                outletId={shown.id}
+                // The owner, and a manager at the outlets they manage
+                // [owner, 2026-09-28]: points are this outlet's to fund.
+                mayWrite={mayAdminister}
+                onSettings={(settings) =>
+                  setLoyaltyGold({ outletId: shown.id, on: settings.goldEnabled })
+                }
+              />
+            )}
+            {shown.is_active && (
+              <OutletTablets
+                key={`tablets-${shown.id}`}
+                outletId={shown.id}
+                outletName={outletLabel(shown)}
+                mayAdminister={mayAdminister}
+                isOwner={mayWrite}
+              />
+            )}
+          </OutletBody>
+        </OutletSettingsLinkProvider>
       )}
 
       {actions.dialogs}

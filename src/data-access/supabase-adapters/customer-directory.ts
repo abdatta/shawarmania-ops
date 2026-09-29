@@ -23,12 +23,18 @@ import type { Database } from '../database.types'
  *
  * The figures on a row and a card are summed from bills when asked for. Nothing
  * here, and nothing in the database, stores them on the customer.
+ *
+ * **The outlet argument is not yet sent** (a-regular-earns-points-and-gold,
+ * #62). Every method takes the outlet the Customers page has chosen, and the
+ * functions that read one outlet arrive with that change's database section
+ * (tasks 5.8). Until then this reads as #57 built it, business-wide, and the
+ * points and end-date fields read as none.
  */
 export function createSupabaseCustomerDirectoryAdapter(
   client: SupabaseClient<Database>,
 ): CustomerDirectoryAdapter {
   return {
-    async list(which, offset) {
+    async list(_outletId, which, offset) {
       const { data, error } = await client.rpc('customer_directory_list', {
         p_list: which,
         p_offset: offset,
@@ -43,7 +49,7 @@ export function createSupabaseCustomerDirectoryAdapter(
       }
     },
 
-    async search(query) {
+    async search(_outletId, query) {
       // Below three of either there is nothing to ask, and nobody is asked.
       if (parseCustomerQuery(query).kind === 'too-short') return { matches: [], more: 0 }
       const { data, error } = await client.rpc('customer_directory_search', { p_query: query })
@@ -57,7 +63,7 @@ export function createSupabaseCustomerDirectoryAdapter(
       }
     },
 
-    async card(customerId) {
+    async card(_outletId, customerId) {
       const { data, error } = await client.rpc('customer_directory_card', {
         p_customer: customerId,
       })
@@ -65,7 +71,7 @@ export function createSupabaseCustomerDirectoryAdapter(
       return toCard(data?.[0])
     },
 
-    async rename(customerId, name) {
+    async rename(_outletId, customerId, name) {
       const trimmed = name.trim()
       if (!trimmed) {
         throw new CustomerActionError('name_required', 'A name cannot be left empty.')
@@ -78,7 +84,7 @@ export function createSupabaseCustomerDirectoryAdapter(
       return toCard(data?.[0])
     },
 
-    async grantMembership(customerId) {
+    async grantMembership(_outletId, customerId) {
       const { data, error } = await client.rpc('customer_membership_grant', {
         p_customer: customerId,
       })
@@ -86,7 +92,7 @@ export function createSupabaseCustomerDirectoryAdapter(
       return toCard(data?.[0])
     },
 
-    async revokeMembership(customerId) {
+    async revokeMembership(_outletId, customerId) {
       const { data, error } = await client.rpc('customer_membership_revoke', {
         p_customer: customerId,
       })
@@ -108,6 +114,7 @@ function toRow(row: {
     phone: normalizeIndianPhone(row.phone) ?? row.phone,
     name: row.name,
     tier: row.is_member ? 'gold' : null,
+    memberUntil: null,
     visits30d: row.visits_30d,
   }
 }
@@ -124,6 +131,10 @@ function toCard(row: CardRow | undefined): DirectoryCustomerCard {
     phone: normalizeIndianPhone(row.phone) ?? row.phone,
     name: row.name,
     memberSince: row.member_since,
+    memberUntil: null,
+    grantedVia: null,
+    grantedByName: null,
+    pointsBalance: null,
     visits30d: row.visits_30d,
     spend30dPaise: row.spend_30d_paise,
     lastSeenAt: row.last_seen_at,

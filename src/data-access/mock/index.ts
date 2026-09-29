@@ -10,6 +10,7 @@ import { createMockCashDrawerAdapter } from './cash-drawer'
 import { createDemoCounter, createMockCounterAdapter, type DemoCounter } from './counter'
 import {
   createDemoCustomers,
+  createDemoLoyaltyHooks,
   createMockCustomersAdapter,
   createMockCustomerDirectoryAdapter,
 } from './customers'
@@ -151,6 +152,7 @@ export function createMockAdapters(
       // at the outlets they manage [owner, 2026-09-27]; nobody else writes it.
       {
         settings: store.serviceSettings,
+        loyalty: store.loyaltySettings,
         writable:
           role === 'super_admin'
             ? null
@@ -171,11 +173,16 @@ export function createMockAdapters(
     // The persona's role reaches the menu mock so it refuses a Biller's write
     // where `menu_items_write` will refuse it.
     menu: createMockMenuAdapter(store, role),
-    billing: createMockBillingAdapter(store, {
-      role,
-      userId: persona.profile.id,
-      outletIds: assignedOutlets(persona.assignments),
-    }),
+    billing: createMockBillingAdapter(
+      store,
+      {
+        role,
+        userId: persona.profile.id,
+        outletIds: assignedOutlets(persona.assignments),
+      },
+      // The demo's stand-in for the ledger triggers on `bills` (#62, D6, D11).
+      createDemoLoyaltyHooks(data.customers, store),
+    ),
     // The role scopes the tablet list as `counter_devices_select` will, and the
     // persona's name stands in for the username the tablet types — demo mode has
     // no usernames, and a handshake with nobody to name is not a handshake.
@@ -190,7 +197,15 @@ export function createMockAdapters(
     ),
     // The role reaches the customer mock so it refuses everybody the database
     // refuses: only a billing context may resolve a phone at all.
-    customers: createMockCustomersAdapter(data.customers, role),
+    // With the store and the counter's own outlet, since #62: gold, the points
+    // balance and eligibility are each answered for that outlet alone.
+    customers: createMockCustomersAdapter(
+      data.customers,
+      role,
+      store,
+      session.outletId ?? DEMO_OUTLET_ID,
+      persona.profile.id,
+    ),
     // The owner's path over the same directory, and a separate adapter with its
     // own refusal: the till's widening can never widen this, nor the reverse.
     customerDirectory: createMockCustomerDirectoryAdapter(

@@ -26,6 +26,10 @@ import {
   type PackagingMode,
 } from '@/domain'
 import { OutletSection } from '@/features/outlets/outlet-section'
+import {
+  useOutletSettingsLink,
+  usePublishGoldPackaging,
+} from '@/features/outlets/outlet-settings-link-context'
 import { cn } from '@/lib/cn'
 import { usePrefersReducedMotion } from '@/lib/use-prefers-reduced-motion'
 
@@ -56,10 +60,16 @@ import { usePrefersReducedMotion } from '@/lib/use-prefers-reduced-motion'
 export function OutletServiceSections({
   outletId,
   mayWrite,
+  goldOffered = true,
 }: {
   outletId: string
   /** Whether to offer the controls. The database is what refuses the write. */
   mayWrite: boolean
+  /**
+   * Whether this outlet has gold members (a-regular-earns-points-and-gold). An
+   * outlet without them shows no *Free for gold members* [owner, 2026-09-29].
+   */
+  goldOffered?: boolean
 }) {
   const { outlets } = useAdapters()
   const [stored, setStored] = useState<OutletServiceSettings | null>(null)
@@ -106,7 +116,9 @@ export function OutletServiceSections({
     )
   }
 
-  if (!mayWrite) return <ReadOnlyOrders outletId={outletId} stored={shown} />
+  if (!mayWrite) {
+    return <ReadOnlyOrders outletId={outletId} stored={shown} goldOffered={goldOffered} />
+  }
 
   return (
     <OrdersSection
@@ -115,6 +127,7 @@ export function OutletServiceSections({
       key={outletId}
       outletId={outletId}
       stored={shown}
+      goldOffered={goldOffered}
       onSave={async (next) => {
         const saved = await outlets.updateServiceSettings(outletId, next)
         setStored(saved)
@@ -176,10 +189,12 @@ function packagingWords(settings: OutletServiceSettings): string {
 function OrdersSection({
   outletId,
   stored,
+  goldOffered,
   onSave,
 }: {
   outletId: string
   stored: OutletServiceSettings
+  goldOffered: boolean
   /** Resolves with what the database stored. */
   onSave: (next: OutletServiceSettings) => Promise<OutletServiceSettings>
 }) {
@@ -230,11 +245,12 @@ function OrdersSection({
     setError(null)
   }
 
-  async function submit() {
+  /** Resolves false when nothing was saved, with the reason shown here. */
+  async function submit(): Promise<boolean> {
     const problem = serviceSettingsProblem(next)
     if (problem !== null) {
       setError(SERVICE_SETTINGS_PROBLEM_MESSAGES[problem])
-      return
+      return false
     }
     setPhase('saving')
     setError(null)
@@ -244,11 +260,29 @@ function OrdersSection({
       // and the day they do not, the page shows the truth.
       resetTo(saved)
       setPhase('saved')
+      return true
     } catch (cause) {
       setError(refusalMessage(cause))
       setPhase('idle')
+      return false
     }
   }
+
+  /*
+    *Free for gold members* is also shown under Loyalty's Gold members
+    [owner, 2026-09-29]: one value, edited in this draft from either place, and
+    saved by either Save. And it shows here only while the outlet has gold, as
+    Loyalty's switch stands right now.
+  */
+  const link = useOutletSettingsLink()
+  const goldShown = link?.goldOn ?? goldOffered
+  usePublishGoldPackaging({
+    available: packagingOn,
+    value: packagingOn && draft.packagingFreeForGold,
+    dirty,
+    set: (value) => change({ packagingFreeForGold: value }),
+    save: submit,
+  })
 
   function resetTo(settings: OutletServiceSettings) {
     setDraft(settings)
@@ -423,20 +457,22 @@ function OrdersSection({
                           />
                         }
                       />
-                      <SettingTile
-                        depth={3}
-                        icon={MemberMark}
-                        caption="Free for gold members"
-                        control={
-                          <Switch
-                            checked={draft.packagingFreeForGold}
-                            label="Free for gold members"
-                            testId="service-gold-free"
-                            disabled={busy}
-                            onChange={(value) => change({ packagingFreeForGold: value })}
-                          />
-                        }
-                      />
+                      {goldShown && (
+                        <SettingTile
+                          depth={3}
+                          icon={MemberMark}
+                          caption="Free for gold members"
+                          control={
+                            <Switch
+                              checked={draft.packagingFreeForGold}
+                              label="Free for gold members"
+                              testId="service-gold-free"
+                              disabled={busy}
+                              onChange={(value) => change({ packagingFreeForGold: value })}
+                            />
+                          }
+                        />
+                      )}
                     </>
                   )}
                 </SettingTile>
@@ -461,7 +497,15 @@ function OrdersSection({
 // The manager's section
 
 /** The same tiles and nesting, each answer where the control would be. */
-function ReadOnlyOrders({ outletId, stored }: { outletId: string; stored: OutletServiceSettings }) {
+function ReadOnlyOrders({
+  outletId,
+  stored,
+  goldOffered,
+}: {
+  outletId: string
+  stored: OutletServiceSettings
+  goldOffered: boolean
+}) {
   const on = ordersOffered(stored)
   return (
     <OutletSection id={`orders-${outletId}`} title="Orders" data-testid="service-orders">
@@ -489,7 +533,7 @@ function ReadOnlyOrders({ outletId, stored }: { outletId: string; stored: Outlet
                   caption="Packaging charge"
                   control={<Answer>{packagingWords(stored)}</Answer>}
                 >
-                  {stored.packagingMode !== 'off' && (
+                  {stored.packagingMode !== 'off' && goldOffered && (
                     <SettingTile
                       depth={3}
                       icon={MemberMark}
@@ -507,7 +551,7 @@ function ReadOnlyOrders({ outletId, stored }: { outletId: string; stored: Outlet
   )
 }
 
-function Answer({ children }: { children: ReactNode }) {
+export function Answer({ children }: { children: ReactNode }) {
   return <span className="shrink-0 text-right text-sm font-semibold text-content">{children}</span>
 }
 
@@ -530,7 +574,7 @@ const DEPTH_TONE: Record<1 | 2 | 3, string> = {
  * `stacked`, beneath, for a control too wide to share a phone's row — and, as
  * children, the options that belong to it, **inside** the tile.
  */
-function SettingTile({
+export function SettingTile({
   depth,
   icon: Icon,
   caption,
@@ -575,7 +619,7 @@ function TileIcon({ icon: Icon }: { icon: LucideIcon | typeof MemberMark }) {
 }
 
 /** Two choices as one row of toggle buttons. */
-function Segmented({
+export function Segmented({
   label,
   options,
   single,
@@ -624,7 +668,7 @@ function Segmented({
 }
 
 /** A short whole-number box, with an optional unit in front of it. */
-function NumberBox({
+export function NumberBox({
   id,
   label,
   prefix,
@@ -632,42 +676,67 @@ function NumberBox({
   onChange,
   disabled,
   testId,
+  suffix,
+  compact = false,
+  decimal = false,
 }: {
   id: string
   label: string
   prefix?: string
+  /** A unit after the box, such as `%`. */
+  suffix?: string
+  /**
+   * Sized to the text around it rather than to a thumb: a short box in a
+   * sentence, like `[5] points for every ₹ [200]` [owner, 2026-09-29].
+   */
+  compact?: boolean
+  /** Takes one decimal point and two places, for a multiplier like `1.5`. */
+  decimal?: boolean
   value: string
   onChange: (value: string) => void
   disabled: boolean
   testId: string
 }) {
   return (
-    <label htmlFor={id} className="flex shrink-0 items-center gap-1 text-content">
+    <label
+      htmlFor={id}
+      className={cn('flex shrink-0 items-center gap-1 text-content', compact && 'text-sm')}
+    >
       {prefix && <span className="font-semibold">{prefix}</span>}
       <input
         id={id}
         aria-label={label}
-        inputMode="numeric"
+        inputMode={decimal ? 'decimal' : 'numeric'}
         autoComplete="off"
         value={value}
         disabled={disabled}
         data-testid={testId}
-        onChange={(event) => onChange(event.target.value.replace(/\D/g, '').slice(0, 5))}
+        onChange={(event) =>
+          onChange(
+            decimal
+              ? (event.target.value.replace(/[^\d.]/g, '').match(/^\d{0,2}(\.\d{0,2})?/)?.[0] ?? '')
+              : event.target.value.replace(/\D/g, '').slice(0, 5),
+          )
+        }
         className={cn(
-          'h-[var(--size-control-phone)] w-20 rounded-lg border border-border bg-surface px-3 text-right tabular-nums',
+          'rounded-lg border border-border bg-surface text-right tabular-nums',
+          compact
+            ? 'h-9 w-16 px-2 text-sm font-semibold'
+            : 'h-[var(--size-control-phone)] w-20 px-3',
           'focus-visible:focus-ring disabled:opacity-50',
         )}
       />
+      {suffix && <span className="font-semibold">{suffix}</span>}
     </label>
   )
 }
 
-type SavePhase = 'idle' | 'saving' | 'saved' | 'settling'
+export type SavePhase = 'idle' | 'saving' | 'saved' | 'settling'
 
 /** How long *Saved* is held before the bar folds away: long enough to read. */
-const SAVED_HOLD_MS = 1400
+export const SAVED_HOLD_MS = 1400
 /** The fold itself, matched to the transition below. */
-const SETTLE_MS = 300
+export const SETTLE_MS = 300
 
 /**
  * Save and Cancel, shown only once the section differs from what is stored —
@@ -687,18 +756,24 @@ const SETTLE_MS = 300
  * there is no drawing, popping or folding — the words alone, for the same
  * moment.
  */
-function SaveBar({
+export function SaveBar({
   dirty,
   phase,
   error,
   onSave,
   onCancel,
+  name = 'Orders',
+  testPrefix = 'service',
 }: {
   dirty: boolean
   phase: SavePhase
   error: string | null
   onSave: () => void
   onCancel: () => void
+  /** The section, as a screen reader hears it saved: `Orders saved`. */
+  name?: string
+  /** Where this bar's test ids start, so two sections on one page keep their own. */
+  testPrefix?: string
 }) {
   const saving = phase === 'saving'
   const showSaved = !dirty && (phase === 'saved' || phase === 'settling')
@@ -707,14 +782,14 @@ function SaveBar({
   return (
     <>
       <p role="status" aria-live="polite" className="sr-only">
-        {phase === 'saved' ? 'Orders saved.' : ''}
+        {phase === 'saved' ? `${name} saved.` : ''}
       </p>
       <div
         className={cn(
           'grid transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none',
           open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
         )}
-        data-testid="service-save-bar"
+        data-testid={`${testPrefix}-save-bar`}
         data-open={open || undefined}
       >
         <div className="min-h-0 overflow-hidden">
@@ -723,7 +798,7 @@ function SaveBar({
               <p
                 role="alert"
                 className="text-sm font-semibold text-danger"
-                data-testid="service-error"
+                data-testid={`${testPrefix}-error`}
               >
                 {error}
               </p>
@@ -731,7 +806,7 @@ function SaveBar({
             {showSaved ? (
               <div className="flex justify-end">
                 <span
-                  data-testid="service-saved"
+                  data-testid={`${testPrefix}-saved`}
                   className="inline-flex h-[var(--size-control-phone)] items-center gap-1.5 rounded-lg border border-border bg-surface px-4 text-sm font-semibold text-accent-text motion-safe:animate-[saved-pop_220ms_ease-out]"
                 >
                   <DrawnTick />
@@ -746,7 +821,7 @@ function SaveBar({
                     size="phone"
                     disabled={saving}
                     onClick={onCancel}
-                    data-testid="service-cancel"
+                    data-testid={`${testPrefix}-cancel`}
                   >
                     Cancel
                   </Button>
@@ -755,7 +830,7 @@ function SaveBar({
                     size="phone"
                     disabled={saving}
                     onClick={onSave}
-                    data-testid="service-save"
+                    data-testid={`${testPrefix}-save`}
                     aria-busy={saving || undefined}
                   >
                     {saving && (

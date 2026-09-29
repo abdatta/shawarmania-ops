@@ -47,6 +47,7 @@ function billsAt(personId: string, outletId: string): boolean {
   )
 }
 import { DEMO_BILLER_ID, DEMO_BILLER_PIN, DEMO_COUNTER_DEVICE_ID } from './fixtures/billing'
+import type { DemoLoyaltyHooks } from './customers'
 import { DEMO_OUTLET_ID, nextCutover, type DemoStore } from './store'
 
 /**
@@ -141,6 +142,12 @@ export function createMockBillingAdapter(
     userId: DEMO_BILLER_ID,
     outletIds: [store.shifts.find((shift) => shift.ended_at === null)?.outlet_id ?? ''],
   },
+  /**
+   * Where a settled or voided bill's points go (a-regular-earns-points-and-gold).
+   * The real database does this in triggers on `bills`; a test of billing alone
+   * leaves it out and nothing is earned.
+   */
+  loyalty?: DemoLoyaltyHooks,
 ): BillingAdapter {
   const listeners = new Set<() => void>()
   const paymentCorrections = new Map<string, PaymentAllocation[][]>()
@@ -676,6 +683,49 @@ export function createMockBillingAdapter(
    * **Never** against the outlet's current choices: an offline tablet may have
    * rung the order before the owner changed them.
    */
+  /**
+   * A points discount's shape, as the boundary checks it (a-regular-earns-
+   * points-and-gold, design D8): an amount in whole rupees, at most one, only on
+   * an order with a customer, and never the last rupee. **Not** the balance and
+   * not the cap: a biller may already take any amount off by hand, and refusing
+   * a paid sale would strand its money. The ledger records what happened.
+   */
+  function refuseMalformedPoints(input: {
+    lines: BillLineDraft[]
+    discounts?: readonly BillDiscountDraft[] | undefined
+    customerPhone?: string | null | undefined
+  }) {
+    const malformed = () =>
+      new BillingActionError('malformed', 'This order could not be read. Nothing was saved.')
+    const points = (input.discounts ?? []).filter((discount) => discount.source === 'points')
+    if (points.length === 0) return
+    if (points.length > 1 || !input.customerPhone?.trim()) throw malformed()
+    const [row] = points
+    if (
+      row!.basis !== 'amount' ||
+      row!.valuePaise !== row!.amountPaise ||
+      row!.amountPaise <= 0 ||
+      row!.amountPaise % 100 !== 0
+    ) {
+      throw malformed()
+    }
+    const others = (input.discounts ?? []).filter((discount) => discount.source !== 'points')
+    const net =
+      input.lines.reduce(
+        (sum, line) =>
+          sum + lineTotalPaise(line.unitPricePaise, line.quantity) - (line.discountPaise ?? 0),
+        0,
+      ) - others.reduce((sum, discount) => sum + discount.amountPaise, 0)
+    if (row!.amountPaise > net - 100) throw malformed()
+  }
+
+  /** What a bill's points discount came to, from its stored bill-level rows. */
+  function pointsPaiseOf(billId: string): number {
+    return (store.billDiscounts.get(billId) ?? [])
+      .filter((discount) => discount.source === 'points')
+      .reduce((sum, discount) => sum + discount.amountPaise, 0)
+  }
+
   function refuseMalformedService(input: ServiceFacts & { lines: BillLineDraft[] }) {
     const malformed = () =>
       new BillingActionError('malformed', 'This order could not be read. Nothing was saved.')
@@ -756,6 +806,11 @@ export function createMockBillingAdapter(
       draft.clientId,
       paymentCorrections.get(draft.clientId)?.at(-1) ?? payments,
     )
+    // The bill's own discount rows, beside it as `bill_discounts` holds them.
+    store.billDiscounts.set(
+      draft.clientId,
+      (draft.discounts ?? []).map((discount) => ({ ...discount })),
+    )
 
     for (const [index, line] of draft.lines.entries()) {
       store.billItems.push({
@@ -778,6 +833,8 @@ export function createMockBillingAdapter(
       })
     }
     pendingPayNowDrafts.delete(draft.clientId)
+    const landed = store.bills.find((bill) => bill.id === draft.clientId)
+    if (landed) loyalty?.billSettled(landed, pointsPaiseOf(landed.id))
   }
 
   function applyCreateOrder(input: SaveOrderInput) {
@@ -957,6 +1014,11 @@ export function createMockBillingAdapter(
     }
     store.bills.push(bill)
     store.billPayments.set(billId, payments)
+    // The order's bill-level discounts become the bill's, points included.
+    store.billDiscounts.set(
+      billId,
+      (store.orderDiscounts.get(row.id) ?? []).map((discount) => ({ ...discount })),
+    )
     // The edit window runs from the money's own clock — for an upfront payer
     // that is when they handed the cash over, not when the kitchen finished.
     acceptedPaymentTimes.set(billId, Date.parse(paidAt))
@@ -978,6 +1040,8 @@ export function createMockBillingAdapter(
         })
       })
     row.bill_id = billId
+    // The points it used and earned, once the bill exists (#62, D6).
+    loyalty?.billSettled(bill, pointsPaiseOf(billId))
     return billId
   }
 
@@ -1029,6 +1093,8 @@ export function createMockBillingAdapter(
     // Command-context voids stamp the acting shift operator, exactly as the
     // database stamps the person behind the tablet's device session.
     bill.voided_by = openShiftRow()?.person_id ?? bill.biller_profile_id
+    // Takes back what it earned and returns what it used (#62, D11).
+    loyalty?.billVoided(bill)
   }
 
   function reopenPaidOrder(orderId: string) {
@@ -1549,6 +1615,7 @@ export function createMockBillingAdapter(
         throw new BillingActionError('duplicate', 'That bill has already been recorded.')
       }
 
+      refuseMalformedPoints(draft)
       requireExactPayments(draft.payments, totalsOf(draft.lines, draft.discounts ?? []).totalPaise)
 
       const draftCopy = structuredClone(draft)
@@ -1645,6 +1712,7 @@ export function createMockBillingAdapter(
         throw new BillingActionError('empty_order', 'There is nothing on this order.')
       }
       refuseMalformedService(input)
+      refuseMalformedPoints(input)
       if (
         pending.has(input.clientId) ||
         store.orders.some((order) => order.id === input.clientId)
@@ -1720,6 +1788,7 @@ export function createMockBillingAdapter(
       if (input.lines.length === 0)
         throw new BillingActionError('empty_order', 'There is nothing on this order.')
       refuseMalformedService(input)
+      refuseMalformedPoints(input)
       const commandId = crypto.randomUUID()
       const inputCopy = structuredClone({
         ...input,
@@ -2144,6 +2213,7 @@ export function createMockBillingAdapter(
       row.void_reason = requireReason(reason)
       row.voided_at = new Date().toISOString()
       row.voided_by = context.userId
+      loyalty?.billVoided(row)
       emit()
       return billView(row)
     },

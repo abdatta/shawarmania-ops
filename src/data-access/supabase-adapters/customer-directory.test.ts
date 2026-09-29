@@ -45,7 +45,7 @@ const CARD = {
 describe('a list, a page at a time', () => {
   it('reads one row past a page as "there is a next page", and shows only the page', async () => {
     const rpc = ok(Array.from({ length: DIRECTORY_PAGE_SIZE + 1 }, (_, n) => row(n)))
-    const page = await adapterWith(rpc).list('members', 40)
+    const page = await adapterWith(rpc).list('o-1', 'members', 40)
 
     expect(rpc).toHaveBeenCalledWith('customer_directory_list', { p_list: 'members', p_offset: 40 })
     expect(page.rows).toHaveLength(DIRECTORY_PAGE_SIZE)
@@ -53,13 +53,13 @@ describe('a list, a page at a time', () => {
   })
 
   it('ends when a page comes back short', async () => {
-    const page = await adapterWith(ok([row(1), row(2)])).list('regulars', 0)
+    const page = await adapterWith(ok([row(1), row(2)])).list('o-1', 'regulars', 0)
     expect(page.next).toBeNull()
     expect(page.rows.map((entry) => entry.id)).toEqual(['c-1', 'c-2'])
   })
 
   it('reads gold-or-not as the tier', async () => {
-    const page = await adapterWith(ok([row(1, { is_member: true })])).list('members', 0)
+    const page = await adapterWith(ok([row(1, { is_member: true })])).list('o-1', 'members', 0)
     expect(page.rows[0]).toMatchObject({ tier: 'gold', visits30d: 1 })
   })
 })
@@ -67,31 +67,35 @@ describe('a list, a page at a time', () => {
 describe('searching', () => {
   it.each(['', 'ri', '90', '+91 9'])('asks nothing for %j', async (query) => {
     const rpc = ok([])
-    await expect(adapterWith(rpc).search(query)).resolves.toEqual({ matches: [], more: 0 })
+    await expect(adapterWith(rpc).search('o-1', query)).resolves.toEqual({ matches: [], more: 0 })
     expect(rpc).not.toHaveBeenCalled()
   })
 
   it('counts the matches it is not showing, from the total each row carries', async () => {
     const rows = Array.from({ length: 20 }, (_, n) => row(n, { matched: 27 }))
-    const result = await adapterWith(ok(rows)).search('rahul')
+    const result = await adapterWith(ok(rows)).search('o-1', 'rahul')
     expect(result.matches).toHaveLength(20)
     expect(result.more).toBe(7)
   })
 
   it('sends what was typed; the database parses it the same way the screen does', async () => {
     const rpc = ok([])
-    await adapterWith(rpc).search('ghosh')
+    await adapterWith(rpc).search('o-1', 'ghosh')
     expect(rpc).toHaveBeenCalledWith('customer_directory_search', { p_query: 'ghosh' })
   })
 })
 
 describe('a card', () => {
   it('reads every fact, including whether this reader may change it', async () => {
-    await expect(adapterWith(ok([CARD])).card('c-1')).resolves.toEqual({
+    await expect(adapterWith(ok([CARD])).card('o-1', 'c-1')).resolves.toEqual({
       id: 'c-1',
       phone: '+919000000001',
       name: 'Ritika Sen',
       memberSince: '2026-08-14T16:00:00.000Z',
+      memberUntil: null,
+      grantedVia: null,
+      grantedByName: null,
+      pointsBalance: null,
       visits30d: 9,
       spend30dPaise: 413900,
       lastSeenAt: '2026-09-24T07:30:00.000Z',
@@ -102,14 +106,16 @@ describe('a card', () => {
   })
 
   it('reads no row as nobody — a customer out of reach answers exactly like one who does not exist', async () => {
-    await expect(adapterWith(ok([])).card('c-9')).rejects.toMatchObject({ code: 'not_found' })
+    await expect(adapterWith(ok([])).card('o-1', 'c-9')).rejects.toMatchObject({
+      code: 'not_found',
+    })
   })
 })
 
 describe('writing', () => {
   it('refuses to erase a name without asking', async () => {
     const rpc = ok([CARD])
-    await expect(adapterWith(rpc).rename('c-1', '   ')).rejects.toMatchObject({
+    await expect(adapterWith(rpc).rename('o-1', 'c-1', '   ')).rejects.toMatchObject({
       code: 'name_required',
     })
     expect(rpc).not.toHaveBeenCalled()
@@ -117,12 +123,12 @@ describe('writing', () => {
 
   it('sends a trimmed name', async () => {
     const rpc = ok([CARD])
-    await adapterWith(rpc).rename('c-1', '  Ritika Sen  ')
+    await adapterWith(rpc).rename('o-1', 'c-1', '  Ritika Sen  ')
     expect(rpc).toHaveBeenCalledWith('customer_rename', { p_customer: 'c-1', p_name: 'Ritika Sen' })
   })
 
   it('says why a manager is refused a customer another outlet also serves', async () => {
-    await expect(adapterWith(fails('42501')).grantMembership('c-1')).rejects.toMatchObject({
+    await expect(adapterWith(fails('42501')).grantMembership('o-1', 'c-1')).rejects.toMatchObject({
       code: 'not_permitted',
       message: expect.stringContaining('another outlet'),
     })
@@ -133,8 +139,10 @@ describe('writing', () => {
     ['22023', 'name_required'],
     ['08006', 'failed'],
   ])('reads %s as %s', async (sqlstate, code) => {
-    await expect(adapterWith(fails(sqlstate)).revokeMembership('c-1')).rejects.toMatchObject({
-      code,
-    })
+    await expect(adapterWith(fails(sqlstate)).revokeMembership('o-1', 'c-1')).rejects.toMatchObject(
+      {
+        code,
+      },
+    )
   })
 })

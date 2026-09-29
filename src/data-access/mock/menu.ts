@@ -1,4 +1,4 @@
-import { ALL_OFF_SERVICE_SETTINGS } from '@/domain'
+import { ALL_OFF_LOYALTY_SETTINGS, ALL_OFF_SERVICE_SETTINGS } from '@/domain'
 
 import type { AppRole } from '../adapters'
 import {
@@ -280,6 +280,8 @@ export function createMockMenuAdapter(store: DemoStore, role: AppRole): MenuAdap
         // On the menu's own path, so a switch turned on at the outlet page
         // reaches the tablet at its next refresh (design D6).
         service: { ...(store.serviceSettings.get(outletId) ?? ALL_OFF_SERVICE_SETTINGS) },
+        // The caps and rates the counter works to, on the same path (#62, D12).
+        loyalty: { ...(store.loyaltySettings.get(outletId) ?? ALL_OFF_LOYALTY_SETTINGS) },
         // Served on the brand site from real outlets only, so a demo outlet's
         // address finds no menu there; the link is here to show where it goes.
         publicMenuSlug: outletFixtures.find((outlet) => outlet.id === outletId)?.menu_slug ?? null,

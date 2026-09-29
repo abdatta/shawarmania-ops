@@ -6,6 +6,11 @@ import {
   normalizeCategory,
   resolveBusinessDate,
   shiftBusinessDate,
+  ALL_OFF_LOYALTY_SETTINGS,
+  withCounterGoldSwitched,
+  withGoldSwitched,
+  withPointsSwitched,
+  type OutletLoyaltySettings,
   type OutletServiceSettings,
 } from '@/domain'
 
@@ -101,6 +106,19 @@ export interface DemoStore {
    * demo's choices cannot drift from the schema the rows are typed against.
    */
   serviceSettings: Map<string, OutletServiceSettings>
+  /**
+   * Each outlet's points and gold rules (a-regular-earns-points-and-gold).
+   * Owned by the outlets adapter, which alone writes it; read by the menu
+   * adapter, which hands the caps to the counter, and by the demo loyalty
+   * ledger, which earns by them.
+   *
+   * **Kalyani runs points and gold, and lets billers upgrade to Gold; Kanchrapara
+   * runs none of it.** Kalyani
+   * is where the demo counter stands, so identifying a regular shows a real
+   * balance and a Use points button; Kanchrapara is the outlet with everything
+   * off, which is what every outlet starts as.
+   */
+  loyaltySettings: Map<string, OutletLoyaltySettings>
   /** Read-only here; #9 owns enrolment. */
   counterDevices: Tables<'counter_devices'>[]
   /** Effective-dated display identity; current authority stays on counterDevices. */
@@ -463,7 +481,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     }
     // The membership as it stood on the day of the sale — what the server
     // writes into `customer_tier` from the history at the moment of sale.
-    const tier = customer ? seededTierAt(customer.phone, seed.daysAgo) : null
+    const tier = customer ? seededTierAt(customer.phone, outletId, seed.daysAgo, today) : null
 
     const lines = seed.lines.map((line) => {
       const itemId = billSeedItemId(seed, line)
@@ -697,7 +715,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     const orderTier = sourceBill
       ? sourceBill.customer_tier
       : orderCustomer
-        ? seededTierAt(orderCustomer.phone, 0)
+        ? seededTierAt(orderCustomer.phone, DEMO_OUTLET_ID, 0, today)
         : null
     const preparedAt =
       seed.preparedAtTime !== undefined
@@ -1392,6 +1410,15 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     serviceSettings: new Map(
       outletFixtures.map((outlet) => [outlet.id, serviceSettingsFromRow(outlet)]),
     ),
+    loyaltySettings: new Map([
+      [
+        OUTLET_KALYANI_ID,
+        withCounterGoldSwitched(
+          withGoldSwitched(withPointsSwitched(ALL_OFF_LOYALTY_SETTINGS, true), true),
+          true,
+        ),
+      ],
+    ]),
     orderNumbers,
     billingCommands,
     billingQueueSeeds,

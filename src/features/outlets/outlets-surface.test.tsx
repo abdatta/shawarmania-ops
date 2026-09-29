@@ -249,8 +249,12 @@ describe('an outlet’s page', () => {
     for (const control of ['edit-kalyani', 'capture-kalyani', 'close-kalyani']) {
       expect(screen.getByTestId(control)).toBeInTheDocument()
     }
-    expect(await screen.findByTestId('add-tablet')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Edit Counter tablet' })).toBeInTheDocument()
+    // The page reads Details, Orders, Loyalty and Tablets at once; under a full
+    // parallel suite the tablets can land after the default second.
+    expect(await screen.findByTestId('add-tablet', {}, { timeout: 5_000 })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', { name: 'Edit Counter tablet' }, { timeout: 5_000 }),
+    ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove Counter tablet' })).toBeInTheDocument()
   })
 })

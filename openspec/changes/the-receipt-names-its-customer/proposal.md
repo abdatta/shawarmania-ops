@@ -1,6 +1,6 @@
 # Proposal: the-receipt-names-its-customer
 
-> **Model**: Opus · **Wave**: F · **Depends on**: #57, #54 · **Gate**: a customer opening their own receipt link sees their name as the bill recorded it and the last four digits of the number they gave, so the page reads as theirs rather than as an anonymous document, and a gold member's receipt says so; a bill rung before any of this still renders, naming nobody, because the page reports what its own bill snapshotted and never consults the directory; the PDF says exactly what the page says; the reversal of the clause that forbade this is argued in the spec rather than deleted from it; and the four-role demo walkthrough still walks.
+> **Model**: Opus · **Wave**: F · **Depends on**: #57, #54, #62 · **Gate**: a customer opening their own receipt link sees their name as the bill recorded it and the last four digits of the number they gave, so the page reads as theirs rather than as an anonymous document, and a gold member's receipt says so; a bill rung before any of this still renders, naming nobody, because the page reports what its own bill snapshotted and never consults the directory; the PDF says exactly what the page says; the reversal of the clause that forbade this is argued in the spec rather than deleted from it; and the four-role demo walkthrough still walks.
 
 ## Why
 
@@ -8,9 +8,8 @@ A receipt with no name on it does not look like *your* receipt. The customer
 cannot confirm at a glance that it is theirs, and the page reads as a document
 about an order rather than a record of a purchase they made.
 
-This becomes more pressing the moment receipts are actually sent to customers —
-the work waiting in
-[`openspec/todos/bill-receipt-delivery.md`](../../todos/bill-receipt-delivery.md).
+This becomes more pressing the moment receipts are actually sent to customers,
+which is [`bill-receipt-delivery`](../bill-receipt-delivery/proposal.md) (#59).
 A link handed over by hand can be explained. A message arriving on a phone cannot.
 
 ## This reverses a shipped clause, deliberately
@@ -62,19 +61,25 @@ The durable half is done and has been since the bills were designed.
 - **`bills.customer_name` and `bills.customer_phone` are snapshot columns on the
   bill itself**, not a join to the directory, and the `bills_append_only` trigger
   refuses to change them afterwards.
-- So: a customer renamed in the directory does not rewrite an old receipt; a
-  number reassigned to a stranger next year does not follow the bill; and a bill
-  can carry a name with no `customer_id` at all — which after #56 is exactly what
-  a skipped order looks like.
+- So: a customer renamed in the directory does not rewrite an old receipt, and a
+  number reassigned to a stranger next year does not follow the bill.
+- **Since #56 (2026-09-21) a name is recorded only with a number.** A skipped
+  order carries no customer facts at all: no name, no phone, no `customer_id`.
+  *(Corrected 2026-09-28. This proposal first said a skipped order carries a
+  name with no number, which was the pre-#56 counter.)*
 - #57 adds the tier snapshot on the bill, which is where the ⭐ comes from. **The
   receipt must read the snapshot**, never the live membership, or a revoked
   member's old receipt would silently rewrite itself.
 
 This change therefore alters **a projection and a page**, not a data model.
 
-**A bill rung before #56 and #57 renders fine and names nobody** — its snapshot
-columns are whatever they were, often null. That is a scenario to assert, not an
-edge case to guard against.
+**A bill rung before #56 must name nobody, and its columns are not null.** About
+1,900 production bills from before 2026-09-21 carry `customer_name` strings such
+as `As`, `Kk` and `Jj`. They are what billers typed to get past the old required
+field, not names. Printed, they would read as the customer's name on an old
+receipt. So the reader returns a name **only for a bill with a `customer_id`**,
+which no pre-#56 bill has. That is a scenario to assert, not an edge case to
+guard against.
 
 ## Scope
 
@@ -128,6 +133,24 @@ branch of the label and the menu branch of the detail: *Discount (100%) ·
 Selected items*, for the right amount. Nothing breaks and the rows still add
 up; the words are wrong until this change renders the row by name.
 
+## Also for the renderer, from #62
+
+`a-regular-earns-points-and-gold` (#62, shipping 2026-09-30) changes three things
+this proposal was written without:
+
+- **Gold is per outlet.** The bill's `customer_tier` is now the membership **at
+  the bill's own outlet**, still snapshotted. The receipt's mark therefore means
+  *gold here*, and needs no other change; it must still read the snapshot.
+- **The receipt already carries points.** #62 adds a *Points (…)* discount row
+  (`source = 'points'`) and *Points used / earned / balance* beneath the discounts,
+  with its own sibling landing change. This change adds the name beside them. It
+  must not move or re-derive them.
+- **The published privacy page is amended by #62** to cover points. It still says
+  *"The page names nobody — not your name, not your number, not even the last four
+  digits of it."* This change contradicts that sentence, so **the page changes
+  first**, per #59's rule for published pages, and the owner approves the new
+  words.
+
 ## Non-goals
 
 - **The biller's identity stays hidden.** #54 also refuses to name the biller, the
@@ -154,9 +177,9 @@ the spec reversal. Order it:
 
 ## How to run the gate
 
-- Open a real receipt for: a bill with a name and a number, a bill with a label
-  and no number (a #56 skip), a bill with neither (pre-#56 history), and a gold
-  member's bill.
+- Open a real receipt for: a bill with a name and a number, a skipped bill (no
+  customer facts), a pre-#56 bill carrying a counter string like `As` (it must
+  name nobody), and a gold member's bill.
 - Confirm the PDF matches the page in every one of those.
 - Confirm the **full** number never appears in the function's response — inspect
   the payload, not the rendering.
@@ -171,6 +194,8 @@ the spec reversal. Order it:
   receipt rather than an ops document.
 - 🧍 The owner confirms they accept the stated cost — that whoever holds a link
   now learns who the bill belongs to.
+- 🧍 The amended privacy page, no longer promising a receipt that names nobody, is
+  live before this change's page is.
 
 ## Docs to update before archiving
 
@@ -179,3 +204,5 @@ the spec reversal. Order it:
 - [`docs/SCREENS.md`](../../../docs/SCREENS.md) — the public receipt's contents.
 - [`docs/LIMITATIONS.md`](../../../docs/LIMITATIONS.md) — anything asserting the
   receipt names nobody.
+- In the landing repository, `privacy/`: the receipt section's *"names nobody"*
+  paragraph.

@@ -1,16 +1,20 @@
-import { Delete, TriangleAlert, UserRoundCheck, X } from 'lucide-react'
+import { Coins, Delete, TriangleAlert, UserRoundCheck, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
+import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { MemberMark } from '@/components/ui/member-mark'
 import { Modal } from '@/components/ui/modal'
 import {
+  DataActionError,
   PARTIAL_PHONE_MIN_DIGITS,
   type CustomerIdentity,
   type CustomerTier,
   type PartialPhoneMatch,
 } from '@/data-access/adapters'
+import { formatDate, goldEndsAt } from '@/domain'
+import { cn } from '@/lib/cn'
 import { formatIndianPhone, normalizeIndianPhone } from '../../../shared/phone'
 
 /**
@@ -52,6 +56,19 @@ export type CustomerSelection =
        * for the first time, who cannot be one yet.
        */
       tier?: CustomerTier | null
+      /** The directory's id, where the dialog was told it. */
+      customerId?: string
+      /**
+       * Their points balance at this outlet, as the lookup gave it
+       * (a-regular-earns-points-and-gold). Null where the outlet has points off.
+       */
+      pointsBalance?: number | null
+      /**
+       * Whether that balance came from the server **just now**, while this
+       * order's customer was being identified (design D10). Only a fresh balance
+       * may be spent: a remembered one is shown and labelled, never used.
+       */
+      pointsFresh?: boolean
     }
   | {
       kind: 'skipped'
@@ -119,6 +136,14 @@ export function CustomerDialog(props: {
    * person it belongs to.
    */
   suggest: (partial: string) => Promise<PartialPhoneMatch | null>
+  /**
+   * Make this customer gold at this outlet, once they have agreed
+   * (a-regular-earns-points-and-gold, D4). Absent where the counter does not
+   * offer it. Resolves with the customer as they now are.
+   */
+  grantGold?: ((customerId: string) => Promise<CustomerIdentity>) | undefined
+  /** How long gold lasts here, for the confirmation's end date. */
+  goldMonths?: number
   onClose: () => void
   onChoose: (selection: CustomerSelection) => void
 }) {
@@ -130,12 +155,16 @@ function OpenCustomerDialog({
   selection,
   lookup,
   suggest,
+  grantGold,
+  goldMonths = 6,
   onClose,
   onChoose,
 }: {
   selection: CustomerSelection | null
   lookup: (phone: string) => Promise<CustomerIdentity | null>
   suggest: (partial: string) => Promise<PartialPhoneMatch | null>
+  grantGold?: ((customerId: string) => Promise<CustomerIdentity>) | undefined
+  goldMonths?: number
   onClose: () => void
   onChoose: (selection: CustomerSelection) => void
 }) {
@@ -154,6 +183,9 @@ function OpenCustomerDialog({
     phone: string
     match: PartialPhoneMatch | null
   } | null>(null)
+  /** The Upgrade to Gold confirmation, and what it is doing. */
+  const [goldAsk, setGoldAsk] = useState<'asking' | 'granting' | null>(null)
+  const [goldError, setGoldError] = useState<string | null>(null)
 
   useEffect(() => {
     const timer = window.setTimeout(() => headingRef.current?.focus(), 0)
@@ -260,6 +292,25 @@ function OpenCustomerDialog({
   const nameRequired = match === null && canonical !== null
   const canConfirm = match !== null || (canonical !== null && name.trim() !== '')
 
+  async function makeGold() {
+    if (match === null || !grantGold) return
+    setGoldAsk('granting')
+    setGoldError(null)
+    try {
+      const updated = await grantGold(match.id)
+      // The customer as they now are: gold, and no longer offered it.
+      setLookedUp({ phone: match.phone, customer: updated })
+      setGoldAsk(null)
+    } catch (cause) {
+      setGoldError(
+        cause instanceof DataActionError
+          ? cause.message
+          : 'They could not be upgraded to Gold. Try again.',
+      )
+      setGoldAsk(null)
+    }
+  }
+
   function appendDigits(value: string) {
     setDigits((current) => `${current}${value}`.slice(0, PHONE_DIGITS))
   }
@@ -273,6 +324,12 @@ function OpenCustomerDialog({
         // Only a member carries the field, so a stranger's selection reads
         // exactly as it did before memberships existed.
         ...(match.tier ? { tier: match.tier } : {}),
+        customerId: match.id,
+        // The balance travels with the choice, and whether it may be spent:
+        // only a balance the server gave just now (design D10).
+        ...(match.pointsBalance != null
+          ? { pointsBalance: match.pointsBalance, pointsFresh: match.remembered !== true }
+          : {}),
       })
       return
     }
@@ -366,13 +423,62 @@ function OpenCustomerDialog({
                   there is still a choice to make about the order — which is
                   the whole of its use at a counter. No date and nothing else.
                 */}
-              <p className="flex min-w-0 items-center gap-1.5 font-bold text-content">
-                <span className="truncate">{match.name ?? 'No saved name'}</span>
-                {match.tier === 'gold' && <MemberMark />}
-              </p>
-              <p className="text-sm tabular-nums text-content-muted">
-                +91 {formatIndianPhone(match.phone)}
-              </p>
+              <div className="flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="flex min-w-0 items-center gap-1.5 font-bold text-content">
+                    <span className="truncate">{match.name ?? 'No saved name'}</span>
+                    {match.tier === 'gold' && <MemberMark />}
+                  </p>
+                  <p className="text-sm tabular-nums text-content-muted">
+                    +91 {formatIndianPhone(match.phone)}
+                  </p>
+                </div>
+                {/*
+                  Their balance here, on the right where the card had nothing
+                  [owner, 2026-09-29], and nothing about what earned it
+                  [owner, 2026-09-28]: a biller sees points and whether gold is
+                  on offer, never spend or visits. Big enough to read out.
+                */}
+                {match.pointsBalance != null && (
+                  <p
+                    className="shrink-0 text-right leading-none"
+                    data-testid="customer-match-points"
+                  >
+                    <span
+                      data-numeric=""
+                      className={cn(
+                        'block font-display text-2xl tabular-nums',
+                        match.pointsBalance < 0 ? 'text-danger' : 'text-content',
+                      )}
+                    >
+                      {match.pointsBalance}
+                    </span>
+                    <span className="mt-1 flex items-center justify-end gap-1 text-xs font-semibold text-content-muted">
+                      <Coins aria-hidden size={12} className="text-accent-text" />
+                      points
+                    </span>
+                  </p>
+                )}
+              </div>
+              {match.goldEligible && grantGold && match.tier !== 'gold' && (
+                <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-surface-raised px-2 py-1.5">
+                  <span className="text-xs font-semibold text-content">Eligible for gold</span>
+                  <Button
+                    size="phone"
+                    variant="secondary"
+                    data-testid="customer-make-gold"
+                    disabled={match.remembered === true || goldAsk !== null}
+                    onClick={() => setGoldAsk('asking')}
+                  >
+                    <MemberMark /> Upgrade to Gold
+                  </Button>
+                </div>
+              )}
+              {goldError && (
+                <p role="alert" className="mt-1 text-xs font-semibold text-danger">
+                  {goldError}
+                </p>
+              )}
               {match.remembered && (
                 <p className="mt-1 text-xs font-semibold text-content-muted">
                   From this tablet&rsquo;s last online read. It will be checked again on sync.
@@ -561,8 +667,31 @@ function OpenCustomerDialog({
           </Button>
         </div>
       </form>
+      {match !== null && grantGold && (
+        <ConfirmDialog
+          open={goldAsk !== null}
+          title={`Upgrade ${match.name ?? 'this customer'} to Gold?`}
+          // Only what the biller says aloud: ask first, and until when, with the
+          // date picked out [owner, 2026-09-29].
+          consequence={
+            <>
+              Check with the customer first. Once upgraded, their Gold is valid until{' '}
+              <strong className="font-bold text-content">{goldEndDate(goldMonths)}</strong>.
+            </>
+          }
+          confirmLabel="Upgrade"
+          busy={goldAsk === 'granting'}
+          onConfirm={() => void makeGold()}
+          onClose={() => setGoldAsk(null)}
+        />
+      )}
     </Modal>
   )
+}
+
+/** When gold granted now would end, as the confirmation words it. */
+function goldEndDate(months: number): string {
+  return formatDate(goldEndsAt(new Date().toISOString(), months))
 }
 
 /**

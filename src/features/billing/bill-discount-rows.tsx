@@ -3,7 +3,13 @@ import { Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Money } from '@/components/ui/money'
 import type { BillDiscountDraft, BillLineDraft } from '@/data-access/adapters'
-import { formatPaise, groupMenuDiscounts, menuDiscountLabel } from '@/domain'
+import {
+  formatPaise,
+  groupMenuDiscounts,
+  menuDiscountLabel,
+  POINT_VALUE_PAISE,
+  pointsRowTitle,
+} from '@/domain'
 
 /**
  * What came off, as rows in the bill column beside the items.
@@ -25,6 +31,8 @@ interface DiscountRow {
   amountPaise: number
   /** Present only on a discount this counter may change. */
   billIndex?: number
+  /** The customer's points, which change through their own panel. */
+  points?: true
 }
 
 /**
@@ -67,6 +75,8 @@ export function BillDiscountRows({
   editable,
   onEdit,
   onRemove,
+  onEditPoints,
+  onRemovePoints,
 }: {
   lines: readonly BillLineDraft[]
   discounts: readonly BillDiscountDraft[]
@@ -76,19 +86,34 @@ export function BillDiscountRows({
   editable: boolean
   onEdit?: (index: number) => void
   onRemove?: (index: number) => void
+  /** The points row's own controls (a-regular-earns-points-and-gold). */
+  onEditPoints?: () => void
+  onRemovePoints?: () => void
 }) {
   const menuRows = menuDiscountRows(lines, categoryCount)
 
-  const billRows: DiscountRow[] = discounts.map((discount, index) => ({
-    key: `bill-${index}`,
-    title:
-      discount.basis === 'percent'
-        ? `Discount (${(discount.valueBp ?? 0) / 100}%)`
-        : `Discount (${formatPaise(discount.valuePaise ?? 0)})`,
-    subtext: 'On this bill',
-    amountPaise: discount.amountPaise,
-    billIndex: index,
-  }))
+  const billRows: DiscountRow[] = discounts.map((discount, index) =>
+    discount.source === 'points'
+      ? {
+          // Its own row, saying what it was [owner, 2026-09-28]: `Points (20)`,
+          // never a Discount the ledger could not tell apart.
+          key: 'points',
+          title: pointsRowTitle(Math.round(discount.amountPaise / POINT_VALUE_PAISE)),
+          subtext: 'From their balance',
+          amountPaise: discount.amountPaise,
+          points: true,
+        }
+      : {
+          key: `bill-${index}`,
+          title:
+            discount.basis === 'percent'
+              ? `Discount (${(discount.valueBp ?? 0) / 100}%)`
+              : `Discount (${formatPaise(discount.valuePaise ?? 0)})`,
+          subtext: 'On this bill',
+          amountPaise: discount.amountPaise,
+          billIndex: index,
+        },
+  )
 
   if (menuRows.length === 0 && billRows.length === 0 && roundingPaise === 0) return null
 
@@ -105,14 +130,14 @@ export function BillDiscountRows({
             {row.subtext && <p className="text-xs text-content-muted">{row.subtext}</p>}
           </div>
 
-          {row.billIndex !== undefined && editable && (
+          {(row.billIndex !== undefined || (row.points && onEditPoints)) && editable && (
             <div className="flex shrink-0 items-center gap-1">
               <Button
                 variant="secondary"
                 size="phone"
                 className="w-10 px-0"
                 aria-label={`Edit ${row.title}`}
-                onClick={() => onEdit?.(row.billIndex!)}
+                onClick={() => (row.points ? onEditPoints?.() : onEdit?.(row.billIndex!))}
               >
                 <Pencil aria-hidden size={15} />
               </Button>
@@ -121,7 +146,7 @@ export function BillDiscountRows({
                 size="phone"
                 className="w-10 px-0"
                 aria-label={`Remove ${row.title}`}
-                onClick={() => onRemove?.(row.billIndex!)}
+                onClick={() => (row.points ? onRemovePoints?.() : onRemove?.(row.billIndex!))}
               >
                 <Trash2 aria-hidden size={15} />
               </Button>

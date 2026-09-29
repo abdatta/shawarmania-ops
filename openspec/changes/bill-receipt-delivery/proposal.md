@@ -1,6 +1,6 @@
 # Proposal: bill-receipt-delivery
 
-> **Model**: Opus · **Wave**: F · **Depends on**: #54, #56 · **Gate**: **a customer who gave their number at the counter receives their own receipt link on their phone without anybody choosing to send it**, and one who did not receives nothing; the message says what `/messages/` already says it says — one per bill, no marketing; **replying STOP stops it**, proved by the next settled bill for that number sending nothing and by a hand-crafted request failing to clear the suppression; the counter asks the published consent question in the published words before a number is keyed; switching delivery on sends nothing for bills rung before it existed; a demo session provably sends no real message; a send that fails is visible to somebody rather than silently lost; and the four-role demo walkthrough still walks.
+> **Model**: Opus · **Wave**: F · **Depends on**: #54, #56, #62 · **Gate**: **a customer who gave their number at the counter receives their own receipt link on their phone without anybody choosing to send it**, and one who did not receives nothing; the message says what `/messages/` already says it says — one per bill, no marketing; **replying STOP stops it**, proved by the next settled bill for that number sending nothing and by a hand-crafted request failing to clear the suppression; the counter asks the published consent question in the published words and records the answer, and a customer who gave their number only to earn points receives nothing; switching delivery on sends nothing for bills rung before it existed; a demo session provably sends no real message; a send that fails is visible to somebody rather than silently lost; and the four-role demo walkthrough still walks.
 
 ## Why
 
@@ -9,6 +9,65 @@ whose trigger was *"the owner picks a channel and settles consent."* Both happen
 and not as a plan — **as something already published and filed with a regulator.**
 
 That is what makes this change unusual, and it should be read before anything is designed.
+
+## What #62 changed here, 2026-09-28
+
+`a-regular-earns-points-and-gold` (#62) ships points and gold on 2026-09-30, before
+this change. It moves four things this proposal was written on:
+
+**1. Giving a number is no longer consent to be messaged.** From 2026-10-01 the
+Cafe asks every customer for their number *to earn points*. The owner aims to ship
+this change the same day (2026-09-28), but that does not make the two one
+question: a customer may want points and not messages, and until this change is
+live the counter asks for the number with no messaging question at all. The published page says the
+opposite: *"you give the cashier your mobile number, and that is the consent."*
+So this change cannot infer consent from a customer existing. It needs **consent
+as its own recorded fact** (when it was given, and that the published words were
+asked), set only at the counter's consent moment. It must send only to customers
+who carry it. "Switching on sends nothing for historical bills" is not enough:
+a customer who first gave their number for points in October must not start
+receiving messages in November because their *next* bill is new. The page's
+*"that is the consent"* sentence changes first.
+
+**Design the counter's two questions together with #62's.** Both live in the
+customer dialog, and on day one the biller asks for a number, offers points and
+asks about messages in one breath. #62's owner checkpoint is on 2026-09-29, so
+settle this change's consent moment at that checkpoint, not at a second one.
+
+**The DLT template must carry the points variables.** The DLT registration was
+still in progress on 2026-09-28. A template approved without a slot for points
+earned and balance cannot send them later without a fresh approval. So the
+template submitted now should include them. If DLT is not approved by opening,
+the gate already allows the SMS fallback to be *visibly disabled* rather than
+silently dropped. RCS alone can then carry the launch, provided the RCS agent
+itself is approved.
+
+**2. The message will carry points.** The owner wants it to include the points the
+bill earned and the balance after it (2026-09-28). Those are the receipt's own
+stored figures (#62 D14), transactional account information rather than an
+offer, but confirm with Telinfy that the Transactional agent and any DLT fallback
+template allow them. Never "use your points" or anything that reads as a nudge.
+The page's *"One message per bill, no offers"* holds as written.
+
+**3. STOP must not erase points.** The published page says that after stopping,
+*"Your number comes out of our customer records, so the counter cannot message
+you again."* With points, removing the number forfeits the customer's balance and
+gold at every outlet, which is not what someone who only wanted fewer messages
+asked for. **Stopping messages and leaving the programme are two different
+requests.** STOP suppresses sending and keeps the customer. Removal on request
+(the privacy page's separate promise) forfeits points and gold, and #62's
+privacy amendment says so. The messages page is corrected first.
+
+**4. A mistyped number now misattributes points too.** Beyond misdelivering a
+receipt, a wrong digit earns a stranger's points and counts toward their gold.
+#62 accepted that the number is unverified (the owner is not concerned yet), but
+the options offered below, a read-back or a first-message confirmation, now buy
+more than privacy.
+
+Removal also meets #62's ledger: points entries reference the customer and are
+append-only. Removing a customer means deciding what those rows keep. The
+simplest honest answer is that they stay, attached to a customer record whose
+name and phone are cleared, so the outlet's accounts still add up.
 
 ## The decisions the todo was waiting for are already made — and published
 
@@ -128,7 +187,11 @@ Added since the todo was written:
 - **No second consent path.** No web form, no checkbox. The counter is the consent.
 - **No change to link issuance, revocation or the identical-refusal rule.**
 - **Not the receipt's contents.** Naming the customer is #58.
-- **No loyalty or re-engagement use of the number.** The privacy page forecloses it.
+- **No re-engagement messaging.** No reminder about unused points, no win-back, no
+  "you're close to gold". The number *is* now a loyalty identity (#62, which
+  amends the privacy page to say so), but this agent only ever sends the bill.
+  *(Until 2026-09-28 this read "No loyalty … use of the number. The privacy page
+  forecloses it." #62 reopened the loyalty half and not the messaging half.)*
 
 ## Task ordering
 
@@ -169,6 +232,8 @@ either implements what is published, or the pages are corrected **before** it sh
 - 🧍 The owner accepts the misdelivery position this change settles — see above — knowing #58 puts a
   name on the page.
 - 🧍 The owner confirms the counter staff ask the published question in the published words.
+- 🧍 The owner approves the amended `/messages/` wording on consent and on STOP, live before the
+  first message is sent.
 
 ## Docs to update before archiving
 

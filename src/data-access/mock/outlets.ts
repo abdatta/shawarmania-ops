@@ -1,5 +1,9 @@
 import {
+  ALL_OFF_LOYALTY_SETTINGS,
   ALL_OFF_SERVICE_SETTINGS,
+  LOYALTY_SETTINGS_PROBLEM_MESSAGES,
+  loyaltySettingsProblem,
+  type OutletLoyaltySettings,
   SERVICE_SETTINGS_PROBLEM_MESSAGES,
   serviceSettingsProblem,
   type OutletServiceSettings,
@@ -86,7 +90,15 @@ export function createMockOutletsAdapter(
    * Defaults to an owner over a private map, which is what a test of this
    * adapter alone wants.
    */
-  service: { settings: Map<string, OutletServiceSettings>; writable: readonly string[] | null } = {
+  service: {
+    settings: Map<string, OutletServiceSettings>
+    writable: readonly string[] | null
+    /**
+     * The outlets' points and gold rules (a-regular-earns-points-and-gold), on
+     * the same reach: the owner anywhere, a manager at the outlets they manage.
+     */
+    loyalty?: Map<string, OutletLoyaltySettings>
+  } = {
     settings: new Map(),
     writable: null,
   },
@@ -95,6 +107,7 @@ export function createMockOutletsAdapter(
   // saving a position changes nothing would be demonstrating the wrong thing,
   // and the shared fixture array must survive the walkthrough unedited.
   const outlets = structuredClone(outletFixtures)
+  const loyalty = service.loyalty ?? new Map<string, OutletLoyaltySettings>()
   let nextId = 1
 
   const find = (id: string) => {
@@ -273,6 +286,30 @@ export function createMockOutletsAdapter(
       // read the choices from.
       if (readable !== null && !readable.includes(id)) return { ...ALL_OFF_SERVICE_SETTINGS }
       return { ...(service.settings.get(id) ?? ALL_OFF_SERVICE_SETTINGS) }
+    },
+
+    async getLoyaltySettings(id: string) {
+      // Outside the caller's reach reads as an outlet that chose nothing, as
+      // the service choices do.
+      if (readable !== null && !readable.includes(id)) return { ...ALL_OFF_LOYALTY_SETTINGS }
+      return { ...(loyalty.get(id) ?? ALL_OFF_LOYALTY_SETTINGS) }
+    },
+
+    async updateLoyaltySettings(id, settings) {
+      if (service.writable !== null && !service.writable.includes(id)) {
+        throw new DataActionError(
+          'not_permitted',
+          'Only the owner or this outlet’s manager changes its points and gold.',
+        )
+      }
+      find(id)
+      const problem = loyaltySettingsProblem(settings)
+      if (problem !== null) {
+        throw new DataActionError(problem, LOYALTY_SETTINGS_PROBLEM_MESSAGES[problem])
+      }
+      const stored = { ...settings }
+      loyalty.set(id, stored)
+      return { ...stored }
     },
 
     async updateServiceSettings(id, settings) {

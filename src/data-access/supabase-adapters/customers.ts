@@ -146,6 +146,16 @@ export function createSupabaseCustomersAdapter(
           }
         : null
     },
+
+    async grantGoldAtCounter() {
+      // Arrives with a-regular-earns-points-and-gold's database section (tasks
+      // 5.5). The counter offers it only where the lookup says a customer is
+      // eligible, and the live lookup says nobody is until then.
+      throw new CustomerActionError(
+        'not_available',
+        'Upgrading to Gold at the counter is not switched on yet.',
+      )
+    },
   }
 }
 

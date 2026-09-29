@@ -1,7 +1,9 @@
+import { goldEndsAt, goldInForce, shiftBusinessDate } from '@/domain'
+
 import type { CustomerTier } from '../../adapters'
 import type { Tables } from '../../database.types'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from './outlets'
-import { DEMO_OWNER_ID } from './personas'
+import { DEMO_BILLER_ID, DEMO_OWNER_ID } from './personas'
 
 /**
  * The demo customer directory: a handful of people, each there to make one
@@ -96,43 +98,91 @@ export function customerIdForPhone(phone: string): string {
 }
 
 /**
- * One spell of membership: granted, and possibly revoked.
+ * One spell of membership: granted at one outlet, possibly revoked, and always
+ * ending on the date its grant stored (a-regular-earns-points-and-gold, D1-D2).
  *
- * **A revocation ends a spell; it never deletes one.** The record is what a
- * future automatic rule reads to learn that a person took a membership away, so
- * that it does not hand it straight back. A re-grant is a new spell.
+ * **A revocation ends a spell; it never deletes one.** A re-grant is a new
+ * spell, and so is a grant after one has lapsed.
  *
  * Instants are held as business days back from today, like the bill seeds, so a
  * walkthrough always shows a plausible recent history.
  */
 export interface MembershipSpellSeed {
   phone: string
+  outletId: string
   grantedDaysAgo: number
   revokedDaysAgo?: number
+  /** How it was given. By the owner unless a biller made them gold at the counter. */
+  grantedVia?: 'management' | 'counter'
 }
 
 export const membershipSeeds: MembershipSpellSeed[] = [
-  { phone: DEMO_RETURNING_CUSTOMER_PHONE, grantedDaysAgo: 110, revokedDaysAgo: 62 },
-  { phone: DEMO_RETURNING_CUSTOMER_PHONE, grantedDaysAgo: 41 },
-  { phone: DEMO_MEMBER_CUSTOMER_PHONE, grantedDaysAgo: 24 },
+  // Ritika: gold at Kalyani, taken back once and given back by the owner.
+  {
+    phone: DEMO_RETURNING_CUSTOMER_PHONE,
+    outletId: OUTLET_KALYANI_ID,
+    grantedDaysAgo: 110,
+    revokedDaysAgo: 62,
+  },
+  { phone: DEMO_RETURNING_CUSTOMER_PHONE, outletId: OUTLET_KALYANI_ID, grantedDaysAgo: 41 },
+  // Arjun: upgraded to Gold at the counter by a biller, the way gold is earned now.
+  {
+    phone: DEMO_MEMBER_CUSTOMER_PHONE,
+    outletId: OUTLET_KALYANI_ID,
+    grantedDaysAgo: 24,
+    grantedVia: 'counter',
+  },
+  // Moumita: her gold lapsed on its own date and she has spent enough since to
+  // be offered it again, which is the renewal the counter makes.
+  { phone: DEMO_REGULAR_CUSTOMER_PHONE, outletId: OUTLET_KALYANI_ID, grantedDaysAgo: 200 },
 ]
 
-/** Who granted and revoked every seeded spell: the owner, who is the only one who may. */
+/** Who granted and revoked by hand: the owner. A counter grant names the demo biller. */
 export const MEMBERSHIP_SEED_ACTOR = DEMO_OWNER_ID
+export const MEMBERSHIP_COUNTER_ACTOR = DEMO_BILLER_ID
+
+/** How long every seeded grant lasted: the default six months. */
+export const SEEDED_GOLD_MONTHS = 6
 
 /**
- * Whether the seeded history made this customer a member `daysAgo` business days
- * back. The store snapshots a bill's tier from it, which is what the real
- * command will do at the moment of sale.
+ * Whether the seeded history made this customer gold **at this outlet**
+ * `daysAgo` business days back. The store snapshots a bill's tier from it,
+ * which is what the real command will do at the moment of sale.
  */
-export function seededTierAt(phone: string, daysAgo: number): CustomerTier | null {
-  const held = membershipSeeds.some(
-    (spell) =>
-      spell.phone === phone &&
-      spell.grantedDaysAgo >= daysAgo &&
-      (spell.revokedDaysAgo === undefined || spell.revokedDaysAgo < daysAgo),
-  )
+export function seededTierAt(
+  phone: string,
+  outletId: string,
+  daysAgo: number,
+  today: string,
+): CustomerTier | null {
+  const at = new Date(`${shiftBusinessDate(today, -daysAgo)}T12:00:00+05:30`).toISOString()
+  const held = membershipSeeds.some((spell) => {
+    if (spell.phone !== phone || spell.outletId !== outletId) return false
+    const grantedAt = new Date(
+      `${shiftBusinessDate(today, -spell.grantedDaysAgo)}T21:30:00+05:30`,
+    ).toISOString()
+    const revokedAt =
+      spell.revokedDaysAgo === undefined
+        ? null
+        : new Date(
+            `${shiftBusinessDate(today, -spell.revokedDaysAgo)}T21:30:00+05:30`,
+          ).toISOString()
+    return goldInForce(
+      { grantedAt, revokedAt, expiresAt: goldEndsAt(grantedAt, SEEDED_GOLD_MONTHS) },
+      at,
+    )
+  })
   return held ? 'gold' : null
+}
+
+/**
+ * When each demo outlet switched points on, in business days back. Kalyani has
+ * run points for three weeks, so the counter shows real balances; Kanchrapara
+ * has not, so the owner sees an outlet with everything off. Points begin when
+ * an outlet turns them on: nothing before earns.
+ */
+export const POINTS_SWITCHED_ON_DAYS_AGO: Readonly<Record<string, number>> = {
+  [OUTLET_KALYANI_ID]: 21,
 }
 
 /**
@@ -259,5 +309,16 @@ export const customerVisitSeeds: CustomerVisitSeed[] = [
   { phone: '+919000000106', outletId: K, daysAgo: 9, time: '13:00', totalPaise: 34800 },
   { phone: '+919000000106', outletId: K, daysAgo: 23, time: '13:20', totalPaise: 28900 },
   { phone: '+919000000107', outletId: N, daysAgo: 4, time: '19:45', totalPaise: 22900 },
+  // Imran at Kalyani: a bill that earned, points he then spent, and the first
+  // bill voided afterwards — which leaves him owing points (design D11).
+  {
+    phone: '+919000000107',
+    outletId: K,
+    daysAgo: 12,
+    time: '19:30',
+    totalPaise: 48000,
+    voided: true,
+  },
+  { phone: '+919000000107', outletId: K, daysAgo: 10, time: '19:40', totalPaise: 31000 },
   { phone: '+919000000107', outletId: N, daysAgo: 25, time: '19:10', totalPaise: 19900 },
 ]

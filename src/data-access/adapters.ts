@@ -3,6 +3,7 @@ import type {
   LineKind,
   MonthDayInput,
   MonthReading,
+  OutletLoyaltySettings,
   OutletServiceSettings,
   ServiceType,
   SyncStateKind,
@@ -162,6 +163,18 @@ export interface OutletsAdapter {
    * where the database's check constraints will refuse it.
    */
   updateServiceSettings(id: string, settings: OutletServiceSettings): Promise<OutletServiceSettings>
+  /**
+   * The outlet's points and gold rules (a-regular-earns-points-and-gold, #62).
+   * Read by whoever reads the outlet; all off for an outlet that has chosen
+   * nothing, which bills exactly as before points existed.
+   */
+  getLoyaltySettings(id: string): Promise<OutletLoyaltySettings>
+  /**
+   * Replace an outlet's loyalty rules as one write: the owner for any outlet, a
+   * Franchise Admin for the outlets they manage, nobody else (design D12). An
+   * inconsistent combination is refused with the problem's own code.
+   */
+  updateLoyaltySettings(id: string, settings: OutletLoyaltySettings): Promise<OutletLoyaltySettings>
 }
 
 export type AppRole = Tables<'assignments'>['role']
@@ -1102,6 +1115,13 @@ export interface OutletMenu {
    */
   service?: OutletServiceSettings
   /**
+   * The outlet's points and gold rules, on the same path for the same reason
+   * (a-regular-earns-points-and-gold, design D12): a running tablet picks up a
+   * change at its next refresh, and a cold start knows its caps. Absent reads as
+   * all off.
+   */
+  loyalty?: OutletLoyaltySettings
+  /**
    * The outlet's public menu address, carried on the read the Menu screen
    * already makes so its "View public menu" link costs no second request
    * (the-menu-is-public, design D5). Absent on a menu a tablet persisted
@@ -1319,12 +1339,21 @@ export interface ServiceFacts {
  * the order it is applied to, so it is derived rather than carried here.
  */
 export interface BillDiscountRule {
+  /**
+   * Who the discount came from (a-regular-earns-points-and-gold, design D7): the
+   * biller, or the customer's points. Absent is the biller's, which is what
+   * every discount before points was. A points discount is an amount in whole
+   * rupees, one point to the rupee, and there is at most one on an order.
+   */
+  source?: BillDiscountSource
   basis: 'percent' | 'amount'
   /** Basis points when the basis is a percentage, else null. */
   valueBp: number | null
   /** Paise when the basis is an amount, else null. */
   valuePaise: number | null
 }
+
+export type BillDiscountSource = 'biller' | 'points'
 
 /** One discount applied to the whole bill, resolved against that order. */
 export interface BillDiscountDraft extends BillDiscountRule {
@@ -1961,8 +1990,9 @@ export interface CustomerIdentity {
   /** The saved billing name, which plenty of customers never give. */
   name: string | null
   /**
-   * Whether this customer holds a membership **now**, and nothing else about it
-   * (a-gold-member-is-a-label). No date, no actor, no history: the counter is
+   * Whether this customer holds a membership **now, at this counter's outlet**,
+   * and nothing else about it (a-gold-member-is-a-label; per outlet since
+   * a-regular-earns-points-and-gold). No date, no actor, no history: the counter is
    * told the state so a biller can act on it, and is told nothing it could use
    * to reason about the customer's trade.
    *
@@ -1970,6 +2000,20 @@ export interface CustomerIdentity {
    * none, and absent reads as not a member, which is what it meant.
    */
   tier?: CustomerTier | null
+  /**
+   * Their points balance **at this counter's outlet**, net of points already on
+   * their open orders here, or null where the outlet has points off
+   * (a-regular-earns-points-and-gold, design D10). Points belong to the outlet
+   * that gave them, so a till is never told another outlet's.
+   *
+   * Absent on a remembered result written before points existed.
+   */
+  pointsBalance?: number | null
+  /**
+   * Whether they have spent enough **here** to be upgraded to Gold at the counter, as a
+   * yes or no and nothing more (design D3). Never the amount behind it.
+   */
+  goldEligible?: boolean
   /** Set only when an offline counter reused this exact result from its last read. */
   remembered?: true
 }
@@ -2068,6 +2112,17 @@ export interface CustomersAdapter {
    * was given by the person it belongs to.
    */
   suggestByPartialPhone(partial: string): Promise<PartialPhoneMatch | null>
+  /**
+   * Make an eligible customer gold at this counter's outlet, once they have
+   * agreed (a-regular-earns-points-and-gold, design D4).
+   *
+   * The outlet is the counter's own, never an argument. **Eligibility is decided
+   * again here**, by the server, and a customer who is not eligible is refused
+   * however the tablet's cached flag reads. A second call for a customer already
+   * gold here answers with the same state rather than a refusal. Online only:
+   * it is not a sale and it is never queued. There is no revoke from a counter.
+   */
+  grantGoldAtCounter(customerId: string): Promise<CustomerIdentity>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2085,7 +2140,10 @@ export interface DirectoryCustomerRow {
   id: string
   phone: string
   name: string | null
+  /** Gold **at the outlet the list was read for**. */
   tier: CustomerTier | null
+  /** When that gold ends, as its grant stored it. Null when not gold here. */
+  memberUntil: string | null
   visits30d: number
 }
 
@@ -2101,6 +2159,13 @@ export interface DirectoryCustomerRow {
  * and a list drawn whole would push everything under it off a phone screen.
  */
 export type DirectoryList = 'regulars' | 'members'
+
+/**
+ * How the gold list is ordered: newest grant first, or most visits in the last
+ * thirty days first [owner, 2026-09-28] — the second is how one number sitting
+ * on top suspiciously often gets noticed.
+ */
+export type DirectoryMemberOrder = 'newest' | 'visits'
 
 /** One page of a list. `next` is where the following page starts, or null at the end. */
 export interface DirectoryCustomerPage {
@@ -2124,6 +2189,16 @@ export interface DirectoryCustomerCard {
   phone: string
   name: string | null
   memberSince: string | null
+  /** When that gold ends, as its grant stored it (design D2). */
+  memberUntil: string | null
+  /**
+   * How the gold in force was given: by the owner or a manager, or by a biller
+   * at the counter, and by whom. Null when not gold here.
+   */
+  grantedVia: 'management' | 'counter' | null
+  grantedByName: string | null
+  /** Their points balance at this outlet, or null where the outlet has points off. */
+  pointsBalance: number | null
   visits30d: number
   spend30dPaise: number
   lastSeenAt: string | null
@@ -2198,7 +2273,12 @@ export interface CustomerDirectoryAdapter {
    * the customer id — so consecutive pages neither repeat nor skip anybody while
    * nothing changes underneath them.
    */
-  list(which: DirectoryList, offset: number): Promise<DirectoryCustomerPage>
+  list(
+    outletId: string,
+    which: DirectoryList,
+    offset: number,
+    order?: DirectoryMemberOrder,
+  ): Promise<DirectoryCustomerPage>
   /**
    * Customers by **name or part of their number** — permissible here and
    * nowhere else, because the owner already reads every bill at every outlet
@@ -2211,12 +2291,13 @@ export interface CustomerDirectoryAdapter {
    *
    * The till has no such path, and this one is never widened to reach it.
    */
-  search(query: string): Promise<DirectoryCustomerSearch>
-  card(customerId: string): Promise<DirectoryCustomerCard>
+  search(outletId: string, query: string): Promise<DirectoryCustomerSearch>
+  card(outletId: string, customerId: string): Promise<DirectoryCustomerCard>
   /** Correct a saved name. Refuses an empty one: a name is corrected, never erased. */
-  rename(customerId: string, name: string): Promise<DirectoryCustomerCard>
-  grantMembership(customerId: string): Promise<DirectoryCustomerCard>
-  revokeMembership(customerId: string): Promise<DirectoryCustomerCard>
+  rename(outletId: string, customerId: string, name: string): Promise<DirectoryCustomerCard>
+  /** Gold at this outlet, for any customer it has served (design D4). */
+  grantMembership(outletId: string, customerId: string): Promise<DirectoryCustomerCard>
+  revokeMembership(outletId: string, customerId: string): Promise<DirectoryCustomerCard>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

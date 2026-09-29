@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 
@@ -7,8 +9,11 @@ interface ConfirmDialogProps {
   /**
    * What will happen, in plain words — "This voids bill 142 and it stops
    * counting towards today's sales", not "Are you sure?".
+   *
+   * Words, or words with one fact picked out in `<strong>` — a date the reader
+   * must see at a glance. It sits inside a paragraph, so inline content only.
    */
-  consequence: string
+  consequence: ReactNode
   confirmLabel: string
   cancelLabel?: string
   /** Destructive actions get the danger treatment. */

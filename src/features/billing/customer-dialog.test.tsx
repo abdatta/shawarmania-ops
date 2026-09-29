@@ -101,6 +101,7 @@ describe('CustomerDialog', () => {
       kind: 'identified',
       phone: '+919000000101',
       name: 'Ritika Sen',
+      customerId: expect.any(String),
     })
   })
 
@@ -123,6 +124,7 @@ describe('CustomerDialog', () => {
       kind: 'identified',
       phone: '+919000000102',
       name: 'Window seat',
+      customerId: expect.any(String),
     })
   })
 
@@ -360,6 +362,7 @@ describe('CustomerDialog', () => {
         kind: 'identified',
         phone: '+919000000101',
         name: 'Ritika Sen',
+        customerId: expect.any(String),
       })
     })
 
