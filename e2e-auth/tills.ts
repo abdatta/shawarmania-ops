@@ -8,6 +8,8 @@ import {
   type Page,
 } from '@playwright/test'
 
+import { instantOnBusinessDay, resolveBusinessDate } from '../src/domain/datetime'
+
 /**
  * The tills of the local stack, shared by the specs that drive more than one.
  *
@@ -88,6 +90,29 @@ export async function setSpareTillInService(request: APIRequestContext, inServic
   }
 
   /*
+    The shift is filed under the outlet's business date for the instant it opens,
+    through the app's mirror of `app_business_date`. The UTC calendar date it
+    used before trails the Kolkata trading day from the 04:00 IST cutover to UTC
+    midnight, and in that window the spare held yesterday's shift while the
+    counter looked for today's, so its payment dialog never closed.
+
+    An hour of history, but never reaching back past the cutover: in the first
+    hour of a trading day an hour ago is yesterday, and dating that instant
+    faithfully would reproduce the bug rather than fix it.
+  */
+  const outlet = await request.get(`${SUPABASE_URL}/rest/v1/outlets`, {
+    headers,
+    params: { id: `eq.${OUTLET_KALYANI}`, select: 'business_day_cutover' },
+  })
+  expect(outlet.ok(), 'could not read the outlet cutover').toBe(true)
+  const [row] = (await outlet.json()) as Array<{ business_day_cutover: string }>
+  expect(row, 'the Kalyani outlet is missing from the local stack').toBeDefined()
+  const cutover = row!.business_day_cutover
+  const now = new Date()
+  const dayStart = instantOnBusinessDay(resolveBusinessDate(now, cutover), cutover, cutover)
+  const openedAt = new Date(Math.max(now.getTime() - 60 * 60_000, Date.parse(dayStart)))
+
+  /*
     Every column stated, `ended_at` and `ended_reason` included.
 
     An upsert only writes the columns its payload carries, so omitting them left
@@ -109,8 +134,8 @@ export async function setSpareTillInService(request: APIRequestContext, inServic
       device_id: SPARE_TILL,
       outlet_id: OUTLET_KALYANI,
       person_id: SECOND_BILLER,
-      opened_at: new Date(Date.now() - 60 * 60_000).toISOString(),
-      business_date: new Date().toISOString().slice(0, 10),
+      opened_at: openedAt.toISOString(),
+      business_date: resolveBusinessDate(openedAt, cutover),
       expires_at: new Date(Date.now() + 6 * 60 * 60_000).toISOString(),
       ended_at: null,
       ended_reason: null,

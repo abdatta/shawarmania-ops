@@ -81,6 +81,56 @@ themselves, not only the new test.
 Both are in `tasks.md`. The first is the one that keeps working forever; the second
 is the one that confirms the first was about the right thing.
 
+## Found while applying: the seed has the same fault in another shape
+
+Run inside the window on 2026-09-28, the fixture fixes cleared five of the seven
+failing files and left `03_status_and_scope` and `30_counter_operations_snapshot`.
+Neither is a calendar-date fault. The seed places today's rows at relative offsets
+— the open shift two hours ago, its bills forty-five and twenty minutes ago, an
+earlier closed shift five hours ago — and each row derives its own business date
+correctly from its own instant. But in the first hours after the 04:00 cutover,
+"forty-five minutes ago" is yesterday, so the open shift and its two bills land on
+two different trading days. The fault is fixed at seed time, not test time: a
+stack reset at 04:30 fails until it is reset again.
+
+**Decision: compress today's timeline into however much of today exists.** Every
+intraday offset is multiplied by `least(1, time since the cutover / 6 hours)`,
+computed once at the top of the seed. Order and proportions are kept, every row
+lands inside the current trading day at any hour, and after 10:00 IST the seed is
+byte-for-byte what it was.
+
+**Rejected: clamp each row to the cutover.** Rows that crossed would all collapse
+onto 04:00, and the closed shift would end before it opened relative to the open
+one; the scenario's shape is what the tests are about.
+
+**Rejected: shift the anchor into the future.** A shift opened after `now()` is
+refused by every command that checks `created_at >= opened_at`.
+
+**Rejected: a helper function.** The CLI sends the seed as one batch, so a
+function the seed creates does not yet exist when later statements are parsed. A
+session setting read through the built-in `current_setting` works.
+
+One test relied on the uncompressed timeline by accident:
+`43_the_drawer_explains_its_figures` counted bills in the last fourteen minutes
+and expected exactly its own thirteen. Compressed, Kanchrapara's seeded cash bill
+falls inside that interval. The assertion now counts against what the interval
+already held, which is what it meant.
+
+Two smaller findings from the same run, both now in `docs/TESTING.md`:
+
+- **A command-written bill is dated by `ordered_at`.** `51` stamped a careful
+  `created_at` and left `ordered_at` to default to `now()`, so the guard checked
+  the wrong clock.
+- **A fixture helper that reads the outlet under RLS returns null once the test
+  impersonates another outlet's tablet.** The first version of the helper did
+  exactly that and turned an `authorization_refused` assertion into
+  `malformed_payload`. The helper now reads the cutover once, while privileged.
+
+And the two-tablet test could not simply date its spare shift from the instant it
+opens, as first written, because it opened an hour back: in the first hour after
+the cutover that instant is yesterday. It now opens an hour back or at the
+cutover, whichever is later.
+
 ## RLS, money and offline semantics
 
 Called out explicitly, per the design rules:

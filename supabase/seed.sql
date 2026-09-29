@@ -295,6 +295,25 @@ values
    now() - interval '90 days');
 
 -- ---------------------------------------------------------------------------
+-- Today's timeline. The rows below say "two hours ago" or "forty-five minutes
+-- ago", and every one of them is meant to sit inside today's trading day. For
+-- the first hours after the 04:00 cutover that much of today has not happened
+-- yet: a bill "forty-five minutes ago" at 04:30 was rung yesterday, and the
+-- open shift and its bills would land on two different days. So the timeline is
+-- compressed into however much of today exists, keeping its order and its
+-- proportions, and is left exactly as written once six hours of the day have
+-- passed. The seed takes its clock when it runs, so without this a reset in the
+-- first hour of the day produced a stack that failed until the next reset.
+
+-- Computed once and kept as a session setting rather than a helper function: the
+-- CLI sends this file as one batch, so a function created here would not yet
+-- exist when the statements that call it are parsed.
+select set_config('seed.today_scale', least(1.0,
+    extract(epoch from now() - ((public.app_business_date(now(), time '04:00')
+      + time '04:00') at time zone 'Asia/Kolkata'))
+    / extract(epoch from interval '6 hours'))::text, false);
+
+-- ---------------------------------------------------------------------------
 -- A live shift on each active tablet, held by that outlet's Biller.
 --
 -- Seeded rather than opened by the handshake, because a handshake needs a code
@@ -318,7 +337,7 @@ values
 insert into public.counter_shifts
   (id, device_id, outlet_id, person_id, opened_at, business_date, expires_at)
 select v.id, v.device_id, v.outlet_id, v.person_id,
-       now() - interval '2 hours',
+       (now() - interval '2 hours' * current_setting('seed.today_scale')::float8),
        public.app_business_date(now(), o.business_day_cutover),
        public.app_next_cutover(now(), o.business_day_cutover)
   from (values
@@ -469,8 +488,8 @@ values
   -- Kalyani today, open
   ('40000000-0000-4000-a000-000000000002', '00000000-0000-4000-a000-000000000001',
    '10000000-0000-4000-a000-000000000004', '10000000-0000-4000-a000-00000000000a',
-   public.app_business_date(now() - interval '2 hours', time '04:00'),
-   now() - interval '2 hours', null),
+   public.app_business_date((now() - interval '2 hours' * current_setting('seed.today_scale')::float8), time '04:00'),
+   (now() - interval '2 hours' * current_setting('seed.today_scale')::float8), null),
   -- Kanchrapara D-2, closed
   ('40000000-0000-4000-a000-000000000003', '00000000-0000-4000-a000-000000000002',
    '10000000-0000-4000-a000-000000000005', '10000000-0000-4000-a000-00000000000b',
@@ -479,13 +498,13 @@ values
   -- Kanchrapara today, open
   ('40000000-0000-4000-a000-000000000004', '00000000-0000-4000-a000-000000000002',
    '10000000-0000-4000-a000-000000000005', '10000000-0000-4000-a000-00000000000b',
-   public.app_business_date(now() - interval '90 minutes', time '04:00'),
-   now() - interval '90 minutes', null),
+   public.app_business_date((now() - interval '90 minutes' * current_setting('seed.today_scale')::float8), time '04:00'),
+   (now() - interval '90 minutes' * current_setting('seed.today_scale')::float8), null),
   -- Kalyani earlier today, already closed — the device must NOT see its bills
   ('40000000-0000-4000-a000-000000000005', '00000000-0000-4000-a000-000000000001',
    '10000000-0000-4000-a000-000000000004', '10000000-0000-4000-a000-00000000000a',
-   public.app_business_date(now() - interval '5 hours', time '04:00'),
-   now() - interval '5 hours', now() - interval '3 hours');
+   public.app_business_date((now() - interval '5 hours' * current_setting('seed.today_scale')::float8), time '04:00'),
+   (now() - interval '5 hours' * current_setting('seed.today_scale')::float8), (now() - interval '3 hours' * current_setting('seed.today_scale')::float8));
 
 insert into public.bills
   (id, outlet_id, business_date, biller_profile_id, counter_device_id, shift_id,
@@ -531,24 +550,24 @@ values
    ((current_date - 2) + time '14:00') at time zone 'Asia/Kolkata'),
   -- ------------------------------------------------ Kalyani today, open shift
   ('50000000-0000-4000-a000-000000000011', '00000000-0000-4000-a000-000000000001',
-   public.app_business_date(now() - interval '45 minutes', time '04:00'),
+   public.app_business_date((now() - interval '45 minutes' * current_setting('seed.today_scale')::float8), time '04:00'),
    '10000000-0000-4000-a000-00000000000a',
    '10000000-0000-4000-a000-000000000004', '40000000-0000-4000-a000-000000000002',
    null, null, null, 13900, 0, 13900, 'cash', 'settled', null, null, null,
-   now() - interval '45 minutes'),
+   (now() - interval '45 minutes' * current_setting('seed.today_scale')::float8)),
   ('50000000-0000-4000-a000-000000000012', '00000000-0000-4000-a000-000000000001',
-   public.app_business_date(now() - interval '20 minutes', time '04:00'),
+   public.app_business_date((now() - interval '20 minutes' * current_setting('seed.today_scale')::float8), time '04:00'),
    '10000000-0000-4000-a000-00000000000a',
    '10000000-0000-4000-a000-000000000004', '40000000-0000-4000-a000-000000000002',
    null, null, null, 15900, 0, 15900, 'upi', 'settled', null, null, null,
-   now() - interval '20 minutes'),
+   (now() - interval '20 minutes' * current_setting('seed.today_scale')::float8)),
   -- ------------------------------------------------ Kalyani today, closed shift
   ('50000000-0000-4000-a000-000000000013', '00000000-0000-4000-a000-000000000001',
-   public.app_business_date(now() - interval '4 hours', time '04:00'),
+   public.app_business_date((now() - interval '4 hours' * current_setting('seed.today_scale')::float8), time '04:00'),
    '10000000-0000-4000-a000-00000000000a',
    '10000000-0000-4000-a000-000000000004', '40000000-0000-4000-a000-000000000005',
    null, null, null, 25000, 0, 25000, 'upi', 'settled', null, null, null,
-   now() - interval '4 hours'),
+   (now() - interval '4 hours' * current_setting('seed.today_scale')::float8)),
   -- ------------------------------------------------ Kanchrapara D-2 (shift 3)
   ('50000000-0000-4000-a000-000000000021', '00000000-0000-4000-a000-000000000002',
    current_date - 2, '10000000-0000-4000-a000-00000000000b',
@@ -573,11 +592,11 @@ values
    ((current_date - 2) + time '21:15') at time zone 'Asia/Kolkata'),
   -- ------------------------------------------------ Kanchrapara today, open shift
   ('50000000-0000-4000-a000-000000000031', '00000000-0000-4000-a000-000000000002',
-   public.app_business_date(now() - interval '30 minutes', time '04:00'),
+   public.app_business_date((now() - interval '30 minutes' * current_setting('seed.today_scale')::float8), time '04:00'),
    '10000000-0000-4000-a000-00000000000b',
    '10000000-0000-4000-a000-000000000005', '40000000-0000-4000-a000-000000000004',
    null, null, null, 13900, 0, 13900, 'cash', 'settled', null, null, null,
-   now() - interval '30 minutes');
+   (now() - interval '30 minutes' * current_setting('seed.today_scale')::float8));
 
 insert into public.bill_payments (bill_id,outlet_id,method,amount_paise,created_at)
 select id,outlet_id,payment_method,total_paise,paid_at

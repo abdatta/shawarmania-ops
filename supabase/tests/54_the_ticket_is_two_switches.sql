@@ -56,6 +56,23 @@ $$;
 -- the rule they are about rather than as six lines of envelope each.
 
 /** IST wall-clock on a business date, which is how a counter's day reads. */
+-- Fixtures below build "yesterday" and "today" from the outlet's business date,
+-- never from `current_date`: that is the UTC calendar date, which trails the
+-- Kolkata trading day from the 04:00 IST cutover to UTC midnight. Every
+-- timestamp is then built from the date it is filed under, so the two cannot
+-- disagree, and a shift expiring at the next cutover is always still open.
+--
+-- The cutover is read once, here, while the session is still privileged: a test
+-- impersonating another outlet's tablet cannot see Kalyani's row, and a helper
+-- that looked it up on every call would quietly return null.
+do $do$ begin
+  execute format(
+    'create function pg_temp.business_today() returns date language sql stable as %L',
+    format('select public.app_business_date(now(), %L::time)',
+      (select business_day_cutover from public.outlets
+        where id = '00000000-0000-4000-a000-000000000001')));
+end $do$;
+
 create function pg_temp.ist(p_date date, p_time time)
 returns timestamptz language sql immutable as $$
   select (p_date + p_time) at time zone 'Asia/Kolkata'
@@ -166,22 +183,22 @@ select has_function('public', 'billing_edit_window_end',
   'the ticket edit window is one named derivation');
 
 select is(public.billing_edit_window_end(
-  pg_temp.ist(current_date - 1, time '12:00'), null, true),
+  pg_temp.ist(pg_temp.business_today() - 1, time '12:00'), null, true),
   null::timestamptz,
   'an order whose food is still owed has no deadline at all');
 select is(public.billing_edit_window_end(
-  pg_temp.ist(current_date - 1, time '12:00'),
-  pg_temp.ist(current_date - 1, time '12:30'), true),
-  pg_temp.ist(current_date - 1, time '12:35'),
+  pg_temp.ist(pg_temp.business_today() - 1, time '12:00'),
+  pg_temp.ist(pg_temp.business_today() - 1, time '12:30'), true),
+  pg_temp.ist(pg_temp.business_today() - 1, time '12:35'),
   'the upfront payer''s clock starts when the food is made');
 select is(public.billing_edit_window_end(
-  pg_temp.ist(current_date - 1, time '12:30'),
-  pg_temp.ist(current_date - 1, time '12:00'), true),
-  pg_temp.ist(current_date - 1, time '12:35'),
+  pg_temp.ist(pg_temp.business_today() - 1, time '12:30'),
+  pg_temp.ist(pg_temp.business_today() - 1, time '12:00'), true),
+  pg_temp.ist(pg_temp.business_today() - 1, time '12:35'),
   'the handover payer''s clock starts when the money is taken');
 select is(public.billing_edit_window_end(
-  pg_temp.ist(current_date - 1, time '12:00'), null, false),
-  pg_temp.ist(current_date - 1, time '12:05'),
+  pg_temp.ist(pg_temp.business_today() - 1, time '12:00'), null, false),
+  pg_temp.ist(pg_temp.business_today() - 1, time '12:05'),
   'a bill with no order behind it keeps the payment-time clock');
 
 -- ---------------------------------------------------------------------------
@@ -260,8 +277,8 @@ select is((select status from public.bills where id = 'f6000000-0000-4000-a000-0
 insert into public.counter_shifts
   (id, device_id, outlet_id, person_id, opened_at, business_date, expires_at)
 values (:'OPEN_SHIFT', :'DEVICE_KAL', :'KAL', :'BILLER_KAL',
-  pg_temp.ist(current_date - 1, time '10:00'), current_date - 1,
-  pg_temp.ist(current_date + 1, time '04:00'));
+  pg_temp.ist(pg_temp.business_today() - 1, time '10:00'), pg_temp.business_today() - 1,
+  pg_temp.ist(pg_temp.business_today() + 1, time '04:00'));
 select pg_temp.impersonate(:'DEVICE_KAL');
 
 /** An order paid before its food is made: the case that started #55. */
@@ -269,11 +286,11 @@ create function pg_temp.upfront_payer(p_order uuid, p_bill uuid, p_seq text)
 returns void language plpgsql as $$
 begin
   perform pg_temp.take_order(p_order, ('f1000000-0000-4000-a000-0000000001' || p_seq)::uuid,
-    pg_temp.ist(current_date - 1, time '11:00'), current_date - 1,
+    pg_temp.ist(pg_temp.business_today() - 1, time '11:00'), pg_temp.business_today() - 1,
     'f5000000-0000-4000-a000-000000000001');
   perform pg_temp.pay_order(p_bill, p_order,
     ('f1000000-0000-4000-a000-0000000002' || p_seq)::uuid,
-    pg_temp.ist(current_date - 1, time '11:01'), current_date - 1,
+    pg_temp.ist(pg_temp.business_today() - 1, time '11:01'), pg_temp.business_today() - 1,
     'f5000000-0000-4000-a000-000000000001');
 end;
 $$;
@@ -283,13 +300,13 @@ create function pg_temp.handover_payer(p_order uuid, p_bill uuid, p_seq text)
 returns void language plpgsql as $$
 begin
   perform pg_temp.take_order(p_order, ('f1000000-0000-4000-a000-0000000001' || p_seq)::uuid,
-    pg_temp.ist(current_date - 1, time '11:00'), current_date - 1,
+    pg_temp.ist(pg_temp.business_today() - 1, time '11:00'), pg_temp.business_today() - 1,
     'f5000000-0000-4000-a000-000000000001');
   perform pg_temp.set_prepared(p_order, ('f1000000-0000-4000-a000-0000000003' || p_seq)::uuid,
-    pg_temp.ist(current_date - 1, time '11:30'), 'f5000000-0000-4000-a000-000000000001');
+    pg_temp.ist(pg_temp.business_today() - 1, time '11:30'), 'f5000000-0000-4000-a000-000000000001');
   perform pg_temp.pay_order(p_bill, p_order,
     ('f1000000-0000-4000-a000-0000000002' || p_seq)::uuid,
-    pg_temp.ist(current_date - 1, time '11:40'), current_date - 1,
+    pg_temp.ist(pg_temp.business_today() - 1, time '11:40'), pg_temp.business_today() - 1,
     'f5000000-0000-4000-a000-000000000001');
 end;
 $$;
@@ -303,7 +320,7 @@ select pg_temp.upfront_payer('f2000000-0000-4000-a000-000000000001',
   'f6000000-0000-4000-a000-000000000001', '01');
 select is(pg_temp.take_back('f2000000-0000-4000-a000-000000000001',
   'f6000000-0000-4000-a000-000000000001', 'f1000000-0000-4000-a000-000000000401',
-  pg_temp.ist(current_date - 1, time '12:30'), :'OPEN_SHIFT'),
+  pg_temp.ist(pg_temp.business_today() - 1, time '12:30'), :'OPEN_SHIFT'),
   'accepted',
   'a take-back on an unprepared order is accepted an hour and a half after paying');
 select is((select status from public.orders where id='f2000000-0000-4000-a000-000000000001'),
@@ -313,24 +330,24 @@ select is((select status from public.orders where id='f2000000-0000-4000-a000-00
 select pg_temp.upfront_payer('f2000000-0000-4000-a000-000000000002',
   'f6000000-0000-4000-a000-000000000002', '02');
 select is(pg_temp.set_prepared('f2000000-0000-4000-a000-000000000002',
-  'f1000000-0000-4000-a000-000000000402', pg_temp.ist(current_date - 1, time '12:00'),
+  'f1000000-0000-4000-a000-000000000402', pg_temp.ist(pg_temp.business_today() - 1, time '12:00'),
   :'OPEN_SHIFT'),
   'accepted', 'an upfront payer''s food is made at noon');
 select is(pg_temp.take_back('f2000000-0000-4000-a000-000000000002',
   'f6000000-0000-4000-a000-000000000002', 'f1000000-0000-4000-a000-000000000403',
-  pg_temp.ist(current_date - 1, time '12:04'), :'OPEN_SHIFT'),
+  pg_temp.ist(pg_temp.business_today() - 1, time '12:04'), :'OPEN_SHIFT'),
   'accepted', 'a take-back four minutes after preparation is accepted');
 
 -- Outside it, refused permanently.
 select pg_temp.upfront_payer('f2000000-0000-4000-a000-000000000003',
   'f6000000-0000-4000-a000-000000000003', '03');
 select is(pg_temp.set_prepared('f2000000-0000-4000-a000-000000000003',
-  'f1000000-0000-4000-a000-000000000404', pg_temp.ist(current_date - 1, time '12:00'),
+  'f1000000-0000-4000-a000-000000000404', pg_temp.ist(pg_temp.business_today() - 1, time '12:00'),
   :'OPEN_SHIFT'),
   'accepted', 'another upfront payer''s food is made at noon');
 select is(pg_temp.take_back('f2000000-0000-4000-a000-000000000003',
   'f6000000-0000-4000-a000-000000000003', 'f1000000-0000-4000-a000-000000000405',
-  pg_temp.ist(current_date - 1, time '12:05'), :'OPEN_SHIFT'),
+  pg_temp.ist(pg_temp.business_today() - 1, time '12:05'), :'OPEN_SHIFT'),
   'payment_edit_expired', 'and five minutes after preparation it is refused');
 
 -- When payment came last, the clock runs from the payment: `greatest`, not
@@ -339,14 +356,14 @@ select pg_temp.handover_payer('f2000000-0000-4000-a000-000000000004',
   'f6000000-0000-4000-a000-000000000004', '04');
 select is(pg_temp.take_back('f2000000-0000-4000-a000-000000000004',
   'f6000000-0000-4000-a000-000000000004', 'f1000000-0000-4000-a000-000000000406',
-  pg_temp.ist(current_date - 1, time '11:44'), :'OPEN_SHIFT'),
+  pg_temp.ist(pg_temp.business_today() - 1, time '11:44'), :'OPEN_SHIFT'),
   'accepted',
   'a handover payment is reversible four minutes after the money, ten past the food');
 select pg_temp.handover_payer('f2000000-0000-4000-a000-000000000005',
   'f6000000-0000-4000-a000-000000000005', '05');
 select is(pg_temp.take_back('f2000000-0000-4000-a000-000000000005',
   'f6000000-0000-4000-a000-000000000005', 'f1000000-0000-4000-a000-000000000407',
-  pg_temp.ist(current_date - 1, time '11:45'), :'OPEN_SHIFT'),
+  pg_temp.ist(pg_temp.business_today() - 1, time '11:45'), :'OPEN_SHIFT'),
   'payment_edit_expired',
   'and five minutes past a payment that came last, it is refused');
 
@@ -356,37 +373,37 @@ select pg_temp.upfront_payer('f2000000-0000-4000-a000-000000000007',
   'f6000000-0000-4000-a000-000000000007', '07');
 select is(pg_temp.cancel_paid('f2000000-0000-4000-a000-000000000007',
   'f6000000-0000-4000-a000-000000000007', 'f1000000-0000-4000-a000-000000000409',
-  pg_temp.ist(current_date - 1, time '12:30'), :'OPEN_SHIFT'),
+  pg_temp.ist(pg_temp.business_today() - 1, time '12:30'), :'OPEN_SHIFT'),
   'accepted',
   'the customer who leaves while the food is being made is cancelled, money returned');
 
 select pg_temp.upfront_payer('f2000000-0000-4000-a000-000000000008',
   'f6000000-0000-4000-a000-000000000008', '08');
 select is(pg_temp.set_prepared('f2000000-0000-4000-a000-000000000008',
-  'f1000000-0000-4000-a000-000000000410', pg_temp.ist(current_date - 1, time '12:00'),
+  'f1000000-0000-4000-a000-000000000410', pg_temp.ist(pg_temp.business_today() - 1, time '12:00'),
   :'OPEN_SHIFT'),
   'accepted', 'its food is made at noon');
 select is(pg_temp.cancel_paid('f2000000-0000-4000-a000-000000000008',
   'f6000000-0000-4000-a000-000000000008', 'f1000000-0000-4000-a000-000000000411',
-  pg_temp.ist(current_date - 1, time '12:04'), :'OPEN_SHIFT'),
+  pg_temp.ist(pg_temp.business_today() - 1, time '12:04'), :'OPEN_SHIFT'),
   'accepted', 'a cancel-after-paid four minutes after preparation is accepted');
 
 select pg_temp.upfront_payer('f2000000-0000-4000-a000-000000000009',
   'f6000000-0000-4000-a000-000000000009', '09');
 select is(pg_temp.set_prepared('f2000000-0000-4000-a000-000000000009',
-  'f1000000-0000-4000-a000-000000000412', pg_temp.ist(current_date - 1, time '12:00'),
+  'f1000000-0000-4000-a000-000000000412', pg_temp.ist(pg_temp.business_today() - 1, time '12:00'),
   :'OPEN_SHIFT'),
   'accepted', 'and another''s at noon');
 select is(pg_temp.cancel_paid('f2000000-0000-4000-a000-000000000009',
   'f6000000-0000-4000-a000-000000000009', 'f1000000-0000-4000-a000-000000000413',
-  pg_temp.ist(current_date - 1, time '12:05'), :'OPEN_SHIFT'),
+  pg_temp.ist(pg_temp.business_today() - 1, time '12:05'), :'OPEN_SHIFT'),
   'payment_edit_expired', 'five minutes after preparation it is refused');
 
 select pg_temp.handover_payer('f2000000-0000-4000-a000-000000000010',
   'f6000000-0000-4000-a000-000000000010', '10');
 select is(pg_temp.cancel_paid('f2000000-0000-4000-a000-000000000010',
   'f6000000-0000-4000-a000-000000000010', 'f1000000-0000-4000-a000-000000000414',
-  pg_temp.ist(current_date - 1, time '11:45'), :'OPEN_SHIFT'),
+  pg_temp.ist(pg_temp.business_today() - 1, time '11:45'), :'OPEN_SHIFT'),
   'payment_edit_expired',
   'and five minutes past a payment that came last, it is refused too');
 
@@ -395,27 +412,27 @@ select is(pg_temp.cancel_paid('f2000000-0000-4000-a000-000000000010',
 select pg_temp.upfront_payer('f2000000-0000-4000-a000-000000000011',
   'f6000000-0000-4000-a000-000000000011', '11');
 select is(pg_temp.correct('f6000000-0000-4000-a000-000000000011', 0,
-  'f1000000-0000-4000-a000-000000000415', pg_temp.ist(current_date - 1, time '12:30'),
+  'f1000000-0000-4000-a000-000000000415', pg_temp.ist(pg_temp.business_today() - 1, time '12:30'),
   :'OPEN_SHIFT', 'upi'),
   'accepted',
   'the Cash-for-UPI slip is corrected an hour and a half later, the food still being made');
 select is(pg_temp.set_prepared('f2000000-0000-4000-a000-000000000011',
-  'f1000000-0000-4000-a000-000000000416', pg_temp.ist(current_date - 1, time '13:00'),
+  'f1000000-0000-4000-a000-000000000416', pg_temp.ist(pg_temp.business_today() - 1, time '13:00'),
   :'OPEN_SHIFT'),
   'accepted', 'then the food is made at one');
 select is(pg_temp.correct('f6000000-0000-4000-a000-000000000011', 1,
-  'f1000000-0000-4000-a000-000000000417', pg_temp.ist(current_date - 1, time '13:04'),
+  'f1000000-0000-4000-a000-000000000417', pg_temp.ist(pg_temp.business_today() - 1, time '13:04'),
   :'OPEN_SHIFT', 'cash'),
   'accepted', 'a correction four minutes after preparation is accepted');
 select is(pg_temp.correct('f6000000-0000-4000-a000-000000000011', 2,
-  'f1000000-0000-4000-a000-000000000418', pg_temp.ist(current_date - 1, time '13:05'),
+  'f1000000-0000-4000-a000-000000000418', pg_temp.ist(pg_temp.business_today() - 1, time '13:05'),
   :'OPEN_SHIFT', 'upi'),
   'payment_edit_expired', 'and five minutes after preparation it is refused');
 
 select pg_temp.handover_payer('f2000000-0000-4000-a000-000000000012',
   'f6000000-0000-4000-a000-000000000012', '12');
 select is(pg_temp.correct('f6000000-0000-4000-a000-000000000012', 0,
-  'f1000000-0000-4000-a000-000000000419', pg_temp.ist(current_date - 1, time '11:45'),
+  'f1000000-0000-4000-a000-000000000419', pg_temp.ist(pg_temp.business_today() - 1, time '11:45'),
   :'OPEN_SHIFT', 'upi'),
   'payment_edit_expired',
   'a correction five minutes past a payment that came last is refused');
@@ -429,7 +446,7 @@ select is(public.pay_billing_now(
   'f1000000-0000-4000-a000-000000000420', 1,
   public.billing_payload_hash(jsonb_build_object(
     'billId', 'f6000000-0000-4000-a000-0000000000d1',
-    'businessDate', current_date - 1, 'paymentBusinessDate', current_date - 1,
+    'businessDate', pg_temp.business_today() - 1, 'paymentBusinessDate', pg_temp.business_today() - 1,
     'customerId', null, 'customerName', null, 'customerPhone', null,
     'subtotalPaise', 13900, 'discountPaise', 0, 'taxPaise', 0, 'totalPaise', 13900,
     'pricingMode', 'no_tax',
@@ -439,10 +456,10 @@ select is(public.pay_billing_now(
       'menuItemId', '31000000-0000-4000-a000-000000000001',
       'itemName', 'Classic Chicken Shawarma',
       'unitPricePaise', 13900, 'quantity', 1, 'lineTotalPaise', 13900)))),
-  pg_temp.ist(current_date - 1, time '14:00'), :'OPEN_SHIFT',
+  pg_temp.ist(pg_temp.business_today() - 1, time '14:00'), :'OPEN_SHIFT',
   jsonb_build_object(
     'billId', 'f6000000-0000-4000-a000-0000000000d1',
-    'businessDate', current_date - 1, 'paymentBusinessDate', current_date - 1,
+    'businessDate', pg_temp.business_today() - 1, 'paymentBusinessDate', pg_temp.business_today() - 1,
     'customerId', null, 'customerName', null, 'customerPhone', null,
     'subtotalPaise', 13900, 'discountPaise', 0, 'taxPaise', 0, 'totalPaise', 13900,
     'pricingMode', 'no_tax',
@@ -457,11 +474,11 @@ select is(public.pay_billing_now(
 select is((select order_id from public.bills where id='f6000000-0000-4000-a000-0000000000d1'),
   null::uuid, 'and it really does carry no order');
 select is(pg_temp.correct('f6000000-0000-4000-a000-0000000000d1', 0,
-  'f1000000-0000-4000-a000-000000000421', pg_temp.ist(current_date - 1, time '14:04'),
+  'f1000000-0000-4000-a000-000000000421', pg_temp.ist(pg_temp.business_today() - 1, time '14:04'),
   :'OPEN_SHIFT', 'upi'),
   'accepted', 'its tender is correctable for five minutes after payment');
 select is(pg_temp.correct('f6000000-0000-4000-a000-0000000000d1', 1,
-  'f1000000-0000-4000-a000-000000000422', pg_temp.ist(current_date - 1, time '14:05'),
+  'f1000000-0000-4000-a000-000000000422', pg_temp.ist(pg_temp.business_today() - 1, time '14:05'),
   :'OPEN_SHIFT', 'cash'),
   'payment_edit_expired',
   'and refused after them, because there is no preparation for its clock to wait on');
@@ -475,7 +492,7 @@ select pg_temp.upfront_payer('f2000000-0000-4000-a000-000000000013',
 select pg_temp.impersonate(:'DEVICE_KPA');
 select is(pg_temp.take_back('f2000000-0000-4000-a000-000000000013',
   'f6000000-0000-4000-a000-000000000013', 'f1000000-0000-4000-a000-000000000423',
-  pg_temp.ist(current_date - 1, time '11:02'), :'OPEN_SHIFT'),
+  pg_temp.ist(pg_temp.business_today() - 1, time '11:02'), :'OPEN_SHIFT'),
   'authorization_refused',
   'another tablet cannot take back a payment it did not take, deadline or no deadline');
 select pg_temp.unimpersonate();

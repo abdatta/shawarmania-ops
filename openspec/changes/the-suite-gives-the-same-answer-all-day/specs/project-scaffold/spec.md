@@ -8,12 +8,16 @@ isolation probes on every push and pull request. A failure in any of these
 SHALL fail the workflow.
 
 The suite SHALL report the same result at every hour of the day. A fixture
-labelling a row whose business date the database validates SHALL derive that
-business date from **the same instant it stamps the row with**, through the same
-definition the validation uses, and SHALL NOT derive it from a calendar date in
-any timezone. A calendar date answers a different question from a trading day,
-and the two disagree for the period between the outlet cutover and the calendar
-rollover.
+labelling a row whose business date the database validates SHALL take that
+business date and the row's timestamp **from one source**: either the date is
+derived from the instant it stamps, through the same definition the validation
+uses, or the instant is built from the date at a time inside that trading day.
+It SHALL NOT pair a date taken from a calendar with an instant taken from the
+clock. A calendar date answers a different question from a trading day, and the
+two disagree for the period between the outlet cutover and the calendar
+rollover. Where a fixture means "today", it SHALL mean the outlet's current
+business date. The same holds for the seed: rows it places relative to the
+present SHALL fall inside the current trading day at whatever hour it runs.
 
 The validation itself SHALL NOT be weakened to accommodate a fixture. It protects
 every figure that sums by business date, and a fixture that finds it inconvenient

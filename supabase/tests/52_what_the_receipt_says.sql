@@ -26,6 +26,22 @@ set local search_path = public, extensions;
 
 select * from no_plan();
 
+-- A bill is filed under the outlet's business date, never `current_date`: that is
+-- the UTC calendar date, which trails the Kolkata trading day from the 04:00 IST
+-- cutover to UTC midnight, and the database refuses a bill whose date and
+-- timestamp disagree.
+--
+-- The cutover is read once, here, while the session is still privileged: a test
+-- impersonating another outlet's tablet cannot see Kalyani's row, and a helper
+-- that looked it up on every call would quietly return null.
+do $do$ begin
+  execute format(
+    'create function pg_temp.business_today() returns date language sql stable as %L',
+    format('select public.app_business_date(now(), %L::time)',
+      (select business_day_cutover from public.outlets
+        where id = '00000000-0000-4000-a000-000000000001')));
+end $do$;
+
 create function pg_temp.kalyani() returns uuid language sql immutable as
   $$ select '00000000-0000-4000-a000-000000000001'::uuid $$;
 
@@ -131,7 +147,7 @@ begin
     counter_device_id, shift_id, subtotal_paise, discount_paise, tax_paise,
     rounding_paise, total_paise, payment_method, created_at)
   values (
-    v_bill, pg_temp.kalyani(), 0, current_date,
+    v_bill, pg_temp.kalyani(), 0, pg_temp.business_today(),
     '10000000-0000-4000-a000-00000000000a',
     '10000000-0000-4000-a000-000000000004',
     '40000000-0000-4000-a000-000000000001',
@@ -341,7 +357,7 @@ begin
     counter_device_id, shift_id, subtotal_paise, discount_paise, tax_paise,
     rounding_paise, total_paise, payment_method, created_at)
   values (
-    v_bill, pg_temp.kalyani(), 0, current_date,
+    v_bill, pg_temp.kalyani(), 0, pg_temp.business_today(),
     '10000000-0000-4000-a000-00000000000a',
     '10000000-0000-4000-a000-000000000004',
     '40000000-0000-4000-a000-000000000001',

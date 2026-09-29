@@ -1,11 +1,11 @@
 # Database tests cross the business cutover
 
-**Type**: Verification gap · **Status**: Open · **Area**: Testing
+**Type**: Verification gap · **Status**: Open, narrowed 2026-09-29 · **Area**: Testing
 
-The local verification suite should give the same result throughout the day. During Overview verification on 2026-09-08, a previously green database run failed receipt fixtures between 04:00 IST and midnight UTC: a fixture labelled a bill with UTC `current_date`, but its timestamp belonged to the next outlet business date. Receipt suites 50–52 reproduced this on a fresh reset. Changing the connection timezone merely moved failures into attendance fixtures, so the timezone was restored to UTC.
+The local verification suite should give the same result throughout the day. During Overview verification on 2026-09-08, a previously green database run failed receipt fixtures between 04:00 IST and midnight UTC: a fixture labelled a bill with UTC `current_date`, but its timestamp belonged to the next outlet business date.
 
-Separately, leaving a seeded stack open across the outlet cutover expires its active shifts and makes later REST billing probes fail. A fresh reset resolves that case.
+**Taken by `the-suite-gives-the-same-answer-all-day`.** The fixtures, the seed's intraday timeline and the authenticated two-tablet test now take their business date from the instant they stamp, and the database suite, the REST probes and the authenticated browser suite passed inside the window on 2026-09-28. That part is no longer open.
 
-The authenticated two-tablet test has the same date issue: it opens the spare shift with `new Date().toISOString().slice(0, 10)` while the counter uses the outlet business date. Between cutover and UTC midnight, the spare's payment dialog remains open because its fixture shift belongs to the previous day.
+**What remains.** Leaving a seeded stack open across the outlet cutover expires its active shifts and makes later REST billing probes fail. A fresh reset resolves it, and it never affects a CI run, which always starts from a fresh stack. It is a different mechanism from the one above: the stack's shifts are genuinely over, not mislabelled.
 
-Promote when maintaining the test harness: give each time-sensitive fixture a consistent explicit business date and timestamp, and prove the suite on both sides of the cutover. Preserve production date validation; do not weaken it to accommodate fixtures.
+Promote if a long local session crossing the cutover becomes a regular way of working: the likely shape is a check in the local verification commands that notices expired seeded shifts and says to reset, rather than any change to shift expiry itself.

@@ -9,6 +9,23 @@ set local search_path = public, extensions;
 
 select * from no_plan();
 
+-- Fixtures below build "yesterday" and "today" from the outlet's business date,
+-- never from `current_date`: that is the UTC calendar date, which trails the
+-- Kolkata trading day from the 04:00 IST cutover to UTC midnight. Every
+-- timestamp is then built from the date it is filed under, so the two cannot
+-- disagree, and a shift expiring at the next cutover is always still open.
+--
+-- The cutover is read once, here, while the session is still privileged: a test
+-- impersonating another outlet's tablet cannot see Kalyani's row, and a helper
+-- that looked it up on every call would quietly return null.
+do $do$ begin
+  execute format(
+    'create function pg_temp.business_today() returns date language sql stable as %L',
+    format('select public.app_business_date(now(), %L::time)',
+      (select business_day_cutover from public.outlets
+        where id = '00000000-0000-4000-a000-000000000001')));
+end $do$;
+
 create function pg_temp.impersonate(p_sub uuid)
 returns void language plpgsql as $$
 begin
@@ -111,7 +128,7 @@ select has_function('public', 'cancel_paid_billing_order',
 -- command time this file uses. The seed's own open shift for this device ends
 -- first: one live shift per device is the database's own rule.
 select pg_temp.unimpersonate();
-update public.counter_shifts set ended_at=((current_date - 1) + time '09:00') at time zone 'Asia/Kolkata',
+update public.counter_shifts set ended_at=((pg_temp.business_today() - 1) + time '09:00') at time zone 'Asia/Kolkata',
   ended_reason='operator'
  where device_id=:'DEVICE_KAL' and ended_at is null;
 insert into public.counter_shifts
@@ -121,9 +138,9 @@ values
    :'DEVICE_KAL',
    :'KAL',
    :'BILLER_KAL',
-   ((current_date - 1) + time '10:00') at time zone 'Asia/Kolkata',
-   current_date - 1,
-   ((current_date + 1) + time '04:00') at time zone 'Asia/Kolkata');
+   ((pg_temp.business_today() - 1) + time '10:00') at time zone 'Asia/Kolkata',
+   pg_temp.business_today() - 1,
+   ((pg_temp.business_today() + 1) + time '04:00') at time zone 'Asia/Kolkata');
 
 -- ---------------------------------------------------------------------------
 -- Preparation is an axis.
@@ -134,12 +151,12 @@ select is(
     'e1000000-0000-4000-a000-000000000001', 1,
     public.billing_payload_hash(pg_temp.order_payload(
       'e2000000-0000-4000-a000-000000000001',
-      'e3000000-0000-4000-a000-000000000001', current_date - 1)),
-    ((current_date - 1) + time '12:00') at time zone 'Asia/Kolkata',
+      'e3000000-0000-4000-a000-000000000001', pg_temp.business_today() - 1)),
+    ((pg_temp.business_today() - 1) + time '12:00') at time zone 'Asia/Kolkata',
     'e5000000-0000-4000-a000-000000000001',
     pg_temp.order_payload(
       'e2000000-0000-4000-a000-000000000001',
-      'e3000000-0000-4000-a000-000000000001', current_date - 1)
+      'e3000000-0000-4000-a000-000000000001', pg_temp.business_today() - 1)
   ) ->> 'status',
   'accepted', 'the fixture order is accepted');
 
@@ -151,14 +168,14 @@ select is(
     'e1000000-0000-4000-a000-000000000002', 1,
     public.billing_payload_hash(pg_temp.prepare_payload(
       'e2000000-0000-4000-a000-000000000001', true)),
-    ((current_date - 1) + time '12:05') at time zone 'Asia/Kolkata',
+    ((pg_temp.business_today() - 1) + time '12:05') at time zone 'Asia/Kolkata',
     'e5000000-0000-4000-a000-000000000001',
     pg_temp.prepare_payload('e2000000-0000-4000-a000-000000000001', true)
   ) ->> 'status',
   'accepted', 'marking prepared is accepted');
 
 select is((select prepared_at from public.orders where id='e2000000-0000-4000-a000-000000000001'),
-  ((current_date - 1) + time '12:05') at time zone 'Asia/Kolkata',
+  ((pg_temp.business_today() - 1) + time '12:05') at time zone 'Asia/Kolkata',
   'prepared_at carries the command time');
 
 select is(
@@ -166,7 +183,7 @@ select is(
     'e1000000-0000-4000-a000-000000000003', 1,
     public.billing_payload_hash(pg_temp.prepare_payload(
       'e2000000-0000-4000-a000-000000000001', false)),
-    ((current_date - 1) + time '12:06') at time zone 'Asia/Kolkata',
+    ((pg_temp.business_today() - 1) + time '12:06') at time zone 'Asia/Kolkata',
     'e5000000-0000-4000-a000-000000000001',
     pg_temp.prepare_payload('e2000000-0000-4000-a000-000000000001', false)
   ) ->> 'status',
@@ -182,15 +199,15 @@ select is(
     public.billing_payload_hash(pg_temp.pay_order_payload(
       'e6000000-0000-4000-a000-000000000001',
       'e2000000-0000-4000-a000-000000000001',
-      ((current_date - 1) + time '12:10') at time zone 'Asia/Kolkata',
-      current_date - 1)),
-    ((current_date - 1) + time '12:10') at time zone 'Asia/Kolkata',
+      ((pg_temp.business_today() - 1) + time '12:10') at time zone 'Asia/Kolkata',
+      pg_temp.business_today() - 1)),
+    ((pg_temp.business_today() - 1) + time '12:10') at time zone 'Asia/Kolkata',
     'e5000000-0000-4000-a000-000000000001',
     pg_temp.pay_order_payload(
       'e6000000-0000-4000-a000-000000000001',
       'e2000000-0000-4000-a000-000000000001',
-      ((current_date - 1) + time '12:10') at time zone 'Asia/Kolkata',
-      current_date - 1)
+      ((pg_temp.business_today() - 1) + time '12:10') at time zone 'Asia/Kolkata',
+      pg_temp.business_today() - 1)
   ) ->> 'status',
   'accepted', 'the order pays');
 
@@ -199,7 +216,7 @@ select is(
     'e1000000-0000-4000-a000-000000000005', 1,
     public.billing_payload_hash(pg_temp.prepare_payload(
       'e2000000-0000-4000-a000-000000000001', false)),
-    ((current_date - 1) + time '12:11') at time zone 'Asia/Kolkata',
+    ((pg_temp.business_today() - 1) + time '12:11') at time zone 'Asia/Kolkata',
     'e5000000-0000-4000-a000-000000000001',
     pg_temp.prepare_payload('e2000000-0000-4000-a000-000000000001', false)
   ) ->> 'status',
@@ -214,7 +231,7 @@ select isnt(
     'e1000000-0000-4000-a000-000000000005', 1,
     public.billing_payload_hash(pg_temp.prepare_payload(
       'e2000000-0000-4000-a000-000000000001', false)),
-    ((current_date - 1) + time '12:11') at time zone 'Asia/Kolkata',
+    ((pg_temp.business_today() - 1) + time '12:11') at time zone 'Asia/Kolkata',
     'e5000000-0000-4000-a000-000000000001',
     pg_temp.prepare_payload('e2000000-0000-4000-a000-000000000001', false)
   ) ->> 'orderNumber',
@@ -227,12 +244,12 @@ select is(
     'e1000000-0000-4000-a000-000000000006', 1,
     public.billing_payload_hash(pg_temp.order_payload(
       'e2000000-0000-4000-a000-000000000002',
-      'e3000000-0000-4000-a000-000000000002', current_date - 1)),
-    ((current_date - 1) + time '13:00') at time zone 'Asia/Kolkata',
+      'e3000000-0000-4000-a000-000000000002', pg_temp.business_today() - 1)),
+    ((pg_temp.business_today() - 1) + time '13:00') at time zone 'Asia/Kolkata',
     'e5000000-0000-4000-a000-000000000001',
     pg_temp.order_payload(
       'e2000000-0000-4000-a000-000000000002',
-      'e3000000-0000-4000-a000-000000000002', current_date - 1)
+      'e3000000-0000-4000-a000-000000000002', pg_temp.business_today() - 1)
   ) ->> 'status',
   'accepted', 'the upfront payer order is created');
 
@@ -242,15 +259,15 @@ select is(
     public.billing_payload_hash(pg_temp.pay_order_payload(
       'e6000000-0000-4000-a000-000000000002',
       'e2000000-0000-4000-a000-000000000002',
-      ((current_date - 1) + time '13:01') at time zone 'Asia/Kolkata',
-      current_date - 1)),
-    ((current_date - 1) + time '13:01') at time zone 'Asia/Kolkata',
+      ((pg_temp.business_today() - 1) + time '13:01') at time zone 'Asia/Kolkata',
+      pg_temp.business_today() - 1)),
+    ((pg_temp.business_today() - 1) + time '13:01') at time zone 'Asia/Kolkata',
     'e5000000-0000-4000-a000-000000000001',
     pg_temp.pay_order_payload(
       'e6000000-0000-4000-a000-000000000002',
       'e2000000-0000-4000-a000-000000000002',
-      ((current_date - 1) + time '13:01') at time zone 'Asia/Kolkata',
-      current_date - 1)
+      ((pg_temp.business_today() - 1) + time '13:01') at time zone 'Asia/Kolkata',
+      pg_temp.business_today() - 1)
   ) ->> 'status',
   'accepted', 'paying before preparing succeeds');
 
@@ -259,7 +276,7 @@ select is(
     'e1000000-0000-4000-a000-000000000008', 1,
     public.billing_payload_hash(pg_temp.prepare_payload(
       'e2000000-0000-4000-a000-000000000002', true)),
-    ((current_date - 1) + time '13:02') at time zone 'Asia/Kolkata',
+    ((pg_temp.business_today() - 1) + time '13:02') at time zone 'Asia/Kolkata',
     'e5000000-0000-4000-a000-000000000001',
     pg_temp.prepare_payload('e2000000-0000-4000-a000-000000000002', true)
   ) ->> 'status',
@@ -281,7 +298,7 @@ select is(
     public.billing_payload_hash(pg_temp.unwind_payload(
       'e2000000-0000-4000-a000-000000000001',
       'e6000000-0000-4000-a000-000000000001')),
-    ((current_date - 1) + time '12:14') at time zone 'Asia/Kolkata',
+    ((pg_temp.business_today() - 1) + time '12:14') at time zone 'Asia/Kolkata',
     'e5000000-0000-4000-a000-000000000001',
     pg_temp.unwind_payload(
       'e2000000-0000-4000-a000-000000000001',
@@ -309,7 +326,7 @@ select is(
     public.billing_payload_hash(pg_temp.unwind_payload(
       'e2000000-0000-4000-a000-000000000001',
       'e6000000-0000-4000-a000-000000000001')),
-    ((current_date - 1) + time '12:14') at time zone 'Asia/Kolkata',
+    ((pg_temp.business_today() - 1) + time '12:14') at time zone 'Asia/Kolkata',
     'e5000000-0000-4000-a000-000000000001',
     pg_temp.unwind_payload(
       'e2000000-0000-4000-a000-000000000001',
@@ -324,15 +341,15 @@ select is(
     public.billing_payload_hash(pg_temp.pay_order_payload(
       'e6000000-0000-4000-a000-000000000003',
       'e2000000-0000-4000-a000-000000000001',
-      ((current_date - 1) + time '12:20') at time zone 'Asia/Kolkata',
-      current_date - 1)),
-    ((current_date - 1) + time '12:20') at time zone 'Asia/Kolkata',
+      ((pg_temp.business_today() - 1) + time '12:20') at time zone 'Asia/Kolkata',
+      pg_temp.business_today() - 1)),
+    ((pg_temp.business_today() - 1) + time '12:20') at time zone 'Asia/Kolkata',
     'e5000000-0000-4000-a000-000000000001',
     pg_temp.pay_order_payload(
       'e6000000-0000-4000-a000-000000000003',
       'e2000000-0000-4000-a000-000000000001',
-      ((current_date - 1) + time '12:20') at time zone 'Asia/Kolkata',
-      current_date - 1))
+      ((pg_temp.business_today() - 1) + time '12:20') at time zone 'Asia/Kolkata',
+      pg_temp.business_today() - 1))
   ->> 'status',
   'accepted', 'the order pays again');
 
@@ -347,7 +364,7 @@ select is(
     'e1000000-0000-4000-a000-000000000015', 1,
     public.billing_payload_hash(pg_temp.prepare_payload(
       'e2000000-0000-4000-a000-000000000001', true)),
-    ((current_date - 1) + time '12:21') at time zone 'Asia/Kolkata',
+    ((pg_temp.business_today() - 1) + time '12:21') at time zone 'Asia/Kolkata',
     'e5000000-0000-4000-a000-000000000001',
     pg_temp.prepare_payload('e2000000-0000-4000-a000-000000000001', true)
   ) ->> 'status',
@@ -360,7 +377,7 @@ select is(
       'e2000000-0000-4000-a000-000000000001',
       'e6000000-0000-4000-a000-000000000003',
       'Customer left')),
-    ((current_date - 1) + time '12:30') at time zone 'Asia/Kolkata',
+    ((pg_temp.business_today() - 1) + time '12:30') at time zone 'Asia/Kolkata',
     'e5000000-0000-4000-a000-000000000001',
     pg_temp.unwind_payload(
       'e2000000-0000-4000-a000-000000000001',
@@ -373,7 +390,7 @@ select is(
 -- holds a valid shift of its own, so the refusal is the device guard and not
 -- a malformed envelope.
 select pg_temp.unimpersonate();
-update public.counter_shifts set ended_at=((current_date - 1) + time '09:00') at time zone 'Asia/Kolkata',
+update public.counter_shifts set ended_at=((pg_temp.business_today() - 1) + time '09:00') at time zone 'Asia/Kolkata',
   ended_reason='operator'
  where device_id=:'DEVICE_KPA' and ended_at is null;
 insert into public.counter_shifts
@@ -383,9 +400,9 @@ values
    :'DEVICE_KPA',
    :'KPA',
    :'BILLER_KPA',
-   ((current_date - 1) + time '10:00') at time zone 'Asia/Kolkata',
-   current_date - 1,
-   ((current_date + 1) + time '04:00') at time zone 'Asia/Kolkata');
+   ((pg_temp.business_today() - 1) + time '10:00') at time zone 'Asia/Kolkata',
+   pg_temp.business_today() - 1,
+   ((pg_temp.business_today() + 1) + time '04:00') at time zone 'Asia/Kolkata');
 select pg_temp.impersonate(:'DEVICE_KPA');
 select is(
   public.unpay_billing_order(
@@ -394,7 +411,7 @@ select is(
       'e2000000-0000-4000-a000-000000000001',
       'e6000000-0000-4000-a000-000000000003',
       'Wrong tender taken back')),
-    ((current_date - 1) + time '12:25') at time zone 'Asia/Kolkata',
+    ((pg_temp.business_today() - 1) + time '12:25') at time zone 'Asia/Kolkata',
     'e5000000-0000-4000-a000-000000000002',
     pg_temp.unwind_payload(
       'e2000000-0000-4000-a000-000000000001',
@@ -420,7 +437,7 @@ select is(
       'e2000000-0000-4000-a000-000000000001',
       'e6000000-0000-4000-a000-000000000003',
       'Customer left')),
-    ((current_date - 1) + time '12:24') at time zone 'Asia/Kolkata',
+    ((pg_temp.business_today() - 1) + time '12:24') at time zone 'Asia/Kolkata',
     'e5000000-0000-4000-a000-000000000001',
     pg_temp.unwind_payload(
       'e2000000-0000-4000-a000-000000000001',
@@ -444,7 +461,7 @@ select is(
     'e1000000-0000-4000-a000-000000000014', 1,
     public.billing_payload_hash(pg_temp.prepare_payload(
       'e2000000-0000-4000-a000-000000000001', true)),
-    ((current_date - 1) + time '12:26') at time zone 'Asia/Kolkata',
+    ((pg_temp.business_today() - 1) + time '12:26') at time zone 'Asia/Kolkata',
     'e5000000-0000-4000-a000-000000000001',
     pg_temp.prepare_payload('e2000000-0000-4000-a000-000000000001', true))
   ->> 'status',

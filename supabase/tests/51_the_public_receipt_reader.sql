@@ -15,6 +15,22 @@ set local search_path = public, extensions;
 
 select * from no_plan();
 
+-- A bill is filed under the outlet's business date, never `current_date`: that is
+-- the UTC calendar date, which trails the Kolkata trading day from the 04:00 IST
+-- cutover to UTC midnight, and the database refuses a bill whose date and
+-- timestamp disagree.
+--
+-- The cutover is read once, here, while the session is still privileged: a test
+-- impersonating another outlet's tablet cannot see Kalyani's row, and a helper
+-- that looked it up on every call would quietly return null.
+do $do$ begin
+  execute format(
+    'create function pg_temp.business_today() returns date language sql stable as %L',
+    format('select public.app_business_date(now(), %L::time)',
+      (select business_day_cutover from public.outlets
+        where id = '00000000-0000-4000-a000-000000000001')));
+end $do$;
+
 create function pg_temp.impersonate(p_sub uuid)
 returns void language plpgsql as $$
 begin
@@ -59,16 +75,21 @@ begin
     id, outlet_id, bill_number, business_date, biller_profile_id,
     counter_device_id, shift_id, customer_id, customer_name, customer_phone,
     subtotal_paise, discount_paise, tax_paise, rounding_paise, total_paise,
-    payment_method, created_at)
+    payment_method, created_at, ordered_at, paid_at, payment_business_date)
   values (
-    v_bill, pg_temp.kalyani(), 0, current_date,
+    v_bill, pg_temp.kalyani(), 0, pg_temp.business_today(),
     '10000000-0000-4000-a000-00000000000a',
     '10000000-0000-4000-a000-000000000004',
     '40000000-0000-4000-a000-000000000001',
     '80000000-0000-4000-a000-000000000001',
     'Ravi Placeholder', '+919000000042',
     23800, 7085, 0, 85, 16800, null,
-    (current_date + time '13:05') at time zone 'Asia/Kolkata');
+    -- A command-written bill is dated by ordered_at, so every clock on it is
+    -- stamped with the one instant its business date was built from.
+    (pg_temp.business_today() + time '13:05') at time zone 'Asia/Kolkata',
+    (pg_temp.business_today() + time '13:05') at time zone 'Asia/Kolkata',
+    (pg_temp.business_today() + time '13:05') at time zone 'Asia/Kolkata',
+    pg_temp.business_today());
 
   insert into public.bill_items (
     id, bill_id, item_name, unit_price_paise, quantity, line_total_paise,
@@ -115,7 +136,7 @@ select is(
 
 select is(
   (pg_temp.receipt() ->> 'business_date')::date,
-  current_date,
+  pg_temp.business_today(),
   'the receipt carries the business date the bill stored');
 
 select isnt(pg_temp.receipt() ->> 'sold_at', null,

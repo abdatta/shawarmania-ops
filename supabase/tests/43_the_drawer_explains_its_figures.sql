@@ -369,6 +369,16 @@ select pg_temp.set_cutover(:'KPA', time '04:00');
 -- boundary and the coincidence report. That list keeps its cap — it is evidence
 -- for a person to recognise rather than an aggregate — but the count stops being
 -- derived from it.
+--
+-- Counted against what the interval already held, because the seed may put its
+-- own Kanchrapara cash bill inside it: the seed compresses today's timeline into
+-- however much of the trading day has passed, so shortly after the cutover its
+-- "thirty minutes ago" is only a few minutes ago.
+
+select pg_temp.impersonate(:'OWNER');
+select coalesce(sum(bills), 0)::int as cash_bills_before
+  from public.drawer_cash_receipts_by_day(:'KPA', now() - interval '14 minutes', now()) \gset
+select pg_temp.unimpersonate();
 
 do $$
 declare i integer;
@@ -390,7 +400,7 @@ select pg_temp.impersonate(:'OWNER');
 select is(
   (select coalesce(sum(bills), 0)::int
      from public.drawer_cash_receipts_by_day(:'KPA', now() - interval '14 minutes', now())),
-  13,
+  :cash_bills_before + 13,
   'thirteen cash bills in the interval are counted as thirteen, which no window '
   'capped at twelve can report');
 
