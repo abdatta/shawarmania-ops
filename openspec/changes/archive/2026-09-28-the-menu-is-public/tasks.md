@@ -65,5 +65,13 @@
 - [x] 4.3 The brand site's half, change 13 `the-table-menu-reads-ops`, verified
   against this stack with `wrangler dev`: a real menu, Unavailable one cache
   minute after it was set, the outage fallback, a closed outlet not found.
-- [ ] 4.4 After deploy, with the brand site's Worker live: the owner marks an item
+- [x] 4.4 After deploy, with the brand site's Worker live: the owner marks an item
   unavailable and sees it greyed out on the table's QR menu within a minute.
+  *Done 2026-09-29 in production, at the owner's request, from the owner's Edge
+  session on Kalyani Cafe: Mayonnaise marked unavailable, Peri Peri repriced
+  ₹145 → ₹149 with a test description and the veg flag, Burgers moved above
+  Shawarmas — all four showed on both `/menu/kalyani-cafe/` and `/menu/` (the
+  302 to it). Then every edit reverted in the app, and a database snapshot of all
+  9 sections and 55 items matched the one taken before the test exactly, bar
+  `updated_at`. Remove and adding an item were deliberately not exercised,
+  because neither can be undone without leaving rows behind.*
