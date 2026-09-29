@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 
 import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/cn'
 
 interface PageHeaderProps {
   title: string
@@ -59,9 +60,25 @@ export function PageHeader({ title, subtitle, backTo, onBack, action, scope }: P
           {subtitle && <p className="mt-0.5 text-sm text-content-muted">{subtitle}</p>}
         </div>
       </div>
-      <div className="flex min-w-0 max-w-full shrink-0 items-center gap-2">
+      {/*
+        With both an outlet selector and an action (the Menu screen's Share and
+        Add), the row grows to the full width once it wraps under the title, so
+        the actions sit at the right edge as every other page's Add does, and the
+        chips keep the left [owner, 2026-09-29]. With only one of them the row is
+        exactly as it was.
+      */}
+      <div
+        className={cn(
+          'flex min-w-0 max-w-full shrink-0 items-center gap-2',
+          scope && action && 'grow',
+        )}
+      >
         {scope}
-        {action}
+        {scope && action ? (
+          <div className="ml-auto flex shrink-0 items-center gap-2">{action}</div>
+        ) : (
+          action
+        )}
       </div>
     </header>
   )

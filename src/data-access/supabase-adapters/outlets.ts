@@ -60,6 +60,9 @@ function toColumns(patch: OutletPatch): TablesUpdate<'outlets'> {
       arrival_deadline: patch.arrivalDeadline,
     }),
     ...(patch.isActive !== undefined && { is_active: patch.isActive }),
+    // Blank is sent as blank: the database derives it on create and keeps the
+    // current one on update (the-menu-is-public, design D1).
+    ...(patch.menuSlug !== undefined && { menu_slug: patch.menuSlug.trim().toLowerCase() }),
   }
 }
 
@@ -73,6 +76,20 @@ function toColumns(patch: OutletPatch): TablesUpdate<'outlets'> {
  * message is what stands alone if that lookup fails too.
  */
 function asOutletError(error: { message: string; code?: string }): unknown {
+  // Checked before the code's own duplicate: both are 23505, and only the
+  // constraint name says which field the owner has to change.
+  if (error.message.includes('outlets_menu_slug_key')) {
+    return new DataActionError(
+      'menu_slug_taken',
+      'Another outlet already uses that public menu address. Pick a different one.',
+    )
+  }
+  if (error.message.includes('outlets_menu_slug_shape')) {
+    return new DataActionError(
+      'menu_slug_invalid',
+      'A public menu address uses only letters, digits and single hyphens between words.',
+    )
+  }
   if (error.code === '23505' || error.message.includes('outlets_code_key')) {
     return new DataActionError(
       'code_taken',

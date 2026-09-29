@@ -17,6 +17,7 @@ import type { Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
 
 import { OutletPage, OutletsSurface } from './outlets-surface'
+import { publicMenuHost, publicMenuLink } from '@/lib/public-menu-link'
 
 /**
  * Outlets: a list like Team, where each row opens that outlet's own page
@@ -227,7 +228,14 @@ describe('an outlet’s page', () => {
     renderPage('kalyani')
 
     const page = await screen.findByTestId('outlet-kalyani')
-    for (const caption of ['Location', 'Phone', 'Address', 'Day ends', 'Staff check in by']) {
+    for (const caption of [
+      'Location',
+      'Phone',
+      'Address',
+      'Public menu',
+      'Day ends',
+      'Staff check in by',
+    ]) {
       expect(within(page).getByText(caption)).toBeInTheDocument()
     }
     expect(within(page).getByText('04:00')).toBeInTheDocument()
@@ -498,6 +506,106 @@ describe('creating and editing an outlet', () => {
     await waitFor(() =>
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
         'Shawarmania Kalyani Central',
+      ),
+    )
+  })
+
+  it('shows the public menu address a table QR code carries, as the address itself', async () => {
+    renderPage('kalyani')
+
+    const link = await screen.findByTestId('public-menu-kalyani')
+    expect(link).toHaveTextContent(`${publicMenuHost()}shawarmania-kalyani/`)
+    expect(link).toHaveAttribute('href', publicMenuLink('shawarmania-kalyani'))
+    expect(link).toHaveAttribute('target', '_blank')
+  })
+
+  it('copies the whole public menu address from beside it, and says so', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window.navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    renderPage('kalyani')
+
+    await user.click(await screen.findByRole('button', { name: 'Copy public menu address' }))
+
+    expect(writeText).toHaveBeenCalledWith(publicMenuLink('shawarmania-kalyani'))
+    expect(screen.getByTestId('copy-public-menu-kalyani')).toHaveTextContent('Copied')
+    Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: undefined })
+  })
+
+  it('selects the address instead of claiming a copy where the device cannot copy', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: undefined })
+    renderPage('kalyani')
+
+    await user.click(await screen.findByRole('button', { name: 'Copy public menu address' }))
+
+    expect(window.getSelection()?.toString()).toContain('shawarmania-kalyani/')
+    expect(screen.getByTestId('copy-public-menu-kalyani')).not.toHaveTextContent('Copied')
+  })
+
+  it('gives a new outlet the public address made from its name, without being asked', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets()
+
+    await user.click(await screen.findByTestId('add-outlet'))
+    await user.type(screen.getByLabelText('Name'), 'Kalyani Cafe')
+    // The placeholder is the address it will get, so the owner sees it first.
+    expect(screen.getByLabelText('Public menu address')).toHaveAttribute(
+      'placeholder',
+      'kalyani-cafe',
+    )
+    await user.type(screen.getByLabelText('Short code'), 'skcafe')
+    await user.type(screen.getByLabelText('Location label'), 'Kalyani')
+    await user.click(screen.getByRole('button', { name: 'Create outlet' }))
+
+    expect(await screen.findByTestId('public-menu-skcafe')).toHaveTextContent(
+      `${publicMenuHost()}kalyani-cafe/`,
+    )
+  })
+
+  it('refuses a public address that is not URL-safe, before sending it', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderPage('kalyani')
+
+    await user.click(await screen.findByTestId('edit-kalyani'))
+    const slug = screen.getByLabelText('Public menu address')
+    expect(slug).toHaveValue('shawarmania-kalyani')
+    await user.clear(slug)
+    await user.type(slug, 'kalyani cafe!')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect((await screen.findAllByText(/single hyphens between words/)).length).toBeGreaterThan(0)
+  })
+
+  it('refuses a public address another outlet already has', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderPage('kalyani')
+
+    await user.click(await screen.findByTestId('edit-kalyani'))
+    const slug = screen.getByLabelText('Public menu address')
+    await user.clear(slug)
+    await user.type(slug, 'shawarmania-kanchrapara')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(
+      (await screen.findAllByText(/already uses that public menu address/)).length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('keeps the public address when the field is cleared, so printed codes keep working', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderPage('kalyani')
+
+    await user.click(await screen.findByTestId('edit-kalyani'))
+    await user.clear(screen.getByLabelText('Public menu address'))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('public-menu-kalyani')).toHaveTextContent(
+        `${publicMenuHost()}shawarmania-kalyani/`,
       ),
     )
   })

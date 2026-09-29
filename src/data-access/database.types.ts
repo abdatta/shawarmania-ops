@@ -3492,6 +3492,7 @@ export type Database = {
           location_captured_at: string | null
           location_label: string
           longitude: number | null
+          menu_slug: string
           name: string
           packaging_free_for_gold: boolean
           packaging_mode: Database["public"]["Enums"]["packaging_mode"]
@@ -3522,6 +3523,7 @@ export type Database = {
           location_captured_at?: string | null
           location_label: string
           longitude?: number | null
+          menu_slug?: string
           name: string
           packaging_free_for_gold?: boolean
           packaging_mode?: Database["public"]["Enums"]["packaging_mode"]
@@ -3552,6 +3554,7 @@ export type Database = {
           location_captured_at?: string | null
           location_label?: string
           longitude?: number | null
+          menu_slug?: string
           name?: string
           packaging_free_for_gold?: boolean
           packaging_mode?: Database["public"]["Enums"]["packaging_mode"]
@@ -4669,6 +4672,10 @@ export type Database = {
         Args: { p_channel: string }
         Returns: undefined
       }
+      free_menu_slug: {
+        Args: { p_code: string; p_name: string; p_outlet: string }
+        Returns: string
+      }
       grant_assignment_with_invite: {
         Args: {
           p_account_email: string
@@ -4780,6 +4787,7 @@ export type Database = {
         Args: { p_discount_id: string }
         Returns: undefined
       }
+      menu_slug_from: { Args: { p_text: string }; Returns: string }
       merge_expense_category: {
         Args: { p_from: string; p_into: string }
         Returns: {
@@ -4878,6 +4886,7 @@ export type Database = {
           profile_id: string
         }[]
       }
+      public_menu: { Args: { p_slug: string }; Returns: Json }
       read_aggregator_login_identifier: {
         Args: { p_channel: string }
         Returns: string
@@ -5143,6 +5152,7 @@ export type Database = {
           location_captured_at: string | null
           location_label: string
           longitude: number | null
+          menu_slug: string
           name: string
           packaging_free_for_gold: boolean
           packaging_mode: Database["public"]["Enums"]["packaging_mode"]

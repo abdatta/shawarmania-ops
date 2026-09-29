@@ -14,6 +14,7 @@ import {
 } from '../adapters'
 import { assignmentFixtures } from './fixtures/accounts'
 import { outletFixtures } from './fixtures/outlets'
+import { menuSlugFrom, menuSlugProblem, normaliseMenuSlug } from '@/lib/public-menu-link'
 
 /**
  * The mock outlets adapter: fixtures in, promises out, no I/O anywhere.
@@ -102,6 +103,34 @@ export function createMockOutletsAdapter(
     return outlet
   }
 
+  /**
+   * The mock's copy of `free_menu_slug` and its trigger: the name's slug, else
+   * the code's, with `-2`, `-3` … until no other outlet holds it.
+   */
+  const freeMenuSlug = (name: string, code: string, exceptId?: string) => {
+    const base = (menuSlugFrom(name) || menuSlugFrom(code) || 'outlet').slice(0, 60)
+    let candidate = base
+    for (let n = 2; outlets.some((o) => o.menu_slug === candidate && o.id !== exceptId); n++) {
+      candidate = `${base.slice(0, 60 - String(n).length - 1)}-${n}`
+    }
+    return candidate
+  }
+
+  const refuseBadMenuSlug = (slug: string, exceptId?: string) => {
+    if (menuSlugProblem(slug)) {
+      throw new DataActionError(
+        'menu_slug_invalid',
+        'A public menu address uses only letters, digits and single hyphens between words.',
+      )
+    }
+    if (outlets.some((outlet) => outlet.menu_slug === slug && outlet.id !== exceptId)) {
+      throw new DataActionError(
+        'menu_slug_taken',
+        'Another outlet already uses that public menu address. Pick a different one.',
+      )
+    }
+  }
+
   const refuseDuplicateCode = (code: string, exceptId?: string) => {
     if (outlets.some((outlet) => outlet.code === code && outlet.id !== exceptId)) {
       throw new DataActionError(
@@ -129,10 +158,14 @@ export function createMockOutletsAdapter(
     async createOutlet(outlet: NewOutlet) {
       const code = outlet.code.trim()
       refuseDuplicateCode(code)
+      const typedSlug = normaliseMenuSlug(outlet.menuSlug ?? '')
+      if (typedSlug) refuseBadMenuSlug(typedSlug)
+      const menuSlug = typedSlug || freeMenuSlug(outlet.name.trim(), code)
 
       const created = {
         id: `d0000000-0000-4000-b000-${String(nextId++).padStart(12, '0')}`,
         code,
+        menu_slug: menuSlug,
         name: outlet.name.trim(),
         location_label: outlet.locationLabel.trim(),
         address_line1: trimmed(outlet.addressLine1),
@@ -178,6 +211,9 @@ export function createMockOutletsAdapter(
     async updateOutlet(id, patch: OutletPatch) {
       const outlet = find(id)
       if (patch.code !== undefined) refuseDuplicateCode(patch.code.trim(), id)
+      // Blank keeps the address the outlet has, as the database's trigger does.
+      const menuSlug = normaliseMenuSlug(patch.menuSlug ?? '')
+      if (menuSlug) refuseBadMenuSlug(menuSlug, id)
 
       Object.assign(outlet, {
         ...(patch.code !== undefined && { code: patch.code.trim() }),
@@ -196,6 +232,7 @@ export function createMockOutletsAdapter(
           arrival_deadline: patch.arrivalDeadline,
         }),
         ...(patch.isActive !== undefined && { is_active: patch.isActive }),
+        ...(menuSlug && { menu_slug: menuSlug }),
       })
       return structuredClone(outlet)
     },

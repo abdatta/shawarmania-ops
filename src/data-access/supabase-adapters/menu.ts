@@ -254,7 +254,7 @@ export function createSupabaseMenuAdapter(
           client
             .from('outlets')
             .select(
-              'discount_presets, dine_in_offered, takeaway_offered, table_numbers, packaging_mode, packaging_price_paise, packaging_free_for_gold',
+              'discount_presets, dine_in_offered, takeaway_offered, table_numbers, packaging_mode, packaging_price_paise, packaging_free_for_gold, menu_slug',
             )
             .eq('id', outletId)
             .single(),
@@ -268,6 +268,7 @@ export function createSupabaseMenuAdapter(
           // it, so a tablet cold-started offline serves the way its outlet does
           // (each-outlet-chooses-how-it-serves, D6).
           service: serviceSettingsFromRow(outlet.data),
+          publicMenuSlug: outlet.data.menu_slug,
         }
         resumeCoordinator?.noteOutletMenu(outletId, menu)
         return menu

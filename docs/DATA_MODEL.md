@@ -21,7 +21,7 @@ Applied everywhere, without exception:
 ## Tenancy and identity
 
 **`outlets`** — the isolation unit.
-`id`, `code` (short slug, e.g. `kalyani`), `name`, `location_label`, `address_line1`, `address_line2`, `city`, `district`, `pincode`, `phone`, `latitude`, `longitude`, `geofence_radius_m` (default 150), `business_day_cutover` (`time`, default `04:00`), `arrival_deadline` (`time`, default `13:00`), `is_active`, `created_at`.
+`id`, `code` (short slug, e.g. `kalyani`), `menu_slug` (public menu address, e.g. `kalyani-cafe` — see below), `name`, `location_label`, `address_line1`, `address_line2`, `city`, `district`, `pincode`, `phone`, `latitude`, `longitude`, `geofence_radius_m` (default 150), `business_day_cutover` (`time`, default `04:00`), `arrival_deadline` (`time`, default `13:00`), `is_active`, `created_at`.
 
 Coordinates and radius exist for attendance verification. The cutover time is what makes cross-midnight trade reconcile correctly.
 
@@ -223,6 +223,10 @@ The approved counter session, and what a bill or a counter expense is attributed
 Menu is per-outlet from day one. Two outlets may share item names and differ on price, and a franchise will want its own availability. A shared master catalogue is a future convenience, not a foundation — see [Limitations](LIMITATIONS.md).
 
 `is_available` is the biller-facing toggle (sold out today). `is_active` on the category and soft-deletion on items handle permanent removal.
+
+**The public menu** *(the-menu-is-public)*. `outlets.menu_slug` is where a customer reads an outlet's menu: `shawarmania.in/menu/<menu_slug>/`, the address a table's QR code carries. It is derived from the name when the outlet is created (`menu_slug_from`: lowercase letters and digits, words joined by single hyphens), given `-2`, `-3` … by `free_menu_slug` when that is taken, and then **kept** — a rename does not move it, and a blank written on an update keeps the old value, because printed codes point at it. A unique key and a shape check refuse a collision or a non-URL-safe value from any request. It is deliberately not `code`, which is internal shorthand the owner edits freely and staff codes derive from.
+
+`public_menu(slug)` is the only way the menu leaves the database for a customer. It is `security definer`, executable by `service_role` alone — the brand site's Worker, exactly as `bill_public_receipt` — and answers the outlet's name and address and, per active section in counter order, per active item in order, `name`, `description`, `price_paise`, `is_veg` and `is_available`. A removed item is absent and an unavailable one is present and flagged. A closed outlet, an empty menu and an unknown address all answer null, alike.
 
 ## Billing
 

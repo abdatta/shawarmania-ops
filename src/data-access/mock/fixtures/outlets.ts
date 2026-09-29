@@ -28,6 +28,8 @@ export const outletFixtures: Tables<'outlets'>[] = [
   {
     id: OUTLET_KALYANI_ID,
     code: 'kalyani',
+    // Derived from the name, as the database derives it (the-menu-is-public, D1).
+    menu_slug: 'shawarmania-kalyani',
     name: 'Shawarmania Kalyani',
     location_label: 'Kalyani — Central Park',
     address_line1: 'Ward 10, B-9 Diagonal Road, Near Central Park Ground',
@@ -64,6 +66,8 @@ export const outletFixtures: Tables<'outlets'>[] = [
   {
     id: OUTLET_KANCHRAPARA_ID,
     code: 'kanchrapara',
+    // Derived from the name, as the database derives it (the-menu-is-public, D1).
+    menu_slug: 'shawarmania-kanchrapara',
     name: 'Shawarmania Kanchrapara',
     location_label: 'Kanchrapara',
     address_line1: '281, K G Path (N), Near Joramandir Bus Stand',
@@ -113,6 +117,8 @@ export const outletFixtures: Tables<'outlets'>[] = [
   {
     id: OUTLET_MISTAKE_ID,
     code: 'demo-mistake',
+    // Derived from the name, as the database derives it (the-menu-is-public, D1).
+    menu_slug: 'test-outlet-created-by-mistake',
     // Named so it sorts after both real shops. The owner's roster picker
     // defaults to the first outlet of a name-sorted list that includes closed
     // ones, so a demo outlet sorting first would quietly

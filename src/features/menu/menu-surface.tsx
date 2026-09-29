@@ -1,4 +1,4 @@
-import { UtensilsCrossed } from 'lucide-react'
+import { Check, Share2, UtensilsCrossed } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
@@ -7,6 +7,7 @@ import { FormSheet } from '@/components/layout/form-sheet'
 import { PageHeader } from '@/components/layout/page-header'
 import { RowActionsMenu } from '@/components/layout/row-actions-menu'
 import { AddButton } from '@/components/ui/add-button'
+import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { CategoryInput } from '@/components/ui/category-input'
@@ -25,6 +26,8 @@ import {
 } from '@/data-access/adapters'
 import { matchCategory, paiseToRupees, rupeesToPaise, type CategoryMatch } from '@/domain'
 import { useOutletScope } from '@/features/outlet-scope'
+import { publicMenuLink } from '@/lib/public-menu-link'
+import { useShareLink } from '@/lib/use-share-link'
 
 import { MenuDiscountsCard } from './menu-discounts'
 
@@ -61,6 +64,10 @@ export function MenuSurface() {
   const [presets, setPresets] = useState<DiscountPreset[]>([])
   const [revealedItem, setRevealedItem] = useState<string | null>(null)
   const [revealedCategory, setRevealedCategory] = useState<string | null>(null)
+  const [publicMenuSlug, setPublicMenuSlug] = useState<string | null>(null)
+  const publicMenuUrl = publicMenuLink(publicMenuSlug)
+  // The link and nothing else [owner, 2026-09-29].
+  const menuShare = useShareLink(publicMenuUrl)
 
   const load = useCallback(async () => {
     if (!outletId) return []
@@ -70,6 +77,7 @@ export function MenuSurface() {
     setMenu(next.categories)
     setDiscounts(next.discounts)
     setPresets(next.presets)
+    setPublicMenuSlug(next.publicMenuSlug ?? null)
     return next.categories
   }, [adapter, outletId])
 
@@ -79,11 +87,12 @@ export function MenuSurface() {
       try {
         const next = outletId
           ? await adapter.readOutletMenu(outletId)
-          : { categories: [], discounts: [], presets: [] }
+          : { categories: [], discounts: [], presets: [], publicMenuSlug: null }
         if (active) {
           setMenu(next.categories)
           setDiscounts(next.discounts)
           setPresets(next.presets)
+          setPublicMenuSlug(next.publicMenuSlug ?? null)
         }
       } catch {
         if (active) setError('Could not load the menu. Try again in a moment.')
@@ -234,14 +243,53 @@ export function MenuSurface() {
 
   const addButton = <AddButton label="Add" data-testid="add-menu-item" onClick={openAdd} />
 
+  /*
+    The public menu exists to be handed to customers, so it is shared rather
+    than opened, exactly as a bill's receipt link is: share sheet, else a copy
+    with a tick, else the address as text (the-menu-is-public, design D5). A
+    labelled button beside Add, in the quiet secondary colours so Add stays the
+    one highlighted action [owner, 2026-09-29].
+  */
+  const shareButton = publicMenuUrl && (
+    <Button
+      variant="secondary"
+      size="phone"
+      className="whitespace-nowrap"
+      onClick={() => void menuShare.share()}
+      aria-label={menuShare.copied ? 'Public menu link copied' : 'Share public menu'}
+      data-testid="share-public-menu"
+    >
+      {menuShare.copied ? <Check aria-hidden size={18} /> : <Share2 aria-hidden size={18} />}
+      {menuShare.copied ? 'Copied' : 'Share'}
+    </Button>
+  )
+
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader
         scope={outletSelector}
         title="Menu"
         subtitle="What this outlet sells. Add the item; its category is created with it when needed."
-        action={addButton}
+        action={
+          <>
+            {shareButton}
+            {addButton}
+          </>
+        }
       />
+
+      {/* Announced when the copy lands; the icon turning to a tick is the sighted half. */}
+      <p aria-live="polite" className="sr-only">
+        {menuShare.copied ? 'Public menu link copied.' : ''}
+      </p>
+      {menuShare.revealed && publicMenuUrl && (
+        <p
+          data-testid="public-menu-url"
+          className="mb-3 rounded-lg border border-border bg-surface p-3 font-mono text-xs break-all text-content"
+        >
+          {publicMenuUrl}
+        </p>
+      )}
 
       {error && (
         <p role="alert" data-testid="menu-error" className="mb-3 text-sm font-semibold text-danger">

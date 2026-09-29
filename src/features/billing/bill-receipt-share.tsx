@@ -1,24 +1,16 @@
 import { Share2 } from 'lucide-react'
-import { useState } from 'react'
-
 import { Button } from '@/components/ui/button'
 import { isDemoReceiptLink } from '@/lib/receipt-link'
+import { useShareLink } from '@/lib/use-share-link'
 
 /**
  * Sharing a bill's receipt link, degrading to whatever the device offers.
  *
- * The three cases, in order, are the same three
- * [`account-handover.tsx`](../accounts/account-handover.tsx) already paid for
- * the lesson on, and this is the second reader of that lesson rather than a
- * second implementation of a different one:
- *
- *   1. the device's own share sheet, which on the owner's phone is the system
- *      sheet with WhatsApp in it — the intended path, and the reason the link
- *      exists at all;
- *   2. the clipboard, with the button confirming `Copied`;
- *   3. neither — show the link as selectable text and **say nothing about
- *      copying**, because clipboard access is unavailable on an ordinary HTTP
- *      tablet and claiming success there is a lie the reader acts on.
+ * The three cases — share sheet, clipboard, selectable text with no claim of a
+ * copy — are the ones [`account-handover.tsx`](../accounts/account-handover.tsx)
+ * paid for the lesson on. They live in {@link useShareLink} since the Menu
+ * screen's public menu became their third reader (the-menu-is-public); this
+ * control is what a bill makes of them.
  *
  * It creates nothing. The database mints one link per bill on insert, so this
  * is a read of a URL that already exists and grants no visibility a role did
@@ -44,43 +36,11 @@ export function BillReceiptShare({
   receiptUrl: string
   billNumber: number
 }) {
-  const [copied, setCopied] = useState(false)
-  const [revealed, setRevealed] = useState(false)
+  const { share, copied, revealed } = useShareLink(receiptUrl, {
+    title: `Bill ${billNumber}`,
+    text: 'Your Shawarmania receipt',
+  })
   const demonstration = isDemoReceiptLink(receiptUrl)
-
-  async function share() {
-    const nav = window.navigator
-
-    // Case one. A cancelled share is not a failure and must not fall through to
-    // the clipboard, or dismissing the sheet would silently copy instead.
-    if (typeof nav.share === 'function') {
-      try {
-        await nav.share({
-          title: `Bill ${billNumber}`,
-          text: 'Your Shawarmania receipt',
-          url: receiptUrl,
-        })
-        return
-      } catch {
-        return
-      }
-    }
-
-    // Case two.
-    if (nav.clipboard) {
-      try {
-        await nav.clipboard.writeText(receiptUrl)
-        setCopied(true)
-        return
-      } catch {
-        // Falls through to case three deliberately.
-      }
-    }
-
-    // Case three. The link becomes selectable text and no success is claimed.
-    setCopied(false)
-    setRevealed(true)
-  }
 
   return (
     <>

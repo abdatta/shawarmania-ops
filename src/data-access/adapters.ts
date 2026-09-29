@@ -78,6 +78,14 @@ export interface NewOutlet {
    * applied to it.
    */
   arrivalDeadline?: string
+  /**
+   * The outlet's public menu address, `shawarmania.in/menu/<menuSlug>/`.
+   * Optional and blank-means-default: on create the database derives it from the
+   * name, and on edit a blank keeps the one the outlet has — so clearing the
+   * field can never un-publish a menu whose QR codes are already printed
+   * (the-menu-is-public, design D1).
+   */
+  menuSlug?: string
 }
 
 export type OutletPatch = Partial<
@@ -1093,6 +1101,13 @@ export interface OutletMenu {
    * the database carries them (design D10).
    */
   service?: OutletServiceSettings
+  /**
+   * The outlet's public menu address, carried on the read the Menu screen
+   * already makes so its "View public menu" link costs no second request
+   * (the-menu-is-public, design D5). Absent on a menu a tablet persisted
+   * before the address existed, which simply shows no link.
+   */
+  publicMenuSlug?: string | null
 }
 
 export interface NewMenuCategory {

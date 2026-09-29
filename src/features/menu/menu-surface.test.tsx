@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { DataAdapters } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
@@ -13,6 +13,7 @@ import type { Role, Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
 
 import { MenuSurface } from './menu-surface'
+import { publicMenuLink } from '@/lib/public-menu-link'
 
 /**
  * One screen, two authorities. The manager's half is about the two frequent
@@ -83,6 +84,66 @@ describe('MenuSurface — the manager', () => {
 
     await waitFor(() => {
       expect(screen.queryByTestId(`unavailable-${MENU_ITEM_STUFFED_ID}`)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('sharing the public menu', () => {
+    // As the receipt's share: jsdom has neither `navigator.share` nor a working
+    // clipboard, so each device is set up explicitly.
+    function givenDevice(device: { share?: unknown; clipboard?: unknown }) {
+      for (const key of ['share', 'clipboard'] as const) {
+        Object.defineProperty(window.navigator, key, { configurable: true, value: device[key] })
+      }
+    }
+    afterEach(() => givenDevice({}))
+
+    it('is a labelled Share button beside Add, not an icon', async () => {
+      renderMenu()
+      const button = await screen.findByRole('button', { name: 'Share public menu' })
+      expect(button).toHaveTextContent('Share')
+      // Left of Add, in the header's action row.
+      const add = screen.getByTestId('add-menu-item')
+      expect(button.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
+    it('hands the public menu to the device share sheet', async () => {
+      const user = userEvent.setup()
+      const share = vi.fn().mockResolvedValue(undefined)
+      givenDevice({ share })
+      renderMenu()
+
+      await user.click(await screen.findByRole('button', { name: 'Share public menu' }))
+
+      // The link and nothing else: no title, no sales line [owner, 2026-09-29].
+      expect(share).toHaveBeenCalledWith({ url: publicMenuLink('shawarmania-kalyani') })
+      expect(screen.queryByTestId('public-menu-url')).not.toBeInTheDocument()
+    })
+
+    it('copies the link where there is no share sheet, and says so', async () => {
+      const user = userEvent.setup()
+      const writeText = vi.fn().mockResolvedValue(undefined)
+      givenDevice({ clipboard: { writeText } })
+      renderMenu()
+
+      await user.click(await screen.findByRole('button', { name: 'Share public menu' }))
+
+      expect(writeText).toHaveBeenCalledWith(publicMenuLink('shawarmania-kalyani'))
+      expect(screen.getByRole('button', { name: 'Public menu link copied' })).toBeInTheDocument()
+    })
+
+    it('shows the link as text where it can neither share nor copy, and claims nothing', async () => {
+      const user = userEvent.setup()
+      givenDevice({})
+      renderMenu()
+
+      await user.click(await screen.findByRole('button', { name: 'Share public menu' }))
+
+      expect(screen.getByTestId('public-menu-url')).toHaveTextContent(
+        publicMenuLink('shawarmania-kalyani')!,
+      )
+      expect(
+        screen.queryByRole('button', { name: 'Public menu link copied' }),
+      ).not.toBeInTheDocument()
     })
   })
 

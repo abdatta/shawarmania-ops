@@ -1,6 +1,8 @@
 import {
+  Check,
   ChevronRight,
   Clock,
+  Copy,
   Crosshair,
   LoaderCircle,
   LocateFixed,
@@ -10,6 +12,7 @@ import {
   Pencil,
   Phone,
   Store,
+  QrCode,
   Tag,
   TriangleAlert,
 } from 'lucide-react'
@@ -63,6 +66,12 @@ import {
 } from '@/features/outlets/outlet-service-sections'
 import { getPartState, isRenderable } from '@/gates/registry'
 import { cn } from '@/lib/cn'
+import {
+  menuSlugFrom,
+  menuSlugProblem,
+  publicMenuHost,
+  publicMenuLink,
+} from '@/lib/public-menu-link'
 import { useSession } from '@/session/context'
 import { holdsRole, sessionOutletsFor } from '@/session/session'
 import {
@@ -90,6 +99,7 @@ import {
 
 interface Draft {
   code: string
+  menuSlug: string
   name: string
   locationLabel: string
   addressLine1: string
@@ -104,6 +114,7 @@ interface Draft {
 
 const EMPTY_DRAFT: Draft = {
   code: '',
+  menuSlug: '',
   name: '',
   locationLabel: '',
   addressLine1: '',
@@ -171,6 +182,7 @@ function referenceWords(reference: OutletReference): string {
 function toDraft(outlet: Tables<'outlets'>): Draft {
   return {
     code: outlet.code,
+    menuSlug: outlet.menu_slug,
     name: outlet.name,
     locationLabel: outlet.location_label,
     addressLine1: outlet.address_line1 ?? '',
@@ -187,6 +199,7 @@ function toDraft(outlet: Tables<'outlets'>): Draft {
 function toPayload(draft: Draft): NewOutlet {
   return {
     code: draft.code,
+    menuSlug: draft.menuSlug,
     name: draft.name,
     locationLabel: draft.locationLabel,
     addressLine1: draft.addressLine1,
@@ -309,7 +322,9 @@ function useOutletActions({
     if (draft.locationLabel.trim() === '') {
       return 'An outlet needs a location label — it is what shows beside the name on every card.'
     }
-    return null
+    // Not a blank check — blank is allowed and means derive or keep — but it
+    // belongs here so it is refused before `run()` for the same reason.
+    return menuSlugProblem(draft.menuSlug)
   }
 
   async function onSubmit(event: FormEvent) {
@@ -753,10 +768,11 @@ export function OutletPage() {
       )}
 
       {shown === undefined ? (
-        // Details, then the Tablets label and two tablets: 316 and 297 px on a
-        // phone (design D5).
+        // Details, then the Tablets label and two tablets: 387 and 297 px on a
+        // phone (design D5). Details grew from 316 by the Public menu tile, its
+        // gap and its Copy button (the-menu-is-public).
         <LoadingRegion label="this outlet" className="space-y-4" data-testid="outlets-loading">
-          <Shimmer className="h-[19.75rem]" />
+          <Shimmer className="h-[24.1875rem]" />
           {showService && <OutletServiceShimmer />}
           <Shimmer className="h-[18.5rem]" />
         </LoadingRegion>
@@ -912,6 +928,29 @@ function OutletBody({
             <Tile icon={MapPin} caption="Address" wide>
               {address || <span className="font-normal text-content-muted">None</span>}
             </Tile>
+            {/*
+              The address a table's QR code carries, shown as the address itself
+              rather than behind a "view" link: the owner asked to see which
+              public address belongs to which outlet at a glance
+              (the-menu-is-public, design D1).
+            */}
+            <Tile
+              icon={QrCode}
+              caption="Public menu"
+              wide
+              trailing={<CopyAddress url={publicMenuLink(outlet.menu_slug)} handle={handle} />}
+            >
+              <a
+                href={publicMenuLink(outlet.menu_slug) ?? undefined}
+                target="_blank"
+                rel="noreferrer"
+                data-testid={`public-menu-${handle}`}
+                className="rounded-sm text-accent-text underline underline-offset-2 focus-visible:focus-ring"
+              >
+                {publicMenuHost()}
+                {outlet.menu_slug}/
+              </a>
+            </Tile>
             <Tile icon={Moon} caption="Day ends">
               {toTimeInput(outlet.business_day_cutover)}
             </Tile>
@@ -1006,17 +1045,68 @@ function OutletBody({
   )
 }
 
+/**
+ * Copies an outlet's public menu address, the one its table QR codes carry.
+ *
+ * The whole URL, not the shortened text the tile shows. Where the device cannot
+ * copy — clipboard access is unavailable on an ordinary HTTP tablet — the
+ * address on the tile is **selected** instead and nothing claims a copy, the
+ * same honesty the receipt share keeps (`useShareLink`).
+ */
+function CopyAddress({ url, handle }: { url: string | null; handle: string }) {
+  const [copied, setCopied] = useState(false)
+  if (!url) return null
+
+  async function copy() {
+    const clipboard = window.navigator.clipboard as Clipboard | undefined
+    if (clipboard) {
+      try {
+        await clipboard.writeText(url!)
+        setCopied(true)
+        window.setTimeout(() => setCopied(false), 2000)
+        return
+      } catch {
+        // Falls through to selecting it.
+      }
+    }
+    const shown = document.querySelector(`[data-testid="public-menu-${handle}"]`)
+    const selection = window.getSelection()
+    if (shown && selection) selection.selectAllChildren(shown)
+  }
+
+  return (
+    <>
+      <Button
+        variant="secondary"
+        size="phone"
+        onClick={() => void copy()}
+        aria-label={copied ? 'Public menu address copied' : 'Copy public menu address'}
+        data-testid={`copy-public-menu-${handle}`}
+      >
+        {copied ? <Check aria-hidden size={16} /> : <Copy aria-hidden size={16} />}
+        {copied ? 'Copied' : 'Copy'}
+      </Button>
+      <span aria-live="polite" className="sr-only">
+        {copied ? 'Public menu address copied.' : ''}
+      </span>
+    </>
+  )
+}
+
 /** A caption over a value: every fact on the Details card. */
 function Tile({
   icon: Icon,
   caption,
   wide,
+  trailing,
   children,
 }: {
   icon: typeof MapPin
   caption: string
   /** Takes the whole row, for a value that wraps. */
   wide?: boolean
+  /** A control at the tile's right edge, as the fence tile carries Recapture. */
+  trailing?: ReactNode
   children: ReactNode
 }) {
   return (
@@ -1027,10 +1117,11 @@ function Tile({
       )}
     >
       <Icon aria-hidden size={18} className="shrink-0 text-accent-text" />
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <dt className="text-xs text-content-muted">{caption}</dt>
         <dd className="break-words text-sm font-semibold text-content">{children}</dd>
       </div>
+      {trailing}
     </div>
   )
 }
@@ -1206,6 +1297,32 @@ function OutletFormSheet({
           <p className="text-xs text-content-muted">
             How you refer to this shop in a sentence. It has to be different from every other
             outlet&rsquo;s.
+          </p>
+        </Field>
+
+        {/*
+          Optional, and blank means something different on each path: on create
+          the database derives it from the name (shown as the placeholder, so the
+          owner sees what they will get), and on edit a blank keeps the address
+          the outlet already has — clearing a field must never un-publish a menu
+          whose QR codes are on the tables (the-menu-is-public, design D1).
+        */}
+        <Field label="Public menu address" id="outlet-menu-slug">
+          <div className="flex items-center gap-1">
+            <span className="shrink-0 text-sm text-content-muted">{publicMenuHost()}</span>
+            <Input
+              id="outlet-menu-slug"
+              autoCapitalize="none"
+              spellCheck={false}
+              value={draft.menuSlug}
+              placeholder={menuSlugFrom(draft.name) || 'e.g. kalyani-cafe'}
+              onChange={(event) => set({ menuSlug: event.target.value })}
+            />
+          </div>
+          <p className="text-xs text-content-muted">
+            {editing
+              ? 'Where this outlet’s menu is published. Printed QR codes point here, so changing it stops them working.'
+              : 'Where this outlet’s menu will be published. Leave it blank to use the one made from the name.'}
           </p>
         </Field>
 

@@ -364,6 +364,15 @@ queue drains, and authoritative reads replace remembered ones only after drain.
 Never clear site data to repair an unsupported record; preserve it and every
 envelope, reconnect, and let a compatible/current build write a fresh record.
 
+## The public menu *(the-menu-is-public)*
+
+The same Worker serves `shawarmania.in/menu/<address>/` — each trading outlet's
+menu, read live through `public_menu()` and cached at Cloudflare for a minute —
+and redirects `/menu/` to Kalyani Cafe's. There is no setup: an outlet's address
+is made from its name when it is created, and its menu is public as soon as it
+has an item. To take one off, mark the outlet closed or empty its menu; the page
+then says the menu was not found, exactly as for an address nobody holds.
+
 ## The customer's receipt link *(#54)*
 
 The receipt page is **not deployed from this repo.** It is a Cloudflare Worker
@@ -413,7 +422,7 @@ different URL, no migration.
 
 The Worker holds the **ops project's service-role key** as a Cloudflare Worker
 secret. It is the one credential it needs and the only privileged thing it can
-do with it is call `bill_public_receipt()`.
+do with it is call `bill_public_receipt()` and `public_menu()`.
 
 - Never in either repo, never in a committed config file, never in a bundle. The
   standing rule about the service-role key is unchanged; the Worker is a
@@ -515,6 +524,10 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
    check prices, category order and availability, then remove a test item and
    confirm historical captured lines do not change. Do this before a tablet is
    set up; a counter with an incomplete menu is not ready for shadow billing.
+   The outlet's page shows its **Public menu** address; that is the menu
+   customers read, live, from the moment it has an item. Print the table QR
+   codes from that address, and do not change it afterwards — printed codes stop
+   working if it changes.
 6. **Set the counter tablet up**: on your own phone, open **Outlets**, tap the
    outlet, and choose **Set up** on its Tablets. Name the tablet what is written
    on the back of it, and generate a **setup code**. Walk to the counter, open the app on the tablet at

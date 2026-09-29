@@ -268,12 +268,21 @@ Browser geolocation is spoofable — see [Limitations](LIMITATIONS.md). This mat
   type/version/hash, clocks, result references and watermarks—never a phone,
   customer name or line payload.
 
-## The one unauthenticated endpoint
+## The unauthenticated endpoints
 
-Everything else in this system requires a session. The customer's bill receipt
-does not — `shawarmania.in/bill/<token>` is opened by whoever holds the link, and
-it is the first and only anonymous surface here. The whole design is about it not
-becoming a door.
+Everything else in this system requires a session. Two things do not, and both
+are served by the brand site's Worker, never by a browser holding a key.
+
+**The public menu** (`shawarmania.in/menu/<address>/`, the-menu-is-public) is
+public by intent: it is the menu on the table. `public_menu()` is service-role
+only and answers section names and each item's name, description, price, veg
+flag and availability — nothing about a person, no ids, no discounts. A closed
+outlet, an empty menu and an invented address answer alike, so the page does not
+reveal which outlets exist but are not trading.
+
+**The customer's bill receipt** is the one that needs a design:
+`shawarmania.in/bill/<token>` is opened by whoever holds the link. Everything below
+is about it not becoming a door.
 
 ### The control that makes every other risk small: it names no customer
 
