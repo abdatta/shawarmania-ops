@@ -462,8 +462,8 @@ horizontally.
 - **THEN** the workspace restores the valid saved widths, or both columns use the 22rem default when no valid preference is available
 
 The Counter shell SHALL NOT carry a read-only Menu surface. The Counter's own menu
-column shows every item, its price, its veg marker and an Off marker on anything
-unavailable, permanently and beside the bill, so a second page carrying the same
+column shows every item, its price, its veg marker and an Unavailable label on
+anything the kitchen cannot sell, permanently and beside the bill, so a second page carrying the same
 facts is a second place to look. The refusal of a Biller's menu write SHALL remain
 the menu policies', unchanged by the surface's absence.
 
@@ -478,7 +478,6 @@ the menu policies', unchanged by the surface's absence.
 #### Scenario: Real user before promotion
 - **WHEN** a real signed-in user loads the application before billing goes live
 - **THEN** the new billing entries remain absent rather than disabled
-
 ### Requirement: Billing V1 gates expose only the appropriate live context
 
 The gate registry SHALL expose live counter navigation only on a set-up tablet

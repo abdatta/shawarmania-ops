@@ -37,19 +37,22 @@ the distinction by shape and by an accessible text label, not by colour alone.
 
 Changing an item's availability SHALL be a single action on the item's row,
 separate from opening the item for editing, and the item's rendered state
-SHALL change immediately to reflect it. An unavailable item SHALL remain
-visible and SHALL be labelled unavailable rather than removed from the list.
+SHALL change immediately to reflect it. The action SHALL be named for what it
+does — **Mark unavailable** on an available item and **Mark available** on an
+unavailable one — and SHALL NOT be a bare on/off word, because *off* does not say
+whether the item is gone from the menu or only sold out. An unavailable item SHALL
+remain visible and SHALL be labelled **Unavailable** rather than removed from the
+list.
 
 #### Scenario: Marking an item unavailable
 
-- **WHEN** a Franchise Admin toggles availability on an item that is available
+- **WHEN** a Franchise Admin chooses Mark unavailable on an item that is available
 - **THEN** the item is marked unavailable in place, and no editing form is opened
 
 #### Scenario: An unavailable item stays on the list
 
 - **WHEN** the menu surface renders an item that is not available
-- **THEN** the item is present and labelled unavailable
-
+- **THEN** the item is present and labelled Unavailable, and its action reads Mark available
 ### Requirement: A price change applies only to future bills
 
 Editing an item's price SHALL state, before it is saved, that the new price
@@ -77,7 +80,7 @@ is a second place to look.
 
 Every menu write SHALL be refused for a Biller by the data layer rather than by the
 absence of a control or of a surface. An unavailable item SHALL remain visible to
-the Biller, marked as off and **without its price**, since a price nobody can sell
+the Biller, labelled **Unavailable** and **without its price**, since a price nobody can sell
 is one a biller might quote before noticing.
 
 #### Scenario: A Biller checks what is available and what it costs
@@ -86,12 +89,11 @@ is one a biller might quote before noticing.
 
 #### Scenario: A Biller attempts a menu write
 - **WHEN** a Biller session attempts to create, edit, or change the availability of a menu item
-- **THEN** the write is refused by the data layer, unchanged by the read-only surface having been retired
+- **THEN** the write is refused by the data layer, unchanged by the read-only surface having been removed
 
 #### Scenario: An item the kitchen has run out of
 - **WHEN** an item is marked unavailable
-- **THEN** the Biller still sees it, marked off, carrying no price, and cannot add it to a bill
-
+- **THEN** the Biller still sees it, labelled Unavailable, carrying no price, and cannot add it to a bill
 ### Requirement: Menu prices are integer paise
 
 Menu item prices SHALL be held and passed as integer paise, converted from
@@ -105,10 +107,18 @@ rupees only at the input boundary and to rupees only at the display edge.
 ### Requirement: The menu is a real record a manager creates and maintains in the app
 
 An authorised manager SHALL create, rename, reprice, reorder, mark unavailable and
-retire menu categories and items for an outlet they are entitled to, entirely
+remove menu categories and items for an outlet they are entitled to, entirely
 through the application and with no SQL. Prices SHALL be entered and stored in
-integer paise. A retired or unavailable item SHALL disappear from the counter
-without altering any bill or order line already captured.
+integer paise. A removed item SHALL disappear from the counter and an unavailable
+one SHALL refuse to be sold there, without altering any bill or order line
+already captured.
+
+**Removing is not deleting.** The action SHALL be named **Remove**, and SHALL
+confirm before it acts. A removed item SHALL leave the working menu for good while
+its row is kept, because captured order and bill lines refer to it; there is no
+restore action, and adding the item again is how it comes back. Unavailable is
+the temporary state and Remove the permanent one, and the two SHALL NOT share a
+word.
 
 **A gate must be reachable from an empty database.** Billing cannot go live at an
 outlet until that outlet's menu exists, and it must have arrived by a route a new
@@ -191,7 +201,7 @@ SHALL render that row in the same disabled treatment as a deleted expense row.
 - **THEN** the manager reorders it on the menu screen and the counter's grouping follows, without any item being retyped
 
 #### Scenario: The last item leaves a category
-- **WHEN** an item is retired and its category holds nothing else
+- **WHEN** an item is removed and its category holds nothing else
 - **THEN** no empty heading is left for a manager to tidy up
 
 #### Scenario: The owner enters an outlet's menu
@@ -210,6 +220,9 @@ SHALL render that row in the same disabled treatment as a deleted expense row.
 - **WHEN** a Franchise Admin hand-crafts a menu write for an outlet they do not manage
 - **THEN** the database refuses it
 
+#### Scenario: Removing an item
+- **WHEN** a manager chooses Remove on an item and confirms
+- **THEN** the item leaves the menu and the counter, its row is kept, and every captured order and bill line naming it reads exactly as before
 ### Requirement: The live counter prefers the latest reachable menu
 
 While the backend is reachable, the tablet SHALL fetch the latest menu for its
@@ -381,3 +394,30 @@ row never wraps.
 
 - **WHEN** a manager attempts to configure a fifth preset
 - **THEN** it is refused
+
+### Requirement: The Menu screen shares the menu a customer reads
+
+The Menu screen SHALL offer a **Share** button, left of **Add** and in the
+secondary colours so Add stays the highlighted action, that shares the outlet's
+public menu address — because the address exists to be handed to customers. It
+SHALL share the link and nothing else: no title and no message. Sharing SHALL behave exactly as sharing
+a bill's receipt link does: the device's share sheet where there is one; else the
+clipboard, with the control saying the link was copied; else the address shown
+as selectable text, with no claim that anything was copied. A dismissed share
+sheet SHALL end the interaction rather than fall through to the clipboard.
+
+The address SHALL arrive on the read the screen already makes, not on a second
+request. An outlet without an address, and a menu a tablet persisted before
+addresses existed, SHALL show no share control.
+
+#### Scenario: A manager shares the menu to WhatsApp
+- **WHEN** a manager on a phone taps Share public menu
+- **THEN** the phone's share sheet opens carrying the outlet's public menu address and no other text
+
+#### Scenario: A tablet with no share sheet
+- **WHEN** the device has no share sheet but can copy
+- **THEN** the address is copied and the control says the link was copied
+
+#### Scenario: Neither is available
+- **WHEN** the device can neither share nor copy
+- **THEN** the address is shown as selectable text and nothing claims it was copied

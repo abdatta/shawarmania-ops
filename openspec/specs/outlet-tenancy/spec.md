@@ -136,15 +136,18 @@ server-side function.
 ### Requirement: An outlet is created and edited from the app, by the owner only
 
 The Super Admin SHALL be able to create an outlet and edit an existing one from
-a surface in the app, supplying its code, name, location label, address, phone,
-business-day cutover, arrival deadline and active state. No other role SHALL be
+a surface in the app, supplying its code, name, public menu address, location label, address, phone,
+business-day cutover, arrival deadline and active state. The public menu
+address is optional on the form: blank derives it from the name on create and
+keeps the current one on edit (see `public-menu`). No other role SHALL be
 offered either action, and the database SHALL refuse both for any other role
 regardless of what a client sends — the `outlets_insert` and `outlets_update`
 policies are the boundary, not the presence of a button.
 
 An outlet code SHALL be unique across the business, and an attempt to reuse one
 SHALL be refused with a message naming the collision rather than a raw database
-error.
+error. The same SHALL hold for a public menu address, whose message SHALL name the
+address rather than the code.
 
 The business-day cutover SHALL be presented as the seam between two trading
 days rather than as an opening time, and the form SHALL resolve a full trading
@@ -197,6 +200,12 @@ then on and does not change how any already recorded day reads.
 - **WHEN** a Franchise Admin's session attempts to write an arrival deadline
   for their own outlet
 - **THEN** the database refuses the write
+
+#### Scenario: A duplicate public menu address is refused legibly
+
+- **WHEN** a Super Admin saves an outlet with a public menu address another outlet
+  already has
+- **THEN** the write is refused and the form explains that the address is taken
 
 ### Requirement: An empty database presents an instruction, not a blank screen
 
@@ -903,3 +912,26 @@ and the outlet boundary SHALL therefore be unreachable through it.
 - **WHEN** a Franchise Admin, Biller or Employee session issues a hand-crafted
   request against another outlet's public link records
 - **THEN** it is refused, as for every other outlet-scoped table
+
+### Requirement: Service choices and service facts are isolated like the rows they sit on
+
+An outlet's service choices SHALL be readable by the principals that may read that
+outlet's row, and by a counter device for its own outlet only. They SHALL be
+writable by the owner, and by a Franchise Admin for the outlets they manage, and
+by nobody else; a manager's write SHALL reach these choices and no other column
+of the outlet row.
+
+An order's and a bill's type and table, and a line's kind, SHALL be readable by
+exactly the principals that may read that order, bill or line, and by no other.
+
+The isolation suite SHALL cover each by hand-crafted request.
+
+#### Scenario: A neighbouring tablet
+
+- **WHEN** a counter device of one outlet requests another outlet's service choices
+- **THEN** nothing is returned
+
+#### Scenario: A neighbouring manager
+
+- **WHEN** a Franchise Admin requests the type and table of another outlet's orders
+- **THEN** nothing is returned
