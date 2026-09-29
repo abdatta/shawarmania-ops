@@ -512,7 +512,7 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
 4. **The Franchise Admin prepares the menu**—copy the standard menu and adjust
    prices where this outlet differs.
 5. **Enter the outlet's complete real menu through Menu.** Create every item,
-   check prices, category order and availability, then retire a test item and
+   check prices, category order and availability, then remove a test item and
    confirm historical captured lines do not change. Do this before a tablet is
    set up; a counter with an incomplete menu is not ready for shadow billing.
 6. **Set the counter tablet up**: on your own phone, open **Outlets**, tap the

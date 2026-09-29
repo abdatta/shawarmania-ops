@@ -56,7 +56,7 @@ export function MenuSurface() {
   const [pendingMatches, setPendingMatches] = useState<CategoryMatch[] | null>(null)
   const [renaming, setRenaming] = useState<Tables<'menu_categories'> | null>(null)
   const [categoryName, setCategoryName] = useState('')
-  const [retiring, setRetiring] = useState<Tables<'menu_items'> | null>(null)
+  const [removing, setRemoving] = useState<Tables<'menu_items'> | null>(null)
   const [discounts, setDiscounts] = useState<MenuDiscount[]>([])
   const [presets, setPresets] = useState<DiscountPreset[]>([])
   const [revealedItem, setRevealedItem] = useState<string | null>(null)
@@ -344,7 +344,7 @@ export function MenuSurface() {
                               data-testid={`unavailable-${item.id}`}
                               className="rounded-md border border-border px-1.5 py-0.5 text-[0.6875rem] font-bold text-content-muted"
                             >
-                              OFF
+                              Unavailable
                             </span>
                           )}
                         </div>
@@ -358,7 +358,9 @@ export function MenuSurface() {
                         compact
                         actions={[
                           {
-                            label: item.is_available ? 'Turn off' : 'Turn on',
+                            // Verbs for what happens, never a bare on/off: *off* did not
+                            // say whether the item was sold out or gone (design D1).
+                            label: item.is_available ? 'Mark unavailable' : 'Mark available',
                             disabled: busy,
                             testId: `toggle-${item.id}`,
                             onSelect: () =>
@@ -374,10 +376,10 @@ export function MenuSurface() {
                             onSelect: () => openEdit(item),
                           },
                           {
-                            label: 'Retire',
+                            label: 'Remove',
                             disabled: busy,
-                            testId: `retire-${item.id}`,
-                            onSelect: () => setRetiring(item),
+                            testId: `remove-${item.id}`,
+                            onSelect: () => setRemoving(item),
                           },
                         ]}
                       />
@@ -508,18 +510,18 @@ export function MenuSurface() {
       </FormSheet>
 
       <ConfirmDialog
-        open={retiring !== null}
-        title={`Retire ${retiring?.name ?? 'item'}?`}
+        open={removing !== null}
+        title={`Remove ${removing?.name ?? 'item'}?`}
         consequence="It disappears from the working menu. Captured order and bill lines keep their recorded name and price."
-        confirmLabel="Retire item"
+        confirmLabel="Remove item"
         danger
-        onClose={() => setRetiring(null)}
+        onClose={() => setRemoving(null)}
         onConfirm={() => {
-          const item = retiring
-          setRetiring(null)
+          const item = removing
+          setRemoving(null)
           if (item)
             void run(async () => {
-              await adapter.retireItem(item.id)
+              await adapter.removeItem(item.id)
               await load()
             })
         }}

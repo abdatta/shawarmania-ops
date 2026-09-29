@@ -5021,6 +5021,7 @@ export type Database = {
         Args: { p_device_id: string; p_removed_by: string }
         Returns: string
       }
+      remove_menu_item: { Args: { p_item_id: string }; Returns: undefined }
       rename_counter_device: {
         Args: { p_device_id: string; p_label: string; p_renamed_by: string }
         Returns: string

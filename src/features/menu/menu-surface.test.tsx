@@ -66,16 +66,19 @@ describe('MenuSurface — the manager', () => {
     expect(within(classic).getByText('Non-vegetarian')).toBeInTheDocument()
   })
 
-  it('shows an unavailable item rather than hiding it, and can turn it back on', async () => {
+  it('shows an unavailable item rather than hiding it, and can mark it available again', async () => {
     const user = userEvent.setup()
     renderMenu()
 
     const off = await screen.findByTestId(`menu-item-${MENU_ITEM_STUFFED_ID}`)
-    expect(within(off).getByTestId(`unavailable-${MENU_ITEM_STUFFED_ID}`)).toHaveTextContent('OFF')
+    expect(within(off).getByTestId(`unavailable-${MENU_ITEM_STUFFED_ID}`)).toHaveTextContent(
+      'Unavailable',
+    )
 
     await user.click(
       screen.getByRole('button', { name: 'Actions for Stuffed Lebanese Chicken Shawarma' }),
     )
+    expect(screen.getByTestId(`toggle-${MENU_ITEM_STUFFED_ID}`)).toHaveTextContent('Mark available')
     await user.click(screen.getByTestId(`toggle-${MENU_ITEM_STUFFED_ID}`))
 
     await waitFor(() => {
@@ -83,12 +86,16 @@ describe('MenuSurface — the manager', () => {
     })
   })
 
-  it('turns an available item off in place, without opening a form', async () => {
+  it('marks an available item unavailable in place, without opening a form', async () => {
     const user = userEvent.setup()
     renderMenu()
 
     await screen.findByTestId(`menu-item-${MENU_ITEM_CLASSIC_ID}`)
     await user.click(screen.getByRole('button', { name: 'Actions for Classic Chicken Shawarma' }))
+    expect(screen.getByTestId(`toggle-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent(
+      'Mark unavailable',
+    )
+    expect(screen.getByTestId(`remove-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('Remove')
     await user.click(screen.getByTestId(`toggle-${MENU_ITEM_CLASSIC_ID}`))
 
     expect(await screen.findByTestId(`unavailable-${MENU_ITEM_CLASSIC_ID}`)).toBeInTheDocument()
@@ -234,7 +241,7 @@ describe('MenuSurface — the manager', () => {
     expect(await screen.findByText('Veg Burger')).toBeInTheDocument()
   })
 
-  it('reorders categories deliberately and retires the final item without an empty heading', async () => {
+  it('reorders categories deliberately and removes the final item without an empty heading', async () => {
     const user = userEvent.setup()
     renderMenu()
     const list = await screen.findByTestId('menu-list')
@@ -252,8 +259,11 @@ describe('MenuSurface — the manager', () => {
     await user.click(
       screen.getByRole('button', { name: 'Actions for Fully Loaded Smashed Burger' }),
     )
-    await user.click(screen.getByTestId('retire-d4000000-0000-4000-b000-000000000007'))
-    await user.click(screen.getByRole('button', { name: 'Retire item' }))
+    await user.click(screen.getByTestId('remove-d4000000-0000-4000-b000-000000000007'))
+    expect(
+      screen.getByRole('heading', { name: 'Remove Fully Loaded Smashed Burger?' }),
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Remove item' }))
     await waitFor(() => {
       expect(screen.queryByRole('heading', { name: 'Burgers' })).not.toBeInTheDocument()
     })

@@ -208,8 +208,8 @@ export function createSupabaseMenuAdapter(
       return data
     },
 
-    async retireItem(id: string) {
-      const { error } = await client.rpc('retire_menu_item', { p_item_id: id })
+    async removeItem(id: string) {
+      const { error } = await client.rpc('remove_menu_item', { p_item_id: id })
       if (error) throw menuError(error)
     },
 

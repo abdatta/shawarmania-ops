@@ -597,7 +597,7 @@ const defs = {
     editing, so a biller could answer "is that still on?" without walking to the
     kitchen. **Retired**, because the Counter's own menu column now answers that
     question and never leaves the screen: every item, its price, its veg marker
-    and an Off marker on anything the kitchen has run out of. The only thing the
+    and an Unavailable label on anything the kitchen has run out of. The only thing the
     read-only page still showed that the counter does not is an item's
     description, which is recorded in `docs/LIMITATIONS.md`.
   */

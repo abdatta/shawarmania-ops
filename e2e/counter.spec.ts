@@ -171,9 +171,9 @@ test.describe('the counter', () => {
     await expect(page.getByTestId('settled-confirmation')).toHaveCount(0)
   })
 
-  test('will not sell an item that is off the menu', async ({ page }) => {
+  test('will not sell an unavailable item', async ({ page }) => {
     const off = page.getByRole('button', {
-      name: 'Stuffed Lebanese Chicken Shawarma — off the menu',
+      name: 'Stuffed Lebanese Chicken Shawarma — unavailable',
     })
     await expect(off).toBeVisible()
     await expect(off).toBeDisabled()

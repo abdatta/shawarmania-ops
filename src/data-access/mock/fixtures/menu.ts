@@ -144,7 +144,7 @@ export function menuItemId(outletId: string, key: MenuItemKey): string {
   return `d4000000-0000-4000-b${slotFor(outletId)}-${String(index).padStart(12, '0')}`
 }
 
-/** Off today, at Kalyani only. The counter must show it and refuse to sell it. */
+/** Unavailable today, at Kalyani only. The counter must show it and refuse to sell it. */
 const UNAVAILABLE_AT_KALYANI: MenuItemKey = 'stuffed'
 
 export const MENU_CATEGORY_SHAWARMA_ID = menuCategoryId(OUTLET_KALYANI_ID, 'shawarma')

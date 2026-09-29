@@ -82,14 +82,28 @@ select results_eq(
   'repricing the menu leaves every captured bill line unchanged');
 
 select lives_ok($q$
-  select public.retire_menu_item(i.id)
+  select public.remove_menu_item(i.id)
     from public.menu_items i
     join public.menu_categories c on c.id = i.category_id
    where c.name = 'Beverages' and i.name = 'Masala Cola'
-$q$, 'a manager may retire an own-outlet item without deleting it');
+$q$, 'a manager may remove an own-outlet item without deleting it');
 select ok((select not is_active and not is_available from public.menu_items
             where name = 'Masala Cola'),
-  'retirement keeps the row but removes it from the working menu');
+  'removal keeps the row but takes it off the working menu');
+
+-- The previous name forwards to the new one for installed apps still on the
+-- previous build (menu-says-unavailable-and-remove, design D2).
+select lives_ok($q$
+  select public.create_menu_item_with_category(
+    '00000000-0000-4000-a000-000000000001',
+    'Beverages', 'Wrapper probe', 100, true, null, null
+  )
+$q$, 'a probe item for the deprecated removal name');
+select lives_ok($q$
+  select public.retire_menu_item(id) from public.menu_items where name = 'Wrapper probe'
+$q$, 'the deprecated retire_menu_item still removes an item');
+select ok((select not is_active from public.menu_items where name = 'Wrapper probe'),
+  'the deprecated name removes exactly as remove_menu_item does');
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000006');
 select throws_ok($q$

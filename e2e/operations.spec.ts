@@ -41,7 +41,7 @@ test.describe('the operations surfaces', () => {
     await page.getByRole('link', { name: 'Menu' }).click()
     await expect(page.getByTestId('menu-list')).toBeVisible()
     await expect(page.getByText('Classic Chicken Shawarma')).toBeVisible()
-    await expect(page.getByText('OFF', { exact: true })).toBeVisible()
+    await expect(page.getByText('Unavailable', { exact: true })).toBeVisible()
 
     // ── Expenses, cash rows distinguishable from the rest ───────────────────
     //
@@ -156,8 +156,8 @@ test.describe('the operations surfaces', () => {
     await expect(menu.getByRole('button', { name: 'Classic Chicken Shawarma' })).toBeVisible()
     await expect(menu).toContainText('₹139')
     // Unavailable items stay on the grid, marked, and without a price to quote.
-    const off = menu.getByRole('button', { name: /Stuffed Lebanese.*off the menu/ })
-    await expect(off).toContainText('Off')
+    const off = menu.getByRole('button', { name: /Stuffed Lebanese.*unavailable/ })
+    await expect(off).toContainText('Unavailable')
     await expect(off).not.toContainText('₹')
 
     // And the route itself no longer resolves to a menu for this role.

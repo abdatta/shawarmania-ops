@@ -346,7 +346,7 @@ export function createMockMenuAdapter(store: DemoStore, role: AppRole): MenuAdap
       return presets.map((preset) => ({ ...preset }))
     },
 
-    async retireItem(id: string) {
+    async removeItem(id: string) {
       refuseReadOnly()
       const item = findItem(id)
       item.is_active = false

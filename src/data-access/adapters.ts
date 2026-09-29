@@ -1170,14 +1170,18 @@ export interface MenuAdapter {
    */
   updateItem(id: string, patch: MenuItemPatch): Promise<Tables<'menu_items'>>
   /**
-   * Turn one item on or off. Separate from `updateItem` because it is the
+   * Mark one item available or unavailable. Separate from `updateItem` because it is the
    * frequent action and belongs on the row rather than behind a form — and
    * because sending a whole item patch to flip one boolean invites a stale
    * price riding along with it.
    */
   setItemAvailability(id: string, isAvailable: boolean): Promise<Tables<'menu_items'>>
-  /** Retire without deleting rows referenced by captured order or bill lines. */
-  retireItem(id: string): Promise<void>
+  /**
+   * Remove an item from the menu for good, without deleting its row: captured
+   * order and bill lines refer to it. Unavailable is the temporary state; this
+   * is the permanent one.
+   */
+  removeItem(id: string): Promise<void>
 
   /**
    * Everything the counter prices from, in one read: the menu, the discounts

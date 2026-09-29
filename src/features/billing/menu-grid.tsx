@@ -54,7 +54,7 @@ export function MenuGrid({
                   type="button"
                   disabled={!item.is_available}
                   data-testid={`tile-${item.id}`}
-                  aria-label={`${item.name}${item.is_available ? '' : ' — off the menu'}`}
+                  aria-label={`${item.name}${item.is_available ? '' : ' — unavailable'}`}
                   onClick={() => onAdd(item)}
                   className={cn(
                     // `min-h-20` rather than `h-20`: a tile grows to fit its name.
@@ -86,7 +86,7 @@ export function MenuGrid({
                     a column without the figure moving because the name above it
                     wrapped onto a second line.
 
-                    An unavailable item shows **Off instead of its price**, not as
+                    An unavailable item shows **Unavailable instead of its price**, not as
                     well as it. The price of something nobody can sell is the one
                     number on this screen that cannot be acted on, and next to a
                     column of prices that can be, it is a figure a biller might
@@ -106,8 +106,11 @@ export function MenuGrid({
                         )}
                       </>
                     ) : (
-                      <span className="rounded-md border border-border px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide text-content-muted">
-                        Off
+                      // Normal case at the badge size, not tracked capitals: the word
+                      // is three times OFF's length and the name beside it is never
+                      // truncated, so it must fit the slot a price takes (design D3).
+                      <span className="rounded-md border border-border px-1.5 py-0.5 text-[0.6875rem] font-bold text-content-muted">
+                        Unavailable
                       </span>
                     )}
                   </span>

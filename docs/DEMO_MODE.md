@@ -312,7 +312,7 @@ Switch to **Admin → Billing**. **Bill 18 is marked *After operator left*.** Op
 
 **Then show the harder one.** Set connectivity to *Offline: closed and reopened* — the tablet was shut and started again with no backend. It comes back on the same shift, with the menu, the outlet pipeline and this shift's bills each labelled *as of* their last successful read, because that is the last moment they were known to be true. Hand over is refused, and so is Finish day, which says why rather than failing quietly. Ring a bill anyway; it is captured. Return to *Online* and it delivers, once.
 
-Try to sell the Stuffed Lebanese Shawarma: it is on the grid and refuses to be sold, because the kitchen has run out. A tile that vanished would read as a bug to whoever was looking straight at it. It shows **Off** where the others show a price, and no price at all — a figure nobody can sell is a figure a biller might quote by mistake.
+Try to sell the Stuffed Lebanese Shawarma: it is on the grid and refuses to be sold, because the kitchen has run out. A tile that vanished would read as a bug to whoever was looking straight at it. It shows **Unavailable** where the others show a price, and no price at all — a figure nobody can sell is a figure a biller might quote by mistake.
 
 **4 — The employee, and the geofence** (Staff)
 

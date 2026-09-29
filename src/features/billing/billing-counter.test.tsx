@@ -280,12 +280,14 @@ describe('BillingCounter', () => {
     expect(screen.getByTestId('bill-total')).toHaveTextContent('₹278')
   })
 
-  it('will not sell an item that is off the menu, and still shows it', async () => {
+  it('will not sell an unavailable item, and still shows it labelled Unavailable', async () => {
     const person = user()
     renderCounter()
 
     const off = await screen.findByTestId(`tile-${MENU_ITEM_STUFFED_ID}`)
     expect(off).toBeDisabled()
+    expect(off).toHaveAccessibleName('Stuffed Lebanese Chicken Shawarma — unavailable')
+    expect(off).toHaveTextContent('Unavailable')
 
     await person.click(off)
     expect(screen.queryByTestId(`bill-line-${MENU_ITEM_STUFFED_ID}`)).not.toBeInTheDocument()
