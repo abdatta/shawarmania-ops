@@ -77,7 +77,7 @@ export function useZomatoChannelConfig(): AggregatorChannelConfig {
     pathSegment: '/delivery/zomato',
     otpHeading: 'Zomato sent you a code',
     uploadHint:
-      'If the automation is blocked, bring a period in by hand: a Zomato order history, a Zomato settlement report, or a Hyperpure statement. The file is read the same way the robot reads it.',
+      'If the automation is blocked, bring a period in by hand: a Zomato order history, the payout workbook of a week Zomato has paid, or a Hyperpure statement. A week is settled only once Zomato has paid it, exactly as the robot settles it.',
     uploadAccept: '.xlsx,.zip,.csv',
     lapsedTitle: 'Zomato ended the session',
   }
