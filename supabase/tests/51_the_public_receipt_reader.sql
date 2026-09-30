@@ -4,8 +4,10 @@
 -- here is mostly what it *cannot* do. It takes a token and nothing that could
 -- name another bill. It refuses unknown, malformed, revoked and switched-off in
 -- one and the same way, so a caller learns nothing from which refusal they got.
--- It never returns a customer's name or phone, and that omission is the
--- function's own projection rather than a page choosing not to render them. And
+-- It never returns a customer's name or their whole phone number, and that
+-- omission is the function's own projection rather than a page choosing not to
+-- render them: since #58 it returns the last four digits and gold at this
+-- outlet, and only for a bill with a customer attached. And
 -- `anon` gains no grant on anything, token or no token -- the credential is the
 -- service role, held by the Worker, server-side.
 
@@ -181,6 +183,174 @@ select ok(
   and pg_temp.receipt()::text not like '%Synthetic Biller%'
   and pg_temp.receipt()::text not like '%10000000-0000-4000-a000-000000000004%',
   'the receipt identifies neither the biller nor the till');
+
+-- ---------------------------------------------------------------------------
+-- What it says of its customer: the last four digits, and gold at this outlet.
+-- Never the name, never the rest of the number (the-receipt-says-its-yours, #58).
+--
+-- Both facts appear only on a bill with a customer attached. Every bill rung
+-- before #56 has a typed name and sometimes a typed phone, and no customer, so
+-- the condition is the link and not a date.
+
+select is(pg_temp.receipt() ->> 'phone_last4', '0042',
+  'a bill with a customer carries the last four digits of the number it recorded');
+
+select ok(
+  pg_temp.receipt()::text not like '%900000%'
+  and pg_temp.receipt()::text not like '%+91%',
+  'no other digit of the number, and not its country code, appears anywhere');
+
+-- The landing Worker refuses a payload carrying any of these keys, whatever the
+-- value. None may appear, or every receipt and counter pop-up is refused.
+select is(
+  (select count(*) from jsonb_each(pg_temp.receipt())
+    where key in ('customer', 'customer_name', 'customer_phone', 'customer_id',
+                  'biller_name', 'biller_profile_id')),
+  0::bigint,
+  'no key the landing tripwire refuses appears in the receipt');
+
+select is((pg_temp.receipt() ->> 'gold_at_outlet')::boolean, false,
+  'a customer who is not gold here is not marked gold');
+
+-- One more bill, shaped by its arguments: a line, a cash tender, and whatever
+-- customer facts and service the case needs.
+create function pg_temp.a_bill(
+  p_customer uuid, p_name text, p_phone text,
+  p_service public.service_type default null, p_table smallint default null)
+returns uuid language plpgsql as $$
+declare
+  v_bill uuid := gen_random_uuid();
+  v_at timestamptz := (pg_temp.business_today() + time '13:05') at time zone 'Asia/Kolkata';
+begin
+  perform set_config('app.billing_command', '1', true);
+  insert into public.bills (
+    id, outlet_id, bill_number, business_date, biller_profile_id,
+    counter_device_id, shift_id, customer_id, customer_name, customer_phone,
+    subtotal_paise, discount_paise, tax_paise, rounding_paise, total_paise,
+    payment_method, created_at, ordered_at, paid_at, payment_business_date,
+    service_type, table_number)
+  values (
+    v_bill, pg_temp.kalyani(), 0, pg_temp.business_today(),
+    '10000000-0000-4000-a000-00000000000a',
+    '10000000-0000-4000-a000-000000000004',
+    '40000000-0000-4000-a000-000000000001',
+    p_customer, p_name, p_phone,
+    9900, 0, 0, 0, 9900, 'cash', v_at, v_at, v_at, pg_temp.business_today(),
+    p_service, p_table);
+  insert into public.bill_items (
+    id, bill_id, item_name, unit_price_paise, quantity, line_total_paise,
+    discount_paise, discount_percent_bp, category_name)
+  values (gen_random_uuid(), v_bill, 'Cold Coffee', 9900, 1, 9900, 0, null, 'Drinks');
+  insert into public.bill_payments (bill_id, outlet_id, method, amount_paise)
+  values (v_bill, pg_temp.kalyani(), 'cash', 9900);
+  set constraints all immediate;
+  set constraints all deferred;
+  perform set_config('app.billing_command', '0', true);
+  return v_bill;
+end;
+$$;
+
+create function pg_temp.receipt_of(p_bill uuid) returns jsonb language sql as
+  $$ select public.bill_public_receipt(pg_temp.token_of(p_bill)) $$;
+
+-- The pre-#56 shape: a typed name and a typed phone, and no customer.
+create temporary table legacy as
+  select pg_temp.a_bill(null, 'As', '9000000077') as bill;
+
+select is(pg_temp.receipt_of((select bill from legacy)) ->> 'phone_last4', null,
+  'a bill with a typed phone and no customer shows no digits');
+
+select is((pg_temp.receipt_of((select bill from legacy)) ->> 'gold_at_outlet')::boolean, false,
+  'a bill with no customer is never marked gold');
+
+select ok(
+  pg_temp.receipt_of((select bill from legacy))::text not like '%0077%'
+  and pg_temp.receipt_of((select bill from legacy))::text not like '%"As"%',
+  'neither the typed name nor any digit of the typed phone reaches the payload');
+
+-- A skipped sale: no customer facts at all.
+create temporary table skipped as select pg_temp.a_bill(null, null, null) as bill;
+
+select is(pg_temp.receipt_of((select bill from skipped)) ->> 'phone_last4', null,
+  'a skipped bill shows no digits');
+
+-- Gold is the bill's own snapshot, at the bill's own outlet.
+update public.outlets set gold_enabled = true where id = pg_temp.kalyani();
+
+insert into public.customers (id, phone, name)
+values ('80000000-0000-4000-a000-0000000005a1', '+919000005801', 'Gold Placeholder'),
+       ('80000000-0000-4000-a000-0000000005a2', '+919000005802', 'Elsewhere Placeholder');
+
+insert into public.customer_memberships
+  (customer_id, outlet_id, granted_at, granted_by, expires_at)
+values
+  ('80000000-0000-4000-a000-0000000005a1', pg_temp.kalyani(),
+   now() - interval '1 day', '10000000-0000-4000-a000-000000000001',
+   now() + interval '30 days'),
+  -- Gold, but at the other outlet.
+  ('80000000-0000-4000-a000-0000000005a2', '00000000-0000-4000-a000-000000000002',
+   now() - interval '1 day', '10000000-0000-4000-a000-000000000001',
+   now() + interval '30 days');
+
+create temporary table golden as
+  select pg_temp.a_bill('80000000-0000-4000-a000-0000000005a1',
+                        'Gold Placeholder', '+919000005801') as bill;
+create temporary table elsewhere as
+  select pg_temp.a_bill('80000000-0000-4000-a000-0000000005a2',
+                        'Elsewhere Placeholder', '+919000005802') as bill;
+
+select is((pg_temp.receipt_of((select bill from golden)) ->> 'gold_at_outlet')::boolean, true,
+  'a bill rung while its customer was gold here is marked gold');
+
+select is(pg_temp.receipt_of((select bill from golden)) ->> 'phone_last4', '5801',
+  'a gold member''s receipt carries their last four digits too');
+
+select ok(
+  pg_temp.receipt_of((select bill from golden))::text not like '%Gold Placeholder%',
+  'a gold member''s name appears nowhere in the receipt');
+
+select is((pg_temp.receipt_of((select bill from elsewhere)) ->> 'gold_at_outlet')::boolean, false,
+  'a customer gold only at another outlet is not marked gold here');
+
+update public.customer_memberships
+   set revoked_at = now(), revoked_by = '10000000-0000-4000-a000-000000000001'
+ where customer_id = '80000000-0000-4000-a000-0000000005a1';
+
+select is((pg_temp.receipt_of((select bill from golden)) ->> 'gold_at_outlet')::boolean, true,
+  'revoking gold afterwards does not rewrite the receipt');
+
+-- ---------------------------------------------------------------------------
+-- Dine-in or takeaway, as the bill stored it (#60), and never the table: a table
+-- is a label for the length of a meal, like the order number [owner, 2026-09-30].
+
+create temporary table served as
+  select pg_temp.a_bill(null, null, null, 'dine_in', 4::smallint) as table_bill,
+         pg_temp.a_bill(null, null, null, 'dine_in', null) as dine_bill,
+         pg_temp.a_bill(null, null, null, 'takeaway', null) as takeaway_bill;
+
+select is(
+  pg_temp.receipt_of((select table_bill from served)) -> 'service_type', '"dine_in"'::jsonb,
+  'a dine-in bill says dine-in');
+
+select ok(
+  not (pg_temp.receipt_of((select table_bill from served)) ? 'table_number'),
+  'a dine-in bill at a table does not carry its table');
+
+select ok(
+  pg_temp.receipt_of((select table_bill from served))::text not like '%"table%',
+  'no table appears anywhere in the receipt');
+
+select is(
+  pg_temp.receipt_of((select dine_bill from served)) -> 'service_type', '"dine_in"'::jsonb,
+  'a dine-in bill with no table says dine-in too');
+
+select is(
+  pg_temp.receipt_of((select takeaway_bill from served)) ->> 'service_type', 'takeaway',
+  'a takeaway bill says takeaway');
+
+select is(
+  pg_temp.receipt_of((select bill from skipped)) -> 'service_type', 'null'::jsonb,
+  'a bill that recorded neither says nothing about service');
 
 -- ---------------------------------------------------------------------------
 -- What was charged, exactly as it was stored.

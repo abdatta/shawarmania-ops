@@ -115,9 +115,9 @@ the identity interval is display evidence, never an alternate route to rows.
 
 | Data | Whose | Why | Rules |
 |---|---|---|---|
-| Name, phone | Customer | Recognising a returning customer; future digital receipts | Optional at billing. **Business-wide, not per outlet** — one canonical phone is one customer. Never logged, never exported. No client may read the table; a counter resolves a complete phone through a rate-bounded function; the owner reads the directory, and a manager only the customers their own outlets served |
+| Name, phone | Customer | Recognising a returning customer; future digital receipts | Optional at billing. **Business-wide, not per outlet** — one canonical phone is one customer. Never logged, never exported. No client may read the table; a counter resolves a complete phone through a rate-bounded function; the owner reads the directory, and a manager only the customers their own outlets served. The public receipt shows the last four digits of the number, and only for a bill with a customer attached; never the name or the whole number (#58) |
 | Gold membership: at which outlet, when granted, by whom and how (by hand or at the counter, and on which tablet), when it ends, when ended early | Customer | Recognising and rewarding regulars at that outlet | **Per outlet** (#62). A counter sees gold-or-not at its own outlet and nothing more; the owner and that outlet's managers see the card's end date and who gave it, and may read the table through its select policy. The history is kept, never deleted |
-| Points: what each bill earned and used at an outlet, reversals, the balance after each | Customer | Points the customer earns and spends at that outlet | **Per outlet** (#62), append-only, written only by the server at acceptance and void. A counter sees only the balance at its own outlet (net of open orders) and a yes or no for gold eligibility, never the spend behind it; the owner and that outlet's managers read the ledger; the customer's own receipt shows the bill's three figures and names nobody. Removing a customer's number ends their points and gold |
+| Points: what each bill earned and used at an outlet, reversals, the balance after each | Customer | Points the customer earns and spends at that outlet | **Per outlet** (#62), append-only, written only by the server at acceptance and void. A counter sees only the balance at its own outlet (net of open orders) and a yes or no for gold eligibility, never the spend behind it; the owner and that outlet's managers read the ledger; the customer's own receipt shows the bill's three figures and names nobody (it shows the last four digits of the number and gold at that outlet, #58, never the name). Removing a customer's number ends their points and gold |
 | Name, phone, staff facts (code, role title, joining/leaving dates) | Staff | The staff record on their account | Visible to their outlet's admin and the owner. Never to other staff. No salary and no home address is stored anywhere |
 | Account email | Any account when explicitly associated; required for a live Super Admin | Alternate sign-in; foundation for future recovery or security features | Private, optional by default, required for Super Admin; no client table privilege; visible through the privileged owner-management response only |
 | Check-in coordinates, accuracy, distance | Employee | Attendance verification | Captured only at check-in. Never continuous |
@@ -297,21 +297,39 @@ is about it not becoming a door.
 
 ### The control that makes every other risk small: it names no customer
 
-Not a name, not a phone number, not four masked digits, not the biller, not the
-till. So a link that leaks, is forwarded, is misdelivered to a mistyped number,
-or is guessed against all odds exposes **one order and no person.**
+Not a name, not a whole phone number, not the biller, not the till. So a link
+that leaks, is forwarded, is misdelivered to a mistyped number, or is guessed
+against all odds exposes **one order and no person.**
+
+**What it does show of the customer is the last four digits of the number they
+gave, and whether they were gold at that outlet** (the-receipt-says-its-yours,
+#58), only on a bill with a customer attached. Those let the holder say *yes,
+mine*; they do not tell a stranger who that is. A misdelivered or forwarded link
+therefore discloses one order, four digits of a number, and a label — that its
+owner is gold at one outlet, which is a disclosure, if a small one.
 
 The omission is the database function's own projection — `customer_name`,
-`customer_phone` and `customer_id` are never selected — rather than a page
-choosing not to render them. A future page cannot start showing them without
-changing that function, and a test asserts they appear nowhere in the serialised
-receipt at any depth.
+`customer_id` and the whole of `customer_phone` are never returned, and the four
+digits are cut from the bill's own snapshot inside the function — rather than a
+page choosing not to render them. A future page cannot start showing more without
+changing that function, and a test asserts the name, the identifier and every
+other digit appear nowhere in the serialised receipt at any depth. The landing
+Worker refuses to serve a payload that carries a name or a biller, a run of ten
+digits anywhere, or last four digits that are not four digits.
 
-Printing four masked digits was declined too, so that the option of using them as
-a second factor is not spent. That factor is not being built, and would defend
-against none of the three realistic threats: it is useless against misdelivery
-(the wrong recipient knows the wrong number, because it is theirs), weak against
-forwarding, and marginal against a brute force that is already infeasible.
+**The name was proposed for the receipt, and refused** [owner, 2026-09-30].
+Receipts are sent to numbers keyed at a counter (#63 by hand, #59 automatically),
+and a name would turn every wrong digit into the disclosure of a person. Do not
+add it back as a small change: it is the one fact that would break the bound
+above.
+
+#54 declined the four digits too, so that the option of using them as a second
+factor was not spent. **#58 spent it, knowingly.** That factor was never built and
+would defend against none of the three realistic threats: it is useless against
+misdelivery (the wrong recipient knows the wrong number, because it is theirs),
+weak against forwarding, and marginal against a brute force that is already
+infeasible. No check may now be built on the last four digits, because every
+receipt prints them.
 
 ### `anon` gains no grant anywhere
 
@@ -346,7 +364,9 @@ that attack is one receipt showing an order and no person.
 
 **Misdelivery, not brute force, is the realistic failure** once links start going
 out by phone: a mistyped digit at a busy counter sends a stranger somebody else's
-receipt. No token length defends against that. An anonymous page does.
+receipt. No token length defends against that. A page that names nobody does:
+the stranger learns an order, four digits and at most a gold label, and never
+who it belongs to.
 
 ### Every refusal is one refusal
 
@@ -451,8 +471,9 @@ Roughly in order of likelihood:
    by uniform failures, hashed per-input/IP limits, and delegating password
    verification to Supabase without logging raw account-email addresses.
 7. **A forwarded or misdelivered receipt link.** The likely one, and the reason
-   the page names no customer: what the wrong reader learns is one order and
-   nothing about a person. Harvesting receipt tokens sits far below this — see
+   the page names no customer: what the wrong reader learns is one order, the
+   last four digits of a number and whether its owner is gold there, and nothing
+   that names a person. Harvesting receipt tokens sits far below this — see
    [The one unauthenticated endpoint](#the-one-unauthenticated-endpoint) for the
    arithmetic — and is bounded by rate limits at the edge, an access record, and
    a kill switch that needs no deploy.

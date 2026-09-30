@@ -213,7 +213,7 @@ A queued bill is identified as `Queued · A3F9` and never as an integer, because
 
 **Tender correction is append-only.** An immediate or on-handover payment appears in Bills this shift at local acceptance. While it remains editable, its collapsed row carries a pencil indicator; expanding it on the originating tablet offers `Edit (N min)`, then `Edit (N sec)` below one minute, until the deadline. **That deadline is five minutes after the ticket is finished — the later of the bill's payment time and its order's preparation time — and it has not started at all while the order is unprepared**, because the food is still owed and nothing is finished. A bill that settles no order has no preparation to wait for and keeps five minutes from its own payment. Where the clock has not started the row keeps its pencil and its edit, **draws no countdown**, and says it stays editable until the order is prepared: a countdown that has not started must not be drawn as one and must never be drawn as expired. The same dialog opens prefilled and locks every sale fact; Save payment enables only for a changed, exact Cash/UPI replacement. At expiry the indicator and action simply disappear. Other mistakes, and all later corrections, use attributed manager void plus a manual counter re-ring.
 
-**A customer who asks to see their bill is shown it on the counter** (a-receipt-goes-out-on-whatsapp). Expanding a bill in Bills this shift offers **View receipt**, which opens a pop-up inside the app showing that bill's receipt from `shawarmania.in` in the page's **counter view**: the customer's receipt trimmed for a pop-up, with the same items, discounts and total but no Download PDF, no *Paid by* and no *not a tax invoice* sentence, and the bill number and time on one row. The biller turns the tablet round, then taps **Close** and the counter is exactly as it was. The counter behind the pop-up is blurred, so a customer shown the tablet cannot read other customers' bills. A spinner reading *Loading receipt…* holds the space until the page arrives. The page is shown in a frame that lets it run its one script, the height report, and nothing else, so no link on it can walk the tablet out of the app. The pop-up grows with the receipt up to most of the screen and scrolls within beyond that, with the header and Close fixed. A bill still in the outbox has no receipt yet: View receipt is greyed out and says *Receipt appears once this bill syncs*. Offline, the pop-up says the receipt needs the internet instead of showing a blank box. A cancelled bill offers none. In demo the pop-up shows the site's refusal page for the invented bill, at a fixed fallback height, with the demo note. Nothing is sent, opened in a browser or shared from the tablet.
+**A customer who asks to see their bill is shown it on the counter** (a-receipt-goes-out-on-whatsapp). Expanding a bill in Bills this shift offers **View receipt**, which opens a pop-up inside the app showing that bill's receipt from `shawarmania.in` in the page's **counter view**: exactly what the customer's own link says, with no Download PDF (#58 aligned the two [owner, 2026-09-30]). The biller turns the tablet round, then taps **Close** and the counter is exactly as it was. The counter behind the pop-up is blurred, so a customer shown the tablet cannot read other customers' bills. A spinner reading *Loading receipt…* holds the space until the page arrives. The page is shown in a frame that lets it run its one script, the height report, and nothing else, so no link on it can walk the tablet out of the app. The pop-up grows with the receipt up to most of the screen and scrolls within beyond that, with the header and Close fixed. A bill still in the outbox has no receipt yet: View receipt is greyed out and says *Receipt appears once this bill syncs*. Offline, the pop-up says the receipt needs the internet instead of showing a blank box. A cancelled bill offers none. In demo the pop-up shows the site's refusal page for the invented bill, at a fixed fallback height, with the demo note. Nothing is sent, opened in a browser or shared from the tablet.
 
 **Open orders** — the **whole outlet's** unfinished orders, from every tablet at this counter (#35), as **one list** ordered newest first. There is no divider, no band and no section heading: a card's place in the list is decided by when its order was taken and by nothing else, so recording preparation or payment changes the card's colours and moves nothing. An order leaves the list only when it is both prepared and paid, and then it flies into Bills this shift.
 
@@ -683,10 +683,24 @@ address, `…/bill/<token>.pdf`, as an ordinary link rather than anything
 script-generated, because that is the only download path that behaves inside
 WhatsApp's in-app browser. Nothing downloads on its own when the page opens.
 
-**It names no customer.** Not a name, not a phone number, not four masked
-digits, and not the biller or the till either. That is what makes a forwarded or
-misdelivered link expose one order and no person; the reasoning is in
-[Security and Privacy](SECURITY_AND_PRIVACY.md).
+One row under the outlet's name reads the bill number and **how the bill was
+served** — `Dine-in` or `Takeaway`, when the bill recorded it, and never the
+table — at the left, and the date and time at the right. Beneath it, **whose receipt it is without saying who** (the-receipt-says-its-yours, #58): `+91 ••••• •0042`, the
+last four digits of the number the customer gave, and for a customer who was gold
+at that outlet when they paid, `⭐ Gold` (the receipt already names its outlet). Both only on a bill with a
+customer attached, so a skipped sale, and every bill rung before customers were
+identified by their number, shows neither. The page, the counter's view of it and
+the PDF say the same lines; the PDF draws the star rather than printing an emoji.
+
+*Paid by* is a plain line under the total. For a customer collecting points, one line beneath
+it reads `+14 pts earned` and `Balance: 96 pts`; what the bill used is its own
+`Points (20)` discount row and is not repeated. The small print signs with the
+bill's outlet, `Shawarmania · Kalyani Cafe`.
+
+**It names no customer.** Not a name, not the whole number, and not the biller or
+the till either. That is what makes a forwarded or misdelivered link expose one
+order and no person; the reasoning, and why the name was refused a second time,
+is in [Security and Privacy](SECURITY_AND_PRIVACY.md).
 
 **It does not claim `All Items`.** Where the counter's own bill column can say
 that a discount covered the whole menu, this reader cannot: it opens a bill
@@ -706,11 +720,10 @@ into a group chat before anybody opens it.
 
 **The counter has its own view of the same receipt** (`?view=counter`), which
 the counter's **View receipt** pop-up frames for a customer standing at the
-tablet (a-receipt-goes-out-on-whatsapp). It shows the same items, discounts and
-total, and leaves out what a customer who has just paid at the counter does not
-need: Download PDF, *Paid by* and the *not a tax invoice* sentence. It puts the
-bill number and time on one row, and reports its height so the pop-up can fit
-it. It is the only view with a script; the customer's own link carries none.
+tablet (a-receipt-goes-out-on-whatsapp). It says exactly what the customer's link says, and differs
+in three ways only: no Download PDF, which leads nowhere from the tablet; even
+spacing at the foot; and a report of its height so the pop-up can fit it
+(#58 aligned the two [owner, 2026-09-30]). It is the only view with a script; the customer's own link carries none.
 
 The page itself is built in the brand repo,
 [`abdatta/shawarmania`](https://github.com/abdatta/shawarmania); this repo owns

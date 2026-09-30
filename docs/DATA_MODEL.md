@@ -534,6 +534,18 @@ than in a year and never breaks a receipt a customer legitimately kept. A link
 row is never deleted; deletion would leave a bill silently unshareable with
 nothing recording that anybody meant it.
 
+**What the reader returns of the customer** (`bill_public_receipt`, #58): the last
+four digits of the bill's snapshotted `customer_phone` as `phone_last4`, and
+`gold_at_outlet` from its snapshotted `customer_tier`, **only when the bill has a
+`customer_id`** — never the name, never the whole number, never the identifier.
+The condition is the link rather than a date: every bill rung before #56 has a
+null `customer_id` and often a typed name and phone, and returns neither. Both
+facts are the bill's own snapshots, so a directory edit or a revoked membership
+never rewrites a receipt. It also returns `service_type` as the bill stored it,
+and never `table_number`: a table is a label for the length of a meal, like the
+order number. None of these keys is one the landing Worker's tripwire
+refuses, so either side can release first.
+
 **`bill_public_link_views`** — `id`, `token`, `viewed_at`,
 `client_address_digest`, `user_agent`. Enough to make a harvesting attempt
 visible after the fact and nothing more. It records the **token**, not the bill,

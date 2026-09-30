@@ -1293,7 +1293,8 @@ bill's link, and a fresh one can be issued for a customer who still needs a
 receipt. Both commands are in [The customer's receipt link](#the-customers-receipt-link-54).
 Switching the whole endpoint off is for something wrong at scale, and needs no
 deploy. **A revoked link cannot be recalled from somebody who already opened it**
-— nothing can, which is why the page names no customer.
+— nothing can, which is why the page names no customer (it shows four digits of
+the number and a gold label at most, never a name).
 
 **A receipt link says the bill is cancelled** → that is correct and deliberate.
 The page is built at the moment it is asked for, so a bill voided after its link

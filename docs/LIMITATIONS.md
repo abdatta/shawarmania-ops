@@ -743,9 +743,10 @@ bill's link. But it acts on the **link**, not on what somebody already saw: a
 person who opened a receipt before it was revoked has the contents, and nothing
 in any design can take that back.
 
-This is why the page names no customer. What a wrong reader keeps is one order
-and nothing that identifies a person, which is the control that makes a leak,
-a forward or a misdelivery survivable rather than a disclosure.
+This is why the page names no customer. What a wrong reader keeps is one order,
+the last four digits of a number and at most a gold label (#58), and nothing
+that identifies a person, which is the control that makes a leak, a forward or a
+misdelivery survivable rather than a disclosure.
 
 There is also **no expiry**, deliberately. The mechanism first assumed for
 killing old links — that they would die when stale data was cleared — does not
@@ -753,15 +754,16 @@ exist, because nothing is deleted here and bills are financial records. So the
 choice was a real expiry or none, and revocation won because it acts now rather
 than in a year and never breaks a receipt a customer legitimately kept.
 
-### The receipt page does not say how a bill was served (#60)
+### A phone number typed into a void reason refuses that receipt (#58)
 
-The public receipt does not say whether a bill was dine-in or takeaway, or at
-which table: the reader does not return the bill's `service_type` and
-`table_number` yet. Rendering them is #58's (`the-receipt-says-its-yours`).
-
-A gold member's waived packaging used to print generically, as *Discount (100%) ·
-Selected items*. It now reads *Free packaging · Gold member*, since #62's landing
-sibling `the-receipt-shows-points`.
+The landing Worker refuses to serve a receipt whose payload carries a run of ten
+digits anywhere, because that is the shape of a whole phone number and the
+receipt may show only the last four. A void reason is free text a manager types,
+so a reason like *Customer 9876543210 left* makes that one bill's receipt answer
+with the ordinary refusal rather than print the number on a bearer-token page.
+Accepted: refusal is the safe failure, it touches one bill, and the Worker logs
+`ReceiptNamesSomebody` so it is findable. The fix, if it ever happens, is a
+reworded reason on a fresh bill, not a looser tripwire.
 
 ### Forgotten-password recovery requires an administrator
 

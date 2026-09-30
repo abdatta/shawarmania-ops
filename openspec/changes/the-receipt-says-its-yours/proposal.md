@@ -1,10 +1,10 @@
 # Proposal: the-receipt-says-its-yours
 
-> **Model**: Opus · **Wave**: F · **Depends on**: #57, #54, **#62**, #60, #63 · **Gate**: a customer opening their own receipt link sees the last four digits of the number they gave and, if they were gold at that outlet when they paid, *⭐ Gold at* that outlet, so the page reads as theirs rather than as an anonymous document; it never shows their name, their full number, or anything else that identifies a person; the full number never leaves the database, proved by reading the function's payload rather than the page; a bill with no customer attached, including every bill rung before customer identification, shows neither; the page, its counter view and its PDF agree on all of it; a bill says whether it was dine-in, at which table, or takeaway; the reversal of the clause that forbade masked digits is argued in the spec rather than deleted from it; no receipt link or counter pop-up breaks at any point in the two-repository release; and the four-role demo walkthrough still walks.
+> **Model**: Opus · **Wave**: F · **Depends on**: #57, #54, **#62**, #60, #63 · **Gate**: a customer opening their own receipt link sees the last four digits of the number they gave and, if they were gold at that outlet when they paid, *⭐ Gold*, so the page reads as theirs rather than as an anonymous document; it never shows their name, their full number, or anything else that identifies a person; the full number never leaves the database, proved by reading the function's payload rather than the page; a bill with no customer attached, including every bill rung before customer identification, shows neither; the page, its counter view and its PDF agree on all of it; a bill says whether it was dine-in or takeaway, and never its table; the reversal of the clause that forbade masked digits is argued in the spec rather than deleted from it; no receipt link or counter pop-up breaks at any point in the two-repository release; and the four-role demo walkthrough still walks.
 
 > **Rewritten 2026-09-30** from the seed `the-receipt-names-its-customer`. The owner
 > decided the receipt shows **the last four digits and gold, never a name**, and
-> that gold reads *⭐ Gold at \<outlet\>*. The first seed put the customer's name on
+> that gold reads *⭐ Gold*: the receipt already names its outlet, loudly. The first seed put the customer's name on
 > the page; why that was dropped is below, so it is not re-proposed.
 
 ## Why
@@ -27,7 +27,7 @@ is set):
 
 - **The last four digits of the number the customer gave**, as the bill
   snapshotted it, in a masked form (e.g. `•••• 4821`).
-- **⭐ Gold at \<outlet\>**, when the bill's snapshotted `customer_tier` is gold.
+- **⭐ Gold**, when the bill's snapshotted `customer_tier` is gold.
   Gold is per outlet since #62, so the mark names the outlet it belongs to, which
   is the bill's own.
 
@@ -75,8 +75,9 @@ payload carrying a customer key (see *The release order* below).
 
 #62 wrote the rule down a second time. Its `public-bill-receipt` delta adds
 *The receipt states the points a bill earned, used and left*, which says the
-receipt *"SHALL continue to name no customer."* This change amends that
-requirement too.
+receipt *"SHALL continue to name no customer."* That clause stays true: the
+amended requirement still names no customer, and defines what naming is. So no
+delta against it is needed (design D5).
 
 **#54's reasoning should be quoted, not paraphrased away.** A receipt link is a
 bearer token in a URL. Anyone who obtains it (forwarded, screenshotted, in a group
@@ -117,7 +118,7 @@ as a disclosure rather than pretend it is none.
   does not rewrite an old receipt. **The receipt must read the snapshot**, never
   the live membership.
 - **`bills.customer_tier` is the membership at the bill's own outlet** (#62's
-  `bills_snapshot_customer_tier`), so *Gold at \<that outlet\>* is exactly what
+  `bills_snapshot_customer_tier`), so *⭐ Gold* on a receipt means gold at the outlet it names, exactly what
   it records.
 - **`bills.customer_id` is null on every bill rung before #56** (2026-09-21):
   `20260920000000_the_server_links_the_sale_to_the_customer.sql` records that no
@@ -125,8 +126,9 @@ as a disclosure rather than pretend it is none.
   `customer_id` is set** gives every older bill nothing, with no date rule. One
   pre-#56 production bill carries a phone and no `customer_id`; it must show no
   digits, and is the real case to test against.
-- **`bills.service_type` and `bills.table_number`** (#60) exist on every bill.
-  The reader does not return them yet.
+- **`bills.service_type`** (#60) exists on every bill. The reader does not return
+  it yet. `bills.table_number` does too, and the receipt never shows it: a table
+  is a label for the length of a meal, like the order number [owner, 2026-09-30].
 
 This change therefore alters **a projection and three renderings**, not a data
 model.
@@ -151,16 +153,15 @@ the real-bill steps below wait for real use, like #62's own.
     `customer_phone`, **only when `customer_id` is set**, else null.
   - `gold_here`: true when the snapshotted `customer_tier` is gold, under the same
     condition.
-  - `service_type` and `table_number`, as the bill stored them.
-  - Key names are the design's to settle, with the landing tripwire in mind (see
-    below): no key may be one the tripwire exists to catch.
+  - `service_type`, as the bill stored it. Not the table number.
+  - No key is one the landing tripwire refuses (design D1).
 - **Mask in the database, not on the page.** #54's principle stands: what the page
   may not show, the function does not return. The full number must never cross the
   boundary and then be trimmed by the page.
 - **Render, in the landing repository**, the digits, the gold mark and the service
   line on all three renderings: the customer's page, its counter view
   (`?view=counter`, from #63), and the PDF.
-  - Service line: *Dine-in · Table 4*, *Dine-in*, *Takeaway*, or nothing for a
+  - Service: *Dine-in* or *Takeaway* beside the bill number, or nothing for a
     bill that is neither (every bill before #60, and every bill at an outlet that
     chose neither).
 - **Amend the `public-bill-receipt` spec**:
@@ -169,9 +170,7 @@ the real-bill steps below wait for real use, like #62's own.
     digits and the gold mark only for a bill with a customer. It carries #54's
     reasoning, the spent second-factor option, and why the name was refused a
     second time.
-  - #62's points requirement loses *"continue to name no customer"* in favour of a
-    pointer to that requirement, so the rule lives in one place.
-  - A requirement, or a scenario, for how the bill was served.
+  - A requirement for how the bill was served.
 - **Update `supabase/tests/51_the_public_receipt_reader.sql`**: the full number,
   the name and the customer id still appear nowhere in the serialised receipt at
   any depth; the four digits appear only with a `customer_id`; a bill with a phone
@@ -197,24 +196,20 @@ each had.
 data.** `worker/src/receipt.ts`'s `assertNamesNobody` walks the payload and throws
 on any key named `customer_name`, `customer_phone`, `customer_id`, `customer`,
 `biller_name` or `biller_profile_id`, **whatever its value**, so even
-`"customer": null` trips it. If the ops migration ships first with such a key,
-**every receipt link and every counter pop-up is refused**, mid-service, including
-the ones #63's Send receipt is already sending.
+`"customer": null` trips it. If the ops migration shipped such a key first,
+**every receipt link and every counter pop-up would be refused**, mid-service,
+including the ones #63's Send receipt is already sending.
 
-So:
+**Resolved in design D1: the new keys are not keys the live tripwire refuses**
+(`phone_last4`, `gold_at_outlet`, `service_type`), so either repo
+can release first and every receipt keeps rendering. The tripwire is widened, not
+deleted: it still refuses a name or a biller by key, and now also refuses a run of
+ten digits anywhere in the payload, which is the leak this change could actually
+introduce.
 
-1. **The landing Worker ships first.** It accepts the new fields and renders
-   nothing when they are absent. **The tripwire is replaced, not deleted**: it
-   still throws on a name or a biller, and now also on anything shaped like a
-   whole phone number anywhere in the payload, which is the leak this change
-   could actually introduce. Its test in `worker/test/receipt.test.ts` changes
-   with it.
-2. **The privacy page changes**, with the owner approving the words (see below),
-   before or with step 3.
-3. **The ops migration ships.** From that moment the new fields render.
-
-Per `no-pushes-while-the-counter-trades`, the owner picks both windows. Plan the
-sequence in `tasks.md` rather than discovering it at deploy.
+What still orders the release is the privacy page: it must be live no later than
+the Worker that prints digits (design D8). Per `no-pushes-while-the-counter-trades`,
+the owner picks both windows.
 
 ## The published pages
 
@@ -259,33 +254,32 @@ reversal.
    in writing is that the next reader finds the reasoning rather than an absence.
 2. **The projection, the masking and the pgTAP suite**, here, not released.
 3. **The landing Worker, tripwire, page, counter view and PDF**, in the other
-   repository, released first.
-4. **The privacy page**, approved and released.
-5. **The ops release.**
-6. **Archive only after #62 archives.** This change's spec delta modifies #62's
-   points requirement, which reaches `openspec/specs/` only when #62 is synced. #62
-   is waiting on real use (`archive-only-after-production-use`), so this change can
-   be built and released first but must be archived second.
+   repository, not released.
+4. **The release**, in the owner's windows: the ops migration at any time; the
+   privacy page and the Worker together, the page no later than the Worker.
+5. **Archive after real use** (`archive-only-after-production-use`). No archive
+   order against #62 is needed (design D5).
 
 ## How to run the gate
 
 On seeded bills locally, and against a local Worker:
 
 - A bill with a customer, not gold: the digits, no mark.
-- A gold member's bill: the digits and *⭐ Gold at \<outlet\>*.
+- A gold member's bill: the digits and *⭐ Gold*.
 - A gold member whose gold has since been revoked or expired: the old receipt still
   shows the mark.
 - A skipped bill (no customer facts): neither.
 - A bill with a phone and no `customer_id` (the pre-#56 shape): neither.
-- Dine-in with a table, dine-in without, takeaway, and neither: the service line
-  reads right in each.
+- Dine-in (with a table or without), takeaway, and neither: the service reads
+  right in each, and no table ever appears.
 - The page, `?view=counter` and the PDF agree in every case above.
 - The function's **payload**, inspected rather than the rendering: the full number,
   the name and the customer id appear nowhere, at any depth.
 - The landing Worker still refuses a payload carrying a name or a whole phone
   number, proved by a test.
-- **The release order**: the new Worker serves an old-shape payload unchanged, and
-  a new-shape payload renders the new lines.
+- **The release order**: the new Worker serves an old-shape payload unchanged, a
+  new-shape payload renders the new lines, and the **live** Worker's tripwire
+  passes a new-shape payload.
 - An unknown, malformed, revoked and disabled link are still refused identically.
 - On a cheap Android phone at the width #54 targets.
 
@@ -295,8 +289,8 @@ On seeded bills locally, and against a local Worker:
   confirms it reads as that customer's receipt. Waits for real use at Kalyani Cafe.
 - 🧍 The owner shows a customer the receipt from the counter's View receipt and
   confirms the pop-up says the same.
-- 🧍 The owner approves the privacy page's new wording, and it is live before the
-  ops release.
+- 🧍 The owner approves the privacy page's new wording, and it is live no later
+  than the landing Worker that prints digits.
 
 ## Docs to update before archiving
 
