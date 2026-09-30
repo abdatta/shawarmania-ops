@@ -515,6 +515,11 @@ fails afterwards, a receipt goes out by hand. In Billing history, expand the bil
 - **Open receipt** shows when there is no number. It opens the receipt page; its
   ⋮ menu shares, copies the link, downloads the PDF or opens it in full Chrome.
 
+**At the counter, a biller can show the bill instead.** In Bills this shift,
+expand the bill and tap **View receipt**: the receipt opens over the counter,
+which is blurred behind it, and **Close** returns to the counter. Nothing is sent.
+A bill rung offline shows the button greyed out until it syncs.
+
 **Ask before sending.** A customer gives their number to earn points, and that is
 not permission to message them.
 

@@ -36,9 +36,10 @@ What that moves:
   connection"*, which is simply no longer true.
 - **The misdelivery argument is unchanged.** An automatic SMS to a mistyped
   number misdelivers exactly as an automatic RCS message would.
-- **Until DLT approves, the owner sends receipts by hand on WhatsApp**
-  (#63 `a-receipt-goes-out-on-whatsapp`). That stays after this ships, as the
-  manual resend when a send fails.
+- **Until DLT approves, the owner sends receipts by hand on WhatsApp**, and a
+  biller can show a customer their bill on the counter (#63
+  `a-receipt-goes-out-on-whatsapp`). Both stay after this ships, the WhatsApp send
+  as the manual resend when a send fails.
 
 ## What #62 changed here, 2026-09-28
 

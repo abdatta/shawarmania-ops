@@ -703,7 +703,9 @@ admin sends it by hand, from a bill they are already looking at:
 
 - a bill carrying the customer's number offers **Send receipt**, which opens
   WhatsApp on that number with the message typed, and the person taps Send;
-- a bill without one offers **Open receipt**, which opens the receipt page.
+- a bill without one offers **Open receipt**, which opens the receipt page;
+- at the counter, a biller can **show** a customer their bill with **View
+  receipt**, which sends nothing.
 
 Automatic delivery was the largest deliberate cut in #54, because it was four
 decisions nobody had made. It is now
@@ -713,7 +715,7 @@ customer gets a receipt only if somebody deliberately sends one, so the
 feature's reach is a person's habit. After it ships, Send receipt stays as the
 manual resend.
 
-Three edges of the by-hand path, each accepted (a-receipt-goes-out-on-whatsapp):
+Four edges of the by-hand path, each accepted (a-receipt-goes-out-on-whatsapp):
 
 - **A bill with a number cannot open its receipt from the bill.** A bill offers
   one receipt action, never both. So when the number is not on WhatsApp, or was
@@ -731,8 +733,8 @@ Three edges of the by-hand path, each accepted (a-receipt-goes-out-on-whatsapp):
 - **The counter's View receipt trusts the browser about being online.** A frame of
   another site cannot report that its load failed, so the pop-up asks
   `navigator.onLine`. On a network that claims to be online but reaches nothing,
-  such as a Wi-Fi captive portal, it shows a blank frame rather than the offline
-  sentence.
+  such as a Wi-Fi captive portal, it shows its loading spinner or a blank frame
+  rather than the offline sentence.
 
 ### A receipt link cannot be recalled, only revoked (#54)
 

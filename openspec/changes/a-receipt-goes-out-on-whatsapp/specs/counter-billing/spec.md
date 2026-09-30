@@ -153,8 +153,9 @@ receipt SHALL be shown disabled with the reason. A void bill SHALL NOT offer it.
 Where the browser reports the tablet offline, the pop-up SHALL say that the
 receipt needs the internet instead of showing the frame. Until the page has
 loaded, the pop-up SHALL show that it is loading, in the space the receipt will
-fill. The page SHALL be requested in its counter view (`view=counter`), which
-omits its download link. While the pop-up is open, the counter behind it SHALL be
+fill. The page SHALL be requested in its counter view (`view=counter`), which the
+receipt site draws for a pop-up (without its download link, among other trims).
+While the pop-up is open, the counter behind it SHALL be
 blurred so that nothing on it can be read, because the tablet is turned to a
 customer and the counter carries other customers' names and totals.
 
@@ -173,8 +174,22 @@ customer and the counter carries other customers' names and totals.
 
 #### Scenario: A link on the receipt
 
-- **WHEN** the receipt's Download PDF link is tapped inside the pop-up
-- **THEN** nothing downloads and the tablet stays in the app
+- **WHEN** anything on the receipt that is a link is tapped inside the pop-up
+- **THEN** nothing opens or downloads and the tablet stays in the app
+
+#### Scenario: A short receipt and a long one
+
+- **WHEN** a receipt shorter than the screen is shown
+- **THEN** the pop-up is as tall as the receipt, with no gap beneath it
+- **WHEN** a receipt taller than the pop-up's ceiling is shown
+- **THEN** the receipt scrolls inside the pop-up while its header and Close stay
+  in place
+
+#### Scenario: A height that is not from the receipt
+
+- **WHEN** a height message arrives from anything but the pop-up's own frame, or
+  carries something that is not a sensible number of pixels
+- **THEN** the pop-up ignores it
 
 #### Scenario: A bill still in the outbox
 

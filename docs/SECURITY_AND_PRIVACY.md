@@ -430,7 +430,9 @@ nothing. It reads the link its own shift's bills already carry
 `sandbox` permits the page its scripts and nothing else, so nothing downloads,
 nothing opens and nothing navigates the app. The only script is the counter
 view's height report, which the pop-up accepts from its own frame alone; the
-customer's own link carries none. The request carries no referrer.
+customer's own link carries none. The request carries no referrer. **The counter
+behind the pop-up is blurred** while it is open, because the tablet is turned to
+a customer and the counter carries other customers' names, orders and totals.
 
 This is not the automatic delivery programme (#59, SMS through MSG91), and
 none of that programme's machinery (template, suppression, STOP) applies to a

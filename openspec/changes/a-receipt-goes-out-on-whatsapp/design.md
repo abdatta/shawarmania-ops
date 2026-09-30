@@ -4,10 +4,11 @@ Read [`proposal.md`](proposal.md) first. It records what the owner decided on
 2026-09-29 and what was refused. This file is how.
 
 **No RLS policy, no migration, no money arithmetic, no offline semantics.** The
-change reads two fields the bill already carries (`customerPhone`,
-`receiptUrl`) and one it already formats (`totalPaise`), and it writes nothing.
-The rules those areas carry are named below only where this change comes near
-them.
+change reads fields the bill already carries (`customerPhone`, `receiptUrl`,
+`status`) and one it already formats (`totalPaise`), and it writes nothing. The
+counter's viewer checks `navigator.onLine` to say it is offline; it touches no
+outbox. The rules those areas carry are named below only where this change comes
+near them.
 
 ## D1. One receipt action per bill, chosen by the number
 
@@ -138,14 +139,14 @@ This is the demo seam, which is one reason this is a change and not a quickfix.
 ## D6. The row
 
 ```tsx
-<div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3">
+<div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
   {receipt action or nothing}
   <Button variant="secondary" className="ml-auto text-danger" …>Cancel this bill</Button>
 </div>
 ```
 
-- **`justify-between` plus `ml-auto` on Cancel**, so Cancel is at the right edge
-  whether or not a receipt action precedes it.
+- **`ml-auto` on Cancel**, so Cancel is at the right edge whether or not a receipt
+  action precedes it.
 - The receipt action stays **first in DOM order**, keeping #54's reason: a
   destructive control must not be the first thing a thumb or a screen reader
   reaches.
@@ -156,9 +157,9 @@ This is the demo seam, which is one reason this is a change and not a quickfix.
 - **This departs from the Outlets page's destructive-at-the-foot convention**
   on purpose, recorded in `docs/DESIGN_SYSTEM.md` so it is not "fixed" back.
 
-**Shimmer:** Billing history's loading silhouette covers collapsed rows, not an
-expanded bill's action row. Check that it is so; if a placeholder draws this
-row, reshape it (AGENTS.md, Design).
+**Shimmer:** Billing history's loading silhouette covers collapsed rows only
+(checked: `BillingHistoryShimmer`), not an expanded bill's action row, so it
+needed no reshaping.
 
 ## D7. WhatsApp's colour and mark
 
@@ -249,11 +250,17 @@ does.
   check than #59's automatic path has. #54's bound (the page names no customer)
   still holds until #58.
 
+## D11. Relationship to #59
+
+A backup now, a manual resend after #59 ships. Nothing here constrains #59's
+design, and #59 will not need to remove anything this builds.
+
 ## D12. The counter shows the receipt (2026-09-30)
 
 A `ReceiptViewer` pop-up on the shared `Modal`, opened from **View receipt** in
 the expanded bill of `ShiftBillList` (the counter's Bills this shift, rendered by
-`MyShiftSurface`). It holds one `<iframe>` of the bill's receipt URL.
+`MyShiftSurface`). It holds one `<iframe>` of the bill's receipt URL, asking for
+the page's counter view (`?view=counter`).
 
 **Why a frame of the real page, not the receipt redrawn in the app.** The page is
 the receipt the customer's link shows, discounts, round-up and points included,
@@ -261,7 +268,8 @@ built at the moment it is asked for (#54). Redrawing it here would be a second
 receipt that could disagree with the first. Measured 2026-09-30: the Worker sends
 `Referrer-Policy`, `X-Robots-Tag` and `X-Content-Type-Options`, and **no**
 `X-Frame-Options` or CSP `frame-ancestors`, so it can be framed with no change to
-the landing repo.
+the landing repo. (The landing repo did change later, for the counter view below,
+but not to allow framing.)
 
 **Locked down with `sandbox="allow-scripts"` and nothing more.** It refuses
 same-origin access, forms, pop-ups, downloads and navigating the app, which is what
@@ -303,19 +311,27 @@ blank frame there is accepted.
 
 **Loading.** A frame's `load` event fires across origins, so a spinner with
 "Loading receipt…" covers the frame until it fires [owner, 2026-09-30: the pop-up
-was a blank dark box while the page loaded]. The pop-up's size is fixed, so the
-spinner holds the space and nothing moves when the receipt arrives; the
-design system's rule for reads (reserve the space) is met by the box, not by a
-shimmer. The frame is its own component, so the spinner returns whenever it
-mounts afresh: each opening, and each return from offline. The spin stops under
-`prefers-reduced-motion`; the words stay.
+was a blank dark box while the page loaded]. The spinner sits over the frame at
+its 32rem fallback height, and the pop-up then settles to the reported height.
+**This is a deliberate exception to the design system's shimmer rule**, which
+says a read waits behind a shimmer shaped like the surface, with no spinner and no
+loading text: the owner asked for a spinner, and the page in the frame is another
+site's, whose shape this app does not draw. It is recorded in
+`docs/DESIGN_SYSTEM.md`, and the lint warning on the text node is suppressed on
+that one line with this reason. The frame is its own component, so the spinner
+returns whenever it mounts afresh: each opening, and each return from offline.
+The spin stops under `prefers-reduced-motion`; the words stay.
 
 **The counter's view of the page.** The frame asks for `?view=counter`, which the
 site's `the-counter-views-the-receipt` (the child of this change in the landing
-repo) reads as "leave out Download PDF": inside this sandbox that button is a dead
-control in front of a customer [owner, 2026-09-30]. The frame cannot hide it
-itself; the page is on another origin. The two ship in either order: until the
-site is deployed it ignores the parameter and the button stays, still inert.
+repo) draws as the customer's receipt trimmed for a pop-up [owner, 2026-09-30]:
+the same items, discounts and total, but no Download PDF (a dead control in this
+sandbox), no "Paid by" (the customer has just paid), no "not a tax invoice"
+sentence, the bill number and time on one plain row, even top and bottom spacing,
+a tighter gap under the logo, and the height report above. The frame cannot
+change any of it itself; the page is on another origin. The two halves could ship
+in either order: a site that did not know the parameter ignored it, and the
+pop-up fell back to its fixed height.
 
 **The counter behind is blurred** (`backdrop:backdrop-blur-md` on this pop-up
 only) [owner, 2026-09-30]. The tablet is turned to a customer, and the counter
@@ -337,8 +353,3 @@ lose the counter mid-service.
 
 **Rejected: the receipt redrawn natively from the bill.** A second rendering of
 the same document; see above.
-
-## D11. Relationship to #59
-
-A backup now, a manual resend after #59 ships. Nothing here constrains #59's
-design, and #59 will not need to remove anything this builds.

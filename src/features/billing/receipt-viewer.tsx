@@ -10,9 +10,9 @@ import { isDemoReceiptLink } from '@/lib/receipt-link'
  * (a-receipt-goes-out-on-whatsapp, design D12).
  *
  * The biller turns the tablet to a customer who asked to see their bill. So this
- * frames **the real receipt page** the customer's link opens, rather than
- * redrawing the bill here: a second rendering of the same document is a second
- * place for it to disagree with the first.
+ * frames **the real receipt page** on `shawarmania.in`, in its counter view,
+ * rather than redrawing the bill here: a second rendering of the same document is
+ * a second place for it to disagree with the first.
  *
  * **The `sandbox` is the guard.** It permits scripts, which the counter view
  * needs to report its height, and nothing else: no same-origin access, form,
@@ -26,12 +26,17 @@ import { isDemoReceiptLink } from '@/lib/receipt-link'
  * and `offline` events, so the frame appears when the tablet comes back. A
  * captive portal that claims to be online still shows a blank frame; accepted.
  *
- * **The page is asked for its counter view** (`?view=counter`), which leaves out
- * Download PDF (a dead control in here, in front of a customer) and reports the
- * page's height, because this pop-up cannot measure a page on another origin.
- * The pop-up grows to that height, up to 92% of the screen, and scrolls beyond
- * it [owner, 2026-09-30]. Where no report comes, it keeps a fixed fallback
- * height, so neither side's deploy can break the other.
+ * **The page is asked for its counter view** (`?view=counter`): the customer's
+ * receipt trimmed for a pop-up, without Download PDF (a dead control in here),
+ * "Paid by" or the tax-invoice sentence, and reporting its height, because this
+ * pop-up cannot measure a page on another origin. The pop-up grows to that
+ * height, up to 92% of the screen, and scrolls beyond it [owner, 2026-09-30].
+ * Where no report comes, it keeps a fixed fallback height, so neither side's
+ * deploy can break the other.
+ *
+ * **Its spinner is a deliberate exception to the shimmer rule** (see
+ * `docs/DESIGN_SYSTEM.md`): the owner asked for one, and the page in the frame is
+ * another site's, whose shape this app does not draw.
  */
 export function ReceiptViewer({
   open,
@@ -157,6 +162,7 @@ function ReceiptFrame({ src, title }: { src: string; title: string }) {
             size={28}
             className="animate-spin text-content-muted motion-reduce:animate-none"
           />
+          {/* eslint-disable-next-line no-restricted-syntax -- the owner asked for a spinner here; the one exception to the shimmer rule, recorded in docs/DESIGN_SYSTEM.md */}
           <p className="text-sm font-semibold text-content-muted">Loading receipt…</p>
         </div>
       )}

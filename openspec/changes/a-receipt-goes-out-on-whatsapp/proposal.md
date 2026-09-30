@@ -1,6 +1,6 @@
 # Proposal: a-receipt-goes-out-on-whatsapp
 
-> **Model**: GPT-5.6 Sol · **Wave**: F · **Depends on**: #54, #56 · **Gate**: on a bill that carries a customer's number, the owner or a franchise admin taps **Send receipt** and WhatsApp opens on that number's chat with the bill's message and receipt link already typed, needing only Send; a bill with no number, or one that does not read as an Indian mobile, offers **Open receipt** instead, which opens that bill's receipt page outside the app; a bill never offers both, and a cancelled bill offers neither; **Cancel this bill** sits at the right-hand end of the row; a demonstration bill sends on WhatsApp exactly as a real one does, and says only that its receipt link will not open; the WhatsApp colour passes AA in both themes; a biller opens **View receipt** on a bill in Bills this shift and that bill's receipt page shows in a pop-up inside the app, with nothing on it that leads out of the app, greyed out with a reason on a bill not yet synced, absent on a cancelled one, and saying so rather than showing a blank box when the tablet is offline; nothing is written; and the four-role demo walkthrough still walks.
+> **Model**: GPT-5.6 Sol · **Wave**: F · **Depends on**: #54, #56 · **Gate**: on a bill that carries a customer's number, the owner or a franchise admin taps **Send receipt** and WhatsApp opens on that number's chat with the bill's message and receipt link already typed, needing only Send; a bill with no number, or one that does not read as an Indian mobile, offers **Open receipt** instead, which opens that bill's receipt page outside the app; a bill never offers both, and a cancelled bill offers neither; **Cancel this bill** sits at the right-hand end of the row; a demonstration bill sends on WhatsApp exactly as a real one does, and says only that its receipt link will not open; the WhatsApp colour passes AA in both themes; a biller opens **View receipt** on a bill in Bills this shift and that bill's receipt shows in the site's counter view, in a pop-up inside the app over a blurred counter, sized to the receipt up to most of the screen and scrolling beyond it, with nothing on it that leads out of the app, a spinner until it loads, greyed out with a reason on a bill not yet synced, absent on a cancelled one, and saying so rather than showing a blank box when the tablet is offline; nothing is written; and the four-role demo walkthrough still walks.
 
 ## Why
 
@@ -87,22 +87,32 @@ Bills this shift → Bill 27 (expanded)
 ```
 
 - **View receipt** sits in a bill's expanded detail in the counter's **Bills this
-  shift**. Tapping it opens a large pop-up **inside the app** showing that bill's
-  receipt page, the real one on `shawarmania.in`. The biller turns the tablet to
-  the customer, then taps Close.
-- **Nothing in the pop-up leads out of the app.** The receipt's own links do
-  nothing there, and the page is asked for its counter view, which leaves out
-  Download PDF altogether (the site's `the-counter-views-the-receipt`). Nothing is
-  copied, shared or sent.
+  shift**. Tapping it opens a pop-up **inside the app** showing that bill's
+  receipt from `shawarmania.in`, in the page's **counter view**. The biller turns
+  the tablet to the customer, then taps Close.
+- **The counter view is the customer's receipt, trimmed for a pop-up** (the site's
+  `the-counter-views-the-receipt`) [owner, 2026-09-30]: the same items, discounts
+  and total, without Download PDF, without "Paid by", without the "not a tax
+  invoice" sentence, with the bill number and time on one plain row, and with even
+  spacing. The customer's own link is unchanged.
+- **The pop-up fits the receipt** [owner, 2026-09-30]: it grows with the receipt up
+  to 92% of the screen and scrolls within beyond that, with the header and Close
+  fixed. The counter view reports its height, because the pop-up cannot measure a
+  page on another site.
+- **The counter behind the pop-up is blurred** [owner, 2026-09-30], so a customer
+  shown the tablet cannot read other customers' names and totals.
+- **Nothing in the pop-up leads out of the app.** The frame lets the page run its
+  one script (the height report) and nothing else: no link on it can open, download
+  or navigate. Nothing is copied, shared or sent.
 - **While the receipt loads**, the pop-up shows a spinner with "Loading receipt…"
-  rather than a blank box.
+  rather than a blank box [owner, 2026-09-30].
 - **A bill not yet synced** has no receipt yet: View receipt is greyed out and says
   "Receipt appears once this bill syncs".
 - **Offline**, the pop-up says the receipt needs the internet rather than showing a
   blank box.
 - **A cancelled bill** gets no View receipt, as on the owner's side.
 - **Demo** behaves as production: the pop-up shows the site's refusal page for the
-  invented bill, with the demo note.
+  invented bill, at the fallback height, with the demo note.
 
 **This reverses one sentence of #54, and only one.** #54 kept a *share*
 affordance off the counter tablet because "the tablet is shared hardware standing
@@ -160,7 +170,6 @@ without re-deriving it. **Not built now.**
 
 - **No sending, opening or sharing from the counter tablet.** It shows the
   receipt in the app and nothing else.
-
 - **No automatic sending.** That is #59.
 - **No WhatsApp Business API, no Meta account, no server-side send.** The link is
   free, keyless and client-only.
@@ -171,9 +180,11 @@ without re-deriving it. **Not built now.**
 - **No customer name in the message.** Bills rung before #56 carry placeholder
   names typed to get past a UI rule (`As`, `Kk`), and a message opening "Hi As"
   is worse than one that names nobody.
-- **No change to the counter, the tablet, offline, the outbox or any write.**
-- **No change to receipt links**: how they are minted, revoked, or what the page
-  shows.
+- **No change to offline, the outbox or any write.** The counter gains View
+  receipt and nothing else.
+- **No change to receipt links**, how they are minted or revoked, **or to what the
+  customer's own link shows.** The counter view is a separate, trimmed rendering,
+  built in the site repo.
 - **No Send to someone else** (see above).
 - **No change to #59 here.** Its proposal was corrected separately on
   2026-09-29 to name SMS through MSG91 as the channel.
@@ -181,21 +192,25 @@ without re-deriving it. **Not built now.**
 ## Docs to update before archiving
 
 - [`docs/SCREENS.md`](../../../docs/SCREENS.md): Billing history's action row, the
-  two receipt actions, Cancel on the right, and the demo behaviour; and the
-  counter's View receipt in Bills this shift.
+  two receipt actions, Cancel on the right, and the demo behaviour; the counter's
+  View receipt in Bills this shift; and the counter view in the customer's-receipt
+  section.
 - [`docs/LIMITATIONS.md`](../../../docs/LIMITATIONS.md): "A receipt link is
   shared by hand" now reads as sent by hand on WhatsApp. Also record the Custom
   Tab ceiling on Android and the no-open-with-a-number trade.
 - [`docs/SECURITY_AND_PRIVACY.md`](../../../docs/SECURITY_AND_PRIVACY.md): the
   number and the receipt link leave the app into WhatsApp on the owner's tap;
   nothing is logged; asking first is the practice; a points number is not
-  consent.
+  consent; the counter shows a receipt and hands nothing out, in a frame that
+  permits only the height report, over a blurred counter.
 - [`docs/DESIGN_SYSTEM.md`](../../../docs/DESIGN_SYSTEM.md): the WhatsApp tokens,
-  why a third party's colour is in the token layer, and the Cancel-on-the-right
-  exception to the destructive-at-the-foot convention.
+  why a third party's colour is in the token layer, the Cancel-on-the-right
+  exception to the destructive-at-the-foot convention, and the receipt pop-up's
+  spinner as an exception to the shimmer rule.
 - [`docs/OPERATIONS.md`](../../../docs/OPERATIONS.md): which WhatsApp account the
-  message goes from (whichever is signed in on that phone), and the suggestion of
-  a dedicated outlet number on the WhatsApp Business app.
+  message goes from (whichever is signed in on that phone), the suggestion of a
+  dedicated outlet number on the WhatsApp Business app, and showing a customer
+  their bill from the counter.
 
 ## How to run the gate
 
@@ -212,9 +227,12 @@ without re-deriving it. **Not built now.**
 - Phone and tablet widths, light and dark: the row holds on one line at 375px,
   and the contrast validator passes the new pair in both themes.
 - At the counter (tablet width), expand a synced bill in Bills this shift and tap
-  View receipt: the receipt shows in a pop-up, its PDF link does nothing, Close
-  returns to the counter. A bill still in the outbox: greyed out with its reason.
-  Offline: the pop-up says the receipt needs the internet.
+  View receipt: a spinner, then the receipt's counter view (no Download PDF, no
+  "Paid by", bill number and time on one row) in a pop-up over a blurred counter,
+  sized to the receipt with no gap beneath it; on a short screen the receipt
+  scrolls inside with Close fixed; Close returns to the counter. A bill still in
+  the outbox: greyed out with its reason. Offline: the pop-up says the receipt
+  needs the internet.
 - The four-role demo walkthrough still walks.
 
 ## User-only gate steps

@@ -50,8 +50,8 @@ is already proved.
 - [x] 3.2 `src/features/billing/bill-receipt-action.tsx` replacing
   `bill-receipt-share.tsx`. Delete the old component and its test. Keep
   `useShareLink` and its other callers untouched.
-- [x] 3.3 `manager-bill-detail.tsx`: pass `customerPhone` and `totalPaise`; row
-  becomes `justify-between` with Cancel `ml-auto`; rewrite the row's comment
+- [x] 3.3 `manager-bill-detail.tsx`: pass `customerPhone` and `totalPaise`; the
+  row keeps `flex-wrap` and Cancel takes `ml-auto`; rewrite the row's comment
   (the reasoning for receipt-first DOM order stays, the fragment and
   revealed-link reasoning goes).
 - [x] 3.4 Failing first in `manager-bill-detail.test.tsx`: Cancel is the row's
@@ -88,7 +88,8 @@ is already proved.
 ## 6. The counter shows the receipt (design D12)
 
 - [x] 6.1 Failing first: `receipt-viewer.test.tsx`. Open, it frames the URL with
-  an empty `sandbox`, `referrerpolicy="no-referrer"` and a title naming the bill;
+  an empty `sandbox` *(later `allow-scripts` only, 6.9)*,
+  `referrerpolicy="no-referrer"` and a title naming the bill;
   offline it shows the sentence and no frame, and the frame appears on `online`;
   a demo link carries the demo note; Close calls `onClose`.
 - [x] 6.2 `src/features/billing/receipt-viewer.tsx` on the shared `Modal`.
@@ -99,20 +100,29 @@ is already proved.
 - [x] 6.4 `ShiftBillList`: View receipt in the expanded detail, above the tender
   edit and unwind rows.
 - [x] 6.5 Docs: `SCREENS.md` (Bills this shift), `SECURITY_AND_PRIVACY.md` (the
-  tablet shows, hands nothing out; the empty sandbox), `LIMITATIONS.md` (a
+  tablet shows, hands nothing out; the sandbox), `LIMITATIONS.md` (a
   captive portal shows a blank frame).
 - [x] 6.6 Gates as in 5.1, and the preview at tablet width in both themes: a
   synced bill, an unsynced one, and the pop-up in demo.
 - [x] 6.7 On the owner's word (2026-09-30), failing first: the frame asks for
   `?view=counter`, and a spinner covers it until `load`, returning after offline.
   The site half, `the-counter-views-the-receipt`, omits Download PDF for that
-  view; it is committed in the landing repo and deploys with `worker:deploy`.
+  view; committed in the landing repo and deployed with `worker:deploy`.
 - [x] 6.8 On the owner's word (2026-09-30), failing first: the counter behind the
   pop-up is blurred, so a customer shown the tablet cannot read other bills.
 - [x] 6.9 On the owner's word (2026-09-30), failing first: the pop-up fits the
   receipt. The frame allows scripts and nothing else, takes a height only from
   its own frame's message, falls back to 32rem, and scrolls within beyond 92% of
   the screen. The site's counter view reports the height.
+- [x] 6.10 On the owner's word (2026-09-30), in the site repo and deployed: the
+  counter view also leaves out "Paid by" and the tax-invoice sentence, puts the
+  bill number and time on one plain row, spaces top and bottom evenly, tightens
+  the gap under the logo, and reports the content's own height rather than the
+  scroll height (which could grow the pop-up but never shrink it). Checked with
+  real Kalyani receipts in a throwaway local demo, since removed.
+- [x] 6.11 The docs audit (2026-09-30): the pop-up's spinner recorded as a
+  deliberate exception to the design system's shimmer rule, with its lint warning
+  suppressed on that line; every doc and change file reread against what is live.
 
 ## 7. PHASE GATE: #63 `a-receipt-goes-out-on-whatsapp`
 
@@ -125,10 +135,12 @@ is already proved.
   demonstration bill sends on WhatsApp exactly as a real one does, and says only
   that its receipt link will not open; the WhatsApp
   colour passes AA in both themes; a biller opens View receipt on a bill in
-  Bills this shift and its receipt shows in a pop-up inside the app, with
-  nothing on it that leads out, greyed out with a reason on a bill not yet
-  synced, absent on a cancelled one, and saying so when offline; nothing is
-  written; and the four-role demo walkthrough still walks.
+  Bills this shift and its receipt shows in the site's counter view, in a pop-up
+  inside the app over a blurred counter, sized to the receipt up to most of the
+  screen and scrolling beyond it, with nothing on it that leads out, a spinner
+  until it loads, greyed out with a reason on a bill not yet synced, absent on a
+  cancelled one, and saying so when offline; nothing is written; and the
+  four-role demo walkthrough still walks.
   *Walked 2026-09-30 in the production build on 7413, demo and the local backend
   signed in as the seed owner: every clause proved except the first's last step.
   Live bills built `https://wa.me/91XXXXXXXXXX?text=…` with `target="_blank"`
@@ -137,10 +149,13 @@ is already proved.
   then showed Send disabled; on the owner's word that became a live link like
   any other (unit-tested, and rechecked in the preview). **WhatsApp actually
   opening on the chat needs a phone with WhatsApp**, so it rides on 7.2, and this
-  box stays open until then.*
+  box stays open until then. The counter's View receipt was walked the same day
+  with real Kalyani receipts in a throwaway local demo (spinner, counter view,
+  fit, scroll on a short screen, blur, Close), and the owner signed the look off.*
 - [ ] 7.2 🧍 The owner sends one real receipt from the installed app on their
   Android phone to a number they own, and judges the wording and the look.
 - [ ] 7.3 🧍 The owner confirms which WhatsApp account customers should see it
   come from.
-- [x] 7.4 Commit locally. **Do not push**: the owner picks the deploy window while
-  the counter trades.
+- [x] 7.4 Commit, and push only in a window the owner picks. Pushed and deployed on
+  the owner's word on 2026-09-30, while every outlet was closed ahead of Kalyani
+  Cafe's opening.
