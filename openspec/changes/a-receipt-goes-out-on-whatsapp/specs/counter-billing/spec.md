@@ -149,7 +149,16 @@ View receipt SHALL read the link the bill already carries and SHALL NOT create
 one. Where the bill has no link yet, because it has not reached the server, View
 receipt SHALL be shown disabled with the reason. A void bill SHALL NOT offer it.
 Where the browser reports the tablet offline, the pop-up SHALL say that the
-receipt needs the internet instead of showing the frame.
+receipt needs the internet instead of showing the frame. Until the page has
+loaded, the pop-up SHALL show that it is loading, in the space the receipt will
+fill. The page SHALL be requested in its counter view (`view=counter`), which
+omits its download link.
+
+#### Scenario: Waiting for the receipt
+
+- **WHEN** View receipt is opened and the page has not loaded yet
+- **THEN** the pop-up says the receipt is loading, and the receipt replaces that
+  when it arrives
 
 #### Scenario: Showing a customer their bill
 

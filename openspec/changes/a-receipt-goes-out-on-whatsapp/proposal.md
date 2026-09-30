@@ -90,8 +90,12 @@ Bills this shift → Bill 27 (expanded)
   shift**. Tapping it opens a large pop-up **inside the app** showing that bill's
   receipt page, the real one on `shawarmania.in`. The biller turns the tablet to
   the customer, then taps Close.
-- **Nothing in the pop-up leads out of the app.** The receipt's own links (the PDF
-  download, the footer) do nothing there. Nothing is copied, shared or sent.
+- **Nothing in the pop-up leads out of the app.** The receipt's own links do
+  nothing there, and the page is asked for its counter view, which leaves out
+  Download PDF altogether (the site's `the-counter-views-the-receipt`). Nothing is
+  copied, shared or sent.
+- **While the receipt loads**, the pop-up shows a spinner with "Loading receipt…"
+  rather than a blank box.
 - **A bill not yet synced** has no receipt yet: View receipt is greyed out and says
   "Receipt appears once this bill syncs".
 - **Offline**, the pop-up says the receipt needs the internet rather than showing a

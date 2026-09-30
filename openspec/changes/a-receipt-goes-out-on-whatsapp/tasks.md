@@ -103,6 +103,10 @@ is already proved.
   captive portal shows a blank frame).
 - [x] 6.6 Gates as in 5.1, and the preview at tablet width in both themes: a
   synced bill, an unsynced one, and the pop-up in demo.
+- [x] 6.7 On the owner's word (2026-09-30), failing first: the frame asks for
+  `?view=counter`, and a spinner covers it until `load`, returning after offline.
+  The site half, `the-counter-views-the-receipt`, omits Download PDF for that
+  view; it is committed in the landing repo and deploys with `worker:deploy`.
 
 ## 7. PHASE GATE: #63 `a-receipt-goes-out-on-whatsapp`
 

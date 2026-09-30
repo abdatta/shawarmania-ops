@@ -60,7 +60,10 @@ describe('a bill in Bills this shift', () => {
     await user.click(within(detail).getByRole('button', { name: 'View receipt' }))
 
     const dialog = screen.getByRole('dialog', { name: 'Receipt for bill 27' })
-    expect(within(dialog).getByTitle('Receipt for bill 27')).toHaveAttribute('src', URL)
+    expect(within(dialog).getByTitle('Receipt for bill 27')).toHaveAttribute(
+      'src',
+      `${URL}?view=counter`,
+    )
   })
 
   /*

@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -21,12 +21,44 @@ function renderViewer(receiptUrl = URL, onClose = vi.fn()) {
 }
 
 describe('the counter’s receipt viewer', () => {
-  it('shows the bill’s own receipt page inside the app', () => {
+  /*
+   * `?view=counter` asks the receipt page to leave out Download PDF, a dead
+   * control inside this sandbox (the site's the-counter-views-the-receipt).
+   * Until the site is deployed it ignores the parameter, so neither side can
+   * break the other.
+   */
+  it('shows the bill’s own receipt page inside the app, in the counter’s view', () => {
     renderViewer()
 
     const frame = screen.getByTitle('Receipt for bill 27')
     expect(frame.tagName).toBe('IFRAME')
-    expect(frame).toHaveAttribute('src', URL)
+    expect(frame).toHaveAttribute('src', `${URL}?view=counter`)
+  })
+
+  it('shows a spinner until the receipt has loaded, then only the receipt', () => {
+    renderViewer()
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading receipt…')
+
+    fireEvent.load(screen.getByTitle('Receipt for bill 27'))
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('spins again when the tablet comes back online and the receipt reloads', () => {
+    renderViewer()
+    fireEvent.load(screen.getByTitle('Receipt for bill 27'))
+
+    act(() => {
+      givenOnline(false)
+      window.dispatchEvent(new Event('offline'))
+    })
+    act(() => {
+      givenOnline(true)
+      window.dispatchEvent(new Event('online'))
+    })
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading receipt…')
   })
 
   /*
@@ -67,7 +99,7 @@ describe('the counter’s receipt viewer', () => {
   it('carries the demo note for a demonstration bill, and frames it all the same', () => {
     renderViewer(DEMO)
 
-    expect(screen.getByTitle('Receipt for bill 27')).toHaveAttribute('src', DEMO)
+    expect(screen.getByTitle('Receipt for bill 27')).toHaveAttribute('src', `${DEMO}?view=counter`)
     expect(screen.getByTestId('receipt-viewer-demo')).toHaveTextContent(/will not open a receipt/i)
   })
 

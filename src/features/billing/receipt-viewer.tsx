@@ -1,4 +1,4 @@
-import { WifiOff } from 'lucide-react'
+import { LoaderCircle, WifiOff } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -25,6 +25,10 @@ import { isDemoReceiptLink } from '@/lib/receipt-link'
  * that its load failed: `navigator.onLine` on open, kept current by the `online`
  * and `offline` events, so the frame appears when the tablet comes back. A
  * captive portal that claims to be online still shows a blank frame; accepted.
+ *
+ * **The page is asked for its counter view** (`?view=counter`), which leaves out
+ * Download PDF: a dead control inside this sandbox, in front of a customer. The
+ * site ignores the parameter until it knows it, so neither side breaks the other.
  */
 export function ReceiptViewer({
   open,
@@ -56,13 +60,7 @@ export function ReceiptViewer({
         </div>
 
         {online ? (
-          <iframe
-            src={receiptUrl}
-            title={title}
-            sandbox=""
-            referrerPolicy="no-referrer"
-            className="min-h-0 w-full flex-1 border-0 bg-surface"
-          />
+          <ReceiptFrame src={counterView(receiptUrl)} title={title} />
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
             <WifiOff aria-hidden size={28} className="text-content-muted" />
@@ -84,6 +82,52 @@ export function ReceiptViewer({
       </div>
     </Modal>
   )
+}
+
+/**
+ * The frame, and a spinner over it until the page has loaded.
+ *
+ * Its own component so the spinner comes back whenever the frame is mounted
+ * afresh: each time the pop-up opens, and when the tablet comes back online.
+ * A frame's `load` fires across origins, so this needs nothing from the page.
+ * The pop-up's size is fixed, so the spinner holds the space the receipt will
+ * fill and nothing moves when it arrives.
+ */
+function ReceiptFrame({ src, title }: { src: string; title: string }) {
+  const [loaded, setLoaded] = useState(false)
+
+  return (
+    <div className="relative min-h-0 flex-1">
+      <iframe
+        src={src}
+        title={title}
+        sandbox=""
+        referrerPolicy="no-referrer"
+        onLoad={() => setLoaded(true)}
+        className="size-full border-0 bg-surface"
+      />
+      {!loaded && (
+        <div
+          role="status"
+          className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-surface"
+        >
+          <LoaderCircle
+            aria-hidden
+            size={28}
+            className="animate-spin text-content-muted motion-reduce:animate-none"
+          />
+          <p className="text-sm font-semibold text-content-muted">Loading receipt…</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The receipt URL, asking the page for the counter's view. */
+function counterView(receiptUrl: string): string {
+  const url = new URL(receiptUrl)
+  url.searchParams.set('view', 'counter')
+  return url.toString()
 }
 
 /** The browser's own answer, kept current while the viewer is open. */

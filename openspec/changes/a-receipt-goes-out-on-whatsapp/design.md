@@ -283,6 +283,22 @@ This tablet is offline." in place of the frame; the frame appears when the table
 comes back. A captive portal that claims to be online is not detected, and a
 blank frame there is accepted.
 
+**Loading.** A frame's `load` event fires across origins, so a spinner with
+"Loading receipt…" covers the frame until it fires [owner, 2026-09-30: the pop-up
+was a blank dark box while the page loaded]. The pop-up's size is fixed, so the
+spinner holds the space and nothing moves when the receipt arrives; the
+design system's rule for reads (reserve the space) is met by the box, not by a
+shimmer. The frame is its own component, so the spinner returns whenever it
+mounts afresh: each opening, and each return from offline. The spin stops under
+`prefers-reduced-motion`; the words stay.
+
+**The counter's view of the page.** The frame asks for `?view=counter`, which the
+site's `the-counter-views-the-receipt` (the child of this change in the landing
+repo) reads as "leave out Download PDF": inside this sandbox that button is a dead
+control in front of a customer [owner, 2026-09-30]. The frame cannot hide it
+itself; the page is on another origin. The two ship in either order: until the
+site is deployed it ignores the parameter and the button stays, still inert.
+
 **Demo** is production, as D5: the frame loads the demo link, which the reader
 refuses, and the demo note says why.
 
