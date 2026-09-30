@@ -9,6 +9,7 @@ import {
   parseOrderHistoryInstant,
   parseZomatoPeriod,
   StatementShapeError,
+  trueSheetRange,
   type DecodedStatement,
   type OutletMap,
 } from '../../../supabase/functions/_shared/statement-parser-core'
@@ -40,6 +41,11 @@ function decodeXlsx(bytes: Uint8Array): DecodedStatement {
   const wb = read(bytes, { type: 'array' })
   const sheets: Record<string, string[][]> = {}
   for (const name of wb.SheetNames) {
+    // Zomato's workbooks declare ranges narrower than their cells; read what is there.
+    const range = trueSheetRange(
+      Object.keys(wb.Sheets[name]!).filter((key) => !key.startsWith('!')),
+    )
+    if (range) wb.Sheets[name]!['!ref'] = range
     sheets[name] = utils.sheet_to_json(wb.Sheets[name]!, {
       header: 1,
       raw: false,
@@ -383,7 +389,40 @@ function zomatoWorkbookBytes(options: WorkbookOptions = {}): Uint8Array {
   if (options.period !== null) {
     utils.book_append_sheet(wb, utils.aoa_to_sheet(hsummary), 'HSummary')
   }
-  return new Uint8Array(write(wb, { type: 'array', bookType: 'xlsx' }))
+  return withZomatoDimensions(new Uint8Array(write(wb, { type: 'array', bookType: 'xlsx' })))
+}
+
+/**
+ * Zomato's workbooks declare sheet ranges that are narrower than their cells.
+ *
+ * Measured on the real 14-20 Sep 2026 workbook: `Order Level` declares
+ * `A9:BG57` although its header is row 7, `Addition Deductions Details` declares
+ * `B5:I21` from row 1, and `HSummary` declares `E2:S2`. A reader that trusts the
+ * tag loses the header, which is how the first production upload was refused
+ * with "no Order ID header". The fixture rewrites the same tags into the bytes
+ * so that failure is reproduced here rather than first seen by the owner.
+ */
+function withZomatoDimensions(bytes: Uint8Array): Uint8Array {
+  const files = unzipSync(bytes)
+  const workbook = new TextDecoder().decode(files['xl/workbook.xml'])
+  const rels = new TextDecoder().decode(files['xl/_rels/workbook.xml.rels'])
+  const declared: Record<string, string> = {
+    'Order Level': 'A9:N12',
+    'Addition Deductions Details': 'B5:I21',
+    HSummary: 'E2:K2',
+  }
+  for (const [sheet, ref] of Object.entries(declared)) {
+    const rid = workbook.match(new RegExp(`<sheet[^>]*name="${sheet}"[^>]*r:id="(rId[0-9]+)"`))?.[1]
+    const target = rels.match(new RegExp(`Id="${rid}"[^>]*Target="([^"]+)"`))?.[1]
+    if (!rid) continue // the case that leaves the sheet out on purpose
+    if (!target) throw new Error(`fixture: no sheet file for ${sheet}`)
+    const path = `xl/${target.replace(/^\/?xl\//, '')}`
+    const xml = new TextDecoder().decode(files[path])
+    const narrowed = xml.replace(/<dimension ref="[^"]*"\/>/, `<dimension ref="${ref}"/>`)
+    if (narrowed === xml) throw new Error(`fixture: ${sheet} declares no dimension to narrow`)
+    files[path] = strToU8(narrowed)
+  }
+  return zipSync(files)
 }
 
 function settlementBytes(): Uint8Array {
@@ -913,5 +952,14 @@ describe('the Swiggy payout annexure', () => {
     expect(() => parseStatement({ sheets }, SWIGGY_OUTLETS, { digestHex: 'd'.repeat(64) })).toThrow(
       StatementShapeError,
     )
+  })
+})
+
+describe('a sheet read by what it holds, not by what it declares', () => {
+  it('spans every cell it has', () => {
+    expect(trueSheetRange(['A1', 'BG57', 'C7'])).toBe('A1:BG57')
+    expect(trueSheetRange(['E2', 'S2'])).toBe('E2:S2')
+    expect(trueSheetRange(['Z3', 'AA10', 'B4'])).toBe('B3:AA10')
+    expect(trueSheetRange([])).toBeNull()
   })
 })

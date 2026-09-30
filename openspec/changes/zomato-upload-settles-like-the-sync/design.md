@@ -155,6 +155,20 @@ two settled weeks and a held payout is re-read until it settles. It was measured
 against production by a read-only rehearsal on 2026-09-30: 21-27 Sep posted
 provisional, 14-20 and 07-13 Sep settled, and ops answered `ok`.
 
+## D9. A sheet is read by the cells it holds, not the range it declares
+
+Found by the first production upload on 2026-09-30, which was refused with "the
+Order Level sheet has no Order ID header". Zomato's workbooks declare sheet
+ranges narrower than their cells: `Order Level` says `A9:BG57` although its header
+is row 7, `Addition Deductions Details` says `B5:I21`, and `HSummary` says
+`E2:S2`. SheetJS, the Edge Function's reader, trusts the declaration and drops
+rows 1-8. ExcelJS, the sync's reader, ignores it, which is why the sync never saw
+this. Both decoders now reset each sheet's range to the cells it actually holds
+(`trueSheetRange`) before reading rows. The test fixture writes Zomato's narrow
+declarations into its bytes, so it fails the way production did without the
+repair. Widening a range to cells a file already contains cannot drop a row, so
+the Hyperpure and Swiggy readers that share the decoder only ever gain.
+
 ## Offline and RLS
 
 Nothing here is offline. An upload already refuses without a connection. No

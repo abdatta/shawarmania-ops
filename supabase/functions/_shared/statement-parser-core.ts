@@ -192,6 +192,50 @@ export function parseWorkbookInstant(text: string): string {
   return `${y}-${m}-${d}T${hh}:${mm}:${ss}+05:30`
 }
 
+// --- decoding --------------------------------------------------------------
+
+function columnNumber(letters: string): number {
+  let n = 0
+  for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64)
+  return n
+}
+
+function columnLetters(n: number): string {
+  let letters = ''
+  for (let rest = n; rest > 0; rest = Math.floor((rest - 1) / 26)) {
+    letters = String.fromCharCode(65 + ((rest - 1) % 26)) + letters
+  }
+  return letters
+}
+
+/**
+ * The range a sheet's cells actually occupy, from their addresses.
+ *
+ * A workbook states its own range in a `<dimension>` tag, and a spreadsheet
+ * library trusts it. Zomato's are wrong: the real 14-20 Sep 2026 payout workbook
+ * declares `Order Level` as `A9:BG57` although its header is row 7, so a reader
+ * that trusts the tag never sees the header. Both decoders reset each sheet's
+ * range to this before reading rows. `null` for a sheet with no cells.
+ */
+export function trueSheetRange(addresses: readonly string[]): string | null {
+  let top = Infinity
+  let bottom = 0
+  let left = Infinity
+  let right = 0
+  for (const address of addresses) {
+    const match = /^([A-Z]+)([0-9]+)$/.exec(address)
+    if (!match) continue
+    const column = columnNumber(match[1] ?? '')
+    const row = Number(match[2])
+    top = Math.min(top, row)
+    bottom = Math.max(bottom, row)
+    left = Math.min(left, column)
+    right = Math.max(right, column)
+  }
+  if (bottom === 0) return null
+  return `${columnLetters(left)}${top}:${columnLetters(right)}${bottom}`
+}
+
 // --- helpers ---------------------------------------------------------------
 
 function headerIndex(header: readonly string[], name: string): number {

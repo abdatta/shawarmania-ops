@@ -12,6 +12,7 @@ import {
 import {
   parseStatement,
   StatementShapeError,
+  trueSheetRange,
   type DecodedStatement,
   type OutletMap,
 } from '../_shared/statement-parser-core.ts'
@@ -66,6 +67,9 @@ function decode(bytes: Uint8Array): DecodedStatement {
   const wb = XLSX.read(bytes, { type: 'array' })
   const sheets: Record<string, string[][]> = {}
   for (const name of wb.SheetNames) {
+    // Zomato's workbooks declare ranges narrower than their cells; read what is there.
+    const range = trueSheetRange(Object.keys(wb.Sheets[name]).filter((key) => !key.startsWith('!')))
+    if (range) wb.Sheets[name]['!ref'] = range
     sheets[name] = XLSX.utils.sheet_to_json(wb.Sheets[name], {
       header: 1,
       raw: false,
