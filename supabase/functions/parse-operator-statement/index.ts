@@ -5,6 +5,11 @@ import { enabledRestaurantMappings } from '../_shared/restaurant-mappings.ts'
 import { serviceClient } from '../_shared/authority.ts'
 import { json, preflight } from '../_shared/http.ts'
 import {
+  contractRefusal,
+  settledAlready,
+  type HeldReconciliation,
+} from '../_shared/settled-week-guard.ts'
+import {
   parseStatement,
   StatementShapeError,
   type DecodedStatement,
@@ -283,6 +288,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
       results.push(data)
     } else {
       for (const cycle of parsed.cycles) {
+        // A Zomato week the ledger already holds settled is left alone and
+        // answered with whether this file agrees (design D5).
+        if (parsed.kind === 'zomato-settlement') {
+          const { data: held, error: heldError } = await service
+            .from('aggregator_cycle_reconciliations')
+            .select('outcome, stated_payout_paise, accepted_at')
+            .eq('outlet_id', cycle.outlet_id)
+            .eq('channel', 'zomato')
+            .eq('operator_cycle_ref', cycle.cycle_start)
+            .maybeSingle()
+          if (heldError) throw heldError
+          const settled = settledAlready(held as HeldReconciliation | null, cycle)
+          if (settled) {
+            results.push(settled)
+            continue
+          }
+        }
         const { data, error } = await service.rpc('ingest_aggregator_cycle', {
           p_payload: cycle,
           p_permitted_outlets: who.permitted,
@@ -307,6 +329,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
     }
   } catch (cause) {
+    // The write contract's own refusals name a restaurant, an outlet or a rule,
+    // never a customer, and are the uploader's to read (design D7). Anything
+    // else is an internal fault and stays opaque.
+    const refusal = contractRefusal(cause)
+    if (refusal) return json({ error: 'refused_by_write_contract', detail: refusal }, 422)
     console.error('ingest failed', cause)
     return json({ error: 'ingest_failed' }, 500)
   }

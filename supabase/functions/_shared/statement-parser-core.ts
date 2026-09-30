@@ -226,7 +226,7 @@ function columnLocator(
 // --- recognition -----------------------------------------------------------
 
 const KNOWN_SHAPES =
-  'Zomato order history (a zip of order_history_*.csv), Zomato settlement (an Order Level sheet), Hyperpure statement (Overall SOA and Payment Ledger sheets), Swiggy payout annexure (Summary and Payout Breakup sheets), or a Swiggy Business Metrics Report'
+  'Zomato order history (a zip of order_history_*.csv), Zomato payout workbook (Order Level, Addition Deductions Details and HSummary sheets), Hyperpure statement (Overall SOA and Payment Ledger sheets), Swiggy payout annexure (Summary and Payout Breakup sheets), or a Swiggy Business Metrics Report'
 
 export function recognise(decoded: DecodedStatement): ParsedStatement['kind'] {
   const csvNames = Object.keys(decoded.csv ?? {})
@@ -236,9 +236,17 @@ export function recognise(decoded: DecodedStatement): ParsedStatement['kind'] {
   const sheets = decoded.sheets ?? {}
   const sheetNames = Object.keys(sheets)
   const lower = sheetNames.map((name) => name.trim().toLowerCase())
-  // A Swiggy annexure ALSO has an "Order Level" sheet, so the workbook is
-  // identified by the pair that only an annexure carries, before the Zomato
-  // settlement check can reach for its own "Order Level" match.
+  // A Zomato payout workbook and a Swiggy annexure BOTH carry "Summary",
+  // "Payout Breakup" and "Order Level". Only Zomato's carries "Addition
+  // Deductions Details" and the hidden "HSummary" (measured on real files from
+  // both, 2026-09-30), so it is recognised by those first. Until then every real
+  // Zomato workbook was read as a Swiggy annexure and refused as one.
+  if (
+    lower.includes('order level') &&
+    (lower.includes('addition deductions details') || lower.includes('hsummary'))
+  ) {
+    return 'zomato-settlement'
+  }
   if (lower.includes('summary') && lower.includes('payout breakup')) {
     return 'swiggy-annexure'
   }
@@ -580,33 +588,267 @@ export function parseOrderHistory(
 }
 
 // --- Zomato settlement -----------------------------------------------------
+//
+// A Zomato payout workbook, read the way the sync settles a week (design D1-D6
+// of `zomato-upload-settles-like-the-sync`). Measured on three real Kalyani
+// workbooks on 2026-09-30:
+//
+//   * `Summary` and `Payout Breakup` are formulas whose cached values are
+//     `#REF!` or 0, so neither is read for a figure.
+//   * The hidden `HSummary` sheet states the report period, the one place the
+//     workbook names its own week.
+//   * `Order Level` states, per order, whether Zomato has paid it: `Settlement
+//     status` (`settled`/`pending`), `Bank UTR` (or `NA`) and `Unsettled Amount`.
+//     It also carries `Customer ID`, which nothing here reads.
+//   * `Addition Deductions Details` lists what the payout took besides the orders:
+//     growth services (ads, and TDS 194O), Hyperpure bills, other deductions,
+//     adjustments, and additions, each with its own settlement status.
+//
+// Zomato's payout is the order-level payouts, less the sheet's `Total Deductions`,
+// plus its `Total Additions`. The order-level payout already contains each
+// order's cancellation refund.
+
+/** Tolerance the ingest's gate uses, so the parser refuses exactly what it would. */
+const RECONCILE_TOLERANCE_PAISE = 100
+
+function findSheet(decoded: DecodedStatement, name: string): Rows | undefined {
+  const want = name.trim().toLowerCase()
+  const key = Object.keys(decoded.sheets ?? {}).find((n) => n.trim().toLowerCase() === want)
+  return key === undefined ? undefined : decoded.sheets?.[key]
+}
+
+/** `Sep`, `Sept` or `September` to `09`; null for anything else. */
+function monthNumber(name: string): string | null {
+  const lower = name.trim().toLowerCase()
+  if (lower.length < 3) return null
+  const full = Object.keys(MONTHS).find((m) => m.startsWith(lower.slice(0, 3)))
+  return full ? (MONTHS[full] ?? null) : null
+}
+
+/** `2026` or `26` as a four-digit year. */
+function fullYear(text: string): string {
+  return text.length === 2 ? `20${text}` : text
+}
 
 /**
- * The Order Level sheet, a settled cycle per outlet.
+ * `21 Sep 2026 - 27 Sep 2026`, or the deduction sheet's `25 September 26 -
+ * 25 September 26`, as two ISO dates. Null when the text is not a period.
+ */
+export function parseZomatoPeriod(text: string): { start: string; end: string } | null {
+  const match = String(text)
+    .trim()
+    .match(
+      /^(\d{1,2})\s+([A-Za-z]{3,9})\s+'?(\d{2}|\d{4})\s*-\s*(\d{1,2})\s+([A-Za-z]{3,9})\s+'?(\d{2}|\d{4})$/,
+    )
+  if (!match) return null
+  const [, d1 = '', m1 = '', y1 = '', d2 = '', m2 = '', y2 = ''] = match
+  const month1 = monthNumber(m1)
+  const month2 = monthNumber(m2)
+  if (!month1 || !month2) return null
+  const start = `${fullYear(y1)}-${month1}-${d1.padStart(2, '0')}`
+  const end = `${fullYear(y2)}-${month2}-${d2.padStart(2, '0')}`
+  return start <= end ? { start, end } : null
+}
+
+/** A cell that means something; `NA` and blank read as nothing. */
+function present(value: string): string {
+  const text = value.trim()
+  return /^(na|n\/a|-)$/i.test(text) ? '' : text
+}
+
+interface ZomatoAdjustments {
+  deductions: Array<{
+    spent_on: string
+    category: string
+    amount_paise: number
+    description: string
+    source_ref: string
+  }>
+  cycleDeductions: Array<{
+    kind: 'tax_deducted_at_source' | 'other_adjustment'
+    period_start: string
+    period_end: string
+    amount_paise: number
+    source_ref: string
+  }>
+  totalDeductions: number | null
+  totalAdditions: number | null
+  pending: string[]
+}
+
+interface AdjustmentColumns {
+  type: number
+  ref: number
+  period: number
+  status: number
+  total: number
+}
+
+/**
+ * The `Addition Deductions Details` sheet, itemised per design D6.
  *
- * The column semantics are the private reader's, ported rather than guessed: the
- * header is row 7, data starts at row 8, a `#REF!` template row is skipped, and
- * the authoritative net is the "Order level Payout" column — which includes the
- * cancellation refunds the dashboard omits — while the revenue is "Commissionable
- * value", so commission is the difference. Columns are matched by name, so the
- * other fifty-odd are ignored and a layout change breaks loudly rather than
- * reconciling against the wrong column.
+ * The sheet is a stack of small tables, each under its own section title and
+ * its own header row, so the columns are re-located at every header rather than
+ * assumed. Subtotal rows (`Total …`) are skipped, except the two grand totals,
+ * which are the workbook's own statement of what the payout took and gave.
+ */
+function parseZomatoAdjustments(
+  rows: Rows,
+  week: { start: string; end: string },
+): ZomatoAdjustments {
+  const result: ZomatoAdjustments = {
+    deductions: [],
+    cycleDeductions: [],
+    totalDeductions: null,
+    totalAdditions: null,
+    pending: [],
+  }
+  let section: 'additions' | 'deductions' | null = null
+  let group: 'growth' | 'hyperpure' | 'other' | 'previous' | null = null
+  let col: AdjustmentColumns | null = null
+
+  rows.forEach((row, index) => {
+    const cells = row.map((c) => String(c ?? '').trim())
+    const first = cells.find((c) => c !== '') ?? ''
+    if (!first) return
+
+    if (/^addition type$/i.test(first)) {
+      section = 'additions'
+      group = null
+      return
+    }
+    if (/^deduction type$/i.test(first)) {
+      section = 'deductions'
+      group = null
+      return
+    }
+    const groupMark = first.match(/^([A-D])\)/i)?.[1]?.toUpperCase()
+    if (groupMark) {
+      group = ({ A: 'growth', B: 'hyperpure', C: 'other', D: 'previous' } as const)[
+        groupMark as 'A' | 'B' | 'C' | 'D'
+      ]
+      return
+    }
+
+    const totalAt = cells.findIndex((c) => /^total amount$/i.test(c))
+    if (/^type$/i.test(first) && totalAt >= 0) {
+      const at = (pattern: RegExp) => cells.findIndex((c) => pattern.test(c))
+      col = {
+        type: at(/^type$/i),
+        ref: at(/invoice|order ?id|campaign/i),
+        period: at(/period|date/i),
+        status: at(/^settlement status$/i),
+        total: totalAt,
+      }
+      return
+    }
+
+    const columns: AdjustmentColumns | null = col
+    if (/^total additions/i.test(first) && columns) {
+      result.totalAdditions = toPaise(cell(row, columns.total), 'Total Additions')
+      return
+    }
+    if (/^total deductions/i.test(first) && columns) {
+      result.totalDeductions = toPaise(cell(row, columns.total), 'Total Deductions')
+      return
+    }
+    if (/^total/i.test(first)) return
+    if (!columns || !section) return
+
+    const type = cells[columns.type] ?? ''
+    if (!type) return
+    const amount = toPaise(cell(row, columns.total), `${type} amount`)
+    const ref = present(cells[columns.ref] ?? '') || `row${index + 1}`
+    const status = (cells[columns.status] ?? '').toLowerCase()
+    if (status !== 'settled') result.pending.push(`${type} ${ref}`)
+    const periodText = cells[columns.period] ?? ''
+    const dated = parseZomatoPeriod(periodText)
+
+    if (section === 'additions') {
+      result.cycleDeductions.push({
+        kind: 'other_adjustment',
+        period_start: dated?.start ?? week.start,
+        period_end: dated?.end ?? week.end,
+        amount_paise: amount,
+        source_ref: `zomato-workbook:addition:${type}:${ref}`,
+      })
+      return
+    }
+    if (group === 'previous') {
+      // Zomato's own label puts these outside `Total Deductions (A)+(B)+(C)`,
+      // and no measured workbook has carried one, so their sign in the payout is
+      // unproved. Refused by name rather than guessed.
+      throw new StatementShapeError(
+        `this workbook carries an adjustment from a previous week (${type} ${ref}), which an upload cannot place yet; nothing was written`,
+      )
+    }
+    if (group === 'other' || (group === 'growth' && /tds/i.test(type))) {
+      const tax = group === 'growth'
+      result.cycleDeductions.push({
+        kind: tax ? 'tax_deducted_at_source' : 'other_adjustment',
+        period_start: dated?.start ?? week.start,
+        period_end: dated?.end ?? week.end,
+        amount_paise: -amount,
+        source_ref: `zomato-workbook:${tax ? 'tds' : 'other'}:${dated?.start ?? week.start}:${ref}`,
+      })
+      return
+    }
+    // Hyperpure bills and ads are spends, dated to when they happened. A
+    // Hyperpure line is subtracted here for the reconciliation and then skipped
+    // as an expense by the reserved-category trigger, because Hyperpure's own
+    // reader already booked that purchase under its order number.
+    if (!dated) {
+      throw new StatementShapeError(
+        `the deduction ${type} ${ref} carries a period this reader cannot parse: "${periodText}"`,
+      )
+    }
+    const hyperpure = group === 'hyperpure'
+    result.deductions.push({
+      spent_on: dated.start,
+      category: hyperpure ? 'Hyperpure' : type,
+      amount_paise: amount,
+      description: hyperpure ? `Zomato-collected Hyperpure order ${ref}` : `Zomato ${type} ${ref}`,
+      source_ref: hyperpure ? `hyperpure:${ref}` : `zomato-workbook:${type}:${ref}`,
+    })
+  })
+
+  return result
+}
+
+/** The week a workbook names for itself, found by its shape rather than its cell. */
+function statedWeek(decoded: DecodedStatement): { start: string; end: string; text: string } {
+  for (const row of findSheet(decoded, 'HSummary') ?? []) {
+    for (const value of row) {
+      const text = String(value ?? '').trim()
+      const found = parseZomatoPeriod(text)
+      if (found) return { ...found, text }
+    }
+  }
+  throw new StatementShapeError(
+    'this Zomato workbook does not state its payout period (its hidden HSummary sheet is missing or empty), so the week it covers cannot be named; download it again from the Zomato payouts page',
+  )
+}
+
+const rupees = (paise: number) => `${paise < 0 ? '-' : ''}₹${(Math.abs(paise) / 100).toFixed(2)}`
+
+/**
+ * The Order Level sheet and its companions, as one settled cycle — or a refusal
+ * that says why.
  *
- * The stated payout is the sum of the order-level payouts, because the workbook is
- * the settled truth: it is what Zomato paid, per order, so the cycle reconciles
- * against itself. The gate that catches a stated-versus-computed mismatch belongs
- * to the live path, where the two come from different places.
+ * Revenue is "Commissionable value" and net is "Order level Payout", so
+ * commission is the difference, exactly as the sync reads the same sheet.
+ * Columns are matched by name, so the other fifty-odd are ignored and a layout
+ * change breaks loudly rather than reconciling against the wrong column.
  */
 export function parseZomatoSettlement(
   decoded: DecodedStatement,
   outlets: OutletMap,
 ): AggregatorCyclePayload[] {
-  const sheet =
-    decoded.sheets?.['Order Level'] ??
-    decoded.sheets?.[
-      Object.keys(decoded.sheets ?? {}).find((n) => n.trim().toLowerCase() === 'order level') ?? ''
-    ]
+  const sheet = findSheet(decoded, 'Order Level')
   if (!sheet) throw new StatementShapeError('the settlement workbook has no Order Level sheet')
+
+  // D2: the week the workbook names, never the span of its orders.
+  const week = statedWeek(decoded)
 
   // Header is row 7 (index 6); tolerate a shifted title block by searching near it.
   let headerRow = 6
@@ -617,15 +859,18 @@ export function parseZomatoSettlement(
     if (headerRow < 0) throw new StatementShapeError('the Order Level sheet has no Order ID header')
   }
 
-  const header = sheet[headerRow] ?? []
+  const names = sheet[headerRow] ?? []
   const find = (pattern: RegExp) =>
-    header.findIndex((c) => pattern.test(String(c).replace(/\s+/g, ' ').trim()))
+    names.findIndex((c) => pattern.test(String(c).replace(/\s+/g, ' ').trim()))
   const cols = {
     orderId: find(/^Order ID$/i),
     orderedAt: find(/^Order Date$/i),
     resId: find(/^Res\.? ID$/i),
     payout: find(/^Order level Payout/i),
     commissionable: find(/^Commissionable value/i),
+    settlement: find(/^Settlement status$/i),
+    utr: find(/^Bank UTR$/i),
+    unsettled: find(/^Unsettled Amount$/i),
   }
   const missing = Object.entries(cols)
     .filter(([, i]) => i < 0)
@@ -634,49 +879,121 @@ export function parseZomatoSettlement(
     throw new StatementShapeError(`the Order Level sheet is missing columns: ${missing.join(', ')}`)
   }
 
-  const byOutlet = new Map<
-    string,
-    { orders: AggregatorCyclePayload['orders']; dates: string[]; payout: number }
-  >()
+  const orders: AggregatorCyclePayload['orders'] = []
+  const resIds = new Set<string>()
+  let pending = 0
+  let withoutUtr = 0
   for (let r = headerRow + 1; r < sheet.length; r += 1) {
     const row = sheet[r]
     if (!row) continue
     const orderId = cell(row, cols.orderId).trim()
     if (!orderId || orderId.includes('#REF')) continue
 
-    const resId = cell(row, cols.resId).trim()
-    const outletId = outlets.zomatoResIds[resId]
-    if (!outletId) continue
-
+    resIds.add(cell(row, cols.resId).trim())
     const placedAt = parseWorkbookInstant(cell(row, cols.orderedAt))
     const gross = toPaise(cell(row, cols.commissionable), 'Commissionable value')
     const net = toPaise(cell(row, cols.payout), 'Order level Payout')
 
-    const bucket = byOutlet.get(outletId) ?? { orders: [], dates: [], payout: 0 }
-    bucket.orders.push({
+    // D1: Zomato's own per-order statement of whether it has paid.
+    const settled = cell(row, cols.settlement).trim().toLowerCase() === 'settled'
+    const unsettled = toPaise(present(cell(row, cols.unsettled)), 'Unsettled Amount')
+    if (!settled || unsettled !== 0) pending += 1
+    else if (net !== 0 && !present(cell(row, cols.utr))) withoutUtr += 1
+
+    const day = placedAt.slice(0, 10)
+    if (day < week.start || day > week.end) {
+      throw new StatementShapeError(
+        `order ${orderId} is dated ${day}, outside the workbook's own period ${week.text}; nothing was written`,
+      )
+    }
+
+    orders.push({
       order_id: orderId,
       placed_at: placedAt,
       gross_paise: gross,
       commission_paise: gross - net,
       net_paise: net,
     })
-    bucket.dates.push(placedAt.slice(0, 10))
-    bucket.payout += net
-    byOutlet.set(outletId, bucket)
   }
 
-  return [...byOutlet.entries()].map(([outlet_id, b]) => ({
-    contract_version: 1,
-    outlet_id,
-    channel: 'zomato',
-    cycle_start: b.dates.reduce((a, c) => (a < c ? a : c)),
-    cycle_end: b.dates.reduce((a, c) => (a > c ? a : c)),
-    cycle_state: 'settled',
-    stated_payout_paise: b.payout,
-    orders: b.orders,
-    deductions: [],
-    cycle_deductions: [],
-  }))
+  if (orders.length === 0) {
+    throw new StatementShapeError(
+      `the workbook for ${week.text} lists no orders; nothing was written`,
+    )
+  }
+  if (pending > 0) {
+    throw new StatementShapeError(
+      `Zomato has not paid ${week.text} yet: ${pending} of ${orders.length} orders are still pending settlement. Upload this week's workbook after its payout date; nothing was written`,
+    )
+  }
+  if (withoutUtr > 0) {
+    throw new StatementShapeError(
+      `${withoutUtr} of ${orders.length} orders in ${week.text} name no bank UTR, so this workbook does not show the payout was made; nothing was written`,
+    )
+  }
+
+  // D3: one restaurant, named, and one this person may write for.
+  if (resIds.size !== 1) {
+    throw new StatementShapeError(
+      `this workbook covers ${resIds.size} restaurants (${[...resIds].join(', ')}); download one outlet's payout at a time`,
+    )
+  }
+  const [resId = ''] = [...resIds]
+  const outletId = outlets.zomatoResIds[resId]
+  if (!outletId) {
+    throw new StatementShapeError(
+      `Zomato restaurant ${resId} is not mapped to an outlet you can write for; nothing was written`,
+    )
+  }
+
+  // D6: what else the payout took and gave.
+  const adjustmentsSheet = findSheet(decoded, 'Addition Deductions Details')
+  if (!adjustmentsSheet) {
+    throw new StatementShapeError(
+      'the workbook has no Addition Deductions Details sheet, so what Zomato deducted cannot be accounted for; nothing was written',
+    )
+  }
+  const adjustments = parseZomatoAdjustments(adjustmentsSheet, week)
+  if (adjustments.pending.length > 0) {
+    throw new StatementShapeError(
+      `Zomato has not settled ${adjustments.pending.length} deduction(s) for ${week.text} yet (${adjustments.pending.slice(0, 3).join(', ')}). Upload this week's workbook after its payout date; nothing was written`,
+    )
+  }
+  if (adjustments.totalDeductions === null || adjustments.totalAdditions === null) {
+    throw new StatementShapeError(
+      'the Addition Deductions Details sheet has no Total Deductions or Total Additions line, so the payout cannot be checked; nothing was written',
+    )
+  }
+
+  // D4: Zomato's totals against the lines itemised above, checked here so a
+  // workbook that does not add up is refused before it can mark a day disputed.
+  const ordersNet = orders.reduce((sum, o) => sum + o.net_paise, 0)
+  const stated = ordersNet - adjustments.totalDeductions + adjustments.totalAdditions
+  const computed =
+    ordersNet -
+    adjustments.deductions.reduce((sum, d) => sum + d.amount_paise, 0) +
+    adjustments.cycleDeductions.reduce((sum, c) => sum + c.amount_paise, 0)
+  if (Math.abs(computed - stated) > RECONCILE_TOLERANCE_PAISE) {
+    throw new StatementShapeError(
+      `the workbook for ${week.text} does not add up: its totals give a payout of ${rupees(stated)} but its itemised lines give ${rupees(computed)}, a difference of ${rupees(computed - stated)}; nothing was written`,
+    )
+  }
+
+  return [
+    {
+      contract_version: 1,
+      outlet_id: outletId,
+      channel: 'zomato',
+      restaurant_ref: resId,
+      cycle_start: week.start,
+      cycle_end: week.end,
+      cycle_state: 'settled',
+      stated_payout_paise: stated,
+      orders,
+      deductions: adjustments.deductions,
+      cycle_deductions: adjustments.cycleDeductions,
+    },
+  ]
 }
 
 // --- entry -----------------------------------------------------------------

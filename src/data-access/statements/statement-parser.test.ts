@@ -7,6 +7,7 @@ import {
   recognise,
   toPaise,
   parseOrderHistoryInstant,
+  parseZomatoPeriod,
   StatementShapeError,
   type DecodedStatement,
   type OutletMap,
@@ -176,60 +177,217 @@ function hyperpureBytes(
   return new Uint8Array(write(wb, { type: 'array', bookType: 'xlsx' }))
 }
 
-function settlementBytes(): Uint8Array {
-  // Only the columns the parser reads, at the real positions: header row 7
-  // (index 6), data from row 8. The other fifty-odd columns are matched by name
-  // so their absence changes nothing.
-  const blank = Array(4).fill('')
+// --- Zomato payout workbook -------------------------------------------------
+//
+// Built to the layout measured on three real Kalyani workbooks on 2026-09-30
+// (design Context of `zomato-upload-settles-like-the-sync`): a hidden `HSummary`
+// whose row 2 states the week, an `Order Level` sheet with its header on row 7,
+// a `#REF!` template row, the settlement columns and a full `Customer ID`
+// column, and an `Addition Deductions Details` sheet stacked in sections. The
+// numbers are invented; the customer column is present and full so the scrub
+// assertion means something.
+
+const SETTLEMENT_CUSTOMER = 'ZCUST-SECRET-77'
+
+interface WorkbookOrder {
+  id: string
+  at: string
+  res?: string
+  commissionable: string
+  payout: string
+  status?: string
+}
+
+interface WorkbookOptions {
+  paid?: boolean
+  period?: string | null
+  orders?: WorkbookOrder[]
+  hyperpure?: { amount: string; status?: string } | null
+  tds?: string | null
+  previousWeek?: boolean
+  /** Overrides the sheet's own Total Deductions line. */
+  totalDeductions?: string
+  dropColumns?: string[]
+}
+
+const WEEK_ORDERS: WorkbookOrder[] = [
+  // Tuesday first: the week still starts on the Monday the workbook names.
+  { id: 'Z-101', at: '2026-09-22 13:05:00', commissionable: '500', payout: '360.1234' },
+  { id: 'Z-102', at: '2026-09-26 21:14:02', commissionable: '268', payout: '166.7502' },
+  { id: 'Z-103', at: '2026-09-27 23:40:00', commissionable: '800', payout: '534.5' },
+]
+
+function zomatoWorkbookBytes(options: WorkbookOptions = {}): Uint8Array {
+  const paid = options.paid ?? true
+  const orders = options.orders ?? WEEK_ORDERS
+  const period = options.period === undefined ? '21 Sep 2026 - 27 Sep 2026' : options.period
+  const hyperpure = options.hyperpure === undefined ? { amount: '961.5' } : options.hyperpure
+  const settledWord = paid ? 'settled' : 'pending'
+
   const header = [
-    'Sr',
+    'S.No.',
     'Order ID',
     'Order Date',
-    'Restaurant name',
+    'Week No.',
+    'Res. name',
     'Res. ID',
-    'Commissionable value (excludes customer GST)',
+    'Order status (Delivered/ Cancelled/ Rejected)',
+    'Commissionable value (excludes customer GST)\n[(A) + (7) - (8) - (6) - (3)]',
     'Order level Payout (A) - (E) + (F)',
     'Settlement status',
-  ]
-  const ref = ['1', '#REF!', '', '', '', '', '', ''] // the template row, skipped
-  const kal = [
-    '1',
-    'Z-1',
-    '2026-08-03 21:14:02',
-    'Shawarmania',
-    '21917311',
-    '268',
-    '166.7502',
-    'settled',
-  ]
-  const kan = [
-    '2',
-    'Z-2',
-    '2026-08-04 13:05:00',
-    'Shawarmania',
-    '22675834',
-    '500',
-    '360',
-    'settled',
-  ]
-  const aoa = [
-    ['Zomato Settlement Report'],
+    'Settlement date',
+    'Bank UTR',
+    'Unsettled Amount',
+    'Customer ID',
+  ].filter((name) => !(options.dropColumns ?? []).includes(name))
+  const keep = (name: string) => !(options.dropColumns ?? []).includes(name)
+
+  const orderRows = orders.map((o, i) => {
+    const values: Record<string, string> = {
+      'S.No.': String(i + 1),
+      'Order ID': o.id,
+      'Order Date': o.at,
+      'Week No.': '39',
+      'Res. name': 'Shawarmania',
+      'Res. ID': o.res ?? '21917311',
+      'Order status (Delivered/ Cancelled/ Rejected)': 'DELIVERED',
+      'Commissionable value (excludes customer GST)\n[(A) + (7) - (8) - (6) - (3)]':
+        o.commissionable,
+      'Order level Payout (A) - (E) + (F)': o.payout,
+      'Settlement status': o.status ?? settledWord,
+      'Settlement date': paid ? '2026-09-30 05:30:00' : 'NA',
+      'Bank UTR': paid ? 'CITIN26000000001' : 'NA',
+      'Unsettled Amount': paid ? '0.0' : o.payout,
+      'Customer ID': SETTLEMENT_CUSTOMER,
+    }
+    return Object.keys(values)
+      .filter(keep)
+      .map((k) => values[k] ?? '')
+  })
+
+  const orderLevel = [
+    ['Order level Breakup'],
+    ['Detailed view of your order level earnings, deductions, pay-outs'],
+    ['Get definition of terms used in this sheet- Glossary'],
     [],
+    ['RESTAURANT DETAILS >'],
+    ['', '', '', '', '', '', '', '(A)', '(G)', '(33)', '(34)', '(35)', '(36)'],
+    header,
+    ['1', '#REF!'],
+    ...orderRows,
+  ]
+
+  const hsummary = [
     [],
-    [], // title block, rows 1-4
-    [], // row 5 group header
-    [], // row 6 numbering
-    header, // row 7 (index 6)
+    ['', '', '', '', period ?? '', '21917311', 'MID-1', 'Legal', 'Shawarmania', 'Address', 'PAN'],
+  ]
+
+  const deductionHeader = (ref: string) => [
+    '',
+    'Type',
+    'Res id for which deduction created',
     ref,
-    kal,
-    kan,
+    'Deduction time period',
+    'Settlement Status',
+    'Total amount',
+    'Adjusted amount',
+    'Outstanding amount',
   ]
-  // Pad early rows so the header genuinely lands at index 6.
-  while (aoa.length < 7) aoa.splice(aoa.length - 3, 0, blank)
+  const growth: string[][] = []
+  let growthTotal = 0
+  if (options.tds) {
+    growth.push([
+      '',
+      'TDS 194O',
+      'NA',
+      'NA',
+      '31 July 26 - 31 July 26',
+      'settled',
+      options.tds,
+      options.tds,
+      '0.0',
+    ])
+    growthTotal += Number(options.tds)
+  }
+  const hyperpureRows: string[][] = []
+  let hyperpureTotal = 0
+  if (hyperpure) {
+    const status = hyperpure.status ?? settledWord
+    hyperpureRows.push([
+      '',
+      'Hyperpure',
+      '22675834', // the OTHER outlet, as the real Kalyani workbook reads
+      '30540356',
+      '25 September 26 - 25 September 26',
+      status,
+      hyperpure.amount,
+      status === 'settled' ? hyperpure.amount : '0.0',
+      status === 'settled' ? '0.0' : hyperpure.amount,
+    ])
+    hyperpureTotal += Number(hyperpure.amount)
+  }
+  const previous: string[][] = options.previousWeek
+    ? [
+        deductionHeader('Invoice No'),
+        ['', 'Adjustment', 'NA', 'ADJ-1', '14 September 26 - 14 September 26', 'settled', '50'],
+      ]
+    : []
+  const total = options.totalDeductions ?? String(growthTotal + hyperpureTotal)
+
+  const adjustments = [
+    ['', 'Addition/ Deduction Details (non-order level additions/deductions)'],
+    ['', 'Summarized view on : 1. Res id level additions like 194 H'],
+    [],
+    [],
+    ['', 'Addition Type'],
+    [
+      '',
+      'Type',
+      'NA',
+      'Invoice No/Order id',
+      'Order date',
+      'Settlement status',
+      'Total amount',
+      'Adjusted amount',
+      'Outstanding amount',
+    ],
+    ['', 'Total Additions', '', '', '', '', '0.0', '0.0', '0.0'],
+    [],
+    [],
+    ['', 'Deduction Type'],
+    ['', 'A) Investments in growth services'],
+    deductionHeader('Invoice No/Campaign id'),
+    ...growth,
+    ['', 'Total Ads & miscellaneous services', '', '', '', '', String(growthTotal)],
+    [],
+    ['', 'B) Investments in Hyperpure'],
+    deductionHeader('OrderId'),
+    ...hyperpureRows,
+    ['', 'Total Hyperpure', '', '', '', '', String(hyperpureTotal)],
+    [],
+    ['', 'C) Other deductions'],
+    ['', 'D) Adjustments from previous weeks'],
+    ...previous,
+    ['', 'Total Deductions (A)+(B)+(C)', '', '', '', '', total, total, '0.0'],
+  ]
+
   const wb = utils.book_new()
-  utils.book_append_sheet(wb, utils.aoa_to_sheet(aoa), 'Order Level')
-  utils.book_append_sheet(wb, utils.aoa_to_sheet([['Summary']]), 'Summary')
+  utils.book_append_sheet(
+    wb,
+    utils.aoa_to_sheet([['Report Summary'], ['Report Period', '#REF!']]),
+    'Summary',
+  )
+  utils.book_append_sheet(wb, utils.aoa_to_sheet([['Payout Breakup']]), 'Payout Breakup')
+  utils.book_append_sheet(wb, utils.aoa_to_sheet(orderLevel), 'Order Level')
+  utils.book_append_sheet(wb, utils.aoa_to_sheet(adjustments), 'Addition Deductions Details')
+  if (options.period !== null) {
+    utils.book_append_sheet(wb, utils.aoa_to_sheet(hsummary), 'HSummary')
+  }
   return new Uint8Array(write(wb, { type: 'array', bookType: 'xlsx' }))
+}
+
+function settlementBytes(): Uint8Array {
+  return zomatoWorkbookBytes()
 }
 
 const FAKE_PHONE = '9998887776'
@@ -370,7 +528,7 @@ describe('the statement parser core', () => {
       expect(recognise(decodeZip(orderHistoryBytes()))).toBe('zomato-order-history')
     })
 
-    it('knows a Zomato settlement by its Order Level sheet', () => {
+    it('knows a Zomato payout workbook although it shares three sheets with a Swiggy annexure', () => {
       expect(recognise(decodeXlsx(settlementBytes()))).toBe('zomato-settlement')
     })
 
@@ -434,23 +592,152 @@ describe('the statement parser core', () => {
     })
   })
 
-  describe('Zomato settlement: a settled cycle per outlet', () => {
-    it('takes commissionable as revenue and order-level payout as net, per outlet', () => {
-      const parsed = parseStatement(decodeXlsx(settlementBytes()), OUTLETS)
+  describe('Zomato settlement: a paid week settles the way the sync settles it', () => {
+    const settle = (options: WorkbookOptions = {}) => {
+      const parsed = parseStatement(decodeXlsx(zomatoWorkbookBytes(options)), OUTLETS)
       if (parsed.kind !== 'zomato-settlement') throw new Error('wrong kind')
+      return parsed.cycles
+    }
+    const refusal = (options: WorkbookOptions) => {
+      try {
+        settle(options)
+      } catch (cause) {
+        expect(cause).toBeInstanceOf(StatementShapeError)
+        return (cause as Error).message
+      }
+      throw new Error('the workbook was accepted')
+    }
 
-      expect(parsed.cycles).toHaveLength(2)
-      const kal = parsed.cycles.find((c) => c.outlet_id === 'outlet-kalyani')
-      expect(kal?.cycle_state).toBe('settled')
-      const order = kal?.orders[0]
+    it('settles one cycle for the week the workbook names, not the span of its orders', () => {
+      const [cycle, ...rest] = settle()
+      expect(rest).toHaveLength(0)
+      expect(cycle?.cycle_state).toBe('settled')
+      expect(cycle?.outlet_id).toBe('outlet-kalyani')
+      expect(cycle?.restaurant_ref).toBe('21917311')
+      // The first order is a Tuesday; the week is still the Monday-to-Sunday one
+      // the workbook states, so the ingest names it exactly as the sync does.
+      expect(cycle?.cycle_start).toBe('2026-09-21')
+      expect(cycle?.cycle_end).toBe('2026-09-27')
+      expect(cycle?.operator_cycle_ref).toBeUndefined()
+    })
+
+    it('takes commissionable as revenue and order-level payout as net', () => {
+      const [cycle] = settle()
+      const order = cycle?.orders.find((o) => o.order_id === 'Z-102')
       expect(order?.gross_paise).toBe(26800)
       expect(order?.net_paise).toBe(16675) // 166.7502 rounds to 16675 paise
       expect(order?.commission_paise).toBe(26800 - 16675)
-      // The stated payout is the workbook's own net, so it reconciles against itself.
-      expect(kal?.stated_payout_paise).toBe(16675)
-      // The template #REF! row and the other outlet's order are not in this cycle.
-      expect(kal?.orders).toHaveLength(1)
-      expect(order?.placed_at).toBe('2026-08-03T21:14:02+05:30')
+      expect(order?.placed_at).toBe('2026-09-26T21:14:02+05:30')
+      // The template #REF! row is not an order.
+      expect(cycle?.orders).toHaveLength(3)
+    })
+
+    it('reconciles the Hyperpure bill the payout collected without booking it as a second expense', () => {
+      const [cycle] = settle()
+      // 360.1234 + 166.7502 + 534.5, each rounded once, less the ₹961.50 bill.
+      expect(cycle?.stated_payout_paise).toBe(36012 + 16675 + 53450 - 96150)
+      expect(cycle?.deductions).toEqual([
+        {
+          spent_on: '2026-09-25',
+          category: 'Hyperpure', // reserved: the ingest subtracts it, the trigger skips the row
+          amount_paise: 96150,
+          description: 'Zomato-collected Hyperpure order 30540356',
+          source_ref: 'hyperpure:30540356',
+        },
+      ])
+      expect(cycle?.cycle_deductions).toEqual([])
+    })
+
+    it('carries a TDS line as a cycle-level tax, by Zomato’s own formula', () => {
+      const [cycle] = settle({ tds: '311.24' })
+      expect(cycle?.cycle_deductions).toEqual([
+        {
+          kind: 'tax_deducted_at_source',
+          period_start: '2026-07-31',
+          period_end: '2026-07-31',
+          amount_paise: -31124,
+          source_ref: 'zomato-workbook:tds:2026-07-31:row13',
+        },
+      ])
+      expect(cycle?.stated_payout_paise).toBe(36012 + 16675 + 53450 - 96150 - 31124)
+    })
+
+    it('never reads the customer column into the payload', () => {
+      const serialised = JSON.stringify(settle())
+      expect(serialised).not.toContain(SETTLEMENT_CUSTOMER)
+    })
+
+    it('refuses a week Zomato has not paid, saying how many orders are pending', () => {
+      expect(refusal({ paid: false })).toBe(
+        "Zomato has not paid 21 Sep 2026 - 27 Sep 2026 yet: 3 of 3 orders are still pending settlement. Upload this week's workbook after its payout date; nothing was written",
+      )
+    })
+
+    it('refuses a week in which even one order is still pending', () => {
+      const orders = WEEK_ORDERS.map((o, i) => (i === 1 ? { ...o, status: 'pending' } : o))
+      expect(refusal({ orders })).toMatch(/1 of 3 orders are still pending settlement/)
+    })
+
+    it('refuses a deduction Zomato has not settled yet', () => {
+      expect(refusal({ hyperpure: { amount: '961.5', status: 'pending' } })).toMatch(
+        /has not settled 1 deduction\(s\) for 21 Sep 2026 - 27 Sep 2026 yet \(Hyperpure 30540356\)/,
+      )
+    })
+
+    it('refuses a workbook that does not state its week', () => {
+      expect(refusal({ period: null })).toMatch(/does not state its payout period/)
+    })
+
+    it('refuses an order dated outside the stated week', () => {
+      const orders = [
+        ...WEEK_ORDERS,
+        { id: 'Z-9', at: '2026-09-28 12:00:00', commissionable: '1', payout: '1' },
+      ]
+      expect(refusal({ orders })).toMatch(
+        /order Z-9 is dated 2026-09-28, outside the workbook's own period/,
+      )
+    })
+
+    it('names a restaurant nobody may write for, instead of succeeding with nothing written', () => {
+      const orders = WEEK_ORDERS.map((o) => ({ ...o, res: '99999999' }))
+      expect(refusal({ orders })).toBe(
+        'Zomato restaurant 99999999 is not mapped to an outlet you can write for; nothing was written',
+      )
+    })
+
+    it('refuses a workbook covering two restaurants', () => {
+      const orders = WEEK_ORDERS.map((o, i) => (i === 0 ? { ...o, res: '22675834' } : o))
+      expect(refusal({ orders })).toMatch(/covers 2 restaurants/)
+    })
+
+    it('refuses when the itemised lines do not add up to the workbook’s own totals', () => {
+      expect(refusal({ totalDeductions: '1161.5' })).toBe(
+        'the workbook for 21 Sep 2026 - 27 Sep 2026 does not add up: its totals give a payout of -₹100.13 but its itemised lines give ₹99.87, a difference of ₹200.00; nothing was written',
+      )
+    })
+
+    it('refuses an adjustment from a previous week rather than guessing its sign', () => {
+      expect(refusal({ previousWeek: true })).toMatch(
+        /adjustment from a previous week \(Adjustment ADJ-1\)/,
+      )
+    })
+
+    it('names the settlement columns an incomplete workbook is missing', () => {
+      expect(refusal({ dropColumns: ['Settlement status', 'Unsettled Amount'] })).toBe(
+        'the Order Level sheet is missing columns: settlement, unsettled',
+      )
+    })
+
+    it('reads both of the workbook’s period spellings', () => {
+      expect(parseZomatoPeriod('21 Sep 2026 - 27 Sep 2026')).toEqual({
+        start: '2026-09-21',
+        end: '2026-09-27',
+      })
+      expect(parseZomatoPeriod('28 December 26 - 03 January 27')).toEqual({
+        start: '2026-12-28',
+        end: '2027-01-03',
+      })
+      expect(parseZomatoPeriod('#REF!')).toBeNull()
     })
   })
 })

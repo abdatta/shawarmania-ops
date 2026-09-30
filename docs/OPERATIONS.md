@@ -717,8 +717,11 @@ Zomato revenue and Hyperpure expenses are read automatically twice a day and can
 no longer be typed. The day the automation is blocked — Zomato changed an API,
 blocking got aggressive, a CI policy changed — a person recovers the period by
 uploading the operator's own statement, on **Super Admin → Ledger → Delivery →
-Zomato → Upload a statement**. The file is parsed by the same code the robot uses, so this
-path is exercised on every scheduled run, not only when it is needed.
+Zomato → Upload a statement**. A Hyperpure statement is parsed by the same code the
+robot uses, so that path is exercised on every scheduled run. A Zomato payout workbook
+is not what the Zomato robot reads, so its parser is held to the robot's rules instead:
+it settles a week only when Zomato has paid it, under the same cycle, with the same
+deductions (`zomato-upload-settles-like-the-sync`).
 
 Three files, each downloaded from the operator's own portal and recognised by
 what is inside it, never by its name:
@@ -726,7 +729,7 @@ what is inside it, never by its name:
 | File | Where | Covers |
 |---|---|---|
 | Zomato order history | Order history → **Download data → Order history** (a zip) | revenue to **yesterday**, commission undetermined |
-| Zomato settlement | Finance → **Payouts →** download a **paid** cycle (xlsx); pick **Legal Entity** for all outlets in one file | a settled week's commission |
+| Zomato payout workbook | Finance → **Payouts →** download a **PAID** cycle (xlsx), **one outlet at a time** | a settled week: commission, and the Hyperpure bills, ads, TDS and additions the payout carried |
 | Hyperpure statement | menu → **Account statement** → dates → **Download** (xlsx, ≤92 days) | supply purchases, one per order |
 
 Notes that save a support call:
@@ -735,6 +738,19 @@ Notes that save a support call:
   workbook exists only once a cycle is **paid**, so the current week's commission
   is obtainable by no route until Zomato settles it. That is why a commission can
   read "not known yet" and a month total is a ceiling.
+- **A Zomato week is uploadable only after its payout date.** Until Zomato marks
+  a week PAID, its workbook says `pending` against every order and the upload is
+  refused with exactly that: *Zomato has not paid 21 Sep 2026 - 27 Sep 2026 yet: 54
+  of 55 orders are still pending settlement.* Nothing is written. The robot waits
+  for the same signal, because a closed week's payout can already reflect a
+  deduction that its deduction list does not show for another two days.
+- **A Zomato workbook is refused, by reason, when it cannot be settled
+  faithfully:** it names no week, it covers two restaurants, its restaurant is not
+  one you may write for, its itemised deductions do not add up to its own totals
+  (both amounts are named), or it carries an adjustment from a previous week,
+  whose sign no workbook has yet proved.
+- **A week the robot already settled is left alone.** The upload says so, and
+  says whether your file agrees with the payout held, to the rupee.
 - **The upload writes only the outlets you may reach**, derived from your own
   session, and a stored statement is reachable only from those outlets. A file
   that matches no known shape is refused in the file's own words and writes

@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { integrationNeedsAttention } from '@/domain/delivery-attention'
+import { formatBusinessDate } from '@/domain/datetime'
+import { formatPaise } from '@/domain/money'
 
 import type {
   AggregatorRunOutcome,
@@ -67,7 +69,39 @@ function describeUpload(
   if (r.outcome === 'reconciliation_failed') {
     return `A week did not add up to what ${who} paid — nothing was overwritten`
   }
+  if (r.already_settled === true) {
+    // Design D5: a week the sync already settled is left alone, and the owner
+    // is told whether the file they brought agrees with what the ledger holds.
+    const week = `${formatBusinessDate(String(r.cycle_start))} – ${formatBusinessDate(String(r.cycle_end))}`
+    const held = typeof r.held_payout_paise === 'number' ? r.held_payout_paise : null
+    const file = typeof r.file_payout_paise === 'number' ? r.file_payout_paise : null
+    if (r.agrees === true && held !== null) {
+      return `${week} is already settled at ${formatPaise(held)} and this file agrees — nothing was changed`
+    }
+    const heldText = held === null ? 'a payout' : formatPaise(held)
+    const fileText = file === null ? 'a different amount' : formatPaise(file)
+    return `${week} is already settled at ${heldText}, but this file says ${fileText} — nothing was changed`
+  }
   return `${plural(count(r.days_written), 'day', 'days')} of ${who} figures written`
+}
+
+/**
+ * The reason a refused upload gave, read out of the response itself.
+ *
+ * `functions.invoke` hands a non-2xx answer back as an error whose `context` is
+ * the HTTP `Response`, not its parsed body, so the reason has to be read from
+ * it. Reading `context.detail` directly - as this adapter once did - is always
+ * undefined, which is how every refusal came to read as "did not go through".
+ */
+async function refusalReason(error: unknown): Promise<string | null> {
+  const context = (error as { context?: unknown } | null)?.context
+  if (!context || typeof (context as Response).json !== 'function') return null
+  try {
+    const body = (await (context as Response).clone().json()) as { detail?: unknown }
+    return typeof body.detail === 'string' && body.detail ? body.detail : null
+  } catch {
+    return null
+  }
 }
 
 /** How wide a net the duplicate signal casts. Deliberately loose; see below. */
@@ -572,8 +606,7 @@ export function createSupabaseAggregatorSyncAdapter(
         // The function speaks a small vocabulary of refusals; the surface only
         // needs to distinguish "this file is wrong" from "that did not go
         // through", and the former is worth showing verbatim.
-        const detail = (error as { context?: { detail?: string } }).context?.detail
-        throw new Error(detail ?? 'That upload did not go through')
+        throw new Error((await refusalReason(error)) ?? 'That upload did not go through')
       }
       const result = data as {
         kind: StatementUploadResult['kind']

@@ -313,6 +313,22 @@ purchase paid **directly** rather than through a Zomato payout — the supplier
 alone knows of it, and it is entered by hand until a supplier-portal reader is
 built (`openspec/todos/supply-bills-paid-outside-the-payout.md`).
 
+**A Zomato deduction has two identities.** The robot keys a Zomato deduction on
+the expense id its expenses tab shows; a payout workbook never shows that id,
+only the invoice or campaign id, so an uploaded workbook keys the same deduction
+differently. An upload for a week the robot has already settled writes nothing, so
+the common order is safe; a week settled by upload *first* and then by the robot
+could book an ad twice. Every Zomato deduction since go-live has been a Hyperpure
+bill, which neither path books as an expense, so this has cost nothing yet
+(`openspec/todos/one-identity-for-a-zomato-deduction.md`).
+
+**Where Zomato's cycle-level TDS belongs is unproved.** A 27 Jul 2026 workbook
+lists `TDS 194O` ₹311.24 among the week's deductions and the dashboard shows it as
+a negative line; the robot assumes TDS already sits inside each order's payout.
+No week since the robot went live has carried one. An uploaded workbook follows
+Zomato's own formula; if the robot is wrong, the first TDS week fails its gate by
+exactly that amount and says so.
+
 #12 retired the remaining drawer/manual-day path. **There is no complete
 reporting view and none is planned** — #13 `owner-console-live` would have built
 one and was withdrawn (`openspec/todos/owner-console-was-withdrawn.md`). The

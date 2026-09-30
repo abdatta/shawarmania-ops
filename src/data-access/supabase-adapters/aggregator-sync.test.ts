@@ -665,6 +665,66 @@ describe('upload answers are described for the owner', () => {
       'A week did not add up to what Zomato paid — nothing was overwritten',
     ])
   })
+
+  it('shows the refusal the function gave, read out of the response', async () => {
+    const { adapter, invoke } = clientForTables({})
+    // What supabase-js really hands back for a non-2xx answer: the Response as
+    // `context`, its body unread.
+    const reason =
+      "Zomato has not paid 21 Sep 2026 - 27 Sep 2026 yet: 54 of 55 orders are still pending settlement. Upload this week's workbook after its payout date; nothing was written"
+    invoke.mockResolvedValue({
+      data: null,
+      error: Object.assign(new Error('Edge Function returned a non-2xx status code'), {
+        context: new Response(JSON.stringify({ error: 'unrecognised_statement', detail: reason }), {
+          status: 422,
+        }),
+      }),
+    })
+
+    await expect(
+      adapter.uploadStatement({ base64: '', filename: 'week.xlsx', confirmed: false }),
+    ).rejects.toThrow(reason)
+  })
+
+  it('falls back to the generic line only when no reason was given', async () => {
+    const { adapter, invoke } = clientForTables({})
+    invoke.mockResolvedValue({
+      data: null,
+      error: Object.assign(new Error('Edge Function returned a non-2xx status code'), {
+        context: new Response(JSON.stringify({ error: 'ingest_failed' }), { status: 500 }),
+      }),
+    })
+
+    await expect(
+      adapter.uploadStatement({ base64: '', filename: 'week.xlsx', confirmed: false }),
+    ).rejects.toThrow('That upload did not go through')
+  })
+
+  it('says a week the sync already settled was left alone, and whether the file agrees', async () => {
+    const { adapter, invoke } = clientForTables({})
+    const week = { already_settled: true, cycle_start: '2026-09-14', cycle_end: '2026-09-20' }
+    invoke.mockResolvedValue({
+      data: {
+        kind: 'zomato-settlement',
+        results: [
+          { ...week, held_payout_paise: 846709, file_payout_paise: 846710, agrees: true },
+          { ...week, held_payout_paise: 846709, file_payout_paise: 800000, agrees: false },
+        ],
+      },
+      error: null,
+    })
+
+    const result = await adapter.uploadStatement({
+      base64: '',
+      filename: 'week.xlsx',
+      confirmed: false,
+    })
+
+    expect(result.wrote).toEqual([
+      '14 Sept 2026 – 20 Sept 2026 is already settled at ₹8,467.09 and this file agrees — nothing was changed',
+      '14 Sept 2026 – 20 Sept 2026 is already settled at ₹8,467.09, but this file says ₹8,000 — nothing was changed',
+    ])
+  })
 })
 
 describe('the Swiggy variant of the sync adapter', () => {
