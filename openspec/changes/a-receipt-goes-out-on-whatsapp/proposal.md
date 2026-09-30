@@ -171,8 +171,8 @@ without re-deriving it. **Not built now.**
 - **No change to receipt links**: how they are minted, revoked, or what the page
   shows.
 - **No Send to someone else** (see above).
-- **No change to #59's proposal here.** It still names RCS as the channel, which
-  the owner has now dropped. Correcting it is that change's own edit.
+- **No change to #59 here.** Its proposal was corrected separately on
+  2026-09-29 to name SMS through MSG91 as the channel.
 
 ## Docs to update before archiving
 

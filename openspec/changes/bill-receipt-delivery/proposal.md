@@ -10,6 +10,36 @@ and not as a plan — **as something already published and filed with a regulato
 
 That is what makes this change unusual, and it should be read before anything is designed.
 
+## The channel is SMS through MSG91, 2026-09-29
+
+**The owner dropped the RCS plan on 2026-09-29.** The channel is now **SMS, sent
+through MSG91**, with the business's **Airtel DLT** registration (entity, header
+and template) pending. Everything below that described RCS through Telinfy has
+been rewritten to say SMS; where the RCS history still matters (the published
+pages were filed with the RCS registration), it is kept as history.
+
+What that moves:
+
+- **DLT is no longer the fallback's problem. It is the whole channel.** Nothing
+  sends until the entity, the six-letter header and the receipt template are
+  approved. The template is fixed at approval, variables included, so the
+  points slots #62 wants (below) must be in the template submitted now.
+- **Two published promises may not survive the move, and the pages must be
+  checked before anything sends.** `/messages/` and `/terms/` promise *"Reply
+  STOP"* and *"reply HELP"*. An SMS sent from a DLT alphanumeric header is, as
+  far as is known here, send-only: a customer's reply has nowhere to go. Confirm
+  with MSG91 whether it offers an inbound number bound to this programme. If it
+  does, inbound STOP is built as scoped below. If it does not, **the pages change
+  first** (the order this proposal already insists on) to name the ways that do
+  work: telling the counter, calling, emailing. The gate's STOP clause is then
+  restated to match. `/terms/` also says messages *"sent as RCS use your data
+  connection"*, which is simply no longer true.
+- **The misdelivery argument is unchanged.** An automatic SMS to a mistyped
+  number misdelivers exactly as an automatic RCS message would.
+- **Until DLT approves, the owner sends receipts by hand on WhatsApp**
+  (#63 `a-receipt-goes-out-on-whatsapp`). That stays after this ships, as the
+  manual resend when a send fails.
+
 ## What #62 changed here, 2026-09-28
 
 `a-regular-earns-points-and-gold` (#62) ships points and gold on 2026-09-30, before
@@ -38,15 +68,15 @@ settle this change's consent moment at that checkpoint, not at a second one.
 still in progress on 2026-09-28. A template approved without a slot for points
 earned and balance cannot send them later without a fresh approval. So the
 template submitted now should include them. If DLT is not approved by opening,
-the gate already allows the SMS fallback to be *visibly disabled* rather than
-silently dropped. RCS alone can then carry the launch, provided the RCS agent
-itself is approved.
+nothing sends, and that must be *visible* rather than silent. *(Until
+2026-09-29 this said RCS alone could carry the launch. RCS is dropped; see
+above.)*
 
 **2. The message will carry points.** The owner wants it to include the points the
 bill earned and the balance after it (2026-09-28). Those are the receipt's own
 stored figures (#62 D14), transactional account information rather than an
-offer, but confirm with Telinfy that the Transactional agent and any DLT fallback
-template allow them. Never "use your points" or anything that reads as a nudge.
+offer, but confirm with MSG91 that a receipt template in the transactional or
+service category may carry them. Never "use your points" or anything that reads as a nudge.
 The page's *"One message per bill, no offers"* holds as written.
 
 **3. STOP must not erase points.** The published page says that after stopping,
@@ -72,14 +102,13 @@ name and phone are cleared, so the outlet's accounts still add up.
 ## The decisions the todo was waiting for are already made — and published
 
 The todo listed four open questions. Three are now answered, and the answers are not internal notes.
-They are live pages on `shawarmania.in` and a submitted RCS agent registration.
+They are live pages on `shawarmania.in`, first filed with an RCS agent registration.
 
-**The channel is RCS**, through Telinfy (GreenAds Global), registered as a **Transactional** agent on
-2026-09-21. The todo framed the choice as WhatsApp Business API *against* SMS/DLT; the answer was
-neither. Note what that does **not** dissolve: RCS falls back to SMS on handsets and networks that
-cannot receive it, and **that fallback is still governed by TRAI's DLT rules** — entity registration,
-header and template approval. The todo's DLT concern survives the choice of channel; it just moved
-to the fallback path.
+**The channel is SMS through MSG91**, under the business's Airtel DLT registration, which was pending
+on 2026-09-29. The todo framed the choice as WhatsApp Business API *against* SMS/DLT; after a detour
+through RCS, the answer is SMS. *(From 2026-09-21 to 2026-09-29 the channel was RCS through Telinfy
+(GreenAds Global), registered as a Transactional agent, with SMS under DLT as its fallback. The
+published pages below were written for, and filed with, that registration.)*
 
 **Consent is taken at the counter, verbally, when the number is given.** There is no web form, and
 that is deliberate rather than pending — the published opt-in page says so, because a web checkbox
@@ -93,8 +122,9 @@ now than when the todo was written. See below.
 
 ## What has been published, and therefore what this change is not free to decide
 
-Three documents are live, indexed, and were submitted to the RCS registration as its terms, privacy
-policy and opt-in page:
+Three documents are live and indexed. They were submitted to the RCS registration as its terms,
+privacy policy and opt-in page, and they are what a customer reads whatever the channel. Two of their
+promises need checking against SMS first (see *The channel is SMS through MSG91* above):
 
 | | |
 |---|---|
@@ -104,8 +134,9 @@ policy and opt-in page:
 
 They make commitments this change has to implement rather than revisit:
 
-- **"One message per bill, no offers."** Transactional only. No marketing on this agent.
-- **"Reply STOP any time."** Named on the opt-in page and in the terms.
+- **"One message per bill, no offers."** Transactional only. No marketing on this sender.
+- **"Reply STOP any time."** Named on the opt-in page and in the terms. Whether SMS can honour a
+  reply at all is the open question above.
 - Telling the counter, calling, or writing to `hello@shawarmania.in` **also** stops it — so
   suppression must be settable by staff, not only by an inbound STOP.
 - A number is **removed on request**, and the sale stays in the accounts without it attached.
@@ -119,7 +150,7 @@ currently ask it:
 
 **If any of this is wrong, the page changes first and this change follows.** The order matters: a
 published opt-in page that describes a programme the system does not run is worse than no page,
-because it is the document a carrier reads when it audits the agent.
+because it is the document a regulator or an operator reads when it audits the sender.
 
 ## The gap, stated plainly
 
@@ -127,8 +158,8 @@ Nothing in this repository knows the word STOP. There is no suppression state on
 inbound webhook, and no send. The landing site is already telling customers, in public, that
 replying STOP stops the messages.
 
-That is a promise with no implementation, and the agent is in review pointing at the page that makes
-it. It is the reason this is seeded now rather than when convenient.
+That is a promise with no implementation, and a DLT registration is now in review for the programme
+the page describes. It is the reason this is seeded now rather than when convenient.
 
 ## The mistyped number is worse than the todo assumed
 
@@ -171,7 +202,8 @@ Added since the todo was written:
 
 - **Suppression as customer state**, set by an inbound STOP, by staff at the counter, and by an
   admin acting on a call or an email. Once set, no bill for that number sends.
-- **Inbound handling** from the provider, verified as genuinely from the provider.
+- **Inbound handling** from MSG91, verified as genuinely from MSG91, **if MSG91 offers an inbound
+  path for replies**. If it does not, this item leaves scope and the pages change first.
 - **The send itself**, once per settled bill, idempotent — the counter's offline queue means a bill
   can reach the server more than once, and a customer must not receive the same receipt twice.
 - **The counter's consent moment**: the published question, asked before the number is keyed.
@@ -180,16 +212,16 @@ Added since the todo was written:
 
 ## Non-goals
 
-- **No marketing, ever, on this agent.** It is registered Transactional, the pages promise no
+- **No marketing, ever, on this sender.** Its DLT template is a receipt, the pages promise no
   offers, and India's promotional rules — traffic caps, communication hours — are a different
-  regime. Promotional messaging would need a separate agent, separate consent and a rewrite of the
+  regime. Promotional messaging would need a separate header and template, separate consent and a rewrite of the
   published pages, per those pages' own wording: *"we will ask you separately."*
 - **No second consent path.** No web form, no checkbox. The counter is the consent.
 - **No change to link issuance, revocation or the identical-refusal rule.**
 - **Not the receipt's contents.** Naming the customer is #58.
 - **No re-engagement messaging.** No reminder about unused points, no win-back, no
   "you're close to gold". The number *is* now a loyalty identity (#62, which
-  amends the privacy page to say so), but this agent only ever sends the bill.
+  amends the privacy page to say so), but this programme only ever sends the bill.
   *(Until 2026-09-28 this read "No loyalty … use of the number. The privacy page
   forecloses it." #62 reopened the loyalty half and not the messaging half.)*
 
@@ -206,7 +238,7 @@ Added since the todo was written:
 
 The send, the suppression and the counter are here. **The published opt-in, privacy and terms pages
 are in the landing repository** (`shawarmania/`, change `legal-and-messaging-pages`), where
-`/messages/` is the page a carrier audits.
+`/messages/` is the page an audit of the sender reads.
 
 Unlike #54's pair, the two sides are **already out of step**: the pages shipped first and describe
 behaviour this repository has not built. So the coordination is the reverse of usual — this change
@@ -216,14 +248,15 @@ either implements what is published, or the pages are corrected **before** it sh
 
 - Ring a bill with a number, settle it, and watch the message arrive on a real handset.
 - Ring one with no number: nothing sends, nothing errors.
-- Reply STOP. Ring that customer another bill. Nothing sends.
+- Reply STOP (if MSG91 gives the programme an inbound path). Ring that customer another bill.
+  Nothing sends.
 - Clear suppression by a hand-crafted request and confirm it is refused.
 - Ask staff to stop it at the counter for a customer standing there; confirm the next bill is silent.
 - Settle the same bill twice through the offline queue; confirm one message.
 - Switch delivery on in an outlet with trading history; confirm no historical bill sends.
 - In demo mode, ring and settle: confirm no real message leaves.
-- On a handset with no RCS, confirm the SMS fallback path is either working under DLT or visibly
-  disabled — not silently dropping.
+- With DLT not yet approved, confirm nothing sends and that the state is visible, not silently
+  dropped.
 
 ## User-only gate steps
 
@@ -244,4 +277,4 @@ either implements what is published, or the pages are corrected **before** it sh
   when a send fails or a customer calls to be removed.
 - [`docs/SCREENS.md`](../../../docs/SCREENS.md) — the counter's consent moment.
 - [`docs/LIMITATIONS.md`](../../../docs/LIMITATIONS.md) — the fallback, and the misdelivery position.
-- [`docs/GLOSSARY.md`](../../../docs/GLOSSARY.md) — RCS, DLT, suppression.
+- [`docs/GLOSSARY.md`](../../../docs/GLOSSARY.md) — DLT, header, template, suppression.

@@ -88,5 +88,11 @@ still open and now harder:
   page. Together they undo #54's "one order, never a person" bound. The seed
   carries the argument.
 
+**The channel moved on 2026-09-29.** The owner dropped RCS. The channel is
+**SMS through MSG91**, under an Airtel DLT registration still pending, so DLT is
+now the whole channel rather than its fallback. The seed carries what that moves,
+including whether SMS can honour the published *"Reply STOP"* at all. Until DLT
+approves, receipts go out by hand on WhatsApp (#63).
+
 **Dependencies when seeded**: `public-bill-receipt` (#54), archived; and
 `a-customer-is-a-phone-number` (#56), which is where suppression belongs.
