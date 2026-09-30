@@ -167,21 +167,22 @@ the page describes. It is the reason this is seeded now rather than when conveni
 The todo called this "the real one" and recorded #54's answer: the receipt page names nobody, so a
 wrong digit costs *"one order, never a person."*
 
-Two things have changed that bet, and they compound:
+**Delivery makes misdelivery systematic rather than occasional.** A link handed over by hand
+reaches a stranger only when somebody hands it to one. An automatic send reaches a stranger
+**every time the digit is wrong**, with nobody in the loop to notice.
 
-1. **Delivery makes misdelivery systematic rather than occasional.** A link handed over by hand
-   reaches a stranger only when somebody hands it to one. An automatic send reaches a stranger
-   **every time the digit is wrong**, with nobody in the loop to notice.
-2. **#58 `the-receipt-names-its-customer` puts the name back on the page.** Its own proposal states
-   the cost: a receipt link becomes a *"link → person lookup for whoever holds it."* Accepted for a
-   link the customer is handed. Not yet argued for a link posted automatically to a number a busy
-   counter typed.
+**#54's bound still holds, because #58 no longer names the customer** [owner, 2026-09-30]. #58
+(`the-receipt-says-its-yours`) was first seeded to put the customer's name on the page, which with
+this change would have made every wrong digit a disclosure of a person. It was rewritten to show
+only the last four digits of the number and *⭐ Gold at \<outlet\>*, never a name, and this
+programme was the reason. So a misdelivered receipt costs one order, four digits the stranger
+cannot connect to anybody, and a gold label: an order, not a person.
 
-**So #58 and this change together undo #54's bound, and neither one does it alone.** Whichever ships
-second inherits the argument. This seed does not settle it; it insists the settlement be written
-down, and offers the options: a confirmation step before the first message to a number, a
-check-digit or read-back at the counter, delivery only to numbers seen on a previous bill, or
-explicit acceptance that the bound is gone.
+What is left to settle here is the order itself reaching a stranger, which is what it always was.
+The options still stand, as a choice rather than a requirement: a confirmation step before the
+first message to a number, a read-back at the counter, delivery only to numbers seen on a previous
+bill, or explicit acceptance. *(Until 2026-09-30 this section argued that #58 and this change
+together undid #54's bound, and that whichever shipped second inherited the argument.)*
 
 ## What already exists
 
@@ -219,7 +220,8 @@ Added since the todo was written:
   published pages, per those pages' own wording: *"we will ask you separately."*
 - **No second consent path.** No web form, no checkbox. The counter is the consent.
 - **No change to link issuance, revocation or the identical-refusal rule.**
-- **Not the receipt's contents.** Naming the customer is #58.
+- **Not the receipt's contents.** What the receipt shows of its customer is #58, and it is never
+  their name.
 - **No re-engagement messaging.** No reminder about unused points, no win-back, no
   "you're close to gold". The number *is* now a loyalty identity (#62, which
   amends the privacy page to say so), but this programme only ever sends the bill.
@@ -263,8 +265,8 @@ either implements what is published, or the pages are corrected **before** it sh
 
 - 🧍 The owner reads `shawarmania.in/messages/` and confirms the system now does what it says,
   clause by clause.
-- 🧍 The owner accepts the misdelivery position this change settles — see above — knowing #58 puts a
-  name on the page.
+- 🧍 The owner accepts the misdelivery position this change settles — see above — knowing a
+  misdelivered receipt shows the last four digits and any gold mark (#58), and never a name.
 - 🧍 The owner confirms the counter staff ask the published question in the published words.
 - 🧍 The owner approves the amended `/messages/` wording on consent and on STOP, live before the
   first message is sent.

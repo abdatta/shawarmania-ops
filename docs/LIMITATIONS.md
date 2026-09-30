@@ -753,13 +753,15 @@ exist, because nothing is deleted here and bills are financial records. So the
 choice was a real expiry or none, and revocation won because it acts now rather
 than in a year and never breaks a receipt a customer legitimately kept.
 
-### The receipt page words the gold packaging waiver generically (#60)
+### The receipt page does not say how a bill was served (#60)
 
-A gold member's waived packaging reaches the receipt as its own discount row,
-and the amounts add up. The page, in the landing repository, does not yet know
-that row by name and prints it as *Discount (100%) · Selected items*. It also
-does not yet say whether the bill was dine-in or takeaway, or at which table.
-Both are the receipt change's to render (#58, which carries the wording).
+The public receipt does not say whether a bill was dine-in or takeaway, or at
+which table: the reader does not return the bill's `service_type` and
+`table_number` yet. Rendering them is #58's (`the-receipt-says-its-yours`).
+
+A gold member's waived packaging used to print generically, as *Discount (100%) ·
+Selected items*. It now reads *Free packaging · Gold member*, since #62's landing
+sibling `the-receipt-shows-points`.
 
 ### Forgotten-password recovery requires an administrator
 

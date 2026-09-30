@@ -129,7 +129,9 @@ stored rows. It is never inferred.
   line and discount they are, through the renderer it already has.** Naming the
   waiver *Gold member · packaging free*, and printing *Dine-in · Table 4* on the
   receipt, are renderer changes in the landing repository and belong with #58
-  `the-receipt-names-its-customer`. They are noted there.
+  `the-receipt-says-its-yours`. They are noted there. *(The waiver's name shipped
+  first, as* Free packaging · Gold member*, with #62's landing sibling
+  `the-receipt-shows-points`; the service line stays with #58.)*
 - **No change to how gold is granted, revoked, shown or snapshotted.**
 
 ## Docs to update before archiving

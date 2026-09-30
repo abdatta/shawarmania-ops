@@ -83,10 +83,10 @@ still open and now harder:
   fallback path** rather than being dissolved by the choice.
 - **Opt-in per bill, or automatic**: automatic, once consented.
 - **Where consent is recorded**: at the counter, in published words.
-- **The mistyped number**: still open, and worse — automatic delivery makes
-  misdelivery systematic, and #58 puts the customer's name back on the receipt
-  page. Together they undo #54's "one order, never a person" bound. The seed
-  carries the argument.
+- **The mistyped number**: still open — automatic delivery makes misdelivery
+  systematic. #54's "one order, never a person" bound holds, because #58 shows
+  only the last four digits and a gold mark, never a name (rewritten
+  2026-09-30; it first put the name back). The seed carries the argument.
 
 **The channel moved on 2026-09-29.** The owner dropped RCS. The channel is
 **SMS through MSG91**, under an Airtel DLT registration still pending, so DLT is

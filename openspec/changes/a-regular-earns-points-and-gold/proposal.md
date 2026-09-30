@@ -184,8 +184,9 @@ Each of these is amended in the living spec **with its reason**, not deleted:
   make eligible.
 - **No points for bills rung before an outlet switches points on.**
 - **No change to who may rename a customer.**
-- **No receipt naming the customer.** That is #58; the points figures here name
-  nobody.
+- **Nothing on the receipt about who the customer is.** That is #58, which adds
+  the last four digits and a gold mark and never a name; the points figures here
+  name nobody.
 
 ## One release, before the trial
 

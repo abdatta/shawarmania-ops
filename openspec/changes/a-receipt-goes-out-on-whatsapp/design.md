@@ -248,7 +248,8 @@ does.
 - **Misdelivery.** A human sees the chat before sending: WhatsApp shows the name
   or photo the number carries, or says it is not on WhatsApp. That is a stronger
   check than #59's automatic path has. #54's bound (the page names no customer)
-  still holds until #58.
+  holds, and #58 keeps it: it adds the last four digits and a gold mark, never a
+  name.
 
 ## D11. Relationship to #59
 
