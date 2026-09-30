@@ -152,7 +152,9 @@ Where the browser reports the tablet offline, the pop-up SHALL say that the
 receipt needs the internet instead of showing the frame. Until the page has
 loaded, the pop-up SHALL show that it is loading, in the space the receipt will
 fill. The page SHALL be requested in its counter view (`view=counter`), which
-omits its download link.
+omits its download link. While the pop-up is open, the counter behind it SHALL be
+blurred so that nothing on it can be read, because the tablet is turned to a
+customer and the counter carries other customers' names and totals.
 
 #### Scenario: Waiting for the receipt
 

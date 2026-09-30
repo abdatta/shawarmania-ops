@@ -108,6 +108,19 @@ describe('the counter’s receipt viewer', () => {
     expect(screen.queryByTestId('receipt-viewer-demo')).not.toBeInTheDocument()
   })
 
+  /*
+   * The tablet is turned to a customer, and behind the pop-up sit other
+   * customers' names, orders and totals. The blur is the only thing keeping
+   * them unreadable, so it is pinned rather than left to a class list someone
+   * tidies away [owner, 2026-09-30].
+   */
+  it('blurs the counter behind it, so nothing there can be read', () => {
+    renderViewer()
+
+    const dialog = screen.getByRole('dialog', { name: 'Receipt for bill 27' })
+    expect(dialog.className).toMatch(/backdrop:backdrop-blur-/)
+  })
+
   it('closes from its own button', async () => {
     const user = userEvent.setup()
     const onClose = renderViewer()

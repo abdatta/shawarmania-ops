@@ -49,7 +49,9 @@ export function ReceiptViewer({
       open={open}
       onClose={onClose}
       aria-label={title}
-      className="m-auto h-[min(92vh,52rem)] w-[min(96vw,30rem)] overflow-hidden rounded-2xl p-0"
+      // Blurred behind, and only here: the tablet is turned to a customer, and
+      // the counter under this pop-up carries other customers' names and totals.
+      className="m-auto h-[min(92vh,52rem)] w-[min(96vw,30rem)] overflow-hidden rounded-2xl p-0 backdrop:backdrop-blur-md"
     >
       <div className="flex h-full flex-col">
         <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">

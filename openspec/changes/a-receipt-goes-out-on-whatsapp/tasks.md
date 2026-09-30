@@ -107,6 +107,8 @@ is already proved.
   `?view=counter`, and a spinner covers it until `load`, returning after offline.
   The site half, `the-counter-views-the-receipt`, omits Download PDF for that
   view; it is committed in the landing repo and deploys with `worker:deploy`.
+- [x] 6.8 On the owner's word (2026-09-30), failing first: the counter behind the
+  pop-up is blurred, so a customer shown the tablet cannot read other bills.
 
 ## 7. PHASE GATE: #63 `a-receipt-goes-out-on-whatsapp`
 

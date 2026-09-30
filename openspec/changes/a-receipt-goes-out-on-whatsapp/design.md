@@ -299,6 +299,11 @@ control in front of a customer [owner, 2026-09-30]. The frame cannot hide it
 itself; the page is on another origin. The two ship in either order: until the
 site is deployed it ignores the parameter and the button stays, still inert.
 
+**The counter behind is blurred** (`backdrop:backdrop-blur-md` on this pop-up
+only) [owner, 2026-09-30]. The tablet is turned to a customer, and the counter
+under the pop-up carries other customers' names, orders and totals. Every other
+dialog keeps the ordinary dim backdrop.
+
 **Demo** is production, as D5: the frame loads the demo link, which the reader
 refuses, and the demo note says why.
 
