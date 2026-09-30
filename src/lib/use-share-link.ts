@@ -3,9 +3,10 @@ import { useCallback, useState } from 'react'
 /**
  * Sharing a public link, degrading to whatever the device offers.
  *
- * Three cases, in order — the lesson `account-handover.tsx` paid for first and
- * `BillReceiptShare` applied second, kept in one place now that a third reader
- * (the Menu screen's public menu) needs it:
+ * Three cases, in order — the lesson `account-handover.tsx` paid for first and a
+ * bill's receipt Share applied second, kept in one place when a third reader
+ * (the Menu screen's public menu) needed it. The bill no longer shares: it sends
+ * on WhatsApp or opens the receipt page (a-receipt-goes-out-on-whatsapp).
  *
  *   1. the device's own share sheet, which on a manager's phone is the system
  *      sheet with WhatsApp in it — the intended path;

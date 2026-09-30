@@ -503,6 +503,28 @@ opened many times is a customer, or a chat app building previews. The digest is
 salted and cannot be turned back into an address; it is there to tell one client
 from another, not to identify anybody.
 
+### Sending a receipt on WhatsApp *(#63)*
+
+Until automatic delivery (#59, SMS through MSG91) is approved, and whenever it
+fails afterwards, a receipt goes out by hand. In Billing history, expand the bill:
+
+- **Send receipt** (green, WhatsApp's mark) shows when the bill carries the
+  customer's number. It opens WhatsApp on that number with the bill number, its
+  total and the receipt link typed. **Check the chat is the right person, then
+  tap Send.** Nothing goes until you do.
+- **Open receipt** shows when there is no number. It opens the receipt page; its
+  ⋮ menu shares, copies the link, downloads the PDF or opens it in full Chrome.
+
+**Ask before sending.** A customer gives their number to earn points, and that is
+not permission to message them.
+
+**The message comes from whichever WhatsApp is signed in on that phone.** On the
+owner's phone that is the owner's personal number, name and photo, for every
+customer. If that is not wanted, put the free **WhatsApp Business** app on a
+dedicated outlet number (named for the outlet, with a profile and an away
+message) on the phone used for this. Where a phone has both WhatsApp and WhatsApp
+Business, Android asks which to open, or uses the one set as default.
+
 ## Onboarding a new franchise outlet
 
 The repeatable path. **If any step here requires a code change, that is a bug** — outlet number seven must be a data operation.

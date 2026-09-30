@@ -1,4 +1,4 @@
-import { ChevronDown, Pencil } from 'lucide-react'
+import { ChevronDown, Pencil, ReceiptText } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import { formatDayTime, tableLabel } from '@/domain'
 import { cn } from '@/lib/cn'
 
 import { LineAmount } from './line-amount'
+import { ReceiptViewer } from './receipt-viewer'
 
 function methodLabel(method: BillingBill['paymentMethod']) {
   return method === 'upi' ? 'UPI' : method[0]!.toUpperCase() + method.slice(1)
@@ -184,6 +185,9 @@ function BillRow({
               <Money paise={bill.totalPaise} className="font-black" />
             </dd>
           </dl>
+          {bill.status !== 'void' && (
+            <ViewReceiptAction receiptUrl={bill.receiptUrl} billNumber={bill.billNumber} />
+          )}
           {onEditPayment && bill.paymentEditable && (
             <PaymentEditAction
               editableUntil={bill.paymentEditableUntil}
@@ -210,6 +214,50 @@ function BillRow({
         </div>
       </details>
     </li>
+  )
+}
+
+/**
+ * Showing a customer their bill from the counter, inside the app
+ * (a-receipt-goes-out-on-whatsapp, design D12).
+ *
+ * The link is the one the bill already carries; nothing is minted here. A bill
+ * still in the outbox has none yet, because its token is written when the row
+ * reaches Postgres, so the control stays and says why rather than vanishing and
+ * reappearing once the bill syncs.
+ */
+function ViewReceiptAction({
+  receiptUrl,
+  billNumber,
+}: {
+  receiptUrl: string | null
+  billNumber: number
+}) {
+  const [viewing, setViewing] = useState(false)
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-3">
+      {!receiptUrl && (
+        <p className="mr-auto text-xs text-content-muted">Receipt appears once this bill syncs</p>
+      )}
+      <Button
+        size="phone"
+        variant="secondary"
+        disabled={!receiptUrl}
+        onClick={() => setViewing(true)}
+      >
+        <ReceiptText aria-hidden size={18} />
+        View receipt
+      </Button>
+      {receiptUrl && (
+        <ReceiptViewer
+          open={viewing}
+          receiptUrl={receiptUrl}
+          billNumber={billNumber}
+          onClose={() => setViewing(false)}
+        />
+      )}
+    </div>
   )
 }
 

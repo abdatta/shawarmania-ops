@@ -280,15 +280,10 @@ describe('manager bill detail', () => {
 
     expect(onReview).toHaveBeenCalledWith('assigned_other', 'priya', null)
   })
-  /*
-   * Share before Cancel, which is the reason this change touched the action row
-   * at all: a destructive control should not be the first thing a thumb reaches
-   * when a bill expands.
-   */
-  it('offers Share before Cancel in the action row', () => {
-    render(
+  function renderDetail(overrides: Partial<BillingBill> = {}) {
+    return render(
       <ManagerBillDetail
-        bill={bill}
+        bill={{ ...bill, ...overrides }}
         cancelling={false}
         reason=""
         onReasonChange={vi.fn()}
@@ -297,110 +292,71 @@ describe('manager bill detail', () => {
         onConfirmCancellation={vi.fn()}
       />,
     )
+  }
 
-    const share = screen.getByRole('button', { name: /share receipt/i })
+  /*
+   * The receipt action before Cancel in reading order, which is the reason #54
+   * touched the action row at all: a destructive control should not be the first
+   * thing a thumb or a screen reader reaches when a bill expands.
+   */
+  it('offers the receipt action before Cancel in the action row', () => {
+    renderDetail()
+
+    const open = screen.getByRole('link', { name: /open receipt/i })
     const cancel = screen.getByRole('button', { name: 'Cancel this bill' })
-    expect(share.compareDocumentPosition(cancel) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+    expect(open.compareDocumentPosition(cancel) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     )
   })
 
   /*
-   * One row, not two [owner, 2026-09-03]. Asserted through the shared parent
-   * rather than a class name: what matters is that the two controls are siblings
-   * in one flex row, which is what puts them side by side.
+   * One row, with Cancel at its far end [owner, 2026-09-29]. The gap between the
+   * two is what keeps a thumb off Cancel, so it is asserted rather than left to
+   * whatever the row happens to do.
    */
-  it('puts Share and Cancel in one row', () => {
-    render(
-      <ManagerBillDetail
-        bill={bill}
-        cancelling={false}
-        reason=""
-        onReasonChange={vi.fn()}
-        onStartCancelling={vi.fn()}
-        onKeepBill={vi.fn()}
-        onConfirmCancellation={vi.fn()}
-      />,
-    )
+  it('puts the receipt action and Cancel in one row, with Cancel at the right-hand end', () => {
+    renderDetail()
 
-    const share = screen.getByRole('button', { name: /share receipt/i })
+    const open = screen.getByRole('link', { name: /open receipt/i })
     const cancel = screen.getByRole('button', { name: 'Cancel this bill' })
-    expect(share.parentElement).toBe(cancel.parentElement)
-    expect(share.parentElement).toHaveClass('flex')
+    expect(open.parentElement).toBe(cancel.parentElement)
+    expect(cancel.parentElement).toHaveClass('flex')
+    expect(cancel).toHaveClass('ml-auto')
   })
 
-  /*
-   * The revealed link wraps onto its own line beneath both, because a URL has no
-   * room beside two buttons at 375px.
-   */
-  it('drops a revealed link below the row rather than into it', async () => {
-    const user = userEvent.setup()
-    Object.defineProperty(window.navigator, 'share', { configurable: true, value: undefined })
-    Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: undefined })
+  it('sends on WhatsApp instead when the bill carries the customer’s number', () => {
+    renderDetail({ customerPhone: '+919876543210' })
 
-    render(
-      <ManagerBillDetail
-        bill={bill}
-        cancelling={false}
-        reason=""
-        onReasonChange={vi.fn()}
-        onStartCancelling={vi.fn()}
-        onKeepBill={vi.fn()}
-        onConfirmCancellation={vi.fn()}
-      />,
-    )
-
-    await user.click(screen.getByRole('button', { name: /share receipt/i }))
-    const link = screen.getByTestId('receipt-link')
-    const cancel = screen.getByRole('button', { name: 'Cancel this bill' })
-    expect(link.parentElement).toBe(cancel.parentElement)
-    // `order-last` as well, or the link would push Cancel onto a third line: it
-    // sits between the two buttons in DOM order.
-    expect(link).toHaveClass('basis-full')
-    expect(link).toHaveClass('order-last')
+    const send = screen.getByRole('link', { name: 'Send receipt on WhatsApp' })
+    expect(send.getAttribute('href')).toMatch(/^https:\/\/wa\.me\/919876543210\?text=/)
+    expect(decodeURIComponent(send.getAttribute('href')!)).toContain('₹139')
+    expect(screen.queryByRole('link', { name: /open receipt/i })).not.toBeInTheDocument()
   })
 
-  it('offers no Share on a cancelled bill', () => {
-    render(
-      <ManagerBillDetail
-        bill={{
-          ...bill,
-          status: 'void',
-          voidReason: 'Duplicate bill',
-          voidedAt: '2026-08-12T12:30:00.000Z',
-          voidedBy: { id: 'person-1', name: 'Demo Manager' },
-        }}
-        cancelling={false}
-        reason=""
-        onReasonChange={vi.fn()}
-        onStartCancelling={vi.fn()}
-        onKeepBill={vi.fn()}
-        onConfirmCancellation={vi.fn()}
-      />,
-    )
+  it('offers no receipt action and no Cancel on a cancelled bill', () => {
+    renderDetail({
+      status: 'void',
+      voidReason: 'Duplicate bill',
+      voidedAt: '2026-08-12T12:30:00.000Z',
+      voidedBy: { id: 'person-1', name: 'Demo Manager' },
+      customerPhone: '+919876543210',
+    })
 
     // A cancelled bill is not something to proactively send. A link already
     // sent for it keeps working and reports the cancellation, which is the
     // receipt's job rather than this row's.
-    expect(screen.queryByRole('button', { name: /share receipt/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /receipt/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancel this bill' })).not.toBeInTheDocument()
   })
 
-  it('offers no Share for a bill the server has not accepted yet', () => {
-    render(
-      <ManagerBillDetail
-        bill={{ ...bill, receiptUrl: null }}
-        cancelling={false}
-        reason=""
-        onReasonChange={vi.fn()}
-        onStartCancelling={vi.fn()}
-        onKeepBill={vi.fn()}
-        onConfirmCancellation={vi.fn()}
-      />,
-    )
+  it('offers no receipt action for a bill the server has not accepted yet, and keeps Cancel on the right', () => {
+    renderDetail({ receiptUrl: null, customerPhone: '+919876543210' })
 
     // The token is minted when the row reaches Postgres, so a queued bill has
     // no link. Nothing is offered rather than a URL that would refuse.
-    expect(screen.queryByRole('button', { name: /share receipt/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Cancel this bill' })).toBeVisible()
+    expect(screen.queryByRole('link', { name: /receipt/i })).not.toBeInTheDocument()
+    const cancel = screen.getByRole('button', { name: 'Cancel this bill' })
+    expect(cancel).toBeVisible()
+    expect(cancel).toHaveClass('ml-auto')
   })
 })

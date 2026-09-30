@@ -11,7 +11,7 @@ import { formatBusinessDate, formatDayTime, serviceTypeLabel, tableLabel } from 
 
 import { BillDiscountRows } from './bill-discount-rows'
 import { LineAmount } from './line-amount'
-import { BillReceiptShare } from './bill-receipt-share'
+import { BillReceiptAction } from './bill-receipt-action'
 
 const CANCELLATION_REASONS = ['Duplicate bill', 'Mistaken entry'] as const
 
@@ -330,24 +330,31 @@ export function ManagerBillDetail({
       {bill.status !== 'void' && (
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
           {/*
-            Share goes first, so `Cancel this bill` stops being the first
-            control a thumb reaches when a bill expands. Both render on the same
-            not-void condition: a cancelled bill is not something to proactively
-            send, while a link already sent for a since-voided bill keeps
-            working and reports the cancellation.
+            The receipt action goes first in reading order, so `Cancel this
+            bill` is never the first control a thumb or a screen reader reaches
+            when a bill expands; Cancel's `ml-auto` then puts it at the row's
+            far end [owner, 2026-09-29], and the gap between the two is what
+            keeps a thumb off it. Both render on the same not-void condition: a
+            cancelled bill is not something to proactively send, while a link
+            already sent for a since-voided bill keeps working and reports the
+            cancellation.
 
             Absent where the bill has no link yet, which is a bill the server
-            has not accepted rather than an error.
+            has not accepted rather than an error; Cancel stays on the right.
 
-            One row rather than two [owner, 2026-09-03]. `BillReceiptShare`
-            renders a fragment, so its button becomes a flex item here beside
-            Cancel, and the link it may reveal carries `basis-full` and wraps
-            onto its own line beneath both.
+            `BillReceiptAction` renders a fragment, so its control is a flex
+            item here, and a demo note it may add carries `basis-full` and wraps
+            onto its own line beneath the row.
           */}
           {bill.receiptUrl && (
-            <BillReceiptShare receiptUrl={bill.receiptUrl} billNumber={bill.billNumber} />
+            <BillReceiptAction
+              receiptUrl={bill.receiptUrl}
+              billNumber={bill.billNumber}
+              totalPaise={bill.totalPaise}
+              customerPhone={bill.customerPhone}
+            />
           )}
-          <Button variant="secondary" className="text-danger" onClick={onStartCancelling}>
+          <Button variant="secondary" className="ml-auto text-danger" onClick={onStartCancelling}>
             <Ban aria-hidden size={18} />
             Cancel this bill
           </Button>

@@ -80,6 +80,24 @@
   --brand-amber: #fbbf24;
 }
 
+/* ── Third-party layer ─────────────────────────────────────────────────
+   Somebody else's colours, used only where a control stands for their
+   product. Kept out of the brand block on purpose: a franchise re-skin
+   replaces that block, and it must not re-colour WhatsApp.
+
+   WhatsApp's green is drawn as text and mark on an outlined button, the
+   way Cancel draws its red, so the value has to read on our card in each
+   theme. Its bright green #25d366 is about 8.8:1 on the dark card and only
+   1.9:1 on white. On light it takes WhatsApp Web's teal green #008069 moved a
+   hair deeper, because the outlined button's hover ground is the raised
+   surface and #008069 is 4.49:1 there; #007d66 is 4.7:1 and looks the same.
+   The contrast validator is what holds both there
+   (a-receipt-goes-out-on-whatsapp). */
+:root {
+  --thirdparty-whatsapp-green: #25d366;
+  --thirdparty-whatsapp-teal-green: #007d66;
+}
+
 /* ── Semantic layer: light — the counter default ───────────────────────── */
 :root,
 [data-theme='light'] {
@@ -130,6 +148,11 @@
      "components contain no hex" literally true rather than carved out. */
   --qr-module: var(--brand-stone-950);
   --qr-field: var(--brand-white);
+
+  /* A control that opens WhatsApp wears WhatsApp's green as its text and
+     mark. Like --danger, the shade moves with the theme so it reads on the
+     card: WhatsApp's own teal green on light. */
+  --whatsapp: var(--thirdparty-whatsapp-teal-green);
 }
 
 /* ── Semantic layer: dark — for phones in the evening ──────────────────── */
@@ -168,4 +191,7 @@
   /* Deliberately NOT inverted for dark mode — see the light block. */
   --qr-module: var(--brand-stone-950);
   --qr-field: var(--brand-white);
+
+  /* WhatsApp's own bright green, which carries itself on a dark card. */
+  --whatsapp: var(--thirdparty-whatsapp-green);
 }

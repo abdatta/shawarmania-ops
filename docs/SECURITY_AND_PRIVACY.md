@@ -390,6 +390,50 @@ absorb with its rate limits, and a write here would hand an attacker the lever.
   the logo and "Your receipt" and no amount, item or bill number, so forwarding a
   link does not spill its contents into a group chat before anybody opens it.
 
+### Sending a receipt on WhatsApp is a person's message, not the app's
+
+On a bill that carries a customer's number, Billing history offers **Send
+receipt**: a WhatsApp click-to-chat link (`wa.me/<number>?text=…`) that opens
+WhatsApp on that number with the bill number, its total and the receipt link
+typed (a-receipt-goes-out-on-whatsapp). What that does and does not do with a
+customer's number:
+
+- **The number and the link leave the app only on the owner's or manager's
+  tap, and only into WhatsApp.** Nothing is logged, stored, counted or sent to
+  a server of ours. The link carries `rel="noreferrer"`, so the app's own
+  address goes nowhere.
+- **Nothing is sent by the link.** The person sends it from their own WhatsApp,
+  having seen whose chat opened: the name or photo the number carries, or
+  WhatsApp saying it is not on WhatsApp. That human look is a stronger check
+  against a mistyped number than any automatic send has.
+- **Where WhatsApp is not installed**, the browser fetches `wa.me/<number>`, so
+  Meta's web server learns the number. Meta is carrying the message to that
+  number anyway; this discloses nothing the send does not.
+- **It comes from whichever WhatsApp account is signed in on that phone**, often
+  a personal number. See [Operations](OPERATIONS.md).
+- **Giving a number is not consent to be messaged.** A customer gives it to earn
+  points (#62), and that is all it agrees to. The practice is to ask first
+  ("want the bill on WhatsApp?"). The app cannot enforce that and does not
+  claim to. WhatsApp itself restricts accounts that many recipients block or
+  report, which is a second reason to send only to people who asked.
+- **A demonstration bill works exactly as a real one** [owner, 2026-09-30].
+  Its number is invented but shaped like a real mobile, so Send receipt can open
+  a chat with a stranger. That is accepted because following it sends nothing:
+  whoever is walking the demo still has to tap Send, and should not.
+
+**The counter tablet shows a receipt and hands nothing out.** Its **View
+receipt** frames the bill's receipt page inside the app for a customer standing
+at the counter. #54 kept a *share* control off the tablet because it is shared
+hardware in a shop, and that still holds: the tablet sends, opens and shares
+nothing. It reads the link its own shift's bills already carry
+(`bill_public_links` is readable wherever its bill is), and the frame's empty
+`sandbox` refuses the page every permission, so no script runs, nothing
+downloads and nothing navigates the app. The request carries no referrer.
+
+This is not the automatic delivery programme (#59, SMS through MSG91), and
+none of that programme's machinery (template, suppression, STOP) applies to a
+message a person types and sends.
+
 ## Threat model — what actually worries us
 
 Roughly in order of likelihood:

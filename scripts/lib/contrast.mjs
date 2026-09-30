@@ -84,6 +84,11 @@ export const CHECKS = [
     note: 'a scannable code, identical in both themes on purpose',
   },
 
+  // Send receipt is an outlined button like Cancel, so WhatsApp's green is its
+  // label, read against the button's own surface.
+  { fg: '--whatsapp', bg: '--surface', min: AA_TEXT, note: 'WhatsApp label on a button' },
+  { fg: '--whatsapp', bg: '--surface-raised', min: AA_TEXT, note: 'WhatsApp label on hover' },
+
   {
     fg: '--marker-veg',
     bg: '--surface',

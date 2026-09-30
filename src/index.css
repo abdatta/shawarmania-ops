@@ -31,6 +31,7 @@
   --color-member-fill: var(--member-fill);
   --color-qr-module: var(--qr-module);
   --color-qr-field: var(--qr-field);
+  --color-whatsapp: var(--whatsapp);
 
   --font-sans: 'Nunito Sans Variable', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Lilita One', ui-sans-serif, system-ui, sans-serif;

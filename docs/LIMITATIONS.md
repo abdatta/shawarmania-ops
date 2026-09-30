@@ -249,7 +249,7 @@ they already wear.
 **No receipt printing and no GST computation.** Digital receipts were the third
 item here and are no longer deferred: every bill is reachable at a public URL and
 the owner and a franchise admin can share it. What remains deferred is
-**delivering** that link, which is [its own limitation](#a-receipt-link-is-shared-by-hand-54).
+**delivering** that link, which is [its own limitation](#a-receipt-is-sent-by-hand-54-63).
 
 This keeps the billing screen minimal and ships the counter faster. All three extensions are anticipated in the schema so that adding them later does **not** require migrating historical bills:
 
@@ -679,26 +679,44 @@ and asks the person to check the device's internet connection; it does not
 mislabel that failure as a wrong username or password. A backend refusal still
 uses one indistinguishable credential message.
 
-### A receipt link is shared by hand (#54)
+### A receipt is sent by hand (#54, #63)
 
-Every bill is reachable at a public URL from the moment the server has it, and
-the owner and a franchise admin can share one from a bill they are already
-looking at. **Nothing sends it to the customer.** No WhatsApp, no RCS, no SMS.
+Every bill is reachable at a public URL from the moment the server has it.
+**Nothing sends it to the customer automatically.** The owner or a franchise
+admin sends it by hand, from a bill they are already looking at:
 
-That is the largest deliberate cut in #54, and it was cut because delivery is
-not one feature but four decisions nobody had made: a WhatsApp Business API
-account against SMS and DLT registration, opt-in per bill against automatic,
-where consent is recorded, and what happens when a number is mistyped at a busy
-counter. Tracked as
-[`bill-receipt-delivery`](../openspec/todos/bill-receipt-delivery.md).
+- a bill carrying the customer's number offers **Send receipt**, which opens
+  WhatsApp on that number with the message typed, and the person taps Send;
+- a bill without one offers **Open receipt**, which opens the receipt page.
 
-Two consequences worth stating plainly. Until delivery exists, a customer gets a
-receipt only if somebody at the counter or the office deliberately sends them
-one — so the feature is real but its reach is a person's habit. And the counter's
-customer fields stay as they are: today's names are placeholders typed to satisfy
-a UI-only name-or-phone rule, and the phone number will need to become
-near-compulsory once links are delivered. #54 deliberately did not make that
-billing-UI change.
+Automatic delivery was the largest deliberate cut in #54, because it was four
+decisions nobody had made. It is now
+[`bill-receipt-delivery`](../openspec/changes/bill-receipt-delivery/proposal.md)
+(#59), by SMS through MSG91, waiting on Airtel DLT registration. Until it ships a
+customer gets a receipt only if somebody deliberately sends one, so the
+feature's reach is a person's habit. After it ships, Send receipt stays as the
+manual resend.
+
+Three edges of the by-hand path, each accepted (a-receipt-goes-out-on-whatsapp):
+
+- **A bill with a number cannot open its receipt from the bill.** A bill offers
+  one receipt action, never both. So when the number is not on WhatsApp, or was
+  keyed wrong, there is no Open receipt to fall back on. The cheapest escape, if
+  it is ever wanted, is a *Send to someone else* that opens WhatsApp with the
+  message and no number (`wa.me/?text=…`). Not built.
+- **Open receipt on an installed app on Android opens a Chrome Custom Tab**, not
+  full Chrome. No web app can open full Chrome directly: Chrome keeps navigation
+  leaving an installed app in a Custom Tab, and an `intent://` rewrite does not
+  escape it. The Custom Tab's menu offers Open in Chrome, Share, Copy link and
+  the PDF download.
+- **The message carries no points and no name.** The history read does not carry
+  points (the receipt page shows them), and bills rung before customer
+  identification carry placeholder names.
+- **The counter's View receipt trusts the browser about being online.** A frame of
+  another site cannot report that its load failed, so the pop-up asks
+  `navigator.onLine`. On a network that claims to be online but reaches nothing,
+  such as a Wi-Fi captive portal, it shows a blank frame rather than the offline
+  sentence.
 
 ### A receipt link cannot be recalled, only revoked (#54)
 
