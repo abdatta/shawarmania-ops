@@ -141,9 +141,11 @@ from its receipt link, never from the session.
 
 An expanded bill in the counter's Bills this shift SHALL offer **View receipt**,
 which SHALL open that bill's receipt page in a pop-up inside the app. The page
-SHALL be shown in a frame that permits no script, form, pop-up, download or
-navigation of the app, and SHALL be requested without a referrer. Closing the
-pop-up SHALL return the counter exactly as it was.
+SHALL be shown in a frame that permits scripts and no same-origin access, form,
+pop-up, download or navigation of the app, and SHALL be requested without a
+referrer. The pop-up SHALL grow with the receipt, to the height the page reports
+from its own frame, up to its ceiling on the screen, and SHALL scroll within
+beyond it. Closing the pop-up SHALL return the counter exactly as it was.
 
 View receipt SHALL read the link the bill already carries and SHALL NOT create
 one. Where the bill has no link yet, because it has not reached the server, View

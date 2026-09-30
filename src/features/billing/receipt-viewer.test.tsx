@@ -62,17 +62,80 @@ describe('the counter’s receipt viewer', () => {
   })
 
   /*
-   * The empty sandbox is the whole guard against the tablet being walked out of
-   * the app: no script, no form, no pop-up, no download, no navigating the app.
-   * The receipt page needs none of them. An attribute that grew a permission
-   * would still render and would still pass every other test here.
+   * The sandbox is the guard against the tablet being walked out of the app. It
+   * permits scripts, which the counter view needs to report its height, and
+   * nothing else: no same-origin access, no form, no pop-up, no download, no
+   * navigating the app. A token that crept in would still render and would still
+   * pass every other test here, so the whole attribute is pinned.
    */
-  it('locks the page down completely and sends no referrer', () => {
+  it('permits the page scripts and nothing else, and sends no referrer', () => {
     renderViewer()
 
     const frame = screen.getByTitle('Receipt for bill 27')
-    expect(frame.getAttribute('sandbox')).toBe('')
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts')
     expect(frame).toHaveAttribute('referrerpolicy', 'no-referrer')
+  })
+
+  /*
+   * The pop-up cannot measure a page on another origin, so the counter view of
+   * the receipt reports its own height (the site's the-counter-views-the-receipt).
+   * The pop-up grows to it, up to its own ceiling, and scrolls beyond that.
+   */
+  it('grows the frame to the height the receipt reports', () => {
+    renderViewer()
+    const frame = screen.getByTitle('Receipt for bill 27') as HTMLIFrameElement
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'shawarmania-receipt-height', height: 1234 },
+          source: frame.contentWindow,
+        }),
+      )
+    })
+
+    expect(frame.style.height).toBe('1234px')
+  })
+
+  it('ignores a height from anything but its own frame, and anything that is not one', () => {
+    renderViewer()
+    const frame = screen.getByTitle('Receipt for bill 27') as HTMLIFrameElement
+    const before = frame.style.height
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'shawarmania-receipt-height', height: 900 },
+          source: window,
+        }),
+      )
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'shawarmania-receipt-height', height: 'tall' },
+          source: frame.contentWindow,
+        }),
+      )
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'something-else', height: 900 },
+          source: frame.contentWindow,
+        }),
+      )
+    })
+
+    expect(frame.style.height).toBe(before)
+  })
+
+  /*
+   * Until the site knows `?view=counter`, or wherever a report never comes, the
+   * frame keeps a fixed fallback height rather than collapsing to nothing.
+   */
+  it('keeps a fallback height until a report arrives', () => {
+    renderViewer()
+    const frame = screen.getByTitle('Receipt for bill 27') as HTMLIFrameElement
+
+    expect(frame.style.height).not.toBe('')
+    expect(frame.style.height).not.toBe('0px')
   })
 
   it('says the receipt needs the internet when the tablet is offline, and shows no frame', () => {

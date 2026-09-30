@@ -263,11 +263,29 @@ receipt that could disagree with the first. Measured 2026-09-30: the Worker send
 `X-Frame-Options` or CSP `frame-ancestors`, so it can be framed with no change to
 the landing repo.
 
-**Locked down with an empty `sandbox`.** The receipt page carries no script
-(checked in `worker/src/page.ts`), so the frame needs no permission at all. An
-empty `sandbox` refuses scripts, forms, pop-ups, downloads and navigating the app,
-which is what keeps the tablet from being walked out of the app by the page's PDF
-link or footer. `referrerPolicy="no-referrer"` matches the page's own policy.
+**Locked down with `sandbox="allow-scripts"` and nothing more.** It refuses
+same-origin access, forms, pop-ups, downloads and navigating the app, which is what
+keeps the tablet from being walked out of the app by any link on the page.
+`referrerPolicy="no-referrer"` matches the page's own policy. *(First built with an
+empty `sandbox`, since the page then carried no script. The owner asked on
+2026-09-30 for the pop-up to fit the receipt, which needs the page to report its
+height; see **Fitting the receipt**.)*
+
+**Fitting the receipt** [owner, 2026-09-30]. The pop-up grows with the receipt up
+to 92% of the screen and scrolls within beyond that. It cannot measure a page on
+another origin, so the site's counter view (`?view=counter`) carries one script
+that posts `{ type: 'shawarmania-receipt-height', height }` to its parent on load
+and on every resize. The pop-up takes a height only from a message whose `source`
+is its own frame's window, and only a finite number between 0 and 20,000, then
+sets the frame to it; the frame's wrapper is the one part of the pop-up allowed
+to shrink, so a long receipt scrolls there with the header and Close fixed. Until a
+report arrives, or where none ever does, the frame keeps a fallback of 32rem, so
+either repository can deploy first. The customer's own link carries no script.
+
+*Rejected: a fixed height (as first built),* which left empty space under a short
+receipt and scrolled a long one early on a tall screen. *Rejected: estimating the
+height from the bill's lines,* which would be a second rendering's guess about the
+first.
 
 **No new read and no new policy.** `listShiftHistory` already selects
 `bill_public_links(token, revoked_at)`, and that table is readable wherever its

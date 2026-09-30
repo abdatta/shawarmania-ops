@@ -426,9 +426,11 @@ receipt** frames the bill's receipt page inside the app for a customer standing
 at the counter. #54 kept a *share* control off the tablet because it is shared
 hardware in a shop, and that still holds: the tablet sends, opens and shares
 nothing. It reads the link its own shift's bills already carry
-(`bill_public_links` is readable wherever its bill is), and the frame's empty
-`sandbox` refuses the page every permission, so no script runs, nothing
-downloads and nothing navigates the app. The request carries no referrer.
+(`bill_public_links` is readable wherever its bill is), and the frame's
+`sandbox` permits the page its scripts and nothing else, so nothing downloads,
+nothing opens and nothing navigates the app. The only script is the counter
+view's height report, which the pop-up accepts from its own frame alone; the
+customer's own link carries none. The request carries no referrer.
 
 This is not the automatic delivery programme (#59, SMS through MSG91), and
 none of that programme's machinery (template, suppression, STOP) applies to a

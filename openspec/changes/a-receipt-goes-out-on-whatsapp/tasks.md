@@ -109,6 +109,10 @@ is already proved.
   view; it is committed in the landing repo and deploys with `worker:deploy`.
 - [x] 6.8 On the owner's word (2026-09-30), failing first: the counter behind the
   pop-up is blurred, so a customer shown the tablet cannot read other bills.
+- [x] 6.9 On the owner's word (2026-09-30), failing first: the pop-up fits the
+  receipt. The frame allows scripts and nothing else, takes a height only from
+  its own frame's message, falls back to 32rem, and scrolls within beyond 92% of
+  the screen. The site's counter view reports the height.
 
 ## 7. PHASE GATE: #63 `a-receipt-goes-out-on-whatsapp`
 
