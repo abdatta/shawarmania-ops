@@ -1146,6 +1146,7 @@ export type Database = {
           created_at: string
           id: string
           outlet_id: string
+          source: Database["public"]["Enums"]["discount_row_source"]
           value_bp: number | null
           value_paise: number | null
         }
@@ -1156,6 +1157,7 @@ export type Database = {
           created_at?: string
           id?: string
           outlet_id: string
+          source?: Database["public"]["Enums"]["discount_row_source"]
           value_bp?: number | null
           value_paise?: number | null
         }
@@ -1166,6 +1168,7 @@ export type Database = {
           created_at?: string
           id?: string
           outlet_id?: string
+          source?: Database["public"]["Enums"]["discount_row_source"]
           value_bp?: number | null
           value_paise?: number | null
         }
@@ -2184,33 +2187,52 @@ export type Database = {
       }
       customer_memberships: {
         Row: {
+          counter_device_id: string | null
           customer_id: string
+          expires_at: string
           granted_at: string
           granted_by: string
+          granted_via: Database["public"]["Enums"]["gold_grant_route"]
           id: string
+          outlet_id: string
           reason: string | null
           revoked_at: string | null
           revoked_by: string | null
         }
         Insert: {
+          counter_device_id?: string | null
           customer_id: string
+          expires_at: string
           granted_at?: string
           granted_by: string
+          granted_via?: Database["public"]["Enums"]["gold_grant_route"]
           id?: string
+          outlet_id: string
           reason?: string | null
           revoked_at?: string | null
           revoked_by?: string | null
         }
         Update: {
+          counter_device_id?: string | null
           customer_id?: string
+          expires_at?: string
           granted_at?: string
           granted_by?: string
+          granted_via?: Database["public"]["Enums"]["gold_grant_route"]
           id?: string
+          outlet_id?: string
           reason?: string | null
           revoked_at?: string | null
           revoked_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "customer_memberships_counter_device_id_fkey"
+            columns: ["counter_device_id"]
+            isOneToOne: false
+            referencedRelation: "counter_devices"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "customer_memberships_customer_id_fkey"
             columns: ["customer_id"]
@@ -2226,10 +2248,84 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "customer_memberships_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "customer_memberships_revoked_by_fkey"
             columns: ["revoked_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_points_entries: {
+        Row: {
+          balance_after: number
+          bill_id: string
+          created_at: string
+          customer_id: string
+          earn_basis_paise: number | null
+          earn_block_paise: number | null
+          earn_multiplier_x100: number | null
+          earn_points_per_block: number | null
+          id: string
+          kind: Database["public"]["Enums"]["points_entry_kind"]
+          outlet_id: string
+          points: number
+        }
+        Insert: {
+          balance_after: number
+          bill_id: string
+          created_at?: string
+          customer_id: string
+          earn_basis_paise?: number | null
+          earn_block_paise?: number | null
+          earn_multiplier_x100?: number | null
+          earn_points_per_block?: number | null
+          id?: string
+          kind: Database["public"]["Enums"]["points_entry_kind"]
+          outlet_id: string
+          points: number
+        }
+        Update: {
+          balance_after?: number
+          bill_id?: string
+          created_at?: string
+          customer_id?: string
+          earn_basis_paise?: number | null
+          earn_block_paise?: number | null
+          earn_multiplier_x100?: number | null
+          earn_points_per_block?: number | null
+          id?: string
+          kind?: Database["public"]["Enums"]["points_entry_kind"]
+          outlet_id?: string
+          points?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_points_entries_bill_id_fkey"
+            columns: ["bill_id"]
+            isOneToOne: false
+            referencedRelation: "bills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_points_entries_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_points_entries_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
             referencedColumns: ["id"]
           },
         ]
@@ -3063,6 +3159,7 @@ export type Database = {
           id: string
           order_id: string
           outlet_id: string
+          source: Database["public"]["Enums"]["discount_row_source"]
           value_bp: number | null
           value_paise: number | null
         }
@@ -3073,6 +3170,7 @@ export type Database = {
           id?: string
           order_id: string
           outlet_id: string
+          source?: Database["public"]["Enums"]["discount_row_source"]
           value_bp?: number | null
           value_paise?: number | null
         }
@@ -3083,6 +3181,7 @@ export type Database = {
           id?: string
           order_id?: string
           outlet_id?: string
+          source?: Database["public"]["Enums"]["discount_row_source"]
           value_bp?: number | null
           value_paise?: number | null
         }
@@ -3484,6 +3583,11 @@ export type Database = {
           discount_presets: Json
           district: string | null
           geofence_radius_m: number
+          gold_counter_grant: boolean
+          gold_duration_months: number
+          gold_earn_multiplier_x100: number
+          gold_enabled: boolean
+          gold_threshold_paise: number | null
           hyperpure_delivery: boolean
           id: string
           is_active: boolean
@@ -3499,6 +3603,11 @@ export type Database = {
           packaging_price_paise: number | null
           phone: string | null
           pincode: string | null
+          points_earn_block_paise: number | null
+          points_earn_per_block: number | null
+          points_enabled: boolean
+          points_gold_use_cap_bp: number | null
+          points_use_cap_bp: number | null
           table_numbers: boolean
           takeaway_offered: boolean
           zomato_res_id: string | null
@@ -3515,6 +3624,11 @@ export type Database = {
           discount_presets?: Json
           district?: string | null
           geofence_radius_m?: number
+          gold_counter_grant?: boolean
+          gold_duration_months?: number
+          gold_earn_multiplier_x100?: number
+          gold_enabled?: boolean
+          gold_threshold_paise?: number | null
           hyperpure_delivery?: boolean
           id?: string
           is_active?: boolean
@@ -3530,6 +3644,11 @@ export type Database = {
           packaging_price_paise?: number | null
           phone?: string | null
           pincode?: string | null
+          points_earn_block_paise?: number | null
+          points_earn_per_block?: number | null
+          points_enabled?: boolean
+          points_gold_use_cap_bp?: number | null
+          points_use_cap_bp?: number | null
           table_numbers?: boolean
           takeaway_offered?: boolean
           zomato_res_id?: string | null
@@ -3546,6 +3665,11 @@ export type Database = {
           discount_presets?: Json
           district?: string | null
           geofence_radius_m?: number
+          gold_counter_grant?: boolean
+          gold_duration_months?: number
+          gold_earn_multiplier_x100?: number
+          gold_enabled?: boolean
+          gold_threshold_paise?: number | null
           hyperpure_delivery?: boolean
           id?: string
           is_active?: boolean
@@ -3561,6 +3685,11 @@ export type Database = {
           packaging_price_paise?: number | null
           phone?: string | null
           pincode?: string | null
+          points_earn_block_paise?: number | null
+          points_earn_per_block?: number | null
+          points_enabled?: boolean
+          points_gold_use_cap_bp?: number | null
+          points_use_cap_bp?: number | null
           table_numbers?: boolean
           takeaway_offered?: boolean
           zomato_res_id?: string | null
@@ -4144,6 +4273,7 @@ export type Database = {
       backfill_prepared_history: { Args: never; Returns: number }
       bill_public_discount_rows: { Args: { p_bill_id: string }; Returns: Json }
       bill_public_link_token: { Args: never; Returns: string }
+      bill_public_points: { Args: { p_bill_id: string }; Returns: Json }
       bill_public_receipt: {
         Args: {
           p_client_address?: string
@@ -4229,6 +4359,10 @@ export type Database = {
         Returns: boolean
       }
       billing_payload_hash: { Args: { p_payload: Json }; Returns: string }
+      billing_points_shape_ok: {
+        Args: { p_payload: Json; p_schema_version: number }
+        Returns: boolean
+      }
       billing_validate_discounts: {
         Args: { p_payload: Json }
         Returns: boolean
@@ -4378,14 +4512,16 @@ export type Database = {
       customer_create_or_get: {
         Args: { p_name?: string; p_phone: string }
         Returns: {
+          gold_eligible: boolean
           id: string
           is_member: boolean
           name: string
           phone: string
+          points_balance: number
         }[]
       }
       customer_directory_activity: {
-        Args: { p_outlets: string[] }
+        Args: { p_outlet: string }
         Returns: {
           customer_id: string
           first_seen_at: string
@@ -4395,25 +4531,35 @@ export type Database = {
         }[]
       }
       customer_directory_card: {
-        Args: { p_customer: string }
+        Args: { p_customer: string; p_outlet: string }
         Returns: {
           customer_since: string
           editable: boolean
+          granted_by_name: string
+          granted_via: string
           id: string
           last_seen_at: string
           member_since: string
+          member_until: string
           name: string
           phone: string
+          points_balance: number
           scope: string
           spend_30d_paise: number
           visits_30d: number
         }[]
       }
       customer_directory_list: {
-        Args: { p_list: string; p_offset?: number }
+        Args: {
+          p_list: string
+          p_offset?: number
+          p_order?: string
+          p_outlet: string
+        }
         Returns: {
           id: string
           is_member: boolean
+          member_until: string
           name: string
           phone: string
           visits_30d: number
@@ -4424,34 +4570,85 @@ export type Database = {
         Returns: boolean
       }
       customer_directory_reach: {
-        Args: { p_outlets: string[] }
+        Args: { p_outlet: string }
         Returns: {
           customer_id: string
         }[]
       }
-      customer_directory_require_editable: {
-        Args: { p_customer: string }
+      customer_directory_require_outlet: {
+        Args: { p_outlet: string }
+        Returns: undefined
+      }
+      customer_directory_require_reach: {
+        Args: { p_customer: string; p_outlet: string }
         Returns: undefined
       }
       customer_directory_search: {
-        Args: { p_query: string }
+        Args: { p_outlet: string; p_query: string }
         Returns: {
           id: string
           is_member: boolean
           matched: number
+          member_until: string
           name: string
           phone: string
           visits_30d: number
         }[]
       }
-      customer_is_member: { Args: { p_customer: string }; Returns: boolean }
-      customer_lookup_by_phone: {
-        Args: { p_phone: string }
+      customer_directory_spell: {
+        Args: { p_customer: string; p_outlet: string }
         Returns: {
+          counter_device_id: string | null
+          customer_id: string
+          expires_at: string
+          granted_at: string
+          granted_by: string
+          granted_via: Database["public"]["Enums"]["gold_grant_route"]
+          id: string
+          outlet_id: string
+          reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "customer_memberships"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      customer_gold_eligible: {
+        Args: { p_customer: string; p_outlet: string }
+        Returns: boolean
+      }
+      customer_gold_grant_at_counter: {
+        Args: { p_customer: string }
+        Returns: {
+          gold_eligible: boolean
           id: string
           is_member: boolean
           name: string
           phone: string
+          points_balance: number
+        }[]
+      }
+      customer_gold_spell_at: {
+        Args: { p_at: string; p_customer: string; p_outlet: string }
+        Returns: string
+      }
+      customer_is_member: {
+        Args: { p_customer: string; p_outlet: string }
+        Returns: boolean
+      }
+      customer_lookup_by_phone: {
+        Args: { p_phone: string }
+        Returns: {
+          gold_eligible: boolean
+          id: string
+          is_member: boolean
+          name: string
+          phone: string
+          points_balance: number
         }[]
       }
       customer_lookup_exceeded: {
@@ -4464,45 +4661,79 @@ export type Database = {
         Returns: boolean
       }
       customer_membership_grant: {
-        Args: { p_customer: string }
+        Args: { p_customer: string; p_outlet: string }
         Returns: {
           customer_since: string
           editable: boolean
+          granted_by_name: string
+          granted_via: string
           id: string
           last_seen_at: string
           member_since: string
+          member_until: string
           name: string
           phone: string
+          points_balance: number
           scope: string
           spend_30d_paise: number
           visits_30d: number
         }[]
       }
       customer_membership_revoke: {
-        Args: { p_customer: string }
+        Args: { p_customer: string; p_outlet: string }
         Returns: {
           customer_since: string
           editable: boolean
+          granted_by_name: string
+          granted_via: string
           id: string
           last_seen_at: string
           member_since: string
+          member_until: string
           name: string
           phone: string
+          points_balance: number
           scope: string
           spend_30d_paise: number
           visits_30d: number
         }[]
       }
+      customer_points_balance: {
+        Args: { p_customer: string; p_outlet: string }
+        Returns: number
+      }
+      customer_points_for_till: {
+        Args: { p_customer: string; p_outlet: string }
+        Returns: number
+      }
+      customer_points_write: {
+        Args: {
+          p_basis?: number
+          p_bill: string
+          p_block?: number
+          p_customer: string
+          p_kind: Database["public"]["Enums"]["points_entry_kind"]
+          p_multiplier?: number
+          p_outlet: string
+          p_per_block?: number
+          p_points: number
+        }
+        Returns: undefined
+      }
       customer_rename: {
-        Args: { p_customer: string; p_name: string }
+        Args: { p_customer: string; p_name: string; p_outlet: string }
         Returns: {
           customer_since: string
           editable: boolean
+          granted_by_name: string
+          granted_via: string
           id: string
           last_seen_at: string
           member_since: string
+          member_until: string
           name: string
           phone: string
+          points_balance: number
           scope: string
           spend_30d_paise: number
           visits_30d: number
@@ -4515,15 +4746,17 @@ export type Database = {
       customer_suggest_at_outlet: {
         Args: { p_partial: string }
         Returns: {
+          gold_eligible: boolean
           id: string
           is_member: boolean
           name: string
           other_matches: number
           phone: string
+          points_balance: number
         }[]
       }
       customer_tier_at: {
-        Args: { p_at: string; p_customer: string }
+        Args: { p_at: string; p_customer: string; p_outlet: string }
         Returns: Database["public"]["Enums"]["customer_tier"]
       }
       discount_presets_valid: { Args: { p_presets: Json }; Returns: boolean }
@@ -5122,6 +5355,68 @@ export type Database = {
         Args: { p_channel: string; p_identifier: string }
         Returns: undefined
       }
+      set_outlet_loyalty_settings: {
+        Args: {
+          p_gold_counter_grant: boolean
+          p_gold_duration_months: number
+          p_gold_earn_multiplier_x100: number
+          p_gold_enabled: boolean
+          p_gold_threshold_paise: number
+          p_outlet: string
+          p_points_earn_block_paise: number
+          p_points_earn_per_block: number
+          p_points_enabled: boolean
+          p_points_gold_use_cap_bp: number
+          p_points_use_cap_bp: number
+        }
+        Returns: {
+          address_line1: string | null
+          address_line2: string | null
+          arrival_deadline: string
+          business_day_cutover: string
+          city: string | null
+          code: string
+          created_at: string
+          dine_in_offered: boolean
+          discount_presets: Json
+          district: string | null
+          geofence_radius_m: number
+          gold_counter_grant: boolean
+          gold_duration_months: number
+          gold_earn_multiplier_x100: number
+          gold_enabled: boolean
+          gold_threshold_paise: number | null
+          hyperpure_delivery: boolean
+          id: string
+          is_active: boolean
+          latitude: number | null
+          location_accuracy_m: number | null
+          location_captured_at: string | null
+          location_label: string
+          longitude: number | null
+          menu_slug: string
+          name: string
+          packaging_free_for_gold: boolean
+          packaging_mode: Database["public"]["Enums"]["packaging_mode"]
+          packaging_price_paise: number | null
+          phone: string | null
+          pincode: string | null
+          points_earn_block_paise: number | null
+          points_earn_per_block: number | null
+          points_enabled: boolean
+          points_gold_use_cap_bp: number | null
+          points_use_cap_bp: number | null
+          table_numbers: boolean
+          takeaway_offered: boolean
+          zomato_res_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "outlets"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       set_outlet_service_settings: {
         Args: {
           p_dine_in_offered: boolean
@@ -5144,6 +5439,11 @@ export type Database = {
           discount_presets: Json
           district: string | null
           geofence_radius_m: number
+          gold_counter_grant: boolean
+          gold_duration_months: number
+          gold_earn_multiplier_x100: number
+          gold_enabled: boolean
+          gold_threshold_paise: number | null
           hyperpure_delivery: boolean
           id: string
           is_active: boolean
@@ -5159,6 +5459,11 @@ export type Database = {
           packaging_price_paise: number | null
           phone: string | null
           pincode: string | null
+          points_earn_block_paise: number | null
+          points_earn_per_block: number | null
+          points_enabled: boolean
+          points_gold_use_cap_bp: number | null
+          points_use_cap_bp: number | null
           table_numbers: boolean
           takeaway_offered: boolean
           zomato_res_id: string | null
@@ -5272,12 +5577,15 @@ export type Database = {
       check_in_source: "phone" | "counter_tablet" | "manual"
       customer_tier: "gold"
       discount_basis: "percent" | "amount"
+      discount_row_source: "biller" | "points"
+      gold_grant_route: "management" | "counter"
       inventory_unit: "kg" | "litre" | "packet" | "piece"
       line_kind: "item" | "packaging"
       movement_type: "added" | "used" | "wasted" | "correction"
       order_status: "open" | "paid" | "cancelled"
       packaging_mode: "off" | "per_bag" | "per_order"
       payment_method: "cash" | "upi"
+      points_entry_kind: "earned" | "used" | "earned_reversed" | "used_returned"
       pricing_mode: "no_tax" | "gst_inclusive" | "gst_exclusive"
       service_type: "dine_in" | "takeaway"
     }
@@ -5438,12 +5746,15 @@ export const Constants = {
       check_in_source: ["phone", "counter_tablet", "manual"],
       customer_tier: ["gold"],
       discount_basis: ["percent", "amount"],
+      discount_row_source: ["biller", "points"],
+      gold_grant_route: ["management", "counter"],
       inventory_unit: ["kg", "litre", "packet", "piece"],
       line_kind: ["item", "packaging"],
       movement_type: ["added", "used", "wasted", "correction"],
       order_status: ["open", "paid", "cancelled"],
       packaging_mode: ["off", "per_bag", "per_order"],
       payment_method: ["cash", "upi"],
+      points_entry_kind: ["earned", "used", "earned_reversed", "used_returned"],
       pricing_mode: ["no_tax", "gst_inclusive", "gst_exclusive"],
       service_type: ["dine_in", "takeaway"],
     },

@@ -593,7 +593,8 @@ select is(
       jsonb_build_array(pg_temp.shawarma(pg_temp.id('b6100000', 33)))) - 'serviceType') ->> 'status',
   'malformed_payload', 'a version-3 envelope missing a version-3 key is refused');
 select is(
-  pg_temp.send('create_billing_order', pg_temp.id('b6200000', 34), 4,
+  -- Version 4 is #62's (a discount entry's source); 5 is nobody's yet.
+  pg_temp.send('create_billing_order', pg_temp.id('b6200000', 34), 5,
     pg_temp.order_v3(pg_temp.id('b6000000', 34), null, null,
       jsonb_build_array(pg_temp.shawarma(pg_temp.id('b6100000', 34))))) ->> 'status',
   'unsupported_schema', 'a version nobody has written yet is unsupported');

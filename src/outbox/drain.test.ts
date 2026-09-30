@@ -24,7 +24,7 @@ function databaseName(): string {
 function command(commandId: string, orderId: string): BillingCommand {
   return {
     commandId,
-    schemaVersion: 3,
+    schemaVersion: 4,
     tabletId: 'tablet-1',
     shiftId: 'shift-1',
     type: 'cancel_order',
@@ -40,7 +40,7 @@ function createOrderCommand(
 ): Extract<BillingCommand, { type: 'create_order' }> {
   return {
     commandId,
-    schemaVersion: 3,
+    schemaVersion: 4,
     tabletId: 'tablet-1',
     shiftId: 'shift-1',
     type: 'create_order',

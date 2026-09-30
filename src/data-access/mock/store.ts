@@ -6,10 +6,6 @@ import {
   normalizeCategory,
   resolveBusinessDate,
   shiftBusinessDate,
-  ALL_OFF_LOYALTY_SETTINGS,
-  withCounterGoldSwitched,
-  withGoldSwitched,
-  withPointsSwitched,
   type OutletLoyaltySettings,
   type OutletServiceSettings,
 } from '@/domain'
@@ -17,6 +13,7 @@ import {
 import type { CounterResumeRecord } from '@/outbox'
 
 import type { Tables } from '../database.types'
+import { loyaltySettingsFromRow } from '../outlet-loyalty-row'
 import { serviceSettingsFromRow } from '../outlet-service-row'
 import type {
   BillDiscountDraft,
@@ -1410,15 +1407,11 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     serviceSettings: new Map(
       outletFixtures.map((outlet) => [outlet.id, serviceSettingsFromRow(outlet)]),
     ),
-    loyaltySettings: new Map([
-      [
-        OUTLET_KALYANI_ID,
-        withCounterGoldSwitched(
-          withGoldSwitched(withPointsSwitched(ALL_OFF_LOYALTY_SETTINGS, true), true),
-          true,
-        ),
-      ],
-    ]),
+    // Read off the fixture rows, as the service choices are: Kalyani has points
+    // and gold on, the others start all off.
+    loyaltySettings: new Map(
+      outletFixtures.map((outlet) => [outlet.id, loyaltySettingsFromRow(outlet)]),
+    ),
     orderNumbers,
     billingCommands,
     billingQueueSeeds,

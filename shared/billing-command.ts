@@ -9,18 +9,24 @@
  * The payload shape this build writes.
  *
  * Version 2 added the discount records and the rounding line; version 3 (#60)
- * adds how the order was served — its type, its table, and each line's kind.
- * **The database still accepts versions 1 and 2**, and must: a till that went
+ * added how the order was served — its type, its table, and each line's kind;
+ * version 4 (#62) adds where each bill-level discount came from, the biller or
+ * the customer's points.
+ * **The database still accepts versions 1 to 3**, and must: a till that went
  * offline before a release and reconnects after it is holding envelopes written
  * under the old shape, with hashes already computed over it, and refusing those
  * would lose a trading day to a deployment. A version-1 payload means no
  * discounts and no rounding, and versions 1 and 2 mean neither type, no table
- * and every line an item — exactly what they meant when they were written.
+ * and every line an item, and versions 1 to 3 mean every discount the
+ * biller's — exactly what they meant when they were written.
  */
-export const BILLING_COMMAND_SCHEMA_VERSION = 3 as const
+export const BILLING_COMMAND_SCHEMA_VERSION = 4 as const
 
 /** Every payload shape the boundary accepts, newest first. */
-export const BILLING_COMMAND_SCHEMA_VERSIONS = [3, 2, 1] as const
+export const BILLING_COMMAND_SCHEMA_VERSIONS = [4, 3, 2, 1] as const
+
+/** Who a bill-level discount came from (#62): the biller, or the customer's points. */
+export type BillingDiscountSource = 'biller' | 'points'
 
 export type BillingCommandType =
   | 'create_order'
@@ -89,6 +95,13 @@ export interface BillingServiceFacts {
 
 /** One discount applied to the whole bill rather than to any single line. */
 export interface BillingDiscountSnapshot {
+  /**
+   * Written on every version-4 entry. Absent on an entry queued under an
+   * earlier version, which the boundary reads as the biller's. A points entry
+   * is an amount in whole rupees, at most one per order, and only with a
+   * customer's phone — the boundary checks that shape, and never the balance.
+   */
+  readonly source?: BillingDiscountSource
   readonly basis: 'percent' | 'amount'
   /** Basis points when the basis is a percentage, else null. */
   readonly valueBp: number | null

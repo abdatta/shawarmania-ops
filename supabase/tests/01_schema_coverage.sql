@@ -75,10 +75,10 @@ classified as (
       -- category tables did: which categories a person may not type is a fact
       -- about the business, not about an outlet, and reserving one retires a
       -- hand-entry path everywhere at once.
-      -- `customer_memberships` joins `customers` because a membership belongs
-      -- to the person, not to a shop (a-gold-member-is-a-label): the same
-      -- exception, so it carries the same teeth in section 6 below.
-      when tbl in ('customers', 'customer_memberships', 'expense_categories',
+      -- `customer_memberships` sat here from #57 to #62, when gold became an
+      -- outlet's (a-regular-earns-points-and-gold): it now carries `outlet_id`
+      -- and is classified outlet-scoped by the first branch.
+      when tbl in ('customers', 'expense_categories',
                    'expense_category_operations', 'reserved_expense_categories')
         then 'global'
       -- Tenant-less: belongs to no outlet at all, because the thing it counts
@@ -220,21 +220,30 @@ select ok(
   'no client session holds any privilege on the global customer table'
 );
 
--- The membership records are the same exception and carry the same teeth:
--- nothing reads them but the security-definer functions that answer for them.
+-- The membership records left this exception in a-regular-earns-points-and-gold
+-- (#62): gold now belongs to an outlet, so the table carries `outlet_id` and is
+-- classified outlet-scoped above, and joins the isolation matrix. What stays is
+-- that nothing writes it but the functions that answer for it: one select
+-- policy, and no write privilege at all. The points ledger is held to the same.
 select is(
-  (select count(*) from pg_policies
-    where schemaname = 'public' and tablename = 'customer_memberships'),
-  0::bigint,
-  'customer_memberships carries no policy: reads go through its functions or nowhere'
+  (select string_agg(tablename || ':' || cmd, ', ' order by tablename)
+     from pg_policies
+    where schemaname = 'public'
+      and tablename in ('customer_memberships', 'customer_points_entries')),
+  'customer_memberships:SELECT, customer_points_entries:SELECT',
+  'gold spells and the points ledger each carry exactly one policy, a select'
 );
 
 select ok(
-  not has_table_privilege('authenticated', 'public.customer_memberships', 'SELECT')
+  has_table_privilege('authenticated', 'public.customer_memberships', 'SELECT')
   and not has_table_privilege('authenticated', 'public.customer_memberships', 'INSERT')
   and not has_table_privilege('authenticated', 'public.customer_memberships', 'UPDATE')
-  and not has_table_privilege('authenticated', 'public.customer_memberships', 'DELETE'),
-  'no client session holds any privilege on the membership records'
+  and not has_table_privilege('authenticated', 'public.customer_memberships', 'DELETE')
+  and has_table_privilege('authenticated', 'public.customer_points_entries', 'SELECT')
+  and not has_table_privilege('authenticated', 'public.customer_points_entries', 'INSERT')
+  and not has_table_privilege('authenticated', 'public.customer_points_entries', 'UPDATE')
+  and not has_table_privilege('authenticated', 'public.customer_points_entries', 'DELETE'),
+  'a client session may read gold spells and ledger rows its policy allows, and write neither'
 );
 
 select ok(

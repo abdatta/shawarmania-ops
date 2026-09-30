@@ -173,6 +173,182 @@ afterAll(async () => {
 })
 
 describe.sequential('billing command races over PostgREST', () => {
+  /*
+   * a-regular-earns-points-and-gold (#62), design D5: two bills for one customer
+   * landing at the same moment on two tills must not both compute their
+   * `balance_after` from the same starting figure. The ledger's writer takes an
+   * advisory lock on (outlet, customer) before reading the balance; a single
+   * pgTAP session cannot race itself, so this is where that lock is proved.
+   *
+   * **A void racing a sale, not two sales.** Every bill at an outlet takes that
+   * outlet's bill-number counter row until it commits, so two sales there are
+   * already queued one behind the other and cannot race the ledger. A void takes
+   * no number: a manager voiding one of the customer's bills while a till is
+   * paying another is the pair that reaches the ledger together, and with the
+   * lock removed this test fails (checked 2026-09-29).
+   *
+   * The proof is a chain: starting from nought, every row's `balance_after`
+   * less its own points must be the previous row's `balance_after`, every row
+   * used exactly once, ending at the balance. Two writers that read the same
+   * starting figure leave two rows claiming the same predecessor.
+   */
+  it("keeps one customer's balance_after a consistent chain when a void races a sale", async () => {
+    const { error: on } = await service
+      .from('outlets')
+      .update({
+        points_enabled: true,
+        points_earn_per_block: 5,
+        points_earn_block_paise: 20000,
+        points_use_cap_bp: 1000,
+      })
+      .eq('id', OUTLET)
+    if (on) throw new Error(`could not switch points on: ${on.message}`)
+
+    try {
+      const businessDate = resolveBusinessDate(new Date(), '04:00')
+      const phone = `+919${String(Date.now()).slice(-9)}`
+      const run = Date.now() % 1_000_000
+      const id = (prefix: string, n: number) =>
+        `${prefix}-0000-4000-a000-${String(run * 10 + n).padStart(12, '0')}`
+      const till = (which: 'one' | 'two') =>
+        which === 'one'
+          ? { client: tablet, tabletId: TABLET, shiftId: SHIFT }
+          : { client: tabletTwo, tabletId: TABLET_TWO, shiftId: SHIFT_TWO }
+
+      /** Save an order for the customer on one till, using `points` of theirs. */
+      const saveOrder = async (n: number, points: number, which: 'one' | 'two') => {
+        const total = 27800 - points * 100
+        const payload: CreateOrderPayload = {
+          orderId: id('fb400000', n),
+          businessDate,
+          customerId: null,
+          customerName: 'Race Regular',
+          customerPhone: phone,
+          subtotalPaise: 27800,
+          discountPaise: points * 100,
+          taxPaise: 0,
+          roundingPaise: 0,
+          totalPaise: total,
+          pricingMode: 'no_tax',
+          discounts:
+            points > 0
+              ? [
+                  {
+                    source: 'points',
+                    basis: 'amount',
+                    valueBp: null,
+                    valuePaise: points * 100,
+                    amountPaise: points * 100,
+                  },
+                ]
+              : [],
+          serviceType: null,
+          tableNumber: null,
+          lines: [{ ...line(id('fb600000', n)), quantity: 2, lineTotalPaise: 27800 }],
+        }
+        const { client, tabletId, shiftId } = till(which)
+        const command = await createBillingCommand({
+          commandId: id('fb100000', n),
+          tabletId,
+          shiftId,
+          type: 'create_order',
+          createdAt: new Date().toISOString(),
+          payload,
+        })
+        const created = await client.rpc('create_billing_order', rpcArgs(command))
+        expect(created.error).toBeNull()
+        expect(status(created.data)).toBe('accepted')
+        return { n, total, which }
+      }
+
+      /** Pay a saved order on the till that took it. */
+      const pay = async (order: { n: number; total: number; which: 'one' | 'two' }) => {
+        const { client, tabletId, shiftId } = till(order.which)
+        const paidAt = new Date().toISOString()
+        const command = await createBillingCommand({
+          commandId: id('fb200000', order.n),
+          tabletId,
+          shiftId,
+          type: 'pay_order',
+          createdAt: paidAt,
+          payload: {
+            billId: id('fb500000', order.n),
+            orderId: id('fb400000', order.n),
+            payments: [{ method: 'cash', amountPaise: order.total }],
+            paidAt,
+            paymentBusinessDate: businessDate,
+          },
+        })
+        return client.rpc('pay_billing_order', rpcArgs(command))
+      }
+
+      // One ₹278 bill earns 6 points, and is settled before the race begins.
+      const first = await saveOrder(1, 0, 'one')
+      const settled = await pay(first)
+      expect(status(settled.data)).toBe('accepted')
+
+      // Then, at once: a manager voids that bill (reversing its 6) while the
+      // other till is paid for a second order spending 5 points and earning 6.
+      const second = await saveOrder(2, 5, 'two')
+      const voidCommand = await createBillingCommand({
+        commandId: id('fb700000', 1),
+        tabletId: null,
+        shiftId: null,
+        type: 'void_bill',
+        createdAt: new Date().toISOString(),
+        payload: { billId: id('fb500000', 1), reason: 'Concurrent void probe' },
+      })
+      const [voided, paid] = await Promise.all([
+        manager.rpc('void_billing_bill', rpcArgs(voidCommand)),
+        pay(second),
+      ])
+      expect(voided.error).toBeNull()
+      expect(status(voided.data)).toBe('accepted')
+      expect(paid.error).toBeNull()
+      expect(status(paid.data)).toBe('accepted')
+
+      const customer = await service.from('customers').select('id').eq('phone', phone).single()
+      expect(customer.error).toBeNull()
+      const rows = await manager
+        .from('customer_points_entries')
+        .select('kind, points, balance_after')
+        .eq('outlet_id', OUTLET)
+        .eq('customer_id', customer.data!.id)
+      expect(rows.error).toBeNull()
+      const entries = rows.data ?? []
+      // Earned 6, reversed; then used 5 and earned 6 on the second bill.
+      expect(entries.map((row) => row.kind).sort()).toEqual([
+        'earned',
+        'earned',
+        'earned_reversed',
+        'used',
+      ])
+
+      const remaining = [...entries]
+      let balance = 0
+      while (remaining.length > 0) {
+        const next = remaining.findIndex((row) => row.balance_after - row.points === balance)
+        expect(
+          next,
+          `no row follows a balance of ${balance}: ${JSON.stringify(remaining)}`,
+        ).not.toBe(-1)
+        balance = remaining[next]!.balance_after
+        remaining.splice(next, 1)
+      }
+      expect(balance).toBe(6 - 6 - 5 + 6)
+    } finally {
+      await service
+        .from('outlets')
+        .update({
+          points_enabled: false,
+          points_earn_per_block: null,
+          points_earn_block_paise: null,
+          points_use_cap_bp: null,
+        })
+        .eq('id', OUTLET)
+    }
+  })
+
   it('serializes two exact retries into one bill and one permanent number', async () => {
     const businessDate = resolveBusinessDate(new Date(), '04:00')
     const createdAt = new Date().toISOString()

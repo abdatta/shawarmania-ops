@@ -57,6 +57,10 @@ export function createSupabaseCustomersAdapter(
             // As it was when this till last read it. A record written before
             // memberships existed has none, which reads as not a member.
             tier: remembered.tier ?? null,
+            // For display only: `remembered` is what keeps Use points off
+            // (a-regular-earns-points-and-gold, D10).
+            pointsBalance: remembered.pointsBalance ?? null,
+            goldEligible: remembered.goldEligible ?? false,
             remembered: true,
           }
         throw toCustomerError(error)
@@ -140,6 +144,8 @@ export function createSupabaseCustomersAdapter(
               phone: best.phone,
               name: best.name,
               tier: best.tier ?? null,
+              pointsBalance: best.pointsBalance ?? null,
+              goldEligible: best.goldEligible ?? false,
               remembered: true as const,
             },
             otherMatches: matching.length - 1,
@@ -147,14 +153,41 @@ export function createSupabaseCustomersAdapter(
         : null
     },
 
-    async grantGoldAtCounter() {
-      // Arrives with a-regular-earns-points-and-gold's database section (tasks
-      // 5.5). The counter offers it only where the lookup says a customer is
-      // eligible, and the live lookup says nobody is until then.
-      throw new CustomerActionError(
-        'not_available',
-        'Upgrading to Gold at the counter is not switched on yet.',
-      )
+    /*
+      Online only and never queued (a-regular-earns-points-and-gold, D4): the
+      server takes the outlet, the tablet and the biller from this tablet's
+      live shift and decides eligibility again, so a failed call is a refusal
+      the biller reads, never a grant waiting to happen.
+    */
+    async grantGoldAtCounter(customerId) {
+      const { data, error } = await client.rpc('customer_gold_grant_at_counter', {
+        p_customer: customerId,
+      })
+      if (error) {
+        if (error.code === '23514') {
+          throw new CustomerActionError(
+            'not_eligible',
+            'This customer has not spent enough here to upgrade to Gold.',
+          )
+        }
+        if (error.code === 'P0002') {
+          throw new CustomerActionError('not_found', 'That customer is no longer in the directory.')
+        }
+        if (!error.code) {
+          throw new CustomerActionError(
+            'offline',
+            'Upgrading to Gold needs the internet. Try again when this tablet is back online.',
+          )
+        }
+        throw toCustomerError(error)
+      }
+      const row = data?.[0]
+      if (!row) {
+        throw new CustomerActionError('not_found', 'That customer is no longer in the directory.')
+      }
+      const identity = toIdentity(row)
+      resumeCoordinator?.noteCustomer(identity)
+      return identity
     },
   }
 }
@@ -164,6 +197,8 @@ function toIdentity(row: {
   phone: string
   name: string | null
   is_member: boolean
+  points_balance: number | null
+  gold_eligible: boolean
 }): CustomerIdentity {
   return {
     id: row.id,
@@ -176,6 +211,11 @@ function toIdentity(row: {
     // history (a-gold-member-is-a-label). The till acts on it; it cannot reason
     // about the customer's trade from it.
     tier: row.is_member ? 'gold' : null,
+    // This outlet's balance, net of its open orders here, or null with points
+    // off; and a yes or no for gold here. Never the spend behind either
+    // (a-regular-earns-points-and-gold, D10).
+    pointsBalance: row.points_balance,
+    goldEligible: row.gold_eligible,
   }
 }
 

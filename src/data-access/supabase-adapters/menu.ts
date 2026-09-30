@@ -12,6 +12,7 @@ import {
   type NewMenuItemWithCategory,
 } from '../adapters'
 import type { Database, Json, Tables } from '../database.types'
+import { loyaltySettingsFromRow, OUTLET_LOYALTY_COLUMNS } from '../outlet-loyalty-row'
 import { serviceSettingsFromRow } from '../outlet-service-row'
 import type { CounterResumeCoordinator, CounterResumeRecord } from '@/outbox'
 
@@ -254,7 +255,7 @@ export function createSupabaseMenuAdapter(
           client
             .from('outlets')
             .select(
-              'discount_presets, dine_in_offered, takeaway_offered, table_numbers, packaging_mode, packaging_price_paise, packaging_free_for_gold, menu_slug',
+              `discount_presets, dine_in_offered, takeaway_offered, table_numbers, packaging_mode, packaging_price_paise, packaging_free_for_gold, menu_slug, ${OUTLET_LOYALTY_COLUMNS}`,
             )
             .eq('id', outletId)
             .single(),
@@ -268,6 +269,9 @@ export function createSupabaseMenuAdapter(
           // it, so a tablet cold-started offline serves the way its outlet does
           // (each-outlet-chooses-how-it-serves, D6).
           service: serviceSettingsFromRow(outlet.data),
+          // The points and gold rules ride the same path (a-regular-earns-
+          // points-and-gold, D12): a cold start offline knows its caps.
+          loyalty: loyaltySettingsFromRow(outlet.data),
           publicMenuSlug: outlet.data.menu_slug,
         }
         resumeCoordinator?.noteOutletMenu(outletId, menu)

@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   createBillingCommand,
   type BillingCommand,
+  type BillingDiscountSnapshot,
   type BillingLineSnapshot,
   type BillingPaymentAllocation,
   type BillingServiceFacts,
@@ -188,6 +189,7 @@ function orderView(row: OrderReadRow, historicalDeviceLabel: string | null): Bil
     tableNumber: row.table_number,
     lines: row.order_items.map(lineView),
     discounts: (row.order_discounts ?? []).map((discount) => ({
+      source: discount.source,
       basis: discount.basis,
       valueBp: discount.value_bp,
       valuePaise: discount.value_paise,
@@ -307,6 +309,7 @@ function billView(
     tableNumber: row.table_number,
     lines: row.bill_items.map(lineView),
     discounts: (row.bill_discounts ?? []).map((discount) => ({
+      source: discount.source,
       basis: discount.basis,
       valueBp: discount.value_bp,
       valuePaise: discount.value_paise,
@@ -380,6 +383,21 @@ function lineSnapshots(lines: readonly BillLineDraft[]): BillingLineSnapshot[] {
   }))
 }
 
+/**
+ * Each bill-level discount as a version-4 command carries it: with its source
+ * stated, always (a-regular-earns-points-and-gold, D9). A key left undefined
+ * would not survive canonical JSON, so the biller's is written, not implied.
+ */
+function discountSnapshots(discounts: readonly BillDiscountDraft[]): BillingDiscountSnapshot[] {
+  return discounts.map((discount) => ({
+    source: discount.source ?? 'biller',
+    basis: discount.basis,
+    valueBp: discount.valueBp,
+    valuePaise: discount.valuePaise,
+    amountPaise: discount.amountPaise,
+  }))
+}
+
 /** How the order was served, with a table only ever on dine-in. */
 function serviceFacts(facts: ServiceFacts): BillingServiceFacts {
   const serviceType = facts.serviceType ?? null
@@ -422,7 +440,7 @@ function orderPayload(
     ...totals,
     pricingMode: 'no_tax',
     lines: lineSnapshots(lines),
-    discounts: discounts.map((discount) => ({ ...discount })),
+    discounts: discountSnapshots(discounts),
     ...serviceFacts(input),
   }
 }
@@ -1590,7 +1608,7 @@ export function createSupabaseBillingAdapter(
           pricingMode: 'no_tax',
           payments: requirePayments(draft.payments, totals.totalPaise),
           lines: lineSnapshots(draft.lines),
-          discounts: (draft.discounts ?? []).map((discount) => ({ ...discount })),
+          discounts: discountSnapshots(draft.discounts ?? []),
           ...serviceFacts(draft),
         },
       })

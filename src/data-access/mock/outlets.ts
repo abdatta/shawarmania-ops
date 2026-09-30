@@ -17,6 +17,7 @@ import {
   type OutletsAdapter,
 } from '../adapters'
 import { assignmentFixtures } from './fixtures/accounts'
+import { ALL_OFF_LOYALTY_COLUMNS } from '../outlet-loyalty-row'
 import { outletFixtures } from './fixtures/outlets'
 import { menuSlugFrom, menuSlugProblem, normaliseMenuSlug } from '@/lib/public-menu-link'
 
@@ -216,6 +217,8 @@ export function createMockOutletsAdapter(
         packaging_mode: 'off' as const,
         packaging_price_paise: null,
         packaging_free_for_gold: false,
+        // Nor points or gold: all off, as every outlet starts (#62).
+        ...ALL_OFF_LOYALTY_COLUMNS,
       }
       outlets.push(created)
       return structuredClone(created)
@@ -309,6 +312,19 @@ export function createMockOutletsAdapter(
       }
       const stored = { ...settings }
       loyalty.set(id, stored)
+      // The row too, as the service choices do, so the two never disagree.
+      Object.assign(find(id), {
+        points_enabled: stored.pointsEnabled,
+        points_earn_per_block: stored.earnPoints,
+        points_earn_block_paise: stored.earnBlockPaise,
+        points_use_cap_bp: stored.useCapBp,
+        gold_enabled: stored.goldEnabled,
+        gold_earn_multiplier_x100: stored.goldEarnMultiplierX100,
+        points_gold_use_cap_bp: stored.goldUseCapBp,
+        gold_duration_months: stored.goldDurationMonths,
+        gold_counter_grant: stored.goldCounterGrant,
+        gold_threshold_paise: stored.goldThresholdPaise,
+      })
       return { ...stored }
     },
 

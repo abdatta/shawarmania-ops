@@ -838,11 +838,22 @@ describe('the global customer directory', () => {
         phone: SHARED_CUSTOMER.phone,
         name: 'Test Customer (Synthetic)',
         is_member: false,
+        points_balance: null,
+        gold_eligible: false,
       },
     ])
     // The whole disclosure, restated as a shape: no outlet, no bill, no spend —
-    // and of membership, gold-or-not and nothing else (a-gold-member-is-a-label).
-    expect(Object.keys(data?.[0] ?? {}).sort()).toEqual(['id', 'is_member', 'name', 'phone'])
+    // of membership, gold-or-not (a-gold-member-is-a-label); and for this
+    // counter's outlet only, its balance and eligible-or-not, never the spend
+    // behind it (a-regular-earns-points-and-gold).
+    expect(Object.keys(data?.[0] ?? {}).sort()).toEqual([
+      'gold_eligible',
+      'id',
+      'is_member',
+      'name',
+      'phone',
+      'points_balance',
+    ])
   })
 
   it('every way of writing that number reaches the same one identity', async () => {
@@ -885,9 +896,10 @@ describe('the global customer directory', () => {
     expect(error?.code).toBe('42501')
   })
 
-  it('the owner reads any customer through the management path', async () => {
+  it('the owner reads a customer an outlet served through the management path', async () => {
     const sa = (await session(PERSONAS.superAdmin.email)).client
     const { data, error } = await sa.rpc('customer_directory_card', {
+      p_outlet: OUTLETS.kalyani,
       p_customer: SHARED_CUSTOMER.id,
     })
     expect(error).toBeNull()
@@ -896,13 +908,15 @@ describe('the global customer directory', () => {
     ])
   })
 
-  // A manager's path is the same door with a narrower lock (#57): only the
-  // customers their own outlets have served, and a customer another outlet also
-  // serves is read-only to them. Every claim below is a hand-crafted request
-  // with the manager's real token — not an absent button.
-  it('a manager reads a customer their outlet served, and cannot change one another outlet also serves', async () => {
+  // A manager's path is the same door with a narrower lock (#57), and since
+  // #62 it names one outlet: only an outlet they manage, only the customers it
+  // has served, and a customer another outlet also serves cannot be renamed by
+  // them. Every claim below is a hand-crafted request with the manager's real
+  // token — not an absent button.
+  it('a manager reads a customer their outlet served, and cannot rename one another outlet also serves', async () => {
     const fa = (await session(PERSONAS.faKalyani.email)).client
     const { data, error } = await fa.rpc('customer_directory_card', {
+      p_outlet: OUTLETS.kalyani,
       p_customer: SHARED_CUSTOMER.id,
     })
     expect(error).toBeNull()
@@ -910,21 +924,40 @@ describe('the global customer directory', () => {
       expect.objectContaining({ id: SHARED_CUSTOMER.id, scope: 'outlets', editable: false }),
     ])
 
-    const grant = await fa.rpc('customer_membership_grant', { p_customer: SHARED_CUSTOMER.id })
-    expect(grant.error?.code).toBe('42501')
     const rename = await fa.rpc('customer_rename', {
+      p_outlet: OUTLETS.kalyani,
       p_customer: SHARED_CUSTOMER.id,
       p_name: 'Renamed By A Manager',
     })
     expect(rename.error?.code).toBe('42501')
   })
 
+  it('a manager naming an outlet they do not manage is refused, not narrowed', async () => {
+    const fa = (await session(PERSONAS.faKalyani.email)).client
+    const card = await fa.rpc('customer_directory_card', {
+      p_outlet: OUTLETS.kanchrapara,
+      p_customer: SHARED_CUSTOMER.id,
+    })
+    expect(card.error?.code).toBe('42501')
+    const grant = await fa.rpc('customer_membership_grant', {
+      p_outlet: OUTLETS.kanchrapara,
+      p_customer: SHARED_CUSTOMER.id,
+    })
+    expect(grant.error?.code).toBe('42501')
+  })
+
   it('a manager cannot reach a customer their outlet has never served', async () => {
     const fa = (await session(PERSONAS.faKalyani.email)).client
-    const card = await fa.rpc('customer_directory_card', { p_customer: UNSERVED_CUSTOMER_ID })
+    const card = await fa.rpc('customer_directory_card', {
+      p_outlet: OUTLETS.kalyani,
+      p_customer: UNSERVED_CUSTOMER_ID,
+    })
     expect(card.error).toBeNull()
     expect(card.data).toEqual([])
-    const grant = await fa.rpc('customer_membership_grant', { p_customer: UNSERVED_CUSTOMER_ID })
+    const grant = await fa.rpc('customer_membership_grant', {
+      p_outlet: OUTLETS.kalyani,
+      p_customer: UNSERVED_CUSTOMER_ID,
+    })
     expect(grant.error?.code).toBe('P0002')
   })
 
@@ -935,25 +968,93 @@ describe('the global customer directory', () => {
   ])('%s calling the management path is refused', async (_who, email) => {
     const client = (await session(email)).client
     for (const call of [
-      client.rpc('customer_directory_list', { p_list: 'regulars', p_offset: 0 }),
-      client.rpc('customer_directory_search', { p_query: '9000' }),
-      client.rpc('customer_directory_card', { p_customer: SHARED_CUSTOMER.id }),
-      client.rpc('customer_membership_grant', { p_customer: SHARED_CUSTOMER.id }),
+      client.rpc('customer_directory_list', {
+        p_outlet: OUTLETS.kalyani,
+        p_list: 'regulars',
+        p_offset: 0,
+      }),
+      client.rpc('customer_directory_search', { p_outlet: OUTLETS.kalyani, p_query: '9000' }),
+      client.rpc('customer_directory_card', {
+        p_outlet: OUTLETS.kalyani,
+        p_customer: SHARED_CUSTOMER.id,
+      }),
+      client.rpc('customer_membership_grant', {
+        p_outlet: OUTLETS.kalyani,
+        p_customer: SHARED_CUSTOMER.id,
+      }),
     ]) {
       expect((await call).error?.code).toBe('42501')
     }
   })
 
-  it('no client reads the membership records directly', async () => {
+  // Gold spells and the points ledger are an outlet's since #62: readable
+  // through their select policies by the owner and that outlet's managers,
+  // and writable by no client at all.
+  it('no client writes the membership records or the points ledger directly', async () => {
     const sa = (await session(PERSONAS.superAdmin.email)).client
-    const { data, error } = await sa.from('customer_memberships').select('*')
-    expect(error?.code).toBe('42501')
-    expect(data).toBeNull()
+    const spell = await sa.from('customer_memberships').insert({
+      customer_id: SHARED_CUSTOMER.id,
+      outlet_id: OUTLETS.kalyani,
+      granted_by: PERSONAS.superAdmin.sub,
+      expires_at: '2099-01-01T00:00:00Z',
+    })
+    expect(spell.error?.code).toBe('42501')
+    const entry = await sa.from('customer_points_entries').insert({
+      outlet_id: OUTLETS.kalyani,
+      customer_id: SHARED_CUSTOMER.id,
+      bill_id: SHARED_CUSTOMER.id,
+      kind: 'earned',
+      points: 1,
+      balance_after: 1,
+    })
+    expect(entry.error?.code).toBe('42501')
+  })
+
+  it.each([
+    ['a counter device', PERSONAS.deviceKalyani.email],
+    ['a Biller', PERSONAS.billerKalyani.email],
+    ["the other outlet's manager", PERSONAS.faKanchrapara.email],
+  ])("%s reads no gold spell and no points of Kalyani's", async (_who, email) => {
+    const client = (await session(email)).client
+    const spells = await client
+      .from('customer_memberships')
+      .select('id')
+      .eq('outlet_id', OUTLETS.kalyani)
+    expect(spells.data ?? []).toEqual([])
+    const points = await client
+      .from('customer_points_entries')
+      .select('id')
+      .eq('outlet_id', OUTLETS.kalyani)
+    expect(points.data ?? []).toEqual([])
+  })
+
+  it("only the owner or that outlet's manager sets its points and gold", async () => {
+    for (const email of [
+      PERSONAS.faKanchrapara.email,
+      PERSONAS.billerKalyani.email,
+      PERSONAS.deviceKalyani.email,
+    ]) {
+      const client = (await session(email)).client
+      const { error } = await client.rpc('set_outlet_loyalty_settings', {
+        p_outlet: OUTLETS.kalyani,
+        p_points_enabled: true,
+        p_points_earn_per_block: 5,
+        p_points_earn_block_paise: 20000,
+        p_points_use_cap_bp: 1000,
+        p_gold_enabled: false,
+        p_gold_earn_multiplier_x100: 100,
+        p_points_gold_use_cap_bp: null as unknown as number,
+        p_gold_duration_months: 6,
+        p_gold_counter_grant: false,
+        p_gold_threshold_paise: null as unknown as number,
+      })
+      expect(error?.code).toBe('42501')
+    }
   })
 
   it('and the pieces that take a scope as an argument are callable by nobody', async () => {
     const sa = (await session(PERSONAS.superAdmin.email)).client
-    const { error } = await sa.rpc('customer_directory_activity', { p_outlets: [] })
+    const { error } = await sa.rpc('customer_directory_activity', { p_outlet: OUTLETS.kalyani })
     expect(error?.code).toBe('42501')
   })
 

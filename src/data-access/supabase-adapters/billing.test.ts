@@ -528,10 +528,11 @@ describe('the live tablet acceptance boundary', () => {
         { kind: 'packaging', menuItemId: null, itemName: 'Packaging', quantity: 1 },
       ],
     })
-    expect(revised?.command).toMatchObject({ schemaVersion: 3, type: 'revise_order' })
+    expect(revised?.command).toMatchObject({ schemaVersion: 4, type: 'revise_order' })
     expect(revised?.command.payload).toMatchObject({
       discountPaise: 1390,
-      discounts: [{ amountPaise: 1390 }],
+      // Version 4 states every entry's source, the biller's included (#62).
+      discounts: [{ amountPaise: 1390, source: 'biller' }],
       serviceType: 'dine_in',
       tableNumber: 4,
       lines: [{ kind: 'item' }],

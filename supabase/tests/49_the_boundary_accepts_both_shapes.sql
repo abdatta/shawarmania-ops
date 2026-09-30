@@ -95,8 +95,10 @@ select is(
   'malformed_payload',
   'a version-3 envelope carrying the version-1 shape is refused');
 
+-- Version 4 (#62) adds a discount entry's source; `5` is the first version
+-- nobody has written.
 select is(
-  pg_temp.envelope(4, pg_temp.legacy_payload()),
+  pg_temp.envelope(5, pg_temp.legacy_payload()),
   'unsupported_schema',
   'a version nobody has written yet is refused as unsupported, not as malformed');
 

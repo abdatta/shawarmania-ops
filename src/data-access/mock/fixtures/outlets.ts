@@ -1,4 +1,5 @@
 import type { Tables } from '../../database.types'
+import { ALL_OFF_LOYALTY_COLUMNS } from '../../outlet-loyalty-row'
 
 /**
  * The two real outlets, plus one that should never have existed. Public
@@ -59,6 +60,19 @@ export const outletFixtures: Tables<'outlets'>[] = [
     packaging_mode: 'off',
     packaging_price_paise: null,
     packaging_free_for_gold: false,
+    // Points and gold on, with the owner's numbers (a-regular-earns-points-and-
+    // gold, #62): 5 points per ₹200, 10%, gold at 1× with a 50% cap for six
+    // months, and billers may upgrade at ₹2,000 a month. The demo walks them.
+    points_enabled: true,
+    points_earn_per_block: 5,
+    points_earn_block_paise: 20_000,
+    points_use_cap_bp: 1_000,
+    gold_enabled: true,
+    gold_earn_multiplier_x100: 100,
+    points_gold_use_cap_bp: 5_000,
+    gold_duration_months: 6,
+    gold_counter_grant: true,
+    gold_threshold_paise: 200_000,
     created_at: FIXTURE_CREATED_AT,
     location_accuracy_m: 9,
     location_captured_at: '2026-07-24T09:15:00+00:00',
@@ -108,6 +122,7 @@ export const outletFixtures: Tables<'outlets'>[] = [
     packaging_mode: 'per_bag',
     packaging_price_paise: 500,
     packaging_free_for_gold: true,
+    ...ALL_OFF_LOYALTY_COLUMNS,
     created_at: FIXTURE_CREATED_AT,
     // Never surveyed, mirroring supabase/seed.sql — so the demo shows both
     // states of the owner's outlet screen without anyone travelling.
@@ -154,6 +169,7 @@ export const outletFixtures: Tables<'outlets'>[] = [
     packaging_mode: 'off',
     packaging_price_paise: null,
     packaging_free_for_gold: false,
+    ...ALL_OFF_LOYALTY_COLUMNS,
     created_at: FIXTURE_CREATED_AT,
     location_accuracy_m: null,
     location_captured_at: null,

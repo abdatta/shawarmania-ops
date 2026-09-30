@@ -181,10 +181,13 @@ select is(
           generate_subscripts(p.proargnames, 1) i
     where n.nspname = 'public' and p.proname = 'customer_lookup_by_phone'
       and p.proargmodes[i] = 't'),
-  'id,phone,name,is_member',
+  'id,phone,name,is_member,points_balance,gold_eligible',
   -- Widened by exactly one column in a-gold-member-is-a-label (#57), with its
   -- cost stated in the spec: gold-or-not, and never when, by whom, or why.
-  'the lookup returns exactly id, phone, name and gold-or-not');
+  -- Then by two in a-regular-earns-points-and-gold (#62), each for the
+  -- caller's own outlet only: the points balance there, and a yes or no for
+  -- gold eligibility there — never the spend behind it.
+  'the lookup returns exactly id, phone, name, gold-or-not, the balance here and eligible-or-not');
 
 select throws_ok($q$
   select * from public.customer_lookup_by_phone('98765')
@@ -248,7 +251,18 @@ select is(
                             'customer_directory_require_editable',
                             'customer_directory_card', 'customer_directory_list',
                             'customer_directory_search', 'customer_rename',
-                            'customer_membership_grant', 'customer_membership_revoke')),
+                            'customer_membership_grant', 'customer_membership_revoke',
+                            -- a-regular-earns-points-and-gold (#62): the points
+                            -- ledger and its readers, gold per outlet, and the
+                            -- counter's grant — each one customer at one outlet,
+                            -- none a list. The management path's scope is now
+                            -- one outlet, authorised by
+                            -- `customer_directory_require_outlet`.
+                            'customer_points_write', 'customer_points_balance',
+                            'customer_points_for_till', 'customer_gold_spell_at',
+                            'customer_gold_eligible', 'customer_gold_grant_at_counter',
+                            'customer_directory_require_outlet', 'customer_directory_spell',
+                            'customer_directory_require_reach')),
   0::bigint,
   'no customer search, list, count or prefix function exists beyond those argued for');
 
@@ -395,25 +409,31 @@ reset role;
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
+-- Since a-regular-earns-points-and-gold (#62) every read names one outlet, and
+-- the owner too reads only the customers that outlet has served.
 select is(
-  (select count(*) from public.customer_directory_card('80000000-0000-4000-a000-000000000002')),
+  (select count(*) from public.customer_directory_card(
+     '00000000-0000-4000-a000-000000000001', '80000000-0000-4000-a000-000000000001')),
   1::bigint,
-  'the owner reads a customer no outlet has served');
+  'the owner reads a customer the outlet has served');
 
 reset role;
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 select is(
-  (select count(*) from public.customer_directory_card('80000000-0000-4000-a000-000000000002')),
+  (select count(*) from public.customer_directory_card(
+     '00000000-0000-4000-a000-000000000001', '80000000-0000-4000-a000-000000000002')),
   0::bigint,
   'a Franchise Admin cannot read a customer their outlet has never served');
 
 select pg_temp.impersonate('10000000-0000-4000-a000-00000000000a'::uuid);
-select throws_ok($q$ select * from public.customer_directory_list('regulars', 0) $q$,
+select throws_ok($q$ select * from public.customer_directory_list(
+    '00000000-0000-4000-a000-000000000001', 'regulars', 0) $q$,
   '42501', null, 'a Biller calling the management path is refused');
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
-select throws_ok($q$ select * from public.customer_directory_search('9000') $q$,
+select throws_ok($q$ select * from public.customer_directory_search(
+    '00000000-0000-4000-a000-000000000001', '9000') $q$,
   '42501', null, 'a counter device calling the management path is refused');
 
 reset role;

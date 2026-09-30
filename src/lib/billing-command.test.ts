@@ -222,7 +222,30 @@ describe('billing command canonical identity', () => {
     )
   })
 
-  it('stamps every new envelope version 3', async () => {
+  /**
+   * Version 4 (#62): each bill-level discount says where it came from. The SQL
+   * half of this vector is in `supabase/tests/66_a_regular_earns_points_and_gold.sql`.
+   */
+  it('hashes a version-4 order using points beside a biller discount as PostgreSQL does', async () => {
+    const withPoints = {
+      ...takeaway,
+      orderId: '40000000-0000-4000-a000-000000000005',
+      subtotalPaise: 13900,
+      discountPaise: 3390,
+      roundingPaise: 90,
+      totalPaise: 10600,
+      lines: [shawarmaLine],
+      discounts: [
+        { source: 'biller', basis: 'percent', valueBp: 1000, valuePaise: null, amountPaise: 1390 },
+        { source: 'points', basis: 'amount', valueBp: null, valuePaise: 2000, amountPaise: 2000 },
+      ],
+    }
+    expect(await billingPayloadHash(withPoints as unknown as Record<string, never>)).toBe(
+      '961c761f98acbe4988f3b69873fe84f82c0d335a253d9e4de184fb9b90589b58',
+    )
+  })
+
+  it('stamps every new envelope version 4', async () => {
     const command = await createBillingCommand({
       commandId: '10000000-0000-4000-a000-000000000003',
       tabletId: null,
@@ -231,8 +254,8 @@ describe('billing command canonical identity', () => {
       createdAt: '2026-09-28T12:00:00.000Z',
       payload: { orderId: takeaway.orderId, reason: 'Test' },
     })
-    expect(command.schemaVersion).toBe(3)
-    expect(BILLING_COMMAND_SCHEMA_VERSIONS).toEqual([3, 2, 1])
+    expect(command.schemaVersion).toBe(4)
+    expect(BILLING_COMMAND_SCHEMA_VERSIONS).toEqual([4, 3, 2, 1])
   })
 
   it('sorts the new keys into the canonical order like every other key', () => {

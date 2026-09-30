@@ -100,6 +100,9 @@ describe('looking a customer up', () => {
       phone: '+919876543210',
       name: 'Anjali',
       tier: 'gold',
+      // Shown, never usable: `remembered` keeps Use points off (#62, D10).
+      pointsBalance: null,
+      goldEligible: false,
       remembered: true,
     })
     await expect(adapter.lookupByPhone('9876543211')).rejects.toMatchObject({ code: 'failed' })

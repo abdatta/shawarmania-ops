@@ -8,12 +8,17 @@ import {
   type OutletsAdapter,
 } from '../adapters'
 import type { Database, Tables, TablesInsert, TablesUpdate } from '../database.types'
+import { loyaltySettingsFromRow, OUTLET_LOYALTY_COLUMNS } from '../outlet-loyalty-row'
 import { serviceSettingsFromRow } from '../outlet-service-row'
 import {
   ALL_OFF_LOYALTY_SETTINGS,
   ALL_OFF_SERVICE_SETTINGS,
+  LOYALTY_SETTINGS_PROBLEM_MESSAGES,
+  loyaltySettingsProblem,
   SERVICE_SETTINGS_PROBLEM_MESSAGES,
   serviceSettingsProblem,
+  type LoyaltySettingsProblem,
+  type OutletLoyaltySettings,
   type OutletServiceSettings,
   type ServiceSettingsProblem,
 } from '@/domain'
@@ -157,6 +162,54 @@ function serviceSettingsRefusal(
               ? 'gold_waiver_without_charge'
               : null
   return problem ? new DataActionError(problem, SERVICE_SETTINGS_PROBLEM_MESSAGES[problem]) : error
+}
+
+/**
+ * A refused loyalty write, named by the check that refused it
+ * (a-regular-earns-points-and-gold, D12). As with the service settings, the
+ * page refuses these before sending; reaching here means a request the page did
+ * not make, and the owner still reads a sentence. A constraint that covers two
+ * mistakes is told apart by what was sent.
+ */
+function loyaltySettingsRefusal(
+  error: { message: string; code?: string },
+  sent: OutletLoyaltySettings,
+): unknown {
+  if (error.code === '42501') {
+    return new DataActionError(
+      'not_permitted',
+      'Only the owner or this outlet’s manager changes its points and gold.',
+    )
+  }
+  if (error.code === 'P0002') {
+    return new DataActionError('not_found', 'That outlet no longer exists.')
+  }
+  if (error.code !== '23514') return error
+
+  const constraint = /check constraint "([a-z0-9_]+)"/.exec(error.message)?.[1]
+  const byConstraint: Record<string, () => LoyaltySettingsProblem> = {
+    outlets_points_earn_per_block_positive: () => 'earn_rate_invalid',
+    outlets_points_earn_block_whole_rupees: () => 'earn_rate_invalid',
+    outlets_points_use_cap_range: () => 'cap_out_of_range',
+    outlets_points_rules_with_switch: () =>
+      !sent.pointsEnabled
+        ? 'points_rules_while_off'
+        : sent.earnPoints === null || sent.earnBlockPaise === null
+          ? 'earn_rate_required'
+          : 'cap_required',
+    outlets_gold_earn_multiplier_range: () => 'multiplier_out_of_range',
+    outlets_points_gold_use_cap_with_switches: () =>
+      sent.pointsEnabled && sent.goldEnabled ? 'gold_cap_required' : 'gold_cap_while_off',
+    outlets_points_gold_use_cap_range: () =>
+      (sent.goldUseCapBp ?? 0) < (sent.useCapBp ?? 0) ? 'gold_cap_below_cap' : 'cap_out_of_range',
+    outlets_gold_duration_range: () => 'duration_out_of_range',
+    outlets_gold_counter_grant_needs_gold: () => 'counter_gold_without_gold',
+    outlets_gold_threshold_with_switch: () =>
+      sent.goldCounterGrant ? 'threshold_required' : 'threshold_while_off',
+    outlets_gold_threshold_whole_rupees: () => 'threshold_invalid',
+  }
+  const problem = constraint ? byConstraint[constraint]?.() : undefined
+  return problem ? new DataActionError(problem, LOYALTY_SETTINGS_PROBLEM_MESSAGES[problem]) : error
 }
 
 export function createSupabaseOutletsAdapter(
@@ -319,21 +372,49 @@ export function createSupabaseOutletsAdapter(
       because that is all the reader may know about it.
     */
     /*
-      Points and gold (a-regular-earns-points-and-gold, #62). The columns and
-      `set_outlet_loyalty_settings` arrive with that change's database section
-      (tasks 4.2 and 5.3); until then every live outlet reads as having chosen
-      nothing, which bills exactly as today, and a write is refused rather than
-      pretending to store.
+      Points and gold (a-regular-earns-points-and-gold, D12), read off the
+      outlet's own row as its service choices are: whoever may read the row
+      reads its rules, and an outlet outside the reader's reach answers as one
+      that chose nothing.
     */
-    async getLoyaltySettings() {
-      return { ...ALL_OFF_LOYALTY_SETTINGS }
+    async getLoyaltySettings(id) {
+      const { data, error } = await table()
+        .select(OUTLET_LOYALTY_COLUMNS)
+        .eq('id', id)
+        .maybeSingle()
+      if (error) throw error
+      return data ? loyaltySettingsFromRow(data) : { ...ALL_OFF_LOYALTY_SETTINGS }
     },
 
-    async updateLoyaltySettings() {
-      throw new DataActionError(
-        'not_available',
-        'Points and gold cannot be saved yet. They arrive with the next release.',
-      )
+    /*
+      Through `set_outlet_loyalty_settings`, never `outlets_update`: the owner
+      and the outlet's own managers may call it, it re-derives the caller's
+      authority, and it writes these ten columns and nothing else.
+    */
+    async updateLoyaltySettings(id, settings) {
+      const problem = loyaltySettingsProblem(settings)
+      if (problem !== null) {
+        throw new DataActionError(problem, LOYALTY_SETTINGS_PROBLEM_MESSAGES[problem])
+      }
+      // The generator types every function argument as non-null; the nullable
+      // ones are null exactly when their switch is off, which the table checks.
+      const { data, error } = await client.rpc('set_outlet_loyalty_settings', {
+        p_outlet: id,
+        p_points_enabled: settings.pointsEnabled,
+        p_points_earn_per_block: settings.earnPoints as number,
+        p_points_earn_block_paise: settings.earnBlockPaise as number,
+        p_points_use_cap_bp: settings.useCapBp as number,
+        p_gold_enabled: settings.goldEnabled,
+        p_gold_earn_multiplier_x100: settings.goldEarnMultiplierX100,
+        p_points_gold_use_cap_bp: settings.goldUseCapBp as number,
+        p_gold_duration_months: settings.goldDurationMonths,
+        p_gold_counter_grant: settings.goldCounterGrant,
+        p_gold_threshold_paise: settings.goldThresholdPaise as number,
+      })
+      if (error) throw loyaltySettingsRefusal(error, settings)
+      const row = data as Tables<'outlets'>
+      remember(row)
+      return loyaltySettingsFromRow(row)
     },
 
     async getServiceSettings(id) {
