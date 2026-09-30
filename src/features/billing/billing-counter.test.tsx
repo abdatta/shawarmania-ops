@@ -1216,6 +1216,34 @@ describe('BillingCounter — a discount survives the whole journey', () => {
     expect(screen.getByTestId('add-discount')).toBeInTheDocument()
   })
 
+  it('keeps the points a saved order holds when it is reopened for edit', async () => {
+    const person = user()
+    renderCounter()
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await identifyCustomer(person, '9000000104')
+    const usePoints = await screen.findByTestId('use-points')
+    await waitFor(() => expect(usePoints).toBeEnabled())
+    await person.click(usePoints)
+    await person.click(screen.getByTestId('apply-points'))
+    const pointsRow = () =>
+      within(screen.getByTestId('bill-discount-rows')).getByText(/^Points \(\d+\)$/)
+    await waitFor(() => expect(pointsRow()).toBeInTheDocument())
+    const held = pointsRow().textContent
+
+    await person.click(screen.getByTestId('save-order'))
+    await waitFor(() => expect(screen.queryByTestId('bill-total')).not.toBeInTheDocument())
+
+    const rail = await screen.findByTestId('counter-activity-rail')
+    const openOrder = await within(rail).findByTestId(/^open-order-local-/)
+    await person.click(within(openOrder).getByRole('button', { name: /^More actions/ }))
+    await person.click(within(openOrder).getByRole('menuitem', { name: 'Edit' }))
+
+    // The reopened order's customer carries no balance, and its own points
+    // are still its own: they stay on the bill, exactly as saved.
+    await waitFor(() => expect(pointsRow()).toHaveTextContent(held ?? ''))
+  })
+
   it('does not carry a discount over to the next customer', async () => {
     const person = user()
     renderCounter()

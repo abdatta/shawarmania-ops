@@ -122,12 +122,16 @@ assignment cannot be ended by anyone, including its holder.
 | View bills | R all | R own outlet | R own shift | — |
 | Void a bill | ✓ | ✓ own outlet | — | — |
 | **Customers** (business-wide, see below) |
-| Retrieve a customer by their **complete** phone, with whether they are gold | — | — | ✓ | — |
+| Retrieve a customer by their **complete** phone, with — for this outlet — whether they are gold, their points balance and whether they are eligible for gold | — | — | ✓ | — |
+| Use a customer's points on the bill, up to the outlet's cap | — | — | ✓ | — |
+| Upgrade an eligible customer to Gold at the counter, with their agreement | — | — | ✓ own outlet | — |
 | One suggestion from four digits, among customers this outlet served | — | — | ✓ | — |
 | Save a customer from a sale | — | — | ✓ | — |
 | See the gold star on a customer, an order or a bill | ✓ | ✓ own outlet | ✓ | — |
-| Search by name or part of a number; list regulars and gold members; open a card | ✓ | ✓ customers own outlet served | — | — |
-| Correct a name; grant or revoke gold | ✓ | ✓ only a customer no other outlet serves | — | — |
+| Search by name or part of a number; list regulars and gold members; open a card (one outlet at a time) | ✓ | ✓ own outlet's customers | — | — |
+| Grant or revoke gold at an outlet | ✓ | ✓ own outlet, any customer it served | — | — |
+| Correct a name | ✓ | ✓ only a customer no other outlet serves | — | — |
+| Set an outlet's points and gold rules | ✓ | ✓ own outlet | — | — |
 | Browse, search or count from a counter | — | — | — | — |
 | Delete or merge a customer | — | — | — | — |
 | **Expenses** |
@@ -184,7 +188,20 @@ nothing**: knowing it opens that customer's bills only at outlets the caller
 could already read, which `supabase/tests/20_global_customer_identity.sql`
 proves with a hand-crafted request.
 
-**Gold, and the management path** (`a-gold-member-is-a-label`, #57). The owner
+**Points and gold are an outlet's** (`a-regular-earns-points-and-gold`, #62). The
+owner sets any outlet's rules and a Franchise Admin their own outlet's, through one
+narrow function that re-derives who is asking; a Biller, an Employee and a tablet
+are refused by hand-crafted request. The management path now names one outlet per
+call and is refused for an outlet the caller does not manage. Gold being an
+outlet's, **a manager grants and revokes it for any customer their outlet has
+served**, shared or not; the served-nowhere-else rule below now governs renaming
+alone. A biller may upgrade an eligible customer to Gold at the counter — the
+server decides eligibility again, and takes the outlet, tablet and biller from the
+live shift — and no counter principal can revoke gold. A biller sees a customer's
+balance at this outlet and a yes or no for eligibility, never the spend behind it.
+
+**Gold, and the management path** (`a-gold-member-is-a-label`, #57, as amended
+above). The owner
 reads every customer and may correct any name and grant or revoke gold for
 anybody. A manager reads the same surface over **only the customers their own
 outlets have served** — anybody else answers exactly as a customer who does not

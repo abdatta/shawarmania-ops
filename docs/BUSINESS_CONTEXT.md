@@ -107,6 +107,22 @@ rather than its number, since that is what the person carrying the tray needs.
 Packaging is a line on the bill like any other, never removed or repriced at the
 counter, so it reaches the day's takings without anybody remembering to add it.
 
+**A regular earns points, and may be made gold** (#62). Where an outlet has
+switched points on, a customer who gives their number earns points on every bill
+they pay there — 5 for every ₹200 by default, in proportion and rounded down, on
+what the bill came to after other discounts and before points — and spends them
+on a later bill there, one point to the rupee, up to a share of the bill the
+outlet sets (10% by default). Points never expire. A gold member earns at a
+multiplier and may spend up to a higher share (50% by default), and packaging can
+be free for them. Gold is granted by the owner or the outlet's manager, or by a
+biller at the counter for a customer who has paid at least the outlet's monthly
+threshold there in the last thirty days (₹2,000 by default), once the customer
+agrees; it lasts a set number of months (six by default) from its grant. Points
+and gold both belong to the outlet that gave them, because a franchisee should
+honour and fund only the benefits it granted. Every number is the outlet's to
+set, every outlet starts with all of it off, and Kalyani Cafe is the first to
+switch it on, from its opening day, 2026-10-01.
+
 Two consequences worth stating plainly:
 
 - **Optional fields must be genuinely optional.** A required customer name would get filled with "a" a hundred times a day and destroy the customer data it was meant to create.

@@ -235,12 +235,23 @@ fence stay the owner's.
 
 Then open **Attendance** from the owner's own navigation — no appointment, no switching, and the address stays inside the owner's shell. Use the outlet selector to move to **Kanchrapara**, the shop this owner holds no assignment at: one arrival is waiting there, and they settle it. The demo's emulated position is at Kalyani, so the rule asks for a reason first and records that the approver was not on site — the same rule the outlet's own manager answers to. Note who is *not* on that roll-call: the owner and the manager are not staff there, so nobody is pretending to record their arrival. Then open **Cash** at the same outlet: the day is all there, and the close and the withdrawal are not, because the drawer comes from the assignment. Switch the selector back to Kalyani, where the owner *is* the manager, and the same screen offers both — which is the whole boundary in one gesture. The outlet you last picked is where the next screen opens, so nobody answers that question twice.
 
-**Then Customers, from Setup** (#57). It opens on **Regulars** — everybody seen in
+**Below Orders, Kalyani's Loyalty section** (#62) is already on, with the owner's
+numbers: 5 points per ₹200, a 10% cap, gold members at 1× with a 50% cap for six
+months, and billers allowed to upgrade at ₹2,000 a month. Change the gold cap in
+the **Points** tile and watch the same box under **Gold members** follow — every
+gold-only setting is shown in both places as one value. Turn **Gold members** off
+and every gold line disappears from the page, the Customers surface and the
+counter; turn it back on and press **Cancel**. **Kanchrapara** starts all off.
+
+**Then Customers, from Setup** (#57; one outlet at a time since #62). It opens on
+Kalyani, with the outlet chips above, and on **Regulars** — everybody seen there in
 the last thirty days, most visits first — and the top of it is *Moumta Ghosh*, the
 most frequent customer and not gold: the owner's obvious candidate. Open her card
-over the list, correct the misspelt name with the pencil, and make her gold with
-the star; the confirmation reads the same either way. Switch to the **Gold** tab
-and she is there, newest first. Search `ghosh`, then `0104`, then `mmta` — a name,
+over the list: it shows her points balance here. Correct the misspelt name with the
+pencil, and upgrade her to Gold with the star; the card now reads *Gold until* six
+months from today. Switch to the **Gold** tab and she is there, newest first, with
+her end date; switch the order to **Recent visits**. *Arjun Das* was upgraded at the
+counter, and his card says by whom. Search `ghosh`, then `0104`, then `mmta` — a name,
 the last digits of a number, and letters in order with gaps — and watch the
 matched part go bold. *Ritika Sen* lost gold once and got it back, so her card
 reads from the second grant; *Sourav Pal* is on no list, because nothing he did is
@@ -260,11 +271,12 @@ records what was true when it was rung.
 
 **Outlets** — the manager's list holds the one shop they run, and nothing else. On its page there is no Edit, no Recapture and no Mark closed, and that is the database's answer rather than the screen's. Its **Tablets** section is the point of the surface: it is the only route to a counter setup code, so this is where a manager whose tablet died starts.
 
-**Customers** — the owner's surface over Kalyani's customers only. *Imran* and
-*Sourav* have only ever bought at Kanchrapara, so they cannot be found here at all.
+**Customers** — the owner's surface over Kalyani's customers only. *Sourav* has
+only ever bought at Kanchrapara, so he cannot be found here at all.
 Open *Arjun Das*, who has only bought at Kalyani: the pencil and the star are
-there. Open *Ritika Sen*, who has bought at both: they are not, and one sentence
-says why. The card says *First visit here*, and its figures count Kalyani's bills
+there. Open *Ritika Sen*, who has bought at both: the pencil is not, and one
+sentence says why — but the star is, because gold at Kalyani is Kalyani's to give
+(#62). The card says *First visit here*, and its figures count Kalyani's bills
 alone.
 
 **3 — The counter, which never blocks** (Biller)
@@ -277,6 +289,22 @@ because a tablet is set up rather than signed in.
 A shift is already open. Ring a direct sale—tap tiles, decide the customer from the keypad row (or **Skip**), tap **Mark Paid**, then **Cash**, then confirm **Mark Paid**. Cash and UPI both begin neutral. The screen clears after local acceptance; expand the new row under **Bills this shift** and use its relative five-minute action to reopen the prefilled tender dialog without changing the bill. The action counts in minutes, switches to seconds below one minute and disappears at expiry; the adjacent demo controls jump to 59 seconds or expiry without a five-minute wait. Repeat from an order paid on handover. For split tender, key `100`, tap Cash, tap UPI for the ₹39 remainder, then Mark Paid.
 
 Ring another item, decide the customer and choose the primary **Order** action. It appears directly in the Counter's compact **Open orders** rail—there is no separate one-slot latest-order card. Its complete preparation lines and amounts, optional customer and total lead the card; `Order #xyz` is only a small reference, today's timestamp is relative, and the current biller's name is not repeated. Mark it paid, or cancel after a preset fills the editable reason field; the paid bill moves below the divider into **Bills this shift**, where Cash and UPI totals remain visible at zero, rows read **Today** with the time, and each bill expands to immutable details. Tap the customer row to open the keypad. Key `9000` to see the outlet's own recent customer suggested with a count of the others; tap it to fill the number, and the saved name resolves. Key `5003801867` instead to see a ten-digit number the mobile rule refuses turn red and offer no save. **Skip** takes one tap and confirms nothing. Swiggy, Zomato, Card and Other never appear as payment categories; aggregator trade is demonstrated in the Ledger instead.
+
+**Points and gold at the counter** (#62). Do this on a fresh demo (a reload
+restarts it), before the owner upgrades Moumita above. Ring a Classic and key
+*Moumita*'s number (`9000000104`): her balance, 36, sits large on the right of her
+card, and because she has paid over ₹2,000 at Kalyani this month the card says
+*Eligible for gold* with **Upgrade to Gold**. The confirmation says to check with
+her first and names the date her gold ends, in bold; upgrade her and the
+eligibility line goes. Switch the demo offline and try it on somebody else: it
+needs the internet. Accept her, and **Use N points** appears beside **Add
+discount**, naming the most this bill may take — for a gold member, half the bill
+after other discounts, and never more than the balance. Tap it: the pad opens on
+that number, with *Balance* and *Max this bill* beneath; type more than the max and
+the readout says *At most N on this bill* in red. Use it, and *Points (N)* joins
+the bill's rows. On another bill, *Priyanka* (`9000000106`) holds 8 points and is
+not gold, so her cap is 10%; *Imran* (`9000000107`) spent points on a bill that was
+then voided and sits at −4, so there is nothing to use and the button says so.
 
 **Edit an order, and watch what the workspace does about it.** Tap the pencil. The composer takes the accent outline and names the order; that order leaves the list and its own card slides left to meet the composer's edge, so the two read as one piece of work. The composer's footer—total, customer fields, Save changes and Cancel edit—**moves onto the card**, leaving the composer as the items alone; there is never a second copy of either. Scroll the rail through this shift's bills: the card holds its place until scrolling would lose it, pins at the edge, and comes back. Add an item, change the customer, save, and see the draft you had in progress restored exactly.
 

@@ -1,4 +1,6 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+
+import { LOCAL_ANON_KEY, OUTLET_KALYANI, PASSWORD, SUPABASE_URL } from './tills'
 
 /**
  * The Customers surface against the real database (a-gold-member-is-a-label).
@@ -10,7 +12,41 @@ import { expect, test, type Page } from '@playwright/test'
  *
  * The seed's `Test Customer (Synthetic)` has bills at both outlets: a regular
  * for the owner, and a shared customer for the Kalyani manager.
+ *
+ * Since a-regular-earns-points-and-gold (#62) the page reads one outlet, so each
+ * test opens it on Kalyani by address; and gold is an outlet's switch, so the
+ * gold round trip turns Kalyani's on for its length and off after, as the seed
+ * has it.
  */
+
+const CUSTOMERS_AT_KALYANI = (role: 'owner' | 'admin') =>
+  `${role}/customers?outlet=${OUTLET_KALYANI}`
+
+async function setKalyaniGold(request: APIRequestContext, on: boolean) {
+  const signIn = await request.post(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    headers: { apikey: LOCAL_ANON_KEY },
+    data: { email: 'owner@login.shawarmania.invalid', password: PASSWORD },
+  })
+  expect(signIn.ok(), 'the owner could not sign in').toBe(true)
+  const { access_token: token } = (await signIn.json()) as { access_token: string }
+  const response = await request.post(`${SUPABASE_URL}/rest/v1/rpc/set_outlet_loyalty_settings`, {
+    headers: { apikey: LOCAL_ANON_KEY, authorization: `Bearer ${token}` },
+    data: {
+      p_outlet: OUTLET_KALYANI,
+      p_points_enabled: false,
+      p_points_earn_per_block: null,
+      p_points_earn_block_paise: null,
+      p_points_use_cap_bp: null,
+      p_gold_enabled: on,
+      p_gold_earn_multiplier_x100: 100,
+      p_points_gold_use_cap_bp: null,
+      p_gold_duration_months: 6,
+      p_gold_counter_grant: false,
+      p_gold_threshold_paise: null,
+    },
+  })
+  expect(response.ok(), `set_outlet_loyalty_settings failed: ${await response.text()}`).toBe(true)
+}
 
 const SHARED = 'Test Customer (Synthetic)'
 
@@ -30,9 +66,10 @@ async function openFromRegulars(page: Page, name: string) {
   return page.getByTestId('customer-card')
 }
 
-test('the owner finds a regular, and makes them gold and back', async ({ page }) => {
+test('the owner finds a regular, and makes them gold and back', async ({ page, request }) => {
+  await setKalyaniGold(request, true)
   await signIn(page, 'owner')
-  await page.goto('owner/customers')
+  await page.goto(CUSTOMERS_AT_KALYANI('owner'))
 
   // Regulars first, read from bills — the seed's shared customer is one.
   await expect(page.getByTestId('tab-regulars')).toHaveAttribute('aria-pressed', 'true')
@@ -40,9 +77,10 @@ test('the owner finds a regular, and makes them gold and back', async ({ page })
   await expect(card.getByTestId('customer-card-figures')).toContainText('Spent')
   await expect(card.getByTestId('customer-card-membership')).toContainText('Not a gold member')
 
-  await card.getByRole('button', { name: 'Make gold member' }).click()
-  await page.getByRole('button', { name: 'Make gold member', exact: true }).last().click()
-  await expect(card.getByTestId('customer-card-membership')).toContainText('Gold member since')
+  await card.getByRole('button', { name: 'Upgrade to Gold' }).click()
+  await page.getByRole('button', { name: 'Upgrade to Gold', exact: true }).last().click()
+  // Gold ends on the date its grant stored (#62).
+  await expect(card.getByTestId('customer-card-membership')).toContainText('Gold until')
 
   await card.getByRole('button', { name: 'Close' }).click()
   await page.getByTestId('tab-members').click()
@@ -61,11 +99,12 @@ test('the owner finds a regular, and makes them gold and back', async ({ page })
   await expect(
     page.getByTestId('customer-card').getByTestId('customer-card-membership'),
   ).toContainText('Not a gold member')
+  await setKalyaniGold(request, false)
 })
 
 test('the owner searches by part of a name and sees the match in bold', async ({ page }) => {
   await signIn(page, 'owner')
-  await page.goto('owner/customers')
+  await page.goto(CUSTOMERS_AT_KALYANI('owner'))
   await page.getByTestId('customer-search').fill('synthetic')
   const result = page.getByTestId('customer-search-result')
   await expect(result).toContainText(SHARED)
@@ -76,11 +115,10 @@ test('the owner searches by part of a name and sees the match in bold', async ({
 
 test('a manager meets a customer another outlet also serves as read-only', async ({ page }) => {
   await signIn(page, 'admin.kalyani')
-  await page.goto('admin/customers')
+  await page.goto(CUSTOMERS_AT_KALYANI('admin'))
 
   const card = await openFromRegulars(page, SHARED)
   await expect(card.getByTestId('customer-card-read-only')).toContainText('another outlet')
   await expect(card.getByRole('button', { name: 'Correct the name' })).toHaveCount(0)
-  await expect(card.getByRole('button', { name: 'Make gold member' })).toHaveCount(0)
   await expect(card.getByTestId('customer-card-figures')).toContainText('First visit here')
 })

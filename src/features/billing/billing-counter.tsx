@@ -578,7 +578,10 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     isRenderable(getPartState('outlet-points'), session?.mode ?? 'real') &&
     loyaltySettings.pointsEnabled &&
     customer?.kind === 'identified' &&
-    customer.pointsBalance != null
+    // A saved order reopened for edit restores its customer from the order,
+    // which carries no balance; the points it already holds are still its own
+    // and must not fall off the revision (found 2026-09-29).
+    (customer.pointsBalance != null || heldPoints > 0)
   /**
    * What may be spent: the balance the server just gave, plus the points this
    * order already holds (which that balance leaves out). A balance that is only

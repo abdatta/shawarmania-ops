@@ -116,7 +116,8 @@ the identity interval is display evidence, never an alternate route to rows.
 | Data | Whose | Why | Rules |
 |---|---|---|---|
 | Name, phone | Customer | Recognising a returning customer; future digital receipts | Optional at billing. **Business-wide, not per outlet** — one canonical phone is one customer. Never logged, never exported. No client may read the table; a counter resolves a complete phone through a rate-bounded function; the owner reads the directory, and a manager only the customers their own outlets served |
-| Gold membership: when granted, by whom, when ended | Customer | Recognising regulars at the counter | Global, like the customer. A counter sees gold-or-not and nothing more; the owner and a manager see "member since" on the card. The history is kept, never deleted, and shown nowhere yet. No client may read the table |
+| Gold membership: at which outlet, when granted, by whom and how (by hand or at the counter, and on which tablet), when it ends, when ended early | Customer | Recognising and rewarding regulars at that outlet | **Per outlet** (#62). A counter sees gold-or-not at its own outlet and nothing more; the owner and that outlet's managers see the card's end date and who gave it, and may read the table through its select policy. The history is kept, never deleted |
+| Points: what each bill earned and used at an outlet, reversals, the balance after each | Customer | Points the customer earns and spends at that outlet | **Per outlet** (#62), append-only, written only by the server at acceptance and void. A counter sees only the balance at its own outlet (net of open orders) and a yes or no for gold eligibility, never the spend behind it; the owner and that outlet's managers read the ledger; the customer's own receipt shows the bill's three figures and names nobody. Removing a customer's number ends their points and gold |
 | Name, phone, staff facts (code, role title, joining/leaving dates) | Staff | The staff record on their account | Visible to their outlet's admin and the owner. Never to other staff. No salary and no home address is stored anywhere |
 | Account email | Any account when explicitly associated; required for a live Super Admin | Alternate sign-in; foundation for future recovery or security features | Private, optional by default, required for Super Admin; no client table privilege; visible through the privileged owner-management response only |
 | Check-in coordinates, accuracy, distance | Employee | Attendance verification | Captured only at check-in. Never continuous |
@@ -147,7 +148,7 @@ retention policy.
 - **No client session holds any privilege on the table.** Not select, not insert — not for a manager, a device, or the owner. The grant is revoked and RLS is enabled with no policy, which says it twice.
 - **The counter's paths in are an exact, complete phone, or four digits among its own outlet's customers.** There is no prefix, wildcard, list or count verb over the directory for a counter to call. A lookup answers a question about somebody who just gave their number; the partial-number suggestion returns at most one customer this outlet already served, plus a count of the others, so it discovers nobody; a browse would be the directory itself.
 - **Lookups are rate-bounded per caller**, so an exact-match oracle cannot be walked, and the counter behind that bound records no phone input in any form.
-- **The management path is separate functions with their own check**, so widening billing can never widen it and vice versa. It is a browse path — search by name or part of a number, and two paged lists — and exists only for the owner and a manager. Each function takes the reader's scope from their own assignments: the whole business for the owner, and for a manager only the customers their outlets have served, with anybody else indistinguishable from nobody. A manager changes a name or gold only for a customer served at no other outlet.
+- **The management path is separate functions with their own check**, so widening billing can never widen it and vice versa. It is a browse path — search by name or part of a number, and two paged lists — and exists only for the owner and a manager. Since #62 every function names one outlet and is refused, not narrowed, for an outlet the caller does not manage; within it, only the customers that outlet served are reachable, with anybody else indistinguishable from nobody. A manager grants or revokes that outlet's gold for any of them, and renames only a customer served at no other outlet.
 
 **Two widenings, each with its cost stated** (`a-gold-member-is-a-label`, #57), because
 a widening recorded without its cost is how the next one gets easier:
@@ -163,12 +164,22 @@ a widening recorded without its cost is how the next one gets easier:
   bit: not which outlet, not when, not what. The owner accepted it with the rule on
   2026-09-24.
 
+**What #62 changed at the boundary, with its cost stated.** The lookup's gold is now
+this outlet's, which **narrows** #57's widening: a biller no longer learns that a
+customer is gold somewhere else. Two fields are added, each for the caller's own
+outlet only: the points balance, which discloses how much the customer has earned
+less spent here — the same outlet's own trade, one number — and eligibility, one
+bit that says "has paid at least the threshold here recently" and is the whole of
+its purpose; the amount, the visits and the dates are never returned. A balance
+can be read by anybody at the counter who knows the number, as the name already
+could; the phone is not verified (see [Limitations](LIMITATIONS.md)).
+
 **No customer activity is stored.** Visits, spend, last seen and the regulars
 ranking are summed from bills under the reader's own authority when asked for.
 `bill_count` and `total_spend_paise` were removed from `customers` so they could
 never ride along in a counter's lookup (#32), and nothing has replaced them.
 
-Proved rather than asserted: `supabase/tests/20_global_customer_identity.sql`, `supabase/tests/59_a_gold_member_is_a_label.sql` and the customer probes in `supabase/tests/rest/rls-probes.test.ts` issue the hand-crafted requests — `select=*`, a `like` filter, a HEAD count, a customer id used to reach the other outlet's bills, a manager opening and changing customers their outlet did not serve or does not wholly serve, and every counter role calling the management path — and assert each is refused.
+Proved rather than asserted: `supabase/tests/20_global_customer_identity.sql`, `supabase/tests/59_a_gold_member_is_a_label.sql` and the customer probes in `supabase/tests/rest/rls-probes.test.ts` issue the hand-crafted requests — `select=*`, a `like` filter, a HEAD count, a customer id used to reach the other outlet's bills, a manager opening and changing customers their outlet did not serve or does not wholly serve, and every counter role calling the management path — and assert each is refused. `supabase/tests/66_a_regular_earns_points_and_gold.sql` does the same for the ledger, the settings and the counter's grant: another outlet's manager, a Biller, an Employee and a tablet each read no ledger row and set no rule, and a tablet at the wrong outlet cannot upgrade anybody.
 
 ## Employee location monitoring
 

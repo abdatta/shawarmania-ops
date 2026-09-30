@@ -730,15 +730,18 @@ const partDefs = {
   'outlet-service-choices': { state: 'live' },
   /**
    * Points (a-regular-earns-points-and-gold, #62): the Loyalty section of an
-   * outlet's page, and the counter's balance and Use points. `demo` until the
-   * change's database section makes them real (tasks 6.4).
+   * outlet's page, and the counter's balance and Use points. Live since the
+   * ledger, the settings and the lookup's balance are real; every outlet starts
+   * with points off, so until somebody turns them on the counter bills exactly
+   * as it did before.
    */
-  'outlet-points': { state: 'demo' },
+  'outlet-points': { state: 'live' },
   /**
-   * Gold earned at the counter (#62): Upgrade to Gold on an eligible customer. `demo`
-   * until the counter grant is real (tasks 6.4).
+   * Gold earned at the counter (#62): Upgrade to Gold on an eligible customer.
+   * Live since the counter grant is real; it shows only where the outlet lets
+   * billers upgrade, which no outlet does until somebody turns it on.
    */
-  'counter-gold': { state: 'demo' },
+  'counter-gold': { state: 'live' },
 } as const satisfies Record<string, { state: GateState }>
 
 export type PartId = keyof typeof partDefs

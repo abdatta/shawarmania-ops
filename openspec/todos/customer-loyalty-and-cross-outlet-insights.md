@@ -1,6 +1,33 @@
 # Customer Loyalty And Cross-Outlet Insights
 
-**Type**: Feature · **Status**: **Partly promoted 2026-09-18** · **Area**: Customers
+**Type**: Feature · **Status**: **Partly promoted 2026-09-18 and 2026-09-28** · **Area**: Customers
+
+## Promoted again, 2026-09-28
+
+[`a-regular-earns-points-and-gold`](../changes/a-regular-earns-points-and-gold/proposal.md)
+(#62) took three more items off the list below: **benefits the system applies
+itself** (points earned and spent, a gold points cap and multiplier, each with its
+own discount source, so what they cost is attributable), **automated eligibility**
+(billers upgrade a customer who has paid the outlet's threshold in thirty days,
+with the customer's agreement — a rule that decides who *may* be made gold, not
+who *is*), and **the franchise question**, answered by making points and gold an
+outlet's own, so a franchisee honours and funds only what it granted. Gold now
+ends on a stored date. What still waits, each on its own trigger:
+
+- cross-outlet activity and spend **insight** as a reportable thing, beyond one
+  outlet's thirty-day figures on a card;
+- a **membership and points history** screen. Every spell and every ledger row is
+  kept, so it needs no backfill;
+- **automatic appointment** without a person — gold granted by the rule alone —
+  and what happens when a manual grant and a rule disagree;
+- **consent language** for the programme, and a separate *stop messaging* from
+  *leave the points programme* (#59's to draw on the privacy page);
+- **merge, split and reassignment** of mistyped or reassigned numbers, which now
+  carry points and gold with them;
+- **points that expire**, a **price for gold**, and **verifying the phone** before
+  points are spent (see `docs/LIMITATIONS.md`).
+
+The sections below are the history of this note, kept as it read before #62.
 
 ## Partly promoted, 2026-09-18
 

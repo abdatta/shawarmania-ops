@@ -202,7 +202,12 @@ customer_points_entries
 - **`balance_after` is stored** so the receipt reports a stored figure rather than
   recomputing one (`public-bill-receipt`). Each write takes
   `pg_advisory_xact_lock` on (outlet, customer) before reading the balance, so two
-  bills landing together cannot both compute from the same starting figure.
+  writes landing together cannot both compute from the same starting figure.
+  *(Found while proving it, 2026-09-29: two sales at one outlet never race the
+  ledger, because each bill holds the outlet's bill-number counter row until it
+  commits. A manager's void takes no number, so a void racing a sale is the case
+  the lock actually holds — proved in `zz-billing-command-races.test.ts`, which
+  fails with the lock removed.)*
 - **`unique (bill_id, kind)` is the idempotency.** A bill earns once, uses once,
   and is reversed once, however often the outbox retries.
 - **Append-only**: a guard refuses update and delete, as `bills` does.
@@ -315,7 +320,7 @@ passing. `lint:discount-rows` gains a points case.
 `customer_create_or_get` each return, **for the caller's own outlet** (from the
 caller's authority, never an argument):
 
-- `is_gold`: a current spell here, yes or no (replacing the business-wide yes or
+- `is_member` (the column keeps #57's name): a current spell here, yes or no (replacing the business-wide yes or
   no);
 - `points_balance`: the ledger balance here, **minus points on this customer's
   open orders here**, so two open orders cannot both use the same points. Null when

@@ -170,6 +170,20 @@ the server side of the existing overlay; envelopes remain the only local command
 log. Remembered surfaces state their read time and reconnect re-resolves the
 tablet before draining, then refreshes authoritative reads last.
 
+**Points earn offline and are spent only online** (#62). A bill rung offline carries
+its customer's phone as always, and the server writes what it earned when the bill
+lands, exactly once however often the outbox retries, at the outlet's rule at that
+moment. **Use points** needs a balance the server gave while this order's customer
+was being identified: a balance the tablet only remembers is shown, labelled, and
+cannot be spent, and an order reopened for editing keeps the points it already
+held. A tablet that read a balance and then went offline may still take the paid
+order, because the counter never blocks; if another till spent the same points in
+between, the balance goes negative and the ledger records it. **Upgrade to Gold**
+is online only and never queued. The outlet's loyalty rules ride the menu into the
+resume record, and so do the balance and eligibility for display. A command queued
+under payload version 1, 2 or 3 before the release settles exactly as it was
+written; version 4 adds only a discount's source.
+
 **Exact-phone results are the only remembered customer lookup.** The tablet may
 reuse only a complete canonical phone it resolved online itself, labels the
 match remembered, keeps at most 50 results for 24 hours, and writes none to logs

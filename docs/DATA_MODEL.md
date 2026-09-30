@@ -41,6 +41,19 @@ outlet and a Franchise Admin for the outlets they manage, and both only through
 authority and writes these columns and no others: `outlets_update` stays the
 owner's, because widening it would hand a manager the cutover and the fence.
 
+**Points and gold** *(#62)* — ten more columns, all off by default, written only
+through `set_outlet_loyalty_settings(outlet, …ten values)` with the same authority
+as the service settings: `points_enabled`; `points_earn_per_block` and
+`points_earn_block_paise` (5 per ₹20000 paise is 5 points per ₹200; the block whole
+rupees); `points_use_cap_bp` (the share of a bill after other discounts points may
+pay, 1–10000); `gold_enabled`; `gold_earn_multiplier_x100` (100–1000, 100 is 1×);
+`points_gold_use_cap_bp` (never below `points_use_cap_bp`); `gold_duration_months`
+(1–60, default 6); `gold_counter_grant`; `gold_threshold_paise` (whole rupees). The
+checks say the earn pair and cap are set exactly while points are on, the gold cap
+exactly while points **and** gold are on, the counter grant only with gold, and the
+threshold exactly while the counter grant is on. The thirty-day eligibility window
+is a constant, not a column. The rules travel to the tablet with its menu.
+
 There is no `billing_live_from`. It was the per-outlet handover after which the
 temporary ledger read Cash and UPI from bills, and it went with the ledger in
 `retire-the-manual-ledger` (#12): with one record of a trading day there is no
@@ -396,10 +409,11 @@ Access is correspondingly narrow, and none of it is a table grant:
 
 | Who | May | Through |
 |---|---|---|
-| A tablet holding a live shift, or the person holding that shift | Retrieve one customer by their **complete** phone, with whether they are gold; create one the first time a phone is seen | `customer_lookup_by_phone()`, `customer_create_or_get()` |
+| A tablet holding a live shift, or the person holding that shift | Retrieve one customer by their **complete** phone, with — **for its own outlet only** — whether they are gold, their points balance (net of their open orders there; null with points off) and a yes or no for gold eligibility; create one the first time a phone is seen | `customer_lookup_by_phone()`, `customer_create_or_get()` |
+| The same | Upgrade an eligible customer to Gold at its own outlet, eligibility decided again by the server; never revoke | `customer_gold_grant_at_counter()` |
 | The same | With four or more digits, the **one** customer their own outlet served most recently among those matching, and a count of the others | `customer_suggest_at_outlet()` |
-| Super Admin | Search by name or part of a number, list regulars and gold members, open a card; correct a name and grant or revoke gold for anybody | `customer_directory_search()`, `customer_directory_list()`, `customer_directory_card()`, `customer_rename()`, `customer_membership_grant()`, `customer_membership_revoke()` |
-| Franchise Admin | The same reads over **only the customers their own outlets have served**, figures from those outlets' bills alone; the same writes only for a customer served at **no other** outlet | The same six functions |
+| Super Admin | For **one named outlet** at a time *(#62)*: search by name or part of a number, list regulars and that outlet's gold members, open a card with that outlet's figures, gold end date, balance and how gold was given; grant or revoke gold there for anybody that outlet has served; correct a name | `customer_directory_search()`, `customer_directory_list()`, `customer_directory_card()`, `customer_rename()`, `customer_membership_grant()`, `customer_membership_revoke()`, each taking the outlet |
+| Franchise Admin | The same, for an outlet they manage and no other; a rename only for a customer served at **no other** outlet | The same six functions |
 | Everybody else, including a direct `select` from any role | Nothing | — |
 
 No client session holds `select` on the table itself. The counter's partial-number
@@ -439,10 +453,30 @@ gold, and when"), what an automatic rule will read before handing gold back to
 somebody a person took it from, and what the sale snapshot above is read from.
 `reason` is where such a rule will record why.
 
-It is **global, like `customers`**: a membership belongs to the person, not to a
-shop, so "a gold member" means the same at every outlet. It is the same deliberate
-exception and carries the same two locks — no client privilege at all, and RLS
-with no policy — asserted by name in `01_schema_coverage.sql`.
+**It belongs to one outlet** *(#62, reversing #57's business-wide gold)*:
+`outlet_id`, `expires_at` (the grant time plus the outlet's `gold_duration_months`
+**at the grant**, so a later change to the setting moves no spell),
+`granted_via` (`management` | `counter`) and `counter_device_id` for a counter
+grant. A spell is current while not revoked and `granted_at <= now < expires_at`; a
+lapse writes nothing. One current spell per customer per outlet is kept by an
+advisory lock in every grant function, since a unique index cannot read the clock.
+`customer_tier_at(customer, outlet, instant)` answers gold only where the outlet has
+gold on, and the sale snapshot reads the order's or bill's own outlet. The table is
+outlet-scoped: a select policy for the owner and that outlet's Franchise Admins, no
+write privilege, and it is in the isolation matrix.
+
+**`customer_points_entries`** *(#62)* — `id`, `outlet_id`, `customer_id`, `bill_id`,
+`kind` (`earned` | `used` | `earned_reversed` | `used_returned`), signed `points`,
+`balance_after`, and on an `earned` row the rule it used: `earn_basis_paise`,
+`earn_block_paise`, `earn_points_per_block`, `earn_multiplier_x100`; `created_at`.
+Append-only, guarded as `bills` is. Written only by two triggers on `bills`: a
+deferred one at acceptance that writes `used` (from the bill's `points` discount
+row, whatever the outlet's switch) and then `earned` (only while the outlet has
+points on, on the bill after every discount but points, rounded down); and one in
+the voiding transaction that writes both reversals. Attribution — till, shift,
+operator — comes from the bill, one join away. Outlet-scoped: the owner and that
+outlet's Franchise Admins read it; a counter learns a balance only through the
+lookup. Isolation-tested, and classified in `01_schema_coverage.sql`.
 
 ## The customer's receipt link
 
@@ -1200,7 +1234,8 @@ Every check below is enforced by the schema and covered by the suites in `supaba
 
 - Every outlet-scoped table has an RLS policy, and the isolation suite covers it — by enumerating tables from the catalog and failing on any it cannot classify, so a new table without a test fails by name.
 - `total_paise = subtotal_paise − discount_paise + tax_paise + rounding_paise` on every bill **and every order**, with `total_paise` always a whole number of rupees and never below ₹1. The rounding term exists because a percentage of an odd subtotal produces paise nobody at a counter can be handed; it is always in the business's favour and always stored rather than derived on read. **This identity is written in three places** — the check constraints, `billTotals()` and `billing_validate_totals` — and `npm run lint` fails when the shared case table in `src/domain/billing-totals-cases.json` drifts from its copy in the pgTAP suite.
-- `discount_paise` equals the sum of its lines' `discount_paise` plus its own `bill_discounts` / `order_discounts` rows, enforced by a deferred constraint trigger. A menu discount rides the line it reduced, carrying the percentage that produced it; a discount on the whole bill has no line and gets a row.
+- `discount_paise` equals the sum of its lines' `discount_paise` plus its own `bill_discounts` / `order_discounts` rows, enforced by a deferred constraint trigger. A menu discount rides the line it reduced, carrying the percentage that produced it; a discount on the whole bill has no line and gets a row. Each such row carries a `source` *(#62)*: `biller`, or `points` — an amount in whole rupees, value equal to amount, at most one per order or bill by partial unique index.
+- A customer's points balance at an outlet is the sum of their `customer_points_entries` there, never a stored column; each row's `balance_after` is that sum after it, written under an advisory lock on (outlet, customer), and `unique (bill_id, kind)` means a bill earns, uses and is reversed once however often its command is retried.
 - `line_total_paise = unit_price_paise × quantity` on every bill item.
 - Every bill has exactly one `bill_public_links` row with a unique, URL-safe token, including every bill rung before the capability existed — the migration backfills them and **asserts the row counts match**, so a partial backfill aborts it whole rather than leaving some bills silently unshareable. No link operation can modify a bill, asserted by reading the bill byte for byte across a revoke, a reissue and an update.
 - A menu discount's rows on the customer's receipt are grouped by the database, and `npm run lint` fails when the shared case table in `src/domain/discount-row-cases.json` drifts from its copy in the pgTAP suite — the same treatment the bill identity gets, because the grouping is a sum performed both in TypeScript for the counter's draft and in SQL for the receipt, and a divergence would show a customer different rows from the ones the till showed them.

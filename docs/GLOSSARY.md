@@ -82,6 +82,37 @@ Added and removed by the order's type, never by the biller, and never repriced.
 Its only possible discount is the **gold waiver**, the whole line at 100%, where
 the outlet makes packaging free for gold members.
 
+### Points
+
+**What a customer earns at one outlet by paying there, and spends there.** One
+point is ₹1 off, always. A bill earns in proportion to what it came to after other
+discounts and before points, rounded down, at the rule the outlet had when the bill
+reached the server; a gold member earns at the outlet's multiplier. Spending points
+is a discount row of its own, *Points (N)*, never more than the outlet's share of
+the bill. Points belong to the outlet that gave them and never expire (#62).
+
+### Balance
+
+**A customer's points at one outlet: the sum of that outlet's ledger rows for
+them**, and never a stored column. What a till is shown is that sum less the points
+already on the customer's open orders there. It may be negative after two tills
+spend the same points; nothing more can be used until it recovers.
+
+### Gold
+
+**A customer's membership at one outlet, from a grant until the date that grant
+stored.** It raises their points cap, may speed their earning and may make their
+packaging free — at that outlet only. It is granted by the owner or the outlet's
+manager, or at the counter by a biller for an *eligible* customer who agrees, and
+it is ended early only by the owner or a manager. With an outlet's gold switched
+off, nobody is gold there.
+
+### Eligible for gold
+
+**Paid at least the outlet's threshold there in the last thirty business days, and
+not gold there already.** The till is told yes or no and never the amount; a voided
+bill counts for nothing, and an offline bill counts once it lands.
+
 ### Bill number
 
 A per-outlet sequential identifier, human-readable and never reused. Distinct from the bill's `id`, which is a client-generated UUID. Two outlets each have a bill #1; that's fine, because bill numbers are only ever meaningful within an outlet.

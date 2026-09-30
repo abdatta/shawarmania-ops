@@ -26,13 +26,15 @@ import {
  *
  * Kalyani is switched on by its manager through the narrow function for the
  * length of this file and put back to all-off after it, as the seed has it.
- * The seed's unnamed customer is made gold for the member's takeaway and
- * put back too.
+ * The seed's customer Kalyani has served is made gold there for the member's
+ * takeaway, and put back too. Since a-regular-earns-points-and-gold (#62) gold
+ * is an outlet's: Kalyani switches gold on for this file, and a management
+ * grant reaches only a customer that outlet has served.
  */
 
-const GOLD_CUSTOMER = '80000000-0000-4000-a000-000000000002'
-const GOLD_PHONE_DIGITS = '9000000002'
-const GOLD_PHONE = '+919000000002'
+const GOLD_CUSTOMER = '80000000-0000-4000-a000-000000000001'
+const GOLD_PHONE_DIGITS = '9000000001'
+const GOLD_PHONE = '+919000000001'
 /** How long a reconnected till may take to drain what it queued. */
 const DRAIN_MS = 60_000
 /**
@@ -219,18 +221,40 @@ async function cancelCard(page: Page, reference: string, text: string) {
   })
 }
 
+/** Gold at Kalyani, on or off, and nothing else about points (#62). */
+async function setKalyaniGold(request: APIRequestContext, on: boolean) {
+  await rpc(request, await accessToken(request, 'admin.kalyani'), 'set_outlet_loyalty_settings', {
+    p_outlet: OUTLET_KALYANI,
+    p_points_enabled: false,
+    p_points_earn_per_block: null,
+    p_points_earn_block_paise: null,
+    p_points_use_cap_bp: null,
+    p_gold_enabled: on,
+    p_gold_earn_multiplier_x100: 100,
+    p_points_gold_use_cap_bp: null,
+    p_gold_duration_months: 6,
+    p_gold_counter_grant: false,
+    p_gold_threshold_paise: null,
+  })
+}
+
 test.beforeAll(async ({ request }) => {
   await setKalyaniServing(request, true)
+  await setKalyaniGold(request, true)
   await rpc(request, await accessToken(request, 'owner'), 'customer_membership_grant', {
+    p_outlet: OUTLET_KALYANI,
     p_customer: GOLD_CUSTOMER,
   })
 })
 
 test.afterAll(async ({ request }) => {
   await setKalyaniServing(request, false)
+  // Revoked while gold is still on: with it off, the outlet has no gold to end.
   await rpc(request, await accessToken(request, 'owner'), 'customer_membership_revoke', {
+    p_outlet: OUTLET_KALYANI,
     p_customer: GOLD_CUSTOMER,
   })
+  await setKalyaniGold(request, false)
 })
 
 test('orders rung offline with a table, bags and a waiver each settle exactly once, carrying them', async ({
