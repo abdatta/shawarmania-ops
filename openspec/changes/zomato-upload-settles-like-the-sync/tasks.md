@@ -36,8 +36,9 @@
   (D8). *Branch `zomato-settles-only-when-paid`, ba102f6; npm test 89/89.*
 - [x] 4.2 Rehearse the branch against production, read-only. *Done 2026-09-30,
   run 36706260023: 21-27 Sep provisional, 14-20 and 07-13 Sep settled, ops `ok`.*
-- [ ] 4.3 Merge to the sync repo's `main` in the owner's deploy window, together
-  with this change's deploy.
+- [x] 4.3 Merge to the sync repo's `main` in the owner's deploy window, together
+  with this change's deploy. *Done 2026-09-30 (ba102f6, nothing trading until
+  10-01); a real run afterwards posted 21-27 Sep provisional and ops said `ok`.*
 
 ## 5. Docs
 
@@ -54,7 +55,11 @@
   `parse-operator-statement` itself; unit 2125/2125; contrast 64 pairs AA;
   build clean; `test:e2e` 284/284. The database and auth job is left to CI: no
   SQL, policy, migration or generated type changes here.*
-- [ ] 6.2 Every clause of the Gate line, each proved by a named test.
-- [ ] 6.3 After deploy: the owner uploads a paid week's workbook and a TO BE PAID
+- [x] 6.2 Every clause of the Gate line, each proved by a named test.
+- [x] 6.3 After deploy: the owner uploads a paid week's workbook and a TO BE PAID
   one; the first reports already settled and matching, the second is refused with
   its reason.
+  *Done 2026-09-30 in production from the owner's Edge: 14-20 Sep read "already
+  settled at ₹8,467.09 and this file agrees"; 21-27 Sep was refused "Zomato has
+  not paid ... 54 of 55 orders are still pending settlement". A database hash
+  before and after both was identical. The first attempt exposed D9.*
