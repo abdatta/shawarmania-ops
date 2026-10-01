@@ -21,6 +21,10 @@ The full phone number SHALL NOT leave the database in the receipt's payload. The
 omission SHALL be the reader function's own projection, not a renderer choosing
 what to show.
 
+The receipt SHALL NOT show the reason a bill was cancelled, and the reader SHALL
+NOT return it [owner, 2026-09-30]: it is the outlet's own note. A cancelled bill
+SHALL still read as cancelled, unmistakably.
+
 The receipt SHALL NOT show any other person's identity: not the biller, not the
 approving manager, not the till.
 
@@ -72,7 +76,7 @@ and a name would turn every wrong digit into the disclosure of a person.
 ### Requirement: The receipt says how the bill was served
 
 The receipt SHALL say whether a bill was dine-in or takeaway when the bill recorded
-it, read from the bill's own stored value, beside the bill number.
+it, read from the bill's own stored value.
 
 The receipt SHALL NOT show a table number, and the reader SHALL NOT return one. A
 table is a label for the length of a meal, like the day's order number, which the

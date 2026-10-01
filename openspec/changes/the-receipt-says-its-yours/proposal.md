@@ -161,7 +161,7 @@ the real-bill steps below wait for real use, like #62's own.
 - **Render, in the landing repository**, the digits, the gold mark and the service
   line on all three renderings: the customer's page, its counter view
   (`?view=counter`, from #63), and the PDF.
-  - Service: *Dine-in* or *Takeaway* beside the bill number, or nothing for a
+  - Service: *Dine-in* or *Takeaway* at the left of the second row, or nothing for a
     bill that is neither (every bill before #60, and every bill at an outlet that
     chose neither).
 - **Amend the `public-bill-receipt` spec**:

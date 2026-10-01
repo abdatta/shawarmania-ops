@@ -167,13 +167,21 @@ because the two halves must agree:
   own outlet. #62's `public-bill-receipt` requirement (*show the points it used,
   earned and the balance*) still holds without a delta: the used points are the
   discount row.
-- **One row at the top** [owner, 2026-09-30]: *Bill 46 · Takeaway* at the left,
-  *30 Sep 2026 · 7:05 pm* at the right, in that 3-letter-month, 12-hour form to
-  match the ops app. It fits one row from 360 px up (measured, to a five-digit
-  bill); on a 320 px phone the date and time wrap whole to a second line, right
-  aligned. *(An intermediate version dropped the time of sale and printed the
-  table in the middle of the row; both were reversed before release, so #54's
-  requirement naming the time is untouched.)*
+- **Two rows at the top** [owner, 2026-09-30]: *Bill 12046* at the left and *30
+  Sep 2026 · 7:05 pm* at the right, in that 3-letter-month, 12-hour form to match
+  the ops app; then *Takeaway* at the left, *⭐ Gold* at the true centre and
+  *+91 ••••• •5801* at the right, each keeping its place when another is absent.
+  Measured: one row each from 360 px up (gold 4 px off centre at 360, exact at
+  390); below 360 px the number takes its own line at the right. The PDF draws the
+  same three columns. *(Released first as one row, `Bill 46 · Takeaway` beside the
+  date, with the digits and gold centred beneath; an intermediate version dropped
+  the time of sale and printed the table. #54's requirement naming the time is
+  untouched.)*
+- **A cancelled receipt gives no reason** [owner, 2026-09-30]. The reader stops
+  returning `void_reason` (migration `20260930010000`): it is the outlet's own
+  note, and a link can reach a stranger. The receipt still reads *Cancelled*,
+  unmistakably. This also retired the one case the widened tripwire refused a real
+  receipt for, a phone number typed into a cancellation reason.
 - **The tripwire is widened, not removed.** It still refuses a name or a biller by
   key. It now also refuses any string value in the payload carrying a run of ten
   or more digits, which is the shape of the leak this change could actually

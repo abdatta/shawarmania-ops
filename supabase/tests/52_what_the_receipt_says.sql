@@ -433,13 +433,18 @@ begin
   if v_receipt ->> 'status' <> 'void' then
     raise exception 'a voided bill did not read as cancelled: %', v_receipt ->> 'status';
   end if;
-  if v_receipt ->> 'void_reason' is null then
-    raise exception 'the cancellation carries no reason';
+  -- The reason is the outlet's own note, not the customer's business: the
+  -- receipt says cancelled and nothing more [owner, 2026-09-30].
+  if v_receipt ? 'void_reason' then
+    raise exception 'the receipt carries the cancellation''s reason';
+  end if;
+  if v_receipt::text like '%Rung twice by mistake%' then
+    raise exception 'the cancellation''s reason appears in the receipt';
   end if;
 end;
 $$;
 
-select pass('a bill voided after its link was sent reads as cancelled, on the same link');
+select pass('a bill voided after its link was sent reads as cancelled, on the same link, with no reason');
 
 do $$
 declare

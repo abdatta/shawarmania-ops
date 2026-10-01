@@ -683,11 +683,15 @@ address, `…/bill/<token>.pdf`, as an ordinary link rather than anything
 script-generated, because that is the only download path that behaves inside
 WhatsApp's in-app browser. Nothing downloads on its own when the page opens.
 
-One row under the outlet's name reads the bill number and **how the bill was
-served** — `Dine-in` or `Takeaway`, when the bill recorded it, and never the
-table — at the left, and the date and time at the right. Beneath it, **whose receipt it is without saying who** (the-receipt-says-its-yours, #58): `+91 ••••• •0042`, the
-last four digits of the number the customer gave, and for a customer who was gold
-at that outlet when they paid, `⭐ Gold` (the receipt already names its outlet). Both only on a bill with a
+Two rows sit under the outlet's name. The first reads the bill number at the left
+and the date and time at the right. The second reads **how the bill was served**
+— `Dine-in` or `Takeaway`, when the bill recorded it, and never the table — at
+the left, `⭐ Gold` at the centre for a customer who was gold at that outlet when
+they paid (the receipt already names its outlet), and at the right `+91 ••••• •0042`,
+the last four digits of the number the customer gave: **whose receipt it is
+without saying who** (the-receipt-says-its-yours, #58). Each keeps its place when
+another is absent; on a phone narrower than 360 px the number takes its own line.
+Gold and the digits appear only on a bill with a
 customer attached, so a skipped sale, and every bill rung before customers were
 identified by their number, shows neither. The page, the counter's view of it and
 the PDF say the same lines; the PDF draws the star rather than printing an emoji.
@@ -709,7 +713,8 @@ categories the bill actually carried — the same answer the manager's bill deta
 gives, for the same reason.
 
 **It is read fresh every time.** A bill voided after the link was sent reads
-`Cancelled`, unmistakably, rather than presenting a valid-looking receipt, and a
+`Cancelled`, unmistakably, rather than presenting a valid-looking receipt, and
+never says why (that is the outlet's own note), and a
 corrected tender reads as the corrected split. Nothing is stored as a file, so
 there is no version of it that can go stale.
 

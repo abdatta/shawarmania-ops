@@ -543,7 +543,9 @@ null `customer_id` and often a typed name and phone, and returns neither. Both
 facts are the bill's own snapshots, so a directory edit or a revoked membership
 never rewrites a receipt. It also returns `service_type` as the bill stored it,
 and never `table_number`: a table is a label for the length of a meal, like the
-order number. None of these keys is one the landing Worker's tripwire
+order number. It does not return `void_reason`: a cancelled bill reads as
+cancelled, and why is the outlet's own note. None of these keys is one the
+landing Worker's tripwire
 refuses, so either side can release first.
 
 **`bill_public_link_views`** — `id`, `token`, `viewed_at`,

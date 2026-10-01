@@ -754,17 +754,6 @@ exist, because nothing is deleted here and bills are financial records. So the
 choice was a real expiry or none, and revocation won because it acts now rather
 than in a year and never breaks a receipt a customer legitimately kept.
 
-### A phone number typed into a void reason refuses that receipt (#58)
-
-The landing Worker refuses to serve a receipt whose payload carries a run of ten
-digits anywhere, because that is the shape of a whole phone number and the
-receipt may show only the last four. A void reason is free text a manager types,
-so a reason like *Customer 9876543210 left* makes that one bill's receipt answer
-with the ordinary refusal rather than print the number on a bearer-token page.
-Accepted: refusal is the safe failure, it touches one bill, and the Worker logs
-`ReceiptNamesSomebody` so it is findable. The fix, if it ever happens, is a
-reworded reason on a fresh bill, not a looser tripwire.
-
 ### Forgotten-password recovery requires an administrator
 
 Every role, including Super Admin, intentionally has no self-service email
