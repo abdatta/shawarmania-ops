@@ -41,9 +41,15 @@ import { holdsRole } from '@/session/session'
  * shows staff their own shift's sales is a product question, while one showing
  * them the month is not.
  *
+ * **Staff read only what left the drawer.** A Biller or Employee is served cash
+ * expenses and nothing else, by `expenses_select` rather than by this screen:
+ * the owner's salaries and rent are entered here on the first of the month, and
+ * what a colleague is paid is not a counter's business
+ * (staff-see-only-what-leaves-the-drawer, which reversed #38's view that hiding
+ * an expense row protects nothing).
+ *
  * **The two-day window is where this opens, not a boundary.** No policy carries
- * a date predicate on reads, and an older expense is still readable — hiding an
- * expense row protects nothing, since it is not a revenue figure (design D2).
+ * a date predicate on reads, and an older cash expense is still readable.
  */
 
 /** Today and yesterday, by the outlet's own cutover rather than the calendar. */

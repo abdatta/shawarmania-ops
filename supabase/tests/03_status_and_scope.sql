@@ -113,8 +113,10 @@ select is(
 
 select is((select count(*) from public.bills), 0::bigint,
   'employee reads no bills');
-select is((select count(*) from public.expenses), 3::bigint,
-  'employee reads their outlet expenses');
+-- Two of Kalyani's three seeded expenses: the cash ones. The UPI electricity
+-- bill is not staff's to read (staff-see-only-what-leaves-the-drawer).
+select is((select count(*) from public.expenses), 2::bigint,
+  'employee reads their outlet''s cash expenses');
 select is((select count(*) from public.menu_items), 0::bigint,
   'employee has no menu surface');
 

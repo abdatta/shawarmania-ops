@@ -660,9 +660,10 @@ values
   ('00000000-0000-4000-a000-000000000002', current_date - 2, 'Packaging',
    'Pita and packaging (synthetic)', 10000, true, '10000000-0000-4000-a000-000000000003'),
   -- The owner's remote entry: recorded by the Super Admin, at an outlet they
-  -- hold no assignment at, non-cash by necessity — `expenses_insert` refuses
-  -- `cash` from that branch, so this row cannot move Kanchrapara's drawer
-  -- (multi-outlet-people, design D8).
+  -- hold no assignment at. Non-cash, so it moves no drawer and staff cannot read
+  -- it. The owner may also record a remote cash expense, which is marked on
+  -- the surface because it does move the drawer (the-ledger-opens-to-the-outlet,
+  -- design D9).
   ('00000000-0000-4000-a000-000000000002', current_date - 1, 'Platform fee',
    'Aggregator platform fee, paid centrally (synthetic)', 62000, false,
    '10000000-0000-4000-a000-000000000001');

@@ -13,6 +13,10 @@ import { personaFixtures } from './fixtures/personas'
 import type { DemoStore } from './store'
 import { captureMockCategory } from './expense-categories'
 
+/** `expense_guard()`'s refusal, word for word, so demo mode says what production says. */
+const STAFF_CASH_ONLY =
+  'staff record only what leaves the drawer; a manager or the owner records the rest'
+
 const PEOPLE: ReadonlyMap<string, string | null> = new Map(
   Object.values(personaFixtures).map((persona) => [persona.profile.id, persona.profile.full_name]),
 )
@@ -93,6 +97,19 @@ export function createMockExpensesAdapter(
     }
   }
 
+  /**
+   * Staff handle the drawer and nothing else, so they read and record only what
+   * left it. The mirror of `expenses_select`, `expenses_insert` and
+   * `expenses_update`'s staff branches and of `expense_guard()`'s sentence
+   * (staff-see-only-what-leaves-the-drawer).
+   */
+  const staffMayRead = (row: Tables<'expenses'>) => !isStaff || row.is_cash
+
+  function refuseStaffNonCash(isCash: boolean | undefined): void {
+    if (!isStaff || isCash !== false) return
+    throw new ExpenseActionError('refused', STAFF_CASH_ONLY)
+  }
+
   function find(id: string): Tables<'expenses'> {
     const row = store.expenses.find((expense) => expense.id === id)
     if (!row) throw new ExpenseActionError('not_found', 'That expense is no longer there.')
@@ -113,6 +130,7 @@ export function createMockExpensesAdapter(
       refuseAccess(outletId)
       return store.expenses
         .filter((row) => row.outlet_id === outletId && row.business_date === businessDate)
+        .filter(staffMayRead)
         .sort((a, b) => b.created_at.localeCompare(a.created_at))
         .map(toRecord)
     },
@@ -121,6 +139,7 @@ export function createMockExpensesAdapter(
       refuseAccess(outletId)
       return store.expenses
         .filter((row) => row.outlet_id === outletId && businessDates.includes(row.business_date))
+        .filter(staffMayRead)
         .sort(
           (a, b) =>
             b.business_date.localeCompare(a.business_date) ||
@@ -132,6 +151,7 @@ export function createMockExpensesAdapter(
     async createExpense(expense: NewExpense) {
       refuseAccess(expense.outletId)
       refuseStaffWrite({ businessDate: expense.businessDate })
+      refuseStaffNonCash(expense.isCash)
       validate(expense)
       const now = new Date().toISOString()
       const row: Tables<'expenses'> = {
@@ -162,11 +182,15 @@ export function createMockExpensesAdapter(
     async updateExpense(id, patch: ExpensePatch) {
       const existing = find(id)
       refuseAccess(existing.outlet_id)
+      if (!staffMayRead(existing)) {
+        throw new ExpenseActionError('not_found', 'That expense is no longer there.')
+      }
       refuseVoided(existing)
       refuseStaffWrite({
         businessDate: existing.business_date,
         recordedBy: existing.recorded_by ?? undefined,
       })
+      refuseStaffNonCash(patch.isCash)
       const amountPaise = patch.amountPaise ?? existing.amount_paise
       const category = patch.category ?? existing.category
       validate({ amountPaise, category })
@@ -186,6 +210,9 @@ export function createMockExpensesAdapter(
     async voidExpense(id, reason) {
       const existing = find(id)
       refuseAccess(existing.outlet_id)
+      if (!staffMayRead(existing)) {
+        throw new ExpenseActionError('not_found', 'That expense is no longer there.')
+      }
       refuseVoided(existing)
       refuseStaffWrite({
         businessDate: existing.business_date,

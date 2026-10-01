@@ -104,7 +104,8 @@ trading day there is nothing to hand over from.
 While it stood it was no longer owner-only. `the-ledger-opens-to-the-outlet` gave
 the **day record** to managers at the outlets they are assigned to, and the
 **expense record** to everyone at the outlet, because the person who spends the
-money was the one person who could not write it down. What that opened, and what
+money was the one person who could not write it down. Staff now read only its
+cash rows (`staff-see-only-what-leaves-the-drawer`; see below). What that opened, and what
 it deliberately did not, is in
 [Roles and permissions](ROLES_AND_PERMISSIONS.md).
 
@@ -197,6 +198,20 @@ day's carried count, its cash out and the following opening reproduce the
 notebook's own arithmetic. The rows were the value here; the surface was not.
 Dropping the tables without the carry-over would not have satisfied the removal,
 and the `manual-ledger` capability spec said so as a testable requirement.
+
+## Staff see what left the drawer, including advances
+
+A Biller, an Employee and the counter tablet read only cash expenses, so the
+salaries, rent and supplier bills the owner enters by transfer are invisible to
+them. Two things stay visible by decision (owner, 2026-10-01):
+
+- **A cash salary advance from the drawer**, with its note. It is a cash
+  expense like any other, and production holds a few: one of Rs 2,500 and two of
+  Rs 100 by August 2026, the small ones recorded by staff themselves. Hiding them
+  would take a per-category privacy setting that a freshly typed category would
+  miss. Revisit if large advances start leaving the drawer.
+- **Category names** in the suggestion list, such as *Salary* or *Rent*. A name
+  carries no amount, row or person.
 
 ## Expense double-counting is warned about, not prevented
 

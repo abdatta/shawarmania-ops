@@ -160,9 +160,9 @@ assignment cannot be ended by anyone, including its holder.
 | **Manual ledger** (temporary, #36) |
 | Read a day or a month | ✓ all | R own outlets | — | — |
 | Record and correct days | ✓ all | ✓ own outlets | — | — |
-| Read the outlet's expenses | ✓ all | ✓ own outlets | R own outlet | R own outlet |
-| Record an expense | ✓ all | ✓ own outlets, any date | ✓ own outlet, today | ✓ own outlet, today |
-| Correct or withdraw an expense | ✓ all | ✓ own outlets | own rows, today | own rows, today |
+| Read the outlet's expenses | ✓ all | ✓ own outlets | R own outlet, cash only | R own outlet, cash only |
+| Record an expense | ✓ all | ✓ own outlets, any date | ✓ own outlet, today, cash only | ✓ own outlet, today, cash only |
+| Correct or withdraw an expense | ✓ all | ✓ own outlets | own rows, today, cash only | own rows, today, cash only |
 | Delete an expense | — | — | — | — |
 
 **Expense categories are business-wide suggestions, not authority.** Any active
@@ -264,9 +264,19 @@ directly rather than inheriting it from the cross-outlet sweep, and
 `supabase/tests/01_schema_coverage.sql` pins the absence as a catalog fact so a
 later migration fails by name.
 
-The **expense record** is the opposite: everyone at the outlet reads every row,
-whoever recorded it, so the surface can show at a glance which rows are yours to
-fix. Staff record against the outlet's current business day only and correct or
+The **expense record** is the opposite, within one limit: everyone at the outlet
+reads every **cash** row, whoever recorded it, so the surface can show at a glance
+which rows are yours to fix and nobody records the same vegetables twice. **Staff
+and the counter tablet read and record only cash expenses**
+(`staff-see-only-what-leaves-the-drawer`, owner, 2026-10-01). The drawer is the
+only money a staff member handles: they cannot pay with the business's UPI, and a
+spend from their own UPI is repaid from the drawer, which is a cash expense. A
+salary, rent or a supplier paid by transfer is therefore invisible to them, and
+`expenses_select` enforces that rather than the screen, because a colleague's
+salary is precisely what a hand-crafted request would go looking for. A staff or
+counter write that is not cash is refused by `expense_guard()` with a sentence
+naming who records the rest. The owner and a manager read and record either
+method, choosing it every time. Staff record against the outlet's current business day only and correct or
 withdraw only their own rows while that day is still running; both limits are the
 guard's, because both need the outlet's own cutover. A manager or the owner
 reaches any row on any date, which is what makes the freeze a routing rule rather

@@ -44,9 +44,10 @@ using (
 )
 ```
 
-The owner and manager disjuncts are untouched. A person who is a manager *and* a
-biller at the same outlet reads everything, through the manager branch. Someone
-who manages outlet B and bills at outlet A reads only cash at A.
+The owner and manager disjuncts are untouched. A person holds at most one live
+role per outlet (`assignments_one_live_per_person_outlet`), so nobody is both a
+manager and staff at the same outlet. Someone who manages outlet B and bills at
+outlet A reads everything at B and only cash at A.
 
 **Why a policy and not the screen.** The point is to keep a salary from being
 read. A screen filter leaves the row one REST call away from any staff session,

@@ -241,9 +241,11 @@ select is((select count(*) from public.outlets), 2::bigint,
   'two_outlets reads both outlet rows, because they work at both');
 select is((select count(*) from public.assignments), 2::bigint,
   'two_outlets sees both of their own assignments and nobody else''s');
--- Expenses are an outlet-wide staff surface, even for an Employee.
-select is((select count(*) from public.expenses), 5::bigint,
-  'two_outlets reads expenses at both assigned outlets and nowhere else');
+-- Expenses are an outlet-wide staff surface, even for an Employee, but only the
+-- ones that left the drawer (staff-see-only-what-leaves-the-drawer): the seed's
+-- three cash rows, not the UPI electricity bill or the owner's platform fee.
+select is((select count(*) from public.expenses), 3::bigint,
+  'two_outlets reads the cash expenses at both assigned outlets and nothing else');
 select is((select count(*) from public.inventory_items), 0::bigint,
   'two_outlets reads no stock at either outlet');
 

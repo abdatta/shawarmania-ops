@@ -48,6 +48,7 @@ describe('demo reset', () => {
     await user.click(screen.getByRole('button', { name: 'Add expense' }))
     await user.type(screen.getByLabelText('Expense category'), 'Reset supplies')
     await user.type(screen.getByLabelText('Amount (₹)'), '175')
+    await user.selectOptions(screen.getByLabelText('Paid with'), 'cash')
     await user.type(screen.getByLabelText('Note (optional)'), 'Reset probe')
     await user.click(screen.getByRole('button', { name: 'Record expense' }))
     await waitFor(() =>
@@ -82,6 +83,7 @@ describe('demo reset', () => {
     await user.click(screen.getByRole('button', { name: 'Add expense' }))
     await user.type(screen.getByLabelText('Expense category'), 'Freezer repair')
     await user.type(screen.getByLabelText('Amount (₹)'), '900')
+    await user.selectOptions(screen.getByLabelText('Paid with'), 'cash')
     await user.type(screen.getByLabelText('Note (optional)'), 'It read minus four this morning')
     await user.click(screen.getByRole('button', { name: 'Record expense' }))
     await waitFor(() =>

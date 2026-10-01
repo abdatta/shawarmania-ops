@@ -341,6 +341,8 @@ describe('Cash Expenses opens the expense list, by business date', () => {
 
     await user.type(await screen.findByTestId('expense-category'), 'Vegetables')
     await user.type(screen.getByTestId('expense-amount'), '240')
+    // A manager chooses the method every time; this one left the drawer.
+    await user.selectOptions(screen.getByTestId('expense-is-cash'), 'cash')
     await user.click(screen.getByRole('button', { name: /record expense/i }))
 
     // **Dated to the group it was recorded in**, which is the whole point: an
@@ -351,6 +353,7 @@ describe('Cash Expenses opens the expense list, by business date', () => {
       businessDate: '2026-08-28',
       outletId: OUTLET_KALYANI_ID,
       amountPaise: 24000,
+      isCash: true,
     })
 
     // And the drawer is re-read, so `expectedNowPaise` moves without a refresh.

@@ -40,6 +40,11 @@ export interface ExpenseListViewer {
    * Whether they may correct and withdraw rows somebody else recorded, on any
    * date. True for an owner and for a manager at this outlet; false for staff,
    * whose reach the database narrows to their own rows on the running day.
+   *
+   * It also decides the payment method. Staff and the counter handle the drawer
+   * and nothing else, so they record cash and are never asked; the owner and a
+   * manager are asked every time, with nothing pre-chosen
+   * (staff-see-only-what-leaves-the-drawer).
    */
   mayTouchAnyRow: boolean
 }
@@ -70,11 +75,19 @@ export interface ExpenseListProps {
 interface ExpenseDraft {
   category: string
   amount: string
-  isCash: boolean
+  /** Null until the owner or a manager chooses. Staff drafts are always cash. */
+  isCash: boolean | null
   note: string
 }
 
-const BLANK_EXPENSE: ExpenseDraft = { category: '', amount: '', isCash: true, note: '' }
+/**
+ * A new expense's starting point. **No method is pre-chosen for the owner or a
+ * manager**: a month of salaries entered quickly, one missed tap, and a
+ * default of cash would have the drawer expect money that was never in it.
+ */
+function blankExpense(mayTouchAnyRow: boolean): ExpenseDraft {
+  return { category: '', amount: '', isCash: mayTouchAnyRow ? null : true, note: '' }
+}
 
 /** "someone" rather than a blank, for a name the reader genuinely cannot resolve. */
 function nameOf(actor: ExpenseActor | null): string {
@@ -99,7 +112,7 @@ export function ExpenseList({
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<ExpenseRecord | null>(null)
-  const [draft, setDraft] = useState<ExpenseDraft>(BLANK_EXPENSE)
+  const [draft, setDraft] = useState<ExpenseDraft>(() => blankExpense(viewer.mayTouchAnyRow))
   const [withdrawing, setWithdrawing] = useState<ExpenseRecord | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
 
@@ -162,13 +175,18 @@ export function ExpenseList({
       setError('Choose or type what the money was spent on.')
       return
     }
+    const isCash = draft.isCash
+    if (isCash === null) {
+      setError('Choose how it was paid.')
+      return
+    }
 
     setBusy(true)
     try {
       if (editing) {
         await adapter.updateExpense(editing.id, {
           category,
-          isCash: draft.isCash,
+          isCash,
           amountPaise: rupeesToPaise(rupees),
           note: draft.note,
         })
@@ -177,14 +195,14 @@ export function ExpenseList({
           outletId,
           businessDate,
           category,
-          isCash: draft.isCash,
+          isCash,
           amountPaise: rupeesToPaise(rupees),
           note: draft.note,
         })
       }
       setOpen(false)
       setEditing(null)
-      setDraft(BLANK_EXPENSE)
+      setDraft(blankExpense(viewer.mayTouchAnyRow))
       await Promise.all([onChanged(), loadCategories()])
     } catch (cause) {
       // Nothing is cleared. A failed submit with no connection keeps every field
@@ -214,7 +232,7 @@ export function ExpenseList({
           onClick={() => {
             setError(null)
             setEditing(null)
-            setDraft(BLANK_EXPENSE)
+            setDraft(blankExpense(viewer.mayTouchAnyRow))
             void loadCategories()
             setOpen(true)
           }}
@@ -654,20 +672,33 @@ export function ExpenseList({
             />
           </Field>
 
-          <Field label="Paid with" id="expense-is-cash">
-            <Select
-              id="expense-is-cash"
-              value={draft.isCash ? 'cash' : 'other'}
-              data-testid="expense-is-cash"
-              onChange={(event) => setDraft({ ...draft, isCash: event.target.value === 'cash' })}
-            >
-              <option value="cash">Cash, out of the drawer</option>
-              <option value="other">Anything else — UPI, transfer, cheque</option>
-            </Select>
-            <p className="text-xs text-content-muted">
-              Only cash reaches the day&rsquo;s count. Everything else is still an expense.
+          {viewer.mayTouchAnyRow ? (
+            <Field label="Paid with" id="expense-is-cash">
+              <Select
+                id="expense-is-cash"
+                required
+                value={draft.isCash === null ? '' : draft.isCash ? 'cash' : 'other'}
+                data-testid="expense-is-cash"
+                onChange={(event) => setDraft({ ...draft, isCash: event.target.value === 'cash' })}
+              >
+                <option value="" disabled>
+                  Choose…
+                </option>
+                <option value="cash">Cash, out of the drawer</option>
+                <option value="other">Anything else — UPI, transfer, cheque</option>
+              </Select>
+              <p className="text-xs text-content-muted">
+                Only cash reaches the day&rsquo;s count. Everything else is still an expense.
+              </p>
+            </Field>
+          ) : (
+            // No field: what staff record is what left the drawer, and the
+            // database refuses anything else.
+            <p className="text-xs text-content-muted" data-testid="expense-cash-only">
+              Cash, out of the drawer. Anything paid another way is for a manager or the owner to
+              record.
             </p>
-          </Field>
+          )}
         </form>
       </FormSheet>
 

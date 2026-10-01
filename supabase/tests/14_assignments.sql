@@ -71,8 +71,9 @@ select set_config('request.jwt.claims',
                     'app_role', 'super_admin', 'app_outlet_id', null)::text, true);
 set local role authenticated;
 
-select is((select count(*) from public.expenses), 3::bigint,
-  'a forged super_admin claim buys no extra reach beyond the employee''s outlet expenses');
+-- Two: the employee's outlet's cash expenses. A real owner would read all five.
+select is((select count(*) from public.expenses), 2::bigint,
+  'a forged super_admin claim buys no extra reach beyond the employee''s outlet''s cash expenses');
 select is((select count(*) from public.outlets), 1::bigint,
   'and still sees exactly the one outlet they are assigned to');
 

@@ -356,9 +356,12 @@ describe('a person assigned to two outlets', () => {
   })
 
   it('gets the staff expense surface at both outlets but no manager inventory surface', async () => {
-    const expenses = await split.from('expenses').select('id')
+    // Staff read only what leaves the drawer (#65): the seed's three cash rows,
+    // not the electricity bill or the owner's platform fee.
+    const expenses = await split.from('expenses').select('id, is_cash')
     expect(expenses.error).toBeNull()
-    expect(expenses.data).toHaveLength(5)
+    expect(expenses.data).toHaveLength(3)
+    expect(expenses.data?.every((row) => row.is_cash)).toBe(true)
 
     const inventory = await split.from('inventory_items').select('id')
     expect(inventory.error).toBeNull()
@@ -1286,6 +1289,37 @@ describe('the promoted expense record over HTTP', () => {
       expect(theirs.data).toEqual([])
     })
 
+    it(`${persona.email} reads the drawer's expenses and no other`, async () => {
+      const client = (await session(persona.email)).client
+      const mine = await client
+        .from('expenses')
+        .select('id, is_cash')
+        .eq('outlet_id', OUTLETS.kalyani)
+      expect(mine.error).toBeNull()
+      expect(mine.data?.length).toBeGreaterThan(0)
+      expect(mine.data?.every((row) => row.is_cash)).toBe(true)
+
+      // Asked for by name, the seed's UPI electricity bill is still not there.
+      const upi = await client.from('expenses').select('id').eq('is_cash', false)
+      expect(upi.error).toBeNull()
+      expect(upi.data).toEqual([])
+    })
+
+    it(`${persona.email} is refused a non-cash expense at their own outlet`, async () => {
+      const client = (await session(persona.email)).client
+      const result = await client.from('expenses').insert({
+        outlet_id: OUTLETS.kalyani,
+        business_date: resolveBusinessDate(new Date(), '04:00'),
+        category: 'Other',
+        is_cash: false,
+        amount_paise: 100,
+      })
+      expect(result.error?.code).toBe('42501')
+      expect(result.error?.message).toBe(
+        'staff record only what leaves the drawer; a manager or the owner records the rest',
+      )
+    })
+
     it(`${persona.email} cannot record at another outlet`, async () => {
       const client = (await session(persona.email)).client
       const result = await client.from('expenses').insert({
@@ -1298,6 +1332,21 @@ describe('the promoted expense record over HTTP', () => {
       expect(result.error?.code).toBe('42501')
     })
   }
+
+  it('a tablet holding a live shift reads the drawer’s expenses and no other', async () => {
+    const tablet = (await session(PERSONAS.deviceKalyani.email)).client
+    const result = await tablet.from('expenses').select('id, is_cash')
+    expect(result.error).toBeNull()
+    expect(result.data?.length).toBeGreaterThan(0)
+    expect(result.data?.every((row) => row.is_cash)).toBe(true)
+  })
+
+  it('a manager still reads the non-cash expenses at their outlet', async () => {
+    const fa = (await session(PERSONAS.faKalyani.email)).client
+    const result = await fa.from('expenses').select('id').eq('is_cash', false)
+    expect(result.error).toBeNull()
+    expect(result.data?.length).toBeGreaterThan(0)
+  })
 
   it('an owner may read both outlets', async () => {
     const owner = (await session(PERSONAS.superAdmin.email)).client

@@ -8,9 +8,8 @@ record only cash expenses at its outlet. An expense paid by any other method SHA
 be invisible to them. The database SHALL enforce this, not the screen, so it holds
 against a hand-crafted request with a valid session.
 
-The restriction SHALL apply only through the staff and counter routes. A person
-who also manages the outlet, and the owner, SHALL read every expense there as
-before.
+The restriction SHALL apply only through the staff and counter routes. A manager
+at the outlet, and the owner, SHALL read every expense there as before.
 
 A refused write SHALL return a sentence naming who records the rest, so a queued
 counter expense refused after it was written carries words the operator can act
@@ -45,10 +44,9 @@ Narrowing staff reads SHALL NOT change any drawer figure.
   to non-cash
 - **THEN** the database refuses the correction and the row is unchanged
 
-#### Scenario: A manager who also bills reads everything
+#### Scenario: A manager still reads everything
 
-- **WHEN** a person holding both the Franchise Admin and the Biller role at an
-  outlet lists that outlet's expenses
+- **WHEN** a Franchise Admin lists the expenses of an outlet they are assigned to
 - **THEN** cash and non-cash expenses are both returned
 
 #### Scenario: The drawer is unchanged by the narrowing

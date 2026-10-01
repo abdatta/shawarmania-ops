@@ -140,6 +140,7 @@ describe('the outlet expenses surface', () => {
     await userEvent.click(screen.getByTestId('add-ledger-expense'))
     await userEvent.type(screen.getByRole('combobox', { name: 'Expense category' }), 'Vegetables')
     await userEvent.type(screen.getByTestId('expense-amount'), '125')
+    await userEvent.selectOptions(screen.getByTestId('expense-is-cash'), 'cash')
     await userEvent.click(screen.getByRole('button', { name: 'Record expense' }))
 
     await waitFor(() => {
@@ -147,6 +148,69 @@ describe('the outlet expenses surface', () => {
         expect.objectContaining({ businessDate: yesterday }),
       )
     })
+  })
+
+  it('makes the owner and a manager choose how it was paid, every time', async () => {
+    for (const role of ['super_admin', 'franchise_admin'] as const) {
+      const base = adaptersFor(role, () => [])
+      const createExpense = vi.fn(base.adapters.expenses.createExpense)
+      const view = renderExpenses(role, {
+        ...base.adapters,
+        expenses: { ...base.adapters.expenses, createExpense },
+      })
+
+      await userEvent.click(await screen.findByTestId('add-ledger-expense'))
+      const method = screen.getByTestId('expense-is-cash')
+      expect(method).toHaveValue('')
+      expect(within(method).getByRole('option', { name: 'Choose…' })).toBeInTheDocument()
+
+      await userEvent.type(screen.getByRole('combobox', { name: 'Expense category' }), 'Salary')
+      await userEvent.type(screen.getByTestId('expense-amount'), '15000')
+      await userEvent.click(screen.getByRole('button', { name: 'Record expense' }))
+      expect(await screen.findByText('Choose how it was paid.')).toBeInTheDocument()
+      expect(createExpense).not.toHaveBeenCalled()
+
+      await userEvent.selectOptions(method, 'other')
+      await userEvent.click(screen.getByRole('button', { name: 'Record expense' }))
+      await waitFor(() => {
+        expect(createExpense).toHaveBeenCalledWith(expect.objectContaining({ isCash: false }))
+      })
+      view.unmount()
+    }
+  })
+
+  it('opens a correction on the method the expense already has', async () => {
+    const { adapters } = adaptersFor('franchise_admin', (dates) =>
+      dates.includes(today) ? [expense('upi', today, 2_000, { isCash: false })] : [],
+    )
+    renderExpenses('franchise_admin', adapters)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Actions for Expense upi' }))
+    await userEvent.click(await screen.findByTestId('edit-expense-upi'))
+    expect(screen.getByTestId('expense-is-cash')).toHaveValue('other')
+  })
+
+  it('asks staff no payment method and records cash', async () => {
+    for (const role of ['biller', 'employee'] as const) {
+      const base = adaptersFor(role, () => [])
+      const createExpense = vi.fn(base.adapters.expenses.createExpense)
+      const view = renderExpenses(role, {
+        ...base.adapters,
+        expenses: { ...base.adapters.expenses, createExpense },
+      })
+
+      await userEvent.click(await screen.findByTestId('add-ledger-expense'))
+      expect(screen.queryByTestId('expense-is-cash')).not.toBeInTheDocument()
+      expect(screen.getByTestId('expense-cash-only')).toHaveTextContent('Cash, out of the drawer')
+
+      await userEvent.type(screen.getByRole('combobox', { name: 'Expense category' }), 'Gas')
+      await userEvent.type(screen.getByTestId('expense-amount'), '900')
+      await userEvent.click(screen.getByRole('button', { name: 'Record expense' }))
+      await waitFor(() => {
+        expect(createExpense).toHaveBeenCalledWith(expect.objectContaining({ isCash: true }))
+      })
+      view.unmount()
+    }
   })
 
   it('stops the forward step and calendar at the owner’s outlet-local today', async () => {
