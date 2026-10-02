@@ -72,10 +72,13 @@
 
 - [x] 5.1 Commit locally in both repositories. **Do not push or deploy**: the owner
       picks the windows (`no-pushes-while-the-counter-trades`).
-- [ ] 5.2 🧍 Release, in order: the landing push and `npm run worker:deploy`; then
+- [x] 5.2 🧍 Release, in order: the landing push and `npm run worker:deploy`; then
       the ops push. Check after the first that `https://shawarmania.in/bill?t=`
       reaches the Worker (its refusal carries `X-Robots-Tag`; GitHub Pages' 404 does
-      not), and that `/`, `/menu/` and `/privacy/` are unchanged.
+      not), and that `/`, `/menu/` and `/privacy/` are unchanged. *(Done 2026-10-03
+      ~01:25-01:40 IST, on the owner's word after service. The exact `bill` route
+      missed every `/bill?t=`; corrected to `bill*` within minutes, design D3. Ops
+      Deploy run 37057980641 green; the live bundle builds `/bill?t=`.)*
 - [ ] 5.3 **PHASE GATE — the ROADMAP.md checkpoint for #66**, walked: every link the
       app hands out reads `https://shawarmania.in/bill?t=<token>`; it opens the
       receipt, the counter view and the PDF as before; every mangled `t` gets the
@@ -85,3 +88,10 @@
 - [ ] 5.4 🧍 The owner registers the dynamic CTA `https://shawarmania.in/bill?` and
       submits the template with a live receipt as the URL sample. Archive once DLT
       has accepted it and a real receipt has been opened at the new address.
+      *(2026-10-03: the CTA is submitted on Airtel's portal as a DynamicURL, its
+      sample a live receipt of a bill with no customer attached: "1 parameters are
+      added, 0 failed validation", pending approval. The template cannot be submitted
+      until then: its URL variable's value is a dropdown of approved CTAs, empty
+      meanwhile. Settled on the form already: header DEDTTL, Service Implicit, Food
+      and Beverages, domain shawarmania.in, `{#var#}` in the content typed Numeric,
+      Numeric, URL.)*
