@@ -1,5 +1,6 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test'
 
+import { MAX_BILLING_RETRY_MS } from '../src/outbox/drain'
 import {
   AFTER_LOCAL_ACCEPTANCE_MS,
   LOCAL_ANON_KEY,
@@ -35,8 +36,18 @@ import {
 const GOLD_CUSTOMER = '80000000-0000-4000-a000-000000000001'
 const GOLD_PHONE_DIGITS = '9000000001'
 const GOLD_PHONE = '+919000000001'
-/** How long a reconnected till may take to drain what it queued. */
-const DRAIN_MS = 60_000
+/**
+ * How long a reconnected till may take to drain what it queued: the outbox's
+ * longest retry delay, then room to deliver the chain waiting behind it.
+ *
+ * Not less. A command that failed offline keeps its backoff in IndexedDB, and
+ * only the `online` event pulls it forward. The reload that follows reconnect
+ * can win that race, or abort a delivery in flight and leave it a fresh full
+ * delay, and the new page then waits it out. A budget equal to the delay itself
+ * passed on an idle machine with under two seconds to spare and failed on a
+ * loaded one, as `stalled`, then `pending`, then out of time.
+ */
+const DRAIN_MS = MAX_BILLING_RETRY_MS + 30_000
 /**
  * How long an offline till takes to draw a card it just saved: the pipeline
  * read has to fail through the network stack before the queue answers it, as
@@ -177,9 +188,25 @@ function cardsAt(page: Page, text: string) {
     .filter({ hasText: text })
 }
 
+/**
+ * Cards this till rang and has not yet sent, which carry no order number.
+ *
+ * For an order no run-unique text can find. The gold member is the seed's one
+ * customer, so "Takeaway" also matches a member takeaway an earlier, failed run
+ * left on the server, and a rerun without a reset found two of them. Anything
+ * the server already holds has a number, so this run's offline work is exactly
+ * the unnumbered cards.
+ */
+function unsentCardsAt(page: Page, text: string) {
+  return page
+    .getByTestId('counter-activity-rail')
+    .locator('[data-testid^="open-order-local-"]')
+    .filter({ hasText: text })
+}
+
 /** Pay an open order from its card, as a biller does. */
-async function payCard(page: Page, text: string) {
-  const paid = cardsAt(page, text).getByRole('button', {
+async function payCard(page: Page, cards: Locator) {
+  const paid = cards.getByRole('button', {
     name: 'Paid',
     exact: true,
     pressed: false,
@@ -196,8 +223,7 @@ async function payCard(page: Page, text: string) {
  * Mark a paid order prepared, which takes it off the rail into the shift's
  * bills, so a rerun's rail holds only its own work.
  */
-async function serveCard(page: Page, text: string) {
-  const card = cardsAt(page, text)
+async function serveCard(card: Locator) {
   await card.getByRole('button', { name: 'Prepared', exact: true, pressed: false }).click()
   await expect(card).toHaveCount(0, { timeout: OFFLINE_READ_MS })
 }
@@ -297,8 +323,8 @@ test('orders rung offline with a table, bags and a waiver each settle exactly on
     await expect(page.getByTestId('bill-quantity-packaging')).toHaveText('2')
     await expect(page.getByTestId('bill-line-packaging')).toHaveAttribute('data-waived', 'true')
     await saveOrder(page)
-    await payCard(page, 'Takeaway')
-    await serveCard(page, 'Takeaway')
+    await payCard(page, unsentCardsAt(page, 'Takeaway'))
+    await serveCard(unsentCardsAt(page, 'Takeaway'))
 
     // 2. Dine-in at table 3.
     await addShawarma(page)
@@ -326,8 +352,8 @@ test('orders rung offline with a table, bags and a waiver each settle exactly on
     await expect(page.getByTestId('editing-order-pin')).toHaveCount(0)
 
     // The second payment, still offline.
-    await payCard(page, bagsCustomer)
-    await serveCard(page, bagsCustomer)
+    await payCard(page, cardsAt(page, bagsCustomer))
+    await serveCard(cardsAt(page, bagsCustomer))
     await page.waitForTimeout(AFTER_LOCAL_ACCEPTANCE_MS)
 
     // Nothing has reached the server yet.
