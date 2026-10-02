@@ -378,8 +378,35 @@ then says the menu was not found, exactly as for an address nobody holds.
 The receipt page is **not deployed from this repo.** It is a Cloudflare Worker
 living in the brand site's repo,
 [`abdatta/shawarmania`](https://github.com/abdatta/shawarmania), routed on
-`shawarmania.in/bill/*`. This repo owns the link, the token and the reader
-function; that one owns the page and the PDF. Neither half is useful alone.
+`shawarmania.in/bill*`. This repo owns the link, the
+token and the reader function; that one owns the page and the PDF. Neither half is
+useful alone.
+
+### The address, and what it is registered as *(#66)*
+
+| Address | Serves |
+|---|---|
+| `https://shawarmania.in/bill?t=<token>` | the receipt; `&view=counter` is the counter's View receipt |
+| `https://shawarmania.in/bill/<token>.pdf` | its PDF, linked from the page |
+| `https://shawarmania.in/bill/<token>` | a 301 to the first row, keeping `view` |
+
+**`https://shawarmania.in/bill?` is registered on Airtel DLT as the sender's
+dynamic CTA URL**, and the receipt SMS template's `{#url#}` is validated against it.
+So the part before the `?` must never change: a new domain, a new path or a link
+shortener is a new CTA registration, and until it is approved every receipt SMS
+fails DLT's check. Changing `VITE_RECEIPT_BASE_URL` in production is the same
+event.
+
+The Worker's receipt route is `shawarmania.in/bill*`. **Not an exact
+`shawarmania.in/bill`**: Cloudflare does not match a pattern with no wildcard once
+the URL carries a query string, which is every receipt link. That was deployed
+first on 2026-10-02 and let `/bill?t=…` fall through to GitHub Pages' 404 for a
+few minutes. The site has no page under `/bill`, and the Worker answers anything
+there it does not own with a 404.
+
+**A change to the address releases the Worker first.** The live app keeps handing
+out the old shape until its own deploy lands, and the counter's View receipt frames
+it; a Worker that answers both shapes is what makes the order safe.
 
 ### The DNS move — completed 2026-09-10
 
@@ -406,7 +433,7 @@ The completed runbook was:
    nameservers.** This is the step that makes the move safe.
 3. Set SSL mode to **Full**.
 4. Switch the nameservers at Hostinger.
-5. Add the Worker route on `/bill/*`.
+5. Add the Worker route on `/bill/*` (`/bill*` since #66).
 
 GitHub Pages keeps serving everything, including this app on `ops`; Cloudflare
 only adds the one route. **Rollback is switching the nameservers back** to

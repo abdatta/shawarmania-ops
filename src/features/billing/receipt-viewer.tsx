@@ -26,11 +26,12 @@ import { isDemoReceiptLink } from '@/lib/receipt-link'
  * and `offline` events, so the frame appears when the tablet comes back. A
  * captive portal that claims to be online still shows a blank frame; accepted.
  *
- * **The page is asked for its counter view** (`?view=counter`): the customer's
- * receipt trimmed for a pop-up, without Download PDF (a dead control in here),
- * "Paid by" or the tax-invoice sentence, and reporting its height, because this
- * pop-up cannot measure a page on another origin. The pop-up grows to that
- * height, up to 92% of the screen, and scrolls beyond it [owner, 2026-09-30].
+ * **The page is asked for its counter view** (`view=counter`, beside the link's
+ * own `t`): the customer's receipt trimmed for a pop-up, without Download PDF (a
+ * dead control in here), "Paid by" or the tax-invoice sentence, and reporting its
+ * height, because this pop-up cannot measure a page on another origin. The pop-up
+ * grows to that height, up to 92% of the screen, and scrolls beyond it [owner,
+ * 2026-09-30].
  * Where no report comes, it keeps a fixed fallback height, so neither side's
  * deploy can break the other.
  *

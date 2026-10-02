@@ -2,10 +2,17 @@
  * The link a customer opens to read their own bill.
  *
  * It does not point at this app. The receipt is served by a Cloudflare Worker
- * on the brand site, `shawarmania.in/bill/<token>`, because that is where the
+ * on the brand site, `shawarmania.in/bill?t=<token>`, because that is where the
  * customer-facing look belongs and because Supabase never ships a rendered
  * receipt — it answers with about two kilobytes of JSON and Cloudflare ships
  * every byte the customer actually downloads.
+ *
+ * **The token goes after a `?`, and nothing else varies** (a-receipt-link-fits-
+ * an-sms). The link is sent by SMS, and an Indian SMS's link is validated against
+ * a URL the sender registered on DLT. A per-bill link can only be registered as a
+ * *dynamic* URL, which is fixed up to and including its `?`: here
+ * `https://shawarmania.in/bill?`. A token in the path, the shape this had until
+ * 2026-10-02, cannot be registered at all.
  *
  * So unlike {@link activationLink}, this cannot be built from the running
  * deployment's own origin. The base comes from configuration, which is also how
@@ -73,8 +80,15 @@ export function isDemoReceiptToken(token: string): boolean {
  * plumbed `mode === 'demo'` flag eventually would.
  */
 export function isDemoReceiptLink(url: string): boolean {
-  const token = url.split('/bill/')[1]
-  return token !== undefined && isDemoReceiptToken(decodeURIComponent(token))
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return false
+  }
+  // `searchParams` decodes, so a percent-encoded tilde reads as one.
+  const token = parsed.searchParams.get('t')
+  return parsed.pathname.endsWith('/bill') && token !== null && isDemoReceiptToken(token)
 }
 
 /**
@@ -91,5 +105,5 @@ export function receiptLink(
   base: string = RECEIPT_BASE_URL,
 ): string | null {
   if (!token) return null
-  return `${base.replace(/\/+$/, '')}/bill/${encodeURIComponent(token)}`
+  return `${base.replace(/\/+$/, '')}/bill?t=${encodeURIComponent(token)}`
 }

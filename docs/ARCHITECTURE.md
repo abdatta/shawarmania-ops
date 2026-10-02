@@ -66,13 +66,13 @@ shadcn components are themed entirely through CSS custom properties, which is wh
 ## The third deployable, and the one page a customer sees
 
 Everything above is one bundle behind authentication. The public bill receipt is
-not: it is a **Cloudflare Worker on `shawarmania.in/bill/<token>`**, living in the
+not: it is a **Cloudflare Worker on `shawarmania.in/bill?t=<token>`**, living in the
 brand site's repo ([`abdatta/shawarmania`](https://github.com/abdatta/shawarmania)),
 and it is the first server-side runtime this system has and the only surface a
 customer ever opens.
 
 ```
-customer's phone ──► shawarmania.in/bill/<token>          (Cloudflare Worker)
+customer's phone ──► shawarmania.in/bill?t=<token>        (Cloudflare Worker)
                           │
                           ├─ cache hit  ──► themed HTML, or the PDF
                           │
@@ -95,9 +95,16 @@ GitHub Pages, which cannot set a response header or return
 `application/pdf` — and both are required here: `X-Robots-Tag: noindex, nofollow`,
 `Referrer-Policy: no-referrer`, and a PDF served from its own URL as an ordinary
 navigation. So the zone moves its nameservers to Cloudflare, keeping the same
-apex records; GitHub Pages keeps serving the site, and Cloudflare only adds a
-Worker route on `/bill/*`. That move completed on 2026-09-10; rollback is
-switching the nameservers back.
+apex records; GitHub Pages keeps serving the site, and Cloudflare only adds
+Worker routes on `/bill*` and `/menu*`. That move completed on
+2026-09-10; rollback is switching the nameservers back.
+
+**Why the token follows a `?`** (#66). The link goes out by SMS, and an Indian
+SMS's link is validated against a URL the sender registered on DLT. A per-bill link
+can only be registered as a *dynamic* URL, fixed up to and including its `?`, so
+`https://shawarmania.in/bill?` is what is registered and only `t=<token>` varies.
+The token was in the path until 2026-10-02, which could not be registered at all;
+`/bill/<token>` now redirects to the new address.
 
 The PDF is served from `…/bill/<token>.pdf` as a plain link rather than a
 script-generated `blob:`, because these links are opened inside WhatsApp's in-app

@@ -294,7 +294,7 @@ describe('the live tablet acceptance boundary', () => {
     // configurable -- pointing a local `.env` at a Worker for browsing must not
     // turn this red. The claim here is that the token becomes a link at all.
     await expect(billing.listManagerHistory({ outletId: 'outlet-1' })).resolves.toMatchObject([
-      { receiptUrl: `${RECEIPT_BASE_URL}/bill/Ab3-_x9QzT` },
+      { receiptUrl: `${RECEIPT_BASE_URL}/bill?t=Ab3-_x9QzT` },
     ])
     expect(selected[0]).toContain('bill_public_links(token, revoked_at)')
   })

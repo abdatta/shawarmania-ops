@@ -292,7 +292,7 @@ outlet, an empty menu and an invented address answer alike, so the page does not
 reveal which outlets exist but are not trading.
 
 **The customer's bill receipt** is the one that needs a design:
-`shawarmania.in/bill/<token>` is opened by whoever holds the link. Everything below
+`shawarmania.in/bill?t=<token>` is opened by whoever holds the link. Everything below
 is about it not becoming a door.
 
 ### The control that makes every other risk small: it names no customer

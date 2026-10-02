@@ -669,7 +669,7 @@ from GPS drift, but no retry erases prior evidence.
 
 Every other screen in this document is behind a sign-in. This one is opened by a
 customer on their own phone, from a link handed to them, at
-`shawarmania.in/bill/<token>` — and it is served by a Cloudflare Worker on the
+`shawarmania.in/bill?t=<token>` — and it is served by a Cloudflare Worker on the
 brand site rather than by this app, so it wears **Shawarmania's** visual
 language rather than the ops portal's deliberately dense, utilitarian one.
 

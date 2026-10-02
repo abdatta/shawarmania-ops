@@ -1,6 +1,6 @@
 # Proposal: bill-receipt-delivery
 
-> **Model**: Opus · **Wave**: F · **Depends on**: #54, #56, #62 · **Gate**: **a customer who gave their number at the counter receives their own receipt link on their phone without anybody choosing to send it**, and one who did not receives nothing; the message says what `/messages/` already says it says — one per bill, no marketing; **replying STOP stops it**, proved by the next settled bill for that number sending nothing and by a hand-crafted request failing to clear the suppression; the counter asks the published consent question in the published words and records the answer, and a customer who gave their number only to earn points receives nothing; switching delivery on sends nothing for bills rung before it existed; a demo session provably sends no real message; a send that fails is visible to somebody rather than silently lost; and the four-role demo walkthrough still walks.
+> **Model**: Opus · **Wave**: F · **Depends on**: #54, #56, #62, #66 · **Gate**: **a customer who gave their number at the counter receives their own receipt link on their phone without anybody choosing to send it**, and one who did not receives nothing; the message says what `/messages/` already says it says — one per bill, no marketing; **replying STOP stops it**, proved by the next settled bill for that number sending nothing and by a hand-crafted request failing to clear the suppression; the counter asks the published consent question in the published words and records the answer, and a customer who gave their number only to earn points receives nothing; switching delivery on sends nothing for bills rung before it existed; a demo session provably sends no real message; a send that fails is visible to somebody rather than silently lost; and the four-role demo walkthrough still walks.
 
 ## Why
 
@@ -64,6 +64,14 @@ receiving messages in November because their *next* bill is new. The page's
 customer dialog, and on day one the biller asks for a number, offers points and
 asks about messages in one breath. #62's owner checkpoint is on 2026-09-29, so
 settle this change's consent moment at that checkpoint, not at a second one.
+
+**The template is drafted, and the link was reshaped to fit it (#66, 2026-10-02).**
+Its wording, its three tagged variables and what each may carry are recorded in
+[#66's design D6](../a-receipt-link-fits-an-sms/design.md#d6-the-template-as-filed-for-59-to-build-against).
+Build the send against that, not against a fresh guess: `{#numeric#}` takes digits
+only (send `String(points)`, never `1,250`), and `{#url#}` must start with the
+registered CTA `https://shawarmania.in/bill?`, which is exactly what
+`receiptLink()` returns in production.
 
 **The DLT template must carry the points variables.** The DLT registration was
 still in progress on 2026-09-28. A template approved without a slot for points
@@ -198,7 +206,8 @@ Added since the todo was written:
 - **#56 `a-customer-is-a-phone-number`** gives a customer identity keyed on the normalised number —
   which is where suppression belongs. A flag on the bill would be wrong: STOP is a statement about a
   person, not about one purchase.
-- The landing repository's receipt Worker, page and PDF are live at `shawarmania.in/bill/*`.
+- The landing repository's receipt Worker, page and PDF are live, and since #66 the link reads
+  `https://shawarmania.in/bill?t=<token>`, the shape DLT can whitelist (below).
 
 ## Scope
 

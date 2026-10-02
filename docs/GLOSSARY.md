@@ -311,6 +311,23 @@ restart and drains when connectivity returns. The command envelope and server
 receipt contract exist now; the queue does not. See
 [Offline And Sync](OFFLINE_AND_SYNC.md).
 
+### Receipt link
+
+**A bill's public address, `https://shawarmania.in/bill?t=<token>`.** Minted by the
+database for every bill the server accepts, opened by whoever holds it, naming no
+customer. The token follows a `?` so the link can be registered on DLT (below).
+See [Operations](OPERATIONS.md#the-customers-receipt-link-54).
+
+### DLT, header, template, CTA
+
+India's register for commercial SMS, run by each telecom operator under TRAI;
+Shawarmania's is with Airtel. Nothing sends until three things are approved there:
+the business (the *entity*), a six-letter sender name (the *header*), and each
+message's fixed wording (the *template*), whose variable slots are tagged with what
+they may carry: `{#numeric#}` is digits only, and `{#url#}` must match a
+registered *CTA*, a call-to-action URL. A per-bill link is registered as a dynamic
+CTA, fixed up to its `?`: here `https://shawarmania.in/bill?`.
+
 ### Brand token / semantic token
 
 Two layers of the theme. **Brand tokens** (`--brand-flame-orange`) hold Shawarmania's actual colours. **Semantic tokens** (`--color-primary`, `--color-surface`) describe roles. Components only ever read semantic tokens, so re-skinning for a franchise is a one-file change. See [Design System](DESIGN_SYSTEM.md).

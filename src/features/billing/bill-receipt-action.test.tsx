@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 
 import { BillReceiptAction } from './bill-receipt-action'
 
-const URL = 'https://shawarmania.in/bill/Ab3-_x9QzT'
-const DEMO = 'https://shawarmania.in/bill/demo~26'
+const URL = 'https://shawarmania.in/bill?t=Ab3-_x9QzT'
+const DEMO = 'https://shawarmania.in/bill?t=demo~26'
 const PHONE = '+919876543210'
 
 function renderAction(props: { receiptUrl?: string; customerPhone?: string | null } = {}) {

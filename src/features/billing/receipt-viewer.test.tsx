@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ReceiptViewer } from './receipt-viewer'
 
-const URL = 'https://shawarmania.in/bill/Ab3-_x9QzT'
-const DEMO = 'https://shawarmania.in/bill/demo~26'
+const URL = 'https://shawarmania.in/bill?t=Ab3-_x9QzT'
+const DEMO = 'https://shawarmania.in/bill?t=demo~26'
 
 function givenOnline(online: boolean) {
   Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: online })
@@ -32,7 +32,7 @@ describe('the counter’s receipt viewer', () => {
 
     const frame = screen.getByTitle('Receipt for bill 27')
     expect(frame.tagName).toBe('IFRAME')
-    expect(frame).toHaveAttribute('src', `${URL}?view=counter`)
+    expect(frame).toHaveAttribute('src', `${URL}&view=counter`)
   })
 
   it('shows a spinner until the receipt has loaded, then only the receipt', () => {
@@ -162,7 +162,14 @@ describe('the counter’s receipt viewer', () => {
   it('carries the demo note for a demonstration bill, and frames it all the same', () => {
     renderViewer(DEMO)
 
-    expect(screen.getByTitle('Receipt for bill 27')).toHaveAttribute('src', `${DEMO}?view=counter`)
+    // Read as a URL rather than compared as a string: re-serialising the query
+    // percent-encodes the demo token's `~`, which a real token never carries.
+    const src = new globalThis.URL(
+      screen.getByTitle('Receipt for bill 27').getAttribute('src') ?? '',
+    )
+    expect(src.origin + src.pathname).toBe('https://shawarmania.in/bill')
+    expect(src.searchParams.get('t')).toBe('demo~26')
+    expect(src.searchParams.get('view')).toBe('counter')
     expect(screen.getByTestId('receipt-viewer-demo')).toHaveTextContent(/will not open a receipt/i)
   })
 

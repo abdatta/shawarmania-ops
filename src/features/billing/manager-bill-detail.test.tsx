@@ -41,7 +41,7 @@ const bill: BillingBill = {
   voidReason: null,
   voidedAt: null,
   voidedBy: null,
-  receiptUrl: 'https://shawarmania.in/bill/Ab3-_x9QzT',
+  receiptUrl: 'https://shawarmania.in/bill?t=Ab3-_x9QzT',
 }
 
 describe('manager bill detail', () => {

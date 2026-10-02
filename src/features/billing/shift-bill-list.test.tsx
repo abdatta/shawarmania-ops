@@ -6,7 +6,7 @@ import type { BillingBill } from '@/data-access/adapters'
 
 import { ShiftBillList } from './shift-bill-list'
 
-const URL = 'https://shawarmania.in/bill/Ab3-_x9QzT'
+const URL = 'https://shawarmania.in/bill?t=Ab3-_x9QzT'
 
 const bill: BillingBill = {
   id: 'bill-1',
@@ -62,7 +62,7 @@ describe('a bill in Bills this shift', () => {
     const dialog = screen.getByRole('dialog', { name: 'Receipt for bill 27' })
     expect(within(dialog).getByTitle('Receipt for bill 27')).toHaveAttribute(
       'src',
-      `${URL}?view=counter`,
+      `${URL}&view=counter`,
     )
   })
 

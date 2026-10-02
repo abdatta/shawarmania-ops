@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { receiptMessage, whatsappChatLink } from './whatsapp-link'
 
-const RECEIPT = 'https://shawarmania.in/bill/Ab3-_x9QzT'
+const RECEIPT = 'https://shawarmania.in/bill?t=Ab3-_x9QzT'
 
 describe('a WhatsApp chat link', () => {
   it('names the number in international form, with no plus', () => {
