@@ -8,6 +8,26 @@ Facts about Shawarmania that the software has to fit. Sourced from the public si
 
 Quality is part of the brand promise: the menu is lab-tested (NABL/ISO 17025 accredited report), which is marketed prominently. That matters operationally — consistency across franchise outlets is a selling point, so per-outlet menu and inventory discipline is a business requirement, not just bookkeeping.
 
+## The legal entity, and where its papers are
+
+Shawarmania is a brand; the business behind it is **De & Datta LLP**. Every registration below is in the LLP's name, which is why the receipt SMS signs off *Regards, De & Datta LLP* and every page on `shawarmania.in` says *Operated by De & Datta LLP*.
+
+| What | Value | Source document |
+|---|---|---|
+| Legal name | DE & DATTA LLP (written *De & Datta LLP*) | Certificate of Incorporation |
+| LLPIN (MCA) | `ADC-3200`, incorporated 17 Sep 2026 | Certificate of Incorporation |
+| GSTIN | `19ABAFD3896L1ZV`, regular, from 25 Sep 2026 | GST Certificate (REG-06) |
+| Udyam (MSME) | `UDYAM-WB-15-0142255`, micro, unit *Shawarmania* | Udyam Registration Certificate |
+| Registered office | A-10/399, Kalyani, Nadia, West Bengal 741235 | Certificate of Incorporation, GST Certificate |
+| DLT principal entity | Airtel, ID `1001829618159358766`, header `DEDTTL`, valid to 29 Sep 2027 | `SMS Docs/DLT certificate.pdf` |
+| FSSAI | per outlet; see [Outlets](#outlets) | FSSAI licences |
+
+Only identifiers that are public by law are written here, because this repository is public. The PAN, TAN, partners' details and contact numbers are in the documents and stay there.
+
+**The documents live in the LLP's Google Drive, account `dedattallp@gmail.com`, in *My Drive*:** `Certificate of Incorporation.pdf`, `GST Certificate.pdf`, `Deed Agreement - De & Datta LLP.pdf`, `Print _ Udyam Registration Certificate.pdf`, `Letterhead De & Datta LLP.docx`, the food and drinks menus, and an `SMS Docs/` folder holding the DLT certificate and the authority letters filed for the SMS sender. **Never copy them into this repository.**
+
+**Finding them on a machine.** On a PC running Google Drive for desktop, each signed-in account is mounted as its own drive letter, and the letter is not stable; find the volume labelled *`dedattallp@gmail.com - Google Drive`* (PowerShell: `Get-PSDrive -PSProvider FileSystem`), then open `My Drive`. Without the desktop client, the same folder is at <https://drive.google.com> signed in as that account. The PDFs carry a text layer, so their facts can be read without OCR.
+
 ## Outlets
 
 Kalyani is the active counter. Kanchrapara operations are paused after trading
