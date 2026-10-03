@@ -94,4 +94,9 @@
       until then: its URL variable's value is a dropdown of approved CTAs, empty
       meanwhile. Settled on the form already: header DEDTTL, Service Implicit, Food
       and Beverages, domain shawarmania.in, `{#var#}` in the content typed Numeric,
-      Numeric, URL.)*
+      Numeric, URL.)* *(Later 2026-10-03: the CTA was approved at 09:57 IST, CTA ID
+      1014225362850951240, and moved from the CTA Parameter tab to Registered → URL,
+      which is why the first list looked empty. The template was submitted at ~13:45
+      IST and reads **Pending With Registrar**. Submit raised an automatic domain
+      check, "a URL with different domain is seen", answered with a justification
+      citing the CTA ID, on the owner's word.)*
