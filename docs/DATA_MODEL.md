@@ -1119,8 +1119,11 @@ Seven properties are load-bearing and easy to undo by accident:
   `supplier_delivery_routes` carries `source_system`, `effective_from date` and
   `outlet_id`, keyed by source and start date. An invoice uses the greatest start
   not later than its invoice date. Hyperpure routes to Kanchrapara from
-  `0001-01-01` and to Kalyani from `2026-09-16`; the historical default resolves
-  old invoices before any books-opening fallback changes their ledger date.
+  `0001-01-01`, to Kalyani from `2026-09-16` and to Kalyani Cafe from
+  `2026-09-28`; the historical default resolves old invoices before any
+  books-opening fallback changes their ledger date. The Cafe row was a data
+  correction applied directly on 2026-10-03, after Kalyani's last trading day
+  (09-27), together with moving that period's four orders; it has no migration.
   Only the Super Admin may read this table and no client role may write it.
   `outlets.hyperpure_delivery` remains temporarily to populate the version-1
   payload during mixed deployment, but it is not routing authority.
