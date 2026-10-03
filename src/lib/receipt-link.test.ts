@@ -142,9 +142,10 @@ describe('spotting a link that will not open', () => {
 
 describe('the receipt message the link goes out in', () => {
   /*
-   * The template registered on DLT (a-receipt-link-fits-an-sms, design D6), filled
-   * in. It lives on the operator's portal, not in this repository, so this is a
-   * copy; what it guards is the link's share of the length. A base or a token
+   * The template registered on DLT (a-receipt-link-fits-an-sms, design D6; Airtel
+   * template ID 1077524620016122125), filled in. It lives on the operator's
+   * portal, not in this repository, so this is a copy; what it guards is the
+   * link's share of the length. A base or a token
    * that grows enough to push the message into a second segment doubles the
    * cost of every receipt, and nothing else would say so.
    */
@@ -160,6 +161,7 @@ describe('the receipt message the link goes out in', () => {
       'Thank you for visiting Shawarmania!',
       `You earned ${earned} points. Balance: ${balance} points.`,
       `Receipt: ${receiptLink(token, PRODUCTION_RECEIPT_BASE_URL)}`,
+      'Regards, De & Datta LLP',
     ].join('\n')
   }
 

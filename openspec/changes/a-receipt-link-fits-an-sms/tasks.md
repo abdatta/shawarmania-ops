@@ -85,7 +85,7 @@
       one refusal; `/bill/<token>` redirects keeping `view`; the brand site's other
       pages are untouched; a demo link is still recognised and still refused; a
       filled-in message fits one SMS; and the four-role demo walkthrough still walks.
-- [ ] 5.4 🧍 The owner registers the dynamic CTA `https://shawarmania.in/bill?` and
+- [x] 5.4 🧍 The owner registers the dynamic CTA `https://shawarmania.in/bill?` and
       submits the template with a live receipt as the URL sample. Archive once DLT
       has accepted it and a real receipt has been opened at the new address.
       *(2026-10-03: the CTA is submitted on Airtel's portal as a DynamicURL, its
@@ -106,4 +106,6 @@
       the owner chose: `Regards, De & Datta LLP` as a fourth line. **Pending With
       Registrar.** 153 characters filled at a 4-digit balance; the part after `?`
       has 15-19 characters of room. On approval: design D6's wording and the
-      SMS-length test in `receipt-link.test.ts` take the sign-off.)*
+      SMS-length test in `receipt-link.test.ts` take the sign-off.)* *(**Approved**
+      2026-10-03 ~14:05 IST as template ID `1077524620016122125`; D5, D6 and the test
+      now carry the approved wording.)*

@@ -127,24 +127,46 @@ The template as filed (D6), with a ten-character token and a four-digit balance:
 Thank you for visiting Shawarmania!
 You earned 20 points. Balance: 1250 points.
 Receipt: https://shawarmania.in/bill?t=Ab3-_x9QzT
+Regards, De & Datta LLP
 ```
 
-**129 characters**, newlines included. Every character is in GSM-7's basic set,
-`_` and `-` included, so no character forces the 70-character Unicode segment; a
-demo token's `~` would, but a demo link never reaches an SMS. One segment is 160. Headroom: a five-digit balance, or
-a token minted at fourteen characters, still fits.
+**153 characters**, newlines included. Every character is in GSM-7's basic set,
+`_`, `-` and `&` included, so no character forces the 70-character Unicode
+segment; a demo token's `~` would, but a demo link never reaches an SMS. One
+segment is 160.
+
+**The headroom is the link's, and it is small.** Everything but the digits and
+the part after the `?` is 135 characters, so the part after the `?` (today
+`t=<token>`, 12 characters) may be up to 19 characters at a 2-digit earning and a
+4-digit balance, 17 at 3 and 5 digits, 15 at 4 and 6. A token minted at fourteen
+characters still fits at 3 and 5 digits (159). A second query parameter does not:
+anything added to the link is paid for in a second SMS segment for every
+high-balance customer.
 
 ## D6. The template as filed, for #59 to build against
 
-The owner drafted this on Airtel DLT's *Register New Template* form on 2026-10-02,
-and holds its submission until this change is live. Once approved, the portal is
-the record:
+**Approved by Airtel on 2026-10-03 as template ID `1077524620016122125`**,
+header DEDTTL, Service Implicit, Food and Beverages. The portal is the record:
 
 ```
 Thank you for visiting Shawarmania!
 You earned {#numeric#} points. Balance: {#numeric#} points.
 Receipt: {#url#}
+Regards, De & Datta LLP
 ```
+
+**The last line is Airtel's, not a style choice.** The first filing, without it,
+was rejected: *"Kindly mention full Entity Name/Header name in content."* The
+registered entity is De & Datta LLP and the header DEDTTL is its; "Shawarmania"
+alone named neither. The owner chose the sign-off from five shapes researched
+2026-10-03 (operators expect the sender's name in a footer such as "Team X" or
+"- X"). Resubmitting the rejected template crashed on Airtel's side, so this is a
+fresh registration under the same name; the rejected one (`033355790362515`)
+stays in the Rejected tab and means nothing.
+
+**Airtel stores it with `\r\n` line breaks** and its own internal tags
+(`{#num#}`, `{#urg#}`). Whether a message sent with `\n` scrubs as a match is for
+#59 to confirm against the provider before relying on it.
 
 | Variable | Tag | Carries | Sample |
 |---|---|---|---|
