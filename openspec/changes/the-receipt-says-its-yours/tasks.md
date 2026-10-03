@@ -71,16 +71,25 @@
 
 - [x] 6.1 Commit locally. **Do not push or deploy**: the owner picks the windows
       (`no-pushes-while-the-counter-trades`).
-- [ ] 6.2 🧍 The owner approves the privacy page's words.
-- [ ] 6.3 🧍 Release: the ops push (migration) at any time; the landing push and
+- [x] 6.2 🧍 The owner approves the privacy page's words. *(Approved with the
+      release, 2026-10-01; live on `shawarmania.in/privacy/` before the Worker.)*
+- [x] 6.3 🧍 Release: the ops push (migration) at any time; the landing push and
       `npm run worker:deploy` together, the privacy page no later than the Worker.
-- [ ] 6.4 **PHASE GATE — the ROADMAP.md checkpoint for #58**, walked: a customer
+      *(2026-10-01: ops `6874197d` and `d0cb2fd2`, migrations `20260930000000` and
+      `20260930010000` applied; landing `ae97f9d` and `960e55a`, Worker version
+      `946bea0a`. The reader in production checked read-only: the three keys, no
+      table, no void reason, `service_role` only.)*
+- [x] 6.4 **PHASE GATE — the ROADMAP.md checkpoint for #58**, walked: a customer
       opening their own receipt link sees the last four digits and, if gold there,
       *⭐ Gold*; never their name or full number, proved from the
       payload; a bill with no customer shows neither; the page, the counter view
       and the PDF agree; the service line reads right; the reversal is argued in
       the spec; no receipt link or counter pop-up breaks across the release; and
-      the four-role demo walkthrough still walks.
+      the four-role demo walkthrough still walks. *(Gold proved on seeded bills
+      and in `51_the_public_receipt_reader.sql`; nobody in production is gold
+      yet. The first real customer receipt, Bill 199 at Kalyani Cafe on
+      2026-10-03, checked live on the link and the counter view: masked digits,
+      *Dine-in*, no whole number anywhere in the page.)*
 - [ ] 6.5 🧍 The owner opens a real receipt for a bill where a customer gave their
       number at Kalyani Cafe, and shows one from the counter's View receipt. Tasks
       complete is not the archive trigger; real use is.
