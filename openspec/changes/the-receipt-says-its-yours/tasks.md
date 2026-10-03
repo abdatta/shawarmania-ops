@@ -72,8 +72,13 @@
 - [x] 6.1 Commit locally. **Do not push or deploy**: the owner picks the windows
       (`no-pushes-while-the-counter-trades`).
 - [ ] 6.2 🧍 The owner approves the privacy page's words.
-- [ ] 6.3 🧍 Release: the ops push (migration) at any time; the landing push and
+- [x] 6.3 🧍 Release: the ops push (migration) at any time; the landing push and
       `npm run worker:deploy` together, the privacy page no later than the Worker.
+      *(Checked 2026-10-03. Migration `20260930000000_the_receipt_says_its_yours` is
+      applied in production. The landing `main` has nothing unpushed, and the live
+      receipt of a bill with a customer shows the last four digits and neither the
+      name nor the full number, in the customer page and in the counter view; that
+      is this change's Worker, so it is deployed. `/privacy/` answers 200.)*
 - [ ] 6.4 **PHASE GATE — the ROADMAP.md checkpoint for #58**, walked: a customer
       opening their own receipt link sees the last four digits and, if gold there,
       *⭐ Gold*; never their name or full number, proved from the

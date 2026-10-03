@@ -67,7 +67,7 @@ settle this change's consent moment at that checkpoint, not at a second one.
 
 **The template is drafted, and the link was reshaped to fit it (#66, 2026-10-02).**
 Its wording, its three tagged variables and what each may carry are recorded in
-[#66's design D6](../a-receipt-link-fits-an-sms/design.md#d6-the-template-as-filed-for-59-to-build-against).
+[#66's design D6](../archive/2026-10-03-a-receipt-link-fits-an-sms/design.md#d6-the-template-as-filed-for-59-to-build-against).
 Build the send against that, not against a fresh guess: `{#numeric#}` takes digits
 only (send `String(points)`, never `1,250`), and `{#url#}` must start with the
 registered CTA `https://shawarmania.in/bill?`, which is exactly what

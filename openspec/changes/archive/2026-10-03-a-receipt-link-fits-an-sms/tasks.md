@@ -79,12 +79,27 @@
       ~01:25-01:40 IST, on the owner's word after service. The exact `bill` route
       missed every `/bill?t=`; corrected to `bill*` within minutes, design D3. Ops
       Deploy run 37057980641 green; the live bundle builds `/bill?t=`.)*
-- [ ] 5.3 **PHASE GATE — the ROADMAP.md checkpoint for #66**, walked: every link the
+- [x] 5.3 **PHASE GATE — the ROADMAP.md checkpoint for #66**, walked: every link the
       app hands out reads `https://shawarmania.in/bill?t=<token>`; it opens the
       receipt, the counter view and the PDF as before; every mangled `t` gets the
       one refusal; `/bill/<token>` redirects keeping `view`; the brand site's other
       pages are untouched; a demo link is still recognised and still refused; a
       filled-in message fits one SMS; and the four-role demo walkthrough still walks.
+      *(Walked 2026-10-03 against the live site with a real settled Kalyani Cafe
+      bill. `src` builds a receipt link in one place, `receiptLink` in
+      `receipt-link.ts`, as `<base>/bill?t=<token>`; no other `/bill/` builder
+      exists. `/bill?t=<token>` answered 200 as the customer page, with
+      `&view=counter` 200 as a different page, and `/bill/<token>.pdf` 200 as a
+      `%PDF`. `/bill/<token>` and `/bill/<token>?view=counter` answered 301 to
+      `/bill?t=<token>` and `/bill?t=<token>&view=counter`. No `t`, an empty `t`, a
+      short `t`, two `t`s, a token with stray characters, a path token of 100
+      characters and the demo token `demo~7` all answered the identical 404 body,
+      and so did a well-formed token naming no bill. `/` answered 200, `/privacy`
+      and `/terms` 301 to their slashed forms, which answer 200, and `/billing` 404.
+      `receipt-link.test.ts`, with the approved wording, 17 of 17, covers the
+      one-SMS length and the demo-link refusal. The four-role demo walkthrough ran
+      green inside Deploy run 37057980641. Opens since the release include
+      non-scripted visits, some from a phone.)*
 - [x] 5.4 🧍 The owner registers the dynamic CTA `https://shawarmania.in/bill?` and
       submits the template with a live receipt as the URL sample. Archive once DLT
       has accepted it and a real receipt has been opened at the new address.

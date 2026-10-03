@@ -102,9 +102,23 @@
 
 ## 7. PHASE GATE
 
-- [ ] 7.1 The Wave E checkpoint for #65, as written in ROADMAP.md: staff and a
+- [x] 7.1 The Wave E checkpoint for #65, as written in ROADMAP.md: staff and a
   live counter read only cash expenses, proved by hand-crafted request; staff and
   the counter are refused any non-cash write with the sentence; the drawer is
   unchanged; the staff form has three fields; the owner and manager form starts
   unchosen and refuses to save unchosen; the four-role demo walkthrough walks.
   Archive only after it has run in production and the owner calls it.
+  *(Walked 2026-10-03 against production, read-only, after the owner asked for
+  the archive. Migration `20261001000000` is applied. At Kalyani Cafe, where the
+  ledger holds 1 cash and 4 non-cash expenses, a request made as each active
+  account, role set to `authenticated` with that account's id in a rolled-back
+  read-only transaction, read: the owners 1 cash and 4 non-cash; the biller 1
+  cash and 0 non-cash; each of the three employees 1 cash and 0 non-cash; the
+  same through `effective_expenses`. `expenses_select`, `expenses_insert` and
+  `expenses_update` all carry `is_cash`, and `expense_guard()` carries the
+  refusal sentence. The write refusal is not attempted against production: it is
+  pinned by `supabase/tests/67_...sql` and `rls-probes.test.ts`, and the staff
+  form and the owner's unchosen form by `outlet-expenses-surface.test.tsx`, all
+  green in Deploy run 36846972234 (every job, `migrate` and `deploy`
+  included), which also ran the demo walkthrough. The counter-tablet read is
+  proved by that run, not re-run by hand: it needs a live counter shift.)*
