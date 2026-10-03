@@ -71,7 +71,8 @@
 
 - [x] 6.1 Commit locally. **Do not push or deploy**: the owner picks the windows
       (`no-pushes-while-the-counter-trades`).
-- [ ] 6.2 🧍 The owner approves the privacy page's words.
+- [x] 6.2 🧍 The owner approves the privacy page's words.
+      *(Approved by the owner in chat, 2026-10-03.)*
 - [x] 6.3 🧍 Release: the ops push (migration) at any time; the landing push and
       `npm run worker:deploy` together, the privacy page no later than the Worker.
       *(Checked 2026-10-03. Migration `20260930000000_the_receipt_says_its_yours` is
@@ -79,13 +80,31 @@
       receipt of a bill with a customer shows the last four digits and neither the
       name nor the full number, in the customer page and in the counter view; that
       is this change's Worker, so it is deployed. `/privacy/` answers 200.)*
-- [ ] 6.4 **PHASE GATE — the ROADMAP.md checkpoint for #58**, walked: a customer
+- [x] 6.4 **PHASE GATE — the ROADMAP.md checkpoint for #58**, walked: a customer
       opening their own receipt link sees the last four digits and, if gold there,
       *⭐ Gold*; never their name or full number, proved from the
       payload; a bill with no customer shows neither; the page, the counter view
       and the PDF agree; the service line reads right; the reversal is argued in
       the spec; no receipt link or counter pop-up breaks across the release; and
       the four-role demo walkthrough still walks.
+      *(Walked 2026-10-03 against production and the live site. **Payload:**
+      `bill_public_receipt` as it is installed projects `phone_last4` and
+      `gold_at_outlet` for a bill with a customer attached, and no key carries a
+      name or a full number; the Worker's `assertNamesNobody` tests refuse any that
+      did. **Live:** the one Kalyani Cafe bill that carries a number (199) reads
+      `+91 ••••• •` and its last four, identically in the customer page, the
+      counter view and the PDF, with no full number, no name and no Gold, as its
+      tier is not gold; a dine-in bill (220) and a takeaway bill (203) with no
+      customer carry no such line and no Gold in any of the three. Both service
+      lines read *Dine-in* and *Takeaway* in all three surfaces, and none prints a
+      table. **The spec:** the delta modifies *The public receipt names no
+      customer* in place, and the proposal's *This reverses a shipped clause,
+      deliberately* argues it. **Across the release:** every Deploy since the
+      Worker and migration went out is green, including the demo walkthrough, and
+      real opens carry on at 4 to 6 a day. **Not seen in production:** a gold
+      member's receipt, because no gold member exists yet (see #62). That clause
+      rests on the Worker's tests, `worker:test` 189 of 189 this day, and on the
+      function's projection of the stored tier.)*
 - [ ] 6.5 🧍 The owner opens a real receipt for a bill where a customer gave their
       number at Kalyani Cafe, and shows one from the counter's View receipt. Tasks
       complete is not the archive trigger; real use is.
