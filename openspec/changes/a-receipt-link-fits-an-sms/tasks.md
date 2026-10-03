@@ -99,4 +99,11 @@
       which is why the first list looked empty. The template was submitted at ~13:45
       IST and reads **Pending With Registrar**. Submit raised an automatic domain
       check, "a URL with different domain is seen", answered with a justification
-      citing the CTA ID, on the owner's word.)*
+      citing the CTA ID, on the owner's word.)* *(Rejected the same day: "Kindly
+      mention full Entity Name/Header name in content." Resubmitting crashed on
+      Airtel's side, a duplicate-key error on template 033355790362515, so it was
+      registered afresh, same name, reference TEM154608444128010, with the sign-off
+      the owner chose: `Regards, De & Datta LLP` as a fourth line. **Pending With
+      Registrar.** 153 characters filled at a 4-digit balance; the part after `?`
+      has 15-19 characters of room. On approval: design D6's wording and the
+      SMS-length test in `receipt-link.test.ts` take the sign-off.)*
