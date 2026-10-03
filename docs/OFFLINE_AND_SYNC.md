@@ -88,6 +88,17 @@ The queue survives page reload, app close, compatible application upgrades and
 device restart. It has to: the realistic failure is not a five-second blip, it
 is a tablet that has been offline all evening.
 
+**The retry delay is stored with the entry, and two things cut it short.** A
+send that gets no answer waits before it tries again, from one second up to a
+minute, and that wait is written into the queue, so it outlives the page. The
+browser's network signal pulls it forward on whatever page is open; so does a
+page that has just confirmed the tablet and its shift with the server, which is
+what a reload or a reopen after an outage is. Without the second, a biller who
+refreshed once the Wi-Fi came back would watch the queue sit for up to a minute
+on a delay the previous page set. Neither is taken as proof the server can be
+reached: only the answer to the next send decides that, and a send that again
+gets no answer backs off from where it was.
+
 Payments are eligible for delivery immediately; there is no delivery hold and
 no queued-write Undo. A correction is its own immutable envelope, chained behind
 the payment and every earlier correction for that bill. The local effective

@@ -14,6 +14,7 @@ import {
   BillingDrainCoordinator,
   BillingDeliveryStore,
   COUNTER_RESUME_SCHEMA_VERSION,
+  MAX_BILLING_RETRY_MS,
   type CounterResumeRecord,
 } from '@/outbox'
 import type { CounterDeviceSession } from '@/session/counter-session'
@@ -1152,7 +1153,7 @@ async function queuePayment(orderId: string, commandId: string) {
 describe('the delivery handoff cannot lose accepted work', () => {
   it('repairs a lost final heartbeat after a committed command replays on restart', async () => {
     const commandId = '10000000-0000-4000-a000-0000000000d1'
-    const { database, store } = await queuePayment(PREPARED_ORDER_ID, commandId)
+    const { database } = await queuePayment(PREPARED_ORDER_ID, commandId)
     const committed = new Set<string>()
     const reportedCount = (args: Record<string, unknown> | undefined) =>
       args?.p_unresolved ?? args?.p_unsent
@@ -1176,10 +1177,14 @@ describe('the delivery handoff cannot lose accepted work', () => {
     stopFirst()
     await vi.waitFor(() => expect(database.leases.count()).resolves.toBe(0))
 
-    // A restarted online app makes retrying work immediately eligible. The
-    // server recognises the immutable command id and returns replay, not a
+    // The first page left the longest delay there is, as a reload that cuts off
+    // a send does. A restarted online app makes that work eligible by itself;
+    // nothing here clears the delay for it (a-reopened-counter-sends-at-once).
+    // The server recognises the immutable command id and returns replay, not a
     // second bill.
-    await store.hintRetry(session.device.deviceId, 0)
+    await database.envelopes.update(commandId, {
+      nextAttemptAtMs: Date.now() + MAX_BILLING_RETRY_MS,
+    })
     const restartedReports: Record<string, unknown>[] = []
     const restartedRpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
       if (name === 'report_counter_device_state') {
@@ -1201,6 +1206,55 @@ describe('the delivery handoff cannot lose accepted work', () => {
     expect(committed).toEqual(new Set([commandId]))
 
     stopRestarted()
+    database.close()
+  })
+
+  it('leaves every retry delay alone when the counter reopens without the server', async () => {
+    const commandId = '10000000-0000-4000-a000-0000000000d2'
+    const { database } = await queuePayment(PREPARED_ORDER_ID, commandId)
+    const delayedUntil = Date.now() + MAX_BILLING_RETRY_MS
+    await database.envelopes.update(commandId, {
+      state: 'retrying',
+      attemptCount: 3,
+      nextAttemptAtMs: delayedUntil,
+    })
+    const resume = {
+      tabletId: session.device.deviceId,
+      schemaVersion: COUNTER_RESUME_SCHEMA_VERSION,
+      complete: true,
+      tablet: {
+        id: session.device.deviceId,
+        label: session.device.label,
+        outletId: session.device.outletId,
+      },
+      shift: { ...session.shift! },
+      outlet: { id: 'outlet-1', business_day_cutover: '04:00:00' },
+      menu: [],
+      pipeline: [],
+      bills: [],
+      rememberedCustomers: {},
+      lastSuccessfulReadAt: '2026-08-11T12:00:00.000Z',
+      serverObservedAt: '2026-08-11T12:00:00.000Z',
+      deviceObservedAt: '2026-08-11T12:00:00.000Z',
+    } as unknown as CounterResumeRecord
+    const rpc = vi.fn(async () => ({ data: null, error: new Error('unreachable'), status: 0 }))
+    const billing = createSupabaseBillingAdapter(clientWithRpc(rpc), {
+      ...session,
+      offlineResume: resume,
+    })
+    const stop = billing.subscribeCounter(() => undefined)
+
+    // No confirmed session, so no drain and no wake: the delay is the evidence
+    // the next online page will start from.
+    await vi.waitFor(() => expect(billing.getCounterState().sync.kind).toBe('stalled'))
+    expect(await database.envelopes.get(commandId)).toMatchObject({
+      state: 'retrying',
+      attemptCount: 3,
+      nextAttemptAtMs: delayedUntil,
+    })
+    expect(rpc).not.toHaveBeenCalled()
+
+    stop()
     database.close()
   })
 

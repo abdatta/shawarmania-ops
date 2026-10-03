@@ -305,6 +305,91 @@ describe('BillingDrainCoordinator', () => {
     database.close()
   })
 
+  // a-reopened-counter-sends-at-once: a page built after the server confirmed
+  // the tablet must not wait out a delay an earlier page recorded, and the wake
+  // moves a schedule without claiming the backend is reachable.
+  it('wakes waiting work on start when its caller holds a server answer', async () => {
+    const database = new BillingDeliveryDatabase(databaseName())
+    const store = new BillingDeliveryStore(database)
+    const waiting = command(crypto.randomUUID(), 'order-a')
+    await accept(store, waiting, 'order-a')
+    await database.envelopes.update(waiting.commandId, {
+      state: 'retrying',
+      nextAttemptAtMs: 70_000,
+      attemptCount: 6,
+    })
+    const reachability = vi.fn()
+    const execute = vi.fn(async () => {
+      // Nothing about reachability is known until the send itself answers.
+      expect(reachability).not.toHaveBeenCalled()
+      return { status: 'accepted' as const, commandId: waiting.commandId }
+    })
+    const coordinator = new BillingDrainCoordinator({
+      store,
+      tabletId: 'tablet-1',
+      ownerId: 'tab-a',
+      locks: null,
+      now: () => 10_000,
+      isVisible: () => true,
+      tickMs: 60_000,
+      connectivityTarget: new EventTarget(),
+      onReachability: reachability,
+      wakeOnStart: true,
+      execute,
+    })
+    coordinator.start()
+
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(1))
+    expect(reachability).toHaveBeenCalledWith(true)
+    expect(await database.envelopes.get(waiting.commandId)).toBeUndefined()
+    await coordinator.stop()
+    database.close()
+  })
+
+  it('backs off again from its attempt count when the woken send gets no answer', async () => {
+    const database = new BillingDeliveryDatabase(databaseName())
+    const store = new BillingDeliveryStore(database)
+    const waiting = command(crypto.randomUUID(), 'order-a')
+    await accept(store, waiting, 'order-a')
+    await database.envelopes.update(waiting.commandId, {
+      state: 'retrying',
+      nextAttemptAtMs: 70_000,
+      attemptCount: 2,
+    })
+    const reachability = vi.fn()
+    const execute = vi.fn(async () => {
+      throw new TypeError('fetch failed')
+    })
+    const coordinator = new BillingDrainCoordinator({
+      store,
+      tabletId: 'tablet-1',
+      ownerId: 'tab-a',
+      locks: null,
+      now: () => 10_000,
+      random: () => 0.5,
+      isVisible: () => true,
+      tickMs: 60_000,
+      connectivityTarget: new EventTarget(),
+      onReachability: reachability,
+      wakeOnStart: true,
+      execute,
+    })
+    coordinator.start()
+
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(1))
+    await vi.waitFor(async () =>
+      expect(await database.envelopes.get(waiting.commandId)).toMatchObject({
+        state: 'retrying',
+        attemptCount: 3,
+        nextAttemptAtMs: 14_000,
+      }),
+    )
+    expect(reachability).toHaveBeenCalledWith(false)
+    expect(reachability).not.toHaveBeenCalledWith(true)
+    await coordinator.stop()
+    database.close()
+  })
+
   it('allows only one fallback lease owner across two tabs', async () => {
     const name = databaseName()
     const firstDatabase = new BillingDeliveryDatabase(name)

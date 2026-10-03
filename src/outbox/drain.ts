@@ -34,6 +34,15 @@ export interface BillingDrainCoordinatorOptions {
   connectivityTarget?: EventTarget | null
   onReachability?: (reachable: boolean) => void
   /**
+   * Start by pulling this tablet's retry delays forward, as the `online` event
+   * does. Set it only where the server has just answered — the counter runtime
+   * builds its drain after the tablet and shift resolved online — because a
+   * delay an earlier page recorded is stale once a request has gone through,
+   * and a page opened on a reload never hears the `online` event that would
+   * have cleared it. It moves a schedule and claims nothing about reachability.
+   */
+  wakeOnStart?: boolean
+  /**
    * Anything else this tablet owes the server, sent on the same tick and under
    * the same mutex as the command queue. The counter expense queue uses it, so
    * that sending is a scheduled act rather than a side effect of some surface
@@ -51,8 +60,9 @@ export function billingRetryDelayMs(attempt: number, random = Math.random): numb
 
 /**
  * One visible page schedules drain attempts. Web Locks is the primary mutex;
- * the renewable IndexedDB lease is the fallback. Browser connectivity events
- * only wake a retry—reachability changes solely after an actual request.
+ * the renewable IndexedDB lease is the fallback. Browser connectivity events,
+ * and a start its caller marks as server-confirmed, only wake a
+ * retry—reachability changes solely after an actual request.
  */
 export class BillingDrainCoordinator {
   private readonly now: () => number
@@ -82,7 +92,8 @@ export class BillingDrainCoordinator {
     this.stopped = false
     this.connectivityTarget?.addEventListener('online', this.onConnectivityHint)
     this.interval = globalThis.setInterval(() => void this.trigger(), this.tickMs)
-    void this.trigger()
+    if (this.options.wakeOnStart) this.onConnectivityHint()
+    else void this.trigger()
   }
 
   async runOnce(): Promise<number> {

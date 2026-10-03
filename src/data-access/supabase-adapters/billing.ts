@@ -1359,6 +1359,10 @@ export function createSupabaseBillingAdapter(
         }
         return result
       },
+      // This drain exists only because the tablet and its shift just resolved
+      // against the server, so a retry delay an earlier page recorded is
+      // stale. A reload never hears the `online` event that would clear it.
+      wakeOnStart: true,
       onReachability: (reachable) => {
         deliveryReachable = reachable
         state = { ...state, sync: deliverySync(state.sync.pending) }
