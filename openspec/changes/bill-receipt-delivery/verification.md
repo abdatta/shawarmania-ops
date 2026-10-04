@@ -1,6 +1,7 @@
 # Verification: bill-receipt-delivery
 
-Verified locally on 3 October 2026. Sending remains disabled pending the release.
+Verified locally on 3 October 2026 and released on 4 October 2026. Production
+sending is enabled from 10:17:53 a.m. Asia/Kolkata.
 
 | Gate | Evidence |
 |---|---|
@@ -50,16 +51,43 @@ fixtures now use that actual shape. The mapper already accepts both shapes.
 Exact optional-property typing required omitted RPC arguments instead of explicit
 `undefined`. The relevant checks were repeated after each correction.
 
-## Release evidence pending
+## Production release evidence
 
-Matching public pages, migration, deployed functions, server secrets, MSG91 final
-reports, activation cutoff, the one authorized handset SMS and its receipt/PDF
-remain to be verified. Provider acceptance alone will not be called delivery.
-No synthetic sale will be written to production to obtain a test receipt.
+The owner explicitly approved pushing both repositories, activation, MSG91
+configuration and the real test SMS. The 12 earlier Ops commits were included;
+the normal merge preserved both the remote #58 release IDs and later evidence.
+Implementation `f1d107f8` and merge `493ea0bb` are pushed. Deploy run
+`37177579707` passed every verification job, migration, all Edge Functions and
+Pages publication. The live Ops entry bundle contains `493ea0bb` and answers 200.
 
-The release check found 12 earlier local Ops commits (mostly documentation, plus
-the reopened-counter drain fix and verification improvements), and one remote
-receipt-release documentation commit. A normal merge requires reconciling only
-`the-receipt-says-its-yours/tasks.md`; preserve the remote release IDs and the
-local later verification evidence. The full local suites above include all 12
-earlier commits. Landing is otherwise fully pushed at `42b07a0`.
+Landing `c4e6092` passed Pages run `37177577578`. Live messaging, terms and privacy
+each answer 200 with the approved copy, before Ops activation. Its release
+evidence is recorded in `1ab29e4`. No Worker change or redeployment was required.
+
+Production project `iefcidjbfnmsiqithqbj` has migration `20261004000000`, both
+handlers, the three server secrets, the Vault endpoint/worker credential and
+one active minute recovery job. Both unauthenticated handlers return 401.
+The authenticated disabled worker returned 200 with zero processed; the
+authenticated unknown report returned 200 with `accepted: false`.
+
+The MSG91 `de16` webhook is enabled for On Report Received, POST JSON to the
+report handler, with its distinct private header and only bill UUID, request ID
+and status. No mobile or message body is included. Sending was enabled at
+`2026-10-04T04:47:53.179311Z` (10:17:53 a.m. IST). History produced zero jobs.
+
+One explicitly authorized test SMS used the shared production submission
+contract and the existing Kalyani Cafe bill 199 receipt, with its actual zero
+earned points and zero balance, addressed only to the owner's approved number.
+It did not manufacture a sale or backfill a customer delivery. MSG91 accepted
+request `366a646a7135507942345945` at 04:47:57Z and its filtered log reports
+**Delivered** at 04:48:01Z, sender DEDTTL and the approved DLT template. The real
+authenticated delivery callback reached the production report handler at
+04:48:17.916Z and received 200. Since this manual connection test has no delivery
+job, it is acknowledged without attaching it to a customer's history.
+
+The SMS receipt URL, counter view and PDF all returned 200; the PDF is a real
+`application/pdf` response. New-bill settlement, offline replay, competing claims
+and terminal delivery persistence were proved against the real local backend.
+No eligible new production bill existed at the release check, and no synthetic
+production sale was added. The first genuine eligible sale will exercise that
+same automatic path in production.
