@@ -12,6 +12,8 @@ export function edgeFunctionTypeEntrypoints(root = resolve(process.cwd(), 'supab
   return [
     resolve(root, '_shared', 'restaurant-mappings.ts'),
     resolve(root, '_shared', 'run-outcome.ts'),
+    resolve(root, 'send-bill-receipts', 'index.ts'),
+    resolve(root, 'bill-receipt-report', 'index.ts'),
   ]
 }
 

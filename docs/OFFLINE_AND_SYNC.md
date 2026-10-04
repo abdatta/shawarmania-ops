@@ -7,6 +7,14 @@
 
 ## What works offline
 
+**Receipt SMS waits for server settlement (#59).** The tablet saves the same
+durable command with its phone snapshot and clears the counter immediately.
+After sync, a deferred database trigger freezes the bill's earned points and
+outlet balance into one delivery job. Command replay cannot create another job.
+Post-commit HTTP wakes the sender; a minute cron recovers queued work. SMS failure
+does not change payment acceptance or the outbox result. An uncertain submission
+is never retried automatically, because the provider may already have sent it.
+
 Deliberately asymmetric, because the risk is asymmetric.
 
 | Works offline | Online only |

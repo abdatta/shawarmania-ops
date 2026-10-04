@@ -8,6 +8,11 @@ describe('Edge Function typechecking', () => {
       entry.replace(/.*[/\\]functions[/\\]/, '').replaceAll('\\', '/'),
     )
 
-    expect(names).toEqual(['_shared/restaurant-mappings.ts', '_shared/run-outcome.ts'])
+    expect(names).toEqual([
+      '_shared/restaurant-mappings.ts',
+      '_shared/run-outcome.ts',
+      'send-bill-receipts/index.ts',
+      'bill-receipt-report/index.ts',
+    ])
   })
 })

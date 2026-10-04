@@ -86,6 +86,10 @@ type BillReadRow = Tables<'bills'> & {
   // that shape, so this goes through `joined()` like every other to-one here —
   // typed both ways because the client's own types describe it as either.
   bill_public_links: PublicLinkReadRow | PublicLinkReadRow[] | null
+  bill_receipt_deliveries?:
+    | Pick<Tables<'bill_receipt_deliveries'>, 'state' | 'failure_code'>
+    | Pick<Tables<'bill_receipt_deliveries'>, 'state' | 'failure_code'>[]
+    | null
   bill_payments: Tables<'bill_payments'>[]
   // `prepared_at` rides along because the bill's edit window is derived from
   // it as well as from `paid_at` (#55).
@@ -241,6 +245,7 @@ function billView(
   const voider = joined(row.voider)
   const review = joined(row.attribution_reviews)
   const publicLink = joined(row.bill_public_links)
+  const delivery = joined(row.bill_receipt_deliveries ?? null)
   const effectiveForBill = effective.filter((payment) => payment.bill_id === row.id)
   const payments =
     effectiveForBill.length > 0
@@ -324,6 +329,12 @@ function billView(
     // A revoked link is not offered for sharing again. It resolves for nobody,
     // and re-sending a killed URL would be handing out a refusal.
     receiptUrl: receiptLink(publicLink && publicLink.revoked_at === null ? publicLink.token : null),
+    receiptDelivery: delivery
+      ? {
+          state: delivery.state as NonNullable<BillingBill['receiptDelivery']>['state'],
+          failureCode: delivery.failure_code,
+        }
+      : null,
   }
 }
 
@@ -982,7 +993,7 @@ export function createSupabaseBillingAdapter(
     let query = client
       .from('bills')
       .select(
-        '*, bill_items(*), bill_discounts(*), bill_public_links(token, revoked_at), bill_payments(*), order:orders!bills_order_id_fkey(order_number, prepared_at), biller:profiles!bills_biller_profile_id_fkey(full_name), voider:profiles!bills_voided_by_fkey(id, full_name), attribution_reviews:billing_attribution_reviews(*, resolved_operator:profiles!billing_attribution_reviews_resolved_operator_id_fkey(full_name), reviewer:profiles!billing_attribution_reviews_reviewed_by_fkey(full_name))',
+        '*, bill_items(*), bill_discounts(*), bill_public_links(token, revoked_at), bill_receipt_deliveries(state, failure_code), bill_payments(*), order:orders!bills_order_id_fkey(order_number, prepared_at), biller:profiles!bills_biller_profile_id_fkey(full_name), voider:profiles!bills_voided_by_fkey(id, full_name), attribution_reviews:billing_attribution_reviews(*, resolved_operator:profiles!billing_attribution_reviews_resolved_operator_id_fkey(full_name), reviewer:profiles!billing_attribution_reviews_reviewed_by_fkey(full_name))',
       )
     if (filters.id) query = query.eq('id', filters.id)
     if (filters.outletId) query = query.eq('outlet_id', filters.outletId)

@@ -517,6 +517,14 @@ export function createMockBillingAdapter(
       // bill by construction rather than by luck. A demo that hands out a live
       // URL over fixture data is a demo that leaks.
       receiptUrl: receiptLink(demoReceiptToken(row.bill_number)),
+      // Fixture status only: demo never calls a provider or creates a real job.
+      receiptDelivery:
+        row.customer_phone && row.status === 'settled'
+          ? {
+              state: row.bill_number % 5 === 0 ? 'failed' : 'delivered',
+              failureCode: row.bill_number % 5 === 0 ? 'provider_failed' : null,
+            }
+          : null,
     }
   }
 

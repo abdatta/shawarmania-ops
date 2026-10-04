@@ -127,6 +127,7 @@ function managerHistoryClient(
     token: 'Ab3-_x9QzT',
     revoked_at: null,
   },
+  delivery: { state: string; failure_code: string | null }[] | null = null,
 ) {
   const bill = {
     id: 'bill-1',
@@ -158,6 +159,7 @@ function managerHistoryClient(
     biller: { full_name: 'Demo Biller' },
     counter_device: { label: 'Current renamed tablet' },
     bill_public_links: publicLink,
+    bill_receipt_deliveries: delivery,
   }
   const selected: string[] = []
   const from = vi.fn((table: string) => {
@@ -298,6 +300,21 @@ describe('the live tablet acceptance boundary', () => {
       { receiptUrl: `${RECEIPT_BASE_URL}/bill?t=Ab3-_x9QzT` },
     ])
     expect(selected[0]).toContain('bill_public_links(token, revoked_at)')
+  })
+
+  it('maps the delivery embed while requesting only safe status fields', async () => {
+    const { client, selected } = managerHistoryClient(null, [
+      {
+        state: 'unknown',
+        failure_code: 'submission_unknown',
+      },
+    ])
+    const billing = createSupabaseBillingAdapter(client)
+    await expect(billing.listManagerHistory({ outletId: 'outlet-1' })).resolves.toMatchObject([
+      { receiptDelivery: { state: 'unknown', failureCode: 'submission_unknown' } },
+    ])
+    expect(selected[0]).toContain('bill_receipt_deliveries(state, failure_code)')
+    expect(selected[0]).not.toContain('provider_request_id')
   })
 
   it('offers no link for a revoked one, rather than a URL that would refuse', async () => {

@@ -1,5 +1,15 @@
 # Data Model
 
+**Receipt delivery (#59).** `bill_receipt_deliveries` has one primary-keyed row per
+bill, a composite bill/outlet foreign key, frozen integer earned/balance points,
+timestamps, a safe state/failure code and optional provider request identifier.
+It stores no additional phone, name or message. RLS allows the active owner and
+the bill's outlet managers to read; only server operations write. The private
+singleton `bill_receipt_delivery_settings` enables future-paid bills and carries
+the activation instant. Service-only claim/report functions serialize workers
+and callbacks; Vault holds the endpoint and worker credential. The table does
+not change immutable bill totals or the customer points ledger.
+
 Overview reads compact, independent aggregates through `overview_sales`, `overview_revenue`, `overview_expenses` and `overview_drawer`. Each function rechecks owner or assigned-manager authority for the requested outlet before reading. No summary table stores a second financial truth. Sales use settled bills and effective payment allocations; expenses use `effective_expenses`; delivery uses daily net figures, or qualified gross while commission is unknown. Drawer Last Left and expected-now use the existing count and cash interval readers. Monthly filters use explicit business dates.
 
 > The authoritative version is the migration set in `supabase/migrations/` (landed with `data-model-and-tenancy`, 2026-07-26); this page explains intent and invariants. Where implementation settled an open question or diverged from the original sketch, the decision is recorded inline with its reason.

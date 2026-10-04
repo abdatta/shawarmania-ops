@@ -1,6 +1,26 @@
 # Proposal: bill-receipt-delivery
 
-> **Model**: Opus · **Wave**: F · **Depends on**: #54, #56, #62, #66 · **Gate**: **a customer who gave their number at the counter receives their own receipt link on their phone without anybody choosing to send it**, and one who did not receives nothing; the message goes **once, as soon as the settled bill reaches the server**, never waiting on *Prepared*, and an offline bill sends when it syncs, still once; the message says what `/messages/` already says it says — one per bill, no marketing; **asking the counter, calling or emailing stops it**, proved by the next settled bill for that number sending nothing and by a hand-crafted request failing to clear the suppression; the counter asks for the number **at payment**, with the published question in the published words, and records the answer, and a customer who gave their number but said no to the message receives nothing; switching delivery on sends nothing for bills rung before it existed; a demo session provably sends no real message; a send that fails is visible to somebody rather than silently lost; and the four-role demo walkthrough still walks.
+## Current scope — owner decision, 3 October 2026
+
+**This section supersedes the earlier consent, suppression and payment-dialog
+design below.** The owner explicitly chose providing a valid phone at the counter
+as opting into receipt SMS. No separate consent question, suppression preference,
+or counter-layout redesign is part of #59. The existing number-or-skip flow stays.
+
+**Current gate:** a new settled bill with a valid number automatically sends its
+receipt, earned points and frozen outlet balance when it reaches the server,
+including after offline sync, once per bill. No valid number, pre-activation bills
+and demo sessions send nothing. Failures and uncertain sends are visible to the
+owner and that outlet's managers; billing never waits for MSG91.
+
+The landing repo is clean and fully pushed at `42b07a0`. That change removed
+reply STOP, but separate stopping promises remain. This change updates messaging,
+terms and privacy to match the owner's decision before delivery is enabled.
+Customer-data removal remains a separate privacy request; directory deletion is
+not implemented here. The older sections below retain the seed's reasoning,
+not the current requirements. `design.md`, `tasks.md` and the delta are current.
+
+> **Model**: Opus · **Wave**: F · **Depends on**: #54, #56, #62, #66 · **Gate**: **a customer who gave a valid number receives their receipt, earned points and frozen outlet balance by SMS automatically after server settlement**, including offline sync; providing the number is the opt-in, with no separate question or SMS suppression preference; no number, pre-activation bills and demo send nothing; one automatic submission per bill, with uncertain acceptance never retried; final delivery is distinguished from submission, failure and uncertainty are visible to the owner and that outlet managers, and billing never waits for SMS; matching landing messaging, terms and privacy are published before activation; the manual WhatsApp fallback and four-role demo still work.
 
 ## Why
 

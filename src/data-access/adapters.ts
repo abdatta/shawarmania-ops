@@ -1567,6 +1567,11 @@ export interface BillingBill extends ServiceFacts {
    * that would refuse.
    */
   receiptUrl: string | null
+  /** Automatic SMS status. Absent on pre-launch, unsynced or numberless bills. */
+  receiptDelivery?: {
+    state: 'queued' | 'sending' | 'submitted' | 'delivered' | 'failed' | 'unknown' | 'skipped'
+    failureCode: string | null
+  } | null
 }
 
 export type BillingAttributionOutcome = 'confirmed_original' | 'assigned_other' | 'operator_unknown'

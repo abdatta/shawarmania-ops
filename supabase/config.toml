@@ -114,6 +114,13 @@ verify_jwt = false
 [functions.redeem-invite]
 verify_jwt = false
 
+# #59: distinct server-only secrets authorize sending and delivery reports.
+[functions.send-bill-receipts]
+verify_jwt = false
+
+[functions.bill-receipt-report]
+verify_jwt = false
+
 # Associated-email sign-in is public by definition. It resolves the private
 # email-to-alias mapping server-side, rate-limits hashed attempt keys, and asks
 # Supabase Auth to verify the password with the public anon credential.

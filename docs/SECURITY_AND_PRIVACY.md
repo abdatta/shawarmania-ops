@@ -410,6 +410,22 @@ absorb with its rate limits, and a write here would hand an attacker the lever.
   the logo and "Your receipt" and no amount, item or bill number, so forwarding a
   link does not spill its contents into a group chat before anybody opens it.
 
+### Automatic receipt SMS (#59)
+
+Giving a valid customer number at billing opts into one service receipt SMS per
+new settled bill, including its earned points and balance at that outlet. There
+is no separate consent checkbox or SMS preference. Skipping the number skips SMS.
+Customer-data removal is a separate privacy request.
+
+MSG91 receives the destination number, receipt URL, integer points and a bill UUID
+used to correlate its report. Delivery jobs retain no phone, name or message
+body; the worker reads the existing bill snapshot only when claiming it. Keys
+stay in Edge secrets and Vault. The worker and report receiver use different
+server-only credentials, accept no browser authority, and log no payloads,
+provider errors, URLs or phones. Managers can read only their outlet's delivery
+status; the owner reads across outlets. Counter, employee and anonymous clients
+cannot read jobs or configure, claim or report them. Demo sends nothing.
+
 ### Sending a receipt on WhatsApp is a person's message, not the app's
 
 On a bill that carries a customer's number, Billing history offers **Send

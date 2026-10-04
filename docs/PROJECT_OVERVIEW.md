@@ -23,7 +23,7 @@ Deliberately out of scope. Each of these is a real thing a restaurant might want
 - **It is not a customer-facing ordering app.** Swiggy and Zomato already do delivery; their revenue reaches the ledger through their own evidence, not rung as counter bills and not fulfilled here.
 - **It does not do payroll.** No salary is stored anywhere in the system (owner decision, 2026-07-28). Attendance feeds whatever payroll process runs outside the app, and wages actually paid are recorded as expenses like any other cost.
 - **Aggregator figures are sourced, not typed.** Zomato revenue, commission and Hyperpure supply costs are read from their operator evidence and reconciled against the payout (#42, #43). Swiggy uses timestamped Finance order detail for a provisional pre-tax daily gross and its payout annexure for final settlement; neither channel can be entered through the ledger. No customer-facing ordering is fulfilled here.
-- **It does not print receipts, compute GST, or send digital receipts** — in v1. The data model is built so all three can be added without migrating historical bills. See [Limitations](LIMITATIONS.md).
+- **It does not print receipts or compute GST.** New bills with a valid customer number send a digital receipt and points by SMS after server settlement; offline bills send after sync. See [Limitations](LIMITATIONS.md).
 - **It is not a supplier or purchase-order system.** Stock arriving is a movement and an expense, not a procurement workflow.
 
 ## Product principles

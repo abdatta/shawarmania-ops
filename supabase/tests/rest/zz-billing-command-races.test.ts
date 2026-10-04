@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import 'fake-indexeddb/auto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import {
@@ -12,6 +13,11 @@ import {
 } from '../../../shared/billing-command'
 import type { Database, Json } from '../../../src/data-access/database.types'
 import { resolveBusinessDate } from '../../../src/domain/datetime'
+import { BillingDeliveryDatabase } from '../../../src/outbox/schema'
+import { BillingDeliveryStore } from '../../../src/outbox/store'
+import { BillingDrainCoordinator } from '../../../src/outbox/drain'
+import type { BillingCommandResult } from '../../../src/domain'
+import { submitReceipt } from '../../functions/_shared/receipt-delivery'
 
 const SUPABASE_URL = process.env['SUPABASE_URL'] ?? 'http://127.0.0.1:54321'
 const SUPABASE_ANON_KEY =
@@ -97,6 +103,132 @@ let tabletTwo: Client
 let manager: Client
 let otherOutletManager: Client
 let service: Client
+
+describe.sequential('automatic receipts after offline billing', () => {
+  it('drains a durable offline bill, replays a lost response, and submits one receipt under competing workers', async () => {
+    const database = new BillingDeliveryDatabase(`receipt-offline-${crypto.randomUUID()}`)
+    const store = new BillingDeliveryStore(database)
+    const billId = crypto.randomUUID()
+    const businessDate = resolveBusinessDate(new Date(), '04:00')
+    const now = Date.now()
+    const command = await createBillingCommand({
+      commandId: crypto.randomUUID(),
+      tabletId: TABLET,
+      shiftId: SHIFT,
+      type: 'pay_now',
+      createdAt: new Date(now).toISOString(),
+      payload: {
+        ...payNowPayload(billId, crypto.randomUUID(), businessDate),
+        customerPhone: '+919000000591',
+      },
+    })
+    const configured = await service
+      .from('bill_receipt_delivery_settings')
+      .update({
+        enabled: true,
+        enabled_at: new Date(now - 60_000).toISOString(),
+      })
+      .eq('id', true)
+    expect(configured.error).toBeNull()
+    let online = false
+    let loseResponse = true
+    const drain = new BillingDrainCoordinator({
+      store,
+      tabletId: TABLET,
+      ownerId: 'receipt-test',
+      random: () => 0,
+      execute: async (envelope) => {
+        if (!online) throw new Error('offline')
+        const result = await tablet.rpc('pay_billing_now', rpcArgs(envelope))
+        if (result.error) throw result.error
+        if (loseResponse) {
+          loseResponse = false
+          throw new Error('response lost')
+        }
+        return result.data as unknown as BillingCommandResult
+      },
+    })
+    try {
+      await store.accept({
+        command,
+        tabletId: TABLET,
+        outletId: OUTLET,
+        businessDate,
+        chainId: billId,
+        eligibleAtMs: now,
+        nowMs: now,
+      })
+      expect(await drain.runOnce()).toBe(0)
+      expect(await store.countUnresolved(TABLET)).toBe(1)
+      expect(
+        (await service.from('bill_receipt_deliveries').select('bill_id').eq('bill_id', billId))
+          .data,
+      ).toEqual([])
+      online = true
+      await store.hintRetry(TABLET, Date.now())
+      expect(await drain.runOnce()).toBe(0) // server committed; acknowledgement lost
+      await store.hintRetry(TABLET, Date.now())
+      expect(await drain.runOnce()).toBe(1) // exact replay acknowledges local queue
+      expect(await store.countUnresolved(TABLET)).toBe(0)
+      const jobs = await service
+        .from('bill_receipt_deliveries')
+        .select('bill_id, state')
+        .eq('bill_id', billId)
+      expect(jobs.error).toBeNull()
+      expect(jobs.data).toEqual([{ bill_id: billId, state: 'queued' }])
+      const workers = await Promise.all([
+        service.rpc('bill_receipt_claim'),
+        service.rpc('bill_receipt_claim'),
+      ])
+      expect(workers.every((result) => result.error === null)).toBe(true)
+      const claimed = workers.flatMap((result) => result.data ?? [])
+      expect(claimed.filter((job) => job.bill_id === billId)).toHaveLength(1)
+      let submissions = 0
+      const outcome = await submitReceipt(
+        claimed.find((job) => job.bill_id === billId)!,
+        'synthetic-key',
+        async () => {
+          submissions++
+          return Response.json({ type: 'success', message: 'synthetic-receipt-0001' })
+        },
+      )
+      expect(submissions).toBe(1)
+      expect(outcome.state).toBe('submitted')
+      expect(
+        (
+          await service.rpc('bill_receipt_finish', {
+            p_bill: billId,
+            p_state: outcome.state,
+            ...(outcome.requestId ? { p_request_id: outcome.requestId } : {}),
+            ...(outcome.failureCode ? { p_failure_code: outcome.failureCode } : {}),
+          })
+        ).error,
+      ).toBeNull()
+      const visible = await manager
+        .from('bills')
+        .select('id, bill_receipt_deliveries(state, failure_code)')
+        .eq('id', billId)
+      expect(visible.error).toBeNull()
+      expect(visible.data).toEqual([
+        { id: billId, bill_receipt_deliveries: [{ state: 'submitted', failure_code: null }] },
+      ])
+      expect(
+        (
+          await otherOutletManager
+            .from('bill_receipt_deliveries')
+            .select('bill_id')
+            .eq('bill_id', billId)
+        ).data,
+      ).toEqual([])
+      expect((await tablet.rpc('bill_receipt_claim')).error).not.toBeNull()
+      expect((await service.rpc('bill_receipt_claim')).data).toEqual([])
+    } finally {
+      await drain.stop()
+      await database.delete()
+      await service.from('bill_receipt_delivery_settings').update({ enabled: false }).eq('id', true)
+    }
+  })
+})
 
 beforeAll(async () => {
   ;[tablet, tabletTwo, manager, otherOutletManager] = await Promise.all([

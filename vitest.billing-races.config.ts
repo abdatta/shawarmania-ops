@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process'
+import { fileURLToPath, URL } from 'node:url'
 
 import { defineConfig } from 'vitest/config'
 
@@ -23,6 +24,7 @@ function serviceRoleKey(): string {
  * intentionally leave immutable bills and receipts behind in the local seed.
  */
 export default defineConfig({
+  resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   test: {
     env: {
       SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey(),

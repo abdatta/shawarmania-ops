@@ -710,11 +710,12 @@ and asks the person to check the device's internet connection; it does not
 mislabel that failure as a wrong username or password. A backend refusal still
 uses one indistinguishable credential message.
 
-### A receipt is sent by hand (#54, #63)
+### Receipt SMS has one automatic submission, with manual fallback (#54, #59, #63)
 
 Every bill is reachable at a public URL from the moment the server has it.
-**Nothing sends it to the customer automatically.** The owner or a franchise
-admin sends it by hand, from a bill they are already looking at:
+New settled bills with a valid customer number automatically send receipt and
+points by SMS through MSG91. The owner or a franchise admin can also send it by
+hand, from a bill they are already looking at:
 
 - a bill carrying the customer's number offers **Send receipt**, which opens
   WhatsApp on that number with the message typed, and the person taps Send;
@@ -722,13 +723,14 @@ admin sends it by hand, from a bill they are already looking at:
 - at the counter, a biller can **show** a customer their bill with **View
   receipt**, which sends nothing.
 
-Automatic delivery was the largest deliberate cut in #54, because it was four
-decisions nobody had made. It is now
-[`bill-receipt-delivery`](../openspec/changes/bill-receipt-delivery/proposal.md)
-(#59), by SMS through MSG91, waiting on Airtel DLT registration. Until it ships a
-customer gets a receipt only if somebody deliberately sends one, so the
-feature's reach is a person's habit. After it ships, Send receipt stays as the
-manual resend.
+Providing the number opts into one receipt SMS per bill. No number, demo bills
+and bills paid before activation send nothing. SMS acceptance is **Submitted**;
+only a final provider report is **Delivered**. An ambiguous response becomes
+**Uncertain** and is never automatically submitted again: MSG91 documents no
+deduplication guarantee, so exactly-once handset delivery cannot be guaranteed.
+Failures and uncertainty appear in the manager's bill Customer details. Send
+receipt remains the manual WhatsApp fallback. Phone numbers are not verified;
+the biller reading the number back remains the control against mistyping.
 
 Four edges of the by-hand path, each accepted (a-receipt-goes-out-on-whatsapp):
 

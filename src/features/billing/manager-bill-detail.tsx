@@ -12,6 +12,7 @@ import { formatBusinessDate, formatDayTime, serviceTypeLabel, tableLabel } from 
 import { BillDiscountRows } from './bill-discount-rows'
 import { LineAmount } from './line-amount'
 import { BillReceiptAction } from './bill-receipt-action'
+import { ReceiptDeliveryStatus } from './receipt-delivery-status'
 
 const CANCELLATION_REASONS = ['Duplicate bill', 'Mistaken entry'] as const
 
@@ -296,6 +297,13 @@ export function ManagerBillDetail({
                 </span>
               </Fact>
               <Fact label="Customer phone">{bill.customerPhone || 'Not provided'}</Fact>
+              {bill.receiptDelivery && (
+                <div className="col-span-2">
+                  <Fact label="Receipt SMS">
+                    <ReceiptDeliveryStatus delivery={bill.receiptDelivery} />
+                  </Fact>
+                </div>
+              )}
             </dl>
           </CollapsibleSection>
 

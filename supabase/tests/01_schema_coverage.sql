@@ -102,7 +102,10 @@ classified as (
       -- reaches either. Their teeth are in `51_the_public_receipt_reader.sql`,
       -- including a column-list assertion on the access record so a later
       -- migration cannot quietly add something that identifies the customer.
-      when tbl in ('public_receipt_settings', 'bill_public_link_views')
+      -- Delivery activation is a private service control; #59 tests that no
+      -- signed-in role can read it or configure the sender.
+      when tbl in ('public_receipt_settings', 'bill_public_link_views',
+                   'bill_receipt_delivery_settings')
         then 'service-only'
       when tbl in ('aggregator_channel_credentials', 'aggregator_auth_requests')
         then 'service-only'

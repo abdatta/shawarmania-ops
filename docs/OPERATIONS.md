@@ -530,10 +530,39 @@ opened many times is a customer, or a chat app building previews. The digest is
 salted and cannot be turned back into an address; it is there to tell one client
 from another, not to identify anybody.
 
+### Automatic receipt SMS *(#59)*
+
+DLT sender `DEDTTL` and MSG91 template `6ac1321521ce1c2d3f08a382` send earned
+points, outlet balance and `https://shawarmania.in/bill?t=<token>`. Providing a
+valid number opts into this service receipt. The sender is disabled on migration;
+publish matching `/messages/`, `/terms/` and `/privacy/` before enabling it.
+
+Deploy `send-bill-receipts` and `bill-receipt-report`. Set server-only
+`MSG91_AUTHKEY`, `RECEIPT_WORKER_SECRET` and `RECEIPT_WEBHOOK_SECRET`; use distinct
+random credentials of at least 32 characters. With service authority call
+`bill_receipt_configure(false, <sender URL>, <worker secret>)` to save the endpoint
+and credential in Vault. Configure MSG91's final-report webhook to the report
+function URL, header `x-receipt-webhook-secret`, and JSON fields `billId` from
+`UUID`, `requestId` from `requestId`, and `status` from `status`. No mobile field
+is needed. Then call `bill_receipt_configure(true)`; its cutoff excludes all bills
+paid earlier, even if their offline commands arrive later.
+
+The deferred settlement trigger creates a job after points are written. `pg_net`
+wakes the worker after commit and the minute `bill-receipt-recovery` cron retries
+queued wakeups. Claims are atomic and an automatic submission is never repeated.
+**Submitted** means MSG91 accepted it; **Delivered** requires its final report.
+An abandoned claim or lost response becomes **Uncertain**. In Billing history,
+open Customer details to see the status; reload to see a later report. Use Send
+receipt on WhatsApp for failures or uncertainty. Never reset a claimed job to
+queued: that risks sending twice. To pause new work and claims, call
+`bill_receipt_configure(false)`; payment keeps working. Previously queued work can
+resume after re-enabling; historical bills are never backfilled. Check cron
+health and MSG91 webhook auto-pause when reports stop arriving.
+
 ### Sending a receipt on WhatsApp *(#63)*
 
-Until automatic delivery (#59, SMS through MSG91) is approved, and whenever it
-fails afterwards, a receipt goes out by hand. In Billing history, expand the bill:
+When automatic SMS delivery fails or is uncertain, a receipt can go out by hand.
+In Billing history, expand the bill:
 
 - **Send receipt** (green, WhatsApp's mark) shows when the bill carries the
   customer's number. It opens WhatsApp on that number with the bill number, its

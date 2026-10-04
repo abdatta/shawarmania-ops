@@ -1485,6 +1485,81 @@ export type Database = {
           },
         ]
       }
+      bill_receipt_deliveries: {
+        Row: {
+          balance_points: number
+          bill_id: string
+          claimed_at: string | null
+          earned_points: number
+          failure_code: string | null
+          outlet_id: string
+          provider_request_id: string | null
+          queued_at: string
+          reported_at: string | null
+          state: string
+          submitted_at: string | null
+        }
+        Insert: {
+          balance_points: number
+          bill_id: string
+          claimed_at?: string | null
+          earned_points: number
+          failure_code?: string | null
+          outlet_id: string
+          provider_request_id?: string | null
+          queued_at?: string
+          reported_at?: string | null
+          state?: string
+          submitted_at?: string | null
+        }
+        Update: {
+          balance_points?: number
+          bill_id?: string
+          claimed_at?: string | null
+          earned_points?: number
+          failure_code?: string | null
+          outlet_id?: string
+          provider_request_id?: string | null
+          queued_at?: string
+          reported_at?: string | null
+          state?: string
+          submitted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bill_receipt_deliveries_bill_outlet_fkey"
+            columns: ["bill_id", "outlet_id"]
+            isOneToOne: false
+            referencedRelation: "bills"
+            referencedColumns: ["id", "outlet_id"]
+          },
+          {
+            foreignKeyName: "bill_receipt_deliveries_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bill_receipt_delivery_settings: {
+        Row: {
+          enabled: boolean
+          enabled_at: string | null
+          id: boolean
+        }
+        Insert: {
+          enabled?: boolean
+          enabled_at?: string | null
+          id?: boolean
+        }
+        Update: {
+          enabled?: boolean
+          enabled_at?: string | null
+          id?: boolean
+        }
+        Relationships: []
+      }
       billing_attribution_reviews: {
         Row: {
           bill_id: string
@@ -4282,6 +4357,35 @@ export type Database = {
         }
         Returns: Json
       }
+      bill_receipt_claim: {
+        Args: { p_limit?: number }
+        Returns: {
+          balance: number
+          bill_id: string
+          earned: number
+          mobile: string
+          token: string
+        }[]
+      }
+      bill_receipt_configure: {
+        Args: { p_enabled: boolean; p_url?: string; p_worker_secret?: string }
+        Returns: undefined
+      }
+      bill_receipt_finish: {
+        Args: {
+          p_bill: string
+          p_failure_code?: string
+          p_request_id?: string
+          p_state: string
+        }
+        Returns: undefined
+      }
+      bill_receipt_recover: { Args: never; Returns: undefined }
+      bill_receipt_report: {
+        Args: { p_bill: string; p_request_id: string; p_state: string }
+        Returns: boolean
+      }
+      bill_receipt_wake: { Args: never; Returns: undefined }
       billing_begin_command: {
         Args: {
           p_actor_id: string
