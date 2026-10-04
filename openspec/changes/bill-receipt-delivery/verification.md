@@ -86,7 +86,9 @@ authenticated delivery callback reached the production report handler at
 job, it is acknowledged without attaching it to a customer's history.
 
 The SMS receipt URL, counter view and PDF all returned 200; the PDF is a real
-`application/pdf` response. New-bill settlement, offline replay, competing claims
+`application/pdf` response. The owner supplied a handset screenshot of the
+received SMS and explicitly confirmed: "Yes, received and opens." The screenshot
+is kept outside Git. New-bill settlement, offline replay, competing claims
 and terminal delivery persistence were proved against the real local backend.
 No eligible new production bill existed at the release check, and no synthetic
 production sale was added. The first genuine eligible sale will exercise that
