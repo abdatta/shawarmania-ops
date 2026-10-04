@@ -1,6 +1,6 @@
 # Proposal: bill-receipt-delivery
 
-> **Model**: Opus · **Wave**: F · **Depends on**: #54, #56, #62, #66 · **Gate**: **a customer who gave their number at the counter receives their own receipt link on their phone without anybody choosing to send it**, and one who did not receives nothing; the message says what `/messages/` already says it says — one per bill, no marketing; **replying STOP stops it**, proved by the next settled bill for that number sending nothing and by a hand-crafted request failing to clear the suppression; the counter asks the published consent question in the published words and records the answer, and a customer who gave their number only to earn points receives nothing; switching delivery on sends nothing for bills rung before it existed; a demo session provably sends no real message; a send that fails is visible to somebody rather than silently lost; and the four-role demo walkthrough still walks.
+> **Model**: Opus · **Wave**: F · **Depends on**: #54, #56, #62, #66 · **Gate**: **a customer who gave their number at the counter receives their own receipt link on their phone without anybody choosing to send it**, and one who did not receives nothing; the message goes **once, as soon as the settled bill reaches the server**, never waiting on *Prepared*, and an offline bill sends when it syncs, still once; the message says what `/messages/` already says it says — one per bill, no marketing; **asking the counter, calling or emailing stops it**, proved by the next settled bill for that number sending nothing and by a hand-crafted request failing to clear the suppression; the counter asks for the number **at payment**, with the published question in the published words, and records the answer, and a customer who gave their number but said no to the message receives nothing; switching delivery on sends nothing for bills rung before it existed; a demo session provably sends no real message; a send that fails is visible to somebody rather than silently lost; and the four-role demo walkthrough still walks.
 
 ## Why
 
@@ -9,6 +9,79 @@ whose trigger was *"the owner picks a channel and settles consent."* Both happen
 and not as a plan — **as something already published and filed with a regulator.**
 
 That is what makes this change unusual, and it should be read before anything is designed.
+
+## Where this stands, 2026-10-03: the channel is built and proved
+
+**Everything outside this repository is done.** A real receipt SMS reached the
+owner's phone on 2026-10-03 with its points and link filled in. What exists:
+
+| Piece | Value |
+|---|---|
+| Sender | Airtel DLT principal entity `1001829618159358766` (De & Datta LLP), header **`DEDTTL`**; arrives as `CP-DEDTTL-S` (`-S`: service) |
+| DLT template | `1077524620016122125`, Service Implicit, approved 2026-10-03; wording in #66 design D6 |
+| DLT CTA | dynamic URL `https://shawarmania.in/bill?` (#66) |
+| Telemarketer chain | Airtel to MSG91 (Walkover Web Solutions, TM `1302157225275643280`), chain `1015638052420708945`, active |
+| MSG91 | workspace `de16`, sender `DEDTTL`, **template ID `6ac1321521ce1c2d3f08a382`**, variables `earned`, `balance`, `url` |
+| Send call | `POST https://control.msg91.com/api/v5/flow`, header `authkey`, body `{template_id, short_url: "0", recipients: [{mobiles: "91XXXXXXXXXX", earned, balance, url}]}`; answers `{"type":"success","message":<request id>}` |
+| Cost | ₹0.25 per SMS from a prepaid rupee wallet (₹3,349 on 2026-10-03), failed sends charged too; ~73 bills a day is ~₹550 a month |
+
+What that settles for the build:
+
+- **No inbound path exists.** A DLT header cannot receive a reply ("Sender can't
+  accept replies" on the handset). So there is **no STOP webhook to build**, and the
+  pages no longer offer one: `/messages/` and `/terms/` dropped *reply STOP* and
+  *reply HELP* on 2026-10-03 (landing `42b07a0`). Stopping is the counter, the phone
+  line or email, each of which ends as suppression set by staff or an admin.
+- **`{#numeric#}` is digits only**: send `String(points)`, never grouped.
+- **`short_url` stays `"0"`.** MSG91's shortener would replace the registered CTA
+  and every message would fail DLT scrubbing.
+- **The auth key** is an Edge Function secret (`MSG91_AUTHKEY`), never the client.
+  The owner's key `ShawarmaniaSMS1` has the Owner rule and IP security off (Supabase
+  has no fixed egress); a narrower key is worth asking MSG91 for before go-live.
+- **The wallet can run dry silently.** MSG91 offers no balance threshold, only an
+  alert recipient. The failure path below covers an empty wallet like any other
+  failed send.
+- **A bill that earned nothing** still sends *"You earned 0 points"*. The template is
+  fixed; a second template is the only way to word it differently.
+- **Points at Kalyani Cafe are on** (5 per ₹200, 10% use cap), but bill 199 (2026-10-03,
+  the first with a customer attached) earned no row. Most likely the switch went on
+  after it, since earning reads it when the bill arrives and settings keep no
+  history. Confirm on the next bill with a customer before relying on it.
+
+## When the number is asked, and when the message goes [recommended 2026-10-03, owner to confirm]
+
+**Send when the settled bill reaches the server, not after *Prepared*.** Everything
+the message carries is final at payment: the items, the total, the tender, the
+points earned and the balance. *Prepared* is a kitchen flag that changes nothing on
+the bill, is tapped late or not at all, and comes after a takeaway customer has
+already left. Nothing done afterwards can make the message wrong in a way that
+matters: the link is live, so a void or a tender correction shows on the page the
+moment it happens; only the two numbers in the text are frozen, and they move only
+on a void. The send is **server-side**, keyed on the bill, so a bill rung offline
+sends once when it syncs and the outbox retrying a bill cannot send it twice.
+
+Rejected: **after both payment and *Prepared***. It delays the receipt for no gain,
+and couples money to a kitchen switch that is not always used.
+
+**Ask for the number at payment, as the payment dialog's first step.** This is
+already what `/messages/` tells customers: *"When you pay at our counter, we ask
+whether you want your bill on your phone."* The cashier asks once, with the reason
+attached, and a dine-in customer who pays at the end is asked when they pay, not
+when they sit down.
+
+What that has to respect:
+
+- **It must come before the tender, not after.** The customer decides the total:
+  gold waives packaging (#62) and points can pay for part of the bill. So the
+  dialog asks *number, then gold and points, then total, then tender*, and the bill
+  is settled with the customer attached.
+- **The order-time customer row stays optional, not removed.** A regular known when
+  ordering still gets gold and points shown on the order, and the payment step then
+  only confirms the message question. Moving the whole customer step out of the
+  order is a larger change to #56 and #62 than this one needs.
+- **Consent is the answer to that question, recorded as its own fact** (who asked,
+  when, the words), as below. A customer who gives the number but says no to the
+  message keeps their points and gets no SMS.
 
 ## The channel is SMS through MSG91, 2026-09-29
 
@@ -24,7 +97,8 @@ What that moves:
   sends until the entity, the six-letter header and the receipt template are
   approved. The template is fixed at approval, variables included, so the
   points slots #62 wants (below) must be in the template submitted now.
-- **Two published promises may not survive the move, and the pages must be
+- **[Resolved 2026-10-03: no inbound path; the pages changed first, see
+  above.]** **Two published promises may not survive the move, and the pages must be
   checked before anything sends.** `/messages/` and `/terms/` promise *"Reply
   STOP"* and *"reply HELP"*. An SMS sent from a DLT alphanumeric header is, as
   far as is known here, send-only: a customer's reply has nowhere to go. Confirm
@@ -144,10 +218,10 @@ promises need checking against SMS first (see *The channel is SMS through MSG91*
 They make commitments this change has to implement rather than revisit:
 
 - **"One message per bill, no offers."** Transactional only. No marketing on this sender.
-- **"Reply STOP any time."** Named on the opt-in page and in the terms. Whether SMS can honour a
-  reply at all is the open question above.
-- Telling the counter, calling, or writing to `hello@shawarmania.in` **also** stops it — so
-  suppression must be settable by staff, not only by an inbound STOP.
+- **"Tell us any time and we stop."** *(Until 2026-10-03 this read "Reply STOP any time"; an
+  SMS sender name cannot receive a reply, so the pages changed.)*
+- Telling the counter, calling, or writing to `hello@shawarmania.in` stops it — so
+  suppression is set by staff and admins; there is no inbound STOP.
 - A number is **removed on request**, and the sale stays in the accounts without it attached.
 - Numbers are **never sold or disclosed for third-party marketing**.
 
@@ -155,7 +229,7 @@ They make commitments this change has to implement rather than revisit:
 currently ask it:
 
 > "Want your bill on your phone? Give us your mobile number. One message per bill, no offers.
-> Reply STOP any time."
+> Tell us any time and we stop."
 
 **If any of this is wrong, the page changes first and this change follows.** The order matters: a
 published opt-in page that describes a programme the system does not run is worse than no page,
@@ -211,13 +285,16 @@ Added since the todo was written:
 
 ## Scope
 
-- **Suppression as customer state**, set by an inbound STOP, by staff at the counter, and by an
-  admin acting on a call or an email. Once set, no bill for that number sends.
-- **Inbound handling** from MSG91, verified as genuinely from MSG91, **if MSG91 offers an inbound
-  path for replies**. If it does not, this item leaves scope and the pages change first.
-- **The send itself**, once per settled bill, idempotent — the counter's offline queue means a bill
-  can reach the server more than once, and a customer must not receive the same receipt twice.
-- **The counter's consent moment**: the published question, asked before the number is keyed.
+- **Suppression as customer state**, set by staff at the counter and by an admin acting on a
+  call or an email. Once set, no bill for that number sends. *(No inbound STOP: a DLT header
+  cannot receive replies, 2026-10-03.)*
+- **The send itself**, server-side through MSG91's Flow API (see *Where this stands*), triggered
+  when a settled bill with a consenting customer reaches the server, once per bill and idempotent
+  — the counter's offline queue means a bill can reach the server more than once, and a customer
+  must not receive the same receipt twice.
+- **The counter's consent moment, at payment**: the payment dialog asks for the number first (or
+  confirms the one attached at ordering), with the published question, before gold, points and the
+  tender are settled.
 - **A visible failure path.** A send that fails is somebody's to see.
 - **Nothing for history.** Switching this on must not message everyone ever billed.
 
@@ -260,15 +337,15 @@ either implements what is published, or the pages are corrected **before** it sh
 
 - Ring a bill with a number, settle it, and watch the message arrive on a real handset.
 - Ring one with no number: nothing sends, nothing errors.
-- Reply STOP (if MSG91 gives the programme an inbound path). Ring that customer another bill.
-  Nothing sends.
+- Pay a bill whose customer gives the number but says no to the message: points are earned, no SMS.
+- Mark an order *Prepared* late, or never: the message has already gone at payment.
 - Clear suppression by a hand-crafted request and confirm it is refused.
 - Ask staff to stop it at the counter for a customer standing there; confirm the next bill is silent.
 - Settle the same bill twice through the offline queue; confirm one message.
 - Switch delivery on in an outlet with trading history; confirm no historical bill sends.
 - In demo mode, ring and settle: confirm no real message leaves.
-- With DLT not yet approved, confirm nothing sends and that the state is visible, not silently
-  dropped.
+- Make a send fail (a wrong auth key, or an empty wallet): confirm the failure is visible to the
+  owner, not silently dropped, and that the bill is otherwise unaffected.
 
 ## User-only gate steps
 
