@@ -202,5 +202,32 @@ After reviewing the expanded checkout and outlet setting, the owner stated
 "Lgtm, you can push". Task 9 is complete and release is authorized. Nine of the
 ten numbered tasks are complete; task 8 awaits a genuine eligible production
 bill. The local evidence above describes the approved application bytes; only
-approval documentation changed afterwards. Release evidence follows once the
-production workflow completes. This change remains active and is not archived.
+approval documentation changed afterwards. Production release evidence follows
+below. This change remains active and is not archived.
+
+Application commit `6d4dd5948ef3f57e0058e0ca8879bdbe3028eaa5` was pushed to
+`main`. [Deploy run 37192024200](https://github.com/abdatta/shawarmania-ops/actions/runs/37192024200)
+passed every verification, build, migration, functions and publication job.
+Pages reported success at **2026-10-04 09:32:58 UTC / 15:02:58 IST**.
+The production build stamp is `6d4dd59` (CI uses Git's seven-character default).
+
+CI observed 2,186 unit/component tests, 2,990 database assertions, the complete
+HTTP/RLS suite, 34 real-account browser tests, schema parity, lint, formatting,
+types, contrast and build passing. Demo browser results were **288 passed and
+2 flaky**, both billing-history layout checks passing on retry. The final local
+demo run above passed all 290 without retries. The CI retry evidence is retained
+here rather than described as an entirely clean first attempt.
+
+Read-only production verification confirmed migration `20261004010000`, the
+non-null default-true column, and collection on for all three existing outlets.
+The installed RPC has one optional argument, denies anonymous execution, checks
+active account plus owner/outlet assignment, and preserves an omitted choice.
+Receipt sending remains enabled. The live HTML and asset return HTTP 200; asset
+`/assets/index-B1t11kAb.js` contains the new setting, payment prompt and expected
+production project. Edge's real owner session shows **Collect customer details**
+on for Kalyani Cafe and **Build 6d4dd59** in its account panel, with no console
+errors. No production setting was changed during verification.
+
+The final read-only points query still returned only historical identified bill
+199, with no earning entry. Task 8 remains open for a genuine eligible bill; this
+release created no production sale, backfill, ledger adjustment or extra SMS.
