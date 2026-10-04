@@ -72,10 +72,10 @@
 - [x] 6.1 Commit locally. **Do not push or deploy**: the owner picks the windows
       (`no-pushes-while-the-counter-trades`).
 - [x] 6.2 🧍 The owner approves the privacy page's words.
-      *(Approved by the owner in chat, 2026-10-03.)*
+      *(Approved with the release, 2026-10-01, and reaffirmed in chat, 2026-10-03.)*
 - [x] 6.3 🧍 Release: the ops push (migration) at any time; the landing push and
       `npm run worker:deploy` together, the privacy page no later than the Worker.
-      *(Checked 2026-10-03. Migration `20260930000000_the_receipt_says_its_yours` is
+      *(Released 2026-10-01: ops `6874197d` and `d0cb2fd2`, migrations `20260930000000` and `20260930010000`; landing `ae97f9d` and `960e55a`, Worker `946bea0a`. The production reader was checked read-only: the three keys, no table or void reason, service-role only. Checked again 2026-10-03. Migration `20260930000000_the_receipt_says_its_yours` is
       applied in production. The landing `main` has nothing unpushed, and the live
       receipt of a bill with a customer shows the last four digits and neither the
       name nor the full number, in the customer page and in the counter view; that
