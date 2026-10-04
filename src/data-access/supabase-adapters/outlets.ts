@@ -420,7 +420,7 @@ export function createSupabaseOutletsAdapter(
     async getServiceSettings(id) {
       const { data, error } = await table()
         .select(
-          'dine_in_offered, takeaway_offered, table_numbers, packaging_mode, packaging_price_paise, packaging_free_for_gold',
+          'collect_customer_details, dine_in_offered, takeaway_offered, table_numbers, packaging_mode, packaging_price_paise, packaging_free_for_gold',
         )
         .eq('id', id)
         .maybeSingle()
@@ -432,7 +432,7 @@ export function createSupabaseOutletsAdapter(
       Never through `outlets_update`, which stays the owner's alone for every
       other column: through `set_outlet_service_settings`, which the owner and
       the outlet's own managers may call, re-derives the caller's authority, and
-      writes these six columns and nothing else.
+      writes service and customer-collection columns and nothing else.
     */
     async updateServiceSettings(id, settings) {
       const problem = serviceSettingsProblem(settings)
@@ -440,6 +440,7 @@ export function createSupabaseOutletsAdapter(
         throw new DataActionError(problem, SERVICE_SETTINGS_PROBLEM_MESSAGES[problem])
       }
       const { data, error } = await client.rpc('set_outlet_service_settings', {
+        p_collect_customer_details: settings.collectCustomerDetails,
         p_outlet: id,
         p_dine_in_offered: settings.dineInOffered,
         p_takeaway_offered: settings.takeawayOffered,

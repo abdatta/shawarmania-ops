@@ -3653,6 +3653,7 @@ export type Database = {
           business_day_cutover: string
           city: string | null
           code: string
+          collect_customer_details: boolean
           created_at: string
           dine_in_offered: boolean
           discount_presets: Json
@@ -3694,6 +3695,7 @@ export type Database = {
           business_day_cutover?: string
           city?: string | null
           code: string
+          collect_customer_details?: boolean
           created_at?: string
           dine_in_offered?: boolean
           discount_presets?: Json
@@ -3735,6 +3737,7 @@ export type Database = {
           business_day_cutover?: string
           city?: string | null
           code?: string
+          collect_customer_details?: boolean
           created_at?: string
           dine_in_offered?: boolean
           discount_presets?: Json
@@ -5480,6 +5483,7 @@ export type Database = {
           business_day_cutover: string
           city: string | null
           code: string
+          collect_customer_details: boolean
           created_at: string
           dine_in_offered: boolean
           discount_presets: Json
@@ -5523,6 +5527,7 @@ export type Database = {
       }
       set_outlet_service_settings: {
         Args: {
+          p_collect_customer_details?: boolean
           p_dine_in_offered: boolean
           p_outlet: string
           p_packaging_free_for_gold: boolean
@@ -5538,6 +5543,7 @@ export type Database = {
           business_day_cutover: string
           city: string | null
           code: string
+          collect_customer_details: boolean
           created_at: string
           dine_in_offered: boolean
           discount_presets: Json

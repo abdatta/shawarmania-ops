@@ -5,7 +5,21 @@
 **This section supersedes the earlier consent, suppression and payment-dialog
 design below.** The owner explicitly chose providing a valid phone at the counter
 as opting into receipt SMS. No separate consent question, suppression preference,
-or counter-layout redesign is part of #59. The existing number-or-skip flow stays.
+is part of #59. The payment-time expansion below supersedes the original decision
+to leave the counter layout alone; the order-time number-or-skip option stays.
+
+**Local expansion, owner-authorized 4 October 2026:** payment asks for the number
+when none is attached, then shows membership and points before total and tender.
+Direct bills and saved orders carry that decision through the existing durable
+commands. The owner reviewed the UI and authorized pushing on 4 October 2026.
+Release may proceed; the production points confirmation remains open.
+
+**Outlet choice, owner-authorized 4 October 2026:** add a default-on Collect
+customer details setting, editable by the owner and each outlet's own franchise
+admins. Off hides customer entry in composing/editing and skips the checkout
+number prompt without requiring Skip. Existing recorded customer facts and
+benefits stay intact; anonymous new bills have no customer-linked points or SMS.
+The setting travels with cached outlet menu data for offline starts.
 
 **Current gate:** a new settled bill with a valid number automatically sends its
 receipt, earned points and frozen outlet balance when it reaches the server,
@@ -72,8 +86,8 @@ What that settles for the build:
 
 > **Status, 4 October 2026.** *Send at settlement* is decided and built (design D1).
 > *Ask at payment* is the owner's own request (3 October, in the session that set
-> up DLT and MSG91) and is **not built**: the scope note above shipped #59 with the
-> existing number-or-skip row. It is the open follow-up in `tasks.md` 7. The consent
+> up DLT and MSG91). It is now **implemented, verified and owner-approved for release**
+> under task 7. The consent
 > half of the last bullet below is superseded: giving a number is the opt-in, and a
 > number with "no SMS" is not an option the counter offers [owner, 3 October 2026].
 

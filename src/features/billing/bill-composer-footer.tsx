@@ -29,13 +29,9 @@ import type { CustomerSelection } from './customer-dialog'
  * what was decided in three states, and a decision already made is changed by
  * tapping the row again and making a different one.
  *
- * What enforces the decision is the terminal actions: they stay disabled until
- * the biller has either identified somebody or skipped. There is no sentence
- * under the row saying so, because a disabled Paid button beside an untouched
- * row already says it, and a third way of saying the same thing is what the red
- * line under the old inputs was. The requirement is this UI's, never the
- * schema's: both snapshot columns stay nullable so the owner can reverse the
- * trial without a migration.
+ * Order waits for identification or skip here. Paid asks for that decision at
+ * the start of checkout instead, before loyalty and tender. Both snapshot
+ * columns stay nullable: skipping never requires a customer record.
  */
 export function BillComposerFooter({
   lines,
@@ -49,6 +45,7 @@ export function BillComposerFooter({
   discountTotalPaise = 0,
   service,
   serviceOwed = false,
+  collectCustomerDetails = true,
 }: {
   lines: BillLineDraft[]
   /** What the biller decided, or null while they have decided nothing. */
@@ -74,10 +71,12 @@ export function BillComposerFooter({
    * actions wait, and the chips standing unpressed beside them are the reminder.
    */
   serviceOwed?: boolean
+  collectCustomerDetails?: boolean
 }) {
   const totals = billTotals(lines, { discountPaise: discountTotalPaise })
 
-  const canComplete = !settling && lines.length > 0 && customer !== null && !serviceOwed
+  const canPay = !settling && lines.length > 0 && !serviceOwed
+  const canComplete = canPay && (!collectCustomerDetails || customer !== null)
 
   return (
     <div className="space-y-3">
@@ -99,7 +98,12 @@ export function BillComposerFooter({
         of one control — which is the failure this footer's own doc warns about.
       */}
       {!editing && (
-        <CustomerServiceRow customer={customer} onOpen={onOpenCustomer} service={service} />
+        <CustomerServiceRow
+          customer={customer}
+          onOpen={onOpenCustomer}
+          service={service}
+          collectCustomerDetails={collectCustomerDetails}
+        />
       )}
 
       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
@@ -127,7 +131,7 @@ export function BillComposerFooter({
           <Button
             variant="secondary"
             size="control"
-            disabled={!canComplete}
+            disabled={!canPay}
             data-testid="settle"
             onClick={onPaid}
           >
@@ -169,11 +173,14 @@ export function CustomerServiceRow({
   customer,
   onOpen,
   service,
+  collectCustomerDetails = true,
 }: {
   customer: CustomerSelection | null
   onOpen: () => void
   service?: ReactNode
+  collectCustomerDetails?: boolean
 }) {
+  if (!collectCustomerDetails) return service ?? null
   if (!service) return <CustomerRow customer={customer} onOpen={onOpen} />
   return (
     <div className="space-y-3" data-testid="customer-service-row">

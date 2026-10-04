@@ -4,6 +4,7 @@ import {
   LoaderCircle,
   ShoppingBag,
   UtensilsCrossed,
+  UserRound,
   type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
@@ -38,7 +39,8 @@ import { usePrefersReducedMotion } from '@/lib/use-prefers-reduced-motion'
  * #60), between Details and Tablets on the outlet's page.
  *
  * **The page grows as the shop does.** An outlet setting itself up sees one
- * switch and nothing else. A setting's own options open **inside** its tile
+ * service switch plus the independent customer-collection switch. A setting's
+ * own options open **inside** its tile
  * while it is on and fold away when it is off, each level on the other of the
  * two surface tones from the one it sits in, so what belongs to what reads from
  * the shape rather than from indentation [owner, 2026-09-27]. Tiles rather than
@@ -139,20 +141,22 @@ export function OutletServiceSections({
 
 /**
  * The section as a newcomer's page draws it — a label over a card holding one
- * switch — at its rendered height. Also drawn by the outlet page's own
+ * service switch plus customer collection — at its rendered height. Also drawn
+ * by the outlet page's own
  * placeholder, so the page does not reflow when this arrives.
  */
 export function OutletServiceShimmer() {
   return (
     <div className="space-y-2">
       <Shimmer className="h-10 w-24" />
-      <Shimmer className="h-[calc(5.25rem+2px)]" />
+      <Shimmer className="h-[calc(11rem+2px)]" />
     </div>
   )
 }
 
 function settingsKey(s: OutletServiceSettings): string {
   return [
+    s.collectCustomerDetails,
     s.dineInOffered,
     s.takeawayOffered,
     s.tableNumbers,
@@ -229,6 +233,7 @@ function OrdersSection({
   const packagingOn = draft.takeawayOffered && draft.packagingMode !== 'off'
   const rupees = wholeNumber(priceText)
   const next: OutletServiceSettings = {
+    collectCustomerDetails: draft.collectCustomerDetails,
     dineInOffered: draft.dineInOffered,
     takeawayOffered: draft.takeawayOffered,
     tableNumbers: draft.dineInOffered && draft.tableNumbers,
@@ -307,6 +312,21 @@ function OrdersSection({
         )}
         data-saved={phase === 'saved' || undefined}
       >
+        <SettingTile
+          depth={1}
+          icon={UserRound}
+          caption="Collect customer details"
+          hint="Number for receipts and points"
+          control={
+            <Switch
+              checked={draft.collectCustomerDetails}
+              label="Collect customer details"
+              testId="service-customers-switch"
+              disabled={busy}
+              onChange={(value) => change({ collectCustomerDetails: value })}
+            />
+          }
+        />
         <SettingTile
           depth={1}
           icon={UtensilsCrossed}
@@ -510,6 +530,12 @@ function ReadOnlyOrders({
   return (
     <OutletSection id={`orders-${outletId}`} title="Orders" data-testid="service-orders">
       <Card className="space-y-2 p-3">
+        <SettingTile
+          depth={1}
+          icon={UserRound}
+          caption="Collect customer details"
+          control={<Answer>{stored.collectCustomerDetails ? 'On' : 'Off'}</Answer>}
+        />
         <SettingTile
           depth={1}
           icon={UtensilsCrossed}

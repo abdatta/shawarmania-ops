@@ -79,7 +79,7 @@ import { CounterActivityRail } from './counter-activity-rail'
 import { EditingOrderPin } from './editing-order-pin'
 import { MenuGrid } from './menu-grid'
 import { MyShiftSurface } from './my-shift-surface'
-import { PaymentDialog } from './payment-dialog'
+import { CheckoutDialog } from './checkout-dialog'
 import { ServiceChips } from './service-chips'
 import { TableDialog, type BusyTable } from './table-dialog'
 import { useCounterState } from './use-counter-state'
@@ -166,7 +166,11 @@ function splitPackaging(lines: readonly BillLineDraft[]): {
   return {
     items: lines.filter((line) => !isPackagingLine(line)),
     packaging: packaging
-      ? { unitPricePaise: packaging.unitPricePaise, quantity: packaging.quantity }
+      ? {
+          unitPricePaise: packaging.unitPricePaise,
+          quantity: packaging.quantity,
+          ...(packaging.orderLineId ? { orderLineId: packaging.orderLineId } : {}),
+        }
       : null,
   }
 }
@@ -1027,6 +1031,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   const composerFooter = (
     <BillComposerFooter
       lines={billLines}
+      collectCustomerDetails={serviceSettings.collectCustomerDetails ?? true}
       customer={customer}
       service={serviceChips}
       settling={settling}
@@ -1227,6 +1232,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
                     */
                     footer: (
                       <CustomerServiceRow
+                        collectCustomerDetails={serviceSettings.collectCustomerDetails ?? true}
                         customer={customer}
                         onOpen={openCustomerDialog}
                         service={serviceChips}
@@ -1314,6 +1320,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
           className="absolute -left-2.5 top-0 z-20 h-full w-5 cursor-col-resize touch-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
         />
         <CounterActivityRail
+          checkoutSettings={{ service: serviceSettings, loyalty: loyaltySettings }}
           {...(resume ? { asOf: resume.lastSuccessfulReadAt } : {})}
           refreshKey={pipelineRefresh}
           savedOrderKey={savedOrderKey}
@@ -1393,8 +1400,44 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         />
       )}
 
-      <PaymentDialog
+      <CheckoutDialog
         open={paymentDialogOpen}
+        collectCustomerDetails={serviceSettings.collectCustomerDetails ?? true}
+        customer={customer}
+        lookup={lookupCustomer}
+        suggest={suggestCustomer}
+        grantGold={
+          isRenderable(getPartState('counter-gold'), session?.mode ?? 'real') &&
+          loyaltySettings.goldCounterGrant
+            ? grantGold
+            : undefined
+        }
+        goldMonths={loyaltySettings.goldDurationMonths}
+        onChooseCustomer={(selection) => {
+          const samePerson =
+            customer?.kind === 'identified' &&
+            selection.kind === 'identified' &&
+            customer.phone === selection.phone
+          if (!samePerson) {
+            setPointsRequested(0)
+            setHeldPoints(0)
+          }
+          setCustomer(selection)
+        }}
+        points={{
+          shown: pointsShown,
+          netPaise: netBeforePointsPaise,
+          capPercent:
+            ((knownTier === 'gold' && loyaltySettings.goldEnabled
+              ? loyaltySettings.goldUseCapBp
+              : loyaltySettings.useCapBp) ?? 0) / 100,
+          balance: pointsAvailable,
+          max: pointsMax,
+          current: pointsUsed > 0 ? pointsUsed : null,
+          used: pointsUsed,
+          busy: settling,
+          onUse: setPointsRequested,
+        }}
         totalPaise={totals.totalPaise}
         initialPayments={paymentPreset}
         busy={settling}

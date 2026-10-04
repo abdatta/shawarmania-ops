@@ -26,13 +26,15 @@ export type PackagingMode = 'off' | 'per_bag' | 'per_order'
 export type LineKind = 'item' | 'packaging'
 
 /**
- * An outlet's service choices — the six columns design D1 puts on `outlets`.
+ * An outlet's six service choices (#60) and customer collection (#59).
  *
  * The **Orders** switch on the settings page is not stored: it reads on while
  * either type is offered. One stored truth, and no switch that can disagree
  * with what sits under it.
  */
 export interface OutletServiceSettings {
+  /** Whether the counter offers customer entry and asks for a number at payment. */
+  collectCustomerDetails: boolean
   dineInOffered: boolean
   takeawayOffered: boolean
   /**
@@ -50,6 +52,7 @@ export interface OutletServiceSettings {
 
 /** What every outlet starts with, and what bills exactly as today. */
 export const ALL_OFF_SERVICE_SETTINGS: Readonly<OutletServiceSettings> = Object.freeze({
+  collectCustomerDetails: true,
   dineInOffered: false,
   takeawayOffered: false,
   tableNumbers: false,
@@ -233,6 +236,8 @@ export function packagingApplies(
  * one (design D6).
  */
 export interface CapturedPackaging {
+  /** Present when this charge belongs to an already saved order item. */
+  orderLineId?: string
   unitPricePaise: number
   quantity: number
 }
@@ -267,6 +272,7 @@ export function packagingLine(captured: CapturedPackaging, waived: boolean) {
   const total = lineTotalPaise(captured.unitPricePaise, captured.quantity)
   return {
     kind: 'packaging' as const,
+    ...(captured.orderLineId ? { orderLineId: captured.orderLineId } : {}),
     menuItemId: '',
     itemName: PACKAGING_LINE_NAME,
     unitPricePaise: captured.unitPricePaise,

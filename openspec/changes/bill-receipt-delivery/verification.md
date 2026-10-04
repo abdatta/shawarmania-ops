@@ -93,3 +93,114 @@ and terminal delivery persistence were proved against the real local backend.
 No eligible new production bill existed at the release check, and no synthetic
 production sale was added. The first genuine eligible sale will exercise that
 same automatic path in production.
+
+## Local checkout expansion — 4 October 2026
+
+The owner authorized the expanded implementation and explicitly reserved UI
+review before finalization or deployment. This follow-up remains unstaged and
+uncommitted on top of `1fbe7f23`; nothing from it was pushed, deployed or archived.
+The original SMS release above remains the production release.
+
+Checkout now asks for a missing number, including one skipped at ordering,
+before membership, points, the final total and tender. An attached number is
+kept and shown. Skip stays one tap, dismissal leaves the bill unpaid, and the
+order-time customer row remains. Customer or points changes clear allocated
+tender. Saved orders durably enqueue their revision before payment, retain the
+revised order if payment storage fails, and keep captured line identities and
+prices across an offline restart and a later menu price change.
+
+| Gate | Local expansion evidence |
+| --- | --- |
+| Lint | Pass, no errors; 15 existing warnings |
+| Format | Formatter ran before gates; final format check passes |
+| App and Edge types | Both typecheck commands pass |
+| Unit/component | 165 files, 2,181 tests pass; final checkout label adjustment verified by 63 counter tests |
+| Contrast | 64 pairs pass in both themes |
+| Build | Final production build passes |
+| Demo browser | 286 pass, including number at payment, retained number, demo isolation and offline paths |
+| Database | Fresh reset; 75 files, 2,973 assertions pass |
+| HTTP/RLS | All six phases pass, 283 tests |
+| Real-account browser | 34 pass, including real offline tablet settlement |
+| Schema | Regenerated from reset schema; generated types have no diff |
+| Visual | Own production preview on 7413; number and tender steps checked at 390×844 and 1024×768, light and dark; temporary viewport reset and original dark theme restored |
+
+The added real-backend case queues anonymous creation, customer revision and
+payment in IndexedDB. It changes the local menu price after creation, then
+reconnects, loses the committed payment response and retries it. The queue drains
+with exactly one ₹270 bill, one 6-point earning entry and one receipt job freezing
+6 earned points and a balance of 6. This uses synthetic fixtures and a local
+backend, with provider submission stubbed; it sends no real SMS. The captured-line
+regression was separately proved red with UUID retention removed, then green
+after restoring the fix.
+
+Read-only production checks confirmed enabled points and receipt triggers,
+Kalyani Cafe's 5-per-₹200 settings and the installed earning function. At
+07:06 UTC, bill 199 remained the only identified customer bill; no genuine
+post-activation customer bill existed to settle task 8. Its historical missing
+earning row remains unexplained: enabling points after that sale is plausible,
+but the settings table has no activation timestamp proving it. No production
+sale, ledger adjustment, backfill or additional SMS was created for this check.
+Task 8 remains pending that first genuine bill, and task 9 remains pending owner
+UI review.
+
+The review tab is left open on the local checkout. Browser proof images are kept
+outside Git in the temporary directory as `receipt-payment-review-light.png`
+and `receipt-payment-review-dark.png`. Private handset attachments and `.env`
+are neither staged nor committed.
+
+## Local outlet collection setting — 4 October 2026
+
+Task 10 is implemented and verified locally. Eight of the ten numbered tasks are
+complete; production points confirmation (8) and owner UI review (9) remain open.
+The owner authorized the switch for both owner and franchise admin, with the
+existing no-deployment instruction retained. No commit, push, production migration,
+deployment, new production sale or additional SMS was performed.
+
+Orders settings now offers default-on **Collect customer details**, independently
+of service types and loyalty. Off removes composer/edit entry, permits anonymous
+ordering without Skip, and skips direct/saved-order checkout prompts. Already
+attached customers, captured prices and benefits remain intact. The counter hands
+its cached settings directly to saved-order checkout; a test makes any extra menu
+read hang and still reaches payment without making that read. A real IndexedDB
+close/reopen followed by an unavailable backend keeps collection off through the
+live menu adapter. Missing older-cache choices remain default-on.
+
+Migration `20261004010000` adds the default-on outlet column and extends the
+narrow service-settings RPC. Its optional argument preserves the stored value
+when omitted by older clients. SQL proves owner and assigned franchise-admin
+writes, cross-outlet refusal/read isolation, lower-role and deactivated-manager
+refusal, and no anonymous execute grant. The REST adapter test verifies a real
+manager saving off and the outlet tablet reading it through its menu. General
+outlet-write policies were not widened.
+
+| Gate | Final local setting evidence |
+| --- | --- |
+| Lint | Pass; no errors, 15 existing warnings |
+| Format | Formatter run before gates; final format check passes |
+| App/Edge types | Both pass against the regenerated schema |
+| Unit/component | 165 files, 2,186 tests pass after cached-settings adjustment |
+| Contrast | 64 pairs pass AA in both themes |
+| Build | Explicit final production build passes |
+| Demo browser | Final run: 290 pass; both owner/admin switch flows reach anonymous ordering and saved-order payment without Skip |
+| Database | Fresh migration/reset; 76 files, 2,990 assertions pass |
+| HTTP/RLS | All six phases pass, 283 tests |
+| Real-account browser | 34 pass, including real offline and two-tablet settlement |
+| Schema parity | Regeneration produces the identical SHA-256 file hash; expected diff is only the new column and optional RPC argument |
+| Visual | Own final build on 7413, 390×844 and 1024×768 in both themes; switch saved off/on; no console errors; viewport and original dark theme restored |
+
+Browser proof files remain outside Git: `customer-collection-review-light.png`
+and `customer-collection-review-dark.png` in the local temporary directory. The
+review tab and own preview remain open. The latest read-only production check
+still returned only historical identified bill 199 with no earned entry, so task
+8 was not marked complete or corrected speculatively. The separate recommendation
+to make order-time identification optional while collection is on has not been
+implemented; this task implements the requested per-outlet switch.
+
+## Owner approval and release — 4 October 2026
+
+After reviewing the expanded checkout and outlet setting, the owner stated
+"Lgtm, you can push". Task 9 is complete and release is authorized. Nine of the
+ten numbered tasks are complete; task 8 awaits a genuine eligible production
+bill. The local evidence above describes the approved application bytes; only
+approval documentation changed afterwards. Release evidence follows once the
+production workflow completes. This change remains active and is not archived.

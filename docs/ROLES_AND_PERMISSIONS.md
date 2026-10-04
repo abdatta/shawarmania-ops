@@ -326,7 +326,9 @@ its tables or charges for bags is the shop's business — so the Orders section 
 the outlet's page is theirs to save for the outlets they manage, as it is the
 owner's for all of them. It reaches the database through
 `set_outlet_service_settings`, a narrow function that re-derives the caller's
-authority and writes those six columns and nothing else. `outlets_update` was
+authority and writes the six service columns plus `collect_customer_details`
+(#59), the outlet's choice to offer customer entry and ask at payment. Both the
+owner and same-outlet franchise admins may change that choice. `outlets_update` was
 **not** widened: it would have handed a manager the business-day cutover and the
 check-in fence, which judges their own staff's attendance. The isolation suite
 proves both halves — a manager's direct update of the row still touches nothing,

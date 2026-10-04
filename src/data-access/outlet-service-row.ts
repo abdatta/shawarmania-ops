@@ -2,9 +2,10 @@ import type { OutletServiceSettings } from '@/domain'
 
 import type { Tables } from './database.types'
 
-/** The six columns of an outlet row that say how it serves (#60, design D1). */
+/** Service choices (#60) and customer collection (#59) from the outlet row. */
 export type OutletServiceColumns = Pick<
   Tables<'outlets'>,
+  | 'collect_customer_details'
   | 'dine_in_offered'
   | 'takeaway_offered'
   | 'table_numbers'
@@ -21,6 +22,7 @@ export type OutletServiceColumns = Pick<
  */
 export function serviceSettingsFromRow(row: OutletServiceColumns): OutletServiceSettings {
   return {
+    collectCustomerDetails: row.collect_customer_details ?? true,
     dineInOffered: row.dine_in_offered,
     takeawayOffered: row.takeaway_offered,
     tableNumbers: row.table_numbers,

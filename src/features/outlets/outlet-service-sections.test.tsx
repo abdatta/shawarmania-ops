@@ -56,12 +56,39 @@ function renderPage(
 }
 
 describe('the outlet page’s Orders', () => {
-  it('shows a newcomer one switch and nothing beneath it', async () => {
+  it.each(['super_admin', 'franchise_admin'] as const)(
+    'lets %s save customer collection independently of service types',
+    async (role) => {
+      const person = userEvent.setup()
+      const data = renderPage(OUTLET_KALYANI_ID, { role })
+      const control = await screen.findByRole('switch', { name: 'Collect customer details' })
+      expect(control).toHaveAttribute('aria-checked', 'true')
+      await person.click(control)
+      await person.click(screen.getByTestId('service-save'))
+      await waitFor(() =>
+        expect(data.store.serviceSettings.get(OUTLET_KALYANI_ID)?.collectCustomerDetails).toBe(
+          false,
+        ),
+      )
+      expect(
+        await createMockAdapters(role, data).outlets.getServiceSettings(OUTLET_KALYANI_ID),
+      ).toMatchObject({ collectCustomerDetails: false })
+      expect(data.store.serviceSettings.get(OUTLET_KALYANI_ID)?.dineInOffered).toBe(false)
+      expect(control).toHaveAttribute('aria-checked', 'false')
+    },
+  )
+  it('shows customer collection on independently of service choices', async () => {
     renderPage(OUTLET_KALYANI_ID)
 
     const orders = await screen.findByTestId('service-orders')
-    expect(within(orders).getAllByRole('switch')).toHaveLength(1)
-    expect(within(orders).getByRole('switch')).toHaveAttribute('aria-checked', 'false')
+    expect(within(orders).getAllByRole('switch')).toHaveLength(2)
+    expect(within(orders).getByRole('switch', { name: 'Dine-in and takeaway' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
+    expect(
+      within(orders).getByRole('switch', { name: 'Collect customer details' }),
+    ).toHaveAttribute('aria-checked', 'true')
     expect(screen.queryByTestId('service-offer-dine_in')).toBeNull()
     expect(screen.queryByTestId('service-packaging-switch')).toBeNull()
     // Nothing changed, so nothing to save.

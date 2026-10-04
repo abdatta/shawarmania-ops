@@ -45,6 +45,7 @@ async function signIn(email: string): Promise<Client> {
 }
 
 const EVERYTHING: OutletServiceSettings = {
+  collectCustomerDetails: true,
   dineInOffered: true,
   takeawayOffered: true,
   tableNumbers: true,
@@ -89,6 +90,7 @@ describe('how an outlet serves, over REST', () => {
   it('lets a manager choose for the outlet they manage', async () => {
     const flat: OutletServiceSettings = {
       ...EVERYTHING,
+      collectCustomerDetails: false,
       tableNumbers: false,
       packagingMode: 'per_order',
       packagingPricePaise: 1000,

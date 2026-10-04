@@ -157,8 +157,8 @@ export interface OutletsAdapter {
    */
   getServiceSettings(id: string): Promise<OutletServiceSettings>
   /**
-   * Replace an outlet's service choices as one write. Super Admin only — the
-   * owner alone writes an outlet row, and no path is added for a manager. An
+   * Replace service and customer-collection choices as one narrow write. The
+   * owner may write any outlet, and a franchise admin their assigned outlets. An
    * inconsistent combination is refused with the problem's own code, exactly
    * where the database's check constraints will refuse it.
    */
@@ -1291,6 +1291,8 @@ export interface CounterShift {
  * these two columns at all.
  */
 export interface BillLineDraft {
+  /** Existing order-item identity, retained when revising captured prices. */
+  orderLineId?: Tables<'order_items'>['id']
   /**
    * `''` where the line has no menu item — which since #60 includes the
    * packaging line — and written back as null.

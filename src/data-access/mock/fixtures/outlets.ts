@@ -54,6 +54,7 @@ export const outletFixtures: Tables<'outlets'>[] = [
     is_active: true,
     // Chosen nothing, as every outlet is after the #60 migration: the demo's
     // counter stands here, so it starts exactly as it bills today.
+    collect_customer_details: true,
     dine_in_offered: false,
     takeaway_offered: false,
     table_numbers: false,
@@ -116,6 +117,7 @@ export const outletFixtures: Tables<'outlets'>[] = [
     // settings page is already grown here while Kalyani shows it growing. The
     // one place this departs from supabase/seed.sql, where no outlet has chosen
     // anything: the local stack proves the default, the demo shows the choices.
+    collect_customer_details: true,
     dine_in_offered: true,
     takeaway_offered: true,
     table_numbers: true,
@@ -163,6 +165,7 @@ export const outletFixtures: Tables<'outlets'>[] = [
     ],
     hyperpure_delivery: false,
     is_active: false,
+    collect_customer_details: true,
     dine_in_offered: false,
     takeaway_offered: false,
     table_numbers: false,

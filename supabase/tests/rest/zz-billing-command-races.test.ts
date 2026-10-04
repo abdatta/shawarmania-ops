@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import {
   billingCommandRpcArguments,
+  BILLING_COMMAND_RPC,
   billingPayloadHash,
   createBillingCommand,
   type BillingCommand,
@@ -105,6 +106,208 @@ let otherOutletManager: Client
 let service: Client
 
 describe.sequential('automatic receipts after offline billing', () => {
+  it('replays payment-time identification on a saved ₹270 order and freezes six earned points once', async () => {
+    const before = await service
+      .from('outlets')
+      .select('points_enabled, points_earn_per_block, points_earn_block_paise, points_use_cap_bp')
+      .eq('id', OUTLET)
+      .single()
+    expect(before.error).toBeNull()
+    const menuBefore = await service
+      .from('menu_items')
+      .select('price_paise')
+      .eq('id', MENU_ITEM)
+      .single()
+    expect(menuBefore.error).toBeNull()
+    const database = new BillingDeliveryDatabase(`receipt-payment-customer-${crypto.randomUUID()}`)
+    const store = new BillingDeliveryStore(database)
+    const orderId = crypto.randomUUID()
+    const billId = crypto.randomUUID()
+    const businessDate = resolveBusinessDate(new Date(), '04:00')
+    const content: CreateOrderPayload = {
+      orderId,
+      businessDate,
+      customerId: null,
+      customerName: null,
+      customerPhone: null,
+      subtotalPaise: 27800,
+      discountPaise: 800,
+      taxPaise: 0,
+      roundingPaise: 0,
+      totalPaise: 27000,
+      pricingMode: 'no_tax',
+      discounts: [
+        { source: 'biller', basis: 'amount', valueBp: null, valuePaise: 800, amountPaise: 800 },
+      ],
+      serviceType: null,
+      tableNumber: null,
+      lines: [{ ...line(crypto.randomUUID()), quantity: 2, lineTotalPaise: 27800 }],
+    }
+    const commands = [
+      await createBillingCommand({
+        commandId: crypto.randomUUID(),
+        tabletId: TABLET_TWO,
+        shiftId: SHIFT_TWO,
+        type: 'create_order',
+        createdAt: new Date().toISOString(),
+        payload: content,
+      }),
+      await createBillingCommand({
+        commandId: crypto.randomUUID(),
+        tabletId: TABLET_TWO,
+        shiftId: SHIFT_TWO,
+        type: 'revise_order',
+        createdAt: new Date().toISOString(),
+        payload: {
+          ...content,
+          customerName: 'Synthetic payment-time customer',
+          customerPhone: '+919000000592',
+        },
+      }),
+      await createBillingCommand({
+        commandId: crypto.randomUUID(),
+        tabletId: TABLET_TWO,
+        shiftId: SHIFT_TWO,
+        type: 'pay_order',
+        createdAt: new Date().toISOString(),
+        payload: {
+          orderId,
+          billId,
+          payments: [{ method: 'cash', amountPaise: 27000 }],
+          paidAt: new Date().toISOString(),
+          paymentBusinessDate: businessDate,
+        },
+      }),
+    ]
+    expect((await tabletTwo.auth.getUser()).data.user?.id).toBe(TABLET_TWO)
+    const liveShift = await service
+      .from('counter_shifts')
+      .select('device_id, outlet_id, opened_at, expires_at, ended_at')
+      .eq('id', SHIFT_TWO)
+      .single()
+    expect(liveShift.error).toBeNull()
+    expect(liveShift.data).toMatchObject({
+      device_id: TABLET_TWO,
+      outlet_id: OUTLET,
+      ended_at: null,
+    })
+    expect(Date.parse(commands[0]!.createdAt)).toBeGreaterThanOrEqual(
+      Date.parse(liveShift.data!.opened_at),
+    )
+    expect(Date.parse(commands[0]!.createdAt)).toBeLessThan(Date.parse(liveShift.data!.expires_at))
+    let online = false
+    let losePaymentResponse = true
+    const outcomes: { type: string; data: Json | null; error: unknown }[] = []
+    const drain = new BillingDrainCoordinator({
+      store,
+      tabletId: TABLET_TWO,
+      ownerId: 'payment-time-receipt-test',
+      random: () => 0,
+      execute: async (command) => {
+        if (!online) throw new Error('offline')
+        const response = await tabletTwo.rpc(
+          BILLING_COMMAND_RPC[command.type] as keyof Database['public']['Functions'],
+          rpcArgs(command),
+        )
+        outcomes.push({ type: command.type, data: response.data, error: response.error })
+        if (response.error) throw response.error
+        if (command.type === 'create_order' && status(response.data) === 'accepted') {
+          // Checkout must retain the saved price even if the menu changes
+          // between ordering and the customer supplying their number.
+          expect(
+            (await service.from('menu_items').update({ price_paise: 14900 }).eq('id', MENU_ITEM))
+              .error,
+          ).toBeNull()
+        }
+        if (command.type === 'pay_order' && losePaymentResponse) {
+          losePaymentResponse = false
+          throw new Error('payment response lost after commit')
+        }
+        return response.data as unknown as BillingCommandResult
+      },
+    })
+    try {
+      expect(
+        (
+          await service
+            .from('outlets')
+            .update({
+              points_enabled: true,
+              points_earn_per_block: 5,
+              points_earn_block_paise: 20000,
+              points_use_cap_bp: 1000,
+            })
+            .eq('id', OUTLET)
+        ).error,
+      ).toBeNull()
+      expect(
+        (
+          await service
+            .from('bill_receipt_delivery_settings')
+            .update({ enabled: true, enabled_at: new Date(Date.now() - 60000).toISOString() })
+            .eq('id', true)
+        ).error,
+      ).toBeNull()
+      for (const [index, command] of commands.entries()) {
+        await store.accept({
+          command,
+          tabletId: TABLET_TWO,
+          outletId: OUTLET,
+          businessDate,
+          chainId: orderId,
+          eligibleAtMs: Date.now(),
+          nowMs: Date.now(),
+          dependsOnCommandIds: index > 0 ? [commands[index - 1]!.commandId] : [],
+        })
+      }
+      expect(await drain.runOnce()).toBe(0)
+      expect((await service.from('bills').select('id').eq('id', billId)).data).toEqual([])
+      online = true
+      await store.hintRetry(TABLET_TWO, Date.now())
+      const acceptedBeforeReplay = await drain.runOnce()
+      expect(outcomes[0]?.data).toMatchObject({ status: 'accepted' })
+      expect(outcomes.map((row) => row.error)).toEqual([null, null, null])
+      expect(outcomes.map((row) => status(row.data))).toEqual(['accepted', 'accepted', 'accepted'])
+      expect(acceptedBeforeReplay).toBe(2)
+      await store.hintRetry(TABLET_TWO, Date.now())
+      expect(await drain.runOnce()).toBe(1)
+      expect(await drain.runOnce()).toBe(0)
+      const bill = await manager
+        .from('bills')
+        .select('id, customer_phone, total_paise')
+        .eq('id', billId)
+      expect(bill.error).toBeNull()
+      expect(bill.data).toEqual([
+        { id: billId, customer_phone: '+919000000592', total_paise: 27000 },
+      ])
+      const jobs = await service
+        .from('bill_receipt_deliveries')
+        .select('bill_id, earned_points, balance_points, state')
+        .eq('bill_id', billId)
+      expect(jobs.error).toBeNull()
+      expect(jobs.data).toEqual([
+        { bill_id: billId, earned_points: 6, balance_points: 6, state: 'queued' },
+      ])
+      expect(
+        (
+          await service
+            .from('customer_points_entries')
+            .select('points')
+            .eq('bill_id', billId)
+            .eq('kind', 'earned')
+        ).data,
+      ).toEqual([{ points: 6 }])
+      expect(await store.countUnresolved(TABLET_TWO)).toBe(0)
+    } finally {
+      await drain.stop()
+      await database.delete()
+      await service.from('bill_receipt_delivery_settings').update({ enabled: false }).eq('id', true)
+      if (before.data) await service.from('outlets').update(before.data).eq('id', OUTLET)
+      if (menuBefore.data)
+        await service.from('menu_items').update(menuBefore.data).eq('id', MENU_ITEM)
+    }
+  })
+
   it('drains a durable offline bill, replays a lost response, and submits one receipt under competing workers', async () => {
     const database = new BillingDeliveryDatabase(`receipt-offline-${crypto.randomUUID()}`)
     const store = new BillingDeliveryStore(database)
@@ -275,6 +478,8 @@ beforeAll(async () => {
     device_id: TABLET_TWO,
     outlet_id: OUTLET,
     person_id: BILLER_TWO,
+    ended_at: null,
+    ended_reason: null,
     opened_at: new Date(Date.now() - 60 * 60_000).toISOString(),
     business_date: resolveBusinessDate(new Date(), outlet.data.business_day_cutover),
     expires_at: new Date(Date.now() + 6 * 60 * 60_000).toISOString(),

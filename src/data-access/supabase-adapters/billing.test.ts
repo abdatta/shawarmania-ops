@@ -798,6 +798,29 @@ describe('the live tablet acceptance boundary', () => {
     database.close()
   })
 
+  it('retains captured order line identities when payment-time identification revises an offline order', async () => {
+    const billing = createSupabaseBillingAdapter(offlineClient(), session)
+    await billing.saveOrder(orderInput)
+    const restarted = createSupabaseBillingAdapter(offlineClient(), session)
+    const [order] = await restarted.listOpenOrders(session.device.outletId)
+    expect(order!.lines[0]!.orderLineId).toEqual(expect.any(String))
+    await restarted.reviseOrder(order!.id, {
+      lines: order!.lines,
+      discounts: order!.discounts,
+      customerName: 'Payment customer',
+      customerPhone: '+919000000592',
+    })
+    const database = new BillingDeliveryDatabase()
+    const commands = await database.envelopes.toArray()
+    const creation = commands.find((row) => row.command.type === 'create_order')!.command
+    const revision = commands.find((row) => row.command.type === 'revise_order')!.command
+    if (creation.type !== 'create_order' || revision.type !== 'revise_order')
+      throw new Error('missing order commands')
+    expect(revision.payload.lines[0]!.id).toBe(creation.payload.lines[0]!.id)
+    expect(revision.payload.lines[0]!.unitPricePaise).toBe(13900)
+    database.close()
+  })
+
   it('drains twenty mixed cold-start commands exactly once with every chain intact', async () => {
     const resumed = createSupabaseBillingAdapter(offlineClient(), session)
     const pause = () => new Promise((resolve) => setTimeout(resolve, 2))

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-import type { BillingOrder } from '@/data-access/adapters'
+import type { BillingOrder, OutletMenu } from '@/data-access/adapters'
 
 import { CounterActivity } from './counter-activity'
 
@@ -28,6 +28,7 @@ export function CounterActivityRail({
   onActivityChanged,
   pin,
   asOf,
+  checkoutSettings,
 }: {
   refreshKey: number
   /** Bumped only when an order is saved on this tablet. */
@@ -39,6 +40,7 @@ export function CounterActivityRail({
   /** The docked card, built by the composer that owns the draft it displays. */
   pin: ReactNode
   asOf?: string
+  checkoutSettings?: Pick<OutletMenu, 'service' | 'loyalty'>
 }) {
   const editing = editingOrder !== null
 
@@ -93,6 +95,7 @@ export function CounterActivityRail({
           editingOrderId={editingOrder?.id ?? null}
           onEditOrder={onEditOrder}
           onActivityChanged={onActivityChanged}
+          {...(checkoutSettings ? { checkoutSettings } : {})}
         />
       </div>
     </aside>

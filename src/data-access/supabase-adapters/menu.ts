@@ -255,7 +255,7 @@ export function createSupabaseMenuAdapter(
           client
             .from('outlets')
             .select(
-              `discount_presets, dine_in_offered, takeaway_offered, table_numbers, packaging_mode, packaging_price_paise, packaging_free_for_gold, menu_slug, ${OUTLET_LOYALTY_COLUMNS}`,
+              `discount_presets, collect_customer_details, dine_in_offered, takeaway_offered, table_numbers, packaging_mode, packaging_price_paise, packaging_free_for_gold, menu_slug, ${OUTLET_LOYALTY_COLUMNS}`,
             )
             .eq('id', outletId)
             .single(),

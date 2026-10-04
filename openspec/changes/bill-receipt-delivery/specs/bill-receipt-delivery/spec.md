@@ -65,3 +65,58 @@ outlet's deliveries. Diagnostics SHALL NOT contain phones or receipt tokens.
 #### Scenario: Other outlet
 - **WHEN** a manager hand-crafts a request for another outlet's delivery
 - **THEN** no row is returned and no write is allowed
+
+### Requirement: Identify at payment before choosing tender
+
+At outlets collecting customer details, direct bills and saved orders SHALL ask for a customer number at payment when
+none is attached, with receipt-and-points wording and one-tap skip. An attached
+number SHALL be shown and kept. Ordering SHALL retain its customer option.
+Membership and redeemable points SHALL precede the recomputed total and tender.
+Only fresh balances SHALL permit additional points; directory failure SHALL NOT
+prevent payment. Customer and pricing snapshots SHALL survive offline replay.
+
+#### Scenario: Number supplied only when paying
+- **WHEN** a customer gives their number while paying a previously anonymous order
+- **THEN** the bill snapshots that customer, applies selected loyalty before tender,
+  and server settlement creates the same single automatic receipt job
+
+#### Scenario: Skip or dismiss
+- **WHEN** the biller skips the payment-time number question
+- **THEN** tender opens in one tap and the numberless bill sends no receipt
+- **WHEN** they dismiss instead
+- **THEN** the unpaid bill and ordering decision remain intact
+
+#### Scenario: Changed total
+- **WHEN** customer or points changes after tender was allocated
+- **THEN** the allocation clears and the Paid action requires the new exact total
+
+#### Scenario: Failed saved-order acceptance
+- **WHEN** saving checkout changes fails locally
+- **THEN** payment is not accepted and the checkout remains available
+- **WHEN** revision succeeds but accepting payment fails
+- **THEN** retry pays the same revised order without making another bill
+
+### Requirement: Each outlet can disable customer collection
+
+The system SHALL offer a default-on Collect customer details setting for each
+outlet. Active owner and same-outlet franchise admins SHALL be able to change it;
+other roles and other-outlet franchise admins SHALL NOT. Off SHALL hide customer
+entry when composing or editing, permit anonymous orders without a customer
+decision, and skip the number prompt for direct and saved-order payment. Existing
+customer facts and benefits SHALL remain intact. The cached outlet menu SHALL
+carry this setting offline; missing older-cache values SHALL default to on.
+
+#### Scenario: Outlet does not collect customer details
+- **WHEN** collection is off and a biller orders, edits or pays an anonymous order
+- **THEN** no customer control or number prompt appears and no Skip is required
+- **AND** ordinary service questions still apply and the anonymous bill earns no customer points or receipt SMS
+
+#### Scenario: Existing customer order
+- **WHEN** an identified order is paid after collection is switched off
+- **THEN** its customer and benefits are retained without customer-edit controls
+
+#### Scenario: Assigned franchise admin
+- **WHEN** a franchise admin changes collection for their assigned outlet
+- **THEN** the choice persists and reaches that outlet's counter menu
+- **WHEN** the same caller targets another outlet or a biller calls the RPC
+- **THEN** the database refuses the change

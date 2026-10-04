@@ -53,7 +53,8 @@ or report. Service functions are revoked from PUBLIC, anon and authenticated.
 The billing adapter embeds status and failure code. Manager Customer details
 shows it inside the existing closed disclosure: the outer history layout and
 collapsed-row shimmer remain accurate. Demo has typed local statuses and never
-calls the sender. Counter/outbox and money arithmetic remain unchanged.
+calls the sender. The original release left counter/outbox unchanged; D7 expands
+the counter while retaining the existing command schema and money arithmetic.
 
 ## D6. Matching copy and release order
 
@@ -66,3 +67,57 @@ Pages deploy before activation.
 Release installs migration and handlers, configures server secrets and MSG91
 reports, then enables future bills. A real handset check uses only an explicitly
 authorized number. Provider URL is fixed in code, never caller-chosen.
+
+## D7. Number at payment — owner-approved follow-up
+
+Paid opens the customer pad first if no valid number is attached, including a
+number skipped at ordering. Its purpose is the receipt and points on the phone;
+Skip is one tap and dismissal keeps the bill. An attached number is kept and
+shown without asking twice. The order-time row remains available.
+
+After identification or skip, checkout shows customer and Gold, available points
+and redemption, then the recomputed total and existing tender pad. Customer or
+points changes remount tender so an old allocation cannot pay a different total.
+Only fresh balances allow additional redemption; existing holds remain usable.
+Lookup failure never blocks payment. Corrections keep their original tender UI.
+
+Direct bills use the existing customer/discount snapshots in `pay_now`. Saved
+orders first durably accept `revise_order` when checkout changed, then accept
+`pay_order` on the same dependency chain. A revision failure accepts no payment;
+a payment-storage failure retains the revised order and shows the error in the
+dialog. Retry pays that same order. Offline replay preserves both UUIDs, prices,
+customer and points, and sends only the eventual bill's single receipt job.
+
+Order-line IDs travel through both typed adapters, queued projections and the
+captured packaging helper. Revisions reuse them, so server validation recognises
+an existing captured price rather than comparing it to today's menu price. New
+lines still mint new UUIDs. This also preserves prices across a cold offline start.
+
+The owner approved this follow-up and authorized pushing on 4 October 2026.
+Points investigation is read-only
+in production: current Kalyani settings and both deferred triggers are enabled,
+but the first genuine customer bill after receipt activation is still outstanding.
+No historical points are retroactively awarded without evidence.
+
+## D8. Each outlet chooses customer collection
+
+`outlets.collect_customer_details` is a non-null boolean, default true for
+existing and new outlets. The Orders settings tile is independent of dine-in,
+takeaway, Gold and points. Owner and same-outlet active franchise admins save it
+through the existing narrow service-settings RPC, extended with an optional
+parameter whose omission preserves the stored value for older clients. Other
+roles and other-outlet managers are refused by the database. Existing outlet RLS
+continues to govern reads. No general outlet-write permission is broadened.
+
+The typed service settings and cached menu snapshot carry the choice; older
+caches without it default to true. Off hides customer controls in both composer
+locations, removes the customer-decision prerequisite for orders, and opens
+tender directly for direct and saved-order payment. Service questions still
+apply. A saved customer remains attached, with existing benefits and SMS
+eligibility; the switch controls collection, not erasure or message suppression.
+Payment shows an existing identity read-only and retains points controls. Off
+with no identity shows no empty customer block. The settings shimmer reserves
+the extra tile. Saved-order checkout uses the counter's already loaded/cached
+settings, so payment never waits for an additional network read. Standalone
+pipeline views resolve settings before deciding whether to show the prompt.
+The owner approved this UI together with checkout and authorized its release.

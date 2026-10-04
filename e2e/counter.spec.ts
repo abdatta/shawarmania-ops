@@ -49,11 +49,15 @@ async function skipCustomer(page: Page) {
   await page.getByRole('dialog', { name: 'Customer' }).getByTestId('customer-skip').click()
 }
 
+async function skipPaymentCustomerIfAsked(page: Page) {
+  await expect(page.getByRole('dialog', { name: 'Loading payment' })).toBeHidden()
+  const question = page.getByRole('dialog', { name: 'Receipt and points' })
+  if (await question.isVisible()) await question.getByTestId('customer-skip').click()
+}
+
 async function recordPaid(page: Page, method = 'Cash') {
-  if ((await page.getByTestId('customer-row').textContent()) === 'Enter Customer Info') {
-    await skipCustomer(page)
-  }
   await page.getByTestId('settle').click()
+  await skipPaymentCustomerIfAsked(page)
   const dialog = page.getByRole('dialog', { name: 'Record payment' })
   await dialog.getByRole('button', { name: method, exact: true }).click()
   await dialog.getByRole('button', { name: 'Paid', exact: true }).click()
@@ -63,6 +67,40 @@ test.describe('the counter', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('demo/biller')
   })
+
+  for (const role of ['owner', 'admin']) {
+    test(`${role} disables customer collection and the counter orders and pays without Skip`, async ({
+      page,
+    }) => {
+      await page.goto(`demo/${role}/outlets/d0000000-0000-4000-a000-000000000001`)
+      const control = page.getByRole('switch', { name: 'Collect customer details' })
+      await expect(control).toHaveAttribute('aria-checked', 'true')
+      await control.click()
+      await page.getByTestId('service-save').click()
+      await expect(page.getByTestId('service-save')).toBeHidden()
+      const switcher = page.getByRole('navigation', { name: 'Demo role switcher' })
+      const select = switcher.getByRole('combobox', { name: 'Demo role' })
+      if (await select.isVisible()) await select.selectOption('biller')
+      else await switcher.getByRole('link', { name: 'Biller', exact: true }).click()
+      await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
+      await expect(page.getByTestId('customer-row')).toHaveCount(0)
+      await expect(page.getByTestId('save-order')).toBeEnabled()
+      await page.getByTestId('save-order').click()
+      const order = page.getByTestId('counter-activity-rail').getByTestId(/^open-order-local-/)
+      await expect(order).toBeVisible()
+      await order.getByRole('button', { name: 'Paid', exact: true }).click()
+      const payment = page.getByRole('dialog', { name: 'Record payment' })
+      await expect(payment).toBeVisible()
+      await expect(page.getByRole('dialog', { name: 'Receipt and points' })).toHaveCount(0)
+      await expect(page.getByTestId('checkout-customer')).toHaveCount(0)
+      await payment.getByRole('button', { name: 'Cash', exact: true }).click()
+      await payment.getByRole('button', { name: 'Paid', exact: true }).click()
+      await expect(order.getByRole('button', { name: 'Paid', exact: true })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+    })
+  }
 
   test('lands on the enrolled tablet itself, with a shift already open', async ({ page }) => {
     // The demo mounts the same shell `/counter` mounts, so it stays at the
@@ -120,11 +158,37 @@ test.describe('the counter', () => {
     ).toBeVisible()
   })
 
-  test('requires a decision about the customer before Order or Paid', async ({ page }) => {
+  test('identifies at payment and keeps the number when checkout is reopened', async ({ page }) => {
+    await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
+    await page.getByTestId('settle').click()
+    let question = page.getByRole('dialog', { name: 'Receipt and points' })
+    await expect(question.getByRole('heading', { name: 'Receipt and points' })).toBeFocused()
+    await expect(page.getByRole('dialog', { name: 'Record payment' })).toHaveCount(0)
+    await question.getByTestId('customer-dismiss').click()
+    await expect(page.getByTestId('bill-total')).toHaveText('₹139')
+    await expect(page.getByTestId('customer-row')).toHaveText('Enter Customer Info')
+    await page.getByTestId('settle').click()
+    question = page.getByRole('dialog', { name: 'Receipt and points' })
+    for (const digit of '9000000101')
+      await question.getByRole('button', { name: digit, exact: true }).click()
+    await question.getByTestId('customer-confirm').click()
+    const payment = page.getByRole('dialog', { name: 'Record payment' })
+    await expect(payment.getByTestId('checkout-customer')).toContainText('Ritika Sen')
+    await expect(payment.getByRole('img', { name: 'Gold member' })).toBeVisible()
+    await expect(payment.getByText('Total to pay')).toBeVisible()
+    await payment.getByRole('button', { name: 'Back', exact: true }).click()
+    await page.getByTestId('settle').click()
+    await expect(question).toHaveCount(0)
+    await expect(payment.getByTestId('checkout-customer')).toContainText('Ritika Sen')
+  })
+
+  test('keeps ordering identification and allows Paid to ask for the number first', async ({
+    page,
+  }) => {
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
     await expect(page.getByTestId('customer-row')).toHaveText('Enter Customer Info')
     await expect(page.getByRole('button', { name: 'Order', exact: true })).toBeDisabled()
-    await expect(page.getByTestId('settle')).toBeDisabled()
+    await expect(page.getByTestId('settle')).toBeEnabled()
     await expect(page.getByTestId('settle')).toHaveText('Paid')
     // The disabled actions beside an untouched row are the message. The
     // sentence that used to sit here was a third way of saying it.
@@ -156,6 +220,8 @@ test.describe('the counter', () => {
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
     await skipCustomer(page)
     await page.getByTestId('settle').click()
+
+    await skipPaymentCustomerIfAsked(page)
 
     const dialog = page.getByRole('dialog', { name: 'Record payment' })
     await expect(dialog.getByRole('heading', { name: 'Record payment' })).toBeFocused()
@@ -190,6 +256,7 @@ test.describe('the counter', () => {
     })
     await paidBill.locator('summary').click()
     await paidBill.getByRole('button', { name: /^Edit \(\d+ min\)$/ }).click()
+    await skipPaymentCustomerIfAsked(page)
     const edit = page.getByRole('dialog', { name: 'Record payment' })
     await expect(edit.getByRole('heading', { name: 'Edit payment' })).toBeVisible()
     await edit.getByRole('button', { name: 'Remove Cash payment' }).click()
@@ -278,6 +345,7 @@ test.describe('the counter', () => {
     // And then the money, which flies left into Bills this shift. The dialog
     // confirm is the only remaining Mark-Paid-family label — and it reads Paid.
     await paid.click()
+    await skipPaymentCustomerIfAsked(page)
     const payment = page.getByRole('dialog', { name: 'Record payment' })
     await payment.getByRole('button', { name: 'UPI', exact: true }).click()
     await payment.getByRole('button', { name: 'Paid', exact: true }).click()
@@ -334,6 +402,7 @@ test.describe('the counter', () => {
     await expect(billColumn.locator('details').first()).toBeVisible()
     const billsBefore = await billColumn.locator('details').count()
     await order.getByRole('button', { name: 'Paid', exact: true }).click()
+    await skipPaymentCustomerIfAsked(page)
     const payment = page.getByRole('dialog', { name: 'Record payment' })
     await payment.getByRole('button', { name: 'Cash', exact: true }).click()
     await payment.getByRole('button', { name: 'Paid', exact: true }).click()
@@ -501,6 +570,7 @@ test.describe('the counter', () => {
     const order = list.getByTestId('open-order-105')
 
     await order.getByRole('button', { name: 'Paid', exact: true }).click()
+    await skipPaymentCustomerIfAsked(page)
     const payment = page.getByRole('dialog', { name: 'Record payment' })
     await payment.getByRole('button', { name: 'Cash', exact: true }).click()
     await payment.getByRole('button', { name: 'Paid', exact: true }).click()
@@ -534,6 +604,7 @@ test.describe('the counter', () => {
       .getByTestId('open-order-105')
       .getByRole('button', { name: 'Paid', exact: true })
       .click()
+    await skipPaymentCustomerIfAsked(page)
     const payment = page.getByRole('dialog', { name: 'Record payment' })
     await payment.getByRole('button', { name: 'Cash', exact: true }).click()
     await payment.getByRole('button', { name: 'Paid', exact: true }).click()
@@ -657,6 +728,7 @@ test.describe('the counter', () => {
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
     await skipCustomer(page)
     await page.getByTestId('settle').click()
+    await skipPaymentCustomerIfAsked(page)
     const dialog = page.getByRole('dialog', { name: 'Record payment' })
     for (const digit of ['1', '0', '0']) {
       await dialog.getByRole('button', { name: digit, exact: true }).click()
@@ -726,6 +798,7 @@ test.describe('the counter', () => {
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
     await skipCustomer(page)
     await page.getByTestId('settle').click()
+    await skipPaymentCustomerIfAsked(page)
     const payment = page.getByRole('dialog', { name: 'Record payment' })
     for (const unsupported of ['Swiggy', 'Zomato', 'Card', 'Other']) {
       await expect(payment.getByRole('button', { name: unsupported })).toHaveCount(0)

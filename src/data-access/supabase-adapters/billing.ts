@@ -138,6 +138,7 @@ function joined<T>(value: T | T[] | null): T | null {
 
 function lineView(row: Tables<'order_items'> | Tables<'bill_items'>): BillLineDraft {
   return {
+    ...('order_id' in row ? { orderLineId: row.id } : {}),
     menuItemId: row.menu_item_id ?? '',
     itemName: row.item_name,
     unitPricePaise: row.unit_price_paise,
@@ -159,6 +160,7 @@ function lineView(row: Tables<'order_items'> | Tables<'bill_items'>): BillLineDr
  */
 function lineDrafts(lines: readonly BillingLineSnapshot[]): BillLineDraft[] {
   return lines.map((line) => ({
+    orderLineId: line.id,
     menuItemId: line.menuItemId ?? '',
     itemName: line.itemName,
     unitPricePaise: line.unitPricePaise,
@@ -381,7 +383,7 @@ function discountTotalPaise(
 /** Each line as the command carries it, its kind included (#60). */
 function lineSnapshots(lines: readonly BillLineDraft[]): BillingLineSnapshot[] {
   return lines.map((line) => ({
-    id: newUuid(),
+    id: line.orderLineId ?? newUuid(),
     menuItemId: line.menuItemId || null,
     itemName: line.itemName,
     unitPricePaise: line.unitPricePaise,
@@ -1755,7 +1757,7 @@ export function createSupabaseBillingAdapter(
         customerPhone: input.customerPhone?.trim() || null,
         customerTier: input.customerTier ?? knownTier(input.customerPhone),
         ...serviceFacts(input),
-        lines: [...input.lines],
+        lines: lineDrafts(command.payload.lines),
         discounts: [...(input.discounts ?? [])],
         // Computed with the discounts, not without them. A local order that
         // reported its gross total showed the till one figure and charged
@@ -1796,6 +1798,7 @@ export function createSupabaseBillingAdapter(
       const revised = {
         ...existing,
         ...input,
+        lines: lineDrafts(command.payload.lines),
         discounts: [...(input.discounts ?? [])],
         roundingPaise: revisedTotals.roundingPaise,
         totalPaise: revisedTotals.totalPaise,

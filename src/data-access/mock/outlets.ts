@@ -217,6 +217,7 @@ export function createMockOutletsAdapter(
         packaging_mode: 'off' as const,
         packaging_price_paise: null,
         packaging_free_for_gold: false,
+        collect_customer_details: true,
         // Nor points or gold: all off, as every outlet starts (#62).
         ...ALL_OFF_LOYALTY_COLUMNS,
       }
@@ -344,6 +345,7 @@ export function createMockOutletsAdapter(
       service.settings.set(id, stored)
       // The row too, so `getOutlet` never reads choices the page just replaced.
       Object.assign(outlet, {
+        collect_customer_details: stored.collectCustomerDetails,
         dine_in_offered: stored.dineInOffered,
         takeaway_offered: stored.takeawayOffered,
         table_numbers: stored.tableNumbers,

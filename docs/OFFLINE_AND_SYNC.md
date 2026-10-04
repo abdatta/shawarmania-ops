@@ -1,5 +1,9 @@
 # Offline And Sync
 
+The outlet's Collect customer details choice travels in the cached menu's
+service settings. A counter reopened offline keeps collection off without
+requiring Skip; older caches without the choice preserve default-on behaviour.
+
 > The command envelope, durable browser queue, live adapters and server receipts
 > are built by `billing-live` (#10).
 
@@ -73,6 +77,14 @@ Attendance stays online-only for a second reason: an offline check-in cannot be 
 `billing-live` (#10) puts every counter mutation into a durable local queue
 rather than sending it straight to the network. The composer clears only after
 that IndexedDB transaction commits; a storage failure leaves every field intact.
+
+A customer supplied at payment rides in the direct bill's existing snapshot.
+For a saved order, checkout accepts any customer or loyalty revision durably,
+then payment on the same dependency chain. A failed revision records no payment;
+a failed payment keeps the accepted revision for retry. Lost acknowledgements
+replay the same UUIDs, producing one bill, one earning entry and one receipt job.
+Existing food and packaging line IDs survive revisions and cold starts, letting
+the server validate their captured prices even after the menu price changes.
 
 ```
   Biller settles a bill

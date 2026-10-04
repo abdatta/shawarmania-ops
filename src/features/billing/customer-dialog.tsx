@@ -113,6 +113,7 @@ interface LookedUp {
 
 export function CustomerDialog(props: {
   open: boolean
+  purpose?: 'order' | 'payment'
   /** The current decision, so reopening the row shows what it already says. */
   selection: CustomerSelection | null
   /**
@@ -152,6 +153,7 @@ export function CustomerDialog(props: {
 }
 
 function OpenCustomerDialog({
+  purpose = 'order',
   selection,
   lookup,
   suggest,
@@ -160,6 +162,7 @@ function OpenCustomerDialog({
   onClose,
   onChoose,
 }: {
+  purpose?: 'order' | 'payment'
   selection: CustomerSelection | null
   lookup: (phone: string) => Promise<CustomerIdentity | null>
   suggest: (partial: string) => Promise<PartialPhoneMatch | null>
@@ -341,12 +344,12 @@ function OpenCustomerDialog({
     <Modal
       open
       onClose={onClose}
-      aria-label="Customer"
+      aria-label={purpose === 'payment' ? 'Receipt and points' : 'Customer'}
       className="m-auto w-[min(94vw,26rem)] rounded-2xl p-4"
     >
       <div className="flex items-start justify-between gap-3">
         <h2 ref={headingRef} tabIndex={-1} className="text-lg font-black text-content outline-none">
-          Customer
+          {purpose === 'payment' ? 'Receipt and points' : 'Customer'}
         </h2>
         {/*
           **Leaving without deciding has to be possible** [owner, 2026-09-19].
@@ -355,9 +358,8 @@ function OpenCustomerDialog({
           which records a decision they did not mean to make and would have to
           remember to undo.
 
-          Closing changes nothing, and nothing is lost by it: the row stays as
-          it was, so Order and Mark Paid stay disabled and the undecided bill
-          cannot be rung by accident. The disabled buttons are the reminder.
+          Closing changes nothing: the order-time row stays as it was, and
+          payment-time dismissal returns to the unpaid bill without settling it.
         */}
         <Button
           variant="ghost"
@@ -370,6 +372,12 @@ function OpenCustomerDialog({
           <X aria-hidden size={18} />
         </Button>
       </div>
+
+      {purpose === 'payment' && (
+        <p className="mt-2 text-sm text-content-muted">
+          Their number, for the bill and points on their phone. Skip if they haven’t given one.
+        </p>
+      )}
 
       {/*
         A real form, so Enter on a keyboard and the Go key on a tablet's own

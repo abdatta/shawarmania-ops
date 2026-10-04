@@ -1,4 +1,4 @@
-import type { BillingOrder } from '@/data-access/adapters'
+import type { BillingOrder, OutletMenu } from '@/data-access/adapters'
 
 import { OpenOrdersSurface } from './open-orders-surface'
 
@@ -23,6 +23,7 @@ export function CounterActivity({
   editingOrderId = null,
   onEditOrder,
   onActivityChanged,
+  checkoutSettings,
 }: {
   refreshKey: number
   /** Bumped only when an order is saved on this tablet. */
@@ -30,6 +31,7 @@ export function CounterActivity({
   editingOrderId?: string | null
   onEditOrder?: (order: BillingOrder) => void
   onActivityChanged?: () => void
+  checkoutSettings?: Pick<OutletMenu, 'service' | 'loyalty'>
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -40,6 +42,7 @@ export function CounterActivity({
         editingOrderId={editingOrderId}
         {...(onEditOrder ? { onEditOrder } : {})}
         {...(onActivityChanged ? { onActivityChanged } : {})}
+        {...(checkoutSettings ? { checkoutSettings } : {})}
       />
     </div>
   )

@@ -9,6 +9,7 @@ import {
   type BillingBill,
   type BillingOrder,
   type PaymentAllocation,
+  type OutletMenu,
 } from '@/data-access/adapters'
 import { isAwaitingOrderNumber, sharedTables, UNSENT_ORDER_REFERENCE } from '@/domain'
 import { SessionContext } from '@/session/context'
@@ -17,7 +18,7 @@ import { CounterDeviceContext } from '@/session/counter-context'
 import { CancelOrderDialog } from './cancel-order-dialog'
 import { captureCardFlight, flyCapturedCardToDestination, useFlip, waitForElement } from './flip'
 import { PipelineCard } from './pipeline-card'
-import { PaymentDialog } from './payment-dialog'
+import { OrderCheckoutDialog, type CheckoutOrderRevision } from './order-checkout-dialog'
 import { RailScrollChip, useRailClipping } from './rail-scroll-chip'
 import { useCounterState } from './use-counter-state'
 import { OfflineFillHint } from './offline-fill-hint'
@@ -79,6 +80,7 @@ export function OpenOrdersSurface({
   onActivityChanged,
   editingOrderId = null,
   onEditOrder,
+  checkoutSettings,
 }: {
   embedded?: boolean
   refreshKey?: number
@@ -92,6 +94,7 @@ export function OpenOrdersSurface({
   onActivityChanged?: () => void
   editingOrderId?: string | null
   onEditOrder?: (order: BillingOrder) => void
+  checkoutSettings?: Pick<OutletMenu, 'service' | 'loyalty'>
 } = {}) {
   const { billing } = useAdapters()
   const session = useContext(SessionContext)
@@ -156,14 +159,22 @@ export function OpenOrdersSurface({
     }
   }
 
-  function recordPayment(payments: PaymentAllocation[]) {
+  function recordPayment(payments: PaymentAllocation[], revision: CheckoutOrderRevision | null) {
     if (!paying) return
     // A settlement replaces an order id with a bill id. Capture the whole
     // ticket before the refresh removes it, so the visual identity survives
     // the cross-column handoff instead of leaving a separate amount badge.
     const source = document.querySelector<HTMLElement>(`[data-flip-id="${paying.id}"]`)
     const flight = source ? captureCardFlight(source) : null
-    void act(() => billing.payOrder(paying.id, payments)).then((bill) => {
+    void act(async () => {
+      if (revision) {
+        // Each command is durable before the next is accepted. If recording
+        // tender fails, keep the revised order so retry pays that same ticket.
+        const revised = await billing.reviseOrder(paying.id, revision)
+        setPaying(revised)
+      }
+      return billing.payOrder(paying.id, payments)
+    }).then((bill) => {
       if (!bill || typeof bill !== 'object' || !('id' in bill)) return
       if (!flight) return
       void waitForElement(`[data-testid="shift-bill-${String(bill.id)}"]`).then((destination) => {
@@ -349,13 +360,18 @@ export function OpenOrdersSurface({
         </div>
       )}
 
-      <PaymentDialog
-        open={paying !== null}
-        totalPaise={paying?.totalPaise ?? 0}
-        busy={busy}
-        onClose={() => setPaying(null)}
-        onConfirm={recordPayment}
-      />
+      {paying && (
+        <OrderCheckoutDialog
+          key={paying.id}
+          order={paying}
+          {...(checkoutSettings ? { initialSettings: checkoutSettings } : {})}
+          mode={session?.mode ?? 'real'}
+          busy={busy}
+          error={error}
+          onClose={() => setPaying(null)}
+          onConfirm={recordPayment}
+        />
+      )}
       <CancelOrderDialog
         open={cancelling !== null}
         orderNumber={cancelling?.orderNumber ?? 0}

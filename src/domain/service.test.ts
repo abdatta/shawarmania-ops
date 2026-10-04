@@ -24,6 +24,7 @@ import {
 } from './service'
 
 const ALL_ON: OutletServiceSettings = {
+  collectCustomerDetails: true,
   dineInOffered: true,
   takeawayOffered: true,
   tableNumbers: true,

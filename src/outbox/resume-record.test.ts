@@ -3,6 +3,9 @@ import 'fake-indexeddb/auto'
 import Dexie from 'dexie'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { ALL_OFF_SERVICE_SETTINGS } from '@/domain'
+import { createSupabaseMenuAdapter } from '@/data-access/supabase-adapters/menu'
+
 import { BillingDeliveryDatabase } from './schema'
 import { CounterResumeCoordinator } from './resume-coordinator'
 import {
@@ -59,6 +62,47 @@ afterEach(async () => {
 })
 
 describe('counter resume record', () => {
+  it('keeps customer collection off after closing IndexedDB and reopening offline', async () => {
+    const databaseName = name()
+    const database = new BillingDeliveryDatabase(databaseName)
+    await writeCounterResume(
+      record({
+        outletMenu: {
+          categories: [],
+          discounts: [],
+          presets: [],
+          service: { ...ALL_OFF_SERVICE_SETTINGS, collectCustomerDetails: false },
+        },
+      }),
+      database,
+    )
+    database.close()
+    const reopened = new BillingDeliveryDatabase(databaseName)
+    const resumed = await readCounterResume(
+      'tablet-1',
+      Date.parse('2026-09-01T14:00:00Z'),
+      reopened,
+    )
+    expect(resumed.status).toBe('ready')
+    if (resumed.status !== 'ready') return
+    const unavailable = { data: null, error: { code: 'offline', message: 'offline' } }
+    const query = {
+      select: () => query,
+      eq: () => query,
+      order: () => query,
+      single: () => Promise.resolve(unavailable),
+      then: (resolve: (value: typeof unavailable) => unknown) =>
+        Promise.resolve(unavailable).then(resolve),
+    }
+    const client = { from: () => query } as unknown as Parameters<
+      typeof createSupabaseMenuAdapter
+    >[0]
+    const menu = await createSupabaseMenuAdapter(client, undefined, resumed.record).readOutletMenu(
+      'outlet-1',
+    )
+    expect(menu.service?.collectCustomerDetails).toBe(false)
+    reopened.close()
+  })
   it('does not publish until every authorised read slice has arrived', async () => {
     const database = new BillingDeliveryDatabase(name())
     const session = {

@@ -1,5 +1,5 @@
 import { Banknote, Delete, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
@@ -26,6 +26,7 @@ type PaymentDialogProps = {
   busy?: boolean
   error?: string | null
   mode?: 'record' | 'correct'
+  beforeTender?: ReactNode
   onClose: () => void
   onConfirm: (payments: PaymentAllocation[]) => void
 }
@@ -41,6 +42,7 @@ function OpenPaymentDialog({
   busy = false,
   error = null,
   mode = 'record',
+  beforeTender,
   onClose,
   onConfirm,
 }: PaymentDialogProps) {
@@ -110,8 +112,18 @@ function OpenPaymentDialog({
             Tap a method for the full balance, or key an amount first to split it.
           </p>
         </div>
-        <Money paise={totalPaise} display className="shrink-0" />
+        {!beforeTender && <Money paise={totalPaise} display className="shrink-0" />}
       </div>
+
+      {beforeTender && (
+        <>
+          {beforeTender}
+          <div className="mt-3 flex items-baseline justify-between border-t border-border pt-3">
+            <span className="font-semibold text-content-muted">Total to pay</span>
+            <Money paise={totalPaise} display />
+          </div>
+        </>
+      )}
 
       {error && (
         <p role="alert" className="mt-3 text-sm font-semibold text-danger">

@@ -51,6 +51,13 @@ outlet and a Franchise Admin for the outlets they manage, and both only through
 authority and writes these columns and no others: `outlets_update` stays the
 owner's, because widening it would hand a manager the cutover and the fence.
 
+**Customer collection** *(#59)* — `collect_customer_details`, a non-null boolean
+defaulting to true for existing and new outlets. The service-settings RPC also
+writes this choice for the owner or the outlet's assigned franchise admins;
+older clients omitting it preserve the stored value. It travels with the cached
+counter menu. Off removes entry prompts; it does not erase customer facts already
+recorded on orders, bills or the customer ledger.
+
 **Points and gold** *(#62)* — ten more columns, all off by default, written only
 through `set_outlet_loyalty_settings(outlet, …ten values)` with the same authority
 as the service settings: `points_enabled`; `points_earn_per_block` and

@@ -594,7 +594,7 @@ export function createMockBillingAdapter(
     store.orderItems = store.orderItems.filter((line) => line.order_id !== orderId)
     lines.forEach((line, index) => {
       store.orderItems.push({
-        id: `${orderId}-${index}`,
+        id: line.orderLineId ?? `${orderId}-${index}`,
         order_id: orderId,
         menu_item_id: line.menuItemId || null,
         item_name: line.itemName,
@@ -671,6 +671,7 @@ export function createMockBillingAdapter(
   function lineView(line: Tables<'order_items'> | Tables<'bill_items'>): BillLineDraft {
     const packaging = line.kind === 'packaging'
     return {
+      ...('order_id' in line ? { orderLineId: line.id } : {}),
       menuItemId: packaging ? '' : (line.menu_item_id ?? line.id),
       itemName: line.item_name,
       unitPricePaise: line.unit_price_paise,
