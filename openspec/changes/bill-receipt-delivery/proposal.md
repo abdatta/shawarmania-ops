@@ -68,7 +68,14 @@ What that settles for the build:
   after it, since earning reads it when the bill arrives and settings keep no
   history. Confirm on the next bill with a customer before relying on it.
 
-## When the number is asked, and when the message goes [recommended 2026-10-03, owner to confirm]
+## When the number is asked, and when the message goes
+
+> **Status, 4 October 2026.** *Send at settlement* is decided and built (design D1).
+> *Ask at payment* is the owner's own request (3 October, in the session that set
+> up DLT and MSG91) and is **not built**: the scope note above shipped #59 with the
+> existing number-or-skip row. It is the open follow-up in `tasks.md` 7. The consent
+> half of the last bullet below is superseded: giving a number is the opt-in, and a
+> number with "no SMS" is not an option the counter offers [owner, 3 October 2026].
 
 **Send when the settled bill reaches the server, not after *Prepared*.** Everything
 the message carries is final at payment: the items, the total, the tender, the
@@ -99,9 +106,12 @@ What that has to respect:
   ordering still gets gold and points shown on the order, and the payment step then
   only confirms the message question. Moving the whole customer step out of the
   order is a larger change to #56 and #62 than this one needs.
-- **Consent is the answer to that question, recorded as its own fact** (who asked,
+- ~~**Consent is the answer to that question, recorded as its own fact** (who asked,
   when, the words), as below. A customer who gives the number but says no to the
-  message keeps their points and gets no SMS.
+  message keeps their points and gets no SMS.~~ Superseded [owner, 3 October 2026]:
+  *"if they are giving a number, we can just assume they're fine with getting the
+  SMS."* The payment step asks for the number, explaining it is for the receipt and
+  points; it does not ask a separate message question.
 
 ## The channel is SMS through MSG91, 2026-09-29
 
