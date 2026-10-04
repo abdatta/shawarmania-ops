@@ -1,18 +1,19 @@
 # Proposal: bill-receipt-delivery
 
-## Current scope — owner decision, 3 October 2026
+## Current scope — owner decisions through 4 October 2026
 
 **This section supersedes the earlier consent, suppression and payment-dialog
 design below.** The owner explicitly chose providing a valid phone at the counter
 as opting into receipt SMS. No separate consent question, suppression preference,
 is part of #59. The payment-time expansion below supersedes the original decision
-to leave the counter layout alone; the order-time number-or-skip option stays.
+to leave the counter layout alone; optional order-time customer entry stays.
 
-**Local expansion, owner-authorized 4 October 2026:** payment asks for the number
+**Deployed expansion, owner-authorized 4 October 2026:** payment asks for the number
 when none is attached, then shows membership and points before total and tender.
 Direct bills and saved orders carry that decision through the existing durable
 commands. The owner reviewed the UI and authorized pushing on 4 October 2026.
-Release may proceed; the production points confirmation remains open.
+It is live in application `6d4dd594` (build stamp `6d4dd59`), along with the
+outlet collection switch below. The production points confirmation remains open.
 
 **Outlet choice, owner-authorized 4 October 2026:** add a default-on Collect
 customer details setting, editable by the owner and each outlet's own franchise
@@ -20,6 +21,17 @@ admins. Off hides customer entry in composing/editing and skips the checkout
 number prompt without requiring Skip. Existing recorded customer facts and
 benefits stay intact; anonymous new bills have no customer-linked points or SMS.
 The setting travels with cached outlet menu data for offline starts.
+
+**Latest refinement, implementation authorized 4 October 2026:** customer entry
+is optional while placing or editing an order, including at outlets collecting
+details. Order and Save changes need no customer decision or Skip. Required
+service choices still apply. Payment asks when no number is attached; an attached
+number is kept. After reviewing the fully verified local preview, the owner
+stated "Looks good to me, we can deploy" on 4 October 2026. The review hold is
+satisfied and release is authorized. Tasks 1–7 and 9–12 are complete: eleven of
+twelve numbered tasks. Task 8 awaits genuine production points evidence.
+Deployment of this latest refinement is in progress; verification.md records
+its result separately from the previously deployed phase.
 
 **Current gate:** a new settled bill with a valid number automatically sends its
 receipt, earned points and frozen outlet balance when it reaches the server,
@@ -86,7 +98,7 @@ What that settles for the build:
 
 > **Status, 4 October 2026.** *Send at settlement* is decided and built (design D1).
 > *Ask at payment* is the owner's own request (3 October, in the session that set
-> up DLT and MSG91). It is now **implemented, verified and owner-approved for release**
+> up DLT and MSG91). It is now **implemented, verified and deployed**
 > under task 7. The consent
 > half of the last bullet below is superseded: giving a number is the opt-in, and a
 > number with "no SMS" is not an option the counter offers [owner, 3 October 2026].
@@ -117,8 +129,9 @@ What that has to respect:
   dialog asks *number, then gold and points, then total, then tender*, and the bill
   is settled with the customer attached.
 - **The order-time customer row stays optional, not removed.** A regular known when
-  ordering still gets gold and points shown on the order, and the payment step then
-  only confirms the message question. Moving the whole customer step out of the
+  ordering still gets gold and points shown on the order; payment keeps that
+  number without another question. Order and Save changes need no identification
+  or Skip [owner, 4 October 2026]. Moving the whole customer step out of the
   order is a larger change to #56 and #62 than this one needs.
 - ~~**Consent is the answer to that question, recorded as its own fact** (who asked,
   when, the words), as below. A customer who gives the number but says no to the

@@ -86,8 +86,12 @@ test.describe('the counter', () => {
       await expect(page.getByTestId('customer-row')).toHaveCount(0)
       await expect(page.getByTestId('save-order')).toBeEnabled()
       await page.getByTestId('save-order').click()
-      const order = page.getByTestId('counter-activity-rail').getByTestId(/^open-order-local-/)
-      await expect(order).toBeVisible()
+      const rail = page.getByTestId('counter-activity-rail')
+      const queuedOrder = rail.getByTestId(/^open-order-local-/)
+      await expect(queuedOrder).toBeVisible()
+      const orderId = await queuedOrder.getAttribute('data-flip-id')
+      expect(orderId).not.toBeNull()
+      const order = rail.locator(`[data-flip-id="${orderId}"]`)
       await order.getByRole('button', { name: 'Paid', exact: true }).click()
       const payment = page.getByRole('dialog', { name: 'Record payment' })
       await expect(payment).toBeVisible()
@@ -113,6 +117,49 @@ test.describe('the counter', () => {
     await expect(page.getByTestId('sync-indicator')).toHaveAttribute('data-sync', 'pending')
     await expect(page.getByTestId('sync-indicator')).toContainText('1 pending')
   })
+
+  for (const outcome of ['identify', 'skip'] as const) {
+    test(`orders and edits without customer entry, then ${outcome === 'identify' ? 'identifies' : 'skips'} at payment`, async ({
+      page,
+    }) => {
+      await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
+      await expect(page.getByTestId('customer-row')).toHaveText('Enter Customer Info')
+      await page.getByTestId('save-order').click()
+      const rail = page.getByTestId('counter-activity-rail')
+      const queuedOrder = rail.getByTestId(/^open-order-local-/)
+      await expect(queuedOrder).toBeVisible()
+      const orderId = await queuedOrder.getAttribute('data-flip-id')
+      expect(orderId).not.toBeNull()
+      // The awaiting-number test id changes once sync assigns #106; UUID does not.
+      const order = rail.locator(`[data-flip-id="${orderId}"]`)
+      await order.getByRole('button', { name: /More actions/ }).click()
+      await page.getByRole('menuitem', { name: /Edit/ }).click()
+      await page
+        .getByRole('button', { name: 'One more Classic Chicken Shawarma', exact: true })
+        .click()
+      await page.getByRole('button', { name: 'Save changes', exact: true }).click()
+      await order.getByRole('button', { name: 'Paid', exact: true }).click()
+      const question = page.getByRole('dialog', { name: 'Receipt and points' })
+      await expect(question).toBeVisible()
+      if (outcome === 'identify') {
+        for (const digit of '9000000101')
+          await question.getByRole('button', { name: digit, exact: true }).click()
+        await question.getByTestId('customer-confirm').click()
+      } else {
+        await question.getByTestId('customer-skip').click()
+      }
+      const payment = page.getByRole('dialog', { name: 'Record payment' })
+      await expect(payment.getByTestId('checkout-customer')).toContainText(
+        outcome === 'identify' ? 'Ritika Sen' : 'No number',
+      )
+      await payment.getByRole('button', { name: 'Cash', exact: true }).click()
+      await payment.getByRole('button', { name: 'Paid', exact: true }).click()
+      await expect(order.getByRole('button', { name: 'Paid', exact: true })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+    })
+  }
 
   test('shows the whole menu without scrolling on a tablet', async ({ page }) => {
     // The smallest tablet this is designed for. If a menu item is ever added
@@ -182,16 +229,15 @@ test.describe('the counter', () => {
     await expect(payment.getByTestId('checkout-customer')).toContainText('Ritika Sen')
   })
 
-  test('keeps ordering identification and allows Paid to ask for the number first', async ({
+  test('keeps optional ordering identification and allows Paid to ask for the number first', async ({
     page,
   }) => {
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
     await expect(page.getByTestId('customer-row')).toHaveText('Enter Customer Info')
-    await expect(page.getByRole('button', { name: 'Order', exact: true })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Order', exact: true })).toBeEnabled()
     await expect(page.getByTestId('settle')).toBeEnabled()
     await expect(page.getByTestId('settle')).toHaveText('Paid')
-    // The disabled actions beside an untouched row are the message. The
-    // sentence that used to sit here was a third way of saying it.
+    // Ordering needs no customer decision; payment remains the checkpoint.
     await expect(page.getByText(/Add a customer/i)).toHaveCount(0)
 
     // A number nobody has used before, so the UI insists on a name for it.

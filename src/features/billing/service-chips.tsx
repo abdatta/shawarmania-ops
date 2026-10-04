@@ -17,8 +17,8 @@ import { cn } from '@/lib/cn'
  * there already is that type.
  *
  * **Nothing is preselected, one tap marks the order, and the answer is owed**
- * [owner, 2026-09-27]: Order and Paid wait for it, the way they wait for the
- * customer decision. Tapping the chosen chip again takes a mistaken tap back,
+ * [owner, 2026-09-27]: Order and Paid wait for the service answer, while
+ * customer entry is optional. Tapping the chosen chip again takes a mistaken tap back,
  * and Order and Paid wait again — nobody should have to tap the other type and
  * back to undo one.
  *

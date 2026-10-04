@@ -121,3 +121,24 @@ the extra tile. Saved-order checkout uses the counter's already loaded/cached
 settings, so payment never waits for an additional network read. Standalone
 pipeline views resolve settings before deciding whether to show the prompt.
 The owner approved this UI together with checkout and authorized its release.
+
+## D9. Customer entry is optional while ordering — reviewed for release
+
+The composer enables Order and Save changes without a customer decision, whether
+collection is on or off. Items, required service choices and local acceptance
+still govern availability. The optional customer row stays where collection is
+on; its dialog can still identify or clear a customer, but opening it or pressing
+Skip is never a prerequisite for ordering. Existing customer snapshots and
+loyalty behave as before.
+
+Payment remains the collection checkpoint: missing or previously skipped numbers
+open the receipt-and-points pad, and one-tap Skip opens tender. An attached number
+is kept without another question. Collection off bypasses this checkpoint. This
+changes only the footer's availability rule; the nullable snapshots, command
+schema, queue, database policies, sender and layout are unchanged. No shimmer
+geometry changes because no element moves or changes size.
+
+The payment-time flow and collection switch are already deployed in `6d4dd594`.
+The owner reviewed the fully verified ordering refinement and authorized
+deployment on 4 October 2026. The active change stays open while the genuine
+production points check remains pending.

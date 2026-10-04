@@ -120,8 +120,8 @@ async function identifyCustomer(person: ReturnType<typeof user>, digits: string,
  * no skip on the composer, because one under the thumb that taps Paid forty
  * times an hour is muscle memory inside a week.
  *
- * Most tests in this file are about something else entirely and reach for this
- * because a terminal action is behind a decision — and this is the cheapest one.
+ * Tests use this when the scenario specifically needs an earlier skip. Ordering
+ * itself never requires a customer decision; payment asks when no number exists.
  */
 async function skipCustomer(person: ReturnType<typeof user>) {
   await person.click(screen.getByTestId('customer-row'))
@@ -144,6 +144,38 @@ async function recordPaid(person: ReturnType<typeof user>, method = 'Cash') {
 }
 
 describe('BillingCounter', () => {
+  it('orders and edits without a customer decision, then offers Skip only when payment asks', async () => {
+    const person = user()
+    const { adapters } = renderCounter()
+    const save = vi.spyOn(adapters.billing, 'saveOrder')
+    const revise = vi.spyOn(adapters.billing, 'reviseOrder')
+    const pay = vi.spyOn(adapters.billing, 'payOrder')
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    expect(screen.getByTestId('customer-row')).toHaveTextContent('Enter Customer Info')
+    await person.click(screen.getByTestId('save-order'))
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+    expect(save.mock.calls[0]![0]).toMatchObject({ customerPhone: '', customerName: '' })
+    const rail = screen.getByTestId('counter-activity-rail')
+    let card = await within(rail).findByTestId(/^open-order-local-/)
+    await person.click(within(card).getByRole('button', { name: /More actions/ }))
+    await person.click(screen.getByRole('menuitem', { name: /Edit/ }))
+    await person.click(screen.getByRole('button', { name: 'One more Classic Chicken Shawarma' }))
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
+    await person.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(revise).toHaveBeenCalledTimes(1))
+    expect(revise.mock.calls[0]![1]).toMatchObject({ customerPhone: '', customerName: '' })
+    card = await within(rail).findByTestId(/^open-order-local-/)
+    await person.click(within(card).getByRole('button', { name: /^Paid/ }))
+    const question = await screen.findByRole('dialog', { name: 'Receipt and points' })
+    expect(pay).not.toHaveBeenCalled()
+    await person.click(within(question).getByTestId('customer-skip'))
+    const payment = screen.getByRole('dialog', { name: 'Record payment' })
+    await person.click(within(payment).getByRole('button', { name: 'Cash' }))
+    await person.click(within(payment).getByRole('button', { name: 'Paid' }))
+    await waitFor(() => expect(pay).toHaveBeenCalledTimes(1))
+    expect(pay.mock.calls[0]![1]).toEqual([{ method: 'cash', amountPaise: 27800 }])
+    expect(revise).toHaveBeenCalledTimes(1)
+  })
   it('retains the customer and benefits on an existing order while collection is off', async () => {
     const person = user()
     renderCounter(createMockAdapters('biller'), {
@@ -267,7 +299,8 @@ describe('BillingCounter', () => {
     const revise = vi.spyOn(adapters.billing, 'reviseOrder')
     const pay = vi.spyOn(adapters.billing, 'payOrder').mockRejectedValueOnce(new Error('disk full'))
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await skipCustomer(person)
+    expect(screen.getByTestId('customer-row')).toHaveTextContent('Enter Customer Info')
+    expect(screen.getByTestId('save-order')).toBeEnabled()
     await person.click(screen.getByTestId('save-order'))
     const rail = await screen.findByTestId('counter-activity-rail')
     const card = await within(rail).findByTestId(/^open-order-local-/)
@@ -450,15 +483,15 @@ describe('BillingCounter', () => {
     expect(screen.queryByTestId(`bill-line-${MENU_ITEM_STUFFED_ID}`)).not.toBeInTheDocument()
   })
 
-  it('keeps ordering identification and allows Paid to ask for the number first', async () => {
+  it('keeps optional ordering identification and allows Paid to ask for the number first', async () => {
     const person = user()
     const { adapters } = renderCounter()
     const settleBill = vi.spyOn(adapters.billing, 'settleBill')
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    expect(screen.getByTestId('save-order')).toBeDisabled()
+    expect(screen.getByTestId('save-order')).toBeEnabled()
     expect(screen.getByTestId('settle')).toBeEnabled()
-    // Order requires a decision; Paid asks for it at the start of checkout. The
+    // Ordering needs no customer decision; Paid asks at the start of checkout. The
     // sentence that used to sit here was a third way of saying it.
     expect(screen.queryByText(/Add a customer/i)).not.toBeInTheDocument()
     expect(settleBill).not.toHaveBeenCalled()
@@ -469,9 +502,8 @@ describe('BillingCounter', () => {
     expect(screen.getByTestId('save-order')).toBeEnabled()
     expect(screen.getByTestId('settle')).toBeEnabled()
 
-    // Skipping is a decision too, and it is the whole of the enforcement. It
-    // costs opening the dialog first — there is no skip on the composer, which
-    // is the one control this change most deliberately does not add.
+    // Early entry can still be cleared by Skip inside the dialog. Neither is
+    // required to place an order, and there is no separate composer Skip button.
     await skipCustomer(person)
     expect(screen.getByTestId('customer-row')).toHaveTextContent('Skipped Customer Info')
     expect(screen.queryByRole('dialog', { name: 'Customer' })).not.toBeInTheDocument()
@@ -1085,7 +1117,7 @@ describe('BillingCounter', () => {
     expect(screen.queryByTestId('bill-discount-row-0')).not.toBeInTheDocument()
     // And they are not the last customer either.
     expect(screen.getByTestId('customer-row')).toHaveTextContent('Enter Customer Info')
-    expect(screen.getByTestId('save-order')).toBeDisabled()
+    expect(screen.getByTestId('save-order')).toBeEnabled()
   })
 
   it('suggests one customer this outlet has served, from a partial number', async () => {

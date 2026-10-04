@@ -1,5 +1,14 @@
 # Verification: bill-receipt-delivery
 
+**Current status, 4 October 2026:** the automatic SMS channel, payment-time
+customer prompt and outlet collection setting are deployed. The latest optional
+ordering refinement is implemented and fully verified locally. The owner reviewed
+it and authorized deployment; release is in progress. Eleven of twelve numbered
+tasks are complete. Task 8 still awaits
+a genuine eligible production bill to confirm points earning. The dated sections
+below retain the evidence for each phase; the latest section describes the current
+refinement.
+
 Verified locally on 3 October 2026 and released on 4 October 2026. Production
 sending is enabled from 10:17:53 a.m. Asia/Kolkata.
 
@@ -231,3 +240,73 @@ errors. No production setting was changed during verification.
 The final read-only points query still returned only historical identified bill
 199, with no earning entry. Task 8 remains open for a genuine eligible bill; this
 release created no production sale, backfill, ledger adjustment or extra SMS.
+
+## Optional customer entry while ordering — 4 October 2026
+
+The owner authorized making customer entry optional for Order and Save changes,
+including when outlet collection is on. Both now use the existing non-empty,
+not-busy and required-service guards. Customer entry stays available; checkout
+still asks for a missing number when collection is on, before benefits and tender,
+and offers one-tap Skip there. Attached customers and the collection-off path are
+preserved. No schema, adapter, money, outbox or layout change is needed.
+
+The active proposal, design, receipt delta, new counter-billing delta and current
+screen/limitations docs describe this rule. Task 11 records implementation and
+task 12 records the owner's requested quick review before release. The previous
+review approval applies to the deployed phase, not this new refinement.
+
+Before the footer change, the two updated component regressions failed because
+Order was disabled beside untouched customer entry. After the change, tests
+exercise anonymous ordering and quantity edits without Skip, then either attach
+a customer or Skip at payment. Existing last-line reset coverage now expects the
+untouched customer control without disabling an otherwise valid order.
+
+The browser tests track the durable order UUID after sync, rather than its
+temporary awaiting-number test id. Initial runs exposed that selector race after
+editing/payment; the final complete run passes without retries. Application
+behavior was not changed to accommodate the selector. All payment/customer
+assertions remain, including the collection-off owner/admin cases.
+
+| Gate | Latest local refinement evidence |
+| --- | --- |
+| Lint | Pass; no errors, 15 existing warnings |
+| Format | Formatter run before gates; final format check passes |
+| App/Edge types | Both pass |
+| Unit/component | 165 files, 2,187 tests pass |
+| Contrast | 64 pairs pass AA in both themes |
+| Build | Explicit final production build passes, including generated PWA assets |
+| Demo browser | 294 pass without retries; untouched order/edit followed by identify or Skip passes on phone and desktop |
+| Database | Fresh reset; 76 files, 2,990 assertions pass |
+| HTTP/RLS | All six phases pass, 283 tests; existing real offline/replay receipt and points proof remains green |
+| Real-account browser | 34 pass, including real offline and two-tablet settlement |
+| Schema parity | Regenerated content matches the tracked schema exactly; no schema file changes |
+| Visual | Own preview on 7413; 390×844 and 1024×768 in light and dark; optional composer and missing-number payment prompt inspected; normal viewport and original dark theme restored |
+
+The read-only production points check still returned only historical identified
+bill 199, without an earned entry or automatic receipt job. Task 8 remains open;
+no synthetic production sale, adjustment, backfill or extra SMS was created.
+Browser proof images are outside Git as `optional-ordering-review-light.png`
+and `optional-ordering-review-dark.png` in the temporary directory. The review
+tab was then reloaded onto the explicit final build (`index-B2qGphvU.js`), where
+untouched customer entry and an enabled Order were confirmed with no console
+errors. `optional-ordering-review-final.png` captures that final review state.
+This latest
+refinement remains local for review; no commit, push or deployment was performed.
+
+## Optional ordering approval and release — 4 October 2026
+
+After reviewing the verified local preview, the owner stated "Looks good to me,
+we can deploy". Task 12 is complete and commit, push and gated deployment are
+authorized. Eleven of twelve numbered tasks are complete; task 8 still awaits a
+genuine eligible production bill. The local evidence above applies to the
+approved application bytes; only approval documentation changed afterwards.
+Production release evidence will be recorded after the gated deployment succeeds.
+
+At the owner's request, the two earlier session commits carrying a generic
+Codex GPT-6 trailer were corrected to Codex GPT-6.1 Sol before this release:
+`6d4dd594` is now `c36de00c`, and `69816892` is now `f194da57`. Their file trees,
+author/committer facts and dates are identical; only the trailers and resulting
+commit identities changed. Earlier deployed build stamps and CI links above
+retain the original identities because those are what production actually ran.
+The receipt and landing commits from this session already carried the requested
+attribution. Other agents' commits were not reattributed.

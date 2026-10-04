@@ -7,7 +7,7 @@
 - [x] 5. Update durable docs, regenerate types, format first and pass full lint/types/unit/contrast/build/E2E/database/RLS/auth gates; exercise offline/replay against the local backend.
 - [x] 6. Deploy matching pages, migration and handlers; configure server secrets and reports; activate future bills and verify one authorized real handset SMS and receipt/PDF.
 - [x] 7. **Ask for the number at payment** [owner, 3 October 2026; implementation authorized
-      4 October; keep it local for owner UI review before finalizing].
+      4 October; reviewed and deployed in application `6d4dd594`].
       The payment dialog's first step asks for the customer's number when none is attached,
       worded around the receipt ("for your bill and points on your phone"), then shows gold and
       points, then the total, then the tender: gold and points change the total, so the number
@@ -35,4 +35,19 @@
       orders and skips checkout prompts. Preserve existing customer facts and
       benefits, carry the choice offline, reshape settings shimmer, regenerate
       types and prove role isolation plus the complete local verification suite.
+      Reviewed and deployed with task 7 in application `6d4dd594`; live build
+      stamp `6d4dd59`. All existing outlets retain collection on by default.
+- [x] 11. **Customer details never block ordering** [owner, 4 October 2026].
+      With collection on, retain optional customer entry but enable Order and
+      Save changes without identification or Skip. Preserve required service
+      choices, empty/busy guards, attached customers and loyalty. Payment still
+      asks when no number is attached; one-tap Skip belongs there. Update the
+      counter-billing deltas, docs and regression tests; verify anonymous
+      order/edit/payment and existing offline settlement before review.
+      Implemented and fully verified locally; see verification.md for the red
+      reproduction, final gates and review evidence. Task 12 authorizes release.
+- [x] 12. **Owner quickly reviews optional ordering before release.**
+      After reviewing the verified local preview, the owner stated "Looks good
+      to me, we can deploy" on 4 October 2026. The review hold is satisfied;
+      commit, push and gated deployment are authorized. Task 8 remains open.
 - [x] PHASE GATE: new valid-number bills send receipt/points automatically after settlement/sync, once per bill; no number, history and demo send nothing; failures are visible and billing never waits for SMS. Automatic settlement/replay proved against the real local backend; production sending enabled and the authorized provider/receipt/report check passed. No synthetic production sale was added.

@@ -29,9 +29,9 @@ import type { CustomerSelection } from './customer-dialog'
  * what was decided in three states, and a decision already made is changed by
  * tapping the row again and making a different one.
  *
- * Order waits for identification or skip here. Paid asks for that decision at
- * the start of checkout instead, before loyalty and tender. Both snapshot
- * columns stay nullable: skipping never requires a customer record.
+ * Customer entry is optional for Order and Save changes. Paid asks for a
+ * missing number at checkout, before loyalty and tender. Both snapshot
+ * columns stay nullable: ordering never requires identification or Skip.
  */
 export function BillComposerFooter({
   lines,
@@ -67,8 +67,8 @@ export function BillComposerFooter({
   service?: ReactNode
   /**
    * Where the food goes is still unanswered and the outlet requires an answer
-   * [owner, 2026-09-27]. Held exactly like the customer decision: the terminal
-   * actions wait, and the chips standing unpressed beside them are the reminder.
+   * [owner, 2026-09-27]. The terminal actions wait, and the chips standing
+   * unpressed beside them are the reminder. Customer entry remains optional.
    */
   serviceOwed?: boolean
   collectCustomerDetails?: boolean
@@ -76,7 +76,6 @@ export function BillComposerFooter({
   const totals = billTotals(lines, { discountPaise: discountTotalPaise })
 
   const canPay = !settling && lines.length > 0 && !serviceOwed
-  const canComplete = canPay && (!collectCustomerDetails || customer !== null)
 
   return (
     <div className="space-y-3">
@@ -110,7 +109,7 @@ export function BillComposerFooter({
         <Button
           size="control"
           className="w-full text-lg"
-          disabled={!canComplete}
+          disabled={!canPay}
           data-testid="save-order"
           onClick={onSaveOrder}
         >

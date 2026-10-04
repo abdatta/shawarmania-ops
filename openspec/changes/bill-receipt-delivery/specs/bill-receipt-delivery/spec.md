@@ -70,7 +70,9 @@ outlet's deliveries. Diagnostics SHALL NOT contain phones or receipt tokens.
 
 At outlets collecting customer details, direct bills and saved orders SHALL ask for a customer number at payment when
 none is attached, with receipt-and-points wording and one-tap skip. An attached
-number SHALL be shown and kept. Ordering SHALL retain its customer option.
+number SHALL be shown and kept. Ordering SHALL retain optional customer entry;
+Order and Save changes SHALL NOT require identification or Skip, even when
+collection is enabled. Required service choices SHALL still apply.
 Membership and redeemable points SHALL precede the recomputed total and tender.
 Only fresh balances SHALL permit additional points; directory failure SHALL NOT
 prevent payment. Customer and pricing snapshots SHALL survive offline replay.
@@ -79,6 +81,10 @@ prevent payment. Customer and pricing snapshots SHALL survive offline replay.
 - **WHEN** a customer gives their number while paying a previously anonymous order
 - **THEN** the bill snapshots that customer, applies selected loyalty before tender,
   and server settlement creates the same single automatic receipt job
+
+#### Scenario: Order without an earlier customer decision
+- **WHEN** collection is enabled and the biller orders or edits without using customer entry
+- **THEN** the order is accepted without requiring Skip, and payment asks for the missing number
 
 #### Scenario: Skip or dismiss
 - **WHEN** the biller skips the payment-time number question
