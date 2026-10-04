@@ -2,8 +2,8 @@
 
 **Current status, 4 October 2026:** the automatic SMS channel, payment-time
 customer prompt and outlet collection setting are deployed. The latest optional
-ordering refinement is implemented and fully verified locally. The owner reviewed
-it and authorized deployment; release is in progress. Eleven of twelve numbered
+ordering refinement is implemented, fully verified and deployed in application
+`38522703`, live build stamp `3852270`, following the owner's review. Eleven of twelve numbered
 tasks are complete. Task 8 still awaits
 a genuine eligible production bill to confirm points earning. The dated sections
 below retain the evidence for each phase; the latest section describes the current
@@ -300,7 +300,7 @@ we can deploy". Task 12 is complete and commit, push and gated deployment are
 authorized. Eleven of twelve numbered tasks are complete; task 8 still awaits a
 genuine eligible production bill. The local evidence above applies to the
 approved application bytes; only approval documentation changed afterwards.
-Production release evidence will be recorded after the gated deployment succeeds.
+Production release evidence is recorded below.
 
 At the owner's request, the two earlier session commits carrying a generic
 Codex GPT-6 trailer were corrected to Codex GPT-6.1 Sol before this release:
@@ -310,3 +310,33 @@ commit identities changed. Earlier deployed build stamps and CI links above
 retain the original identities because those are what production actually ran.
 The receipt and landing commits from this session already carried the requested
 attribution. Other agents' commits were not reattributed.
+
+Application commit `3852270396a52aca9d949eb54e510856b5e7393b` was pushed to
+`main` with an explicit force-with-lease against the previous remote tip, as the
+owner authorized for the attribution corrections. [Deploy run 37200727819](https://github.com/abdatta/shawarmania-ops/actions/runs/37200727819)
+passed verification, build, production migrations, Edge Functions and Pages.
+Publication completed at **2026-10-04 12:11:12 UTC / 17:41:12 IST**.
+
+CI observed 2,187 unit/component tests, 2,990 database assertions, all six
+HTTP/RLS phases (283 tests), 34 real-account browser tests, schema parity, lint,
+formatting, app/Edge types, contrast and build passing. Demo browser results
+were **292 passed and 2 flaky**: the tablet and desktop manager billing-history
+structured-detail/layout test both passed on retry. All new optional-ordering
+cases passed. The local final browser run passed all 294 without retries; the
+CI retry evidence is retained rather than reported as a clean first attempt.
+
+The live HTML and `/assets/index-BS7xuoLC.js` return HTTP 200, and the asset
+contains build stamp `3852270` and the payment prompt. Edge's explicit production
+demo initially served its cached preceding asset. Clearing only the draft added
+for this check and refreshing the idle demo adopted the newly published asset.
+On that asset, untouched customer entry leaves Order enabled, Paid opens Receipt
+and points, and one-tap Skip reaches Record payment with No number / no receipt
+SMS. The check created no order, bill, customer or SMS; no real outlet record or
+setting was changed. Browser console errors are empty, the draft is cleared and
+the temporary viewport is restored. Proof is outside Git in the temporary file
+`optional-ordering-production.png`.
+
+The latest read-only production points query still returns only historical
+identified bill 199, without an earning entry or automatic receipt job. Task 8
+remains open; this release is not archived. This evidence-only follow-up does
+not redeploy the application, so its live build stamp remains `3852270`.

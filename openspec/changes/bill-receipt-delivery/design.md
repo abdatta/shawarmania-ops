@@ -140,5 +140,6 @@ geometry changes because no element moves or changes size.
 
 The payment-time flow and collection switch are already deployed in `6d4dd594`.
 The owner reviewed the fully verified ordering refinement and authorized
-deployment on 4 October 2026. The active change stays open while the genuine
-production points check remains pending.
+deployment on 4 October 2026. It is live in application `38522703`, build stamp
+`3852270`. The active change stays open while the genuine production points
+check remains pending.

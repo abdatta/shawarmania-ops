@@ -30,8 +30,9 @@ number is kept. After reviewing the fully verified local preview, the owner
 stated "Looks good to me, we can deploy" on 4 October 2026. The review hold is
 satisfied and release is authorized. Tasks 1–7 and 9–12 are complete: eleven of
 twelve numbered tasks. Task 8 awaits genuine production points evidence.
-Deployment of this latest refinement is in progress; verification.md records
-its result separately from the previously deployed phase.
+This latest refinement is deployed in application `38522703` (build stamp
+`3852270`); verification.md records its production evidence separately from
+the previously deployed phase.
 
 **Current gate:** a new settled bill with a valid number automatically sends its
 receipt, earned points and frozen outlet balance when it reaches the server,

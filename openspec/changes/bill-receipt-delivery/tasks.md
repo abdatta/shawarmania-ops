@@ -46,6 +46,7 @@
       order/edit/payment and existing offline settlement before review.
       Implemented and fully verified locally; see verification.md for the red
       reproduction, final gates and review evidence. Task 12 authorizes release.
+      Deployed in application `38522703`, live build stamp `3852270`.
 - [x] 12. **Owner quickly reviews optional ordering before release.**
       After reviewing the verified local preview, the owner stated "Looks good
       to me, we can deploy" on 4 October 2026. The review hold is satisfied;
