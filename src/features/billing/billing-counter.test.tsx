@@ -1724,10 +1724,9 @@ describe('BillingCounter — how the outlet serves (#60)', () => {
     const rail = await screen.findByTestId('counter-activity-rail')
     const table = await within(rail).findByText('Table 3')
     // The number leads and the table follows it [owner, 2026-10-05].
+    const card = table.closest('article')!
     await waitFor(() =>
-      expect(table.closest('[data-testid^="order-reference-"]')).toHaveTextContent(
-        /^#\s*\d+\s*·\s*Table 3$/,
-      ),
+      expect(within(card).getByTestId(/^order-reference-/)).toHaveTextContent(/^#\s*\d+$/),
     )
   })
 

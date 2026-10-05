@@ -9,7 +9,7 @@ to the outlet's choices SHALL alter them. Both MAY change while the order is ope
 and SHALL be fixed at payment.
 
 Where an order has a table, the counter SHALL show its order number followed by
-its table, as `#106 · Table 8`. An order with a table SHALL show its table even
+its table, as `#106  TABLE 8`. An order with a table SHALL show its table even
 while its number has not yet arrived.
 Where an order has a type and no table, its pipeline card SHALL say whether it is
 dine-in or takeaway, so the kitchen can tell a plate from a parcel.
@@ -20,12 +20,12 @@ order by.
 #### Scenario: The number leads and the table follows it
 
 - **WHEN** order 106 for table 8 is on the pipeline
-- **THEN** its card reads #106 · Table 8
+- **THEN** its card reads #106 followed by Table 8
 
 #### Scenario: A parcel with no table
 
 - **WHEN** a takeaway order is on the pipeline
-- **THEN** its card says Takeaway beside its number
+- **THEN** its card says Takeaway beside its number, in the same tag a table wears
 
 #### Scenario: The outlet stops offering dine-in
 

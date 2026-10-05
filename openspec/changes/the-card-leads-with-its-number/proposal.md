@@ -17,11 +17,11 @@ already newest first (owner, 2026-10-05).
 
 ## What Changes
 
-- The card reads `#106 · Table 8`: the number first, then the table. A takeaway
-  card still reads `#106` with *Takeaway* beside it. The docked card under edit
-  uses the same reference.
+- The card reads `#106` then a place tag, `TABLE 8` or `TAKEAWAY`, in one style
+  for both (icon in primary, small muted capitals), since they answer the same
+  question. The docked card under edit reads `#106 · Table 8`.
 - The customer line and the age are gone from the pipeline card. The gold star
-  moves beside the reference.
+  badges the customer control, since it describes the customer.
 - One customer control sits right of the total. With a customer it opens the
   order's own snapshot (name, phone, membership) and offers *Change customer*;
   without one it starts the ordinary edit with the customer dialog already

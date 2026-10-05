@@ -75,16 +75,19 @@ SHALL read Paid and the preparation action Prepared.
 ### Requirement: A pipeline card states both of its answers in two fixed controls
 
 A pipeline card SHALL show its reference with the number part in the brand's
-bright primary colour, one meta line — the order type when the reference names
-no table, creator when another operator took the order, till when another till
-did — the total prominent at the right, and complete untruncated item lines with
+bright primary colour, followed by one place tag — its table, or its order type
+when it has no table — drawn in a single style for both, with an icon and small
+capitals that do not read as an item line; one meta line — creator when another
+operator took the order, till when another till did — the total prominent at
+the right, and complete untruncated item lines with
 bold quantity prefixes. The card SHALL NOT print the customer's name or the
 order's age.
 
 Beside the total, a card SHALL carry one customer control whenever the order has
 a customer or one can be set from this tablet. With a customer, it SHALL open
 what the order recorded — name, phone and membership — and, while the order can
-be edited here, offer to change it. Without one, it SHALL open the order in the
+be edited here, offer to change it. A gold member's star SHALL sit on that
+control rather than beside the reference, because it describes the customer. Without one, it SHALL open the order in the
 composer with the customer dialog already open: the ordinary edit, saved the
 ordinary way, and no new write. Per-line prices SHALL NOT appear on a pipeline card. A
 one-item card SHALL stand no taller than about 120px so at least six fit the rail

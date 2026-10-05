@@ -123,20 +123,37 @@ describe('the order number arrives when it arrives', () => {
 })
 
 describe('the number leads and the table follows it', () => {
-  it('reads #42 · Table 8 on a dine-in card with a table', () => {
+  const ID = 'a0000000-0000-4000-a000-000000000001'
+
+  it('reads #42 then Table 8 on a dine-in card with a table', () => {
     renderCard({ orderNumber: 42, serviceType: 'dine_in', tableNumber: 8 })
 
-    const badge = screen.getByTestId('order-reference-a0000000-0000-4000-a000-000000000001')
     // The table no longer replaces the number: both are on the card, number first.
-    expect(badge).toHaveTextContent(/^#\s*42\s*·\s*Table 8$/)
+    const badge = screen.getByTestId(`order-reference-${ID}`)
+    const place = screen.getByTestId(`order-service-${ID}`)
+    expect(badge).toHaveTextContent(/^#\s*42$/)
+    expect(place).toHaveTextContent(/^Table 8$/)
+    expect(badge.compareDocumentPosition(place) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('keeps the table steady while the number is still on its way', () => {
     renderCard({ orderNumber: AWAITING_ORDER_NUMBER, serviceType: 'dine_in', tableNumber: 8 })
 
-    const badge = screen.getByTestId('order-reference-a0000000-0000-4000-a000-000000000001')
-    expect(badge).toHaveTextContent(/Table 8$/)
-    expect(badge.querySelector('.animate-pulse')).not.toBeNull()
+    expect(
+      screen.getByTestId(`order-reference-${ID}`).querySelector('.animate-pulse'),
+    ).not.toBeNull()
+    expect(screen.getByTestId(`order-service-${ID}`)).toHaveTextContent(/^Table 8$/)
+  })
+
+  it('draws a table and Takeaway in one style, since they answer one question', () => {
+    const { unmount } = renderCard({ orderNumber: 42, serviceType: 'dine_in', tableNumber: 8 })
+    const table = screen.getByTestId(`order-service-${ID}`).className
+    unmount()
+    renderCard({ orderNumber: 43, serviceType: 'takeaway' })
+    const takeaway = screen.getByTestId(`order-service-${ID}`)
+
+    expect(takeaway).toHaveTextContent(/^Takeaway$/)
+    expect(takeaway.className).toBe(table)
   })
 })
 

@@ -1,4 +1,4 @@
-import { MoreVertical, UserRound, UserRoundPlus } from 'lucide-react'
+import { MoreVertical, ShoppingBag, UserRound, UserRoundPlus, UtensilsCrossed } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -300,15 +300,14 @@ export function PipelineCard({
           ) : (
             `#${order.orderNumber}`
           )}
-          {table !== null && (
-            <>
-              <span aria-hidden className="px-1.5 text-content-muted">
-                ·
-              </span>
-              <span>{tableLabel(table)}</span>
-            </>
-          )}
         </span>
+        {order.serviceType && (
+          <PlaceTag
+            testId={`order-service-${order.id}`}
+            icon={order.serviceType === 'dine_in' ? UtensilsCrossed : ShoppingBag}
+            label={table !== null ? tableLabel(table) : serviceTypeLabel(order.serviceType)}
+          />
+        )}
         {/*
           Two open orders on one table: both allowed, both shown, and each says
           which it is — 1 is the older [owner, 2026-09-27]. The warning fill,
@@ -343,15 +342,6 @@ export function PipelineCard({
               order without one needs the word.
             */}
             {[
-              order.serviceType && table === null && (
-                <span
-                  key="service"
-                  className="font-semibold text-content"
-                  data-testid={`order-service-${order.id}`}
-                >
-                  {serviceTypeLabel(order.serviceType)}
-                </span>
-              ),
               showCreator && (
                 <span key="creator" className="truncate">
                   {order.creatorName}
@@ -554,6 +544,31 @@ export function PipelineCard({
         }}
       />
     </article>
+  )
+}
+
+/**
+ * Where the food goes — a table, or Takeaway — in one style for both, because
+ * they answer the same question [owner, 2026-10-05]. Small caps with the icon
+ * carrying the meaning, so it never reads as another item line beneath it.
+ */
+function PlaceTag({
+  icon: Icon,
+  label,
+  testId,
+}: {
+  icon: typeof ShoppingBag
+  label: string
+  testId: string
+}) {
+  return (
+    <span
+      data-testid={testId}
+      className="inline-flex shrink-0 items-center gap-1 self-center text-xs font-bold uppercase tracking-wider text-content-muted"
+    >
+      <Icon aria-hidden size={13} className="shrink-0 text-primary" />
+      {label}
+    </span>
   )
 }
 
