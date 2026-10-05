@@ -308,12 +308,6 @@ export function PipelineCard({
               <span>{tableLabel(table)}</span>
             </>
           )}
-          {/*
-            Read from the order's own snapshot, never the live membership: the
-            kitchen acts on "was a member when they ordered", and a revocation
-            tonight must not change a card already being made.
-          */}
-          {member && <MemberMark className="ml-1.5" />}
         </span>
         {/*
           Two open orders on one table: both allowed, both shown, and each says
@@ -403,10 +397,12 @@ export function PipelineCard({
             <Button
               variant="secondary"
               size="phone"
-              className="h-9 w-9 px-0"
+              className="relative h-9 w-9 px-0"
               data-testid={`order-customer-${order.id}`}
               aria-label={
-                hasCustomer ? `Customer for ${reference}` : `Add a customer to ${reference}`
+                hasCustomer
+                  ? `Customer for ${reference}${member ? ', gold member' : ''}`
+                  : `Add a customer to ${reference}`
               }
               disabled={busy}
               onClick={() => (hasCustomer ? setCustomerOpen(true) : onSetCustomer?.(order))}
@@ -415,6 +411,16 @@ export function PipelineCard({
                 <UserRound aria-hidden className="text-primary" size={17} />
               ) : (
                 <UserRoundPlus aria-hidden className="text-content-muted" size={17} />
+              )}
+              {/*
+                The star rides on the customer it belongs to, not beside the
+                order's number [owner, 2026-10-05]. Read from the order's own
+                snapshot, never the live membership: the kitchen acts on "was a
+                member when they ordered", and a revocation tonight must not
+                change a card already being made.
+              */}
+              {member && (
+                <MemberMark className="pointer-events-none absolute -right-1.5 -top-1.5 rounded-full border border-border bg-surface p-0.5" />
               )}
             </Button>
           )}

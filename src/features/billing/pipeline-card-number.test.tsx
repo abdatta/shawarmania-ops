@@ -153,12 +153,24 @@ describe('the customer sits behind one button', () => {
     const person = userEvent.setup()
     renderCard({ orderNumber: 42, customerPhone: '9876543210', customerTier: 'gold' })
 
-    await person.click(screen.getByRole('button', { name: 'Customer for Order #42' }))
+    await person.click(screen.getByRole('button', { name: 'Customer for Order #42, gold member' }))
     const details = screen.getByTestId(
       'order-customer-details-a0000000-0000-4000-a000-000000000001',
     )
     expect(details).toHaveTextContent('Ravi')
     expect(details).toHaveTextContent('+91 98765 43210')
+  })
+
+  it('wears the gold star on the customer button, not beside the number', () => {
+    renderCard({ orderNumber: 42, serviceType: 'dine_in', tableNumber: 8, customerTier: 'gold' })
+
+    const button = screen.getByTestId('order-customer-a0000000-0000-4000-a000-000000000001')
+    expect(within(button).getByTestId('member-mark')).toBeInTheDocument()
+    expect(
+      within(
+        screen.getByTestId('order-reference-a0000000-0000-4000-a000-000000000001'),
+      ).queryByTestId('member-mark'),
+    ).toBeNull()
   })
 
   it('starts the edit with the customer dialog when the order has no customer', async () => {
