@@ -321,6 +321,19 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   const [tableOrders, setTableOrders] = useState<BillingOrder[]>([])
   const [customer, setCustomer] = useState<CustomerSelection | null>(null)
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false)
+  /*
+    The edit was opened from a card's customer button, so the customer is the
+    whole of it: Use or Skip saves the order at once, and closing the dialog
+    abandons the edit [owner, 2026-10-05]. Save changes would only have
+    confirmed a choice made a second earlier.
+  */
+  const [customerOnlyEdit, setCustomerOnlyEdit] = useState(false)
+  /*
+    Saved one render after the choice rather than inside it: the bill's
+    discounts are derived from the customer (gold waives packaging), and the
+    revision must carry the ones the new customer earns.
+  */
+  const [customerSaveRequest, setCustomerSaveRequest] = useState(0)
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
   const [paymentPreset, setPaymentPreset] = useState<PaymentAllocation[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -836,16 +849,21 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     setError(null)
   }
 
-  /** The card's customer button: the same edit, with the customer dialog already up. */
+  /**
+   * The card's customer button: the same edit, with the customer dialog already
+   * up, and saved by the dialog itself.
+   */
   function beginOrderCustomerEdit(order: BillingOrder) {
     if (settling || editingOrder) return
     beginOrderEdit(order)
+    setCustomerOnlyEdit(true)
     setCustomerDialogOpen(true)
   }
 
   function leaveOrderEdit() {
     const draft = suspendedDraft.current
     suspendedDraft.current = null
+    setCustomerOnlyEdit(false)
     setEditingOrder(null)
     if (draft) putDraftOnPanel(draft)
     else clearPanel()
@@ -883,8 +901,17 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     if (!editingOrder || lines.length === 0) return
     setSettling(true)
     setError(null)
+    await reviseEditedOrder(editingOrder)
+  }
+
+  /**
+   * The revision itself, for a caller that has already marked the counter
+   * busy. Every state change here follows the write, so the customer save can
+   * start it from an effect.
+   */
+  async function reviseEditedOrder(order: BillingOrder) {
     try {
-      await billing.reviseOrder(editingOrder.id, {
+      await billing.reviseOrder(order.id, {
         lines: billLines,
         discounts: billDiscounts,
         customerId: null,
@@ -902,6 +929,15 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
       setSettling(false)
     }
   }
+
+  // Runs after the render that put the chosen customer on the bill, so the
+  // revision carries that customer's discounts. A failed save leaves the order
+  // docked with its error, for Save changes or Cancel.
+  useEffect(() => {
+    if (customerSaveRequest === 0 || !editingOrder) return
+    void reviseEditedOrder(editingOrder)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerSaveRequest])
 
   async function settle(payments: PaymentAllocation[]) {
     if (!shift || !outlet || !outletId) return
@@ -1362,7 +1398,10 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
             : undefined
         }
         goldMonths={loyaltySettings.goldDurationMonths}
-        onClose={() => setCustomerDialogOpen(false)}
+        onClose={() => {
+          setCustomerDialogOpen(false)
+          if (customerOnlyEdit) leaveOrderEdit()
+        }}
         onChoose={(selection) => {
           // The points belonged to the customer they were taken from: another
           // customer, or a skip, takes them off the order (design D7).
@@ -1376,6 +1415,12 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
           }
           setCustomer(selection)
           setCustomerDialogOpen(false)
+          if (customerOnlyEdit && editingOrder && lines.length > 0) {
+            setCustomerOnlyEdit(false)
+            setSettling(true)
+            setError(null)
+            setCustomerSaveRequest((request) => request + 1)
+          }
         }}
       />
 

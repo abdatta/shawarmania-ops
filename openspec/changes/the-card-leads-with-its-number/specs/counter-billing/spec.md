@@ -87,9 +87,13 @@ Beside the total, a card SHALL carry one customer control whenever the order has
 a customer or one can be set from this tablet. With a customer, it SHALL open
 what the order recorded — name, phone and membership — and, while the order can
 be edited here, offer to change it. A gold member's star SHALL sit on that
-control rather than beside the reference, because it describes the customer. Without one, it SHALL open the order in the
-composer with the customer dialog already open: the ordinary edit, saved the
-ordinary way, and no new write. Per-line prices SHALL NOT appear on a pipeline card. A
+control rather than beside the reference, because it describes the customer. Without one, or when the biller changes it, it SHALL open the order in the
+composer with the customer dialog already open: the ordinary edit and its
+ordinary revision, with no new write. Because the customer is the whole of that
+edit, choosing in the dialog SHALL save it at once — Use attaches the customer,
+Skip saves the order with no customer, as Skip means everywhere else — and
+closing the dialog without choosing SHALL abandon the edit and leave the order
+unchanged [owner, 2026-10-05]. Per-line prices SHALL NOT appear on a pipeline card. A
 one-item card SHALL stand no taller than about 120px so at least six fit the rail
 at landscape tablet height without scrolling. Item names SHALL never truncate.
 
@@ -176,4 +180,14 @@ card. Edit SHALL be unavailable once an order is paid.
 #### Scenario: A customer is added from the card
 
 - **WHEN** a biller taps the customer control on this tablet's open order that has no customer
-- **THEN** the order opens in the composer with the customer dialog open, and the customer joins the order only when the edit is saved
+- **THEN** the order opens in the composer with the customer dialog open, and choosing Use saves the order with that customer at once, with no Save changes
+
+#### Scenario: Skip from the card removes the customer
+
+- **WHEN** a biller changes an order's customer from its card and chooses Skip
+- **THEN** the order is saved at once with no customer's number, and leaves edit mode
+
+#### Scenario: Closing the dialog from the card changes nothing
+
+- **WHEN** a biller opens the customer dialog from a card and closes it without choosing
+- **THEN** the edit is abandoned, the order is unchanged, and nothing is written

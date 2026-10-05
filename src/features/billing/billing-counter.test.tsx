@@ -1051,6 +1051,56 @@ describe('BillingCounter', () => {
     expect(screen.getByTestId(`bill-quantity-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('1')
   })
 
+  it('saves a customer chosen from the card at once, and closing the dialog abandons the edit', async () => {
+    const person = user()
+    const { adapters } = renderCounter()
+    const reviseOrder = vi.spyOn(adapters.billing, 'reviseOrder')
+    const rail = await screen.findByTestId('counter-activity-rail')
+
+    // The card's customer button, then Change customer: the edit opens with
+    // the customer dialog already up.
+    async function openFromCard() {
+      const card = await within(rail).findByTestId('open-order-104')
+      await person.click(within(card).getByRole('button', { name: /^Customer for Order .104/ }))
+      const details = await screen.findByRole('dialog', { name: /^Customer for Order .104/ })
+      await person.click(within(details).getByRole('button', { name: 'Change customer' }))
+      return screen.findByRole('dialog', { name: 'Customer' })
+    }
+    const docked = () => within(rail).queryByTestId('editing-order-pin')
+
+    // Closing without deciding leaves the order as it was and the counter
+    // out of edit mode.
+    let dialog = await openFromCard()
+    expect(docked()).toBeInTheDocument()
+    await person.click(within(dialog).getByRole('button', { name: 'Close without deciding' }))
+    expect(docked()).not.toBeInTheDocument()
+    expect(reviseOrder).not.toHaveBeenCalled()
+
+    // Use saves the order: no Save changes.
+    dialog = await openFromCard()
+    for (const digit of '9000000333') {
+      await person.click(within(dialog).getByRole('button', { name: digit }))
+    }
+    await person.type(await within(dialog).findByPlaceholderText(/name/i), 'Card customer')
+    await person.click(within(dialog).getByTestId('customer-confirm'))
+    await waitFor(() => expect(reviseOrder).toHaveBeenCalledTimes(1))
+    expect(reviseOrder).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({ customerName: 'Card customer', customerPhone: '+919000000333' }),
+    )
+    await waitFor(() => expect(docked()).not.toBeInTheDocument())
+
+    // Skip takes the customer off, also at once.
+    dialog = await openFromCard()
+    await person.click(within(dialog).getByTestId('customer-skip'))
+    await waitFor(() => expect(reviseOrder).toHaveBeenCalledTimes(2))
+    expect(reviseOrder).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({ customerName: '', customerPhone: '' }),
+    )
+    await waitFor(() => expect(docked()).not.toBeInTheDocument())
+  })
+
   it('resolves a saved number to its saved name, and puts that on the row', async () => {
     const person = user()
     renderCounter()

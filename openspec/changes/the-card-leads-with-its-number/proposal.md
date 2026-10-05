@@ -25,7 +25,9 @@ already newest first (owner, 2026-10-05).
 - One customer control sits right of the total. With a customer it opens the
   order's own snapshot (name, phone, membership) and offers *Change customer*;
   without one it starts the ordinary edit with the customer dialog already
-  open. The edit is saved the ordinary way, so this adds no new write path.
+  open. Choosing in that dialog saves it at once — Use attaches the customer,
+  Skip removes one — and closing it abandons the edit [owner, 2026-10-05]. The
+  save is the ordinary revision, so this adds no new write path.
 
 ## Non-goals
 
