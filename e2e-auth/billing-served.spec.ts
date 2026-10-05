@@ -178,12 +178,19 @@ async function addShawarma(page: Page) {
   await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
 }
 
-/** Save the composer's order and return its id, which finds its card. */
+/**
+ * Save the composer's order and return its id, which finds its card. Waits as
+ * long as an offline till takes to draw it, since most saves here are offline.
+ */
 async function saveOrder(page: Page): Promise<string> {
-  return saveNewOrder(page, async () => {
-    await page.getByTestId('save-order').click()
-    await expect(page.getByTestId('bill-total')).toHaveCount(0)
-  })
+  return saveNewOrder(
+    page,
+    async () => {
+      await page.getByTestId('save-order').click()
+      await expect(page.getByTestId('bill-total')).toHaveCount(0)
+    },
+    { timeout: OFFLINE_READ_MS },
+  )
 }
 
 function cardsAt(page: Page, text: string) {

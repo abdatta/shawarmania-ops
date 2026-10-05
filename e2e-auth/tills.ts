@@ -185,8 +185,13 @@ export async function openTill(
  * A pipeline card no longer prints its customer, so a spec cannot find its own
  * order by the name it gave. The id is the till's own UUID, the same one the
  * server stores, so it holds across delivery and on the neighbouring till too.
+ * An offline till draws the card slowly, so its caller passes a longer wait.
  */
-export async function saveNewOrder(page: Page, save: () => Promise<void>): Promise<string> {
+export async function saveNewOrder(
+  page: Page,
+  save: () => Promise<void>,
+  { timeout }: { timeout?: number } = {},
+): Promise<string> {
   const ids = async () =>
     new Set(
       await page
@@ -198,7 +203,9 @@ export async function saveNewOrder(page: Page, save: () => Promise<void>): Promi
   await save()
   let added: string[] = []
   await expect
-    .poll(async () => (added = [...(await ids())].filter((id) => !before.has(id))).length)
+    .poll(async () => (added = [...(await ids())].filter((id) => !before.has(id))).length, {
+      ...(timeout !== undefined ? { timeout } : {}),
+    })
     .toBe(1)
   return added[0]!
 }
