@@ -178,3 +178,32 @@ export async function openTill(
   await page.evaluate(() => navigator.serviceWorker.ready)
   return { context, page }
 }
+
+/**
+ * Press the composer's save and return the id of the pipeline card it made.
+ *
+ * A pipeline card no longer prints its customer, so a spec cannot find its own
+ * order by the name it gave. The id is the till's own UUID, the same one the
+ * server stores, so it holds across delivery and on the neighbouring till too.
+ */
+export async function saveNewOrder(page: Page, save: () => Promise<void>): Promise<string> {
+  const ids = async () =>
+    new Set(
+      await page
+        .getByTestId('counter-activity-rail')
+        .locator('[data-flip-id]')
+        .evaluateAll((els) => els.map((el) => el.getAttribute('data-flip-id')!)),
+    )
+  const before = await ids()
+  await save()
+  let added: string[] = []
+  await expect
+    .poll(async () => (added = [...(await ids())].filter((id) => !before.has(id))).length)
+    .toBe(1)
+  return added[0]!
+}
+
+/** One order's pipeline card, by the id `saveNewOrder` returned. */
+export function orderCard(page: Page, id: string) {
+  return page.getByTestId('counter-activity-rail').locator(`[data-flip-id="${id}"]`)
+}

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 
 /**
  * The counter, in a real browser, on the device it actually runs on.
@@ -61,6 +61,40 @@ async function recordPaid(page: Page, method = 'Cash') {
   const dialog = page.getByRole('dialog', { name: 'Record payment' })
   await dialog.getByRole('button', { name: method, exact: true }).click()
   await dialog.getByRole('button', { name: 'Paid', exact: true }).click()
+}
+
+/**
+ * Save the composer's order and return the id of the card it made.
+ *
+ * A pipeline card no longer prints its customer, so a test cannot find its own
+ * order by the name it gave. The id is the counter's own UUID and survives
+ * delivery, when `open-order-local-*` becomes `open-order-<n>`, so the card is
+ * the one id the rail did not hold before the save.
+ */
+async function saveNewOrder(page: Page): Promise<string> {
+  const cards = page.getByTestId('counter-activity-rail').locator('[data-flip-id]')
+  const ids = async () =>
+    new Set(await cards.evaluateAll((els) => els.map((el) => el.getAttribute('data-flip-id')!)))
+  const before = await ids()
+  await page.getByTestId('save-order').click()
+  let added: string[] = []
+  await expect
+    .poll(async () => (added = [...(await ids())].filter((id) => !before.has(id))).length)
+    .toBe(1)
+  return added[0]!
+}
+
+function orderCard(page: Page, id: string) {
+  return page.getByTestId('counter-activity-rail').locator(`[data-flip-id="${id}"]`)
+}
+
+/** The customer is one tap away on the card, not printed on it. */
+async function expectCardCustomer(page: Page, card: Locator, name: string) {
+  await card.getByRole('button', { name: /^Customer for / }).click()
+  const details = page.getByRole('dialog', { name: /^Customer for / })
+  await expect(details).toContainText(name)
+  await details.getByRole('button', { name: 'Done', exact: true }).click()
+  await expect(details).toHaveCount(0)
 }
 
 test.describe('the counter', () => {
@@ -329,7 +363,7 @@ test.describe('the counter', () => {
   test('saves and records a food-first order from the persistent rail', async ({ page }) => {
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
     await page.getByRole('button', { name: 'Mayonnaise Chicken Shawarma', exact: true }).click()
-    // Identified, because the cards are found below by the name they carry.
+    // Identified, so the card's customer button has someone to show.
     await identifyCustomer(page, '9000000888', 'Asha')
     /*
       The network goes before the order does, so everything below about the
@@ -346,13 +380,18 @@ test.describe('the counter', () => {
     // Before delivery the card shows the shape of the number, never a number —
     // and no per-line prices: the total is what the pipeline card shows.
     const saved = rail.getByTestId(/^open-order-local-/)
-    await expect(saved.getByText('Asha', { exact: true })).toBeVisible()
+    await expect(saved).toBeVisible()
+    // The counter's own UUID, which delivery does not change.
+    const savedId = (await saved.getAttribute('data-flip-id'))!
     await expect(saved.getByText('Classic Chicken Shawarma', { exact: true })).toBeVisible()
     await expect(saved.getByText('Mayonnaise Chicken Shawarma', { exact: true })).toBeVisible()
     // The shape of the number that is coming, never a stand-in for it.
     await expect(saved.locator('.animate-pulse')).toBeVisible()
     await expect(saved).not.toContainText(/#\d/)
-    await expect(saved.getByText('now', { exact: true })).toBeVisible()
+    // Neither the customer's name nor the order's age is printed on the card.
+    await expect(saved).not.toContainText('Asha')
+    await expect(saved.getByText('now', { exact: true })).toHaveCount(0)
+    await expect(saved.getByRole('button', { name: /^Customer for an unsent order/ })).toBeVisible()
     await expect(saved.getByText('Demo Biller', { exact: true })).toHaveCount(0)
     await expect(saved).toContainText('₹298')
 
@@ -375,12 +414,11 @@ test.describe('the counter', () => {
     // only then — and the preparation recorded offline came with it.
     await setConnectivity(page, 'online')
     await expect(rail.getByTestId(/^open-order-local-/)).toHaveCount(0, { timeout: 15_000 })
-    const delivered = rail
-      .getByTestId('pipeline-list')
-      .getByTestId(/^open-order-\d+$/)
-      .filter({ hasText: 'Asha' })
+    const delivered = rail.getByTestId('pipeline-list').locator(`[data-flip-id="${savedId}"]`)
+    await expect(delivered).toHaveAttribute('data-testid', /^open-order-\d+$/)
     await expect(delivered).toContainText(/#\d/)
     await expect(delivered).toContainText('₹298')
+    await expectCardCustomer(page, delivered, 'Asha')
     await expect(delivered.getByRole('button', { name: 'Prepared', exact: true })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -531,33 +569,26 @@ test.describe('the counter', () => {
       saved after it, so it is the money waiting out of sight that the bottom
       chip has to announce.
     */
-    // Identified rather than skipped: each card is found below by the name it
-    // carries, and a skipped order carries none. One number apiece, since the
-    // number is the identity.
-    let nextNumber = 9000001000
-    const save = async (customer: string) => {
+    // Each card is found by the id its save returns.
+    const save = async () => {
       await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
-      await identifyCustomer(page, String((nextNumber += 1)), customer)
-      await page.getByTestId('save-order').click()
-      await expect(rail.getByText(customer, { exact: true })).toBeVisible()
+      return saveNewOrder(page)
     }
 
-    await save('Asha')
-    const ashaCard = rail
-      .getByTestId('pipeline-list')
-      .locator('li')
-      .filter({ hasText: 'Asha' })
-      .first()
-    await ashaCard.getByRole('button', { name: 'Prepared', exact: true }).click()
-    await expect(ashaCard.getByRole('button', { name: 'Prepared', exact: true })).toHaveAttribute(
+    const firstCard = orderCard(page, await save())
+    await firstCard.getByRole('button', { name: 'Prepared', exact: true }).click()
+    await expect(firstCard.getByRole('button', { name: 'Prepared', exact: true })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
 
-    for (const customer of ['Bilal', 'Chitra', 'Devi', 'Ehsan', 'Farah']) await save(customer)
+    for (let saved = 0; saved < 5; saved += 1) await save()
+    // Every order delivered and numbered, so the rail is not redrawing cards
+    // under the scrolls below.
+    await expect(rail.getByTestId(/^open-order-local-/)).toHaveCount(0)
 
-    // Saving returns the rail to its newest end, so Asha is now below the fold
-    // along with everything older than her.
+    // Saving returns the rail to its newest end, so the first order is now
+    // below the fold along with everything older than it.
     const bottom = rail.getByRole('button', { name: /^Scroll to the oldest order/ })
     await expect(bottom).toBeVisible()
     await expect(bottom).toHaveText(/\d+ more/)
@@ -571,6 +602,11 @@ test.describe('the counter', () => {
     const top = rail.getByRole('button', { name: /^Scroll to the newest order/ })
     await expect(top).toBeVisible()
     await expect(rail.getByRole('button', { name: /^Scroll to the oldest order/ })).toHaveCount(0)
+    // The smooth scroll has arrived, not merely passed the last card's edge.
+    const list = rail.getByTestId('pipeline-list')
+    await expect
+      .poll(() => list.evaluate((ul) => ul.scrollHeight - ul.clientHeight - ul.scrollTop))
+      .toBeLessThanOrEqual(1)
 
     await top.click()
     await expect(rail.getByRole('button', { name: /^Scroll to the newest order/ })).toHaveCount(0)
@@ -586,25 +622,13 @@ test.describe('the counter', () => {
     const list = page.getByTestId('counter-activity-rail').getByTestId('pipeline-list')
 
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
-    await identifyCustomer(page, '9000001999', 'Newest')
-    await page.getByTestId('save-order').click()
-    await expect(list.getByText('Newest', { exact: true })).toBeVisible()
+    const newest = await saveNewOrder(page)
 
-    const times = await list.evaluate((ul) =>
-      [...ul.children].map((li) => {
-        const meta = (li as HTMLElement).querySelector('[data-testid^="order-metadata-"]')
-        return meta?.textContent ?? ''
-      }),
-    )
-    expect(times.length).toBeGreaterThan(1)
+    const cards = list.locator(':scope > li')
+    expect(await cards.count()).toBeGreaterThan(1)
     // The order just taken is the first card, which is the whole reason the
     // list reads this way: a correction happens in the seconds after saving.
-    expect(
-      await list
-        .locator('li')
-        .first()
-        .evaluate((li) => li.textContent?.includes('Newest')),
-    ).toBe(true)
+    await expect(cards.first().locator(`[data-flip-id="${newest}"]`)).toHaveCount(1)
   })
 
   test('leaves an upfront payment reversible while the food is still being made', async ({
@@ -735,8 +759,8 @@ test.describe('the counter', () => {
     await expect(pin).toHaveCount(0)
     await expect(page.getByTestId('customer-row')).toContainText('Skipped Customer Info')
     await expect(classicQuantity).toHaveText('1')
-    await expect(order.getByText('Updated customer', { exact: true })).toBeVisible()
     await expect(order.getByText('Mayonnaise Chicken Shawarma', { exact: true })).toBeVisible()
+    await expectCardCustomer(page, order, 'Updated customer')
 
     await order.getByRole('button', { name: /^More actions for Order .104$/ }).click()
     await order.getByRole('menuitem', { name: 'Edit' }).click()

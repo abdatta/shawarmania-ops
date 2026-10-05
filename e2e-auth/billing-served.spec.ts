@@ -10,6 +10,8 @@ import {
   TILL_ONE,
   TILL_TWO,
   openTill,
+  orderCard,
+  saveNewOrder,
   setSpareTillInService,
 } from './tills'
 
@@ -176,9 +178,12 @@ async function addShawarma(page: Page) {
   await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
 }
 
-async function saveOrder(page: Page) {
-  await page.getByTestId('save-order').click()
-  await expect(page.getByTestId('bill-total')).toHaveCount(0)
+/** Save the composer's order and return its id, which finds its card. */
+async function saveOrder(page: Page): Promise<string> {
+  return saveNewOrder(page, async () => {
+    await page.getByTestId('save-order').click()
+    await expect(page.getByTestId('bill-total')).toHaveCount(0)
+  })
 }
 
 function cardsAt(page: Page, text: string) {
@@ -232,9 +237,9 @@ async function serveCard(card: Locator) {
  * Take an order this file left open off the rail, so a rerun without a reset
  * does not find its tables still busy.
  */
-async function cancelCard(page: Page, reference: string, text: string) {
-  const card = cardsAt(page, text)
-  await card.getByRole('button', { name: `More actions for ${reference}` }).click()
+async function cancelCard(page: Page, orderId: string) {
+  const card = orderCard(page, orderId)
+  await card.getByRole('button', { name: /^More actions for / }).click()
   await card.getByRole('menuitem', { name: 'Cancel order' }).click()
   const dialog = page.getByRole('dialog', { name: /^Cancel/ })
   await dialog.getByRole('textbox', { name: 'Cancellation reason' }).fill('End-to-end test')
@@ -332,28 +337,29 @@ test('orders rung offline with a table, bags and a waiver each settle exactly on
     await page.getByTestId('service-chip-dine_in').click()
     await keyTable(page, '3')
     await expect(page.getByTestId('service-chip-dine_in')).toHaveText('Table 3')
-    await saveOrder(page)
+    const tableOrder = await saveOrder(page)
 
     // 3. A takeaway with two bags, charged.
     await addShawarma(page)
     await identifyNew(page, bagsCustomer)
     await page.getByTestId('service-chip-takeaway').click()
     await page.getByRole('button', { name: 'One more Packaging' }).click()
-    await saveOrder(page)
+    const bagsOrder = await saveOrder(page)
 
     // Revise one: a second shawarma at table 3, still offline. Found by this
-    // run's customer, not by the table, which an earlier run may still hold.
-    const table = cardsAt(page, tableCustomer)
+    // run's order, not by the table, which an earlier run may still hold. The
+    // reference leads with the order and the table follows it.
+    const table = orderCard(page, tableOrder)
     await expect(table).toHaveCount(1, { timeout: OFFLINE_READ_MS })
-    await table.getByRole('button', { name: /^More actions for Table 3$/ }).click()
+    await table.getByRole('button', { name: /^More actions for .+ · Table 3$/ }).click()
     await table.getByRole('menuitem', { name: 'Edit' }).click()
     await addShawarma(page)
     await page.getByTestId('editing-order-pin').getByTestId('save-order').click()
     await expect(page.getByTestId('editing-order-pin')).toHaveCount(0)
 
     // The second payment, still offline.
-    await payCard(page, cardsAt(page, bagsCustomer))
-    await serveCard(cardsAt(page, bagsCustomer))
+    await payCard(page, orderCard(page, bagsOrder))
+    await serveCard(orderCard(page, bagsOrder))
     await page.waitForTimeout(AFTER_LOCAL_ACCEPTANCE_MS)
 
     // Nothing has reached the server yet.
@@ -419,7 +425,7 @@ test('orders rung offline with a table, bags and a waiver each settle exactly on
     const [bagsBill] = await billFor(request, token, bags[0]!.id)
     expect(bagsBill).toMatchObject({ service_type: 'takeaway', table_number: null })
 
-    await cancelCard(page, 'Table 3', tableCustomer)
+    await cancelCard(page, tableOrder)
   } finally {
     await context.close()
   }
@@ -446,7 +452,7 @@ test('two tills seat one table while one is offline, and both orders say so', as
     await identifyNew(two.page, seatedTwo)
     await two.page.getByTestId('service-chip-dine_in').click()
     await keyTable(two.page, '4')
-    await saveOrder(two.page)
+    const seatedTwoOrder = await saveOrder(two.page)
 
     // Till one, online, sees nothing at table 4 and seats it too. The counter
     // refuses only a table it can see is busy (design D5).
@@ -454,7 +460,7 @@ test('two tills seat one table while one is offline, and both orders say so', as
     await identifyNew(one.page, seatedOne)
     await one.page.getByTestId('service-chip-dine_in').click()
     await keyTable(one.page, '4')
-    await saveOrder(one.page)
+    const seatedOneOrder = await saveOrder(one.page)
 
     // Till two reconnects and drains; the database records both, refusing
     // neither, and marks each as having shared its table.
@@ -488,13 +494,13 @@ test('two tills seat one table while one is offline, and both orders say so', as
       await expect(page.getByTestId('menu-grid')).toBeVisible()
       const atFour = cardsAt(page, 'Table 4')
       await expect(atFour).toHaveCount(2, { timeout: 20_000 })
-      await expect(cardsAt(page, seatedTwo)).toContainText('1 of 2')
-      await expect(cardsAt(page, seatedOne)).toContainText('2 of 2')
+      await expect(orderCard(page, seatedTwoOrder)).toContainText('1 of 2')
+      await expect(orderCard(page, seatedOneOrder)).toContainText('2 of 2')
     }
 
     // Each till takes its own off the rail; neither may cancel the other's.
-    await cancelCard(one.page, 'Table 4', seatedOne)
-    await cancelCard(two.page, 'Table 4', seatedTwo)
+    await cancelCard(one.page, seatedOneOrder)
+    await cancelCard(two.page, seatedTwoOrder)
   } finally {
     await one.context.close()
     await two.context.close()

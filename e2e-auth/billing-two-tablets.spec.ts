@@ -8,6 +8,8 @@ import {
   TILL_ONE,
   TILL_TWO,
   openTill,
+  orderCard,
+  saveNewOrder,
   setSpareTillInService,
 } from './tills'
 
@@ -65,11 +67,13 @@ async function markPaid(page: Page, customerName: string) {
   await expect(page.getByTestId('bill-total')).toHaveCount(0)
 }
 
-async function saveOrder(page: Page, customerName: string) {
+async function saveOrder(page: Page, customerName: string): Promise<string> {
   await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
   await identifyCustomer(page, customerName)
-  await page.getByRole('button', { name: 'Order', exact: true }).click()
-  await expect(page.getByTestId('bill-total')).toHaveCount(0)
+  return saveNewOrder(page, async () => {
+    await page.getByRole('button', { name: 'Order', exact: true }).click()
+    await expect(page.getByTestId('bill-total')).toHaveCount(0)
+  })
 }
 
 async function managerToken(request: APIRequestContext): Promise<string> {
@@ -134,7 +138,7 @@ test('two tablets bill one outlet at once, own their own orders, and neither dra
 
     // ---------------------------------------------------------------------
     // 2. The neighbour sees the order, is told whose it is, and cannot act.
-    await saveOrder(one.page, 'Kitchen Owes This')
+    const kitchenOwesThis = await saveOrder(one.page, 'Kitchen Owes This')
 
     // The outlet's pipeline, on the other till: the order is there, named with
     // the counter that took it, and its two facts are *printed* rather than
@@ -149,15 +153,10 @@ test('two tablets bill one outlet at once, own their own orders, and neither dra
       on strict mode, with both of them correctly disabled: the assertion was
       right and the locator was sloppy. Naming the card is also what the
       assertion means, since the claim is about one order rather than about
-      every control on screen.
+      every control on screen. Found by the order's id, which both tills share,
+      since the card no longer prints the customer's name.
     */
-    const cardFor = (page: Page, customer: string) =>
-      page
-        .getByTestId('counter-activity-rail')
-        .locator('[data-testid^="open-order-"]')
-        .filter({ hasText: customer })
-
-    const neighbourCard = cardFor(two.page, 'Kitchen Owes This')
+    const neighbourCard = orderCard(two.page, kitchenOwesThis)
     await expect(neighbourCard).toBeVisible({ timeout: 20_000 })
     await expect(neighbourCard).toContainText(`on ${TILL_ONE.label}`)
     /*
@@ -176,7 +175,7 @@ test('two tablets bill one outlet at once, own their own orders, and neither dra
     // And the same order is still fully actionable on the till that took it,
     // which is the assertion that keeps the gate from being "stand everything
     // down".
-    const ownCard = cardFor(one.page, 'Kitchen Owes This')
+    const ownCard = orderCard(one.page, kitchenOwesThis)
     await expect(ownCard).toBeVisible({ timeout: 20_000 })
     const ownControl = ownCard.getByRole('button', { name: 'Prepared' })
     await expect(ownControl).toBeEnabled()
