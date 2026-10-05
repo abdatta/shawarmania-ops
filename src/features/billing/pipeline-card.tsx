@@ -372,7 +372,10 @@ export function PipelineCard({
         </div>
         {/* No paid badge: the ticked Paid box below says it, in the place the
             biller is already looking. */}
-        <div className="flex shrink-0 self-center items-center gap-1.5">
+        {/* Wider than the 6px between Paid and the kebab, on purpose: the
+            heavy total inks right to its edge, so an equal gap reads tighter
+            than the one between two outlined controls [owner, 2026-10-05]. */}
+        <div className="flex shrink-0 self-center items-center gap-2.5">
           <span className="flex items-baseline gap-1.5">
             {discounted && (
               <Money
