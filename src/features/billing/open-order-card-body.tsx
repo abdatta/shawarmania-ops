@@ -37,9 +37,7 @@ export function OpenOrderCardBody({
 }: {
   orderNumber: number
   /**
-   * The order's table, which **replaces** its number here [owner, 2026-09-26].
-   * An order with a table needs no number to be called, so it never waits on
-   * one either.
+   * The order's table, which follows its number here [owner, 2026-10-05].
    */
   tableNumber?: number | null
   orderedAt: string
@@ -57,14 +55,12 @@ export function OpenOrderCardBody({
   showLines?: boolean
 }) {
   const totalPaise = lines.reduce((sum, line) => sum + line.unitPricePaise * line.quantity, 0)
-  const awaitingNumber = tableNumber === null && isAwaitingOrderNumber(orderNumber)
+  const awaitingNumber = isAwaitingOrderNumber(orderNumber)
   const member = customerTier === 'gold'
+  // The number leads and the table follows it, as on the pipeline card.
+  const numberReference = awaitingNumber ? UNSENT_ORDER_REFERENCE : `Order #${orderNumber}`
   const reference =
-    tableNumber !== null
-      ? tableLabel(tableNumber)
-      : awaitingNumber
-        ? UNSENT_ORDER_REFERENCE
-        : `Order #${orderNumber}`
+    tableNumber !== null ? `${numberReference} · ${tableLabel(tableNumber)}` : numberReference
 
   return (
     <>
@@ -84,7 +80,7 @@ export function OpenOrderCardBody({
                 : 'flex flex-wrap items-center gap-1.5'
             }
           >
-            {awaitingNumber ? (
+            {awaitingNumber && tableNumber === null ? (
               <>
                 <Shimmer className="h-5 w-16 rounded-md" />
                 <span className="sr-only">Order number not yet assigned</span>

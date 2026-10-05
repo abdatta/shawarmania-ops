@@ -1,4 +1,4 @@
-import { MoreVertical, UserRound } from 'lucide-react'
+import { MoreVertical, UserRound, UserRoundPlus } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,6 @@ import { Money } from '@/components/ui/money'
 import type { BillingOrder } from '@/data-access/adapters'
 import type { SharedTable } from '@/domain'
 import {
-  formatRecentAge,
   isAwaitingOrderNumber,
   serviceTypeLabel,
   tableLabel,
@@ -19,6 +18,7 @@ import {
 } from '@/domain'
 
 import { cn } from '@/lib/cn'
+import { formatIndianPhone } from '../../../shared/phone'
 
 import { StateToggle } from './state-toggle'
 
@@ -50,6 +50,7 @@ export function PipelineCard({
   tenderLabel = null,
   sharedTable = null,
   onEdit,
+  onSetCustomer,
   onMarkPrepared,
   onUnprepare,
   onMarkPaid,
@@ -79,6 +80,12 @@ export function PipelineCard({
    */
   sharedTable?: SharedTable | null
   onEdit?: (order: BillingOrder) => void
+  /**
+   * Opens the order in the composer with the customer dialog already up — the
+   * same edit a biller could reach through Edit, minus the steps. Absent off
+   * the counter, where nothing edits an order.
+   */
+  onSetCustomer?: (order: BillingOrder) => void
   onMarkPrepared: (order: BillingOrder) => void
   onUnprepare: (order: BillingOrder) => void
   onMarkPaid: (order: BillingOrder) => void
@@ -90,6 +97,7 @@ export function PipelineCard({
   const [menuPosition, setMenuPosition] = useState<{ bottom: number; right: number } | null>(null)
   const [unpaying, setUnpaying] = useState(false)
   const [cancellingAfterPaid, setCancellingAfterPaid] = useState(false)
+  const [customerOpen, setCustomerOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   function placeMenu() {
@@ -133,19 +141,16 @@ export function PipelineCard({
   const grossPaise = order.lines.reduce((sum, line) => sum + line.unitPricePaise * line.quantity, 0)
   const discounted = grossPaise > totalPaise
   /*
-    A table **replaces** the number on this card [owner, 2026-09-26]: the
-    kitchen takes the food to table 4, not to an order number. The number is still
-    allocated and stored, and an order with a table never waits on one.
+    The number leads and the table follows it, `#42 · Table 8` [owner,
+    2026-10-05]. The table alone used to replace the number, and then the one
+    identifier the bill, the kitchen and the manager share was missing from the
+    only screen the biller reads.
   */
   const table = order.serviceType === 'dine_in' ? (order.tableNumber ?? null) : null
-  const awaitingNumber = table === null && isAwaitingOrderNumber(order.orderNumber)
+  const awaitingNumber = isAwaitingOrderNumber(order.orderNumber)
   const member = order.customerTier === 'gold'
-  const reference =
-    table !== null
-      ? tableLabel(table)
-      : awaitingNumber
-        ? UNSENT_ORDER_REFERENCE
-        : `Order #${order.orderNumber}`
+  const numberReference = awaitingNumber ? UNSENT_ORDER_REFERENCE : `Order #${order.orderNumber}`
+  const reference = table !== null ? `${numberReference} · ${tableLabel(table)}` : numberReference
   const isPaid = order.status === 'paid'
   const prepared = order.preparedAt !== null
   /*
@@ -213,6 +218,16 @@ export function PipelineCard({
     — changed in appearance here, never in authority.
   */
   const actionsDisabled = busy || foreignTill
+
+  /*
+    The customer is one tap away rather than a line on every card [owner,
+    2026-10-05]: the kitchen calls food by number and table, and the name was the
+    widest thing in the header. Present, the button opens what the order knows;
+    absent, it starts the same edit Edit does with the customer dialog up.
+  */
+  const hasCustomer = Boolean(order.customerName || order.customerPhone || member)
+  const canSetCustomer =
+    order.status === 'open' && onSetCustomer !== undefined && !foreignTill && !editDisabled
 
   const kebabRows: Array<{
     label: string
@@ -282,11 +297,23 @@ export function PipelineCard({
               <Shimmer className="h-6 w-12 rounded-md" />
               <span className="sr-only">Order number not yet assigned</span>
             </>
-          ) : table !== null ? (
-            tableLabel(table)
           ) : (
             `#${order.orderNumber}`
           )}
+          {table !== null && (
+            <>
+              <span aria-hidden className="px-1.5 text-content-muted">
+                ·
+              </span>
+              <span>{tableLabel(table)}</span>
+            </>
+          )}
+          {/*
+            Read from the order's own snapshot, never the live membership: the
+            kitchen acts on "was a member when they ordered", and a revocation
+            tonight must not change a card already being made.
+          */}
+          {member && <MemberMark className="ml-1.5" />}
         </span>
         {/*
           Two open orders on one table: both allowed, both shown, and each says
@@ -307,21 +334,11 @@ export function PipelineCard({
             </span>
           </Chip>
         )}
+        {/*
+          No age either: the list is already newest first, so a card's place
+          says what its age did [owner, 2026-10-05].
+        */}
         <div className="min-w-0 flex-1 self-center">
-          {(order.customerName || member) && (
-            <div className="flex min-w-0 items-center gap-1 text-sm font-black leading-5 text-content">
-              <UserRound aria-hidden className="shrink-0 text-accent-text" size={14} />
-              {order.customerName && (
-                <span className="max-w-40 truncate">{order.customerName}</span>
-              )}
-              {/*
-                Read from the order's own snapshot, never the live membership:
-                the kitchen acts on "was a member when they ordered", and a
-                revocation tonight must not change a card already being made.
-              */}
-              {member && <MemberMark />}
-            </div>
-          )}
           <div
             data-testid={`order-metadata-${order.id}`}
             className="flex min-w-0 items-center gap-x-1.5 text-xs leading-4 text-content-muted"
@@ -331,21 +348,42 @@ export function PipelineCard({
               (#60). A table already says dine-in in the reference, so only an
               order without one needs the word.
             */}
-            {order.serviceType && table === null && (
-              <span
-                className="font-semibold text-content"
-                data-testid={`order-service-${order.id}`}
-              >
-                {serviceTypeLabel(order.serviceType)} ·
-              </span>
-            )}
-            <span>{formatRecentAge(order.orderedAt)}</span>
-            {showCreator && <span className="truncate">· {order.creatorName}</span>}
-            {otherTill && (
-              <span className="truncate font-semibold" data-testid={`order-till-${order.id}`}>
-                · on {otherTill}
-              </span>
-            )}
+            {[
+              order.serviceType && table === null && (
+                <span
+                  key="service"
+                  className="font-semibold text-content"
+                  data-testid={`order-service-${order.id}`}
+                >
+                  {serviceTypeLabel(order.serviceType)}
+                </span>
+              ),
+              showCreator && (
+                <span key="creator" className="truncate">
+                  {order.creatorName}
+                </span>
+              ),
+              otherTill && (
+                <span
+                  key="till"
+                  className="truncate font-semibold"
+                  data-testid={`order-till-${order.id}`}
+                >
+                  on {otherTill}
+                </span>
+              ),
+            ]
+              .filter(Boolean)
+              .flatMap((part, index) =>
+                index === 0
+                  ? [part]
+                  : [
+                      <span key={`dot-${index}`} aria-hidden>
+                        ·
+                      </span>,
+                      part,
+                    ],
+              )}
           </div>
         </div>
         {/* No paid badge: the ticked Paid box below says it, in the place the
@@ -361,6 +399,25 @@ export function PipelineCard({
             )}
             <Money paise={totalPaise} display className="font-black text-content" />
           </span>
+          {(hasCustomer || canSetCustomer) && (
+            <Button
+              variant="secondary"
+              size="phone"
+              className="h-9 w-9 px-0"
+              data-testid={`order-customer-${order.id}`}
+              aria-label={
+                hasCustomer ? `Customer for ${reference}` : `Add a customer to ${reference}`
+              }
+              disabled={busy}
+              onClick={() => (hasCustomer ? setCustomerOpen(true) : onSetCustomer?.(order))}
+            >
+              {hasCustomer ? (
+                <UserRound aria-hidden className="text-primary" size={17} />
+              ) : (
+                <UserRoundPlus aria-hidden className="text-content-muted" size={17} />
+              )}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -453,6 +510,20 @@ export function PipelineCard({
         )}
       </div>
 
+      <OrderCustomerDialog
+        open={customerOpen}
+        order={order}
+        reference={reference}
+        onClose={() => setCustomerOpen(false)}
+        {...(canSetCustomer && onSetCustomer
+          ? {
+              onChange: () => {
+                setCustomerOpen(false)
+                onSetCustomer(order)
+              },
+            }
+          : {})}
+      />
       <UnpayDialog
         open={unpaying}
         reference={reference}
@@ -477,6 +548,60 @@ export function PipelineCard({
         }}
       />
     </article>
+  )
+}
+
+/**
+ * What the order knows about its customer, read from the order's own snapshot.
+ * Changing it is the ordinary edit, so the dialog only hands over to it.
+ */
+function OrderCustomerDialog({
+  open,
+  order,
+  reference,
+  onClose,
+  onChange,
+}: {
+  open: boolean
+  order: BillingOrder
+  reference: string
+  onClose: () => void
+  /** Absent where the order cannot be edited from here. */
+  onChange?: () => void
+}) {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      aria-label={`Customer for ${reference}`}
+      className="m-auto w-[min(92vw,22rem)] rounded-2xl p-4"
+    >
+      {open && (
+        <div data-testid={`order-customer-details-${order.id}`}>
+          <p className="text-xs font-semibold text-content-muted">{reference}</p>
+          <p className="mt-1 flex min-w-0 items-center gap-1.5 text-lg font-black text-content">
+            <UserRound aria-hidden className="shrink-0 text-primary" size={18} />
+            <span className="truncate">{order.customerName || 'No name given'}</span>
+            {order.customerTier === 'gold' && <MemberMark />}
+          </p>
+          {order.customerPhone && (
+            <p className="mt-1 text-sm font-semibold text-content">
+              +91 {formatIndianPhone(order.customerPhone)}
+            </p>
+          )}
+          <div className="mt-4 flex justify-end gap-2">
+            {onChange && (
+              <Button variant="secondary" size="phone" onClick={onChange}>
+                Change customer
+              </Button>
+            )}
+            <Button size="phone" onClick={onClose}>
+              Done
+            </Button>
+          </div>
+        </div>
+      )}
+    </Modal>
   )
 }
 

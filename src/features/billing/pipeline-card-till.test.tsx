@@ -104,7 +104,7 @@ describe('a pipeline card says which till took the order', () => {
     )
     // And the creator chip is genuinely absent, so the till chip is the only
     // thing standing between the operator and an unexplained refusal.
-    expect(screen.queryByText('· Asha')).not.toBeInTheDocument()
+    expect(screen.queryByText('Asha')).not.toBeInTheDocument()
   })
 
   it("says nothing about the till on this tablet's own work", () => {
@@ -177,7 +177,7 @@ describe('a pipeline card says which till took the order', () => {
       THIS_TILL,
     )
 
-    expect(screen.getByText('· Asha')).toBeInTheDocument()
+    expect(screen.getByText('Asha')).toBeInTheDocument()
     expect(
       screen.getByTestId('order-till-a0000000-0000-4000-a000-000000000001'),
     ).toBeInTheDocument()

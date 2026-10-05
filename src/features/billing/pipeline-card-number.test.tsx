@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { AWAITING_ORDER_NUMBER } from '@/domain'
 import type { BillingOrder } from '@/data-access/adapters'
@@ -60,10 +61,14 @@ function order(over: Partial<BillingOrder>): BillingOrder {
 
 function noop() {}
 
-function renderCard(over: Partial<BillingOrder>) {
+function renderCard(
+  over: Partial<BillingOrder>,
+  props: Partial<Parameters<typeof PipelineCard>[0]> = {},
+) {
   return render(
     <MemoryRouter>
       <PipelineCard
+        {...props}
         order={order(over)}
         currentBillerId={ONE_PERSON}
         currentDeviceId={THIS_TILL}
@@ -114,5 +119,64 @@ describe('the order number arrives when it arrives', () => {
     // "More actions for A7K3" told a screen reader a hash it could not use.
     const actions = screen.getByRole('button', { name: /^More actions for / })
     expect(actions).toHaveAccessibleName(/unsent order/i)
+  })
+})
+
+describe('the number leads and the table follows it', () => {
+  it('reads #42 · Table 8 on a dine-in card with a table', () => {
+    renderCard({ orderNumber: 42, serviceType: 'dine_in', tableNumber: 8 })
+
+    const badge = screen.getByTestId('order-reference-a0000000-0000-4000-a000-000000000001')
+    // The table no longer replaces the number: both are on the card, number first.
+    expect(badge).toHaveTextContent(/^#\s*42\s*·\s*Table 8$/)
+  })
+
+  it('keeps the table steady while the number is still on its way', () => {
+    renderCard({ orderNumber: AWAITING_ORDER_NUMBER, serviceType: 'dine_in', tableNumber: 8 })
+
+    const badge = screen.getByTestId('order-reference-a0000000-0000-4000-a000-000000000001')
+    expect(badge).toHaveTextContent(/Table 8$/)
+    expect(badge.querySelector('.animate-pulse')).not.toBeNull()
+  })
+})
+
+describe('the customer sits behind one button', () => {
+  it('prints neither the name nor the age on the card', () => {
+    renderCard({ orderNumber: 42 })
+
+    const card = screen.getByTestId('open-order-42')
+    expect(card).not.toHaveTextContent('Ravi')
+    expect(card).not.toHaveTextContent(/now|ago/)
+  })
+
+  it('opens what the order knows about its customer', async () => {
+    const person = userEvent.setup()
+    renderCard({ orderNumber: 42, customerPhone: '9876543210', customerTier: 'gold' })
+
+    await person.click(screen.getByRole('button', { name: 'Customer for Order #42' }))
+    const details = screen.getByTestId(
+      'order-customer-details-a0000000-0000-4000-a000-000000000001',
+    )
+    expect(details).toHaveTextContent('Ravi')
+    expect(details).toHaveTextContent('+91 98765 43210')
+  })
+
+  it('starts the edit with the customer dialog when the order has no customer', async () => {
+    const person = userEvent.setup()
+    const onSetCustomer = vi.fn()
+    renderCard({ orderNumber: 42, customerName: null }, { onSetCustomer })
+
+    await person.click(screen.getByRole('button', { name: 'Add a customer to Order #42' }))
+    expect(onSetCustomer).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers no add button where the order cannot be edited', () => {
+    renderCard({ orderNumber: 42, customerName: null })
+
+    expect(
+      within(screen.getByTestId('open-order-42')).queryByRole('button', {
+        name: /customer/i,
+      }),
+    ).toBeNull()
   })
 })

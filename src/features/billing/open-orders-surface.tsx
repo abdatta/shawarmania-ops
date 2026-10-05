@@ -80,6 +80,7 @@ export function OpenOrdersSurface({
   onActivityChanged,
   editingOrderId = null,
   onEditOrder,
+  onSetOrderCustomer,
   checkoutSettings,
 }: {
   embedded?: boolean
@@ -94,6 +95,7 @@ export function OpenOrdersSurface({
   onActivityChanged?: () => void
   editingOrderId?: string | null
   onEditOrder?: (order: BillingOrder) => void
+  onSetOrderCustomer?: (order: BillingOrder) => void
   checkoutSettings?: Pick<OutletMenu, 'service' | 'loyalty'>
 } = {}) {
   const { billing } = useAdapters()
@@ -325,6 +327,7 @@ export function OpenOrdersSurface({
                   currentDeviceId={counterDevice?.device.deviceId ?? null}
                   busy={busy}
                   {...(onEditOrder ? { onEdit: onEditOrder } : {})}
+                  {...(onSetOrderCustomer ? { onSetCustomer: onSetOrderCustomer } : {})}
                   tenderLabel={order.billId ? (tenders.get(order.billId) ?? null) : null}
                   sharedTable={shared.get(order.id) ?? null}
                   onMarkPrepared={(target) =>

@@ -25,6 +25,7 @@ export function CounterActivityRail({
   savedOrderKey = 0,
   editingOrder,
   onEditOrder,
+  onSetOrderCustomer,
   onActivityChanged,
   pin,
   asOf,
@@ -35,6 +36,8 @@ export function CounterActivityRail({
   savedOrderKey?: number
   editingOrder: BillingOrder | null
   onEditOrder: (order: BillingOrder) => void
+  /** Edit, opened straight onto the customer dialog. */
+  onSetOrderCustomer: (order: BillingOrder) => void
   /** The pipeline already reloads itself; notify the bills column only. */
   onActivityChanged: () => void
   /** The docked card, built by the composer that owns the draft it displays. */
@@ -94,6 +97,7 @@ export function CounterActivityRail({
           savedOrderKey={savedOrderKey}
           editingOrderId={editingOrder?.id ?? null}
           onEditOrder={onEditOrder}
+          onSetOrderCustomer={onSetOrderCustomer}
           onActivityChanged={onActivityChanged}
           {...(checkoutSettings ? { checkoutSettings } : {})}
         />

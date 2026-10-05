@@ -22,6 +22,7 @@ export function CounterActivity({
   savedOrderKey = 0,
   editingOrderId = null,
   onEditOrder,
+  onSetOrderCustomer,
   onActivityChanged,
   checkoutSettings,
 }: {
@@ -30,6 +31,7 @@ export function CounterActivity({
   savedOrderKey?: number
   editingOrderId?: string | null
   onEditOrder?: (order: BillingOrder) => void
+  onSetOrderCustomer?: (order: BillingOrder) => void
   onActivityChanged?: () => void
   checkoutSettings?: Pick<OutletMenu, 'service' | 'loyalty'>
 }) {
@@ -41,6 +43,7 @@ export function CounterActivity({
         savedOrderKey={savedOrderKey}
         editingOrderId={editingOrderId}
         {...(onEditOrder ? { onEditOrder } : {})}
+        {...(onSetOrderCustomer ? { onSetOrderCustomer } : {})}
         {...(onActivityChanged ? { onActivityChanged } : {})}
         {...(checkoutSettings ? { checkoutSettings } : {})}
       />

@@ -836,6 +836,13 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     setError(null)
   }
 
+  /** The card's customer button: the same edit, with the customer dialog already up. */
+  function beginOrderCustomerEdit(order: BillingOrder) {
+    if (settling || editingOrder) return
+    beginOrderEdit(order)
+    setCustomerDialogOpen(true)
+  }
+
   function leaveOrderEdit() {
     const draft = suspendedDraft.current
     suspendedDraft.current = null
@@ -1326,6 +1333,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
           savedOrderKey={savedOrderKey}
           editingOrder={editingOrder}
           onEditOrder={beginOrderEdit}
+          onSetOrderCustomer={beginOrderCustomerEdit}
           onActivityChanged={() => setBillRefresh((value) => value + 1)}
           pin={
             editingOrder && (

@@ -903,12 +903,14 @@ describe('BillingCounter', () => {
     // replacing it read as the order changing identity.
     const clientId = (saveOrder.mock.calls[0]![0] as { clientId: string }).clientId
     const saved = await within(rail).findByTestId(`open-order-local-${clientId}`)
-    expect(within(saved).getByText('Asha')).toBeInTheDocument()
+    // The customer is behind the card's customer button, not printed on it.
+    expect(within(saved).getByRole('button', { name: /^Customer for / })).toBeInTheDocument()
     expect(saved.querySelector('.animate-pulse')).toBeInTheDocument()
     expect(saved).not.toHaveTextContent(/#\d/)
     expect(within(saved).getByText('Classic Chicken Shawarma')).toBeInTheDocument()
     expect(within(saved).getByText('Mayonnaise Chicken Shawarma')).toBeInTheDocument()
-    expect(within(saved).getByText('now')).toBeInTheDocument()
+    // No age: the list is newest first already.
+    expect(saved).not.toHaveTextContent(/\bnow\b/)
     expect(within(saved).queryByText('Demo Biller')).not.toBeInTheDocument()
     expect(saved).toHaveTextContent('₹298')
 
@@ -952,9 +954,7 @@ describe('BillingCounter', () => {
       'Order',
     )
     const metadata = within(order).getByTestId(`order-metadata-${openOrder.id}`)
-    // Age and creator are two facts; pin each on its own so the wall clock
-    // cannot flip the combined pattern between now and mins-ago.
-    expect(metadata).toHaveTextContent(/(now|ago)/)
+    // No age on the card: the list is newest first already.
     expect(metadata).toHaveTextContent('Demo Morning Biller')
   })
 
@@ -1033,7 +1033,12 @@ describe('BillingCounter', () => {
     expect(screen.queryByTestId(`bill-line-${MENU_ITEM_MAYO_ID}`)).not.toBeInTheDocument()
 
     const updated = await within(rail).findByTestId('open-order-104')
-    await waitFor(() => expect(within(updated).getByText('Updated customer')).toBeInTheDocument())
+    await person.click(
+      await within(updated).findByRole('button', { name: /^Customer for Order .104$/ }),
+    )
+    const details = await screen.findByRole('dialog', { name: /^Customer for Order .104$/ })
+    await waitFor(() => expect(details).toHaveTextContent('Updated customer'))
+    await person.click(within(details).getByRole('button', { name: 'Done' }))
     expect(within(updated).getByText('Mayonnaise Chicken Shawarma')).toBeInTheDocument()
 
     await person.click(
@@ -1717,9 +1722,13 @@ describe('BillingCounter — how the outlet serves (#60)', () => {
     expect(saveOrder.mock.calls[0]![0]).toMatchObject({ serviceType: 'dine_in', tableNumber: 3 })
 
     const rail = await screen.findByTestId('counter-activity-rail')
-    const reference = await within(rail).findByText('Table 3')
-    // The table replaces the number; it does not sit beside it.
-    expect(reference.textContent).toBe('Table 3')
+    const table = await within(rail).findByText('Table 3')
+    // The number leads and the table follows it [owner, 2026-10-05].
+    await waitFor(() =>
+      expect(table.closest('[data-testid^="order-reference-"]')).toHaveTextContent(
+        /^#\s*\d+\s*·\s*Table 3$/,
+      ),
+    )
   })
 
   it('takes any table up to three digits, and never a leading nought', async () => {
