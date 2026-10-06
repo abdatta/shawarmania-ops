@@ -159,7 +159,9 @@ export function MyShiftSurface({
       </div>
       {/* Everything below the totals scrolls together, so an attention card
           never sits below the fold with no way to reach it. */}
-      <div className={embedded ? 'min-h-0 flex-1 space-y-2 overflow-y-auto' : 'space-y-5'}>
+      <div
+        className={embedded ? 'no-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto' : 'space-y-5'}
+      >
         {/*
           Needs-attention first, above the money.
 

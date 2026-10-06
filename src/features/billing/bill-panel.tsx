@@ -86,7 +86,11 @@ export function BillPanel({
         {editing ? `Editing ${editingOrderReference}` : 'Current bill'}
       </h2>
 
-      <div className="min-h-20 flex-1 overflow-y-auto px-3 md:min-h-0" data-testid="bill-lines">
+      {/* No drawn scrollbar, as every scrolling column on the counter. */}
+      <div
+        className="no-scrollbar min-h-20 flex-1 overflow-y-auto px-3 md:min-h-0"
+        data-testid="bill-lines"
+      >
         {lines.length === 0 ? (
           <p className="py-6 text-center text-sm text-content-muted">
             Tap an item to start the order.

@@ -1103,7 +1103,14 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         } as CSSProperties
       }
     >
-      <div className="@container min-h-0 overflow-y-auto">
+      {/*
+        No drawn scrollbar here, nor on the bill's lines, Bills this shift or
+        the rail, as the customer's bill list: on a desktop each bar ran a
+        column's full height. They all still scroll by wheel, trackpad and
+        touch. The workspace's sideways scroll keeps its bar, the one sign on a
+        desktop that a column sits off to the right.
+      */}
+      <div className="no-scrollbar @container min-h-0 overflow-y-auto">
         {resume && (
           <p className="mb-2 text-xs font-semibold text-content-muted" data-testid="menu-as-of">
             Menu as of {new Date(resume.lastSuccessfulReadAt).toLocaleString()}

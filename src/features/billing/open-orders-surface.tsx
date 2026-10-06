@@ -306,7 +306,7 @@ export function OpenOrdersSurface({
               whatever happens to be positioned above it.
             */
             className={`relative min-h-0 flex-1 space-y-1 scroll-smooth motion-reduce:scroll-auto ${
-              embedded ? 'overflow-y-auto' : ''
+              embedded ? 'no-scrollbar overflow-y-auto' : ''
             }`}
           >
             {listed.map((order) => (
