@@ -192,7 +192,7 @@ Worth knowing before running one:
 - **Business dates are relative to today**, resolved through the outlet's own cutover. **Four days traded at each outlet**: the three before today are counted and signed off, and today is open and can be closed during a walkthrough. Four days rather than one is what gives a period report and a comparison something to be a period *of*.
 - **Things have deliberately gone wrong**, all at Kalyani, because a demo where nothing does demonstrates nothing: yesterday's drawer was ₹240 short, a bill for yesterday arrived after that day had been signed off — which the cash screen reports as a reconciliation exception rather than quietly absorbing — arrivals are recorded and waiting for a manager, one of them taken well outside the geofence, the aggregator sync has work needing the owner, and a counter tablet is holding bills it has not managed to send.
 - **Today carries a bulk delivery**, bought and mostly unused, so the Ledger reads like a shop rather than like a spreadsheet of identical days. It was here to give the P&L's basis toggle something to show; #12 withdrew the toggle and #51 withdrew the P&L, and it earns its place on the Ledger alone.
-- **Every current menu item is non-vegetarian**, because every item the business sells is built on chicken. The vegetarian marker has no live example rather than a fabricated one; create an item from the menu form to see it.
+- **The menu is the real one**: Kalyani Cafe's sixty items in ten categories, names, prices, descriptions and veg markers as the owner's own Menu screen shows them, at both trading outlets. It is long on purpose — the counter's menu column scrolls, which is what its search is for (`the-demo-bills-like-the-shop`).
 - **The Menu screen's Share button hands out a brand-site address.** The brand site serves real trading outlets only, so a demo outlet's address — made from its name exactly as the database makes one — finds no menu there. Sharing it writes nothing; a demo that faked a working public menu would be demonstrating something that does not exist (the-menu-is-public, D6).
 - **The offline states are the real ones, reached from the demo indicator.** The yellow strip carries a **connectivity** control on the Biller walkthrough: *Online*, *Offline: network dropped*, and *Offline: closed and reopened*. Nothing about the behaviour is simulated — the queue, the escalation, the drain and the resumed-tablet provenance are the shipped ones, and the control only stands in for the network going away. Aeroplane mode and the DevTools offline toggle still work exactly as they did, and win: if the browser says there is no network, the counter is offline whatever the control reads. The control is absent on the three phone walkthroughs, because no phone shell has a local queue to demonstrate.
 
@@ -219,24 +219,25 @@ can be changed. **Start again** restores the original grouping. No part of this
 walkthrough changes historical bills or orders.
 
 **How each outlet serves** (#60). The same section, and the same counter, run live against the real settings; here they run against the demo store, where the choices live on the fixture outlets.
-Kalyani's page has **Orders** between Details and Tablets: one switch and nothing
-beneath it. That is what a new outlet sees, and it is why the counter so far has
-billed exactly as it always has. Turn **Dine-in and takeaway** on and the page
-grows, each option opening inside the tile it belongs to, on the other of the two
-surface tones: the two types, **Table numbers** inside dine-in's reach — turn it
-on; there is no count to type — and **Packaging charge**, offered only because takeaway is.
-Turn packaging on: *Flat per order* is first and chosen; pick **Per bag**, type
-**5**, and turn **Free for gold members** on. Save refuses to start charging until
-a price is typed. Take **Takeaway** off and the packaging goes with it; put it
-back and press **Cancel** to return to what is stored, then **Save**.
-**Kanchrapara**'s page shows the same section already grown. Switch to the manager and open Kalyani: the same section, and they can change it too —
+Kalyani's page has **Orders** between Details and Tablets, set the way the owner's
+shop runs: **Dine-in and takeaway** on with both types offered, **Table numbers**
+inside dine-in's reach — there is no count to type — and **Packaging charge**,
+offered only because takeaway is, at *Flat per order*, **₹10**, free for gold
+members. Each option opens inside the tile it belongs to, on the other of the two
+surface tones. Turn **Dine-in and takeaway** off and the page folds to one switch
+with nothing beneath it: that is what a new outlet sees, and its counter bills
+without asking how the order is served. Turn it back on, pick **Per bag**, and
+clear the price: Save refuses to start charging until a price is typed. Take
+**Takeaway** off and the packaging goes with it; put it back and press **Cancel**
+to return to what is stored. **Kanchrapara**'s page shows the other packaging
+choice, ₹5 a bag. Switch to the manager and open Kalyani: the same section, and they can change it too —
 but the Details card above it has no Edit, because the cutover and the check-in
 fence stay the owner's.
 
 Then open **Attendance** from the owner's own navigation — no appointment, no switching, and the address stays inside the owner's shell. Use the outlet selector to move to **Kanchrapara**, the shop this owner holds no assignment at: one arrival is waiting there, and they settle it. The demo's emulated position is at Kalyani, so the rule asks for a reason first and records that the approver was not on site — the same rule the outlet's own manager answers to. Note who is *not* on that roll-call: the owner and the manager are not staff there, so nobody is pretending to record their arrival. Then open **Cash** at the same outlet: the day is all there, and the close and the withdrawal are not, because the drawer comes from the assignment. Switch the selector back to Kalyani, where the owner *is* the manager, and the same screen offers both — which is the whole boundary in one gesture. The outlet you last picked is where the next screen opens, so nobody answers that question twice.
 
 **Below Orders, Kalyani's Loyalty section** (#62) is already on, with the owner's
-numbers: 5 points per ₹200, a 10% cap, gold members at 1× with a 50% cap for six
+numbers: 5 points per ₹200, a 5% cap, gold members at 1× with a 30% cap for six
 months, and billers allowed to upgrade at ₹2,000 a month. Change the gold cap in
 the **Points** tile and watch the same box under **Gold members** follow — every
 gold-only setting is shown in both places as one value. Turn **Gold members** off
@@ -286,7 +287,7 @@ on the hardware at Kalyani: one screen, no tabs, no way out except the demo
 banner pinned above it. The header names the *device* rather than a person,
 because a tablet is set up rather than signed in.
 
-A shift is already open. Ring a direct sale—tap tiles, decide the customer from the keypad row (or **Skip**), tap **Mark Paid**, then **Cash**, then confirm **Mark Paid**. Cash and UPI both begin neutral. The screen clears after local acceptance; expand the new row under **Bills this shift** and use its relative five-minute action to reopen the prefilled tender dialog without changing the bill. The action counts in minutes, switches to seconds below one minute and disappears at expiry; the adjacent demo controls jump to 59 seconds or expiry without a five-minute wait. Repeat from an order paid on handover. For split tender, key `100`, tap Cash, tap UPI for the ₹39 remainder, then Mark Paid.
+A shift is already open. Ring a direct sale—tap tiles, decide the customer from the keypad row (or **Skip**), tap **Mark Paid**, then **Cash**, then confirm **Mark Paid**. Cash and UPI both begin neutral. The screen clears after local acceptance; expand the new row under **Bills this shift** and use its relative five-minute action to reopen the prefilled tender dialog without changing the bill. The action counts in minutes, switches to seconds below one minute and disappears at expiry; the adjacent demo controls jump to 59 seconds or expiry without a five-minute wait. Repeat from an order paid on handover. Kalyani offers dine-in and takeaway, so each order waits for one as it waits for the customer: tap **Takeaway** and the ₹10 packaging line joins the bill. For split tender on a takeaway Classic (₹145), key `100`, tap Cash, tap UPI for the ₹45 remainder, then Mark Paid.
 
 Ring another item, decide the customer and choose the primary **Order** action. It appears directly in the Counter's compact **Open orders** rail—there is no separate one-slot latest-order card. Its complete preparation lines and amounts, optional customer and total lead the card; `Order #xyz` is only a small reference, today's timestamp is relative, and the current biller's name is not repeated. Mark it paid, or cancel after a preset fills the editable reason field; the paid bill moves below the divider into **Bills this shift**, where Cash and UPI totals remain visible at zero, rows read **Today** with the time, and each bill expands to immutable details. Tap the customer row to open the keypad. Key `9000` to see the outlet's own recent customer suggested with a count of the others; tap it to fill the number, and the saved name resolves. Key `5003801867` instead to see a ten-digit number the mobile rule refuses turn red and offer no save. **Skip** takes one tap and confirms nothing. Swiggy, Zomato, Card and Other never appear as payment categories; aggregator trade is demonstrated in the Ledger instead.
 
@@ -298,26 +299,25 @@ card, and because she has paid over ₹2,000 at Kalyani this month the card says
 her first and names the date her gold ends, in bold; upgrade her and the
 eligibility line goes. Switch the demo offline and try it on somebody else: it
 needs the internet. Accept her, and **Use N points** appears beside **Add
-discount**, naming the most this bill may take — for a gold member, half the bill
+discount**, naming the most this bill may take — for a gold member, 30% of the bill
 after other discounts, and never more than the balance. Tap it: the pad opens on
 that number, with *Balance* and *Max this bill* beneath; type more than the max and
 the readout says *At most N on this bill* in red. Use it, and *Points (N)* joins
 the bill's rows. On another bill, *Priyanka* (`9000000106`) holds 8 points and is
-not gold, so her cap is 10%; *Imran* (`9000000107`) spent points on a bill that was
+not gold, so her cap is 5%; *Imran* (`9000000107`) spent points on a bill that was
 then voided and sits at −4, so there is nothing to use and the button says so.
 
 **Edit an order, and watch what the workspace does about it.** Tap the pencil. The composer takes the accent outline and names the order; that order leaves the list and its own card slides left to meet the composer's edge, so the two read as one piece of work. The composer's footer—total, customer fields, Save changes and Cancel edit—**moves onto the card**, leaving the composer as the items alone; there is never a second copy of either. Scroll the rail through this shift's bills: the card holds its place until scrolling would lose it, pins at the edge, and comes back. Add an item, change the customer, save, and see the draft you had in progress restored exactly.
 
-**Then serve it the way Kalyani now does** (#60, after the owner's switches
-above — the counter reads them at its next menu refresh, which a role switch
-is). Tap an item. **Dine-in** and **Takeaway** sit above the customer row, neither
+**Then serve it the way Kalyani does** (#60, with the owner's settings above).
+Tap an item. **Dine-in** and **Takeaway** sit above the customer row, neither
 chosen, and **Order** and **Paid** wait for one, as they wait for the customer;
 tapping a chosen chip again takes it back.
-Tap **Takeaway**: a **Packaging × 1** line joins the bill, last. **+** makes it two
-bags; **−** stops at one, because the counter never removes packaging. Key
-Ritika's number (`9000000101`): she is gold, so the bags read *₹10* struck through
-and *Free*, and the total drops by exactly that; decide *Skip* instead and they
-are charged again. Tap **Dine-in**: the packaging goes, and a popup asks which
+Tap **Takeaway**: a **Packaging** line of ₹10 joins the bill, last — flat for the
+order, so there is nothing to count. Key Ritika's number (`9000000101`): she is
+gold, so it reads *₹10* struck through and *Free*, and the total drops by exactly
+that; decide *Skip* instead and it is charged again. Tap **Dine-in**: the
+packaging goes, and a popup asks which
 table on a number pad. Key **3** and *Done*, and the chip reads *Table 3*; save it with
 **Order**, and the rail calls it *Table 3*, never by its number. Now tap another
 item, **Dine-in** again, and key **3**: it turns red — *Table 3 is already open.* — and *Done* will not take
@@ -325,9 +325,10 @@ it. Tap **Edit here.** and table 3's order opens for
 editing, as its card's Edit would; *Cancel edit* brings back the bill you had
 started. Or key **12** instead, which any number up to 999 may be. Save, then mark it Prepared and Paid: its bill reads *Table 3* under Bills
 this shift, and table 3 is free again. Have the owner offer **Takeaway** alone and
-come back: no chip at all, and every order is takeaway with its packaging.
-**Start again** puts Kalyani back to nothing chosen, and the counter back to the
-one it always was.
+come back: no chip at all, and every order is takeaway with its packaging. Turn
+**Dine-in and takeaway** off and the counter bills as an outlet that has chosen
+nothing does, without asking. **Start again** puts Kalyani back to the owner's
+settings.
 
 **Narrow the window** until three columns no longer fit. Nothing rearranges and nothing becomes a tab—the workspace scrolls sideways, each column about a phone's width. That is why there is no Open orders, My shift or Menu entry in this shell: all three are columns that never leave the screen. On a busy evening the middle column scrolls **beneath** its Cash and UPI totals, which stay pinned, and anything needing attention sits above the bills rather than under all of them.
 
@@ -341,7 +342,7 @@ Switch to **Admin → Billing**. **Bill 18 is marked *After operator left*.** Op
 
 **Then show the harder one.** Set connectivity to *Offline: closed and reopened* — the tablet was shut and started again with no backend. It comes back on the same shift, with the menu, the outlet pipeline and this shift's bills each labelled *as of* their last successful read, because that is the last moment they were known to be true. Hand over is refused, and so is Finish day, which says why rather than failing quietly. Ring a bill anyway; it is captured. Return to *Online* and it delivers, once.
 
-Try to sell the Stuffed Lebanese Shawarma: it is on the grid and refuses to be sold, because the kitchen has run out. A tile that vanished would read as a bug to whoever was looking straight at it. It shows **Unavailable** where the others show a price, and no price at all — a figure nobody can sell is a figure a biller might quote by mistake.
+Try to sell the Lebanese Chicken Shawarma: it is on the grid and refuses to be sold, because the kitchen has run out. A tile that vanished would read as a bug to whoever was looking straight at it. It shows **Unavailable** where the others show a price, and no price at all — a figure nobody can sell is a figure a biller might quote by mistake.
 
 **4 — The employee, and the geofence** (Staff)
 

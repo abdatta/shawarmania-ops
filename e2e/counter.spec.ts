@@ -98,9 +98,41 @@ async function expectCardCustomer(page: Page, card: Locator, name: string) {
   await expect(details).toHaveCount(0)
 }
 
+/** Kalyani, from the outlet fixture: where the demo's counter stands. */
+const KALYANI = 'd0000000-0000-4000-a000-000000000001'
+
+/** Back to the counter through the demo banner, which keeps the demo's state. */
+async function switchToBiller(page: Page) {
+  const switcher = page.getByRole('navigation', { name: 'Demo role switcher' })
+  const select = switcher.getByRole('combobox', { name: 'Demo role' })
+  if (await select.isVisible()) await select.selectOption('biller')
+  else await switcher.getByRole('link', { name: 'Biller', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Counter tablet' })).toBeVisible()
+}
+
+/**
+ * The counter at a Kalyani that has chosen no order settings.
+ *
+ * The demo's Kalyani bills with the owner's own settings — dine-in and
+ * takeaway, keyed tables, ₹10 packaging — so every order there waits for a
+ * service type. Most of this file is about something else, asserted against the
+ * counter as it bills where nothing is chosen, so a test says so first, through
+ * the owner's own Orders switch, as `billing-counter.test.tsx` does with its
+ * `serving` option. The demo as shipped is walked by its own test.
+ */
+async function openCounterWithNothingChosen(page: Page) {
+  await page.goto(`demo/owner/outlets/${KALYANI}`)
+  const orders = page.getByTestId('service-orders-switch')
+  await expect(orders).toHaveAttribute('aria-checked', 'true')
+  await orders.click()
+  await page.getByTestId('service-save').click()
+  await expect(page.getByTestId('service-save')).toBeHidden()
+  await switchToBiller(page)
+}
+
 test.describe('the counter', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('demo/biller')
+    await openCounterWithNothingChosen(page)
   })
 
   for (const role of ['owner', 'admin']) {
@@ -113,11 +145,11 @@ test.describe('the counter', () => {
       await control.click()
       await page.getByTestId('service-save').click()
       await expect(page.getByTestId('service-save')).toBeHidden()
-      const switcher = page.getByRole('navigation', { name: 'Demo role switcher' })
-      const select = switcher.getByRole('combobox', { name: 'Demo role' })
-      if (await select.isVisible()) await select.selectOption('biller')
-      else await switcher.getByRole('link', { name: 'Biller', exact: true }).click()
+      await switchToBiller(page)
       await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
+      // The page it came from keeps the outlet's own order settings, so the order
+      // still waits for a service type; it no longer waits for a customer.
+      await page.getByTestId('service-chip-takeaway').click()
       await expect(page.getByTestId('customer-row')).toHaveCount(0)
       await expect(page.getByTestId('save-order')).toBeEnabled()
       await page.getByTestId('save-order').click()
@@ -208,16 +240,18 @@ test.describe('the counter', () => {
     const everything = await tiles.count()
 
     // Every word, any order, in the browser alone.
+    // "chee chi" finds Cheese Chicken Shawarma and Chicken & Cheese Sandwich;
+    // "shawarma" is the category's word, which narrows it to the one.
     await search.fill('chee chi')
+    await expect(tiles).toHaveCount(2)
+    await search.fill('cheese shawarma')
     await expect(tiles).toHaveCount(1)
-    await expect(
-      grid.getByRole('button', { name: 'Mozzarella Cheese Chicken Shawarma' }),
-    ).toBeVisible()
+    await expect(grid.getByRole('button', { name: 'Cheese Chicken Shawarma' })).toBeVisible()
 
     // A tap adds and leaves the search where it was.
-    await grid.getByRole('button', { name: 'Mozzarella Cheese Chicken Shawarma' }).click()
-    await expect(page.getByTestId('bill-total')).toHaveText('₹199')
-    await expect(search).toHaveValue('chee chi')
+    await grid.getByRole('button', { name: 'Cheese Chicken Shawarma' }).click()
+    await expect(page.getByTestId('bill-total')).toHaveText('₹175')
+    await expect(search).toHaveValue('cheese shawarma')
     await expect(tiles).toHaveCount(1)
 
     // Escape belongs to an open dialog first: it closes, the search stays.
@@ -226,7 +260,7 @@ test.describe('the counter', () => {
     await expect(customer).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(customer).toHaveCount(0)
-    await expect(search).toHaveValue('chee chi')
+    await expect(search).toHaveValue('cheese shawarma')
 
     // With nothing open, Escape clears it and drops the cursor.
     await page.keyboard.press('Escape')
@@ -243,18 +277,41 @@ test.describe('the counter', () => {
     await expect(tiles).toHaveCount(everything)
   })
 
+  test('keeps the menu search in reach while a long menu scrolls under it', async ({ page }) => {
+    // The smallest tablet this is designed for, and the real sixty-item menu,
+    // which no counter column holds at once.
+    await page.setViewportSize({ width: 1024, height: 768 })
+    const grid = page.getByTestId('menu-grid')
+    const column = grid.locator('xpath=..')
+    const search = page.getByRole('textbox', { name: 'Search the menu' })
+    await expect(grid.getByRole('button', { name: 'Fresh Lime Soda' })).toBeAttached()
+
+    expect(await column.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true)
+    await column.evaluate((node) => node.scrollTo({ top: node.scrollHeight }))
+    await expect(grid.getByRole('button', { name: 'Fresh Lime Soda' })).toBeInViewport()
+
+    const columnBox = (await column.boundingBox())!
+    const searchBox = (await search.boundingBox())!
+    expect(searchBox.y).toBeGreaterThanOrEqual(columnBox.y)
+    expect(searchBox.y + searchBox.height).toBeLessThanOrEqual(columnBox.y + columnBox.height)
+
+    // And it still works from down there.
+    await search.fill('nashville wings')
+    await expect(grid.getByRole('button', { name: 'Nashville Chicken Wings' })).toBeInViewport()
+  })
+
   test('records a full bill through the tap-first payment dialog', async ({ page }) => {
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
-    await page.getByRole('button', { name: 'Mozzarella Cheese Chicken Shawarma' }).click()
-    await page.getByRole('button', { name: 'Fully Loaded Smashed Burger' }).click()
+    await page.getByRole('button', { name: 'Cheese Chicken Shawarma' }).click()
+    await page.getByRole('button', { name: 'Smashed Chicken Burger' }).click()
 
-    // 139×2 + 199 + 250 is ₹727 at list price, and the burger carries the
-    // outlet's 15% menu discount: ₹37.50 off, leaving ₹689.50, which the
-    // round-up line carries to ₹690. The whole chain in a real browser — the
+    // 135×2 + 175 + 250 is ₹695 at list price, and the burger carries the
+    // outlet's 15% menu discount: ₹37.50 off, leaving ₹657.50, which the
+    // round-up line carries to ₹658. The whole chain in a real browser — the
     // discount reaching the tablet with the menu, the line capturing it, and the
     // bill landing on a whole rupee.
-    await expect(page.getByTestId('bill-total')).toHaveText('₹690')
+    await expect(page.getByTestId('bill-total')).toHaveText('₹658')
 
     const discounts = page.getByTestId('bill-discount-rows')
     await expect(discounts).toContainText('Menu Discount (15%)')
@@ -269,7 +326,7 @@ test.describe('the counter', () => {
     await expect(page.getByRole('heading', { name: 'Bills this shift' })).toBeVisible()
     await expect(page.getByTestId('settled-confirmation')).toHaveCount(0)
     await expect(
-      page.getByTestId('bill-column').locator('details').filter({ hasText: '₹690' }),
+      page.getByTestId('bill-column').locator('details').filter({ hasText: '₹658' }),
     ).toBeVisible()
   })
 
@@ -280,7 +337,7 @@ test.describe('the counter', () => {
     await expect(question.getByRole('heading', { name: 'Receipt and points' })).toBeFocused()
     await expect(page.getByRole('dialog', { name: 'Record payment' })).toHaveCount(0)
     await question.getByTestId('customer-dismiss').click()
-    await expect(page.getByTestId('bill-total')).toHaveText('₹139')
+    await expect(page.getByTestId('bill-total')).toHaveText('₹135')
     await expect(page.getByTestId('customer-row')).toHaveText('Enter Customer Info')
     await page.getByTestId('settle').click()
     question = page.getByRole('dialog', { name: 'Receipt and points' })
@@ -347,13 +404,13 @@ test.describe('the counter', () => {
       cashClass!,
     )
     await expect(dialog.getByRole('button', { name: 'Paid', exact: true })).toBeDisabled()
-    await expect(page.getByTestId('bill-total')).toHaveText('₹139')
+    await expect(page.getByTestId('bill-total')).toHaveText('₹135')
     await expect(page.getByTestId('settled-confirmation')).toHaveCount(0)
   })
 
   test('will not sell an unavailable item', async ({ page }) => {
     const off = page.getByRole('button', {
-      name: 'Stuffed Lebanese Chicken Shawarma — unavailable',
+      name: 'Lebanese Chicken Shawarma — unavailable',
     })
     await expect(off).toBeVisible()
     await expect(off).toBeDisabled()
@@ -366,7 +423,7 @@ test.describe('the counter', () => {
 
     await expect(page.getByTestId('undo-settle')).toHaveCount(0)
     const paidBill = page.locator('details').filter({
-      has: page.locator('summary').filter({ hasText: 'Cash' }).filter({ hasText: '₹159' }),
+      has: page.locator('summary').filter({ hasText: 'Cash' }).filter({ hasText: '₹155' }),
     })
     await paidBill.locator('summary').click()
     await paidBill.getByRole('button', { name: /^Edit \(\d+ min\)$/ }).click()
@@ -379,7 +436,7 @@ test.describe('the counter', () => {
     await expect(page.getByText('Payment updated.')).toBeVisible()
 
     const correctedBill = page.locator('details').filter({
-      has: page.locator('summary').filter({ hasText: 'UPI' }).filter({ hasText: '₹159' }),
+      has: page.locator('summary').filter({ hasText: 'UPI' }).filter({ hasText: '₹155' }),
     })
     if ((await correctedBill.getAttribute('open')) === null) {
       await correctedBill.locator('summary').click()
@@ -427,7 +484,7 @@ test.describe('the counter', () => {
     await expect(saved.getByText('now', { exact: true })).toHaveCount(0)
     await expect(saved.getByRole('button', { name: /^Customer for an unsent order/ })).toBeVisible()
     await expect(saved.getByText('Demo Biller', { exact: true })).toHaveCount(0)
-    await expect(saved).toContainText('₹298')
+    await expect(saved).toContainText('₹290')
 
     // Preparation is recorded on the card where it already stands: the box
     // ticks, the control keeps its word, and nothing moves.
@@ -451,7 +508,7 @@ test.describe('the counter', () => {
     const delivered = rail.getByTestId('pipeline-list').locator(`[data-flip-id="${savedId}"]`)
     await expect(delivered).toHaveAttribute('data-testid', /^open-order-\d+$/)
     await expect(delivered).toContainText(/#\d/)
-    await expect(delivered).toContainText('₹298')
+    await expect(delivered).toContainText('₹290')
     await expectCardCustomer(page, delivered, 'Asha')
     await expect(delivered.getByRole('button', { name: 'Prepared', exact: true })).toHaveAttribute(
       'aria-pressed',
@@ -480,7 +537,7 @@ test.describe('the counter', () => {
     await expect(closed).toContainText('UPI')
     await expect(closed).toContainText('Classic Chicken Shawarma')
     await expect(closed).toContainText('Mayonnaise Chicken Shawarma')
-    await expect(closed).toContainText('1 × ₹139')
+    await expect(closed).toContainText('1 × ₹135')
 
     // Taking the money back and cancelling after payment stand on the same
     // deadline as the edit beside them, and go when it does. A control that
@@ -840,7 +897,7 @@ test.describe('the counter', () => {
     await dialog.getByRole('button', { name: 'Cash', exact: true }).click()
     await expect(dialog.getByRole('list', { name: 'Payment split' })).toContainText('₹100')
     await dialog.getByRole('button', { name: 'UPI', exact: true }).click()
-    await expect(dialog.getByRole('list', { name: 'Payment split' })).toContainText('₹39')
+    await expect(dialog.getByRole('list', { name: 'Payment split' })).toContainText('₹35')
     await dialog.getByRole('button', { name: 'Paid', exact: true }).click()
     await expect(page.getByTestId('settled-confirmation')).toHaveCount(0)
     // The one split bill: both tenders readable once the composer gives the
@@ -1132,9 +1189,9 @@ test.describe('the counter from a physical keyboard', () => {
   test('types the customer number, points and a discount, and Enter confirms each', async ({
     page,
   }) => {
-    await page.goto('demo/biller')
+    await openCounterWithNothingChosen(page)
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
-    await expect(page.getByTestId('bill-total')).toHaveText('₹139')
+    await expect(page.getByTestId('bill-total')).toHaveText('₹135')
 
     await page.getByTestId('customer-row').click()
     const customer = page.getByRole('dialog', { name: 'Customer' })
@@ -1162,7 +1219,7 @@ test.describe('the counter from a physical keyboard', () => {
     await expect(points.getByTestId('points-readout')).toContainText('5')
     await page.keyboard.press('Enter')
     await expect(points).toHaveCount(0)
-    await expect(page.getByTestId('bill-total')).toHaveText('₹134')
+    await expect(page.getByTestId('bill-total')).toHaveText('₹130')
 
     await page.getByTestId('add-discount').click()
     const discount = page.getByRole('dialog', { name: 'Add discount' })
@@ -1179,7 +1236,7 @@ test.describe('the counter from a physical keyboard', () => {
   })
 
   test('keys a split payment, and a held Enter records exactly one bill', async ({ page }) => {
-    await page.goto('demo/biller')
+    await openCounterWithNothingChosen(page)
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
     await skipCustomer(page)
     await page.getByTestId('settle').click()
@@ -1188,7 +1245,7 @@ test.describe('the counter from a physical keyboard', () => {
     await expect(payment.getByRole('heading', { name: 'Record payment' })).toBeFocused()
     await expectNoTextFocus(page)
 
-    // ₹509 is more than the ₹139 bill, so the pad refuses the 9 as a tap would.
+    // ₹509 is more than the ₹135 bill, so the pad refuses the 9 as a tap would.
     await page.keyboard.type('509')
     await expect(payment).toContainText('₹50')
     await page.keyboard.press('Backspace')
@@ -1224,15 +1281,8 @@ test.describe('the counter from a physical keyboard', () => {
   })
 
   test('keys a table, and a control reached with Tab keeps its own Enter', async ({ page }) => {
-    await page.goto('demo/owner/outlets/d0000000-0000-4000-a000-000000000001')
-    await page.getByTestId('service-orders-switch').click()
-    await page.getByTestId('service-tables-switch').click()
-    await page.getByTestId('service-save').click()
-    await expect(page.getByTestId('service-save')).toBeHidden()
-    const switcher = page.getByRole('navigation', { name: 'Demo role switcher' })
-    const select = switcher.getByRole('combobox', { name: 'Demo role' })
-    if (await select.isVisible()) await select.selectOption('biller')
-    else await switcher.getByRole('link', { name: 'Biller', exact: true }).click()
+    // The demo as shipped: Kalyani seats keyed tables.
+    await page.goto('demo/biller')
 
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
     await page.getByTestId('service-chip-dine_in').click()
@@ -1267,6 +1317,37 @@ test.describe('the counter from a physical keyboard', () => {
   })
 })
 
+test.describe('the demo’s Kalyani, billing as the shop does', () => {
+  test('waits for a service type, and charges ₹10 packaging flat on a takeaway', async ({
+    page,
+  }) => {
+    await page.goto('demo/biller')
+    await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
+
+    // Both types offered, so the order waits for one, as it waits for a customer.
+    await expect(page.getByTestId('service-chip-dine_in')).toBeVisible()
+    await expect(page.getByTestId('save-order')).toBeDisabled()
+
+    // Flat per order: one ₹10 line, last, and nothing to count.
+    await page.getByTestId('service-chip-takeaway').click()
+    const packaging = page.getByTestId('bill-line-packaging')
+    await expect(packaging).toContainText('₹10')
+    await expect(page.getByTestId('bill-total')).toHaveText('₹145')
+    await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
+    await expect(page.getByTestId('bill-total')).toHaveText('₹280')
+
+    // A gold member's packaging is free.
+    await identifyCustomer(page, '9000000101')
+    await expect(packaging).toHaveAttribute('data-waived')
+    await expect(page.getByTestId('bill-total')).toHaveText('₹270')
+
+    await recordPaid(page)
+    // Newest first, so the bill just rung heads the list; an earlier ₹270 bill
+    // from the demo day sits further down.
+    await expect(page.getByTestId('bill-column').locator('details').first()).toContainText('₹270')
+  })
+})
+
 /**
  * The demo's connectivity, which lives in the yellow indicator rather than in a
  * strip of its own. Selecting by value, so a label rewording does not silently
@@ -1283,7 +1364,7 @@ test.describe('the counter offline', () => {
   test('walks cold-start provenance, capture, Finish Day refusal and reconnect', async ({
     page,
   }) => {
-    await page.goto('demo/biller')
+    await openCounterWithNothingChosen(page)
     await setConnectivity(page, 'closed-and-reopened')
 
     await expect(page.getByTestId('offline-resume-status')).toContainText(
@@ -1316,7 +1397,7 @@ test.describe('the counter offline', () => {
     page,
     context,
   }) => {
-    await page.goto('demo/biller')
+    await openCounterWithNothingChosen(page)
     await expect(page.getByTestId('sync-indicator')).toHaveAttribute('data-sync', 'pending')
 
     await context.setOffline(true)
@@ -1356,7 +1437,7 @@ test.describe('the counter offline', () => {
   test('the demonstrator can drop the network from the indicator and bring it back', async ({
     page,
   }) => {
-    await page.goto('demo/biller')
+    await openCounterWithNothingChosen(page)
     await expect(page.getByTestId('sync-indicator')).toHaveAttribute('data-sync', 'pending')
 
     await setConnectivity(page, 'network-dropped')
@@ -1428,7 +1509,7 @@ test.describe('the demo indicator on the counter', () => {
         )
       })
 
-    await page.goto('demo/biller')
+    await openCounterWithNothingChosen(page)
     await expect(page.getByTestId('demo-connectivity')).toBeVisible()
     const atCounter = await positions()
     expect(atCounter).toHaveLength(4)
@@ -1447,7 +1528,7 @@ test.describe('the demo indicator on the counter', () => {
   })
 
   test('stays one row on a phone and on a tablet, and adds no second strip', async ({ page }) => {
-    await page.goto('demo/biller')
+    await openCounterWithNothingChosen(page)
     const banner = page.getByTestId('demo-banner')
     await expect(banner).toBeVisible()
 

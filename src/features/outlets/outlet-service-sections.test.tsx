@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it } from 'vitest'
 
 import { AdaptersContext } from '@/data-access/adapters-context'
+import { ALL_OFF_SERVICE_SETTINGS } from '@/domain'
 import {
   createDemoData,
   createMockAdapters,
@@ -22,9 +23,18 @@ import { OutletPage } from './outlets-surface'
  * #60): two switches for a newcomer, settings that grow beneath a switch only
  * while it is on, and read-only answers for a manager.
  *
- * In the demo Kalyani has every switch on and Kanchrapara every switch off, so
- * one walkthrough shows both pages.
+ * Most of these grow a page from nothing chosen, which no demo outlet is any
+ * more: Kalyani carries the owner's own settings and Kanchrapara every switch
+ * on. So these tests clear Kalyani's choices first and say so, rather than
+ * borrowing whatever the demo happens to hold.
  */
+
+/** The demo, with Kalyani's order settings back to a newcomer's. */
+function nothingChosenAtKalyani() {
+  const data = createDemoData()
+  data.store.serviceSettings.set(OUTLET_KALYANI_ID, { ...ALL_OFF_SERVICE_SETTINGS })
+  return data
+}
 
 function sessionFor(role: Role, mode: 'demo' | 'real' = 'demo'): Session {
   const persona = personaFixtures[role]
@@ -39,7 +49,11 @@ function sessionFor(role: Role, mode: 'demo' | 'real' = 'demo'): Session {
 
 function renderPage(
   outletId: string,
-  { role = 'super_admin' as Role, mode = 'demo' as 'demo' | 'real', data = createDemoData() } = {},
+  {
+    role = 'super_admin' as Role,
+    mode = 'demo' as 'demo' | 'real',
+    data = nothingChosenAtKalyani(),
+  } = {},
 ) {
   render(
     <MemoryRouter initialEntries={[`/outlets/${outletId}`]}>
@@ -284,7 +298,7 @@ describe('the outlet page’s Orders', () => {
 
 describe('the mock refuses what the database will', () => {
   it('lets a manager write their own outlet’s choices and no other outlet’s', async () => {
-    const adapters = createMockAdapters('franchise_admin')
+    const adapters = createMockAdapters('franchise_admin', nothingChosenAtKalyani())
     const current = await adapters.outlets.getServiceSettings(OUTLET_KALYANI_ID)
     const next = {
       ...current,
@@ -301,7 +315,7 @@ describe('the mock refuses what the database will', () => {
   })
 
   it('refuses a biller writing any outlet’s choices', async () => {
-    const adapters = createMockAdapters('biller')
+    const adapters = createMockAdapters('biller', nothingChosenAtKalyani())
     await expect(
       adapters.outlets.updateServiceSettings(OUTLET_KALYANI_ID, {
         ...(await adapters.outlets.getServiceSettings(OUTLET_KALYANI_ID)),
@@ -311,7 +325,7 @@ describe('the mock refuses what the database will', () => {
   })
 
   it('refuses an inconsistent combination with the problem as its code', async () => {
-    const adapters = createMockAdapters('super_admin')
+    const adapters = createMockAdapters('super_admin', nothingChosenAtKalyani())
     const current = await adapters.outlets.getServiceSettings(OUTLET_KALYANI_ID)
     await expect(
       adapters.outlets.updateServiceSettings(OUTLET_KALYANI_ID, { ...current, tableNumbers: true }),
@@ -319,7 +333,7 @@ describe('the mock refuses what the database will', () => {
   })
 
   it('hands the counter the outlet’s choices with its menu, and all-off where none are made', async () => {
-    const adapters = createMockAdapters('biller')
+    const adapters = createMockAdapters('biller', nothingChosenAtKalyani())
     expect((await adapters.menu.readOutletMenu(OUTLET_KANCHRAPARA_ID)).service).toMatchObject({
       packagingMode: 'per_bag',
       tableNumbers: true,

@@ -52,25 +52,26 @@ export const outletFixtures: Tables<'outlets'>[] = [
     ],
     hyperpure_delivery: true,
     is_active: true,
-    // Chosen nothing, as every outlet is after the #60 migration: the demo's
-    // counter stands here, so it starts exactly as it bills today.
+    // The owner's own settings [owner, 2026-10-06]: the demo's counter stands
+    // here, so it bills the way the shop does — both service types, keyed
+    // tables, ₹10 flat packaging per order, free for gold members.
     collect_customer_details: true,
-    dine_in_offered: false,
-    takeaway_offered: false,
-    table_numbers: false,
-    packaging_mode: 'off',
-    packaging_price_paise: null,
-    packaging_free_for_gold: false,
-    // Points and gold on, with the owner's numbers (a-regular-earns-points-and-
-    // gold, #62): 5 points per ₹200, 10%, gold at 1× with a 50% cap for six
-    // months, and billers may upgrade at ₹2,000 a month. The demo walks them.
+    dine_in_offered: true,
+    takeaway_offered: true,
+    table_numbers: true,
+    packaging_mode: 'per_order',
+    packaging_price_paise: 1_000,
+    packaging_free_for_gold: true,
+    // Points and gold on, with the owner's numbers [owner, 2026-10-06]: 5 points
+    // per ₹200, up to 5% of a bill, gold at 1× with a 30% cap for six months,
+    // and billers may upgrade at ₹2,000 a month. The demo walks them.
     points_enabled: true,
     points_earn_per_block: 5,
     points_earn_block_paise: 20_000,
-    points_use_cap_bp: 1_000,
+    points_use_cap_bp: 500,
     gold_enabled: true,
     gold_earn_multiplier_x100: 100,
-    points_gold_use_cap_bp: 5_000,
+    points_gold_use_cap_bp: 3_000,
     gold_duration_months: 6,
     gold_counter_grant: true,
     gold_threshold_paise: 200_000,
@@ -114,9 +115,9 @@ export const outletFixtures: Tables<'outlets'>[] = [
     hyperpure_delivery: false,
     is_active: true,
     // Everything on — both types, keyed tables, ₹5 a bag, free for gold — so the
-    // settings page is already grown here while Kalyani shows it growing. The
-    // one place this departs from supabase/seed.sql, where no outlet has chosen
-    // anything: the local stack proves the default, the demo shows the choices.
+    // demo shows per-bag packaging here and per-order packaging at Kalyani. One
+    // of the places the demo departs from supabase/seed.sql, where no outlet has
+    // chosen anything: the local stack proves the default, the demo the choices.
     collect_customer_details: true,
     dine_in_offered: true,
     takeaway_offered: true,

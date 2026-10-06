@@ -64,17 +64,20 @@ may lag this operational fact, so invoice-date routing in Ops is authoritative.
 
 ## Menu
 
-The live menu as of this writing. Seven items, all built around chicken shawarma plus one burger. Prices appear to be **tax-inclusive** with no GST breakup shown to customers, which is why v1 stores bills with `pricing_mode = 'no_tax'`.
+Kalyani Cafe's menu as of October 2026, from the owner's own Menu screen: sixty items in ten categories, chicken and mutton shawarmas at its heart, with vegetarian items marked. Prices appear to be **tax-inclusive** with no GST breakup shown to customers, which is why v1 stores bills with `pricing_mode = 'no_tax'`. The demo carries it item for item (`src/data-access/mock/fixtures/menu.ts`). The menu began at seven shawarmas and a burger, which is what the counter was first designed around.
 
-| Item | Price | Note |
+| Category | Items | Prices |
 |---|---|---|
-| Classic Chicken Shawarma | ₹139 | Bestseller |
-| Mayonnaise Chicken Shawarma | ₹159 | Top rated |
-| Double Chicken Shawarma | ₹179 | |
-| Mozzarella Cheese Chicken Shawarma | ₹199 | |
-| Healthy Chicken Shawarma Salad | ₹219 | Viral; 25.8g protein per 100g |
-| Stuffed Lebanese Chicken Shawarma | ₹238 | Saaj/pita style |
-| Fully Loaded Smashed Burger | ₹250 | New |
+| Shawarmas | 10 | ₹135–₹250 |
+| Burgers | 5 | ₹200–₹350 |
+| Sandwiches | 4 | ₹200–₹300 |
+| Appetizers | 8 | ₹120–₹300 |
+| Main Course | 9 | ₹180–₹480 |
+| Arabian Favourites | 2 | ₹200–₹220 |
+| Desserts | 5 | ₹150–₹300 |
+| Tea & Coffee | 9 | ₹40–₹200 |
+| Mocktails | 6 | ₹70–₹150 |
+| Water | 2 | ₹10–₹20 |
 
 Implications for the software:
 

@@ -278,7 +278,7 @@ export {
 export {
   MENU_ITEM_CLASSIC_ID,
   MENU_ITEM_MAYO_ID,
-  MENU_ITEM_STUFFED_ID,
+  MENU_ITEM_LEBANESE_ID,
   menuCategoryFixtures,
   menuItemFixtures,
 } from './fixtures/menu'

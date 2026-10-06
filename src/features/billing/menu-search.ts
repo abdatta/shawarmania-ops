@@ -7,8 +7,8 @@ import type { MenuCategoryWithItems } from '@/data-access/adapters'
  * over it and never a request: it works offline exactly as it works online.
  *
  * Every word typed must appear somewhere in the item's name or its category's,
- * in any order and case, so "chee chi" finds "Mozzarella Cheese Chicken
- * Shawarma" and "burger" finds every tile under Burgers. A category left with
+ * in any order and case, so "cheese chi" finds "Cheese Chicken Shawarma" and
+ * "Chicken & Cheese Sandwich", and "burger" finds every tile under Burgers. A category left with
  * no matching item is dropped rather than shown as an empty heading. Unavailable
  * items stay in the result: a search that hid them would read as "we don't sell
  * that" rather than "we've run out".

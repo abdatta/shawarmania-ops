@@ -154,9 +154,9 @@ test.describe('the operations surfaces', () => {
 
     const menu = page.getByTestId('menu-grid')
     await expect(menu.getByRole('button', { name: 'Classic Chicken Shawarma' })).toBeVisible()
-    await expect(menu).toContainText('₹139')
+    await expect(menu).toContainText('₹135')
     // Unavailable items stay on the grid, marked, and without a price to quote.
-    const off = menu.getByRole('button', { name: /Stuffed Lebanese.*unavailable/ })
+    const off = menu.getByRole('button', { name: /Lebanese Chicken Shawarma.*unavailable/ })
     await expect(off).toContainText('Unavailable')
     await expect(off).not.toContainText('₹')
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { MenuActionError } from '../adapters'
-import { MENU_ITEM_CLASSIC_ID, MENU_ITEM_STUFFED_ID } from './fixtures/menu'
+import { MENU_ITEM_CLASSIC_ID, MENU_ITEM_LEBANESE_ID } from './fixtures/menu'
 import { createMockMenuAdapter } from './menu'
 import { createDemoStore, DEMO_OUTLET_ID } from './store'
 
@@ -16,22 +16,39 @@ describe('mock menu adapter', () => {
   it('returns categories and items in sort order', async () => {
     const menu = await managerAdapter().listMenu(DEMO_OUTLET_ID)
 
-    expect(menu.map((entry) => entry.category.name)).toEqual(['Shawarma', 'Burgers'])
+    expect(menu.map((entry) => entry.category.name)).toEqual([
+      'Shawarmas',
+      'Burgers',
+      'Sandwiches',
+      'Appetizers',
+      'Main Course',
+      'Arabian Favourites',
+      'Desserts',
+      'Tea & Coffee',
+      'Mocktails',
+      'Water',
+    ])
+    // By sort order, not by id: the classic's id is the oldest, its place ninth.
     expect(menu[0]?.items.map((item) => item.name)).toEqual([
-      'Classic Chicken Shawarma',
+      'Peri Peri Chicken Shawarma',
       'Mayonnaise Chicken Shawarma',
       'Double Chicken Shawarma',
-      'Mozzarella Cheese Chicken Shawarma',
-      'Healthy Chicken Shawarma Salad',
-      'Stuffed Lebanese Chicken Shawarma',
+      'Cheese Chicken Shawarma',
+      'Lebanese Chicken Shawarma',
+      'Taco Chicken Shawarma',
+      'Chicken Shawarma Salad',
+      'Shawarmania Mutton Shawarma',
+      'Classic Chicken Shawarma',
+      'Paneer Shawarma',
     ])
+    expect(menu.flatMap((entry) => entry.items)).toHaveLength(60)
   })
 
   it('includes an unavailable item rather than hiding it', async () => {
     const menu = await managerAdapter().listMenu(DEMO_OUTLET_ID)
     const items = menu.flatMap((entry) => entry.items)
 
-    const off = items.find((item) => item.id === MENU_ITEM_STUFFED_ID)
+    const off = items.find((item) => item.id === MENU_ITEM_LEBANESE_ID)
     expect(off).toBeDefined()
     expect(off?.is_available).toBe(false)
   })
@@ -78,7 +95,7 @@ describe('mock menu adapter', () => {
     // And nothing moved.
     const menu = await biller.listMenu(DEMO_OUTLET_ID)
     const classic = menu.flatMap((entry) => entry.items).find((i) => i.id === MENU_ITEM_CLASSIC_ID)
-    expect(classic?.price_paise).toBe(13900)
+    expect(classic?.price_paise).toBe(13500)
     expect(classic?.is_available).toBe(true)
   })
 
@@ -133,6 +150,6 @@ describe('mock menu adapter', () => {
     first[0]!.items[0]!.name = 'MUTATED'
 
     const second = await adapter.listMenu(DEMO_OUTLET_ID)
-    expect(second[0]?.items[0]?.name).toBe('Classic Chicken Shawarma')
+    expect(second[0]?.items[0]?.name).toBe('Peri Peri Chicken Shawarma')
   })
 })

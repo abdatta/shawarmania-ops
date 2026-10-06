@@ -6,7 +6,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DataAdapters } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters } from '@/data-access/mock'
-import { MENU_ITEM_CLASSIC_ID, MENU_ITEM_STUFFED_ID } from '@/data-access/mock/fixtures/menu'
+import { OUTLET_KALYANI_ID } from '@/data-access/mock'
+import {
+  MENU_ITEM_CLASSIC_ID,
+  MENU_ITEM_LEBANESE_ID,
+  menuItemId,
+} from '@/data-access/mock/fixtures/menu'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
 import type { Role, Session } from '@/session/session'
@@ -59,11 +64,22 @@ describe('MenuSurface — the manager', () => {
     const headings = within(list)
       .getAllByRole('heading', { level: 2 })
       .map((heading) => heading.textContent)
-    expect(headings).toEqual(['Shawarma', 'Burgers'])
+    expect(headings).toEqual([
+      'Shawarmas',
+      'Burgers',
+      'Sandwiches',
+      'Appetizers',
+      'Main Course',
+      'Arabian Favourites',
+      'Desserts',
+      'Tea & Coffee',
+      'Mocktails',
+      'Water',
+    ])
 
     const classic = within(list).getByTestId(`menu-item-${MENU_ITEM_CLASSIC_ID}`)
     expect(within(classic).getByText('Classic Chicken Shawarma')).toBeInTheDocument()
-    expect(within(classic).getByText('₹139')).toBeInTheDocument()
+    expect(within(classic).getByText('₹135')).toBeInTheDocument()
     expect(within(classic).getByText('Non-vegetarian')).toBeInTheDocument()
   })
 
@@ -71,19 +87,19 @@ describe('MenuSurface — the manager', () => {
     const user = userEvent.setup()
     renderMenu()
 
-    const off = await screen.findByTestId(`menu-item-${MENU_ITEM_STUFFED_ID}`)
-    expect(within(off).getByTestId(`unavailable-${MENU_ITEM_STUFFED_ID}`)).toHaveTextContent(
+    const off = await screen.findByTestId(`menu-item-${MENU_ITEM_LEBANESE_ID}`)
+    expect(within(off).getByTestId(`unavailable-${MENU_ITEM_LEBANESE_ID}`)).toHaveTextContent(
       'Unavailable',
     )
 
-    await user.click(
-      screen.getByRole('button', { name: 'Actions for Stuffed Lebanese Chicken Shawarma' }),
+    await user.click(screen.getByRole('button', { name: 'Actions for Lebanese Chicken Shawarma' }))
+    expect(screen.getByTestId(`toggle-${MENU_ITEM_LEBANESE_ID}`)).toHaveTextContent(
+      'Mark available',
     )
-    expect(screen.getByTestId(`toggle-${MENU_ITEM_STUFFED_ID}`)).toHaveTextContent('Mark available')
-    await user.click(screen.getByTestId(`toggle-${MENU_ITEM_STUFFED_ID}`))
+    await user.click(screen.getByTestId(`toggle-${MENU_ITEM_LEBANESE_ID}`))
 
     await waitFor(() => {
-      expect(screen.queryByTestId(`unavailable-${MENU_ITEM_STUFFED_ID}`)).not.toBeInTheDocument()
+      expect(screen.queryByTestId(`unavailable-${MENU_ITEM_LEBANESE_ID}`)).not.toBeInTheDocument()
     })
   })
 
@@ -241,13 +257,13 @@ describe('MenuSurface — the manager', () => {
     expect(screen.getAllByRole('button', { name: 'Add' })).toHaveLength(1)
     expect(screen.queryByRole('button', { name: /add category/i })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Add' }))
-    await user.type(screen.getByLabelText('Name'), 'Fresh Lime Soda')
+    await user.type(screen.getByLabelText('Name'), 'Rose Sharbat')
     await user.type(screen.getByRole('combobox', { name: 'Category' }), 'Beverages')
     await user.type(screen.getByLabelText('Price (₹)'), '50')
     await user.click(screen.getByRole('button', { name: 'Create item' }))
 
     expect(await screen.findByRole('heading', { name: 'Beverages' })).toBeInTheDocument()
-    expect(await screen.findByText('Fresh Lime Soda')).toBeInTheDocument()
+    expect(await screen.findByText('Rose Sharbat')).toBeInTheDocument()
     expect(screen.queryByTestId('category-match-list')).not.toBeInTheDocument()
   })
 
@@ -269,15 +285,15 @@ describe('MenuSurface — the manager', () => {
     const confirm = screen.getByTestId('confirm-category-choice')
     expect(confirm).toBeDisabled()
 
-    await user.click(screen.getByTestId('use-category-Shawarma'))
+    await user.click(screen.getByTestId('use-category-Shawarmas'))
     expect(screen.getByTestId(`menu-item-${MENU_ITEM_CLASSIC_ID}`)).toBeInTheDocument()
     expect(screen.queryByText('Spicy Chicken Shawarma')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Use “Shawarma”' }))
+    await user.click(screen.getByRole('button', { name: 'Use “Shawarmas”' }))
 
     const added = await screen.findByText('Spicy Chicken Shawarma')
     expect(
       within(added.closest('[data-testid^="category-"]')!).getByRole('heading', { level: 2 }),
-    ).toHaveTextContent('Shawarma')
+    ).toHaveTextContent('Shawarmas')
     expect(
       within(list).queryByRole('heading', { level: 2, name: 'Shwarma' }),
     ).not.toBeInTheDocument()
@@ -313,20 +329,26 @@ describe('MenuSurface — the manager', () => {
       expect(
         within(list)
           .getAllByRole('heading', { level: 2 })
-          .map((heading) => heading.textContent),
-      ).toEqual(['Burgers', 'Shawarma'])
+          .map((heading) => heading.textContent)
+          .slice(0, 2),
+      ).toEqual(['Burgers', 'Shawarmas'])
     })
 
-    await user.click(
-      screen.getByRole('button', { name: 'Actions for Fully Loaded Smashed Burger' }),
-    )
-    await user.click(screen.getByTestId('remove-d4000000-0000-4000-b000-000000000007'))
-    expect(
-      screen.getByRole('heading', { name: 'Remove Fully Loaded Smashed Burger?' }),
-    ).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Remove item' }))
+    // Every category on the real menu has two items or more, so the final one
+    // is reached by removing a pair: Arabian Favourites' two.
+    for (const [key, name] of [
+      ['chicken-batata-harra', 'Chicken Batata Harra'],
+      ['veg-batata-harra', 'Veg Batata Harra'],
+    ] as const) {
+      expect(screen.getByRole('heading', { name: 'Arabian Favourites' })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: `Actions for ${name}` }))
+      await user.click(screen.getByTestId(`remove-${menuItemId(OUTLET_KALYANI_ID, key)}`))
+      expect(screen.getByRole('heading', { name: `Remove ${name}?` })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Remove item' }))
+      await waitFor(() => expect(screen.queryByText(name)).not.toBeInTheDocument())
+    }
     await waitFor(() => {
-      expect(screen.queryByRole('heading', { name: 'Burgers' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Arabian Favourites' })).not.toBeInTheDocument()
     })
   })
 })
@@ -360,7 +382,7 @@ describe('MenuSurface — discounts across the menu', () => {
     // Named for what it is: a discount the owner runs across the menu, not the
     // one a biller puts on a single bill.
     expect(within(card).getByRole('heading', { name: 'Menu Discounts' })).toBeInTheDocument()
-    // The fixture runs 15% across Shawarma, so the row says what and where.
+    // The fixture runs 15% across Burgers, so the row says what and where.
     expect(card).toHaveTextContent('15% off · Burgers')
     // No sale, no offer, no promotion — anywhere on the surface.
     expect(document.body.textContent).not.toMatch(/\b(sale|offer|promotion)\b/i)
@@ -400,8 +422,8 @@ describe('MenuSurface — discounts across the menu', () => {
 
     await user.click(screen.getByTestId('select-all-categories'))
     // The real figure, worked out from the categories now covered: the cheapest
-    // active item on the demo menu is the ₹139 Classic Chicken Shawarma.
-    expect(screen.getByTestId('discount-limit')).toHaveTextContent('Up to ₹139')
+    // active item on the demo menu is the ₹10 Water.
+    expect(screen.getByTestId('discount-limit')).toHaveTextContent('Up to ₹10')
   })
 
   it('refuses a rupee discount above the cheapest item inside the form, before saving', async () => {
@@ -418,7 +440,7 @@ describe('MenuSurface — discounts across the menu', () => {
     // In the sheet, naming the actual limit — not on the page after the sheet
     // has closed, where it would describe a form the reader can no longer see.
     await waitFor(() => {
-      expect(screen.getByTestId('form-sheet-error')).toHaveTextContent(/more than ₹139/i)
+      expect(screen.getByTestId('form-sheet-error')).toHaveTextContent(/more than ₹10\b/i)
     })
     expect(screen.getByTestId('save-discount')).toBeInTheDocument()
     expect(screen.queryByTestId('menu-error')).not.toBeInTheDocument()

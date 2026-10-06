@@ -188,7 +188,7 @@ export const billSeeds: BillSeed[] = [
     daysAgo: 3,
     time: '19:30',
     paymentMethod: 'cash',
-    lines: [{ item: 'mozzarella', quantity: 2 }],
+    lines: [{ item: 'cheese', quantity: 2 }],
     customerPhone: DEMO_MEMBER_CUSTOMER_PHONE,
   },
   {
@@ -233,7 +233,7 @@ export const billSeeds: BillSeed[] = [
     paymentMethod: 'cash',
     lines: [
       { item: 'burger', quantity: 1 },
-      { item: 'mozzarella', quantity: 1 },
+      { item: 'cheese', quantity: 1 },
     ],
   },
 
@@ -264,7 +264,7 @@ export const billSeeds: BillSeed[] = [
     daysAgo: 1,
     time: '19:24',
     paymentMethod: 'cash',
-    lines: [{ item: 'mozzarella', quantity: 3 }],
+    lines: [{ item: 'cheese', quantity: 3 }],
   },
   {
     daysAgo: 1,
@@ -319,11 +319,12 @@ export const billSeeds: BillSeed[] = [
     daysAgo: 0,
     time: '12:20',
     paymentMethod: 'upi',
-    lines: [{ item: 'mozzarella', quantity: 2 }],
+    lines: [{ item: 'cheese', quantity: 3 }],
     // One discounted sale in the demo day, so the Ledger's giveaway figure is a
-    // real number and the round-up line has something to round. Two at ₹199 is
-    // ₹398; ten percent is ₹39.80, leaving ₹358.20, which the bill carries up
-    // to ₹359. The day's UPI takings are ₹39 lighter for it.
+    // real number and the round-up line has something to round. Three at ₹175
+    // is ₹525; ten percent is ₹52.50, leaving ₹472.50, which the bill carries
+    // up to ₹473. The day's UPI takings are ₹52 lighter for it. (Three, not
+    // two: two would be ₹350, whose tenth is whole and leaves nothing to round.)
     discountBp: 1000,
   },
   {
@@ -362,7 +363,7 @@ export const billSeeds: BillSeed[] = [
     paymentMethod: 'cash',
     lines: [
       { item: 'classic', quantity: 5 },
-      { item: 'mozzarella', quantity: 2 },
+      { item: 'cheese', quantity: 2 },
     ],
   },
   {
@@ -420,7 +421,7 @@ export const billSeeds: BillSeed[] = [
     daysAgo: 2,
     time: '19:40',
     paymentMethod: 'upi',
-    lines: [{ item: 'mozzarella', quantity: 1 }],
+    lines: [{ item: 'cheese', quantity: 1 }],
   },
 
   // ── Kanchrapara, yesterday — quieter, and it balanced ────────────────────
@@ -455,7 +456,7 @@ export const billSeeds: BillSeed[] = [
     daysAgo: 1,
     time: '20:35',
     paymentMethod: 'upi',
-    lines: [{ item: 'mozzarella', quantity: 2 }],
+    lines: [{ item: 'cheese', quantity: 2 }],
   },
 
   // ── Kanchrapara, today ───────────────────────────────────────────────────

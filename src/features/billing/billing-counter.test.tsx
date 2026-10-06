@@ -12,7 +12,7 @@ import {
   MENU_ITEM_BURGER_ID,
   MENU_ITEM_CLASSIC_ID,
   MENU_ITEM_MAYO_ID,
-  MENU_ITEM_STUFFED_ID,
+  MENU_ITEM_LEBANESE_ID,
 } from '@/data-access/mock/fixtures/menu'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { createMockBillingAdapter } from '@/data-access/mock/billing'
@@ -173,7 +173,7 @@ describe('BillingCounter', () => {
     await person.click(within(payment).getByRole('button', { name: 'Cash' }))
     await person.click(within(payment).getByRole('button', { name: 'Paid' }))
     await waitFor(() => expect(pay).toHaveBeenCalledTimes(1))
-    expect(pay.mock.calls[0]![1]).toEqual([{ method: 'cash', amountPaise: 27800 }])
+    expect(pay.mock.calls[0]![1]).toEqual([{ method: 'cash', amountPaise: 27000 }])
     expect(revise).toHaveBeenCalledTimes(1)
   })
   it('retains the customer and benefits on an existing order while collection is off', async () => {
@@ -239,7 +239,7 @@ describe('BillingCounter', () => {
     expect(within(question).getByText(/bill and points on their phone/)).toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: 'Record payment' })).toBeNull()
     await person.click(within(question).getByTestId('customer-dismiss'))
-    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹139')
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹135')
     expect(screen.getByTestId('customer-row')).toHaveTextContent('Enter Customer Info')
     await person.click(screen.getByTestId('settle'))
     question = screen.getByRole('dialog', { name: 'Receipt and points' })
@@ -254,7 +254,7 @@ describe('BillingCounter', () => {
     expect(settleBill.mock.calls[0]![0]).toMatchObject({
       customerPhone: '+919000000000',
       customerName: 'Payment customer',
-      payments: [{ method: 'cash', amountPaise: 13900 }],
+      payments: [{ method: 'cash', amountPaise: 13500 }],
     })
   })
 
@@ -283,13 +283,13 @@ describe('BillingCounter', () => {
     tender = screen.getByRole('dialog', { name: 'Record payment' })
     expect(within(tender).queryByRole('list', { name: 'Payment split' })).toBeNull()
     expect(within(tender).getByRole('button', { name: 'Paid' })).toBeDisabled()
-    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹119')
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹115')
     await person.click(within(tender).getByRole('button', { name: 'Cash' }))
     await person.click(within(tender).getByRole('button', { name: 'Paid' }))
     expect(settleBill.mock.calls[0]![0]).toMatchObject({
       customerTier: 'gold',
       discounts: [expect.objectContaining({ source: 'points', amountPaise: 2000 })],
-      payments: [{ method: 'cash', amountPaise: 11900 }],
+      payments: [{ method: 'cash', amountPaise: 11500 }],
     })
   })
 
@@ -392,7 +392,7 @@ describe('BillingCounter', () => {
 
     const classic = await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`)
     await person.click(classic)
-    expect(screen.getByTestId(`bill-line-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('₹139')
+    expect(screen.getByTestId(`bill-line-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('₹135')
 
     const liveItem = store.menuItems.find((item) => item.id === MENU_ITEM_CLASSIC_ID)
     if (!liveItem) throw new Error('Expected the classic item')
@@ -401,7 +401,7 @@ describe('BillingCounter', () => {
     act(() => document.dispatchEvent(new Event('visibilitychange')))
     await waitFor(() => expect(listMenu).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(classic).toHaveTextContent('₹149'))
-    expect(screen.getByTestId(`bill-line-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('₹139')
+    expect(screen.getByTestId(`bill-line-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('₹135')
   })
 
   it('treats a reported change as a re-read nudge and preserves work in progress', async () => {
@@ -434,7 +434,7 @@ describe('BillingCounter', () => {
 
     await waitFor(() => expect(classic).toBeDisabled())
     await waitFor(() => expect(listOrders.mock.calls.length).toBeGreaterThan(beforeOrders))
-    expect(screen.getByTestId(`bill-line-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('₹139')
+    expect(screen.getByTestId(`bill-line-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('₹135')
     expect(screen.getByTestId(`bill-quantity-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('1')
   })
 
@@ -458,29 +458,29 @@ describe('BillingCounter', () => {
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
     await person.click(screen.getByTestId(`tile-${MENU_ITEM_MAYO_ID}`))
-    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹298')
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹290')
 
     await person.click(screen.getByRole('button', { name: 'One more Classic Chicken Shawarma' }))
-    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹437')
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹425')
 
     await person.click(
       screen.getByRole('button', { name: 'One fewer Mayonnaise Chicken Shawarma' }),
     )
     expect(screen.queryByTestId(`bill-line-${MENU_ITEM_MAYO_ID}`)).not.toBeInTheDocument()
-    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹278')
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹270')
   })
 
   it('will not sell an unavailable item, and still shows it labelled Unavailable', async () => {
     const person = user()
     renderCounter()
 
-    const off = await screen.findByTestId(`tile-${MENU_ITEM_STUFFED_ID}`)
+    const off = await screen.findByTestId(`tile-${MENU_ITEM_LEBANESE_ID}`)
     expect(off).toBeDisabled()
-    expect(off).toHaveAccessibleName('Stuffed Lebanese Chicken Shawarma — unavailable')
+    expect(off).toHaveAccessibleName('Lebanese Chicken Shawarma — unavailable')
     expect(off).toHaveTextContent('Unavailable')
 
     await person.click(off)
-    expect(screen.queryByTestId(`bill-line-${MENU_ITEM_STUFFED_ID}`)).not.toBeInTheDocument()
+    expect(screen.queryByTestId(`bill-line-${MENU_ITEM_LEBANESE_ID}`)).not.toBeInTheDocument()
   })
 
   it('keeps optional ordering identification and allows Paid to ask for the number first', async () => {
@@ -540,7 +540,7 @@ describe('BillingCounter', () => {
     // carrying an id and nothing to print is a receipt nobody can read.
     expect(draft.customerName).toBe('Demo Regular')
     expect(draft.customerPhone).toBe('+919000000000')
-    expect(draft.payments).toEqual([{ method: 'upi', amountPaise: 13900 }])
+    expect(draft.payments).toEqual([{ method: 'upi', amountPaise: 13500 }])
   })
 
   it('keeps payment unconfirmed until a tender allocation covers the bill', async () => {
@@ -605,7 +605,7 @@ describe('BillingCounter', () => {
 
     expect((settleBill.mock.calls[0]![0] as BillDraft).payments).toEqual([
       { method: 'cash', amountPaise: 10000 },
-      { method: 'upi', amountPaise: 3900 },
+      { method: 'upi', amountPaise: 3500 },
     ])
   })
 
@@ -816,7 +816,7 @@ describe('BillingCounter', () => {
     // the customer and the tender-edit action.
     const paidBill = (await screen.findAllByText('Demo Regular'))
       .map((name) => name.closest('details'))
-      .find((details) => details?.querySelector('summary')?.textContent?.includes('₹278'))
+      .find((details) => details?.querySelector('summary')?.textContent?.includes('₹270'))
     if (!paidBill) throw new Error('Expected the new paid bill in shift history')
     await person.click(await within(paidBill).findByRole('button', { name: /^Edit \(\d+ min\)$/ }))
     await skipPaymentCustomerIfAsked(person)
@@ -850,7 +850,7 @@ describe('BillingCounter', () => {
     await recordPaid(person)
 
     const draft = settleBill.mock.calls[0]![0] as BillDraft
-    expect(draft.lines[0]!.unitPricePaise).toBe(13900)
+    expect(draft.lines[0]!.unitPricePaise).toBe(13500)
     expect(draft.lines[0]!.itemName).toBe('Classic Chicken Shawarma')
   })
 
@@ -912,7 +912,7 @@ describe('BillingCounter', () => {
     // No age: the list is newest first already.
     expect(saved).not.toHaveTextContent(/\bnow\b/)
     expect(within(saved).queryByText('Demo Biller')).not.toBeInTheDocument()
-    expect(saved).toHaveTextContent('₹298')
+    expect(saved).toHaveTextContent('₹290')
 
     // Delivered, it has left the queue and carries its permanent daily number.
     await vi.advanceTimersByTimeAsync(500)
@@ -1157,7 +1157,7 @@ describe('BillingCounter', () => {
     await person.click(screen.getByTestId('add-discount'))
     await person.click(screen.getByTestId('discount-preset-percent-1000'))
     await person.click(screen.getByTestId('apply-discount'))
-    await waitFor(() => expect(screen.getByTestId('bill-total')).toHaveTextContent('₹126'))
+    await waitFor(() => expect(screen.getByTestId('bill-total')).toHaveTextContent('₹122'))
 
     // Taking the last line off closes the panel: there is no bill in progress
     // any more, and everything that belonged to it goes with it.
@@ -1168,7 +1168,7 @@ describe('BillingCounter', () => {
 
     // The next customer never asked for the last one's discount, and nobody
     // would think to check their bill for it.
-    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹139')
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹135')
     expect(screen.queryByTestId('bill-discount-row-0')).not.toBeInTheDocument()
     // And they are not the last customer either.
     expect(screen.getByTestId('customer-row')).toHaveTextContent('Enter Customer Info')
@@ -1296,10 +1296,10 @@ describe('BillingCounter — discounts', () => {
     expect(within(rows).getByText('Menu Discount (15%)')).toBeInTheDocument()
     expect(within(rows).getByText('Burgers')).toBeInTheDocument()
 
-    // ₹250 + ₹139 = ₹389, less 15% of the burger (₹37.50) is ₹351.50,
-    // which the round-up carries to ₹352.
+    // ₹250 + ₹135 = ₹385, less 15% of the burger (₹37.50) is ₹347.50,
+    // which the round-up carries to ₹348.
     expect(within(rows).getByTestId('discount-row-rounding')).toBeInTheDocument()
-    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹352')
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹348')
   })
 
   it('offers a biller no way to change the owner’s discount', async () => {
@@ -1317,7 +1317,7 @@ describe('BillingCounter — discounts', () => {
     renderCounter()
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹139')
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹135')
 
     await person.click(screen.getByTestId('add-discount'))
     // The readout starts at nought and carries its unit.
@@ -1335,9 +1335,9 @@ describe('BillingCounter — discounts', () => {
 
     await person.click(screen.getByTestId('apply-discount'))
 
-    // ₹139 less 10% is ₹125.10, carried up to ₹126.
+    // ₹135 less 10% is ₹121.50, carried up to ₹122.
     await waitFor(() => {
-      expect(screen.getByTestId('bill-total')).toHaveTextContent('₹126')
+      expect(screen.getByTestId('bill-total')).toHaveTextContent('₹122')
     })
     expect(screen.getByTestId('discount-row-bill-0')).toHaveTextContent('Discount (10%)')
     expect(screen.getByTestId('discount-row-bill-0')).toHaveTextContent('On this bill')
@@ -1357,10 +1357,10 @@ describe('BillingCounter — discounts', () => {
     await person.click(screen.getByTestId('discount-preset-percent-1500'))
     await person.click(screen.getByTestId('apply-discount'))
 
-    // Additive against the gross subtotal: 25% off ₹139 is ₹34.75, leaving
-    // ₹104.25, carried up to ₹105. Not 23.5% compounded.
+    // Additive against the gross subtotal: 25% off ₹135 is ₹33.75, leaving
+    // ₹101.25, carried up to ₹102. Not 23.5% compounded.
     await waitFor(() => {
-      expect(screen.getByTestId('bill-total')).toHaveTextContent('₹105')
+      expect(screen.getByTestId('bill-total')).toHaveTextContent('₹102')
     })
   })
 
@@ -1394,11 +1394,11 @@ describe('BillingCounter — discounts', () => {
     await person.click(screen.getByTestId('discount-preset-percent-1000'))
     await person.click(screen.getByTestId('apply-discount'))
 
-    await waitFor(() => expect(screen.getByTestId('bill-total')).toHaveTextContent('₹126'))
+    await waitFor(() => expect(screen.getByTestId('bill-total')).toHaveTextContent('₹122'))
     await person.click(screen.getByRole('button', { name: 'Remove Discount (10%)' }))
 
     await waitFor(() => {
-      expect(screen.getByTestId('bill-total')).toHaveTextContent('₹139')
+      expect(screen.getByTestId('bill-total')).toHaveTextContent('₹135')
     })
   })
 
@@ -1450,7 +1450,7 @@ describe('BillingCounter — a discount survives the whole journey', () => {
     await person.click(screen.getByTestId('add-discount'))
     await person.click(screen.getByTestId('discount-preset-percent-1000'))
     await person.click(screen.getByTestId('apply-discount'))
-    await waitFor(() => expect(screen.getByTestId('bill-total')).toHaveTextContent('₹126'))
+    await waitFor(() => expect(screen.getByTestId('bill-total')).toHaveTextContent('₹122'))
 
     await skipCustomer(person)
     await person.click(screen.getByTestId('save-order'))
@@ -1506,7 +1506,7 @@ describe('BillingCounter — a discount survives the whole journey', () => {
     await person.click(screen.getByTestId('add-discount'))
     await person.click(screen.getByTestId('discount-preset-percent-1000'))
     await person.click(screen.getByTestId('apply-discount'))
-    await waitFor(() => expect(screen.getByTestId('bill-total')).toHaveTextContent('₹126'))
+    await waitFor(() => expect(screen.getByTestId('bill-total')).toHaveTextContent('₹122'))
 
     await skipCustomer(person)
     await person.click(screen.getByTestId('save-order'))
@@ -1515,13 +1515,13 @@ describe('BillingCounter — a discount survives the whole journey', () => {
     // The next sale starts at the list price. A discount inherited here would be
     // given to somebody who never asked and would never be checked.
     await person.click(screen.getByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹139')
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹135')
     expect(screen.queryByTestId('discount-row-bill-0')).not.toBeInTheDocument()
   })
 })
 
 describe('BillingCounter — how the outlet serves (#60)', () => {
-  /** Kalyani in the demo: every switch on. */
+  /** Every switch on, ₹5 a bag: Kanchrapara in the demo. */
   const SERVING: OutletServiceSettings = {
     collectCustomerDetails: true,
     dineInOffered: true,
@@ -1552,7 +1552,7 @@ describe('BillingCounter — how the outlet serves (#60)', () => {
     expect(screen.queryByTestId('service-chip-dine_in')).toBeNull()
     expect(screen.queryByTestId('service-chip-takeaway')).toBeNull()
     expect(screen.queryByTestId('bill-line-packaging')).toBeNull()
-    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹139')
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹135')
   })
 
   it('adds one bag, last, when the order is marked takeaway, and counts bags like any line', async () => {
@@ -1573,7 +1573,7 @@ describe('BillingCounter — how the outlet serves (#60)', () => {
     expect(screen.getByTestId('bill-quantity-packaging')).toHaveTextContent('1')
     await person.click(screen.getByRole('button', { name: 'One more Packaging' }))
     expect(screen.getByTestId('bill-quantity-packaging')).toHaveTextContent('2')
-    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹149')
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹145')
 
     await skipCustomer(person)
     await person.click(screen.getByTestId('save-order'))
@@ -1599,7 +1599,7 @@ describe('BillingCounter — how the outlet serves (#60)', () => {
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
     await person.click(screen.getByTestId('service-chip-dine_in'))
     expect(screen.queryByTestId('bill-line-packaging')).toBeNull()
-    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹139')
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹135')
 
     await person.click(screen.getByTestId('service-chip-takeaway'))
     expect(screen.getByTestId('bill-quantity-packaging')).toHaveTextContent('1')
@@ -1702,13 +1702,13 @@ describe('BillingCounter — how the outlet serves (#60)', () => {
     await identifyCustomer(person, '9000000101')
     expect(screen.getByTestId('bill-line-packaging')).toHaveAttribute('data-waived')
     expect(screen.getByTestId('bill-line-packaging')).toHaveTextContent('Free')
-    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹139')
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹135')
     // No row claims a menu discount the owner never ran.
     expect(screen.queryByTestId('bill-discount-rows')).toBeNull()
 
     await skipCustomer(person)
     expect(screen.getByTestId('bill-line-packaging')).not.toHaveAttribute('data-waived')
-    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹144')
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹140')
 
     await identifyCustomer(person, '9000000101')
     await person.click(screen.getByTestId('save-order'))

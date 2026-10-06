@@ -167,12 +167,12 @@ describe('the day’s figures sit outside the tabs', () => {
 
     const totals = screen.getByRole('region', { name: 'Payment totals' })
     expect(within(totals).getByTestId('billing-total-cash')).toHaveTextContent('Cash')
-    expect(within(totals).getByTestId('billing-total-cash')).toHaveTextContent('₹3,711')
+    expect(within(totals).getByTestId('billing-total-cash')).toHaveTextContent('₹3,595')
     expect(within(totals).getByTestId('billing-total-upi')).toHaveTextContent('UPI')
-    // ₹39 lighter than the undiscounted day: one UPI sale in the demo carries a
+    // ₹52 lighter than the undiscounted day: one UPI sale in the demo carries a
     // ten percent discount, which is what makes the Ledger's giveaway figure a
     // real number rather than a nought.
-    expect(within(totals).getByTestId('billing-total-upi')).toHaveTextContent('₹1,733')
+    expect(within(totals).getByTestId('billing-total-upi')).toHaveTextContent('₹1,823')
     expect(within(totals).getByTestId('billing-total-combined')).toHaveTextContent('Total')
     expect(within(totals).getByTestId('billing-total-average')).toHaveTextContent('AOV')
   })
@@ -225,11 +225,11 @@ describe('the day’s figures sit outside the tabs', () => {
     const bills = within(list).getAllByRole('button', { name: /^Bill \d+Paid/ })
     expect(bills.length).toBeGreaterThan(0)
 
-    // ₹3,711 cash and ₹1,733 UPI, so the total is their sum and cannot drift
+    // ₹3,595 cash and ₹1,823 UPI, so the total is their sum and cannot drift
     // from the two cards beside it. The UPI side is net of the demo's one
     // discounted sale, as takings always are.
     expect(within(screen.getByTestId('billing-total-combined')).getByText('Total')).toBeVisible()
-    expect(within(screen.getByTestId('billing-total-combined')).getByText('₹5,444')).toBeVisible()
+    expect(within(screen.getByTestId('billing-total-combined')).getByText('₹5,418')).toBeVisible()
 
     // And the average is that total over the bills that were paid, in whole
     // paise — `formatPaise` throws on a float, so a division that leaked one
@@ -238,7 +238,7 @@ describe('the day’s figures sit outside the tabs', () => {
     const average = screen.getByTestId('billing-total-average')
     expect(within(average).getByText('AOV')).toBeVisible()
     expect(
-      within(average).getByText(formatPaise(averageBillPaise(544_400, bills.length))),
+      within(average).getByText(formatPaise(averageBillPaise(541_800, bills.length))),
     ).toBeVisible()
   })
 })
