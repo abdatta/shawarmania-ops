@@ -438,6 +438,22 @@ describe('BillingCounter', () => {
     expect(screen.getByTestId(`bill-quantity-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('1')
   })
 
+  it('reserves the menu search above the tiles while the menu is read', async () => {
+    const adapters = createMockAdapters('biller')
+    // A read that never answers, so the placeholder is all there is to see.
+    vi.spyOn(adapters.menu, 'readOutletMenu').mockReturnValue(new Promise(() => {}))
+    renderCounter(adapters)
+
+    const loading = await screen.findByTestId('menu-loading')
+    const search = within(loading).getByTestId('menu-search-loading')
+    // The field's own box — its height and its focus-ring padding — and first,
+    // where the search lands, so the column does not reflow when the menu does.
+    expect(search).toHaveClass('px-[3px]', 'pt-[3px]', 'pb-1')
+    expect(search.firstElementChild).toHaveClass('h-[var(--size-control)]')
+    const firstBlock = [...loading.children].find((node) => node.querySelector('[aria-hidden]'))
+    expect(firstBlock).toBe(search)
+  })
+
   it('adds an item on the first tap and increments on the next', async () => {
     const person = user()
     renderCounter()

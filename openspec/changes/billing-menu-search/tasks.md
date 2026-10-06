@@ -5,6 +5,7 @@
 - [x] 1.3 × and Escape clear and blur; Escape stands down for an open dialog, `details` or `role="menu"`, a modifier, a handled event, or focus in another text field.
 - [x] 1.4 The sticky bar carries the focus ring's 3px as padding, so the column's scroll does not clip the ring (found in review of the first screenshots).
 - [x] 1.5 Screenshots on tablet and phone, light and dark; approved by the owner [owner, 2026-10-06].
+- [x] 1.6 The menu's loading silhouette reserves the search field (its height and focus-ring padding) above the tiles, so the column does not reflow when the menu arrives. Missed at build and caught before archive by the shimmer rule in `docs/DESIGN_SYSTEM.md`; pinned in `billing-counter.test.tsx`, which fails without it, and measured equal to the field in a browser on tablet and desktop.
 
 ## 2. Pin
 

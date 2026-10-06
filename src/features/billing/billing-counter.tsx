@@ -1136,11 +1136,16 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
           </p>
         )}
         {menu === null ? (
-          // The menu grid's own silhouette: category headings over a grid of
-          // tiles at the tile's height. Only this pane waits — the bill panel
-          // beside it is the write path and is never replaced by a placeholder.
+          // The menu grid's own silhouette: the search field, then category
+          // headings over a grid of tiles at the tile's height. Only this pane
+          // waits — the bill panel beside it is the write path and is never
+          // replaced by a placeholder.
           <LoadingRegion label="the menu" className="space-y-3" data-testid="menu-loading">
             <OfflineFillHint />
+            {/* The search bar's own box: its focus-ring padding and its height. */}
+            <div className="px-[3px] pb-1 pt-[3px]" data-testid="menu-search-loading">
+              <Shimmer className="h-[var(--size-control)] rounded-lg" />
+            </div>
             {[6, 3].map((tiles, section) => (
               <div key={section}>
                 <Shimmer className="mb-1.5 h-4 w-24" />
