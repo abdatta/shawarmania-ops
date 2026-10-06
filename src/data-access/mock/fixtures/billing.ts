@@ -56,18 +56,6 @@ export const DEMO_MORNING_SHIFT_ID = 'd6000000-0000-4000-a000-000000000003'
 
 export const DEMO_KANCHRAPARA_SHIFT_ID = 'd6000000-0000-4000-a000-000000000002'
 
-/**
- * Every demo biller's PIN.
- *
- * A PIN selects attribution; it is not the security boundary, and the real one
- * arrives with `counter-devices-and-offline` (#9) as a hash with a real refusal
- * path behind it. This exists so the unlock and handover screens have something
- * to refuse — a PIN pad that accepts anything demonstrates a product where it
- * does — and it is one shared value so a walkthrough needs no crib sheet.
- * Recorded in `docs/DEMO_MODE.md` beside the persona names.
- */
-export const DEMO_BILLER_PIN = '1234'
-
 export const counterDeviceFixtures: Tables<'counter_devices'>[] = [
   {
     id: DEMO_COUNTER_DEVICE_ID,

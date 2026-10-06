@@ -7,7 +7,6 @@ import { BillingCounter } from '@/features/billing/billing-counter'
 import { ManagerBillingHistory } from '@/features/billing/manager-billing-history'
 import { MyShiftSurface } from '@/features/billing/my-shift-surface'
 import { OpenOrdersSurface } from '@/features/billing/open-orders-surface'
-import { ShiftUnlock } from '@/features/billing/shift-unlock'
 import { CashDrawerSurface } from '@/features/cash/cash-drawer-surface'
 import { CustomersSurface } from '@/features/customers/customers-surface'
 import { LedgerStatementSurface } from '@/features/cash/ledger-statement-surface'
@@ -90,14 +89,6 @@ export const roleSurfaceRoutes: RouteObject[] = [
     element: (
       <GatedSurface path="billing">
         <BillingCounter />
-      </GatedSurface>
-    ),
-  },
-  {
-    path: 'shift',
-    element: (
-      <GatedSurface path="shift">
-        <ShiftUnlock />
       </GatedSurface>
     ),
   },

@@ -9,7 +9,7 @@ import {
 
 import type { BillDraft, SaveOrderInput } from '../adapters'
 import { createMockBillingAdapter } from './billing'
-import { DEMO_BILLER_PIN, DEMO_MORNING_BILLER_ID, DEMO_OPEN_SHIFT_ID } from './fixtures/billing'
+import { DEMO_OPEN_SHIFT_ID } from './fixtures/billing'
 import { MENU_ITEM_CLASSIC_ID } from './fixtures/menu'
 import { personaFixtures } from './fixtures/personas'
 import { createDemoStore, DEMO_OUTLET_ID, type DemoStore } from './store'
@@ -80,33 +80,6 @@ describe('mock billing adapter', () => {
     expect(billers.map((biller) => biller.fullName)).toEqual(['Demo Biller', 'Demo Morning Biller'])
     // The Kanchrapara biller belongs to another counter entirely.
     expect(billers.map((biller) => biller.fullName)).not.toContain('Demo Evening Biller')
-  })
-
-  it('refuses a wrong PIN and an unknown biller with one identical sentence', async () => {
-    const adapter = createMockBillingAdapter(createDemoStore())
-    await adapter.closeShift(DEMO_OPEN_SHIFT_ID)
-
-    const wrongPin = adapter
-      .openShift({ outletId: DEMO_OUTLET_ID, billerProfileId: DEMO_MORNING_BILLER_ID, pin: '9999' })
-      .catch((error: Error) => error.message)
-    const unknownBiller = adapter
-      .openShift({ outletId: DEMO_OUTLET_ID, billerProfileId: 'nobody', pin: DEMO_BILLER_PIN })
-      .catch((error: Error) => error.message)
-
-    expect(await wrongPin).toBe(await unknownBiller)
-  })
-
-  it('hands a shift over to the incoming biller', async () => {
-    const adapter = createMockBillingAdapter(createDemoStore())
-    await adapter.closeShift(DEMO_OPEN_SHIFT_ID)
-    expect(adapter.getCounterState().shift).toBeNull()
-
-    await adapter.openShift({
-      outletId: DEMO_OUTLET_ID,
-      billerProfileId: DEMO_MORNING_BILLER_ID,
-      pin: DEMO_BILLER_PIN,
-    })
-    expect(adapter.getCounterState().shift?.billerName).toBe('Demo Morning Biller')
   })
 
   // Spec: counter writes are idempotent by client identity.

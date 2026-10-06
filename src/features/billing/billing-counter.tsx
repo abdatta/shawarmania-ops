@@ -10,10 +10,8 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from 'react'
-import { Link } from 'react-router'
 
 import { EmptyState } from '@/components/layout/empty-state'
-import { buttonVariants } from '@/components/ui/button-variants'
 import { Button } from '@/components/ui/button'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { useAdapters, type Tables } from '@/data-access'
@@ -1050,17 +1048,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
       <div className="flex h-full items-center justify-center" data-testid="no-shift">
         <EmptyState
           icon={KeyRound}
-          title="No shift is open, so there is nobody to credit these bills to. Open one — it takes a name and a PIN — and the counter is ready."
-          action={
-            <Link
-              to="../shift"
-              relative="path"
-              className={buttonVariants({ size: 'control' })}
-              data-testid="open-shift-link"
-            >
-              Open a shift
-            </Link>
-          }
+          title="No shift is open, so there is nobody to credit these bills to. The next operator opens one by confirming this tablet’s code on their own phone."
         />
       </div>
     )

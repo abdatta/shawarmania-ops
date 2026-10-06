@@ -1684,18 +1684,8 @@ export interface BillingAdapter {
   getCounterState(): CounterState
   /** Subscribe to counter changes. Returns the unsubscribe function. */
   subscribeCounter(listener: () => void): () => void
-  /** The outlet's billers, for the shift-unlock grid. */
+  /** The outlet's billers, for manager billing history. */
   listBillers(outletId: string): Promise<CounterBiller[]>
-  /**
-   * Open a shift. The PIN selects attribution and is not the security boundary
-   * — the device's own session is (#9). A wrong PIN and an unknown biller get
-   * one identical refusal.
-   */
-  openShift(input: {
-    outletId: string
-    billerProfileId: string
-    pin: string
-  }): Promise<CounterShift>
   closeShift(shiftId: string): Promise<void>
   /** Drain, then explain every condition relevant to Finish Day. */
   inspectFinishDay(shiftId: string): Promise<FinishDayReadiness>

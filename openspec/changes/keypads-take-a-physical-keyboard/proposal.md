@@ -34,7 +34,17 @@ a touch screen never raises its own keyboard over them, and that must stay true.
   a pad by its ten digit buttons and fails any test that opens one with a key
   unmarked (a dev build logs it instead; production skips the check), and
   `npm run lint:keypads` reads source, so a pop-up with no test is held to it
-  too. The legacy PIN page draws its pad outside a pop-up and is exempt by name.
+  too.
+- **The legacy PIN shift page is deleted** [owner, 2026-10-06], found by the
+  check above as the one pad it could not reach. Its gate had been `hidden`
+  since shifts moved to the tablet-and-phone handshake, so no route resolved to
+  it, and `counter-billing` already requires that **no counter PIN exist**.
+  Gone with it: its route and gate entry, the PIN-only `openShift` adapter
+  method (a refusal stub in the live adapter, a PIN check in the mock), the
+  demo PIN, and the counter's *Open a shift* link, which led to a page that
+  said it did not exist. The no-shift screen now says how a shift is opened:
+  from the operator's own phone. Folded into this change rather than given its
+  own, at the owner's call: it removes something stale, and adds nothing.
 - End-to-end coverage drives every pad from `page.keyboard` alone, on the
   desktop and tablet projects.
 

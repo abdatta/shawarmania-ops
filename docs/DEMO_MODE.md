@@ -174,7 +174,7 @@ Worth knowing before running one:
   persona to see the outlet fixed and the name-only edit; **Start again**
   restores every demo tablet and its original outlet. The walkthrough changes
   device context only — it never edits a historical bill or order.
-- **The old counter PIN surface is hidden.** The walkthrough uses the same
+- **The old counter PIN surface is gone.** The walkthrough uses the same
   tablet↔phone handshake story as production; no personal password or PIN is
   typed on the tablet.
 - **The Biller walkthrough is the enrolled tablet's own screen, not a copy of

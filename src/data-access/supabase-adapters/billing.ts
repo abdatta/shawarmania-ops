@@ -1413,11 +1413,6 @@ export function createSupabaseBillingAdapter(
     reporter = null
   }
 
-  const notLive = () =>
-    Promise.reject(
-      new BillingActionError('not_live', 'This shift action uses the tablet handshake.'),
-    )
-
   return {
     getCounterState: () => state,
     subscribeCounter(listener) {
@@ -1444,7 +1439,6 @@ export function createSupabaseBillingAdapter(
         }))
         .sort((left, right) => left.fullName.localeCompare(right.fullName))
     },
-    openShift: notLive,
     async inspectFinishDay(shiftId) {
       const { session, shift, store } = requireTablet()
       if (shift.id !== shiftId) {

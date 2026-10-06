@@ -46,9 +46,9 @@ function billsAt(personId: string, outletId: string): boolean {
     (assignment) => assignment.role === 'biller' && assignment.outletId === outletId,
   )
 }
-import { DEMO_BILLER_ID, DEMO_BILLER_PIN, DEMO_COUNTER_DEVICE_ID } from './fixtures/billing'
+import { DEMO_BILLER_ID, DEMO_COUNTER_DEVICE_ID } from './fixtures/billing'
 import type { DemoLoyaltyHooks } from './customers'
-import { DEMO_OUTLET_ID, nextCutover, type DemoStore } from './store'
+import { DEMO_OUTLET_ID, type DemoStore } from './store'
 
 /**
  * The mock counter: an in-memory command queue that behaves the way the real
@@ -1496,42 +1496,6 @@ export function createMockBillingAdapter(
         .filter((account) => account.is_active && billsAt(account.id, outletId))
         .map((account) => ({ profileId: account.id, fullName: account.full_name }))
         .sort((a, b) => a.fullName.localeCompare(b.fullName))
-    },
-
-    async openShift({ outletId, billerProfileId, pin }) {
-      const biller = accountFixtures.find(
-        (account) =>
-          account.id === billerProfileId && account.is_active && billsAt(account.id, outletId),
-      )
-
-      // One refusal for both failures, deliberately. Telling a wrong PIN apart
-      // from an unknown biller would confirm which names are real, on a device
-      // that lives on a counter anyone can reach across.
-      if (!biller || pin !== DEMO_BILLER_PIN) {
-        throw new BillingActionError('unlock_failed', 'That did not unlock. Check the PIN.')
-      }
-
-      if (openShiftRow()) {
-        throw new BillingActionError(
-          'shift_open',
-          'A shift is already open. Close it before opening another.',
-        )
-      }
-
-      const row: Tables<'counter_shifts'> = {
-        id: `d6000000-0000-4000-b000-${String(store.shifts.length + 1).padStart(12, '0')}`,
-        outlet_id: outletId,
-        person_id: billerProfileId,
-        device_id: DEMO_COUNTER_DEVICE_ID,
-        business_date: store.today,
-        opened_at: new Date().toISOString(),
-        expires_at: nextCutover(store.today, outletId),
-        ended_at: null,
-        ended_reason: null,
-      }
-      store.shifts.push(row)
-      emit()
-      return toShift(row)
     },
 
     async inspectFinishDay(shiftId: string) {

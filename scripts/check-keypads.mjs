@@ -14,8 +14,6 @@
  * so a pop-up nobody has written a test for is held to it too: a file drawing a
  * pad (a `Delete last digit` key, or a `... keypad` label) must mark that
  * delete key Backspace, mark an Enter action, and mark its digits.
- *
- * A pad that is deliberately not a pop-up is listed in EXEMPT with its reason.
  */
 
 import { execFileSync } from 'node:child_process'
@@ -26,13 +24,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 // Resolved when run, not at import: under Vitest `import.meta.url` is rewritten
 // to something `fileURLToPath` rejects, as `check-todos-index.mjs` notes.
 const repoRoot = () => fileURLToPath(new URL('..', import.meta.url))
-
-const EXEMPT = new Map([
-  [
-    'src/features/billing/shift-unlock.tsx',
-    'the legacy PIN page: a page rather than a pop-up, so the Modal key routing does not reach it',
-  ],
-])
 
 const count = (source, pattern) => source.match(pattern)?.length ?? 0
 
@@ -65,7 +56,7 @@ function main() {
     encoding: 'utf8',
   })
     .split('\0')
-    .filter((path) => path.endsWith('.tsx') && !/\.test\.tsx$/.test(path) && !EXEMPT.has(path))
+    .filter((path) => path.endsWith('.tsx') && !/\.test\.tsx$/.test(path))
 
   const violations = []
   let pads = 0
@@ -88,7 +79,7 @@ function main() {
     )
     process.exit(1)
   }
-  console.log(`Every number pad takes a physical keyboard (${pads} pads, ${EXEMPT.size} exempt).`)
+  console.log(`Every number pad takes a physical keyboard (${pads} pads).`)
 }
 
 const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : ''

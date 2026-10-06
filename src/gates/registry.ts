@@ -6,7 +6,6 @@ import {
   Contact,
   IndianRupee,
   Home,
-  KeyRound,
   LayoutDashboard,
   NotepadText,
   Settings2,
@@ -565,12 +564,6 @@ const defs = {
     role: 'biller',
     path: '',
     state: 'live',
-  },
-  'counter-shift-unlock': {
-    role: 'biller',
-    path: 'shift',
-    nav: { label: 'Shift', icon: KeyRound, order: 3 },
-    state: 'hidden',
   },
   /**
    * Open orders, and **deliberately without a navigation entry** — see

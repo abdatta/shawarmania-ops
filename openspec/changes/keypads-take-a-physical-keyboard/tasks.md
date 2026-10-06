@@ -15,13 +15,20 @@
 ## 3. Keep every future pad on it
 
 - [x] 3.1 `keypadGaps` in `useKeypadKeys`: a dialog with ten digit buttons must mark each digit, a Backspace key and an Enter action; a test that opens one that does not fails, naming what is missing. Shown to fail the points dialog's own tests with its 5 key unmarked.
-- [x] 3.2 `npm run lint:keypads` (`scripts/check-keypads.mjs`), in the `lint` chain CI runs: a source file drawing a pad must mark it. Shown to fail with the table dialog's Enter mark removed. The legacy PIN page is exempt by name, being a page rather than a pop-up.
+- [x] 3.2 `npm run lint:keypads` (`scripts/check-keypads.mjs`), in the `lint` chain CI runs: a source file drawing a pad must mark it. Shown to fail with the table dialog's Enter mark removed.
 - [x] 3.3 `AGENTS.md` lists the new lint check.
 
-## 4. End to end
+## 4. Delete the legacy PIN shift page
 
-- [x] 4.1 `e2e/counter.spec.ts`, *the counter from a physical keyboard*: customer, points and discount typed and confirmed with Enter; a keyed split payment where a mouse-focused Cash never answers Enter and a held Enter records one bill; a table keyed within the pad's rules, and Enter on a control reached with Tab staying that control's. Desktop and tablet.
+- [x] 4.1 Delete `shift-unlock.tsx` and its test, its `shift` route in `surfaces.tsx`, and the `counter-shift-unlock` gate entry, which was already `hidden`.
+- [x] 4.2 Delete the PIN-only `openShift` from `BillingAdapter`, the live adapter's refusal stub, the mock's PIN check and its two tests, and `DEMO_BILLER_PIN`. `listBillers` stays: manager billing history reads it.
+- [x] 4.3 The counter's no-shift screen loses its *Open a shift* link, which led to a page that said it did not exist, and says instead that the next operator confirms the tablet's code on their own phone. The existing test asserts there is no link.
+- [x] 4.4 No spec delta: `counter-billing` already requires that no counter PIN exist. `docs/DEMO_MODE.md` says the PIN surface is gone, and the keypad check loses its one exemption.
 
-## 5. Gate
+## 5. End to end
 
-- [x] 5.1 **Gate**: every billing pad takes typed digits, Backspace and Enter as it takes taps; a held Enter confirms once; no pad gains a text field. The whole of `verify.yml` run locally before pushing [owner, 2026-10-06]: `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run functions:typecheck`, `npm test`, `npm run contrast`, `npm run build`, `npm run test:e2e`, and the database job where this machine can run it.
+- [x] 5.1 `e2e/counter.spec.ts`, *the counter from a physical keyboard*: customer, points and discount typed and confirmed with Enter; a keyed split payment where a mouse-focused Cash never answers Enter and a held Enter records one bill; a table keyed within the pad's rules, and Enter on a control reached with Tab staying that control's. Desktop and tablet.
+
+## 6. Gate
+
+- [x] 6.1 **Gate**: every billing pad takes typed digits, Backspace and Enter as it takes taps; a held Enter confirms once; no pad gains a text field. The whole of `verify.yml` run locally before pushing [owner, 2026-10-06]: `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run functions:typecheck`, `npm test`, `npm run contrast`, `npm run build`, `npm run test:e2e`, and the database job where this machine can run it.

@@ -1275,7 +1275,10 @@ describe('BillingCounter', () => {
     const notice = await screen.findByTestId('no-shift')
     expect(within(notice).getByText(/No shift is open/i)).toBeInTheDocument()
     expect(screen.queryByTestId('settle')).not.toBeInTheDocument()
-    expect(screen.getByTestId('open-shift-link')).toBeInTheDocument()
+    // No way out to a page that no longer exists: the shift is opened from the
+    // operator's own phone, never from a PIN typed here.
+    expect(within(notice).queryByRole('link')).not.toBeInTheDocument()
+    expect(within(notice).getByText(/on their own phone/)).toBeInTheDocument()
   })
 })
 
