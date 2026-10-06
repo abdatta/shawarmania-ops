@@ -1083,6 +1083,157 @@ test.describe('the counter', () => {
 })
 
 /**
+ * The number pads from a physical keyboard (keypads-take-a-physical-keyboard):
+ * a counter billing from a laptop, or a tablet with a keyboard attached, types
+ * on every pad exactly as it taps. Every pad here is driven by `page.keyboard`
+ * alone, and opens with focus on its heading and no text field anywhere, so a
+ * touch screen has nothing to raise its own keyboard for.
+ */
+test.describe('the counter from a physical keyboard', () => {
+  /** The pad opened with nothing that would raise a device keyboard. */
+  async function expectNoTextFocus(page: Page) {
+    expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('H2')
+  }
+
+  test('types the customer number, points and a discount, and Enter confirms each', async ({
+    page,
+  }) => {
+    await page.goto('demo/biller')
+    await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
+    await expect(page.getByTestId('bill-total')).toHaveText('₹139')
+
+    await page.getByTestId('customer-row').click()
+    const customer = page.getByRole('dialog', { name: 'Customer' })
+    await expect(customer.getByRole('heading', { name: 'Customer' })).toBeFocused()
+    await expectNoTextFocus(page)
+    // Top row, then the number pad with Num Lock off, which arrives as
+    // navigation keys and is read by position.
+    await page.keyboard.type('90000001')
+    await page.keyboard.press('Numpad0')
+    await page.keyboard.press('Numpad9')
+    await page.keyboard.press('Backspace')
+    await page.keyboard.press('Numpad1')
+    await expect(customer.getByTestId('customer-phone-readout')).toHaveText('+91 90000 00101')
+    await expect(customer.getByTestId('customer-match')).toBeVisible()
+    await page.keyboard.press('Enter')
+    await expect(customer).toHaveCount(0)
+
+    await page.getByTestId('use-points').click()
+    const points = page.getByRole('dialog', { name: 'Use points' })
+    await expect(points.getByRole('heading', { name: 'Use points' })).toBeFocused()
+    await expectNoTextFocus(page)
+    await page.keyboard.press('Backspace')
+    await page.keyboard.press('Backspace')
+    await page.keyboard.type('5')
+    await expect(points.getByTestId('points-readout')).toContainText('5')
+    await page.keyboard.press('Enter')
+    await expect(points).toHaveCount(0)
+    await expect(page.getByTestId('bill-total')).toHaveText('₹134')
+
+    await page.getByTestId('add-discount').click()
+    const discount = page.getByRole('dialog', { name: 'Add discount' })
+    await expect(discount.getByRole('heading', { name: 'Add discount' })).toBeFocused()
+    await expectNoTextFocus(page)
+    // Two decimal places is the pad's own limit, and typing keeps it.
+    await page.keyboard.type('12.555')
+    await expect(discount.getByTestId('discount-readout')).toHaveText('Discount12.55%')
+    await page.keyboard.press('Backspace')
+    await expect(discount.getByTestId('discount-readout')).toHaveText('Discount12.5%')
+    await page.keyboard.press('Enter')
+    await expect(discount).toHaveCount(0)
+    await expect(page.getByTestId('bill-discount-rows')).toContainText('12.5%')
+  })
+
+  test('keys a split payment, and a held Enter records exactly one bill', async ({ page }) => {
+    await page.goto('demo/biller')
+    await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
+    await skipCustomer(page)
+    await page.getByTestId('settle').click()
+    await skipPaymentCustomerIfAsked(page)
+    const payment = page.getByRole('dialog', { name: 'Record payment' })
+    await expect(payment.getByRole('heading', { name: 'Record payment' })).toBeFocused()
+    await expectNoTextFocus(page)
+
+    // ₹509 is more than the ₹139 bill, so the pad refuses the 9 as a tap would.
+    await page.keyboard.type('509')
+    await expect(payment).toContainText('₹50')
+    await page.keyboard.press('Backspace')
+    await page.keyboard.type('2')
+    await expect(payment).toContainText('₹52')
+
+    // The mouse leaves Cash focused; Enter is still the dialog's, not Cash's,
+    // and Paid waits for the balance, so nothing is added twice.
+    await payment.getByRole('button', { name: 'Cash', exact: true }).click()
+    await page.keyboard.press('Enter')
+    const split = payment.getByRole('list', { name: 'Payment split' })
+    await expect(split).toContainText('₹52')
+    await expect(split).not.toContainText('₹104')
+    await payment.getByRole('button', { name: 'UPI', exact: true }).click()
+
+    // A held key repeats; only the first press may act.
+    await page.keyboard.down('Enter')
+    await page.keyboard.down('Enter')
+    await page.keyboard.down('Enter')
+    await page.keyboard.up('Enter')
+    await expect(payment).toHaveCount(0)
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    // One bill for one press: a repeat that paid again would put a second
+    // split bill directly beneath it.
+    const bills = page
+      .getByTestId('bill-column')
+      .locator('li')
+      .filter({ hasText: /Bill \d+/ })
+    await expect(bills.first()).toContainText('Mixed')
+    await expect(bills.nth(1)).toContainText(/Bill \d+/)
+    await expect(bills.nth(1)).not.toContainText('Mixed')
+  })
+
+  test('keys a table, and a control reached with Tab keeps its own Enter', async ({ page }) => {
+    await page.goto('demo/owner/outlets/d0000000-0000-4000-a000-000000000001')
+    await page.getByTestId('service-orders-switch').click()
+    await page.getByTestId('service-tables-switch').click()
+    await page.getByTestId('service-save').click()
+    await expect(page.getByTestId('service-save')).toBeHidden()
+    const switcher = page.getByRole('navigation', { name: 'Demo role switcher' })
+    const select = switcher.getByRole('combobox', { name: 'Demo role' })
+    if (await select.isVisible()) await select.selectOption('biller')
+    else await switcher.getByRole('link', { name: 'Biller', exact: true }).click()
+
+    await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
+    await page.getByTestId('service-chip-dine_in').click()
+    const tables = page.getByRole('dialog', { name: 'Which table' })
+    await expect(tables.getByRole('heading', { name: 'Which table?' })).toBeFocused()
+    await expectNoTextFocus(page)
+    // No leading nought, and three digits at most: the pad's rules, typed.
+    await page.keyboard.type('01234')
+    await expect(tables.getByTestId('table-readout')).toHaveText('Table 123')
+    await page.keyboard.press('Backspace')
+    await page.keyboard.press('Backspace')
+    await expect(tables.getByTestId('table-readout')).toHaveText('Table 1')
+    await page.keyboard.press('Enter')
+    await expect(tables).toHaveCount(0)
+    await expect(page.getByTestId('service-chip-dine_in')).toHaveText('Table 1')
+
+    // Tab to No table: Enter there is that button's, not the pad's Done.
+    await page.getByTestId('service-chip-dine_in').click()
+    await expect(tables.getByRole('heading', { name: 'Which table?' })).toBeFocused()
+    await page.keyboard.type('7')
+    for (let step = 0; step < 30; step += 1) {
+      await page.keyboard.press('Tab')
+      if (
+        await tables.getByTestId('table-none').evaluate((node) => node === document.activeElement)
+      )
+        break
+    }
+    await expect(tables.getByTestId('table-none')).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(tables).toHaveCount(0)
+    await expect(page.getByTestId('service-chip-dine_in')).toHaveText('No table')
+  })
+})
+
+/**
  * The demo's connectivity, which lives in the yellow indicator rather than in a
  * strip of its own. Selecting by value, so a label rewording does not silently
  * stop exercising the state it names.

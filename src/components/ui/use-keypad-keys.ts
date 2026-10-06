@@ -28,6 +28,7 @@ export function useKeypadKeys(ref: RefObject<HTMLDialogElement | null>, open: bo
   useEffect(() => {
     const dialog = ref.current
     if (!open || !dialog) return
+    if (import.meta.env.DEV) reportKeypadGaps(dialog)
     openDialogs.push(dialog)
 
     /*
@@ -101,4 +102,50 @@ function ownKeys(dialog: HTMLDialogElement): HTMLButtonElement[] {
   return [...dialog.querySelectorAll<HTMLButtonElement>('button[data-keypad-key]')].filter(
     (key) => key.closest('dialog') === dialog,
   )
+}
+
+/**
+ * What a number pad in this dialog is missing for a physical keyboard, as
+ * sentences; empty when nothing is, or when the dialog draws no pad.
+ *
+ * **A pad is recognised by its digits, not by a name or a label**: ten buttons
+ * reading 0 to 9 are a number pad whatever they are called, so a pop-up added
+ * later cannot opt out by naming its pad differently. Each digit must be marked
+ * with itself, and the dialog must mark a Backspace key and its Enter action.
+ */
+export function keypadGaps(dialog: HTMLDialogElement): string[] {
+  const own = [...dialog.querySelectorAll<HTMLButtonElement>('button')].filter(
+    (button) => button.closest('dialog') === dialog,
+  )
+  const digits = own.filter((button) => /^[0-9]$/.test(button.textContent?.trim() ?? ''))
+  if (new Set(digits.map((button) => button.textContent!.trim())).size < 10) return []
+
+  const gaps: string[] = []
+  for (const button of digits) {
+    const digit = button.textContent!.trim()
+    if (button.dataset.keypadKey !== digit) {
+      gaps.push(`the ${digit} key is not marked data-keypad-key="${digit}"`)
+    }
+  }
+  for (const key of ['Backspace', 'Enter']) {
+    if (!own.some((button) => button.dataset.keypadKey === key)) {
+      gaps.push(`no button is marked data-keypad-key="${key}"`)
+    }
+  }
+  return gaps
+}
+
+/**
+ * Every pad takes a keyboard, and a new one that does not is caught where it is
+ * built: a test that opens it fails, and a dev build says so in the console.
+ * Production never pays for the check. `npm run lint:keypads` covers the pad
+ * nobody has written a test for.
+ */
+function reportKeypadGaps(dialog: HTMLDialogElement) {
+  const gaps = keypadGaps(dialog)
+  if (gaps.length === 0) return
+  const name = dialog.getAttribute('aria-label') ?? 'A dialog'
+  const message = `${name} draws a number pad a physical keyboard cannot reach: ${gaps.join('; ')}. Mark its keys as described in use-keypad-keys.ts.`
+  if (import.meta.env.MODE === 'test') throw new Error(message)
+  console.error(message)
 }

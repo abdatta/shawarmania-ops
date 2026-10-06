@@ -30,6 +30,13 @@ a touch screen never raises its own keyboard over them, and that must stay true.
   Escape already closes the native dialog.
 - The five billing pads mark their keys: payment, points, discount, table and
   customer phone.
+- **A future pad cannot forget** [owner, 2026-10-06]. `useKeypadKeys` recognises
+  a pad by its ten digit buttons and fails any test that opens one with a key
+  unmarked (a dev build logs it instead; production skips the check), and
+  `npm run lint:keypads` reads source, so a pop-up with no test is held to it
+  too. The legacy PIN page draws its pad outside a pop-up and is exempt by name.
+- End-to-end coverage drives every pad from `page.keyboard` alone, on the
+  desktop and tablet projects.
 
 ## Non-goals
 
