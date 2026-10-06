@@ -1625,6 +1625,40 @@ export interface BillingMethodTotal {
   totalPaise: number
 }
 
+/**
+ * A bill as a manager's list row shows it, and nothing more: what
+ * `ManagerBillSummary` prints. The lines, payments, discounts, customer and
+ * receipt are the detail's, read with `getBill` when the row is opened.
+ */
+export type BillingBillSummary = Pick<
+  BillingBill,
+  | 'id'
+  | 'billNumber'
+  | 'status'
+  | 'voidKind'
+  | 'recordedAfterShiftEnd'
+  | 'paymentMethod'
+  | 'paidAt'
+  | 'billerName'
+  | 'tillLabel'
+  | 'totalPaise'
+>
+
+/**
+ * One page of a customer's bills at one outlet (the-card-lists-every-bill),
+ * as summaries. `next` is where the following page starts, or null at the end.
+ */
+export interface CustomerBillPage {
+  bills: BillingBillSummary[]
+  next: number | null
+}
+
+/**
+ * Summaries per page of a customer's history. Ten, because the card's window
+ * shows four or five and a long history should cost what is scrolled to.
+ */
+export const CUSTOMER_BILLS_PAGE_SIZE = 10
+
 export interface ShiftBillingHistory {
   bills: BillingBill[]
   totals: BillingMethodTotal[]
@@ -1752,6 +1786,16 @@ export interface BillingAdapter {
   cancelPaidOrder(orderId: string, reason: string): Promise<BillingOrder>
   listShiftHistory(shiftId: string): Promise<ShiftBillingHistory>
   listManagerHistory(filters: BillingHistoryFilters): Promise<BillingBill[]>
+  /**
+   * One customer's bills at one outlet, newest first, one page of summaries
+   * from `offset` (the-card-lists-every-bill): the history on their Customers
+   * card, read under the same authority as Billing and only when the card asks
+   * for it. **Summaries only** — a row opened reads its detail with `getBill` —
+   * so a long history costs only the rows scrolled to. The order is total —
+   * paid at, then id — so pages neither repeat nor skip a bill while nothing is
+   * rung in between.
+   */
+  listCustomerBills(outletId: string, customerId: string, offset: number): Promise<CustomerBillPage>
   getBill(billId: string): Promise<BillingBill | null>
   voidBill(billId: string, reason: string): Promise<BillingBill>
   listManagerOpenOrders(outletId: string): Promise<BillingOrder[]>

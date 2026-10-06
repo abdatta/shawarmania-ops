@@ -1,0 +1,13 @@
+# Tasks: the-card-lists-every-bill
+
+- [x] 1. Reorder the card's figures: *Last seen* and *First visit here* under the divider, then *Last 30 days*. Reshape the card's loading shimmer for the added control.
+- [x] 2. `BillingBillSummary`, `CustomerBillPage`, `CUSTOMER_BILLS_PAGE_SIZE` and `BillingAdapter.listCustomerBills` in the adapter interface.
+- [x] 3. Live: a narrow summary read (ten per page, total order, one past the page), corrected tenders and till labels by id; detail via `getBill` on open. No migration, no policy change.
+- [x] 4. Demo: store bill numbers start after `DEMO_BILL_NUMBER_BASE`; the customer directory hands the billing mock a customer's older visits as bills, and `getBill` opens them.
+- [x] 5. Extract Billing's summary row into `manager-bill-row.tsx`; `CustomerBills` reuses it with `ManagerBillDetail` (actions kept: the owner chose whichever needs less code) in a fixed-height window with its own sentinel; the card is capped at the viewport.
+- [x] 6. Owner feedback: divider toggle *See bills* / *Hide bills*; bordered window with no drawn scrollbar; keyboard focus ring on the label only; summaries-only pages of ten and detail read on open (low egress).
+- [x] 7. Screenshots of the card, the open list and an expanded bill on a phone (light, dark) and desktop, sent to the owner. GATE (owner): UI approved 2026-10-06.
+- [x] 8. Pin: the surface test (figure order; no read until pressed; summaries listed, a cancelled one marked; a row's detail read only when opened), the mock (outlet-only summaries carrying only the row's fields, newest first, paging with no bill twice, an older bill opening in full with lines summing to its total, a manager refused another outlet, a biller refused) and the live seam (customer and outlet filters, order, range of ten and one past, no detail columns, a corrected tender and the till label in the summary).
+- [x] 9. Prove the read on the real schema (local Postgres with every migration and the seed, impersonating as PostgREST does): the owner reads the customer's bill at both outlets; each manager only at their own; a biller's personal login and an employee read none; the biller's name, tenders and till labels resolve for whoever may read the bill.
+- [x] 10. Spec delta (customer-membership), `docs/SCREENS.md` card paragraph, `docs/DEMO_MODE.md` numbering.
+- [ ] 11. GATE: CI green on the pushed branch.

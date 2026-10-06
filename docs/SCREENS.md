@@ -584,9 +584,17 @@ at its foot: the name with a pencil that turns it into an input and itself into 
 tick (a name can be corrected and never erased); the number with `+91`; the
 membership as *Gold member since …* with a crossed-out star to revoke, or *Not a
 gold member* with a star to grant — the icon carries the verb, the text the state
-— and both directions confirm identically. Below, the last thirty days as visits
-and *Spent*, then last seen and customer since. A change on the card is laid over
-the rows already on screen rather than reloading the list.
+— and both directions confirm identically. Under a divider, last seen and first
+visit here, then the last thirty days as visits and *Spent*, then a divider
+labelled **See bills** (the-card-lists-every-bill). Opened, it shows this
+customer's bills at this outlet in a bordered window of its own with no drawn
+scrollbar, each as **Billing's own row** — number, Paid or Cancelled, method,
+time, biller and till, total — expanding into Billing's own detail, actions
+included. **Low egress**: nothing is read until it is opened; then ten row
+summaries, ten more only as the window nears its end, and a bill's items,
+payments and customer only when its row is first opened. The card never
+outgrows the screen: the window gives way first. A change on the card is laid over the rows already on screen rather than
+reloading the list.
 
 **Team** — every person across all outlets. Create one account at one or
 several outlets, issue a fresh one-time code, correct another person's

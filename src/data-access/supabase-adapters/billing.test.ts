@@ -6,6 +6,7 @@ import { AWAITING_ORDER_NUMBER } from '@/domain'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { CUSTOMER_BILLS_PAGE_SIZE } from '../adapters'
 import type { BillDraft, BillingOrder, PaymentMethod } from '../adapters'
 import type { Database } from '../database.types'
 import {
@@ -1639,5 +1640,116 @@ describe('the pipeline read asks the server for the pipeline', () => {
     } finally {
       database?.close()
     }
+  })
+})
+
+/**
+ * A customer's bills on their card (the-card-lists-every-bill): summaries only,
+ * a page at a time, so a long history costs only what is scrolled to. The scope
+ * is `bills_select`'s and is proved where it lives; what is pinned here is the
+ * shape of the request and of the answer.
+ */
+describe('a customer’s bills, as summaries', () => {
+  function customerBillsClient(
+    rows: unknown[],
+    corrected: { bill_id: string; method: string }[] = [],
+  ) {
+    const asked: { method: string; args: unknown[] }[] = []
+    const record =
+      <T>(method: string, then: T) =>
+      (...args: unknown[]) => {
+        asked.push({ method, args })
+        return then
+      }
+    const bills: Record<string, unknown> = {}
+    bills['select'] = record('select', bills)
+    bills['eq'] = record('eq', bills)
+    bills['order'] = record('order', bills)
+    bills['range'] = (...args: unknown[]) => {
+      asked.push({ method: 'range', args })
+      return Promise.resolve({ data: rows, error: null })
+    }
+    const payments = {
+      select: () => payments,
+      in: (_column: string, ids: string[]) => {
+        asked.push({ method: 'payments', args: [ids] })
+        return Promise.resolve({ data: corrected, error: null })
+      },
+    }
+    const from = vi.fn((table: string) => (table === 'bills' ? bills : payments))
+    const rpc = vi.fn(async () => ({
+      data: [{ event_id: 'b-0', label: 'Counter 2' }],
+      error: null,
+    }))
+    const billing = createSupabaseBillingAdapter({
+      from,
+      rpc,
+    } as unknown as SupabaseClient<Database>)
+    return { billing, asked, rpc }
+  }
+
+  const row = (n: number, extra: Record<string, unknown> = {}) => ({
+    id: `b-${n}`,
+    bill_number: 100 - n,
+    status: 'settled',
+    void_kind: null,
+    recorded_after_shift_end: false,
+    paid_at: '2026-10-01T08:00:00.000Z',
+    total_paise: 46_800,
+    payment_method: 'cash',
+    bill_payments: [{ method: 'cash' }],
+    biller: { full_name: 'Priya Das' },
+    ...extra,
+  })
+
+  it('reads one customer at one outlet, newest first, ten and one past them', async () => {
+    const { billing, asked } = customerBillsClient(
+      Array.from({ length: CUSTOMER_BILLS_PAGE_SIZE + 1 }, (_, n) => row(n)),
+    )
+    const page = await billing.listCustomerBills('outlet-1', 'customer-1', 10)
+
+    expect(asked).toContainEqual({ method: 'eq', args: ['outlet_id', 'outlet-1'] })
+    expect(asked).toContainEqual({ method: 'eq', args: ['customer_id', 'customer-1'] })
+    expect(asked.filter((call) => call.method === 'order').map((call) => call.args[0])).toEqual([
+      'paid_at',
+      'id',
+    ])
+    expect(asked).toContainEqual({ method: 'range', args: [10, 10 + CUSTOMER_BILLS_PAGE_SIZE] })
+    expect(page.bills).toHaveLength(CUSTOMER_BILLS_PAGE_SIZE)
+    expect(page.next).toBe(20)
+    // Only the page's own bills are asked about, never the row past it.
+    const ids = asked.find((call) => call.method === 'payments')!.args[0] as string[]
+    expect(ids).toHaveLength(CUSTOMER_BILLS_PAGE_SIZE)
+  })
+
+  it('asks for what the row prints and none of the detail', async () => {
+    const { billing, asked } = customerBillsClient([row(0)])
+    await billing.listCustomerBills('outlet-1', 'customer-1', 0)
+    const columns = String(asked.find((call) => call.method === 'select')!.args[0])
+    expect(columns).not.toMatch(
+      /bill_items|bill_discounts|customer_phone|customer_name|bill_public_links|attribution/,
+    )
+  })
+
+  it('answers the summary the row prints, a corrected tender and the till included', async () => {
+    const { billing } = customerBillsClient(
+      [row(0), row(1, { status: 'void', void_kind: 'manager_void' })],
+      [{ bill_id: 'b-0', method: 'upi' }],
+    )
+    const page = await billing.listCustomerBills('outlet-1', 'customer-1', 0)
+    expect(page.next).toBeNull()
+    expect(page.bills[0]).toEqual({
+      id: 'b-0',
+      billNumber: 100,
+      status: 'settled',
+      voidKind: null,
+      recordedAfterShiftEnd: false,
+      paymentMethod: 'upi',
+      paidAt: '2026-10-01T08:00:00.000Z',
+      billerName: 'Priya Das',
+      tillLabel: 'Counter 2',
+      totalPaise: 46_800,
+    })
+    expect(page.bills[1]).toMatchObject({ status: 'void', paymentMethod: 'cash', tillLabel: null })
   })
 })

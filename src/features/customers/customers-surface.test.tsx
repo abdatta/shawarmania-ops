@@ -278,6 +278,64 @@ describe('CustomersSurface', () => {
     expect(within(card).getByTestId('customer-card-points')).toHaveTextContent('Points')
   })
 
+  it('reads the dates above the month, under the divider', async () => {
+    const user = userEvent.setup()
+    renderSurface()
+    const card = await openCard(user, 'members', RITIKA)
+
+    const text = within(card).getByTestId('customer-card-figures').textContent ?? ''
+    expect(text.indexOf('Last seen')).toBeLessThan(text.indexOf('Last 30 days'))
+    expect(text.indexOf('First visit here')).toBeLessThan(text.indexOf('Last 30 days'))
+  })
+
+  it('reads bill summaries only when asked, and a bill’s detail only when it is opened', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('super_admin', createDemoData())
+    const asked: number[] = []
+    const bills = adapters.billing.listCustomerBills.bind(adapters.billing)
+    adapters.billing.listCustomerBills = (outletId, customerId, offset) => {
+      asked.push(offset)
+      return bills(outletId, customerId, offset)
+    }
+    renderSurface(adapters)
+    const card = await openCard(user, 'members', RITIKA)
+
+    // Opening the card reads no bill.
+    expect(asked).toEqual([])
+    const toggle = within(card).getByTestId('customer-card-bills-toggle')
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(within(card).queryByTestId('customer-card-bills')).toBeNull()
+
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    const list = await within(card).findByTestId('customer-card-bills')
+    const rows = await within(list).findAllByTestId('customer-card-bill')
+    expect(asked).toEqual([0])
+    expect(rows.length).toBeGreaterThan(1)
+    // Her voided Kalyani bill is in the history, and says so.
+    expect(within(list).getAllByText('Cancelled').length).toBeGreaterThan(0)
+    expect(rows[0]).toHaveTextContent('₹')
+
+    // A row's detail is read when it is opened, and only then.
+    const details: string[] = []
+    const getBill = adapters.billing.getBill.bind(adapters.billing)
+    adapters.billing.getBill = (billId) => {
+      details.push(billId)
+      return getBill(billId)
+    }
+    await user.click(within(rows[0]!).getAllByRole('button')[0]!)
+    expect(await within(rows[0]!).findByText('Order items')).toBeInTheDocument()
+    expect(details).toHaveLength(1)
+
+    // Hidden, then shown again, it reads nothing a second time.
+    await user.click(toggle)
+    expect(within(card).getByTestId('customer-card-bills')).not.toBeVisible()
+    await user.click(toggle)
+    expect(within(card).getByTestId('customer-card-bills')).toBeVisible()
+    expect(asked).toEqual([0])
+    expect(details).toHaveLength(1)
+  })
+
   it('shows no gold at an outlet with gold off', async () => {
     const data = createDemoData()
     const settings = data.store.loyaltySettings.get(OUTLET_KALYANI_ID)!

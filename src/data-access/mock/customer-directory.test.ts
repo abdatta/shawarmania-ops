@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  CUSTOMER_BILLS_PAGE_SIZE,
   CustomerActionError,
   DIRECTORY_PAGE_SIZE,
   DIRECTORY_SEARCH_LIMIT,
@@ -386,6 +387,80 @@ describe('the owner customer path — the card and its figures', () => {
     for (const profile of data.customers.byPhone.values()) {
       expect(Object.keys(profile).sort()).toEqual(['createdAt', 'id', 'name', 'phone'])
     }
+  })
+})
+
+describe('a customer’s bills on their card (the-card-lists-every-bill)', () => {
+  const SUMMARY_KEYS = [
+    'billNumber',
+    'billerName',
+    'id',
+    'paidAt',
+    'paymentMethod',
+    'recordedAfterShiftEnd',
+    'status',
+    'tillLabel',
+    'totalPaise',
+    'voidKind',
+  ]
+
+  it('lists every bill at the outlet as a summary, newest first, a cancelled one marked', async () => {
+    const { data, adapters } = session()
+    const page = await adapters.billing.listCustomerBills(K, RITIKA, 0)
+
+    const older = data.customers.olderVisits.filter(
+      (visit) => visit.customerId === RITIKA && visit.outletId === K,
+    )
+    const rung = data.store.bills.filter(
+      (bill) => bill.customer_id === RITIKA && bill.outlet_id === K,
+    )
+    expect(page.bills).toHaveLength(Math.min(older.length + rung.length, CUSTOMER_BILLS_PAGE_SIZE))
+    const times = page.bills.map((bill) => bill.paidAt)
+    expect(times).toEqual([...times].sort().reverse())
+    expect(page.bills.some((bill) => bill.status === 'void')).toBe(true)
+    // What the row prints, and none of the detail.
+    for (const bill of page.bills) expect(Object.keys(bill).sort()).toEqual(SUMMARY_KEYS)
+  })
+
+  it('walks a long history a page at a time, no bill twice and none missed', async () => {
+    const { data, adapters } = session()
+    for (let n = 0; n < 25; n += 1) servedAt(data, ARJUN)
+    const seen: string[] = []
+    let offset: number | null = 0
+    while (offset !== null) {
+      const page: Awaited<ReturnType<typeof adapters.billing.listCustomerBills>> =
+        await adapters.billing.listCustomerBills(K, ARJUN, offset)
+      expect(page.bills.length).toBeLessThanOrEqual(CUSTOMER_BILLS_PAGE_SIZE)
+      seen.push(...page.bills.map((bill) => bill.id))
+      offset = page.next
+    }
+    expect(new Set(seen).size).toBe(seen.length)
+    expect(seen.length).toBeGreaterThan(25)
+  })
+
+  it('opens an older bill in full, its lines adding up to what the figures count', async () => {
+    const { adapters } = session()
+    const page = await adapters.billing.listCustomerBills(K, RITIKA, 0)
+    // Below the store's own sequence: one of the visits before the demo's days.
+    const older = page.bills.find((bill) => bill.billNumber <= 1000)!
+    const bill = (await adapters.billing.getBill(older.id))!
+    expect(bill.totalPaise).toBe(older.totalPaise)
+    expect(bill.lines.reduce((sum, line) => sum + line.unitPricePaise * line.quantity, 0)).toBe(
+      bill.totalPaise,
+    )
+    expect(bill.customerPhone).toBe(DEMO_RETURNING_CUSTOMER_PHONE)
+  })
+
+  it('gives a manager their own outlet’s bills, and refuses everybody else', async () => {
+    const manager = session('franchise_admin').adapters.billing
+    await expect(manager.listCustomerBills(K, RITIKA, 0)).resolves.toBeTruthy()
+    await expect(manager.listCustomerBills(N, RITIKA, 0)).rejects.toMatchObject({
+      code: 'not_permitted',
+    })
+    const biller = session('biller').adapters.billing
+    await expect(biller.listCustomerBills(K, RITIKA, 0)).rejects.toMatchObject({
+      code: 'not_permitted',
+    })
   })
 })
 

@@ -163,7 +163,7 @@ export function ManagerBillDetail({
       id={detailId}
       aria-labelledby={`bill-summary-${bill.id}`}
       data-testid={detailId}
-      className="rounded-b-xl border border-t-0 border-border bg-surface-raised p-3 sm:p-4"
+      className="@container rounded-b-xl border border-t-0 border-border bg-surface-raised p-3 sm:p-4"
     >
       {bill.status === 'void' && (
         <BillStatusNotice
@@ -230,7 +230,7 @@ export function ManagerBillDetail({
         </section>
       )}
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-3 @2xl:grid-cols-2">
         <Section icon={ReceiptText} title="Order items">
           <ul className="divide-y divide-border">
             {bill.lines.map((line, index) => (

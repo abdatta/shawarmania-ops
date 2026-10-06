@@ -13,6 +13,7 @@ import { formatDate } from '@/domain'
 import { cn } from '@/lib/cn'
 import { formatIndianPhone } from '../../../shared/phone'
 
+import { CustomerBills } from './customer-bills'
 import { visitsLabel } from './visits-label'
 
 /**
@@ -26,11 +27,16 @@ import { visitsLabel } from './visits-label'
  *      Given at the counter by Priya
  *   Points                         42
  *   ─────────────────────────────────
- *   Last 30 days
- *   14 visits              ₹9,240
  *   Last seen            14 Sep 2026
  *   First visit here     12 Mar 2026
+ *   Last 30 days
+ *   14 visits              ₹9,240
+ *   ─────────── See bills ⌄ ───────────
  * ```
+ *
+ * **The dates lead, then the month, then the bills** [owner, 2026-10-06]: when
+ * they were last in and how long they have been coming frame the thirty-day
+ * figures, and the button to every bill sits under the figures it explains.
  *
  * **Everything on it belongs to one outlet** (a-regular-earns-points-and-gold,
  * D13): gold, its end date and who gave it, the points balance, and every
@@ -72,7 +78,7 @@ export function CustomerCardDialog({
       open={customerId !== null}
       onClose={onClose}
       aria-label="Customer"
-      className="m-auto w-[min(94vw,24rem)] rounded-2xl p-4"
+      className="m-auto w-[min(94vw,28rem)] rounded-2xl p-4"
     >
       {customerId !== null && (
         <CardBody
@@ -176,7 +182,9 @@ function CardBody({
   const who = card?.name ?? 'this customer'
 
   return (
-    <div data-testid="customer-card">
+    // A column no taller than the screen: when every bill is open, the bill
+    // window is what gives way, so the card always fits with a margin.
+    <div data-testid="customer-card" className="flex max-h-[calc(100dvh-5rem)] flex-col">
       <div className="-mt-1 -mr-2 flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-wide text-content-muted">Customer</p>
         <button type="button" aria-label="Close" onClick={onClose} className={ICON_BUTTON}>
@@ -195,6 +203,7 @@ function CardBody({
             <Shimmer className="h-5 w-1/2" />
             <Shimmer className="h-11 w-full" />
             <Shimmer className="mt-4 h-24 w-full" />
+            <Shimmer className="mt-3 h-11 w-full" />
           </div>
         )
       ) : (
@@ -357,7 +366,18 @@ function CardBody({
 
           {/* ── What they have done, derived when this card opened ────── */}
           <div className="mt-3 border-t border-border pt-3" data-testid="customer-card-figures">
-            <p className="text-xs font-semibold uppercase tracking-wide text-content-muted">
+            <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-sm">
+              <dt className="text-content-muted">Last seen</dt>
+              <dd className="text-right font-semibold text-content">
+                {card.lastSeenAt ? formatDate(card.lastSeenAt) : 'Not yet'}
+              </dd>
+              {/* This outlet's first sale: every figure here is this outlet's. */}
+              <dt className="text-content-muted">First visit here</dt>
+              <dd className="text-right font-semibold text-content">
+                {formatDate(card.customerSince)}
+              </dd>
+            </dl>
+            <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-content-muted">
               Last 30 days
             </p>
             <div className="mt-1 flex items-baseline justify-between gap-3">
@@ -369,18 +389,9 @@ function CardBody({
                 <Money paise={card.spend30dPaise} className="text-lg font-black text-content" />
               </span>
             </div>
-            <dl className="mt-3 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-sm">
-              <dt className="text-content-muted">Last seen</dt>
-              <dd className="text-right font-semibold text-content">
-                {card.lastSeenAt ? formatDate(card.lastSeenAt) : 'Not yet'}
-              </dd>
-              {/* This outlet's first sale: every figure here is this outlet's. */}
-              <dt className="text-content-muted">First visit here</dt>
-              <dd className="text-right font-semibold text-content">
-                {formatDate(card.customerSince)}
-              </dd>
-            </dl>
           </div>
+
+          <CustomerBills outletId={outletId} customerId={card.id} />
 
           <ConfirmDialog
             open={confirming !== null}

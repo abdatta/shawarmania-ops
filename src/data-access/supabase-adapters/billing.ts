@@ -13,6 +13,8 @@ import {
 import {
   BILLING_PAYMENT_METHODS,
   BillingActionError,
+  CUSTOMER_BILLS_PAGE_SIZE,
+  type BillingBillSummary,
   type BillDraft,
   type BillDiscountDraft,
   type BillLineDraft,
@@ -2102,6 +2104,64 @@ export function createSupabaseBillingAdapter(
         )
       }
       return bills
+    },
+
+    async listCustomerBills(outletId, customerId, offset) {
+      // What the row prints and nothing else (the-card-lists-every-bill): no
+      // lines, discounts, customer, receipt or review, which `getBill` reads
+      // when a row is opened. What this reader may see is already decided by
+      // `bills_select`. A total order — paid at, then id — and one row past the
+      // page to say there is another, so no count is asked for.
+      const { data, error } = await client
+        .from('bills')
+        .select(
+          'id, bill_number, status, void_kind, recorded_after_shift_end, paid_at, total_paise, payment_method, bill_payments(method), biller:profiles!bills_biller_profile_id_fkey(full_name)',
+        )
+        .eq('outlet_id', outletId)
+        .eq('customer_id', customerId)
+        .order('paid_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(offset, offset + CUSTOMER_BILLS_PAGE_SIZE)
+      if (error) throw actionError(error, 'Could not load bills.')
+      const rows = (data ?? []).slice(0, CUSTOMER_BILLS_PAGE_SIZE)
+      const ids = rows.map((row) => row.id)
+      // A corrected tender is the method the row names, as on Billing; the
+      // till's name as it was when the bill was rung. Both by id, both small.
+      const [effective, labels] = await Promise.all([
+        ids.length === 0
+          ? Promise.resolve({ data: [], error: null })
+          : client.from('effective_bill_payments').select('bill_id, method').in('bill_id', ids),
+        deviceLabelsFor('bill', ids),
+      ])
+      if (effective.error) throw actionError(effective.error, 'Could not load bill payments.')
+      const corrected = effective.data ?? []
+      return {
+        bills: rows.map((row): BillingBillSummary => {
+          const fromCorrection = corrected.filter((payment) => payment.bill_id === row.id)
+          const methods =
+            fromCorrection.length > 0
+              ? fromCorrection.map((payment) => payment.method)
+              : row.bill_payments.length > 0
+                ? row.bill_payments.map((payment) => payment.method)
+                : row.payment_method
+                  ? [row.payment_method]
+                  : []
+          return {
+            id: row.id,
+            billNumber: row.bill_number,
+            status: row.status,
+            voidKind: row.void_kind,
+            recordedAfterShiftEnd: row.recorded_after_shift_end,
+            paymentMethod: methods.length > 1 ? 'mixed' : (methods[0] ?? 'cash'),
+            paidAt: row.paid_at,
+            billerName: joined(row.biller)?.full_name ?? 'Counter operator',
+            tillLabel: labels.get(row.id) ?? null,
+            totalPaise: row.total_paise,
+          }
+        }),
+        next:
+          (data ?? []).length > CUSTOMER_BILLS_PAGE_SIZE ? offset + CUSTOMER_BILLS_PAGE_SIZE : null,
+      }
     },
 
     async getBill(billId) {

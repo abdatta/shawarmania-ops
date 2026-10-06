@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { createDemoStore, DEMO_OUTLET_ID, DEMO_SECOND_OUTLET_ID } from './store'
+import {
+  createDemoStore,
+  DEMO_BILL_NUMBER_BASE,
+  DEMO_OUTLET_ID,
+  DEMO_SECOND_OUTLET_ID,
+} from './store'
 
 /**
  * The scenario dataset's own invariants.
@@ -37,7 +42,7 @@ describe('the demo scenario dataset', () => {
     expect(legacy?.is_approximate).toBe(false)
   })
 
-  it('numbers every outlet’s bills from one, independently and without gaps', () => {
+  it('numbers every outlet’s bills on from its earlier history, independently and without gaps', () => {
     const store = createDemoStore()
 
     for (const outletId of store.tradingOutletIds) {
@@ -46,14 +51,14 @@ describe('the demo scenario dataset', () => {
         .map((bill) => bill.bill_number)
         .sort((a, b) => a - b)
 
-      expect(numbers[0]).toBe(1)
-      expect(numbers).toEqual(numbers.map((_, index) => index + 1))
+      expect(numbers[0]).toBe(DEMO_BILL_NUMBER_BASE + 1)
+      expect(numbers).toEqual(numbers.map((_, index) => DEMO_BILL_NUMBER_BASE + index + 1))
     }
 
     // Independent, not shared: both outlets own a bill number 1, which is what
     // `(outlet_id, bill_number)` unique means and a single global counter could
     // never produce.
-    const ones = store.bills.filter((bill) => bill.bill_number === 1)
+    const ones = store.bills.filter((bill) => bill.bill_number === DEMO_BILL_NUMBER_BASE + 1)
     expect(new Set(ones.map((bill) => bill.outlet_id)).size).toBe(store.tradingOutletIds.length)
   })
 

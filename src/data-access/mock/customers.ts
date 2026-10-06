@@ -31,7 +31,11 @@ import {
   type DirectoryScope,
   type CustomerDirectoryAdapter,
 } from '../adapters'
-import { DEMO_COUNTER_DEVICE_ID } from './fixtures/billing'
+import {
+  DEMO_COUNTER_DEVICE_ID,
+  DEMO_KANCHRAPARA_BILLER_ID,
+  DEMO_KANCHRAPARA_DEVICE_ID,
+} from './fixtures/billing'
 import {
   customerFixtures,
   customerIdForPhone,
@@ -42,9 +46,10 @@ import {
   POINTS_SWITCHED_ON_DAYS_AGO,
   SEEDED_GOLD_MONTHS,
 } from './fixtures/customers'
-import { outletFixtures } from './fixtures/outlets'
-import { personaFixtures } from './fixtures/personas'
-import { DEMO_OUTLET_ID, type DemoStore } from './store'
+import { menuItemFixtures } from './fixtures/menu'
+import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID, outletFixtures } from './fixtures/outlets'
+import { DEMO_BILLER_ID, DEMO_OWNER_ID, personaFixtures } from './fixtures/personas'
+import { DEMO_BILL_NUMBER_BASE, DEMO_OUTLET_ID, type DemoStore } from './store'
 
 /**
  * The mock customer directory: a map in, promises out, no I/O anywhere.
@@ -236,7 +241,7 @@ function seedPointsLedger(customers: DemoCustomers, businessDate: (daysAgo: numb
   customers.olderVisits.forEach((visit, index) => {
     const onDaysAgo = POINTS_SWITCHED_ON_DAYS_AGO[visit.outletId]
     if (onDaysAgo === undefined || visit.businessDate < businessDate(onDaysAgo)) return
-    const billId = `d8100000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`
+    const billId = seededVisitBillId(index)
     const gold = customers.memberships.some(
       (spell) =>
         spell.customerId === visit.customerId &&
@@ -372,6 +377,19 @@ export function reverseBillPoints(customers: DemoCustomers, billId: string, at: 
 export interface DemoLoyaltyHooks {
   billSettled(bill: Tables<'bills'>, pointsDiscountPaise: number): void
   billVoided(bill: Tables<'bills'>): void
+  /**
+   * A customer's bills at an outlet from before the store's days, and the phone
+   * a store bill rung without a link carries (the-card-lists-every-bill). In
+   * production every bill is one table; the demo keeps its older history here.
+   */
+  customerHistory?(outletId: string, customerId: string): DemoCustomerHistory
+  /** One of those older bills by id, for the detail a row opens. */
+  historyBill?(billId: string): DemoCustomerHistory['older'][number] | null
+}
+
+export interface DemoCustomerHistory {
+  phone: string | null
+  older: { bill: Tables<'bills'>; items: Tables<'bill_items'>[] }[]
 }
 
 export function createDemoLoyaltyHooks(
@@ -410,6 +428,143 @@ export function createDemoLoyaltyHooks(
     billVoided(bill) {
       reverseBillPoints(customers, bill.id, bill.voided_at ?? new Date().toISOString())
     },
+    customerHistory(outletId, customerId) {
+      const profile = profileWithId(customers, customerId)
+      if (!profile) return { phone: null, older: [] }
+      return {
+        phone: profile.phone,
+        older: customers.olderVisits.flatMap((visit, index) =>
+          visit.customerId === customerId && visit.outletId === outletId
+            ? [olderVisitBill(customers, profile, visit, index)]
+            : [],
+        ),
+      }
+    },
+    historyBill(billId) {
+      const index = customers.olderVisits.findIndex((_, at) => seededVisitBillId(at) === billId)
+      const visit = customers.olderVisits[index]
+      const profile = visit && profileWithId(customers, visit.customerId)
+      return visit && profile ? olderVisitBill(customers, profile, visit, index) : null
+    },
+  }
+}
+
+/** The id an older visit's bill had: the points ledger and the card's history both name it. */
+function seededVisitBillId(index: number): string {
+  return `d8100000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`
+}
+
+/** Who rang an older visit, and on which tablet: each outlet's own. */
+const HISTORY_COUNTER: Readonly<Record<string, { billerId: string; deviceId: string }>> = {
+  [OUTLET_KALYANI_ID]: { billerId: DEMO_BILLER_ID, deviceId: DEMO_COUNTER_DEVICE_ID },
+  [OUTLET_KANCHRAPARA_ID]: {
+    billerId: DEMO_KANCHRAPARA_BILLER_ID,
+    deviceId: DEMO_KANCHRAPARA_DEVICE_ID,
+  },
+}
+
+/**
+ * An older visit as the bill it was (the-card-lists-every-bill).
+ *
+ * The seed carries only where, when, how much and whether it was voided, so
+ * the rest is made up deterministically and never contradicts it: the number
+ * sits below the store's sequence in the order the visits happened, and the
+ * items are a few of the outlet's menu items at the prices they carried then —
+ * a little below today's, scaled so the lines add up to exactly the total the
+ * card's figures already count.
+ */
+function olderVisitBill(
+  customers: DemoCustomers,
+  profile: DemoCustomerProfile,
+  visit: DemoCustomerVisit,
+  index: number,
+): { bill: Tables<'bills'>; items: Tables<'bill_items'>[] } {
+  const id = seededVisitBillId(index)
+  const daysAgo = Math.round(
+    (Date.parse(`${customers.today}T00:00:00Z`) - Date.parse(`${visit.businessDate}T00:00:00Z`)) /
+      86_400_000,
+  )
+  const hour = Number(
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      hourCycle: 'h23',
+    }).format(new Date(visit.paidAt)),
+  )
+  const menu = menuItemFixtures
+    .filter((item) => item.outlet_id === visit.outletId && item.is_active)
+    .sort((left, right) => left.sort_order - right.sort_order)
+  // Enough of the menu, in a rotation the visit picks, to reach the total.
+  const picked: typeof menu = []
+  for (let step = 0; step < menu.length && sum(picked) < visit.totalPaise; step += 1) {
+    picked.push(menu[(index + step * 3) % menu.length]!)
+  }
+  const listed = sum(picked)
+  const prices = picked.map(
+    (item) => Math.floor((item.price_paise * visit.totalPaise) / listed / 100) * 100,
+  )
+  // Whatever the whole-rupee rounding left goes on the first line.
+  prices[0] = prices[0]! + visit.totalPaise - prices.reduce((total, price) => total + price, 0)
+  const counter = HISTORY_COUNTER[visit.outletId] ?? HISTORY_COUNTER[OUTLET_KALYANI_ID]!
+  const voidedAt = visit.voided
+    ? new Date(Date.parse(visit.paidAt) + 20 * 60_000).toISOString()
+    : null
+  return {
+    bill: {
+      id,
+      outlet_id: visit.outletId,
+      bill_number: DEMO_BILL_NUMBER_BASE - daysAgo * 25 + hour,
+      biller_profile_id: counter.billerId,
+      counter_device_id: counter.deviceId,
+      counter_shift_id: null,
+      shift_id: null,
+      business_date: visit.businessDate,
+      payment_business_date: visit.businessDate,
+      ordered_at: new Date(Date.parse(visit.paidAt) - 6 * 60_000).toISOString(),
+      paid_at: visit.paidAt,
+      created_at: visit.paidAt,
+      synced_at: visit.paidAt,
+      customer_id: profile.id,
+      customer_name: profile.name,
+      customer_phone: profile.phone,
+      customer_tier: currentSpell(customers, profile.id, visit.outletId, visit.paidAt)
+        ? 'gold'
+        : null,
+      payment_method: index % 3 === 0 ? 'cash' : 'upi',
+      pricing_mode: 'no_tax',
+      subtotal_paise: visit.totalPaise,
+      discount_paise: 0,
+      tax_paise: 0,
+      rounding_paise: 0,
+      total_paise: visit.totalPaise,
+      order_id: null,
+      recorded_after_shift_end: false,
+      attribution_shift_ended_at: null,
+      service_type: null,
+      table_number: null,
+      status: visit.voided ? 'void' : 'settled',
+      void_kind: visit.voided ? 'manager_void' : null,
+      void_reason: visit.voided ? 'Mistaken entry' : null,
+      voided_at: voidedAt,
+      voided_by: visit.voided ? DEMO_OWNER_ID : null,
+    },
+    items: picked.map((item, line) => ({
+      id: `${id.slice(0, -3)}${String(line + 1).padStart(3, '0')}`,
+      bill_id: id,
+      menu_item_id: item.id,
+      item_name: item.name,
+      unit_price_paise: prices[line]!,
+      quantity: 1,
+      line_total_paise: prices[line]!,
+      discount_paise: 0,
+      discount_percent_bp: null,
+      category_name: null,
+      kind: 'item' as const,
+    })),
+  }
+
+  function sum(items: readonly { price_paise: number }[]): number {
+    return items.reduce((total, item) => total + item.price_paise, 0)
   }
 }
 

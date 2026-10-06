@@ -67,6 +67,16 @@ import { personaFixtures } from './fixtures/personas'
  * a design mistake, not a convenience.
  */
 
+/**
+ * The bill number each outlet's sequence had reached before the demo's four
+ * trading days (the-card-lists-every-bill).
+ *
+ * The outlets have been trading a while — the customer directory carries their
+ * regulars' older visits — so the store's first bill is not bill 1, and the
+ * older visits a customer's card lists sit below it in the same sequence.
+ */
+export const DEMO_BILL_NUMBER_BASE = 1000
+
 export interface DemoStore {
   /** Today's business date at the demo outlet, resolved through the cutover. */
   readonly today: string
@@ -501,7 +511,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
         : 0,
     })
 
-    const nextNumber = (billNumbers.get(outletId) ?? 0) + 1
+    const nextNumber = (billNumbers.get(outletId) ?? DEMO_BILL_NUMBER_BASE) + 1
     billNumbers.set(outletId, nextNumber)
 
     bills.push({
@@ -632,7 +642,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
   clampFutureInstants()
 
   /**
-   * Every outlet numbers its own bills from one, without a gap. The real
+   * Every outlet numbers its own bills on from `DEMO_BILL_NUMBER_BASE`, without a gap. The real
    * sequence is `(outlet_id, bill_number)` unique with a per-outlet counter, and
    * a demo that shared one counter across two outlets would be demonstrating a
    * product this one is not.
@@ -642,11 +652,11 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       .filter((bill) => bill.outlet_id === outletId)
       .map((bill) => bill.bill_number)
       .sort((a, b) => a - b)
-    const expected = numbers.map((_, index) => index + 1)
+    const expected = numbers.map((_, index) => DEMO_BILL_NUMBER_BASE + index + 1)
     if (numbers.join(',') !== expected.join(',')) {
       throw new Error(
         `Demo fixture drift: outlet ${outletId} numbered its bills ${numbers.join(', ')}, ` +
-          `which is not a gapless per-outlet sequence from 1.`,
+          `which is not a gapless per-outlet sequence from ${DEMO_BILL_NUMBER_BASE + 1}.`,
       )
     }
   }

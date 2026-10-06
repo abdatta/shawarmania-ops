@@ -13,6 +13,7 @@ import { demoReceiptToken, receiptLink } from '@/lib/receipt-link'
 
 import {
   BillingActionError,
+  CUSTOMER_BILLS_PAGE_SIZE,
   BILLING_PAYMENT_METHODS,
   type BillDraft,
   type BillDiscountDraft,
@@ -48,7 +49,7 @@ function billsAt(personId: string, outletId: string): boolean {
 }
 import { DEMO_BILLER_ID, DEMO_COUNTER_DEVICE_ID } from './fixtures/billing'
 import type { DemoLoyaltyHooks } from './customers'
-import { DEMO_OUTLET_ID, type DemoStore } from './store'
+import { DEMO_BILL_NUMBER_BASE, DEMO_OUTLET_ID, type DemoStore } from './store'
 
 /**
  * The mock counter: an in-memory command queue that behaves the way the real
@@ -442,6 +443,11 @@ export function createMockBillingAdapter(
   }
 
   function billView(row: Tables<'bills'>): BillingBill {
+    return billViewOf(row)
+  }
+
+  /** `items` stands in for the store's lines on a bill the store does not hold. */
+  function billViewOf(row: Tables<'bills'>, items?: Tables<'bill_items'>[]): BillingBill {
     const order = row.order_id
       ? store.orders.find((candidate) => candidate.id === row.order_id)
       : null
@@ -503,7 +509,7 @@ export function createMockBillingAdapter(
       customerTier: row.customer_tier,
       serviceType: row.service_type,
       tableNumber: row.table_number,
-      lines: store.billItems.filter((line) => line.bill_id === row.id).map(lineView),
+      lines: (items ?? store.billItems.filter((line) => line.bill_id === row.id)).map(lineView),
       discounts: (store.billDiscounts.get(row.id) ?? []).map((discount) => ({ ...discount })),
       roundingPaise: row.rounding_paise,
       totalPaise: row.total_paise,
@@ -769,7 +775,7 @@ export function createMockBillingAdapter(
       acceptedPaymentTimes.get(draft.clientId) ?? Date.now(),
     ).toISOString()
 
-    const next = (store.billNumbers.get(draft.outletId) ?? 0) + 1
+    const next = (store.billNumbers.get(draft.outletId) ?? DEMO_BILL_NUMBER_BASE) + 1
     store.billNumbers.set(draft.outletId, next)
 
     store.bills.push({
@@ -980,7 +986,7 @@ export function createMockBillingAdapter(
   ) {
     const shift = store.shifts.find((candidate) => candidate.id === shiftId)
     if (!shift) throw new Error(`Settling order ${row.id} has no shift to attribute to.`)
-    const nextNumber = (store.billNumbers.get(row.outlet_id) ?? 0) + 1
+    const nextNumber = (store.billNumbers.get(row.outlet_id) ?? DEMO_BILL_NUMBER_BASE) + 1
     store.billNumbers.set(row.outlet_id, nextNumber)
     const bill: Tables<'bills'> = {
       id: billId,
@@ -2169,9 +2175,56 @@ export function createMockBillingAdapter(
         )
     },
 
+    async listCustomerBills(outletId, customerId, offset) {
+      requireManager(outletId)
+      // The store's bills linked to them — by id, or by the phone a sale the
+      // demo counter rang without one carries — and, from the customer
+      // directory, the bills of their visits before the store's days.
+      const history = loyalty?.customerHistory?.(outletId, customerId)
+      const bills = [
+        ...store.bills
+          .filter(
+            (bill) =>
+              bill.outlet_id === outletId &&
+              (bill.customer_id === customerId ||
+                (bill.customer_id === null &&
+                  history?.phone != null &&
+                  bill.customer_phone === history.phone)),
+          )
+          .map((row) => billView(row)),
+        ...(history?.older ?? []).map(({ bill, items }) => billViewOf(bill, items)),
+      ].sort(
+        (left, right) => right.paidAt.localeCompare(left.paidAt) || right.id.localeCompare(left.id),
+      )
+      const start = Math.max(0, Math.trunc(offset))
+      const end = start + CUSTOMER_BILLS_PAGE_SIZE
+      return {
+        // Summaries, as the live read answers: the detail is `getBill`'s.
+        bills: bills.slice(start, end).map((bill) => ({
+          id: bill.id,
+          billNumber: bill.billNumber,
+          status: bill.status,
+          voidKind: bill.voidKind,
+          recordedAfterShiftEnd: bill.recordedAfterShiftEnd ?? false,
+          paymentMethod: bill.paymentMethod,
+          paidAt: bill.paidAt,
+          billerName: bill.billerName,
+          tillLabel: bill.tillLabel,
+          totalPaise: bill.totalPaise,
+        })),
+        next: end < bills.length ? end : null,
+      }
+    },
+
     async getBill(billId) {
       const row = store.bills.find((bill) => bill.id === billId)
-      if (!row) return null
+      if (!row) {
+        // A bill from a customer's older history, which the store does not hold.
+        const older = loyalty?.historyBill?.(billId)
+        if (!older) return null
+        requireManager(older.bill.outlet_id)
+        return billViewOf(older.bill, older.items)
+      }
       if (context.role !== 'biller') requireManager(row.outlet_id)
       return billView(row)
     },

@@ -153,7 +153,7 @@ Nothing in it is authored as a total. Every figure the owner sees is derived at 
 Worth knowing before running one:
 
 - **Both outlets trade, and deliberately not identically.** Kalyani is busier and carries every awkward state; Kanchrapara turns over roughly half as much, is short of nothing, and closed yesterday exactly. Two outlets of the same shape would make the comparison screen unreadable — a difference is only legible against something that is not different.
-- **Each outlet numbers its own bills from 1**, mirroring the per-outlet sequence the database enforces.
+- **Each outlet numbers its own bills from 1001**, mirroring the per-outlet sequence the database enforces. The outlets have been trading a while: a customer's older visits, which the customer directory carries, are listed on their card as the bills below 1001 in the same sequence (the-card-lists-every-bill).
 - **Every demo person has one canonical username.** Account creation on Team, correction
   and activation handover use the same namespace and validation as live mode,
   but the mock adapter never calls Auth, a mail provider or any real endpoint.
@@ -381,5 +381,5 @@ When a new surface is added:
 1. Build it against the mock adapter, behind the gate, in a `ui-*` change.
 2. Add its fixtures to the scenario dataset so the numbers still reconcile with everything else. **Give every seed an outlet** — the dataset spans both, and a seed that assumes one is a screen that will be empty for the other.
 3. If the surface shows a derived figure, derive it in the mock from rows already in the store rather than adding a total to a fixture. A fixture that may state its own total is a demo that can show a number the system could not produce.
-4. If the invariant is worth relying on, assert it in `createDemoStore()`. The one there now — each outlet's bill numbers are gapless from 1 — exists because getting it wrong would be invisible until somebody read two screens in a row. A second, that a stock quantity equalled its own ledger, went with the stock surfaces in #51.
+4. If the invariant is worth relying on, assert it in `createDemoStore()`. The one there now — each outlet's bill numbers are gapless from 1001 — exists because getting it wrong would be invisible until somebody read two screens in a row. A second, that a stock quantity equalled its own ledger, went with the stock surfaces in #51.
 5. Later, swap the adapter and promote the gate in a `*-live` change — **without redesigning the screen**. If that turns out to be impossible, the mock was the wrong shape; fix the mock's shape and record why in the change.

@@ -1,5 +1,5 @@
-import { ChevronDown, ReceiptText } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { ReceiptText } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { EmptyState } from '@/components/layout/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
@@ -32,6 +32,7 @@ import { useSession } from '@/session/context'
 
 import { averageBillPaise, combinedTakingsPaise, paymentTotalPaise } from './day-totals'
 import { ManagerBillDetail } from './manager-bill-detail'
+import { BillDetailTransition, DETAIL_TRANSITION_MS, ManagerBillSummary } from './manager-bill-row'
 import { countSyncProblems, ManagerSyncStatus } from './manager-sync-status'
 import { PaymentTotalCards } from './payment-total-cards'
 
@@ -67,37 +68,7 @@ function splitPipeline(orders: readonly BillingOrder[]): {
 
 type View = 'bills' | 'orders' | 'status'
 
-const DETAIL_TRANSITION_MS = 200
 const ORDER_CANCELLATION_REASONS = ['Duplicate order', 'Mistaken entry'] as const
-
-function BillDetailTransition({ open, children }: { open: boolean; children: ReactNode }) {
-  const [entered, setEntered] = useState(false)
-
-  useEffect(() => {
-    if (!open) {
-      const frame = window.requestAnimationFrame(() => setEntered(false))
-      return () => window.cancelAnimationFrame(frame)
-    }
-
-    const frame = window.requestAnimationFrame(() => setEntered(true))
-    return () => window.cancelAnimationFrame(frame)
-  }, [open])
-
-  return (
-    <div
-      data-testid="manager-bill-detail-transition"
-      data-open={open}
-      aria-hidden={!open || undefined}
-      className={`grid overflow-hidden transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none ${entered && open ? 'grid-rows-[1fr] opacity-100' : 'pointer-events-none grid-rows-[0fr] opacity-0'}`}
-    >
-      <div className="min-h-0 overflow-hidden">{children}</div>
-    </div>
-  )
-}
-
-function methodLabel(method: BillingBill['paymentMethod']) {
-  return method === 'upi' ? 'UPI' : method[0]!.toUpperCase() + method.slice(1)
-}
 
 function BillingHistoryShimmer() {
   return (
@@ -475,65 +446,14 @@ export function ManagerBillingHistory() {
             {bills.map((bill) => {
               const expanded = bill.id === selectedId
               const showingDetail = expanded || closingIds.includes(bill.id)
-              const stateLabel = bill.status === 'void' ? 'Cancelled' : 'Paid'
               return (
                 <li key={bill.id} data-testid={`manager-bill-${bill.id}`}>
-                  <Button
-                    id={`bill-summary-${bill.id}`}
-                    variant="secondary"
-                    className={`min-h-20 w-full justify-start gap-3 p-3 text-left transition-colors ${showingDetail ? 'rounded-b-none' : ''}`}
-                    aria-expanded={expanded}
-                    aria-controls={`bill-detail-${bill.id}`}
-                    onClick={() => selectBill(bill.id)}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <span className="font-black text-content">Bill {bill.billNumber}</span>
-                        <span
-                          className={`rounded-full border px-2 py-0.5 text-xs font-bold ${bill.status === 'void' ? 'border-danger text-danger' : 'border-success text-success'}`}
-                        >
-                          {stateLabel}
-                        </span>
-                        {/* The stored kind, displayed — never inferred from
-                            timestamps or reasons (design D4). */}
-                        {bill.status === 'void' && bill.voidKind === 'cancelled_after_paid' && (
-                          <span
-                            data-testid={`cancelled-after-paid-${bill.id}`}
-                            className="rounded-full border border-danger px-2 py-0.5 text-xs font-black text-danger"
-                          >
-                            Cancelled after paid
-                          </span>
-                        )}
-                        {bill.recordedAfterShiftEnd && (
-                          <span
-                            data-testid={`after-departure-${bill.id}`}
-                            className="rounded-full border border-warning px-2 py-0.5 text-xs font-black text-warning"
-                          >
-                            After operator left
-                          </span>
-                        )}
-                      </span>
-                      <span className="mt-1 block text-sm font-normal text-content-muted">
-                        {methodLabel(bill.paymentMethod)} · {formatDayTime(bill.paidAt)} · by{' '}
-                        {bill.billerName}
-                        {/*
-                          And which till, where the outlet has more than one.
-                          The operator's name does not answer it: one person may
-                          hold a shift on both counters, so reconciling a
-                          two-till evening needs the till named.
-                        */}
-                        {bill.tillLabel && <> · on {bill.tillLabel}</>}
-                      </span>
-                    </span>
-                    <span className="flex shrink-0 items-center gap-2">
-                      <Money paise={bill.totalPaise} className="font-black text-content" />
-                      <ChevronDown
-                        aria-hidden
-                        size={18}
-                        className={`text-content-muted transition-transform ${expanded ? 'rotate-180' : ''}`}
-                      />
-                    </span>
-                  </Button>
+                  <ManagerBillSummary
+                    bill={bill}
+                    expanded={expanded}
+                    showingDetail={showingDetail}
+                    onToggle={() => selectBill(bill.id)}
+                  />
                   {showingDetail && (
                     <BillDetailTransition open={expanded}>
                       <ManagerBillDetail
