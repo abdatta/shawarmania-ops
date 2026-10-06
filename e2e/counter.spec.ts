@@ -4,9 +4,10 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
  * The counter, in a real browser, on the device it actually runs on.
  *
  * The gate for `ui-billing-counter` is three clauses and each has a test here:
- * a full order rung and settled on a tablet viewport, the whole menu visible
- * without scrolling, and the UI-only gate that a customer has been decided —
- * identified from their number, or deliberately skipped.
+ * a full order rung and settled on a tablet viewport, every item in reach (since
+ * `billing-menu-search`, through a search over a column that scrolls rather
+ * than a menu that must fit), and the UI-only gate that a customer has been
+ * decided — identified from their number, or deliberately skipped.
  *
  * The offline spec is the other half — the sync indicator's three states are the
  * whole reason it exists, and the escalated one cannot be reached by looking at
@@ -195,18 +196,51 @@ test.describe('the counter', () => {
     })
   }
 
-  test('shows the whole menu without scrolling on a tablet', async ({ page }) => {
-    // The smallest tablet this is designed for. If a menu item is ever added
-    // that pushes the grid past one screen, this fails rather than a shift does.
+  test('searches the menu, keeps the search through a tap, and clears it on Escape', async ({
+    page,
+  }) => {
+    // The smallest tablet this is designed for.
     await page.setViewportSize({ width: 1024, height: 768 })
     const grid = page.getByTestId('menu-grid')
-    await expect(grid).toBeVisible()
+    const search = page.getByRole('textbox', { name: 'Search the menu' })
+    const tiles = grid.locator('[data-testid^="tile-"]:not([data-testid^="tile-count-"])')
+    await expect(tiles.first()).toBeVisible()
+    const everything = await tiles.count()
 
-    const fits = await grid.evaluate((node) => node.scrollHeight <= node.clientHeight)
-    expect(fits).toBe(true)
+    // Every word, any order, in the browser alone.
+    await search.fill('chee chi')
+    await expect(tiles).toHaveCount(1)
+    await expect(
+      grid.getByRole('button', { name: 'Mozzarella Cheese Chicken Shawarma' }),
+    ).toBeVisible()
 
-    // And every item really is on it, including the one that is off today.
-    await expect(grid.getByRole('button')).toHaveCount(7)
+    // A tap adds and leaves the search where it was.
+    await grid.getByRole('button', { name: 'Mozzarella Cheese Chicken Shawarma' }).click()
+    await expect(page.getByTestId('bill-total')).toHaveText('₹199')
+    await expect(search).toHaveValue('chee chi')
+    await expect(tiles).toHaveCount(1)
+
+    // Escape belongs to an open dialog first: it closes, the search stays.
+    await page.getByTestId('customer-row').click()
+    const customer = page.getByRole('dialog')
+    await expect(customer).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(customer).toHaveCount(0)
+    await expect(search).toHaveValue('chee chi')
+
+    // With nothing open, Escape clears it and drops the cursor.
+    await page.keyboard.press('Escape')
+    await expect(search).toHaveValue('')
+    await expect(search).not.toBeFocused()
+    await expect(tiles).toHaveCount(everything)
+
+    // Nothing matching says so; the × clears it the same way.
+    await search.fill('pizza')
+    await expect(page.getByTestId('menu-search-empty')).toHaveText('No item matches “pizza”.')
+    await page.getByRole('button', { name: 'Clear search' }).click()
+    await expect(search).toHaveValue('')
+    await expect(search).not.toBeFocused()
+    await expect(tiles).toHaveCount(everything)
   })
 
   test('records a full bill through the tap-first payment dialog', async ({ page }) => {

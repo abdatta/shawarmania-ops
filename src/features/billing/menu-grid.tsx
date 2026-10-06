@@ -1,16 +1,22 @@
+import { Search, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+
+import { Input } from '@/components/ui/input'
 import { Money } from '@/components/ui/money'
 import { VegMarker } from '@/components/ui/veg-marker'
 import type { MenuCategoryWithItems } from '@/data-access/adapters'
 import type { Tables } from '@/data-access/database.types'
 import { cn } from '@/lib/cn'
 
+import { filterMenu } from './menu-search'
+
 /**
- * The menu, whole, on one screen.
+ * The menu, whole, with a search over it.
  *
- * Seven items today against a stated ceiling of about twenty, so there is no
- * search box and no category drilling: at a counter, looking is faster than
- * typing, and a biller who has to find an item has already lost the order's
- * worth of time.
+ * The menu outgrew one screen, so a biller can type to narrow it. The search is
+ * a filter over the menu the counter already holds, never a request, and it
+ * **stays until the biller clears it** — with ×, or Escape — so a run of taps on
+ * the same few tiles does not mean retyping between each one.
  *
  * **A tile adds, and only adds.** Quantity is adjusted on the bill line
  * instead, because a −/+ pair here would halve the target at exactly the moment
@@ -32,9 +38,18 @@ export function MenuGrid({
   quantities: Map<string, number>
   onAdd: (item: Tables<'menu_items'>) => void
 }) {
+  const [query, setQuery] = useState('')
+  const shown = useMemo(() => filterMenu(menu, query), [menu, query])
+
   return (
     <div className="space-y-3" data-testid="menu-grid">
-      {menu.map(({ category, items }) => (
+      <MenuSearch query={query} onChange={setQuery} />
+      {shown.length === 0 && (
+        <p data-testid="menu-search-empty" className="py-6 text-center text-sm text-content-muted">
+          No item matches &ldquo;{query.trim()}&rdquo;.
+        </p>
+      )}
+      {shown.map(({ category, items }) => (
         <section key={category.id} aria-label={category.name}>
           <h2 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-content-muted">
             {category.name}
@@ -120,6 +135,95 @@ export function MenuGrid({
           </div>
         </section>
       ))}
+    </div>
+  )
+}
+
+/**
+ * A text field, so it raises the touch keyboard, and the one text field on the
+ * counter's main surface — no number pad listens outside a dialog, so typing
+ * here never reaches one.
+ *
+ * **Escape clears it from anywhere on the surface**, not only while it has
+ * focus: a tap on a tile takes focus away, and the search outlives the tap.
+ * Escape already means something else in three places here, and each of them
+ * wins: an open dialog closes, the account menu closes, and a card's actions
+ * menu is left alone. Escape only clears the search when none of them is open,
+ * and never while another text field has the key.
+ */
+function MenuSearch({ query, onChange }: { query: string; onChange: (query: string) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (query === '') return
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+      if (document.querySelector('dialog[open], details[open], [role="menu"]')) return
+      const focused = document.activeElement
+      if (
+        focused !== inputRef.current &&
+        (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement)
+      ) {
+        return
+      }
+      event.preventDefault()
+      onChange('')
+      inputRef.current?.blur()
+    }
+
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [query, onChange])
+
+  return (
+    // Sticky inside the menu column's own scroll, so the field stays in reach
+    // however far down a long result list the biller has scrolled.
+    //
+    // The 3px of padding is the focus ring's width. The ring is drawn outside
+    // the field, and the column's scroll clips whatever crosses its edge, so a
+    // field flush against that edge kept only the bottom of its ring and read as
+    // underlined rather than focused.
+    <div className="sticky top-0 z-10 bg-canvas px-[3px] pb-1 pt-[3px]" role="search">
+      <div className="relative">
+        <Search
+          aria-hidden
+          size={18}
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-content-muted"
+        />
+        <Input
+          ref={inputRef}
+          type="text"
+          inputMode="search"
+          enterKeyHint="search"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          aria-label="Search the menu"
+          placeholder="Search the menu"
+          data-testid="menu-search"
+          value={query}
+          onChange={(event) => onChange(event.target.value)}
+          className="pl-10 pr-11"
+        />
+        {query !== '' && (
+          <button
+            type="button"
+            aria-label="Clear search"
+            data-testid="menu-search-clear"
+            // Clearing drops the cursor too, so a touch screen's keyboard goes
+            // away with the search rather than covering the grid it restored.
+            onClick={() => {
+              onChange('')
+              inputRef.current?.blur()
+            }}
+            className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-content-muted hover:bg-surface-raised hover:text-content focus-visible:focus-ring"
+          >
+            <X aria-hidden size={18} />
+          </button>
+        )}
+      </div>
     </div>
   )
 }

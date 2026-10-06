@@ -78,7 +78,7 @@ The live menu as of this writing. Seven items, all built around chicken shawarma
 
 Implications for the software:
 
-- **A small menu means the billing screen should show everything at once.** No search-first interaction, no deep category drilling — a grid of large tappable tiles is faster than any list. Design for ~10–20 items visible, not 200.
+- **The billing screen is a grid of large tappable tiles, with a search over it.** The menu began at seven items and was designed to fit one screen; one outlet now sells sixty. Tiles stay the primary interaction and there is still no category drilling — the search narrows the grid in the browser and leaves the tapping as it was (`billing-menu-search`).
 - **Prices are usually round rupees, and nothing requires them to be.** Money is integer paise throughout, and since discounts arrived a menu price may carry paise without anything downstream minding: a percentage of an odd subtotal already produces them, and the bill rounds **up** to a whole rupee on its own stated line rather than the prices being constrained to avoid it.
 - **Items are veg/non-veg meaningful.** The brand's own CSS already carries `--color-veg` and `--color-nonveg` tokens; the menu carries the distinction. Model it.
 
