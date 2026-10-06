@@ -8,4 +8,4 @@
 - [x] 6. Spec deltas for counter-billing and order-lifecycle.
 - [x] 7. Screenshots of the rail and the customer dialog in light and dark on a tablet viewport.
 - [x] 7a. From the card's customer control, Use or Skip in the customer dialog saves the order at once and closing it abandons the edit [owner, 2026-10-05]; pinned in `billing-counter.test.tsx`, which fails without it.
-- [ ] 8. GATE: CI green on the pushed branch; the owner confirms the layout and picks the deploy.
+- [x] 8. GATE: CI green on the pushed branch; the owner confirms the layout and picks the deploy.

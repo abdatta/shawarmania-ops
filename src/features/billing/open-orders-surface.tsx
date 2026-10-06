@@ -248,14 +248,15 @@ export function OpenOrdersSurface({
     /*
       The rail's own silhouette, reshaped with the list it stands in for: plain
       cards over one scroller with no hairline between them, because the hairline
-      belonged to a divider that no longer arrives.
+      belonged to a divider that no longer arrives. 98px is a one-item card
+      since the customer button (36px) set the header's height.
     */
     return (
       <LoadingRegion label="the pipeline" className="space-y-1">
         <OfflineFillHint />
-        <Shimmer className="h-[92px]" />
-        <Shimmer className="h-[92px]" />
-        <Shimmer className="h-[92px]" />
+        <Shimmer className="h-[98px]" />
+        <Shimmer className="h-[98px]" />
+        <Shimmer className="h-[98px]" />
       </LoadingRegion>
     )
   }

@@ -654,12 +654,15 @@ seen.
 ### Requirement: Pipeline orders remain editable until they are paid
 
 The pipeline SHALL list this outlet's unpaid orders, each with its reference,
-age, optional customer, complete quantity-and-item lines and total. Items SHALL
+complete quantity-and-item lines and total. A card SHALL NOT print the
+customer's name or the order's age: the list is ordered newest first, and the
+customer is one control away (see *A pipeline card states both of its answers in
+two fixed controls*). Items SHALL
 NOT be truncated or collapsed because these lists are preparation work. Any
 operator holding the owning tablet's live shift SHALL reopen and change lines,
 quantities and customer form values until payment or cancellation. No discount
 control SHALL appear. The original order time and business date SHALL remain
-visible and unchanged. On the combined tablet workspace, edit SHALL use the
+unchanged, and visible on the order while it is edited. On the combined tablet workspace, edit SHALL use the
 same menu and composer used for a new order, overlaying the bills column. Any
 in-progress new-order draft SHALL be restored exactly after the edit is saved
 or cancelled. Once an order is paid, revision SHALL close for it everywhere.
@@ -667,15 +670,15 @@ or cancelled. Once an order is paid, revision SHALL close for it everywhere.
 #### Scenario: Staff scans work to prepare
 
 - **WHEN** a pipeline order contains several different items and has a customer name
-- **THEN** every item and quantity is readable without expansion, the customer and total are prominent, and the card labels its reference as Order # followed by the number
+- **THEN** every item and quantity is readable without expansion, the total is prominent, the card labels its reference as Order # followed by the number, and the customer's name is not printed on the card but opens from its customer control
 
 #### Scenario: Current operator created the order today
 - **WHEN** the order was created today by the person holding the current billing shift
-- **THEN** the card shows a relative age such as now or 12 mins ago and does not repeat that person's name
+- **THEN** the card shows no age and does not repeat that person's name
 
 #### Scenario: Another operator created the order
 - **WHEN** the order creator differs from the person holding the current billing shift
-- **THEN** the creator's name remains visible beside the age or date
+- **THEN** the creator's name remains visible on the card's meta line
 
 #### Scenario: Incoming operator edits an order
 - **WHEN** a different operator's shift begins on the same tablet and they edit its open order
@@ -1027,8 +1030,8 @@ available only on the tablet that owns it, to any operator holding its live
 shift. Clearing an order stranded on an unavailable tablet SHALL be an ordinary
 reasoned cancellation by that outlet's manager, and no transfer or recovery
 path SHALL exist. Cards across the pipeline SHALL label secondary numbers as
-Order #, show complete item lines, use relative age for today's order, and omit
-the creator when the current shift holder took the order. The payment action
+Order #, show complete item lines, and omit the creator when the current shift
+holder took the order. The payment action
 SHALL read Paid and the preparation action Prepared.
 
 #### Scenario: Another operator uses the same tablet
@@ -1241,10 +1244,25 @@ taken is on screen.
 ### Requirement: A pipeline card states both of its answers in two fixed controls
 
 A pipeline card SHALL show its reference with the number part in the brand's
-bright primary colour, one meta line — customer name when present, relative age,
-creator when another operator took the order, till when another till did — the
-total prominent at the right, and complete untruncated item lines with bold
-quantity prefixes. Per-line prices SHALL NOT appear on a pipeline card. A
+bright primary colour, followed by one place tag — its table, or its order type
+when it has no table — drawn in a single style for both, with an icon and small
+capitals that do not read as an item line; one meta line — creator when another
+operator took the order, till when another till did — the total prominent at
+the right, and complete untruncated item lines with
+bold quantity prefixes. The card SHALL NOT print the customer's name or the
+order's age.
+
+Beside the total, a card SHALL carry one customer control whenever the order has
+a customer or one can be set from this tablet. With a customer, it SHALL open
+what the order recorded — name, phone and membership — and, while the order can
+be edited here, offer to change it. A gold member's star SHALL sit on that
+control rather than beside the reference, because it describes the customer. Without one, or when the biller changes it, it SHALL open the order in the
+composer with the customer dialog already open: the ordinary edit and its
+ordinary revision, with no new write. Because the customer is the whole of that
+edit, choosing in the dialog SHALL save it at once — Use attaches the customer,
+Skip saves the order with no customer, as Skip means everywhere else — and
+closing the dialog without choosing SHALL abandon the edit and leave the order
+unchanged [owner, 2026-10-05]. Per-line prices SHALL NOT appear on a pipeline card. A
 one-item card SHALL stand no taller than about 120px so at least six fit the rail
 at landscape tablet height without scrolling. Item names SHALL never truncate.
 
@@ -1322,6 +1340,26 @@ card. Edit SHALL be unavailable once an order is paid.
 
 - **WHEN** the operator opens the overflow of a paid card
 - **THEN** Edit is absent or refused with guidance to take the payment back first, and the composer cannot load a paid order's lines for revision
+
+#### Scenario: The customer is one tap away
+
+- **WHEN** a biller taps the customer control on a card whose order has a customer
+- **THEN** the order's customer name, phone and membership open over the counter, and nothing about the order changes
+
+#### Scenario: A customer is added from the card
+
+- **WHEN** a biller taps the customer control on this tablet's open order that has no customer
+- **THEN** the order opens in the composer with the customer dialog open, and choosing Use saves the order with that customer at once, with no Save changes
+
+#### Scenario: Skip from the card removes the customer
+
+- **WHEN** a biller changes an order's customer from its card and chooses Skip
+- **THEN** the order is saved at once with no customer's number, and leaves edit mode
+
+#### Scenario: Closing the dialog from the card changes nothing
+
+- **WHEN** a biller opens the customer dialog from a card and closes it without choosing
+- **THEN** the edit is abandoned, the order is unchanged, and nothing is written
 
 ### Requirement: Only a finished ticket travels
 

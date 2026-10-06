@@ -122,8 +122,9 @@ gold members. Every outlet starts with all of it off and bills exactly as the
 counter always has; the owner, or the outlet's own manager, switches on what
 the shop actually does. Where there is a choice the biller answers it in one tap
 before the order is saved, because a kitchen that cannot tell a plate from a
-parcel packs the wrong one. A dine-in order with a table is called by its table
-rather than its number, since that is what the person carrying the tray needs.
+parcel packs the wrong one. A dine-in order shows its table beside its number,
+since the table is what the person carrying the tray needs and the number is
+what the bill, the kitchen and a manager share.
 Packaging is a line on the bill like any other, never removed or repriced at the
 counter, so it reaches the day's takings without anybody remembering to add it.
 
