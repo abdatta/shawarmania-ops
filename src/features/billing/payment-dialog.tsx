@@ -190,6 +190,8 @@ function OpenPaymentDialog({
               size="phone"
               className="min-w-0 px-0 text-lg"
               disabled={remainingPaise === 0}
+              // `00` has no single key; a keyboard types nought twice.
+              data-keypad-key={key === '00' ? undefined : key}
               onClick={() => appendDigit(key)}
             >
               {key}
@@ -200,6 +202,7 @@ function OpenPaymentDialog({
             size="phone"
             className="min-w-0 px-0"
             aria-label="Delete last digit"
+            data-keypad-key="Backspace"
             disabled={!digits}
             onClick={() => setDigits((current) => current.slice(0, -1))}
           >
@@ -223,6 +226,7 @@ function OpenPaymentDialog({
           disabled={
             busy || totalPaise <= 0 || remainingPaise !== 0 || (mode === 'correct' && unchanged)
           }
+          data-keypad-key="Enter"
           onClick={() => onConfirm(payments)}
         >
           {mode === 'correct' ? 'Save payment' : 'Paid'}

@@ -144,6 +144,7 @@ function OpenPointsDialog({
               variant="secondary"
               size="phone"
               className="min-w-0 px-0 text-lg"
+              data-keypad-key={key}
               onClick={() => append(key)}
             >
               {key}
@@ -154,6 +155,7 @@ function OpenPointsDialog({
             variant="secondary"
             size="phone"
             className="min-w-0 px-0 text-lg"
+            data-keypad-key="0"
             onClick={() => append('0')}
           >
             0
@@ -163,6 +165,7 @@ function OpenPointsDialog({
             size="phone"
             className="min-w-0 px-0"
             aria-label="Delete last digit"
+            data-keypad-key="Backspace"
             disabled={!typed}
             onClick={() => setTyped((value) => value.slice(0, -1))}
           >
@@ -179,6 +182,7 @@ function OpenPointsDialog({
           size="control"
           disabled={busy || !valid}
           data-testid="apply-points"
+          data-keypad-key="Enter"
           onClick={() => onConfirm(points)}
         >
           Use points

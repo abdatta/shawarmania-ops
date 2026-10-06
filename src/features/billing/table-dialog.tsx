@@ -174,6 +174,7 @@ function OpenTableDialog({
               size="control"
               className="min-w-0 px-0 text-lg"
               disabled={digits.length >= TABLE_DIGITS}
+              data-keypad-key={key}
               onClick={() => append(key)}
             >
               {key}
@@ -186,6 +187,7 @@ function OpenTableDialog({
             size="control"
             className="min-w-0 px-0 text-lg"
             disabled={digits === '' || digits.length >= TABLE_DIGITS}
+            data-keypad-key="0"
             onClick={() => append('0')}
           >
             0
@@ -195,6 +197,7 @@ function OpenTableDialog({
             size="control"
             className="min-w-0 px-0"
             aria-label="Delete last digit"
+            data-keypad-key="Backspace"
             disabled={digits === ''}
             onClick={() => setDigits((current) => current.slice(0, -1))}
           >
@@ -206,7 +209,13 @@ function OpenTableDialog({
           <Button variant="secondary" size="control" data-testid="table-none" onClick={onNoTable}>
             No table
           </Button>
-          <Button type="submit" size="control" disabled={!canConfirm} data-testid="table-confirm">
+          <Button
+            type="submit"
+            size="control"
+            disabled={!canConfirm}
+            data-testid="table-confirm"
+            data-keypad-key="Enter"
+          >
             Done
           </Button>
         </div>

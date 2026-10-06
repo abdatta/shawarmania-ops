@@ -619,6 +619,8 @@ function OpenCustomerDialog({
               size="control"
               className="min-w-0 px-0 text-lg"
               disabled={complete}
+              // `00` has no single key; a keyboard types nought twice.
+              data-keypad-key={key === '00' ? undefined : key}
               onClick={() => appendDigits(key)}
             >
               {key}
@@ -629,6 +631,7 @@ function OpenCustomerDialog({
             size="control"
             className="min-w-0 px-0"
             aria-label="Delete last digit"
+            data-keypad-key="Backspace"
             disabled={digits === ''}
             onClick={() => setDigits((current) => current.slice(0, -1))}
           >
@@ -670,6 +673,7 @@ function OpenCustomerDialog({
             size="control"
             disabled={!canConfirm}
             data-testid="customer-confirm"
+            data-keypad-key="Enter"
           >
             {match !== null ? 'Use' : 'Save'}
           </Button>

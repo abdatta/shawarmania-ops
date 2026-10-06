@@ -185,6 +185,7 @@ function OpenDiscountDialog({
               variant="secondary"
               size="phone"
               className="min-w-0 px-0 text-lg"
+              data-keypad-key={key}
               onClick={() => append(key)}
             >
               {key}
@@ -195,6 +196,7 @@ function OpenDiscountDialog({
             size="phone"
             className="min-w-0 px-0 text-lg"
             aria-label="Decimal point"
+            data-keypad-key="."
             onClick={() => append('.')}
           >
             .
@@ -204,6 +206,7 @@ function OpenDiscountDialog({
             variant="secondary"
             size="phone"
             className="min-w-0 px-0 text-lg"
+            data-keypad-key="0"
             onClick={() => append('0')}
           >
             0
@@ -213,6 +216,7 @@ function OpenDiscountDialog({
             size="phone"
             className="min-w-0 px-0"
             aria-label="Delete last digit"
+            data-keypad-key="Backspace"
             disabled={!typed}
             onClick={() => setTyped((current) => current.slice(0, -1))}
           >
@@ -235,6 +239,7 @@ function OpenDiscountDialog({
           size="control"
           disabled={busy || !valid}
           data-testid="apply-discount"
+          data-keypad-key="Enter"
           onClick={confirm}
         >
           Apply

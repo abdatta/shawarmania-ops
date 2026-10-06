@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -63,5 +63,30 @@ describe('PointsDialog', () => {
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(onClose).toHaveBeenCalled()
     expect(onConfirm).not.toHaveBeenCalled()
+  })
+
+  /*
+    A counter with a physical keyboard types on the pad [owner, 2026-10-06]:
+    digits press the matching key, Backspace the delete key, Enter the primary
+    action. Nothing on the pad is a text field, so a touch screen never raises
+    its own keyboard.
+  */
+  it('takes digits, Backspace and Enter from a physical keyboard', async () => {
+    const { onConfirm, user } = open()
+    await user.keyboard('{Backspace}{Backspace}7')
+    expect(screen.getByTestId('points-readout')).toHaveTextContent('7')
+
+    await user.keyboard('{Enter}')
+    expect(onConfirm).toHaveBeenCalledOnce()
+    expect(onConfirm).toHaveBeenCalledWith(7)
+  })
+
+  it('leaves a held Enter alone, so it cannot carry into the next dialog', async () => {
+    const { onConfirm, user } = open()
+    await user.keyboard('{Enter}')
+    // user-event does not flag a held key as repeating; a real keyboard does.
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Enter', repeat: true })
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Enter', repeat: true })
+    expect(onConfirm).toHaveBeenCalledOnce()
   })
 })

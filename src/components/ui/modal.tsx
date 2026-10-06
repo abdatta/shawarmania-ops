@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 
+import { useKeypadKeys } from '@/components/ui/use-keypad-keys'
 import { cn } from '@/lib/cn'
 
 interface ModalProps {
@@ -28,9 +29,13 @@ interface ModalProps {
  * It works. `e2e/dialog-escape.spec.ts` proves it in a real browser, on both the
  * shared ConfirmDialog and a bare dialog, and exists so that nobody spends an
  * afternoon on this twice.
+ *
+ * A dialog carrying a number pad also takes a physical keyboard, by marking its
+ * keys `data-keypad-key` — see `useKeypadKeys`.
  */
 export function Modal({ open, onClose, children, className, ...props }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null)
+  useKeypadKeys(ref, open)
 
   useEffect(() => {
     const dialog = ref.current

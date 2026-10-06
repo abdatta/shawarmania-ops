@@ -187,6 +187,26 @@ describe('CustomerDialog', () => {
     })
   })
 
+  it('keys the number from a physical keyboard, and leaves the name field its own keys', async () => {
+    const { person, onChoose } = open()
+
+    await person.keyboard('9000000999')
+    expect(screen.getByTestId('customer-phone-readout')).toHaveTextContent('+91 90000 00999')
+
+    // Digits and Backspace typed into the name stay in the name, not the pad.
+    const field = await screen.findByPlaceholderText(NEW_NAME)
+    await person.type(field, 'Flat 23{Backspace}')
+    expect(field).toHaveValue('Flat 2')
+    expect(screen.getByTestId('customer-phone-readout')).toHaveTextContent('+91 90000 00999')
+
+    await person.keyboard('{Enter}')
+    expect(onChoose).toHaveBeenCalledExactlyOnceWith({
+      kind: 'identified',
+      phone: '+919000000999',
+      name: 'Flat 2',
+    })
+  })
+
   it('does not save on Enter while the name is still missing', async () => {
     const { person, onChoose } = open()
 
