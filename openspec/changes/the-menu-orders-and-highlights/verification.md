@@ -2,9 +2,9 @@
 
 ## Resumed live stage — all local gates passed
 
-The owner resumed in this session after the approved UI branch checkpoint. All 13 tasks are implemented and locally verified. The live part gate preserves the approved UI and demo. Two scoped tables and three authority-checking commands persist the configuration and normalize item order. Types were regenerated from the reset schema; no brand-site files changed. The records below the resumed-stage notes describe the earlier UI checkpoint and its then-pending backend, not the current implementation status.
+The owner resumed in this session after the approved UI branch checkpoint. All implementation tasks are implemented and locally verified; the newly authorised release is in progress. The live part gate preserves the approved UI and demo. Two scoped tables and three authority-checking commands persist the configuration and normalize item order. Types were regenerated from the reset schema; no brand-site files changed. The records below the resumed-stage notes describe the earlier UI checkpoint and its then-pending backend, not the current implementation status.
 
-The 49 baseline menu/settings tests passed before live edits. The new SQL suite was observed failing against the old schema: reorder/read functions did not exist and tied positions remained unchanged. The REST suite also failed on the old schema's missing configuration tables; the migration was restored in finally and the seeded schema reset afterwards. Both final SQL files now pass 65 assertions. Seven real-session HTTP checks pass, including owner/manager round trips, positive-control foreign rows before concealment, revoked direct writes, read-only roles and a concurrent removal held open while a reorder waits. After committing the removal, the stale reorder is refused and both saved positions remain unchanged. Fixture configuration and synthetic race rows are restored/removed.
+The 49 baseline menu/settings tests passed before live edits. The new SQL suite was observed failing against the old schema: reorder/read functions did not exist and tied positions remained unchanged. The REST suite also failed on the old schema's missing configuration tables; the migration was restored in finally and the seeded schema reset afterwards. Both final SQL files now pass 65 assertions. Eight real-session HTTP checks pass, including owner/manager round trips, positive-control foreign rows before concealment, revoked direct writes, read-only roles and a concurrent removal held open while a reorder waits. After committing the removal, the stale reorder is refused and both saved positions remain unchanged. Fixture configuration and synthetic race rows are restored/removed.
 
 The focused gate/screen tests passed 67 cases before the final equal-name tie test was added. The new auth browser case passed, saving highlights, moving a dish and reloading the real screen on phone 390×844 and tablet 1080×810 in both themes. All four screenshots were inspected; category markers, compact cards and saved order match the approved UI, with no page errors or horizontal overflow. The loading shapes remain those approved in the UI stage.
 
@@ -27,12 +27,12 @@ Formatting ran before the source checks; after the final documentation edits, pr
 | Production build | Passed in both demo and authenticated browser preconditions, including TypeScript and service worker |
 | Demo browser suite | 312 passed without retries |
 | Fresh reset and database suite | 78 files / 3,073 assertions passed; new files contribute 65 |
-| REST/RLS suite | All six phases passed: 11 realtime, 217 general REST (9 files, serial), 12 billing races, 43 drawer writes, 3 telemetry, 4 ledger timing; 290 total |
+| REST/RLS suite | All six phases passed: 11 realtime, 218 general REST (9 files, default parallelism), 12 billing races, 43 drawer writes, 3 telemetry, 4 ledger timing; 291 total |
 | Authenticated browser suite | 35 passed without retries, including live menu persistence, device billing and offline paths |
 | Generated types | Regenerated output matches the committed schema snapshot |
 | Diff and encoding | Clean whitespace; every changed file decodes as UTF-8 without BOM |
 
-The main REST phase used `npx vitest run --config vitest.rls.config.ts --maxWorkers=1`; the other five configurations ran in the same order as `npm run test:rls`. No reset occurred between the authoritative pgTAP, REST/RLS and auth phases. Phone/tablet and both-theme live screenshots were inspected, and demo browser checks retain no-external-request coverage.
+The initial main REST verification used serial files. The release correction below reran the exact `npm run test:rls` command with default parallelism successfully, superseding that workaround. No reset occurred between the authoritative pgTAP, REST/RLS and auth phases. Phone/tablet and both-theme live screenshots were inspected, and demo browser checks retain no-external-request coverage.
 
 All gate clauses have local implementation evidence. **Production remains unpublished**: `shawarmania.in/menu/<slug>/` changes only after the ops migration/app release, then the existing minute cache expiry. The actual Worker compatibility and simulated expiry proof do not claim a hosted production update. Archive, merge and deployment were not performed.
 
@@ -113,3 +113,11 @@ Menu-management adds **Managers deliberately order items within a category** and
 Public-menu adds **Highlighted dishes lead the public menu** and modifies **The public menu is read through one service-role function** to prepend highlights while preserving ordinary order, exact public fields, client-role refusal and null responses. All unrelated main-spec requirement blocks were compared to HEAD and remain unchanged. The main specs and deltas agree; syncing them does not complete tasks 3.1–3.6.
 
 `npm run roadmap:sync` reported no status changes. Formatting ran before checks; format:check, lint:todos, lint:specs, lint:agents, lint:encoding and diff checks passed. An additional audit verified clean UTF-8 without BOM for new change files, seven completed/six pending tasks and unchanged source/test hashes, so the prior final UI verification remains applicable. A pre-commit Docker probe could not connect to the Linux engine; database/RLS/auth/generated parity remain unrun locally and are required for the next live stage. The branch checkpoint does not publish to main.
+
+## Release correction — REST session cleanup
+
+The owner authorised merging to main and deploying, then specified no merge commits. Main and origin/main matched and were ancestors of the tested branch; the integration fast-forwarded to debe0a8d.
+
+Deploy run 37680155944 failed its REST gate with 28 account-flow failures before production migration/publication. Inspection exposed a test-fixture bug: default Supabase signOut revokes all sessions for each shared seeded persona. The menu fixture therefore invalidated parallel tests' owner/manager sessions. A two-client local probe confirmed this, and a regression calling the actual shared cleanup helper failed with AuthSessionMissingError when the old global cleanup was restored. Restoring scope: local passed all eight presentation tests, preserving the other owner's session.
+
+After another fresh reset, all 3,073 database assertions and the exact standard parallel npm run test:rls command passed (291 checks across all six phases). Typecheck, test-file ESLint/formatting and diff checks passed. The product/migration bytes did not change; prior UI, unit, contrast and authenticated-browser evidence still applies. The initial deploy was cancelled before publication, and the scoped-cleanup correction is being released through a new complete deployment run.

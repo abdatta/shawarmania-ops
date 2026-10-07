@@ -21,3 +21,8 @@
 - [x] 3.4 Prepend highlights in public_menu without changing its public JSON field allowlist or service-role-only privilege. Prove removed/empty omission, unavailable flags, exact field projection and item order, including the actual website Worker renderer with duplicate section names.
 - [x] 3.5 Update SCREENS, DATA_MODEL, OPERATIONS and TESTING; rerun full local gates including db:start, db:reset, test:db, test:rls, test:e2e:auth and generated types parity, with phone/tablet and both themes.
 - [x] 3.6 PHASE GATE (#68, Wave F): authorised managers round-trip order and highlights; another outlet is refused; the public menu shows highlights first and category item order within a minute without a website deploy; demo still walks. Report any external verification honestly. Do not archive or publish without the owner's request.
+
+## 4. Authorised release — no merge commits
+
+- [x] 4.1 Pin the parallel REST fixture cleanup regression with a red/green check, scope sign-out to fixture sessions only, and rerun a fresh database suite and the standard parallel six-phase REST/RLS command. Evidence: verification.md.
+- [ ] 4.2 Fast-forward main, release through the verified migration/functions/Pages workflow, inspect the served build and hosted menu, and record release evidence. Do not archive automatically.

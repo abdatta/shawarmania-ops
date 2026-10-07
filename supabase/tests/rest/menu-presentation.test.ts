@@ -22,6 +22,12 @@ const salad = '31000000-0000-4000-a000-000000000005'
 const foreignDish = '32000000-0000-4000-a000-000000000001'
 type Client = SupabaseClient<Database>
 
+async function closeFixtureSessions(clients: Client[]) {
+  await Promise.all(
+    clients.filter(Boolean).map((client) => client.auth.signOut({ scope: 'local' })),
+  )
+}
+
 describe('live menu presentation over HTTP', () => {
   let owner: Client, manager: Client, biller: Client, employee: Client, service: Client
   let sections: Tables<'menu_highlight_sections'>[] = []
@@ -95,9 +101,27 @@ describe('live menu presentation over HTTP', () => {
           expect((await service.from('menu_highlight_items').insert(selections)).error).toBeNull()
       }
     } finally {
-      await Promise.all(
-        [owner, manager, biller, employee].filter(Boolean).map((client) => client.auth.signOut()),
-      )
+      await closeFixtureSessions([owner, manager, biller, employee])
+    }
+  })
+
+  it('closes fixture sessions without revoking another test’s owner session', async () => {
+    const disposable = createClient<Database>(url, localKeys().ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
+    try {
+      expect(
+        (
+          await disposable.auth.signInWithPassword({
+            email: 'owner@login.shawarmania.invalid',
+            password: 'shawarmania-local',
+          })
+        ).error,
+      ).toBeNull()
+      await closeFixtureSessions([disposable])
+      expect((await owner.auth.getUser()).error).toBeNull()
+    } finally {
+      await closeFixtureSessions([disposable])
     }
   })
 
