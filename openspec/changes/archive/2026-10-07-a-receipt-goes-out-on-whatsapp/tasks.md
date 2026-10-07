@@ -126,7 +126,7 @@ is already proved.
 
 ## 7. PHASE GATE: #63 `a-receipt-goes-out-on-whatsapp`
 
-- [ ] 7.1 The ROADMAP.md checkpoint, walked: on a bill that carries a customer's
+- [x] 7.1 The ROADMAP.md checkpoint, walked: on a bill that carries a customer's
   number the owner or a franchise admin taps Send receipt and WhatsApp opens on
   that number's chat with the message and receipt link typed, needing only Send;
   a bill with no number, or one that does not read as an Indian mobile, offers
@@ -151,11 +151,16 @@ is already proved.
   opening on the chat needs a phone with WhatsApp**, so it rides on 7.2, and this
   box stays open until then. The counter's View receipt was walked the same day
   with real Kalyani receipts in a throwaway local demo (spinner, counter view,
-  fit, scroll on a short screen, blur, Close), and the owner signed the look off.*
-- [ ] 7.2 🧍 The owner sends one real receipt from the installed app on their
+  fit, scroll on a short screen, blur, Close), and the owner signed the look off. Closed 2026-10-07 by 7.2.*
+- [x] 7.2 🧍 The owner sends one real receipt from the installed app on their
   Android phone to a number they own, and judges the wording and the look.
-- [ ] 7.3 🧍 The owner confirms which WhatsApp account customers should see it
+  *(Done 2026-10-07: the owner sent one and reported that WhatsApp opens on the
+  bill's chat correctly, with nothing to change. This closes 7.1's last step.)*
+- [x] 7.3 🧍 The owner confirms which WhatsApp account customers should see it
   come from.
+  *(Settled 2026-10-07: no single account. Depending on urgency, a receipt goes
+  from the owner's own number or the brand's, whichever WhatsApp the sending
+  phone has, so the app names no sender.)*
 - [x] 7.4 Commit, and push only in a window the owner picks. Pushed and deployed on
   the owner's word on 2026-09-30, while every outlet was closed ahead of Kalyani
   Cafe's opening.
