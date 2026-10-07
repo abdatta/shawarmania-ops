@@ -70,6 +70,43 @@ function renderPage(
 }
 
 describe('the outlet page’s Orders', () => {
+  it('saves and cancels order settings and shortcuts independently when both have drafts', async () => {
+    const person = userEvent.setup()
+    const data = renderPage(OUTLET_KALYANI_ID)
+    const adapters = createMockAdapters('super_admin', data)
+    const original = (await adapters.menu.readOutletMenu(OUTLET_KALYANI_ID)).presets
+    const collection = await screen.findByRole('switch', { name: 'Collect customer details' })
+    await screen.findByTestId('preset-percent-1000')
+    await person.click(collection)
+    await person.click(screen.getByRole('button', { name: 'Remove the 10% preset' }))
+    await person.click(screen.getByTestId('service-save'))
+    await screen.findByTestId('service-saved')
+    expect(data.store.serviceSettings.get(OUTLET_KALYANI_ID)?.collectCustomerDetails).toBe(false)
+    expect((await adapters.menu.readOutletMenu(OUTLET_KALYANI_ID)).presets).toEqual(original)
+    expect(screen.getByTestId('presets-save')).toBeInTheDocument()
+    await person.click(collection)
+    await person.click(screen.getByTestId('presets-cancel'))
+    expect(collection).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByTestId('service-save')).toBeInTheDocument()
+    expect(screen.getByTestId('preset-percent-1000')).toBeInTheDocument()
+    await person.click(screen.getByRole('button', { name: 'Remove the 10% preset' }))
+    await person.click(screen.getByTestId('presets-save'))
+    await screen.findByTestId('presets-saved')
+    expect((await adapters.menu.readOutletMenu(OUTLET_KALYANI_ID)).presets).toEqual(
+      original.slice(1),
+    )
+    expect(data.store.serviceSettings.get(OUTLET_KALYANI_ID)?.collectCustomerDetails).toBe(false)
+    expect(collection).toHaveAttribute('aria-checked', 'true')
+    await person.click(screen.getByRole('button', { name: 'Remove the 15% preset' }))
+    await person.click(screen.getByTestId('service-cancel'))
+    expect(collection).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByTestId('presets-save')).toBeInTheDocument()
+    expect(screen.queryByTestId('preset-percent-1500')).not.toBeInTheDocument()
+    expect((await adapters.menu.readOutletMenu(OUTLET_KALYANI_ID)).presets).toEqual(
+      original.slice(1),
+    )
+  })
+
   it.each(['super_admin', 'franchise_admin'] as const)(
     'lets %s save customer collection independently of service types',
     async (role) => {

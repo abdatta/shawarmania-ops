@@ -69,6 +69,7 @@ import {
   OutletLoyaltyShimmer,
 } from '@/features/outlets/outlet-loyalty-section'
 import { OutletSettingsLinkProvider } from '@/features/outlets/outlet-settings-link'
+import { OutletDiscountPresets } from './outlet-discount-presets'
 import { getPartState, isRenderable } from '@/gates/registry'
 import { cn } from '@/lib/cn'
 import {
@@ -789,7 +790,7 @@ export function OutletPage() {
         // gap and its Copy button (the-menu-is-public).
         <LoadingRegion label="this outlet" className="space-y-4" data-testid="outlets-loading">
           <Shimmer className="h-[24.1875rem]" />
-          {showService && <OutletServiceShimmer />}
+          {showService && <OutletServiceShimmer withDiscounts />}
           {showLoyalty && <OutletLoyaltyShimmer />}
           <Shimmer className="h-[18.5rem]" />
         </LoadingRegion>
@@ -822,7 +823,9 @@ export function OutletPage() {
                 // the owner's alone.
                 mayWrite={mayAdminister}
                 goldOffered={goldOffered}
-              />
+              >
+                <OutletDiscountPresets outletId={shown.id} mayWrite={mayAdminister} />
+              </OutletServiceSections>
             )}
             {shown.is_active && showLoyalty && (
               <OutletLoyaltySection

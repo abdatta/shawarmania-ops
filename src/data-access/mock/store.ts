@@ -20,6 +20,7 @@ import type {
   BillDraft,
   DiscountPreset,
   MenuDiscount,
+  MenuHighlights,
   PaymentAllocation,
 } from '../adapters'
 import {
@@ -88,6 +89,8 @@ export interface DemoStore {
   menuCategories: Tables<'menu_categories'>[]
   /** Owned by the menu adapter. */
   menuItems: Tables<'menu_items'>[]
+  /** Ordered merchandising references; items keep their real categories. */
+  menuHighlights: Map<string, MenuHighlights>
   /** Owned by the menu adapter: the discounts running across part of the menu. */
   menuDiscounts: MenuDiscount[]
   /**
@@ -1383,6 +1386,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     tradingOutletIds,
     menuCategories: structuredClone(menuCategoryFixtures),
     menuItems,
+    menuHighlights: new Map(),
     // A discount the owner is running, so the demo shows the feature rather than
     // hiding it: fifteen percent across the Shawarma category at Kalyani.
     menuDiscounts: structuredClone(menuDiscountFixtures),

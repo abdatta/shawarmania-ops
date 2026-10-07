@@ -172,7 +172,11 @@ export function createMockAdapters(
         : withReachableWaiting(attendance, assignedOutlets(persona.assignments)),
     // The persona's role reaches the menu mock so it refuses a Biller's write
     // where `menu_items_write` will refuse it.
-    menu: createMockMenuAdapter(store, role),
+    menu: createMockMenuAdapter(
+      store,
+      role,
+      role === 'super_admin' ? null : assignedOutlets(persona.assignments),
+    ),
     billing: createMockBillingAdapter(
       store,
       {

@@ -51,7 +51,13 @@ function refuseBadPrice(pricePaise: number): number {
   return pricePaise
 }
 
-export function createMockMenuAdapter(store: DemoStore, role: AppRole): MenuAdapter {
+export function createMockMenuAdapter(
+  store: DemoStore,
+  role: AppRole,
+  reachableOutlets: readonly string[] | null = role === 'super_admin'
+    ? null
+    : [store.tradingOutletIds[0]!],
+): MenuAdapter {
   /**
    * The floor the database enforces, enforced here for the same reason: a
    * per-unit amount above the price would drive that line's own discount past
@@ -137,6 +143,78 @@ export function createMockMenuAdapter(store: DemoStore, role: AppRole): MenuAdap
   }
 
   return {
+    presentation: {
+      async readHighlights(outletId) {
+        if (reachableOutlets && !reachableOutlets.includes(outletId)) {
+          throw new MenuActionError('not_permitted', 'You can read only your own outlet’s menu.')
+        }
+        const saved = store.menuHighlights.get(outletId) ?? { title: 'Highlights', itemIds: [] }
+        const activeIds = new Set(
+          store.menuItems
+            .filter(
+              (item) =>
+                item.outlet_id === outletId &&
+                item.is_active &&
+                store.menuCategories.some(
+                  (category) => category.id === item.category_id && category.is_active,
+                ),
+            )
+            .map((item) => item.id),
+        )
+        return { title: saved.title, itemIds: saved.itemIds.filter((id) => activeIds.has(id)) }
+      },
+      async setHighlights(outletId, highlights) {
+        refuseReadOnly()
+        if (reachableOutlets && !reachableOutlets.includes(outletId)) {
+          throw new MenuActionError('not_permitted', 'You can change only a menu you manage.')
+        }
+        const title = refuseBlank('The section name', highlights.title)
+        if (title.length > 60 || new Set(highlights.itemIds).size !== highlights.itemIds.length) {
+          throw new MenuActionError(
+            'invalid',
+            'Use a name up to 60 characters and choose each item once.',
+          )
+        }
+        const eligible = store.menuItems.filter(
+          (item) =>
+            item.outlet_id === outletId &&
+            item.is_active &&
+            store.menuCategories.some(
+              (category) => category.id === item.category_id && category.is_active,
+            ),
+        )
+        if (highlights.itemIds.some((id) => !eligible.some((item) => item.id === id))) {
+          throw new MenuActionError('invalid', 'Choose items from this outlet’s current menu.')
+        }
+        const saved = { title, itemIds: [...highlights.itemIds] }
+        store.menuHighlights.set(outletId, saved)
+        return structuredClone(saved)
+      },
+      async reorderItems(categoryId, itemIds) {
+        refuseReadOnly()
+        const category = findCategory(categoryId)
+        if (reachableOutlets && !reachableOutlets.includes(category.outlet_id)) {
+          throw new MenuActionError('not_permitted', 'You can change only a menu you manage.')
+        }
+        const items = store.menuItems.filter(
+          (item) => item.category_id === categoryId && item.is_active,
+        )
+        if (
+          !category.is_active ||
+          itemIds.length !== items.length ||
+          new Set(itemIds).size !== items.length ||
+          itemIds.some((id) => !items.some((item) => item.id === id))
+        ) {
+          throw new MenuActionError(
+            'invalid',
+            'The category changed. Refresh the menu and try again.',
+          )
+        }
+        itemIds.forEach((id, index) => {
+          findItem(id).sort_order = index + 1
+        })
+      },
+    },
     async listMenu(outletId: string): Promise<MenuCategoryWithItems[]> {
       return store.menuCategories
         .filter((category) => category.outlet_id === outletId && category.is_active)

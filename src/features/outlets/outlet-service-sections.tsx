@@ -63,6 +63,7 @@ export function OutletServiceSections({
   outletId,
   mayWrite,
   goldOffered = true,
+  children,
 }: {
   outletId: string
   /** Whether to offer the controls. The database is what refuses the write. */
@@ -72,6 +73,7 @@ export function OutletServiceSections({
    * outlet without them shows no *Free for gold members* [owner, 2026-09-29].
    */
   goldOffered?: boolean
+  children?: ReactNode
 }) {
   const { outlets } = useAdapters()
   const [stored, setStored] = useState<OutletServiceSettings | null>(null)
@@ -113,13 +115,17 @@ export function OutletServiceSections({
         className="space-y-4"
         data-testid="service-loading"
       >
-        <OutletServiceShimmer />
+        <OutletServiceShimmer withDiscounts={children !== undefined} />
       </LoadingRegion>
     )
   }
 
   if (!mayWrite) {
-    return <ReadOnlyOrders outletId={outletId} stored={shown} goldOffered={goldOffered} />
+    return (
+      <ReadOnlyOrders outletId={outletId} stored={shown} goldOffered={goldOffered}>
+        {children}
+      </ReadOnlyOrders>
+    )
   }
 
   return (
@@ -135,7 +141,9 @@ export function OutletServiceSections({
         setStored(saved)
         return saved
       }}
-    />
+    >
+      {children}
+    </OrdersSection>
   )
 }
 
@@ -145,11 +153,12 @@ export function OutletServiceSections({
  * by the outlet page's own
  * placeholder, so the page does not reflow when this arrives.
  */
-export function OutletServiceShimmer() {
+export function OutletServiceShimmer({ withDiscounts = false }: { withDiscounts?: boolean }) {
   return (
     <div className="space-y-2">
       <Shimmer className="h-10 w-24" />
       <Shimmer className="h-[calc(11rem+2px)]" />
+      {withDiscounts && <Shimmer className="h-[calc(92px+7rem)]" />}
     </div>
   )
 }
@@ -195,12 +204,14 @@ function OrdersSection({
   stored,
   goldOffered,
   onSave,
+  children,
 }: {
   outletId: string
   stored: OutletServiceSettings
   goldOffered: boolean
   /** Resolves with what the database stored. */
   onSave: (next: OutletServiceSettings) => Promise<OutletServiceSettings>
+  children?: ReactNode
 }) {
   const [draft, setDraft] = useState(stored)
   // Typed separately from the draft, so an empty or half-typed box is not a
@@ -509,6 +520,7 @@ function OrdersSection({
           onCancel={cancel}
         />
       </Card>
+      {children}
     </OutletSection>
   )
 }
@@ -521,10 +533,12 @@ function ReadOnlyOrders({
   outletId,
   stored,
   goldOffered,
+  children,
 }: {
   outletId: string
   stored: OutletServiceSettings
   goldOffered: boolean
+  children?: ReactNode
 }) {
   const on = ordersOffered(stored)
   return (
@@ -573,6 +587,7 @@ function ReadOnlyOrders({
           )}
         </SettingTile>
       </Card>
+      {children}
     </OutletSection>
   )
 }
@@ -608,6 +623,7 @@ export function SettingTile({
   stacked,
   control,
   children,
+  compact = false,
 }: {
   depth: 1 | 2 | 3
   icon: LucideIcon | typeof MemberMark
@@ -616,11 +632,16 @@ export function SettingTile({
   stacked?: boolean
   control: ReactNode
   children?: ReactNode
+  /** A shorter header for dense settings whose controls live below it. */
+  compact?: boolean
 }) {
   return (
     <div className={cn('rounded-lg px-3 py-2', DEPTH_TONE[depth])} data-depth={depth}>
       <div
-        className={cn(stacked ? 'space-y-2' : 'flex min-h-14 items-center justify-between gap-3')}
+        className={cn(
+          stacked ? 'space-y-2' : 'flex items-center justify-between gap-3',
+          !stacked && (compact ? 'min-h-10' : 'min-h-14'),
+        )}
       >
         <div className="flex min-w-0 items-center gap-2">
           <TileIcon icon={Icon} />
@@ -652,6 +673,7 @@ export function Segmented({
   disabled,
   testId,
   onToggle,
+  compact = false,
 }: {
   label: string
   options: { value: string; label: string; on: boolean }[]
@@ -660,12 +682,17 @@ export function Segmented({
   disabled: boolean
   testId: string
   onToggle: (value: string) => void
+  /** Icon-width units beside a value field, retaining 44 px tap targets. */
+  compact?: boolean
 }) {
   return (
     <div
       role="group"
       aria-label={label}
-      className="grid grid-cols-2 gap-1 rounded-xl border border-border bg-surface p-1"
+      className={cn(
+        'grid grid-cols-2 gap-1 rounded-xl border border-border bg-surface p-1',
+        compact && 'shrink-0',
+      )}
     >
       {options.map((option) => (
         <button
@@ -681,6 +708,7 @@ export function Segmented({
           className={cn(
             'flex h-[var(--size-control-phone)] items-center justify-center rounded-lg px-2 text-sm font-semibold',
             'focus-visible:focus-ring disabled:pointer-events-none disabled:opacity-50',
+            compact && 'min-h-[44px] w-[44px] px-0',
             option.on
               ? 'bg-primary text-on-primary'
               : 'text-content-muted hover:bg-surface-raised hover:text-content',

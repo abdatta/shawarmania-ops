@@ -1176,7 +1176,21 @@ export class MenuActionError extends DataActionError {
   }
 }
 
+/** Ordered references to existing schema items, awaiting the approved live schema. */
+export interface MenuHighlights {
+  title: string
+  itemIds: Tables<'menu_items'>['id'][]
+}
+
+export interface MenuPresentationAdapter {
+  readHighlights(outletId: string): Promise<MenuHighlights>
+  setHighlights(outletId: string, highlights: MenuHighlights): Promise<MenuHighlights>
+  reorderItems(categoryId: string, itemIds: string[]): Promise<void>
+}
+
 export interface MenuAdapter {
+  /** Mock-only until the owner approves #68; the demo part gate hides live controls. */
+  presentation?: MenuPresentationAdapter
   /**
    * The outlet's menu, categories in sort order with their items in sort order.
    *

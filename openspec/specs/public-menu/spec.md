@@ -4,8 +4,9 @@
 
 The outlet's live menu as a customer reads it on `shawarmania.in`: a public
 address derived from the outlet's name and kept through a rename, read through one
-service-role function that returns active sections and items in the counter's
-order, flags unavailable items, omits removed ones, and answers a closed outlet,
+service-role function that puts optional highlights first, retains ordinary
+categories and items in the counter's saved order, flags unavailable items, omits
+removed ones, and answers a closed outlet,
 an empty menu and an invented address alike.
 
 ## Requirements
@@ -56,9 +57,11 @@ the service role and by no client role — neither `anon` nor `authenticated` �
 exactly as the public receipt is. The brand site's Worker SHALL hold the
 credential; no browser SHALL.
 
-It SHALL answer with the outlet's name and address and, for each active section
-in the counter's order, each active item in order with its name, description,
-price in integer paise, veg flag and whether it is available — and nothing else:
+It SHALL answer with the outlet's name and address, optional nonempty highlights
+first, and ordinary active categories in the counter's saved order. Each section
+SHALL use the same existing section shape and each active item SHALL carry its
+name, description, price in integer paise, veg flag and whether it is available
+— and nothing else:
 no ids, no other outlet fields, no discounts. A removed item SHALL be absent; an
 unavailable item SHALL be present and flagged, because the customer should see
 what is off today rather than wonder where it went.
@@ -69,7 +72,7 @@ about which outlets exist.
 
 #### Scenario: A customer scans a table's code
 - **WHEN** the Worker asks for a trading outlet's address
-- **THEN** it receives that outlet's active sections and items in the counter's order, each with exactly name, description, price, veg flag and availability
+- **THEN** it receives nonempty highlights first when configured, then that outlet's ordinary active categories and items in the counter's saved order, each item with exactly name, description, price, veg flag and availability
 
 #### Scenario: The kitchen ran out
 - **WHEN** an item is marked unavailable
@@ -86,3 +89,21 @@ about which outlets exist.
 #### Scenario: A session tries to call it
 - **WHEN** an anonymous request or any signed-in session, the owner's included, calls `public_menu`
 - **THEN** it is refused
+
+### Requirement: Highlighted dishes lead the public menu
+
+The public reader SHALL prepend a nonempty outlet highlights selection as an ordinary section under its configured title, in its independently configured order. It SHALL retain those dishes in their ordinary categories, use the same public projection and current price/availability, omit removed dishes and inactive categories, and omit an empty selection. Item reordering and highlight edits SHALL reach `shawarmania.in/menu/<slug>/` within the existing cache minute without a brand-site deployment.
+
+#### Scenario: A new launch is promoted
+- **WHEN** a manager saves Newly Launched with dishes from two categories
+- **THEN** the customer menu shows Newly Launched first and both ordinary categories still contain those dishes
+
+#### Scenario: A highlighted dish becomes unavailable or is removed
+- **WHEN** it becomes unavailable
+- **THEN** both appearances show Unavailable
+- **WHEN** it is removed
+- **THEN** neither appearance remains and an empty highlights section disappears
+
+#### Scenario: A title matches another category
+- **WHEN** a highlights title equals an ordinary category name
+- **THEN** the website renders both sections with distinct anchors and functional navigation

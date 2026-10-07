@@ -375,6 +375,29 @@ Finish on the owner console. The alert count has changed, because it was always 
 
 **Afterwards:** press **Start again** so the next walkthrough begins where this one did.
 
+## Menu ordering and highlights review (#68)
+
+In the Admin or Owner demo, open Menu. On a dish's actions, use Move up/down
+to arrange it within its category; the first and last directions are disabled.
+Discounts appear first, then a compact highlights card above the ordinary menu.
+When highlights are empty, only the name, permanent purpose text and Edit
+button appear. Use Highlight on dishes from different categories, then Edit
+highlights below discounts. Rename the section, search and select dishes, arrange the selected list,
+and Save highlights. Close without saving to discard a draft. Dishes remain in their ordinary
+categories; use Share above to open the public menu once the live integration ships.
+An unavailable dish reads Unavailable in both places; removing a dish removes its
+highlight too. A sparkle identifies highlighted dishes in their ordinary category
+rows, and a crossed-circle identifies unavailable dishes there. Hover titles and
+accessible names explain both symbols. Clear the selection to hide the customer section. As Owner,
+choose the other outlet: its title and selection are independent, and open drafts
+close on an outlet change. Bill discount shortcuts live inside Orders in each
+outlet’s settings: one to four shortcuts fill a single equal-width row. Add or remove
+shortcuts inline, then Save or Cancel. Orders uses a sibling card with
+its own Save; saving or cancelling either preserves the other card's draft.
+Saving confirms the result in place and briefly glows the saved card, like Orders; Cancel restores the saved shortcuts. Menu has no preset controls. The `menu-presentation` part gate remains demo-only: its UI is approved, while
+live ordering/highlights persistence and public website integration are still
+pending. The existing shortcut adapter already persists its settings.
+
 ## Extending it
 
 When a new surface is added:

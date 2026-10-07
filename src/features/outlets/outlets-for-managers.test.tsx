@@ -119,6 +119,7 @@ describe('a manager’s outlets', () => {
     expect(await screen.findByText('This outlet is not one you can see.')).toBeInTheDocument()
     expect(screen.queryByText('Shawarmania Kanchrapara')).toBeNull()
     expect(screen.queryByTestId('outlet-tablets')).toBeNull()
+    expect(screen.queryByTestId('outlet-discount-presets')).toBeNull()
   })
 })
 

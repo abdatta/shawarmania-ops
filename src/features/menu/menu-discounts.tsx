@@ -1,4 +1,4 @@
-import { ChevronRight, Pencil, Trash2 } from 'lucide-react'
+import { Pencil, Trash2 } from 'lucide-react'
 import { useMemo, useState, type FormEvent } from 'react'
 
 import { FormSheet } from '@/components/layout/form-sheet'
@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import type {
-  DiscountPreset,
   MenuCategoryWithItems,
   MenuDiscount,
   MenuDiscountPatch,
@@ -46,21 +45,17 @@ function categoryNames(discount: MenuDiscount, categories: MenuCategoryWithItems
 export function MenuDiscountsCard({
   discounts,
   categories,
-  presets,
   busy,
   onCreate,
   onUpdate,
   onRemove,
-  onSetPresets,
 }: {
   discounts: MenuDiscount[]
   categories: MenuCategoryWithItems[]
-  presets: DiscountPreset[]
   busy: boolean
   onCreate: (discount: Omit<NewMenuDiscount, 'outletId'>) => Promise<void>
   onUpdate: (id: string, patch: MenuDiscountPatch) => Promise<void>
   onRemove: (id: string) => Promise<void>
-  onSetPresets: (presets: DiscountPreset[]) => Promise<void>
 }) {
   const [open, setOpen] = useState(false)
   /** The discount being changed, or null when starting a new one. */
@@ -179,10 +174,19 @@ export function MenuDiscountsCard({
   }
 
   return (
-    <Card className="mb-4 space-y-2" data-testid="menu-discounts">
+    <Card className="mb-3 space-y-1 p-3" data-testid="menu-discounts">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-bold text-content">Menu Discounts</h2>
-        <Button size="phone" data-testid="set-discounts" disabled={busy} onClick={openSheet}>
+        <div className="min-w-0">
+          <h2 className="text-sm font-bold text-content">Menu Discounts</h2>
+          <p className="text-xs text-content-muted">Category or whole-menu discounts.</p>
+        </div>
+        <Button
+          className="shrink-0"
+          size="phone"
+          data-testid="set-discounts"
+          disabled={busy}
+          onClick={openSheet}
+        >
           Add Discount
         </Button>
       </div>
@@ -229,8 +233,6 @@ export function MenuDiscountsCard({
           ))}
         </ul>
       )}
-
-      <DiscountPresets presets={presets} busy={busy} onSetPresets={onSetPresets} />
 
       <FormSheet
         open={open}
@@ -335,154 +337,6 @@ export function MenuDiscountsCard({
         </form>
       </FormSheet>
     </Card>
-  )
-}
-
-/**
- * The counter panel's percentage presets.
- *
- * Between none and four. Four is a layout fact rather than an arbitrary cap: the
- * biller's panel fits four across one row, and a preset row that wraps is worse
- * than one preset fewer.
- */
-function DiscountPresets({
-  presets,
-  busy,
-  onSetPresets,
-}: {
-  presets: DiscountPreset[]
-  busy: boolean
-  onSetPresets: (presets: DiscountPreset[]) => Promise<void>
-}) {
-  const [adding, setAdding] = useState('')
-  const [addingBasis, setAddingBasis] = useState<'percent' | 'amount'>('percent')
-
-  const label = (preset: DiscountPreset) =>
-    preset.basis === 'percent' ? `${preset.value / 100}%` : formatPaise(preset.value)
-
-  return (
-    /*
-      Collapsed by default, because presets are set once and then left alone
-      while the discounts above them change. The summary still carries their
-      values, so the owner can confirm what the counter offers without opening
-      anything — which is the only question this section usually has to answer.
-    */
-    <details className="border-t border-border pt-2" data-testid="discount-presets">
-      <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-bold uppercase text-content-muted">
-        <ChevronRight
-          aria-hidden
-          size={14}
-          className="transition-transform [details[open]_&]:rotate-90"
-        />
-        Counter presets
-        <span className="font-semibold normal-case tracking-normal">
-          {presets.length > 0 ? presets.map(label).join(' · ') : 'None'}
-        </span>
-      </summary>
-
-      <p className="mb-2 mt-2 text-xs text-content-muted">
-        What the counter offers in one tap. Up to four.
-      </p>
-
-      <div className="flex flex-wrap items-center gap-2">
-        {presets.map((preset) => (
-          <span
-            key={`${preset.basis}-${preset.value}`}
-            data-testid={`preset-${preset.basis}-${preset.value}`}
-            className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-border px-2 text-sm font-bold text-content"
-          >
-            {label(preset)}
-            <Button
-              variant="ghost"
-              size="phone"
-              className="size-7 px-0"
-              aria-label={`Remove the ${label(preset)} preset`}
-              disabled={busy}
-              onClick={() =>
-                void onSetPresets(
-                  presets.filter(
-                    (candidate) =>
-                      !(candidate.basis === preset.basis && candidate.value === preset.value),
-                  ),
-                )
-              }
-            >
-              <Trash2 aria-hidden size={13} />
-            </Button>
-          </span>
-        ))}
-
-        {presets.length < 4 && (
-          <span className="flex items-center gap-1">
-            <Input
-              className="h-9 w-16"
-              inputMode="decimal"
-              autoComplete="off"
-              aria-label="New preset value"
-              placeholder={addingBasis === 'percent' ? '%' : '₹'}
-              value={adding}
-              onChange={(event) => setAdding(event.target.value)}
-            />
-            {/*
-              Two buttons rather than a dropdown: there are exactly two units,
-              and a select costs a tap to open before the tap that chooses. It is
-              also the same %/₹ pair the discount sheet and the counter panel
-              already use, so the control means one thing everywhere.
-            */}
-            <span className="flex gap-1" role="group" aria-label="New preset unit">
-              {(['percent', 'amount'] as const).map((option) => (
-                <Button
-                  key={option}
-                  variant={addingBasis === option ? 'primary' : 'secondary'}
-                  size="phone"
-                  className="size-9 px-0"
-                  aria-pressed={addingBasis === option}
-                  data-testid={`preset-unit-${option}`}
-                  onClick={() => setAddingBasis(option)}
-                >
-                  {option === 'percent' ? '%' : '₹'}
-                </Button>
-              ))}
-            </span>
-            <Button
-              variant="secondary"
-              size="phone"
-              data-testid="add-preset"
-              disabled={busy || adding.trim() === ''}
-              onClick={() => {
-                const numeric = Number(adding.trim())
-                if (!Number.isFinite(numeric) || numeric <= 0) return
-                if (addingBasis === 'percent' && numeric > 100) return
-                const next: DiscountPreset = {
-                  basis: addingBasis,
-                  // Basis points for a percentage, paise for an amount — the
-                  // same integer convention the rest of the discount path uses.
-                  value:
-                    addingBasis === 'percent' ? Math.round(numeric * 100) : rupeesToPaise(numeric),
-                }
-                if (
-                  presets.some(
-                    (preset) => preset.basis === next.basis && preset.value === next.value,
-                  )
-                ) {
-                  setAdding('')
-                  return
-                }
-                void onSetPresets(
-                  [...presets, next].sort(
-                    (left, right) =>
-                      left.basis.localeCompare(right.basis) || left.value - right.value,
-                  ),
-                )
-                setAdding('')
-              }}
-            >
-              Add preset
-            </Button>
-          </span>
-        )}
-      </div>
-    </details>
   )
 }
 

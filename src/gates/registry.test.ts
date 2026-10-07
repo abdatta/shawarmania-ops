@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   GROUPED_SHELL_ROLES,
+  getPartState,
   isRenderable,
   NAV_GROUPS,
   navTree,
@@ -10,6 +11,10 @@ import {
 } from './registry'
 
 describe('gate registry', () => {
+  it('keeps menu presentation demo-only until the owner approves live integration', () => {
+    expect(isRenderable(getPartState('menu-presentation'), 'demo')).toBe(true)
+    expect(isRenderable(getPartState('menu-presentation'), 'real')).toBe(false)
+  })
   it('covers all three states across both modes', () => {
     // hidden: absent everywhere
     expect(isRenderable('hidden', 'demo')).toBe(false)

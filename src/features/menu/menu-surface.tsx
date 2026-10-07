@@ -1,4 +1,4 @@
-import { Check, Share2, UtensilsCrossed } from 'lucide-react'
+import { Ban, Check, Share2, Sparkles, UtensilsCrossed } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
@@ -13,7 +13,7 @@ import { Card } from '@/components/ui/card'
 import { CategoryInput } from '@/components/ui/category-input'
 import { CategoryMatchDialog } from '@/components/ui/category-match-dialog'
 import { Input } from '@/components/ui/input'
-import { LoadingList } from '@/components/ui/loading'
+import { LoadingList, LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { RevealAdded } from '@/components/ui/reveal-added'
 import { VegMarker } from '@/components/ui/veg-marker'
@@ -21,15 +21,18 @@ import { useAdapters, type Tables } from '@/data-access'
 import {
   DataActionError,
   type MenuCategoryWithItems,
-  type DiscountPreset,
   type MenuDiscount,
+  type MenuHighlights,
 } from '@/data-access/adapters'
 import { matchCategory, paiseToRupees, rupeesToPaise, type CategoryMatch } from '@/domain'
 import { useOutletScope } from '@/features/outlet-scope'
 import { publicMenuLink } from '@/lib/public-menu-link'
 import { useShareLink } from '@/lib/use-share-link'
+import { getPartState, isRenderable } from '@/gates/registry'
+import { useSession } from '@/session/context'
 
 import { MenuDiscountsCard } from './menu-discounts'
+import { MenuHighlightsCard } from './menu-highlights'
 
 interface ItemDraft {
   categoryName: string
@@ -48,9 +51,31 @@ const EMPTY_DRAFT: ItemDraft = {
 }
 
 export function MenuSurface() {
-  const { menu: adapter } = useAdapters()
   const { outletId, selector: outletSelector } = useOutletScope()
+  // An outlet change unmounts every draft and loaded row together.
+  return (
+    <OutletMenuSurface
+      key={outletId ?? 'loading'}
+      outletId={outletId}
+      outletSelector={outletSelector}
+    />
+  )
+}
+
+function OutletMenuSurface({
+  outletId,
+  outletSelector,
+}: {
+  outletId: string | null
+  outletSelector: ReactNode
+}) {
+  const { menu: adapter } = useAdapters()
+  const session = useSession()
+  const presentation = isRenderable(getPartState('menu-presentation'), session.mode)
+    ? adapter.presentation
+    : undefined
   const [menu, setMenu] = useState<MenuCategoryWithItems[] | null>(null)
+  const [highlights, setHighlights] = useState<MenuHighlights | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [itemFormOpen, setItemFormOpen] = useState(false)
@@ -61,7 +86,6 @@ export function MenuSurface() {
   const [categoryName, setCategoryName] = useState('')
   const [removing, setRemoving] = useState<Tables<'menu_items'> | null>(null)
   const [discounts, setDiscounts] = useState<MenuDiscount[]>([])
-  const [presets, setPresets] = useState<DiscountPreset[]>([])
   const [revealedItem, setRevealedItem] = useState<string | null>(null)
   const [revealedCategory, setRevealedCategory] = useState<string | null>(null)
   const [publicMenuSlug, setPublicMenuSlug] = useState<string | null>(null)
@@ -73,25 +97,30 @@ export function MenuSurface() {
     if (!outletId) return []
     // One read, because a discount that is current while the menu beside it is
     // stale prices a line wrong.
-    const next = await adapter.readOutletMenu(outletId)
+    const [next, nextHighlights] = await Promise.all([
+      adapter.readOutletMenu(outletId),
+      presentation?.readHighlights(outletId) ?? Promise.resolve(null),
+    ])
     setMenu(next.categories)
+    setHighlights(nextHighlights)
     setDiscounts(next.discounts)
-    setPresets(next.presets)
     setPublicMenuSlug(next.publicMenuSlug ?? null)
     return next.categories
-  }, [adapter, outletId])
+  }, [adapter, outletId, presentation])
 
   useEffect(() => {
     let active = true
     void (async () => {
       try {
-        const next = outletId
-          ? await adapter.readOutletMenu(outletId)
-          : { categories: [], discounts: [], presets: [], publicMenuSlug: null }
+        if (!outletId) return
+        const [next, nextHighlights] = await Promise.all([
+          adapter.readOutletMenu(outletId),
+          presentation?.readHighlights(outletId) ?? Promise.resolve(null),
+        ])
         if (active) {
           setMenu(next.categories)
+          setHighlights(nextHighlights)
           setDiscounts(next.discounts)
-          setPresets(next.presets)
           setPublicMenuSlug(next.publicMenuSlug ?? null)
         }
       } catch {
@@ -101,7 +130,7 @@ export function MenuSurface() {
     return () => {
       active = false
     }
-  }, [adapter, outletId])
+  }, [adapter, outletId, presentation])
 
   const categories = useMemo(() => menu ?? [], [menu])
   const suggestions = useMemo(() => categories.map(({ category }) => category.name), [categories])
@@ -235,6 +264,24 @@ export function MenuSurface() {
     })
   }
 
+  async function moveItem(entry: MenuCategoryWithItems, index: number, direction: -1 | 1) {
+    if (!presentation) return
+    const ids = entry.items.map((item) => item.id)
+    const other = index + direction
+    if (!ids[index] || !ids[other]) return
+    ;[ids[index], ids[other]] = [ids[other]!, ids[index]!]
+    await run(async () => {
+      await presentation.reorderItems(entry.category.id, ids)
+      await load()
+    })
+  }
+
+  async function saveHighlights(next: MenuHighlights) {
+    if (!presentation || !outletId) return
+    await presentation.setHighlights(outletId, next)
+    await load()
+  }
+
   const priceChanged =
     editing !== null &&
     Number.isFinite(Number(draft.price.trim())) &&
@@ -297,11 +344,14 @@ export function MenuSurface() {
         </p>
       )}
 
-      {menu !== null && (
+      {menu === null ? (
+        <LoadingRegion label="menu discounts" className="mb-3">
+          <Shimmer className="h-[70px]" />
+        </LoadingRegion>
+      ) : (
         <MenuDiscountsCard
           discounts={discounts}
           categories={categories}
-          presets={presets}
           busy={busy}
           // Deliberately not wrapped in `run`: a refusal belongs inside the
           // sheet the reader is still looking at, not on the page behind it.
@@ -321,14 +371,22 @@ export function MenuSurface() {
               await load()
             })
           }
-          onSetPresets={(next) =>
-            run(async () => {
-              if (!outletId) return
-              setPresets(await adapter.setDiscountPresets(outletId, next))
-            })
-          }
         />
       )}
+
+      {presentation &&
+        (highlights === null ? (
+          <LoadingRegion label="menu highlights" className="mb-3" data-testid="highlights-loading">
+            <Shimmer className="h-[70px]" />
+          </LoadingRegion>
+        ) : (
+          <MenuHighlightsCard
+            highlights={highlights}
+            categories={categories}
+            busy={busy}
+            onSave={saveHighlights}
+          />
+        ))}
 
       {menu === null ? (
         <LoadingList
@@ -375,36 +433,90 @@ export function MenuSurface() {
                   />
                 </div>
                 <ul className="divide-y divide-border">
-                  {items.map((item) => (
+                  {items.map((item, itemIndex) => (
                     <RevealAdded
                       as="li"
                       key={item.id}
                       active={revealedItem === item.id}
                       data-testid={`menu-item-${item.id}`}
-                      className={`flex items-center gap-3 py-2 ${!item.is_available ? 'bg-surface-raised text-content-muted opacity-70' : ''}`}
+                      className={`flex items-center gap-3 py-2 ${!item.is_available ? 'bg-surface-raised text-content-muted' : ''}`}
                     >
-                      <VegMarker isVeg={item.is_veg} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="truncate text-sm font-semibold text-content">{item.name}</p>
-                          {!item.is_available && (
-                            <span
-                              data-testid={`unavailable-${item.id}`}
-                              className="rounded-md border border-border px-1.5 py-0.5 text-[0.6875rem] font-bold text-content-muted"
-                            >
-                              Unavailable
-                            </span>
+                      <div
+                        className={`flex min-w-0 flex-1 items-center gap-3 ${!item.is_available ? 'opacity-70' : ''}`}
+                      >
+                        <VegMarker isVeg={item.is_veg} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-sm font-semibold text-content">
+                              {item.name}
+                            </p>
+                            {highlights?.itemIds.includes(item.id) && (
+                              <span
+                                role="img"
+                                aria-label="Highlighted"
+                                title="Highlighted"
+                                className="inline-flex shrink-0 text-primary"
+                              >
+                                <Sparkles size={14} aria-hidden />
+                              </span>
+                            )}
+                            {!item.is_available && (
+                              <span
+                                role="img"
+                                aria-label="Unavailable"
+                                title="Unavailable"
+                                data-testid={`unavailable-${item.id}`}
+                                className="inline-flex shrink-0 text-content-muted"
+                              >
+                                <Ban size={14} aria-hidden />
+                              </span>
+                            )}
+                          </div>
+                          {item.description && (
+                            <p className="truncate text-xs text-content-muted">
+                              {item.description}
+                            </p>
                           )}
                         </div>
-                        {item.description && (
-                          <p className="truncate text-xs text-content-muted">{item.description}</p>
-                        )}
+                        <Money
+                          paise={item.price_paise}
+                          className="shrink-0 text-sm font-semibold"
+                        />
                       </div>
-                      <Money paise={item.price_paise} className="shrink-0 text-sm font-semibold" />
                       <RowActionsMenu
                         label={`Actions for ${item.name}`}
                         compact
                         actions={[
+                          ...(presentation
+                            ? [
+                                {
+                                  label: 'Move up',
+                                  disabled: itemIndex === 0 || busy,
+                                  onSelect: () => void moveItem({ category, items }, itemIndex, -1),
+                                },
+                                {
+                                  label: 'Move down',
+                                  disabled: itemIndex === items.length - 1 || busy,
+                                  onSelect: () => void moveItem({ category, items }, itemIndex, 1),
+                                },
+                                {
+                                  label: highlights?.itemIds.includes(item.id)
+                                    ? 'Remove highlight'
+                                    : 'Highlight',
+                                  disabled: busy || highlights === null,
+                                  onSelect: () =>
+                                    void run(async () => {
+                                      if (!highlights) return
+                                      await saveHighlights({
+                                        ...highlights,
+                                        itemIds: highlights.itemIds.includes(item.id)
+                                          ? highlights.itemIds.filter((id) => id !== item.id)
+                                          : [...highlights.itemIds, item.id],
+                                      })
+                                    }),
+                                },
+                              ]
+                            : []),
                           {
                             // Verbs for what happens, never a bare on/off: *off* did not
                             // say whether the item was sold out or gone (design D1).

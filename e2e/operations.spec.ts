@@ -41,7 +41,7 @@ test.describe('the operations surfaces', () => {
     await page.getByRole('link', { name: 'Menu' }).click()
     await expect(page.getByTestId('menu-list')).toBeVisible()
     await expect(page.getByText('Classic Chicken Shawarma')).toBeVisible()
-    await expect(page.getByText('Unavailable', { exact: true })).toBeVisible()
+    await expect(page.getByRole('img', { name: 'Unavailable', exact: true })).toBeVisible()
 
     // ── Expenses, cash rows distinguishable from the rest ───────────────────
     //

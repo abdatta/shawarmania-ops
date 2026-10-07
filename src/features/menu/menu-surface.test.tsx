@@ -41,12 +41,13 @@ function sessionFor(role: Role): Session {
 function renderMenu(
   role: Role = 'franchise_admin',
   adapters: DataAdapters = createMockAdapters(role),
+  mode: Session['mode'] = 'demo',
 ) {
   return {
     adapters,
     ...render(
       <MemoryRouter>
-        <SessionContext.Provider value={sessionFor(role)}>
+        <SessionContext.Provider value={{ ...sessionFor(role), mode } as Session}>
           <AdaptersContext.Provider value={adapters}>
             <MenuSurface />
           </AdaptersContext.Provider>
@@ -57,10 +58,149 @@ function renderMenu(
 }
 
 describe('MenuSurface — the manager', () => {
+  it('does not read presentation data or expose draft controls in real mode', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+    const read = vi.spyOn(adapters.menu.presentation!, 'readHighlights')
+    renderMenu('franchise_admin', adapters, 'real')
+    await screen.findByTestId('menu-list')
+    expect(screen.queryByTestId('menu-highlights')).not.toBeInTheDocument()
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: 'Actions for Classic Chicken Shawarma' }))
+    expect(screen.queryByRole('button', { name: 'Highlight' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Move up' })).not.toBeInTheDocument()
+    expect(read).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('discount-presets')).not.toBeInTheDocument()
+  })
+
+  it('closes drafts on an outlet change and keeps saved selections separate', async () => {
+    const user = userEvent.setup()
+    const { adapters } = renderMenu('super_admin')
+    await user.click(await screen.findByRole('button', { name: 'Shawarmania Kalyani' }))
+    await user.click(await screen.findByRole('button', { name: 'Edit highlights' }))
+    expect(screen.getByText('No dishes highlighted yet.')).toBeInTheDocument()
+    await user.clear(screen.getByLabelText('Section name'))
+    await user.type(screen.getByLabelText('Section name'), 'Kalyani favourites')
+    await user.click(screen.getByRole('checkbox', { name: 'Highlight Classic Chicken Shawarma' }))
+    await user.click(screen.getByRole('button', { name: 'Save highlights' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Edit highlights' }))
+    await user.type(screen.getByLabelText('Section name'), ' unsaved')
+    // A scope change can also come from navigation while a modal is open.
+    screen.getByRole('button', { name: 'Shawarmania Kanchrapara' }).click()
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() =>
+      expect(within(screen.getByTestId('menu-highlights')).getByRole('heading')).toHaveTextContent(
+        'Highlights',
+      ),
+    )
+    expect(screen.queryByTestId('highlighted-items')).not.toBeInTheDocument()
+    expect((await adapters.menu.presentation!.readHighlights(OUTLET_KALYANI_ID)).title).toBe(
+      'Kalyani favourites',
+    )
+  })
+  it('moves an item within its category and disables movement past the first item', async () => {
+    const user = userEvent.setup()
+    const { adapters } = renderMenu()
+    const entry = (await adapters.menu.listMenu(OUTLET_KALYANI_ID))[0]!
+    await screen.findByTestId('menu-list')
+    await user.click(screen.getByRole('button', { name: `Actions for ${entry.items[0]!.name}` }))
+    expect(screen.getByRole('button', { name: 'Move up' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Move down' }))
+    await waitFor(async () =>
+      expect((await adapters.menu.listMenu(OUTLET_KALYANI_ID))[0]!.items[1]!.id).toBe(
+        entry.items[0]!.id,
+      ),
+    )
+    const rows = within(screen.getByTestId(`category-${entry.category.id}`)).getAllByTestId(
+      /^menu-item-/,
+    )
+    expect(rows[1]).toHaveTextContent(entry.items[0]!.name)
+  })
+
+  it('edits and orders highlights, keeps dishes in their categories, and cancels drafts', async () => {
+    const user = userEvent.setup()
+    const { adapters } = renderMenu()
+    await user.click(await screen.findByRole('button', { name: 'Edit highlights' }))
+    await user.clear(screen.getByLabelText('Section name'))
+    await user.type(screen.getByLabelText('Section name'), 'Newly Launched')
+    await user.click(screen.getByRole('checkbox', { name: 'Highlight Classic Chicken Shawarma' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Highlight Lebanese Chicken Shawarma' }))
+    expect(screen.queryByText('No dishes highlighted yet.')).not.toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'Highlighted dishes' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /Selected dishes/ })).not.toBeInTheDocument()
+    await user.click(
+      screen.getByRole('button', { name: 'Move Lebanese Chicken Shawarma up in highlights' }),
+    )
+    await user.click(screen.getByRole('button', { name: 'Save highlights' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Edit highlights' })).not.toBeInTheDocument(),
+    )
+    expect(await adapters.menu.presentation!.readHighlights(OUTLET_KALYANI_ID)).toEqual({
+      title: 'Newly Launched',
+      itemIds: [MENU_ITEM_LEBANESE_ID, MENU_ITEM_CLASSIC_ID],
+    })
+    expect(
+      within(screen.getByTestId('menu-highlights')).getByText('Unavailable'),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId(`menu-item-${MENU_ITEM_CLASSIC_ID}`)).toBeInTheDocument()
+    const unavailableRow = within(screen.getByTestId(`menu-item-${MENU_ITEM_LEBANESE_ID}`))
+    expect(unavailableRow.getByRole('img', { name: 'Highlighted' })).toBeInTheDocument()
+    expect(unavailableRow.getByRole('img', { name: 'Unavailable' })).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('menu-highlights')).queryByRole('img', { name: 'Highlighted' }),
+    ).not.toBeInTheDocument()
+    expect(within(screen.getByTestId('menu-highlights')).getByRole('heading')).toHaveTextContent(
+      'Newly Launched',
+    )
+    expect(screen.getAllByText('Classic Chicken Shawarma')).toHaveLength(2)
+    expect(screen.queryByRole('button', { name: 'Preview customer menu' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Edit highlights' }))
+    await user.clear(screen.getByLabelText('Section name'))
+    await user.type(screen.getByLabelText('Section name'), 'Discard me')
+    await user.click(screen.getByRole('checkbox', { name: 'Highlight Classic Chicken Shawarma' }))
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    expect(await adapters.menu.presentation!.readHighlights(OUTLET_KALYANI_ID)).toEqual({
+      title: 'Newly Launched',
+      itemIds: [MENU_ITEM_LEBANESE_ID, MENU_ITEM_CLASSIC_ID],
+    })
+  })
+
+  it('highlights from a row and returns to the compact empty state after removal', async () => {
+    const user = userEvent.setup()
+    renderMenu()
+    await screen.findByTestId('menu-list')
+    await user.click(screen.getByRole('button', { name: 'Actions for Classic Chicken Shawarma' }))
+    await user.click(screen.getByRole('button', { name: 'Highlight' }))
+    await waitFor(() =>
+      expect(screen.getByTestId('highlighted-items')).toHaveTextContent('Classic Chicken Shawarma'),
+    )
+    const row = within(screen.getByTestId(`menu-item-${MENU_ITEM_CLASSIC_ID}`))
+    expect(row.getByRole('img', { name: 'Highlighted' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Actions for Classic Chicken Shawarma' }))
+    await user.click(screen.getByRole('button', { name: 'Remove highlight' }))
+    await waitFor(() => expect(screen.queryByTestId('highlighted-items')).not.toBeInTheDocument())
+    expect(row.queryByRole('img', { name: 'Highlighted' })).not.toBeInTheDocument()
+    expect(screen.getByTestId('menu-highlights')).toHaveTextContent(
+      'Highlight dishes at the top of your menu.',
+    )
+    expect(screen.getByRole('button', { name: 'Edit highlights' })).toBeEnabled()
+  })
+
+  it('keeps a refused save visible inside the editor', async () => {
+    const user = userEvent.setup()
+    renderMenu()
+    await user.click(await screen.findByRole('button', { name: 'Edit highlights' }))
+    await user.clear(screen.getByLabelText('Section name'))
+    await user.click(screen.getByRole('button', { name: 'Save highlights' }))
+    expect(screen.getByTestId('form-sheet-error')).toHaveTextContent('Give this section a name.')
+    expect(screen.getByRole('dialog', { name: 'Edit highlights' })).toBeInTheDocument()
+  })
   it('lists categories and items in sort order, with prices in rupees', async () => {
     renderMenu()
 
     const list = await screen.findByTestId('menu-list')
+    expect(screen.queryByTestId('discount-presets')).not.toBeInTheDocument()
     const headings = within(list)
       .getAllByRole('heading', { level: 2 })
       .map((heading) => heading.textContent)
@@ -88,9 +228,10 @@ describe('MenuSurface — the manager', () => {
     renderMenu()
 
     const off = await screen.findByTestId(`menu-item-${MENU_ITEM_LEBANESE_ID}`)
-    expect(within(off).getByTestId(`unavailable-${MENU_ITEM_LEBANESE_ID}`)).toHaveTextContent(
+    expect(within(off).getByTestId(`unavailable-${MENU_ITEM_LEBANESE_ID}`)).toHaveAccessibleName(
       'Unavailable',
     )
+    expect(within(off).queryByText('Unavailable')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Actions for Lebanese Chicken Shawarma' }))
     expect(screen.getByTestId(`toggle-${MENU_ITEM_LEBANESE_ID}`)).toHaveTextContent(
@@ -460,37 +601,6 @@ describe('MenuSurface — discounts across the menu', () => {
     expect(screen.queryByRole('list', { name: 'Menu discounts' })).not.toBeInTheDocument()
   })
 
-  it('keeps the counter presets to four, so the panel row never wraps', async () => {
-    const user = userEvent.setup()
-    renderMenu()
-    await screen.findByTestId('menu-list')
-
-    const presets = screen.getByTestId('discount-presets')
-    // Collapsed by default, and the summary still says what the counter offers,
-    // so the usual question is answered without opening anything.
-    expect(presets).not.toHaveAttribute('open')
-    expect(presets).toHaveTextContent('10% · 15% · 20%')
-
-    await user.click(within(presets).getByText('Counter presets'))
-
-    // The default the database gives a new outlet.
-    expect(within(presets).getByTestId('preset-percent-1000')).toBeInTheDocument()
-    expect(within(presets).getByTestId('preset-percent-1500')).toBeInTheDocument()
-    expect(within(presets).getByTestId('preset-percent-2000')).toBeInTheDocument()
-
-    await user.type(screen.getByLabelText('New preset value'), '25')
-    await user.click(screen.getByTestId('add-preset'))
-
-    await waitFor(() => {
-      expect(
-        within(screen.getByTestId('discount-presets')).getByTestId('preset-percent-2500'),
-      ).toBeInTheDocument()
-    })
-
-    // A fifth has nowhere to go, so the control that would add one is gone.
-    expect(screen.queryByTestId('add-preset')).not.toBeInTheDocument()
-  })
-
   it('offers a Biller no way to change what comes off', async () => {
     const adapters = createMockAdapters('biller')
     renderMenu('biller', adapters)
@@ -550,26 +660,5 @@ describe('MenuSurface — changing a discount that is already running', () => {
     await waitFor(() => {
       expect(screen.getByTestId('form-sheet-error')).toHaveTextContent(/more than ₹/i)
     })
-  })
-
-  it('offers a rupee preset as readily as a percentage one', async () => {
-    const user = userEvent.setup()
-    renderMenu()
-    await screen.findByTestId('menu-list')
-
-    const presets = screen.getByTestId('discount-presets')
-    await user.click(within(presets).getByText('Counter presets'))
-
-    await user.type(screen.getByLabelText('New preset value'), '20')
-    await user.click(screen.getByTestId('preset-unit-amount'))
-    await user.click(screen.getByTestId('add-preset'))
-
-    await waitFor(() => {
-      expect(
-        within(screen.getByTestId('discount-presets')).getByTestId('preset-amount-2000'),
-      ).toBeInTheDocument()
-    })
-    // The summary reads both units without ambiguity.
-    expect(screen.getByTestId('discount-presets')).toHaveTextContent('₹20')
   })
 })
