@@ -1,8 +1,8 @@
 -- the-menu-asks-for-a-review
 --
 -- The public table menu opens with a popup asking for a Google review, with a
--- thank-you discount for sharing one. Each outlet decides whether it asks, where
--- its own Google listing takes a review, and how large the thank-you is; the
+-- review discount for sharing one. Each outlet decides whether it asks, where
+-- its own Google listing takes a review, and how large the review discount is; the
 -- owner for any outlet, a Franchise Admin for the outlets they manage — the same
 -- reach as Orders and Loyalty on the outlet page.
 --
@@ -34,7 +34,7 @@ comment on column public.outlets.review_ask_enabled is
 comment on column public.outlets.review_ask_url is
   'Where this outlet''s Google listing takes a review, e.g. https://g.page/r/<id>/review.';
 comment on column public.outlets.review_ask_percent is
-  'The thank-you discount the review ask names, in whole percent. Copy only: no bill applies it by itself.';
+  'The review discount the menu''s review popup names, in whole percent. Copy only: no bill applies it by itself.';
 
 -- ---------------------------------------------------------------------------
 -- 2. One narrow write: the owner, or a Franchise Admin of this outlet, on a live

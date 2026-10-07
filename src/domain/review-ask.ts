@@ -2,9 +2,9 @@
  * An outlet's Google review ask (the-menu-asks-for-a-review).
  *
  * The public table menu at `shawarmania.in/menu/<slug>/` opens with a popup
- * asking the customer to share a review on Google, with a thank-you discount
+ * asking the customer to share a review on Google, with a review discount
  * for sharing it. Each outlet decides whether it asks, where its own listing
- * takes a review, and how large the thank-you is.
+ * takes a review, and how large the review discount is.
  *
  * **The percentage is words, not arithmetic.** It is what the menu promises; the
  * biller gives it at the counter with the outlet's ordinary bill discount, as for
@@ -14,7 +14,7 @@ export interface OutletReviewAsk {
   enabled: boolean
   /** Where the outlet's Google listing takes a review, e.g. `https://g.page/r/<id>/review`. */
   url: string | null
-  /** The thank-you, in whole percent. */
+  /** The review discount, in whole percent. */
   percent: number
 }
 
@@ -37,7 +37,7 @@ export type ReviewAskProblem = 'url_required' | 'url_invalid' | 'percent_out_of_
 export const REVIEW_ASK_PROBLEM_MESSAGES: Record<ReviewAskProblem, string> = {
   url_required: 'Paste the outlet’s Google review link to ask for reviews.',
   url_invalid: 'Use the review link exactly as Google gives it, starting with https://.',
-  percent_out_of_range: `The thank-you is a whole number from ${MIN_REVIEW_PERCENT} to ${MAX_REVIEW_PERCENT} percent.`,
+  percent_out_of_range: `The review discount is a whole number from ${MIN_REVIEW_PERCENT} to ${MAX_REVIEW_PERCENT} percent.`,
 }
 
 /** Why the database would refuse this ask, or null when it would store it. */

@@ -32,6 +32,9 @@ review, says "good or bad, we read every one", and names the percentage as "our
 thank-you". It never asks for stars or a positive review. This repo holds only
 the number; the wording is the site's (`worker/src/menu-page.ts`).
 
+The ops side says it plainly [owner, 2026-10-07]: **Review popup on the menu** and
+**Review discount**. Warm wording belongs only where customers read it.
+
 ## D4. The percentage is not applied automatically
 
 A customer shows their review at the counter and the biller applies the ordinary

@@ -26,7 +26,7 @@ describe('an outlet’s Google review ask', () => {
     expect(reviewAskProblem({ enabled: true, url: `  ${link}  `, percent: 5 })).toBeNull()
   })
 
-  it('keeps the thank-you a whole number from one to fifty percent', () => {
+  it('keeps the review discount a whole number from one to fifty percent', () => {
     for (const percent of [0, 51, 2.5, Number.NaN]) {
       expect(reviewAskProblem({ enabled: true, url: link, percent })).toBe('percent_out_of_range')
     }

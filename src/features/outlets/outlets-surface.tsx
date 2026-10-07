@@ -847,7 +847,7 @@ export function OutletPage() {
                 key={`review-${shown.id}`}
                 outletId={shown.id}
                 // The owner, and a manager at the outlets they manage, as
-                // Orders and Loyalty: the thank-you is this outlet's to give.
+                // Orders and Loyalty: the review discount is this outlet's to give.
                 mayWrite={mayAdminister}
               />
             )}

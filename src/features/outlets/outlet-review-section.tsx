@@ -32,13 +32,13 @@ import { usePrefersReducedMotion } from '@/lib/use-prefers-reduced-motion'
  *
  * ```
  * GOOGLE REVIEW
- * ┌ Ask on the table menu                              [ on ] ┐
+ * ┌ Review popup on the menu                           [ on ] ┐
  * │ ┌ Review link   [https://g.page/r/…/review              ] ┐│
- * │ ┌ Thank-you discount                            [5] %     ┐│
+ * │ ┌ Review discount                               [5] %     ┐│
  * ```
  *
  * While it is on, the outlet's public menu opens with a popup asking the
- * customer to share a review on Google, naming the thank-you; within the menu's
+ * customer to share a review on Google, naming the review discount; within the menu's
  * one-minute cache, with no website deploy. The percentage is the promise the
  * menu makes — the biller gives it with the ordinary bill discount.
  *
@@ -196,12 +196,12 @@ function ReviewAskSection({
         <SettingTile
           depth={1}
           icon={Star}
-          caption="Ask on the table menu"
-          hint={on ? undefined : 'The menu opens by asking customers to share a Google review'}
+          caption="Review popup on the menu"
+          hint={on ? undefined : 'Menu opens with a popup asking for a Google review'}
           control={
             <Switch
               checked={on}
-              label="Ask for a Google review on the table menu"
+              label="Review popup on the menu"
               testId="review-ask-switch"
               disabled={busy}
               onChange={(value) => {
@@ -246,12 +246,12 @@ function ReviewAskSection({
               <SettingTile
                 depth={2}
                 icon={Percent}
-                caption="Thank-you discount"
-                hint="Named on the menu; given at the counter"
+                caption="Review discount"
+                hint="Shown on the menu. Biller applies it at the counter"
                 control={
                   <NumberBox
                     id={`${id}-percent`}
-                    label="Thank-you discount"
+                    label="Review discount"
                     compact
                     suffix="%"
                     value={percent}
@@ -291,8 +291,8 @@ function ReadOnlyReviewAsk({ outletId, stored }: { outletId: string; stored: Out
         <SettingTile
           depth={1}
           icon={Star}
-          caption="Ask on the table menu"
-          control={<Answer>{stored.enabled ? `${stored.percent}% thank-you` : 'Off'}</Answer>}
+          caption="Review popup on the menu"
+          control={<Answer>{stored.enabled ? `${stored.percent}% review discount` : 'Off'}</Answer>}
         />
       </Card>
     </OutletSection>

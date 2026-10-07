@@ -1,7 +1,7 @@
 -- the-menu-asks-for-a-review: the outlet's Google review ask in the database.
 --
 --   * every outlet starts with it off, and the database refuses an ask with
---     nowhere to send the customer, a link that is not https, and a thank-you
+--     nowhere to send the customer, a link that is not https, and a review discount
 --     outside 1–50 %, however it is asked;
 --   * the owner writes any outlet's ask and a manager their own outlet's, through
 --     one narrow function; nobody else does;
@@ -30,7 +30,7 @@ $$;
 select is((select count(*)::int from public.outlets where review_ask_enabled), 0,
   'no outlet in a fresh database asks for a review');
 select is((select review_ask_percent from public.outlets where id='00000000-0000-4000-a000-000000000001'), 5,
-  'the thank-you starts at five percent');
+  'the review discount starts at five percent');
 select is(public.public_menu('shawarmania-kalyani')->'review', 'null'::jsonb,
   'the public menu says null while the outlet does not ask');
 
@@ -43,9 +43,9 @@ select throws_ok($q$update public.outlets set review_ask_url='http://g.page/r/x/
 select throws_ok($q$update public.outlets set review_ask_url='https://g.page/r/x" onclick="y'
   where id='00000000-0000-4000-a000-000000000001'$q$, '23514', null, 'the link cannot break out of an attribute');
 select throws_ok($q$update public.outlets set review_ask_percent=0
-  where id='00000000-0000-4000-a000-000000000001'$q$, '23514', null, 'a thank-you is at least one percent');
+  where id='00000000-0000-4000-a000-000000000001'$q$, '23514', null, 'a review discount is at least one percent');
 select throws_ok($q$update public.outlets set review_ask_percent=51
-  where id='00000000-0000-4000-a000-000000000001'$q$, '23514', null, 'a thank-you is at most fifty percent');
+  where id='00000000-0000-4000-a000-000000000001'$q$, '23514', null, 'a review discount is at most fifty percent');
 
 -- ---------------------------------------------------------------------------
 -- The owner writes any outlet's ask through the one function.
@@ -80,7 +80,7 @@ select is(public.public_menu('shawarmania-kalyani')->'review',
   '{"url":"https://g.page/r/Cef3CrZy-ZyuEBE/review","percent":5}'::jsonb,
   'the public menu carries the outlet''s own ask');
 select is(public.public_menu('shawarmania-kanchrapara')->'review'->>'percent', '7',
-  'each outlet carries its own thank-you');
+  'each outlet carries its own review discount');
 select ok(jsonb_array_length(public.public_menu('shawarmania-kalyani')->'sections') > 0,
   'the sections are unchanged beside it');
 

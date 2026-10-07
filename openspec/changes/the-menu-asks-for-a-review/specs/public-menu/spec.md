@@ -3,7 +3,7 @@
 ### Requirement: An outlet may ask for a Google review on its public menu
 
 Each outlet SHALL hold a Google review ask: whether its public menu asks, the
-`https://` link where its Google listing takes a review, and a thank-you
+`https://` link where its Google listing takes a review, and a review discount
 percentage, a whole number from 1 to 50, five by default. Every outlet SHALL start
 with the ask off. The database SHALL refuse an ask that is on with no link, a link
 that is not `https://` or that contains whitespace, a quote or an angle bracket,
@@ -14,7 +14,7 @@ they manage, through one function that writes these settings and no other column
 of the outlet; nobody else SHALL. The percentage SHALL change no bill: the counter
 gives it with the ordinary bill discount.
 
-#### Scenario: A manager raises the thank-you
+#### Scenario: A manager raises the review discount
 - **WHEN** Kalyani's manager saves the Google review section at eight percent
 - **THEN** the public menu names eight percent within its cache minute, with no website deploy
 
@@ -43,7 +43,7 @@ name, description, price in integer paise, veg flag and whether it is available
 no ids, no other outlet fields, no discounts. A removed item SHALL be absent; an
 unavailable item SHALL be present and flagged, because the customer should see
 what is off today rather than wonder where it went. Beside the sections it SHALL
-carry `review`: the outlet's review link and thank-you percentage while the
+carry `review`: the outlet's review link and review discount percentage while the
 outlet asks for a Google review, and null while it does not.
 
 It SHALL answer null — one answer for all three — for an address no outlet holds,

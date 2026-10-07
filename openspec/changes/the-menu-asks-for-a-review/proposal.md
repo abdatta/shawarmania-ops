@@ -16,7 +16,7 @@ it must not read as paying for a good review.
 ## What changes
 
 - **Each outlet has a Google review ask**: on or off, its listing's review link,
-  and a thank-you percentage (whole, 1–50, five by default). The owner sets it for
+  and a review discount percentage (whole, 1–50, five by default). The owner sets it for
   any outlet and a Franchise Admin for the outlets they manage — the same reach as
   Orders and Loyalty — on a new **Google review** section of the outlet's page.
 - **`public_menu` carries it**: `review` is `{url, percent}` while the outlet asks

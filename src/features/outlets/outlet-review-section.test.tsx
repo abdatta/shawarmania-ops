@@ -17,7 +17,7 @@ function setup(outletId: string, mayWrite = true) {
 }
 
 describe('the Google review section', () => {
-  it('shows the outlet’s ask, and saves a new thank-you percentage', async () => {
+  it('shows the outlet’s ask, and saves a new review discount', async () => {
     const user = userEvent.setup()
     const adapters = setup(OUTLET_KALYANI_ID)
     await screen.findByTestId('review-ask-section')
@@ -50,7 +50,7 @@ describe('the Google review section', () => {
 
   it('reads as one line to somebody who cannot change it', async () => {
     setup(OUTLET_KALYANI_ID, false)
-    expect(await screen.findByTestId('review-ask-section')).toHaveTextContent('5% thank-you')
+    expect(await screen.findByTestId('review-ask-section')).toHaveTextContent('5% review discount')
     expect(screen.queryByTestId('review-ask-switch')).not.toBeInTheDocument()
   })
 })

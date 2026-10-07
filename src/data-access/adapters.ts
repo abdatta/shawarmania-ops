@@ -178,7 +178,7 @@ export interface OutletsAdapter {
   updateLoyaltySettings(id: string, settings: OutletLoyaltySettings): Promise<OutletLoyaltySettings>
   /**
    * Whether the outlet's public table menu opens by asking for a Google review,
-   * where its listing takes one, and the thank-you percentage the ask names
+   * where its listing takes one, and the review discount percentage
    * (the-menu-asks-for-a-review). Off for an outlet that has chosen nothing.
    */
   getReviewAsk(id: string): Promise<OutletReviewAsk>

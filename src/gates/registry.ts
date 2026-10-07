@@ -740,7 +740,7 @@ const partDefs = {
   /**
    * The Google review section of an outlet's page (the-menu-asks-for-a-review):
    * whether the public table menu opens by asking for a review, the outlet's
-   * review link and the thank-you percentage. Live with its database column and
+   * review link and the review discount percentage. Live with its database column and
    * `public_menu`; every outlet but Kalyani Cafe starts with it off.
    */
   'outlet-review-ask': { state: 'live' },
