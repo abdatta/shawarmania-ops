@@ -105,6 +105,12 @@
       member's receipt, because no gold member exists yet (see #62). That clause
       rests on the Worker's tests, `worker:test` 189 of 189 this day, and on the
       function's projection of the stored tier.)*
-- [ ] 6.5 🧍 The owner opens a real receipt for a bill where a customer gave their
+- [x] 6.5 🧍 The owner opens a real receipt for a bill where a customer gave their
       number at Kalyani Cafe, and shows one from the counter's View receipt. Tasks
       complete is not the archive trigger; real use is.
+      *(Done 2026-10-07: the owner opened both and found them as expected. In real
+      use, the receipts of 113 bills that carry a customer's number have been
+      opened since 2026-10-01, most from the SMS #59 sends. **Still not seen in
+      production:** a gold member's receipt, because nobody holds gold yet. It is
+      tracked with #62's gold clauses in
+      `openspec/todos/loyalty-gate-unwalked-clauses.md`.)*
