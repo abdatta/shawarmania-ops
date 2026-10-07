@@ -31,3 +31,4 @@
 - [x] 5.1 `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run build`, `npm run test:e2e`; then a fresh `db:reset`, `test:db`, `test:rls`, `test:e2e:auth`.
   - 2026-10-02 21:45–21:54Z: lint, format, typecheck, functions typecheck, contrast, 2158 unit tests, build, 284 demo e2e; then `db:reset`, `test:db` (2939), `test:rls` (all six phases), `test:e2e:auth` (34).
 - [x] 5.2 PHASE GATE: no roadmap checkpoint, as a fix. The Gate line in `proposal.md` holds clause by clause, and the commit stays local: the owner picks the deploy window.
+  - Deployed with `99576fd5` and in real use at Kalyani Cafe from 2026-10-03. Read from production 2026-10-07: every one of the 381 orders billed since 2026-10-02 has exactly one bill, and no customer bill earned points or queued its receipt SMS twice. The owner archived it on 2026-10-07.
