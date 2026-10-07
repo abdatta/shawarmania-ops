@@ -9,7 +9,7 @@ telling you about your code. It is telling you the time.
 
 This one does exactly that, and it has now done it twice. It was first recorded on
 2026-09-08 in
-[`openspec/todos/database-tests-cross-the-business-cutover.md`](../../todos/database-tests-cross-the-business-cutover.md).
+[`openspec/todos/a-local-stack-left-open-across-the-cutover.md`](../../todos/a-local-stack-left-open-across-the-cutover.md).
 It happened again on 2026-09-21 at 23:41 UTC, failing the `Deploy` workflow on a
 commit that contained **nothing but documentation** — a roadmap row and a
 proposal. No code, no migration, no schema.
@@ -116,5 +116,5 @@ outlet business date. In the window, the spare's payment dialog stays open.
 - [`docs/TESTING.md`](../../../docs/TESTING.md) — how a time-sensitive fixture
   picks its business date, and the rule that a fixture never asks a different clock
   than the guard does.
-- [`openspec/todos/database-tests-cross-the-business-cutover.md`](../../todos/database-tests-cross-the-business-cutover.md)
+- [`openspec/todos/a-local-stack-left-open-across-the-cutover.md`](../../todos/a-local-stack-left-open-across-the-cutover.md)
   — closed, leaving the open-stack case behind as the part this change did not take.

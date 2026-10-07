@@ -49,7 +49,7 @@
 ## 6. Record the consequences
 
 - [x] 6.1 `docs/TESTING.md`: how a time-sensitive fixture picks its business date, and the rule underneath it — a fixture never asks a different clock than the guard does.
-- [x] 6.2 Close `openspec/todos/database-tests-cross-the-business-cutover.md`, **leaving the open-stack case behind**: a seeded local stack left across the cutover expires its active shifts, a fresh reset resolves it, it never affects CI, and this change did not take it. Closing the whole note would lose that.
+- [x] 6.2 Close `openspec/todos/a-local-stack-left-open-across-the-cutover.md`, **leaving the open-stack case behind**: a seeded local stack left across the cutover expires its active shifts, a fresh reset resolves it, it never affects CI, and this change did not take it. Closing the whole note would lose that.
 - [x] 6.3 **No roadmap row**, per the rule under "How work enters": `ROADMAP.md` sequences product capability, and test-harness work is not product. Same treatment as `ci-on-deployable-change`. Run `npm run roadmap:sync` and confirm it agrees.
   - `Roadmap status reconciled: 0 row(s) updated. (already in sync)`
 

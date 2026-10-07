@@ -18,5 +18,5 @@
 ## 3. Release — Worker first
 
 - [ ] 3.1 Deploy the brand site's Worker that accepts `review` (shawarmania `npm run worker:deploy`).
-- [ ] 3.2 Push this change; the Deploy workflow migrates production. Outside 04:00 IST–00:00 UTC, when the database tests cross the cutover.
+- [ ] 3.2 Push this change; the Deploy workflow migrates production. Not so close to 00:00 UTC (05:30 IST) that the gate's auth e2e step runs across it: the two-till table test still fails on a run that crosses UTC midnight.
 - [ ] 3.3 Open `shawarmania.in/menu/kalyani-cafe/` and confirm the popup, then change the percentage on the outlet page and see it on the menu within a minute.
