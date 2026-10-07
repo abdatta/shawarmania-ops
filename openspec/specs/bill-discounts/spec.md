@@ -12,8 +12,10 @@ And every bill ends on a whole rupee, rounded up on its own stated line and
 never below ₹1, so a fully discounted meal is a ₹1 bill that appears in the
 day's takings rather than a nought that disappears from them.
 
-Discounts arrive from two sources — the outlet's menu, attached to each line
-they reach, and the biller, standing alone against the bill — combine
+Discounts arrive from the outlet's menu, attached to each line they reach;
+from the biller, standing alone against the bill; from points the customer
+uses, standing alone with their own source; and, for a gold member where the
+outlet waives it, as the packaging line's whole discount. They combine
 additively against gross, cap at the subtotal, and are attributed to the
 person and the till that applied them. Once a bill is settled its discount is
 history; the correction is a void and a new bill.
@@ -101,6 +103,13 @@ Every discount SHALL be computed against the gross total of its own scope: a
 category discount against the lines in that category, a bill discount against the
 bill's subtotal. The results SHALL then be summed.
 
+**One exception, and it is an amount rather than a basis.** A points discount is a
+fixed number of rupees, and its **ceiling** is computed against the order after
+every other discount, because the owner set the cap there (2026-09-28). It SHALL be
+re-evaluated whenever the order changes, and lowered to its ceiling when it
+exceeds it, so the outcome still does not depend on the order in which discounts
+were applied.
+
 The order in which discounts are applied SHALL NOT change the outcome.
 
 A discount in rupees SHALL apply per unit and SHALL multiply by the line's
@@ -125,6 +134,11 @@ exceeds what it discounts and no total is ever negative.
 - **WHEN** the discounts applied to a bill total more than its subtotal
 - **THEN** the stored discount is the subtotal, and the total before rounding is
   nought
+
+#### Scenario: A discount added after points
+
+- **WHEN** a biller adds a discount by hand to an order already carrying the most points allowed
+- **THEN** the points fall to the new ceiling, and the total is the same as if the discount had come first
 
 ### Requirement: Every bill ends on a whole rupee, rounded up on its own line
 
@@ -224,3 +238,24 @@ against the whole subtotal, packaging included.
 
 - **WHEN** a payload carries a packaging line discounted by less than its whole total
 - **THEN** the command is refused and nothing is written
+
+### Requirement: Points used are a bill discount of their own source
+
+A bill-level discount SHALL record its source: the biller, or points. A points
+discount SHALL be an amount in whole rupees equal to the points used, SHALL be at
+most one on an order or a bill, SHALL require the order's customer, and SHALL be
+carried from the order to the bill exactly as a biller's bill discount is.
+
+It SHALL read on the order and the receipt as its own line naming the points it
+used, and SHALL count in the parent's stored discount like every other discount.
+
+Every bill-level discount recorded before sources existed SHALL read as the
+biller's.
+
+#### Scenario: What points cost
+- **WHEN** a reader sums the points discounts at an outlet for a month
+- **THEN** the result is exactly what points paid for there that month
+
+#### Scenario: A discount from before
+- **WHEN** a bill discount recorded before this change is read
+- **THEN** its source is the biller

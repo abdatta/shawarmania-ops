@@ -24,24 +24,29 @@ across the business. Accepted presentation variants SHALL normalize to the same
 
 ### Requirement: Billing contexts lookup only by complete exact phone
 
-> **This clause is deliberately widened by one field, and the widening is the
-> only one.** The previous version disclosed customer ID, canonical phone and
-> saved billing name, and said so exhaustively. Membership is added because a
-> biller who cannot see it cannot act on it, which is the whole of
-> `customer-membership`'s value at the counter. The cost is stated in the
-> requirement below rather than left to be discovered: membership is a weak
-> signal about a customer's trade, and a biller at one outlet may now infer it
-> about a customer who has only ever shopped at another. The owner accepted that
-> on 2026-09-18. **Nothing else about this boundary moves** — not the exactness,
-> not the absence of a browse path, not the rate bound.
+> **This clause has been widened twice, each time by what the counter must act
+> on, and each widening is stated with its cost.** #57 added membership, because
+> a biller who cannot see it cannot act on it. `a-regular-earns-points-and-gold`
+> (#62) made that membership the **caller's own outlet's**, and added that
+> outlet's **points balance** and whether the customer is **eligible for gold
+> there**, because the biller uses the one and offers the other. The eligibility
+> flag discloses that a customer has spent at least the outlet's threshold there
+> recently, and nothing more; that is its whole purpose, and the owner accepted it
+> on 2026-09-28. #57's stated cost, a biller inferring membership granted at an
+> outlet the customer never visited here, **no longer exists**: membership is now
+> the caller's outlet's. **Nothing else about this boundary moves**: not the
+> exactness, not the absence of a browse path, not the rate bound.
 
 An eligible billing context SHALL retrieve a customer from the business-wide
 directory only by submitting the complete phone, where an eligible billing
 context is an unrevoked enrolled counter device or an active account holding a
 live Biller assignment. The response SHALL contain only customer ID, canonical
-phone, saved billing name, and whether that customer currently holds a
-membership. It SHALL NOT contain when a membership began, who granted it, whether
-one was ever revoked, or any spend, visit, outlet or bill information.
+phone, saved billing name, and, **for the caller's own outlet, taken from the
+caller's authority and never from an argument**: whether the customer is a member
+there, their points balance there (none when that outlet has points off), and
+whether they are eligible for gold there. It SHALL NOT contain when a membership
+began or ends, who granted it, whether one was ever revoked, anything about any
+other outlet, or any spend, visit or bill information.
 
 **One narrower path exists, and its scope is the whole of its safety.** An
 eligible billing context MAY submit four or more digits of a number and receive
@@ -66,11 +71,15 @@ direct-table read path over the business-wide directory.
 
 #### Scenario: Exact returning-customer lookup
 - **WHEN** an eligible billing context supplies a complete phone that exists
-- **THEN** the one global profile is returned, with membership as a plain yes or no, and without any bill, outlet, spend, or visit information
+- **THEN** the one global profile is returned, with membership, balance and eligibility at the caller's outlet, and without any bill, spend, visit or other-outlet information
 
 #### Scenario: Membership detail is asked for
-- **WHEN** a billing context requests a membership's date, actor, or history
+- **WHEN** a billing context requests a membership's dates, actor, or history
 - **THEN** no such path exists and nothing beyond the current state is disclosed
+
+#### Scenario: Another outlet's standing
+- **WHEN** an eligible billing context looks up a customer who is a member and holds points only at another outlet
+- **THEN** the response reports no membership, no balance and no eligibility earned there
 
 #### Scenario: Prefix enumeration attempt
 - **WHEN** a device supplies a prefix, wildcard, or list request against the business-wide directory
@@ -78,7 +87,7 @@ direct-table read path over the business-wide directory.
 
 #### Scenario: A partial number at the till
 - **WHEN** an eligible billing context supplies four or more digits
-- **THEN** at most one customer its own outlet has served is returned, with membership as a plain yes or no and a count of the others, and no customer who has only ever been served elsewhere can be returned
+- **THEN** at most one customer its own outlet has served is returned, with the same three outlet fields and a count of the others, and no customer who has only ever been served elsewhere can be returned
 
 #### Scenario: Too few digits
 - **WHEN** fewer than four digits are supplied
