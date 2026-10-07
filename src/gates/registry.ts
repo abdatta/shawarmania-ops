@@ -714,8 +714,8 @@ export function getSurface(id: SurfaceId): Surface {
  * Promoting a part is the same one-line edit as promoting a surface.
  */
 const partDefs = {
-  /** Item ordering and highlights (#68), awaiting the owner's demo UI approval. */
-  'menu-presentation': { state: 'demo' },
+  /** Item ordering and highlights (#68), persisted through outlet-scoped commands. */
+  'menu-presentation': { state: 'live' },
   /**
    * The Orders section of an outlet's page (each-outlet-chooses-how-it-serves,
    * #60). Live since the live outlets adapter reads and writes the settings;

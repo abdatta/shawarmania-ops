@@ -58,10 +58,12 @@ function renderMenu(
 }
 
 describe('MenuSurface — the manager', () => {
-  it('does not read presentation data or expose draft controls in real mode', async () => {
+  it('keeps presentation absent when an adapter does not offer it', async () => {
     const adapters = createMockAdapters('franchise_admin')
     const read = vi.spyOn(adapters.menu.presentation!, 'readHighlights')
-    renderMenu('franchise_admin', adapters, 'real')
+    const ordinaryAdapters = { ...adapters, menu: { ...adapters.menu } }
+    delete ordinaryAdapters.menu.presentation
+    renderMenu('franchise_admin', ordinaryAdapters, 'real')
     await screen.findByTestId('menu-list')
     expect(screen.queryByTestId('menu-highlights')).not.toBeInTheDocument()
     await userEvent
@@ -71,6 +73,20 @@ describe('MenuSurface — the manager', () => {
     expect(screen.queryByRole('button', { name: 'Move up' })).not.toBeInTheDocument()
     expect(read).not.toHaveBeenCalled()
     expect(screen.queryByTestId('discount-presets')).not.toBeInTheDocument()
+  })
+
+  it('uses the same approved controls through an adapter in real mode', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+    const firstDish = (await adapters.menu.listMenu(OUTLET_KALYANI_ID))[0]!.items[0]!
+    const read = vi.spyOn(adapters.menu.presentation!, 'readHighlights')
+    renderMenu('franchise_admin', adapters, 'real')
+    await screen.findByTestId('menu-highlights')
+    expect(read).toHaveBeenCalledWith(OUTLET_KALYANI_ID)
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: `Actions for ${firstDish.name}` }))
+    expect(screen.getByRole('button', { name: /^Highlight$/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Move up$/ })).toBeDisabled()
   })
 
   it('closes drafts on an outlet change and keeps saved selections separate', async () => {

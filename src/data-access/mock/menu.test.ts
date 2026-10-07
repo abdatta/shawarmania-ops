@@ -12,6 +12,25 @@ import { createDemoStore, DEMO_OUTLET_ID } from './store'
  */
 describe('mock menu adapter', () => {
   describe('menu presentation', () => {
+    it('uses item identity to break equal name and position ties before a move', async () => {
+      const store = createDemoStore()
+      const adapter = createMockMenuAdapter(store, 'franchise_admin')
+      const category = (await adapter.listMenu(DEMO_OUTLET_ID))[0]!.category
+      const tied = store.menuItems.filter(
+        (item) => item.category_id === category.id && item.is_active,
+      )
+      tied.forEach((item) => {
+        item.name = 'Same name'
+        item.sort_order = 0
+      })
+      store.menuItems.reverse()
+      const ids = tied.map((item) => item.id).sort()
+      expect((await adapter.listMenu(DEMO_OUTLET_ID))[0]!.items.map((item) => item.id)).toEqual(ids)
+      await adapter.presentation!.reorderItems(category.id, [...ids].reverse())
+      expect((await adapter.listMenu(DEMO_OUTLET_ID))[0]!.items.map((item) => item.id)).toEqual(
+        [...ids].reverse(),
+      )
+    })
     it('normalizes tied positions atomically and rejects stale membership', async () => {
       const store = createDemoStore()
       const adapter = createMockMenuAdapter(store, 'franchise_admin')

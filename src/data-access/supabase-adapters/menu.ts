@@ -7,6 +7,7 @@ import {
   type MenuCategoryPatch,
   type MenuItemPatch,
   type MenuItemWithCategoryPatch,
+  type MenuHighlights,
   type NewMenuCategory,
   type NewMenuItem,
   type NewMenuItemWithCategory,
@@ -30,6 +31,23 @@ function menuError(error: PostgrestError): MenuActionError {
     default:
       return new MenuActionError('failed', 'The menu could not be saved. Try again in a moment.')
   }
+}
+
+function highlightsFromResult(value: Json): MenuHighlights {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    typeof value.title !== 'string' ||
+    !Array.isArray(value.itemIds) ||
+    !value.itemIds.every((id): id is string => typeof id === 'string')
+  ) {
+    throw new MenuActionError(
+      'failed',
+      'The highlights could not be read. Refresh the menu and try again.',
+    )
+  }
+  return { title: value.title, itemIds: [...value.itemIds] }
 }
 
 function categoryPatch(
@@ -99,6 +117,45 @@ export function createSupabaseMenuAdapter(
   }
 
   return {
+    presentation: {
+      async readHighlights(outletId) {
+        const { data, error } = await client.rpc('read_menu_highlights', { p_outlet_id: outletId })
+        if (error) throw menuError(error)
+        return highlightsFromResult(data)
+      },
+      async setHighlights(outletId, highlights) {
+        const { data, error } = await client.rpc('set_menu_highlights', {
+          p_outlet_id: outletId,
+          p_title: highlights.title,
+          p_item_ids: [...highlights.itemIds],
+        })
+        if (error) {
+          if (error.code === '22023') {
+            throw new MenuActionError(
+              'invalid',
+              'Use a name up to 60 characters and choose dishes from this outlet’s current menu.',
+            )
+          }
+          throw menuError(error)
+        }
+        return highlightsFromResult(data)
+      },
+      async reorderItems(categoryId, itemIds) {
+        const { error } = await client.rpc('reorder_menu_items', {
+          p_category_id: categoryId,
+          p_item_ids: [...itemIds],
+        })
+        if (error) {
+          if (error.code === '22023' || error.code === '40001' || error.code === '40P01') {
+            throw new MenuActionError(
+              'invalid',
+              'The category changed. Refresh the menu and try again.',
+            )
+          }
+          throw menuError(error)
+        }
+      },
+    },
     async listMenu(outletId) {
       const [categoriesResult, itemsResult] = await Promise.all([
         client
@@ -114,7 +171,8 @@ export function createSupabaseMenuAdapter(
           .eq('outlet_id', outletId)
           .eq('is_active', true)
           .order('sort_order')
-          .order('name'),
+          .order('name')
+          .order('id'),
       ])
       if (categoriesResult.error || itemsResult.error) {
         if (offlineResume?.tablet.outletId === outletId) {

@@ -1176,10 +1176,10 @@ export class MenuActionError extends DataActionError {
   }
 }
 
-/** Ordered references to existing schema items, awaiting the approved live schema. */
+/** Ordered references backed by the outlet's highlight configuration schema. */
 export interface MenuHighlights {
-  title: string
-  itemIds: Tables<'menu_items'>['id'][]
+  title: Tables<'menu_highlight_sections'>['title']
+  itemIds: Tables<'menu_highlight_items'>['item_id'][]
 }
 
 export interface MenuPresentationAdapter {
@@ -1189,7 +1189,7 @@ export interface MenuPresentationAdapter {
 }
 
 export interface MenuAdapter {
-  /** Mock-only until the owner approves #68; the demo part gate hides live controls. */
+  /** Item ordering and outlet-local highlights (#68), rendered through its part gate. */
   presentation?: MenuPresentationAdapter
   /**
    * The outlet's menu, categories in sort order with their items in sort order.

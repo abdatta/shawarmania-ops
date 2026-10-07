@@ -3166,6 +3166,62 @@ export type Database = {
           },
         ]
       }
+      menu_highlight_items: {
+        Row: {
+          item_id: string
+          outlet_id: string
+          sort_order: number
+        }
+        Insert: {
+          item_id: string
+          outlet_id: string
+          sort_order: number
+        }
+        Update: {
+          item_id?: string
+          outlet_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_highlight_items_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "menu_highlight_sections"
+            referencedColumns: ["outlet_id"]
+          },
+          {
+            foreignKeyName: "menu_highlight_items_outlet_id_item_id_fkey"
+            columns: ["outlet_id", "item_id"]
+            isOneToOne: true
+            referencedRelation: "menu_items"
+            referencedColumns: ["outlet_id", "id"]
+          },
+        ]
+      }
+      menu_highlight_sections: {
+        Row: {
+          outlet_id: string
+          title: string
+        }
+        Insert: {
+          outlet_id: string
+          title?: string
+        }
+        Update: {
+          outlet_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_highlight_sections_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: true
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       menu_items: {
         Row: {
           category_id: string
@@ -5232,6 +5288,7 @@ export type Database = {
         Returns: string
       }
       read_aggregator_session: { Args: { p_channel: string }; Returns: string }
+      read_menu_highlights: { Args: { p_outlet_id: string }; Returns: Json }
       record_aggregator_sync_run: {
         Args: {
           p_channel: string
@@ -5382,6 +5439,10 @@ export type Database = {
           ledger_rows_moved: number
         }[]
       }
+      reorder_menu_items: {
+        Args: { p_category_id: string; p_item_ids: string[] }
+        Returns: undefined
+      }
       report_counter_device_state:
         | {
             Args: { p_oldest_unresolved_at: string; p_unresolved: number }
@@ -5461,6 +5522,10 @@ export type Database = {
       set_aggregator_login_identifier: {
         Args: { p_channel: string; p_identifier: string }
         Returns: undefined
+      }
+      set_menu_highlights: {
+        Args: { p_item_ids: string[]; p_outlet_id: string; p_title: string }
+        Returns: Json
       }
       set_outlet_loyalty_settings: {
         Args: {

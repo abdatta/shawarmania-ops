@@ -373,6 +373,8 @@ is made from its name when it is created, and its menu is public as soon as it
 has an item. To take one off, mark the outlet closed or empty its menu; the page
 then says the menu was not found, exactly as for an address nobody holds.
 
+Managers use item Move up/down and Edit highlights in Menu to save outlet-local ordering and a named selection. After the ops migration and app release, the existing Worker consumes nonempty highlights as its first ordinary-shaped section; no brand-site deployment or credential change is required. Dishes remain in their categories, and an empty selection publishes no section. Changes become visible on the next cache miss within the existing minute; an ops outage continues to use the Worker's existing last-good fallback. Whole-bill discount shortcuts are configured in the outlet's Orders settings, with their own Save, independently of service settings. A highlight title never creates a discount.
+
 ## The customer's receipt link *(#54)*
 
 The receipt page is **not deployed from this repo.** It is a Cloudflare Worker

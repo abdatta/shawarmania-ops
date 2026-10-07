@@ -223,7 +223,12 @@ export function createMockMenuAdapter(
           category: structuredClone(category),
           items: store.menuItems
             .filter((item) => item.category_id === category.id && item.is_active)
-            .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
+            .sort(
+              (a, b) =>
+                a.sort_order - b.sort_order ||
+                a.name.localeCompare(b.name) ||
+                a.id.localeCompare(b.id),
+            )
             .map((item) => structuredClone(item)),
         }))
     },

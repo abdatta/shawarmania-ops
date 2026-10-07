@@ -1,10 +1,48 @@
-# Approved UI verification — 2026-10-07
+# Implementation verification — 2026-10-07
 
-The requested UI refinements are verified and the owner explicitly approved them on 2026-10-07 (“amazing all lgtm”). The UI checkpoint is complete (7/13 tasks complete); every persistence/live task remains unchecked. Main capability specs describe the approved contract, not evidence that the pending live stage has shipped. No migrations, generated schema, live presentation adapter, public reader or website files changed; no archive or deployment was performed. The owner subsequently authorised a branch commit and push, then a pause; handover is in handover.md. The preset relocation reuses its existing live adapter and persistence.
+## Resumed live stage — all local gates passed
+
+The owner resumed in this session after the approved UI branch checkpoint. All 13 tasks are implemented and locally verified. The live part gate preserves the approved UI and demo. Two scoped tables and three authority-checking commands persist the configuration and normalize item order. Types were regenerated from the reset schema; no brand-site files changed. The records below the resumed-stage notes describe the earlier UI checkpoint and its then-pending backend, not the current implementation status.
+
+The 49 baseline menu/settings tests passed before live edits. The new SQL suite was observed failing against the old schema: reorder/read functions did not exist and tied positions remained unchanged. The REST suite also failed on the old schema's missing configuration tables; the migration was restored in finally and the seeded schema reset afterwards. Both final SQL files now pass 65 assertions. Seven real-session HTTP checks pass, including owner/manager round trips, positive-control foreign rows before concealment, revoked direct writes, read-only roles and a concurrent removal held open while a reorder waits. After committing the removal, the stale reorder is refused and both saved positions remain unchanged. Fixture configuration and synthetic race rows are restored/removed.
+
+The focused gate/screen tests passed 67 cases before the final equal-name tie test was added. The new auth browser case passed, saving highlights, moving a dish and reloading the real screen on phone 390×844 and tablet 1080×810 in both themes. All four screenshots were inspected; category markers, compact cards and saved order match the approved UI, with no page errors or horizontal overflow. The loading shapes remain those approved in the UI stage.
+
+The actual unchanged brand Worker was bundled from its local source and run against the local database with its own readMenu, public-field tripwire, cache handler and renderer. It returned 200 with `public, max-age=60`, rendered independently ordered highlights before categories, kept dishes in their categories and generated working `shawarma` / `shawarma-2` anchors when titles matched. A configuration change retained the cached result, then appeared after advancing the simulated cache clock past sixty seconds. No service credential appeared in HTML. Kanchrapara's fixture was restored. This is local Worker compatibility/cache evidence; production propagation has not been exercised and no release is authorised.
+
+Corrections during this stage: fixed a test's first-dish expectation to match its deliberately reversed order; the concurrency probe now identifies blockers by the holder's backend PID because other roles' SQL text is not reliably visible; the real-mode component test uses the fixture's actual first dish; and unsupported Testing Library `exact` options were removed. No product behavior was weakened to satisfy assertions. Docker Desktop was started successfully, superseding the earlier unavailable-engine note. The first full backend attempt found the Edge runtime stopped after reset; restarting it restored the device-handshake path. Another attempt hit shared-seed/startup failures in account flows, and a focused retry hit local one-time-code rate limits. The authoritative run used a fresh reset, pgTAP first and all six REST/RLS phases with the main files serial (same assertions). All phases passed. No unrelated product fix or test weakening was needed.
+
+## Final gates — 2026-10-07
+
+Formatting ran before the source checks; after the final documentation edits, prose formatting and repository invariant checks were repeated. No source changed after the successful gates.
+
+| Gate | Final evidence |
+| --- | --- |
+| Lint | Passed, 0 errors / 16 existing warnings |
+| Format check | Passed |
+| App typecheck | Passed |
+| Edge Function typecheck | Passed against regenerated schema |
+| Unit/component suite | 170 files / 2,249 tests passed |
+| Contrast | 64 pairs passed across light and dark |
+| Production build | Passed in both demo and authenticated browser preconditions, including TypeScript and service worker |
+| Demo browser suite | 312 passed without retries |
+| Fresh reset and database suite | 78 files / 3,073 assertions passed; new files contribute 65 |
+| REST/RLS suite | All six phases passed: 11 realtime, 217 general REST (9 files, serial), 12 billing races, 43 drawer writes, 3 telemetry, 4 ledger timing; 290 total |
+| Authenticated browser suite | 35 passed without retries, including live menu persistence, device billing and offline paths |
+| Generated types | Regenerated output matches the committed schema snapshot |
+| Diff and encoding | Clean whitespace; every changed file decodes as UTF-8 without BOM |
+
+The main REST phase used `npx vitest run --config vitest.rls.config.ts --maxWorkers=1`; the other five configurations ran in the same order as `npm run test:rls`. No reset occurred between the authoritative pgTAP, REST/RLS and auth phases. Phone/tablet and both-theme live screenshots were inspected, and demo browser checks retain no-external-request coverage.
+
+All gate clauses have local implementation evidence. **Production remains unpublished**: `shawarmania.in/menu/<slug>/` changes only after the ops migration/app release, then the existing minute cache expiry. The actual Worker compatibility and simulated expiry proof do not claim a hosted production update. Archive, merge and deployment were not performed.
+
+## Earlier approved UI checkpoint
+
+The following sections retain historical UI-stage evidence, superseded by the completed live-stage results above. The owner explicitly approved the UI on 2026-10-07 (“amazing all lgtm”). At that checkpoint, seven of thirteen tasks were complete and persistence/live work was still pending. No migration, generated schema, live presentation adapter or public reader had changed yet. The owner authorised a branch commit/push and pause, then resumed here. The preset relocation reused its existing live persistence.
 
 ## What was walked
 
-Items move up/down within their category, including tied sort positions; the first move-up action is disabled. The highlights editor renames the section, searches and selects dishes from several categories, independently reorders them, and saves title and selection together. Cancel preserves the saved selection. Blank titles are refused visibly. Highlighted dishes remain in their original categories, unavailable dishes stay visible, and removed selections are filtered. Outlet changes discard old loaded rows and drafts. Each outlet keeps independent configuration. Real mode does not read presentation data or offer its new controls.
+Items move up/down within their category, including tied sort positions; the first move-up action is disabled. The highlights editor renames the section, searches and selects dishes from several categories, independently reorders them, and saves title and selection together. Cancel preserves the saved selection. Blank titles are refused visibly. Highlighted dishes remain in their original categories, unavailable dishes stay visible, and removed selections are filtered. Outlet changes discard old loaded rows and drafts. Each outlet keeps independent configuration. At this earlier UI checkpoint, real mode did not read presentation data or offer its new controls.
 
 ## Owner-requested UI iterations
 
@@ -66,7 +104,7 @@ Phone 390×844 and tablet 1080×810 were checked in light and dark through brows
 
 The session-owned production preview remains running on 7414, with its review tab retained; the owner's dev server was not used. The original 7413 tab and draft were preserved. A fresh review tab opens the outlet's Orders settings for the shortcut controls. The existing user tab and its draft remain untouched; inspection drafts in the new tab were cancelled and temporary viewport overrides reset. The prior service-worker build needed reloading before the new bytes appeared; verified the current copy and opacity through the loaded DOM.
 
-Owner approval was explicit on 2026-10-07: “amazing all lgtm”. The requested specification reconciliation records it in proposal, design and tasks and syncs the two main capability specs. Backend/live/public work remains pending; no further UI approval is required to resume that stage. The owner then requested a branch commit/push and pause until a new session. See handover.md for the starting point. Archive and publication remain separate, unauthorised actions.
+Owner approval was explicit on 2026-10-07: “amazing all lgtm”. The requested specification reconciliation records it in proposal, design and tasks and syncs the two main capability specs. Backend/live/public work was pending at that checkpoint and is now complete as recorded above; no further UI approval was required to resume it. The owner then requested a branch commit/push and pause until a new session. See handover.md for the starting point. Archive and publication remain separate, unauthorised actions.
 
 ## Specification reconciliation and handover checks — 2026-10-07
 

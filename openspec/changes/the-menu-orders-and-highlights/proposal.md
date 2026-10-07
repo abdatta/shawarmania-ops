@@ -18,7 +18,7 @@ The approved manager layout puts compact Menu Discounts above Highlights and ord
 
 ## Delivery and gate
 
-Build and verify the UI against the mock first, behind the `menu-presentation` demo part gate. The owner explicitly approved the settled UI on 2026-10-07 (“amazing all lgtm”) and requested specification reconciliation before continuing. That checkpoint is complete; database persistence, tenancy tests, live presentation adapters and public-reader integration remain pending and must preserve the approved UI. Final checkpoint: managers round-trip ordering and highlights through the live app, another outlet cannot read or write them, the customer's menu reflects them within a minute without a website deploy, and the demo still walks.
+Build and verify the UI against the mock first, behind the `menu-presentation` demo part gate. The owner explicitly approved the settled UI on 2026-10-07 (“amazing all lgtm”) and requested specification reconciliation before continuing. That checkpoint is complete. The owner resumed here after the branch checkpoint; database persistence, tenancy tests, live presentation adapters and public-reader integration now preserve the approved UI, with all local gates passing. Hosted propagation awaits the ops release; the actual unchanged Worker and cache handler were verified against local reader output. Final checkpoint: managers round-trip ordering and highlights through the live app, another outlet cannot read or write them, the customer's menu reflects them within a minute without a website deploy, and the demo still walks.
 
 ## Non-goals
 

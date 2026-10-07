@@ -1,52 +1,27 @@
-# Handover — approved UI, live implementation pending
+# Handover — menu ordering and highlights (#68)
 
-Recorded 2026-10-07. Change #68, Wave F, `the-menu-orders-and-highlights`.
-Branch: `codex/menu-orders-highlights-ui`, based on main `0732ba11`.
-Main and fetched origin/main matched again before this handover commit.
+Recorded 2026-10-07. Branch: `codex/menu-orders-highlights-ui`, based on main `0732ba11`, which matched fetched origin/main at resumption. The approved UI checkpoint is commit `f683d2cd`; the owner then explicitly resumed implementation here.
 
-## Owner authority and stopping point
+## Current state
 
-The owner explicitly approved the current UI: “amazing all lgtm”. Approval is recorded in proposal, design, tasks and verification. The owner then requested reconciliation of all change files/specs, a commit and optional branch push, and a pause until another session. Do not continue implementation in this paused session. Resume when the owner asks; another UI approval is not required. Do not archive, merge to main or deploy without a separate request.
+The approved UI is preserved. Persistence, live adapters and public-reader integration are implemented. All 13 tasks are complete and all local gates pass. Read tasks.md and verification.md for the authoritative results. No archive, merge or deployment has occurred.
 
-Seven of thirteen tasks are complete. All six tasks in section 3 remain pending. The active change and main menu-management/public-menu specs describe the approved contract; that sync does not mean live ordering/highlights or website propagation exist. Roadmap status is derived by `npm run roadmap:sync` and remains active. Opus is roadmap metadata, not an assertion about the current Codex model.
+The owner approved the UI on 2026-10-07 (“amazing all lgtm”). No further UI approval is required. The earlier pause was revoked by “resume here itself”. Commit and branch push were authorised; publication and archive remain separate actions. Category-based discount presentation is deliberately deferred.
 
-## What is implemented
+## Implementation
 
-The typed optional `MenuAdapter.presentation` interface and mock support independent outlet titles/selections, category item ordering including tied positions, same-outlet validation, read-only refusals and removed-item filtering. `menu-presentation` is still a demo part gate. Real mode does not read presentation data or show its new controls.
+- `supabase/migrations/20261007000000_menu_orders_and_highlights.sql` creates outlet-scoped highlight title/reference tables with RLS, revoked direct client writes and a same-outlet composite foreign key. Atomic commands re-derive live owner/manager authority, validate the complete selection/order and refuse stale membership without partial positions.
+- `src/data-access/supabase-adapters/menu.ts` implements the existing presentation seam; generated schema types back the configuration. `menu-presentation` is live. Both adapters use item identity after equal position/name ties; the demo remains synthetic.
+- `public_menu` prepends nonempty highlights in the existing section shape and exact public item allowlist. The existing service-only boundary, indistinguishable nulls and ordinary categories survive. Removed/inactive selections disappear; unavailable dishes remain selected.
+- The actual unchanged brand Worker in `C:/Users/iamro/Code/shawarmania/worker/src/` rendered local reader output, including duplicate-title anchors. Its actual cache handler was checked with simulated sixty-second expiry. No website files or credentials changed.
+- The approved compact menu cards/editor, symbols, opaque actions and Orders Bill discount shortcuts remain. Shortcuts and service settings have independent plain Save/Cancel, equal-width one-to-four controls and saved glow.
 
-Menu Discounts sits above compact Highlights, followed by ordinary categories. The settled editor, purpose text, empty-state line, category-row symbols and fully opaque unavailable dropdown are described in design D1. Share is the only public-menu entry point. Preserve this UI while making it real. Do not revisit the category-row discount redesign: the owner explicitly deferred it.
+## Verification and continuation
 
-Bill discount shortcuts is inside the outlet's existing Orders section. Orders settings and shortcuts are sibling cards with independent drafts and plain Save/Cancel, equal-width one-to-four shortcut rows, compact addition controls and matching saved-card glow with reduced-motion support. Presets already use the existing live adapter/persistence; this relocation needs no new schema. The implementation uses the existing percent/rupee integer storage conversions; it does not change bill arithmetic or offline settlement.
+Full frontend gates pass: 2,249 unit/component tests, 312 demo browser cases, 64 contrast pairs, lint (16 existing warnings), formatting and both typechecks. Fresh database verification passes 3,073 assertions. All six REST/RLS phases pass 290 checks; the main REST phase ran serially to avoid local shared-seed interference. Generated types match the schema. The focused live-menu browser case passed on phone/tablet in both themes and all four screenshots were inspected. The full authenticated browser suite passed all 35 cases without retries.
 
-## Read first and resume at task 3.1
+An initial reset left the Edge runtime stopped; it was restarted. Retried account flows hit local one-time-code rate limits, so the authoritative run used another fresh reset, pgTAP first, then all six REST phases without changing their assertions. Do not rerun pgTAP on the committed money fixtures left by REST; use a fresh reset and the documented order. Start your own preview and follow AGENTS.md port rules.
 
-Read AGENTS.md, the propose-apply-verify and openspec-apply-change skills, then proposal.md, design.md, tasks.md, both spec deltas and verification.md. Fetch and inspect branch/main/origin/main without discarding this branch's work. Preserve unrelated changes. Start with failing database and REST tests for atomic reorder, stale membership, highlight configuration validation, authority and outlet isolation.
+The final results and completed tasks are recorded, roadmap status is derived, and the branch checkpoint includes this implementation. Continue with an explicitly requested review, archive or release; do not archive automatically.
 
-Add schema-backed per-outlet persistence and RLS in the same stage, regenerate types from a fresh reset, and wire the existing presentation interface through the live adapter. Promote the part gate only after round-trip evidence. Do not introduce direct Supabase imports into screens or invent generated-schema fields. Keep demo behavior intact.
-
-Extend the service-role-only `public_menu(slug)` reader by prepending nonempty highlights as an existing-shape section, keeping dishes in their ordinary categories and using the exact public projection. Preserve null responses, privilege restrictions and field allowlist. Validate current prices, availability, removed/empty omission and ordinary item order. The actual brand-site Worker is in `C:/Users/iamro/Code/shawarmania/worker/src/menu.ts` and `menu-page.ts`; generic section rendering and its one-minute cache should require no website deployment. Verify its renderer and duplicate-title anchors rather than claiming propagation from inspection alone. The real URL is `shawarmania.in/menu/<slug>/`.
-
-Before finishing, run the full local gates and database/auth/generated-parity checks specified in tasks 3.5–3.6, update the remaining durable docs, and report external verification honestly. Archive is a separate action.
-
-## Code landmarks
-
-- `src/data-access/adapters.ts`, `mock/menu.ts`, `mock/store.ts`, `mock/index.ts`: presentation seam, demo configuration and authority.
-- `src/features/menu/menu-surface.tsx`, `menu-highlights.tsx`, `menu-discounts.tsx`: ordering/highlighting controls, compact cards/editor and opacity fix.
-- `src/features/outlets/outlet-discount-presets.tsx`, `outlet-preset-editor.tsx`: independent draft/preset persistence, outer saved card and compact controls.
-- `src/features/outlets/outlet-service-sections.tsx`, `outlets-surface.tsx`: sibling card ownership, shared SaveBar/timing, loading shapes and visible active outlet scope.
-- `src/gates/registry.ts`: demo-only `menu-presentation` part.
-- `e2e/menu-presentation.spec.ts`, menu/mock/outlet component tests: current behavioral and layout evidence.
-
-## Verification and local state
-
-The final UI code passed lint (16 existing warnings), format check, TypeScript, Edge mapping typecheck, 170 files / 2,247 unit tests, 64 contrast pairs across both themes, the production build and 312 browser tests without retries. Focused shortcut/Orders tests: 27; focused presentation browser cases: 8. Phone 390×844 and tablet 1080×810 were inspected in both themes, with no console errors or external demo requests. Opacity, 44 px preset sizing and saved-card assertions were observed failing before their respective fixes. This documentation reconciliation does not change source or tests.
-
-Database/RLS/auth/generated parity were not run locally in this UI stage. No migrations, policies, generated schema, live presentation adapter, public reader or brand-site files changed. Docker was probed before the branch commit and its Linux engine was unavailable. The next live stage must start the required stack and run those checks.
-
-Prior UI logs are temporary local evidence (`preset-glow-unit.log`, `preset-glow-e2e.log` under the Windows TEMP directory) and are not required to resume. Current screenshots use `glow-` in `C:/Users/iamro/.codex/visualizations/2026/10/07/01a114b1-ee9b-72c1-81db-80518474186b/`; these files are not on the branch.
-
-The agent's production preview used port 7414; do not assume it survives the session. Start your own preview rather than attaching to a server you did not start. Main-tree preview is 7413; worktree preview is 7414; the owner's dev server is 7412. A service worker can retain old bytes, so confirm the loaded build after restarting. Preserve the owner's tabs and drafts.
-
-## Prompt for a new session
-
-Resume change `the-menu-orders-and-highlights` (#68) on branch `codex/menu-orders-highlights-ui`. Read its handover.md and all applicable instructions/skills. The UI is explicitly owner-approved and the specs are reconciled; implement tasks 3.1–3.6 end to end using propose-apply-verify, preserving the approved UI. Start with database/REST tests, then persistence/RLS, generated types, live adapters and public-menu propagation. Keep the demo working, leave category-row discount redesign deferred, and do not archive, merge or deploy without my request.
+Production `shawarmania.in/menu/<slug>/` has not changed yet. Release the ops migration and app through the repository's verified deployment workflow when authorised, then check the hosted menu after its minute cache expires. The existing brand Worker needs no deployment. Preserve its last-good fallback; never send a service credential to the browser.

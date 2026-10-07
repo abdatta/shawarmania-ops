@@ -11,9 +11,9 @@ import {
 } from './registry'
 
 describe('gate registry', () => {
-  it('keeps menu presentation demo-only until the owner approves live integration', () => {
+  it('offers approved menu presentation in both live and demo modes', () => {
     expect(isRenderable(getPartState('menu-presentation'), 'demo')).toBe(true)
-    expect(isRenderable(getPartState('menu-presentation'), 'real')).toBe(false)
+    expect(isRenderable(getPartState('menu-presentation'), 'real')).toBe(true)
   })
   it('covers all three states across both modes', () => {
     // hidden: absent everywhere
