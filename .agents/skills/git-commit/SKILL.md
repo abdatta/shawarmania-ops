@@ -152,10 +152,32 @@ End a material commit with exactly one blank line and one truthful trailer:
 ```text
 Co-Authored-By: <agent identity> <noreply address>
 ```
-Do not use generic trailers like: "Co-Authored-By: Codex GPT-5". Use exact version, like the examples below.
+For Codex, run this from the repository root **before composing the trailer**:
+
+```text
+node scripts/resolve-codex-model.mjs
+```
+
+The helper selects the rollout matching the active `CODEX_THREAD_ID` (or
+`CODEX_SESSION_ID`) and reads its latest `turn_context.model`. Use the returned
+`coauthor`. It reads only model metadata into its output. If `modelsSeen` contains
+multiple models, inspect the relevant work interval before attributing earlier
+commits; the latest model alone does not identify who did earlier work.
+
+Never infer the exact model from a generic developer instruction such as
+"based on GPT-6", a roadmap recommendation, configured default, available-model
+list, or another thread's most recent rollout. Version and variant both matter:
+`gpt-6.1-sol` becomes `Codex GPT-6.1 Sol`, never `Codex GPT-6`.
+
+If the helper cannot resolve the active identity, use other authoritative
+current-session metadata or ask the user to confirm the exact identity. Do not
+invent a variant or silently fall back to a family-only trailer. For Claude,
+use its own confirmed runtime identity rather than this Codex-specific helper.
+
 Known repository identities:
 
 ```text
+Codex GPT-6.1 Sol <noreply@openai.com>
 Codex GPT-5.6 Sol <noreply@openai.com>
 Codex GPT-5.6 Terra <noreply@openai.com>
 Codex GPT-5.6 Luna <noreply@openai.com>
@@ -166,10 +188,10 @@ Claude Sonnet 5 <noreply@anthropic.com>
 
 Attribute the agent that actually performed the current work. The prose style
 does not authorize copying another agent's trailer. When the current agent is
-Codex GPT-5.6 Sol, use:
+Codex GPT-6.1 Sol, use:
 
 ```text
-Co-Authored-By: Codex GPT-5.6 Sol <noreply@openai.com>
+Co-Authored-By: Codex GPT-6.1 Sol <noreply@openai.com>
 ```
 
 For another explicitly known Codex model, use `Codex <exact model display
@@ -193,7 +215,7 @@ Resulting contract and boundary paragraph.
 
 Gates: only results actually observed.
 
-Co-Authored-By: Codex GPT-5.6 Sol <noreply@openai.com>
+Co-Authored-By: Codex GPT-6.1 Sol <noreply@openai.com>
 '@
 git commit -m $gitCommitMessage
 ```

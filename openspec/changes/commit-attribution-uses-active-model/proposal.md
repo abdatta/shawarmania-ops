@@ -1,0 +1,3 @@
+# Commit attribution uses the active model
+
+The commit skill required exact attribution but left its source implicit, allowing a generic GPT-6 family instruction to override this session's actual `gpt-6.1-sol` identity. Resolve the active thread's latest model metadata with a small read-only helper, refuse ambiguous identities, report model switches for earlier-work review, and teach the skill to use this evidence. The owner authorised correction of the three affected commits and a lease-protected force-push. This changes agent tooling only, with no feature gate or product behavior change; verification is focused helper tests, the actual active-session invocation, repository lint, formatting and typecheck, followed by the normal release workflow.

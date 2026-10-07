@@ -1,10 +1,12 @@
 # Handover — menu ordering and highlights (#68)
 
-Recorded 2026-10-07. Branch: `codex/menu-orders-highlights-ui`, based on main `0732ba11`, which matched fetched origin/main at resumption. The approved UI checkpoint is commit `f683d2cd`; the owner then explicitly resumed implementation here.
+Recorded 2026-10-07. Branch: `codex/menu-orders-highlights-ui`, based on main `0732ba11`, which matched fetched origin/main at resumption. The approved UI checkpoint is commit `a35f49cb` (originally `f683d2cd`); the owner then explicitly resumed implementation here.
 
 ## Current state
 
-The approved UI is preserved. Persistence, live adapters and public-reader integration are implemented. All implementation tasks are complete and all local gates pass. The owner has now authorised release. Read tasks.md and verification.md for the authoritative results. Main was updated by fast-forward to debe0a8d without a merge commit. Archive remains separate; deployment verification is in progress.
+The approved UI is preserved. Persistence, live adapters and public-reader integration are implemented. All implementation tasks are complete and all local gates pass. The owner has now authorised release. Read tasks.md and verification.md for the authoritative results. Main was updated by fast-forward without a merge commit. Archive remains separate; deployment verification is in progress.
+
+The owner authorised amendment and a force-push to correct model attribution. This thread's `turn_context.model` consistently identifies `gpt-6.1-sol`; the correct trailer is Codex GPT-6.1 Sol. The three original commits were reconstructed with unchanged file trees, author/committer identities and dates, and linear parents: `f683d2cd` → `a35f49cb`, `debe0a8d` → `01a06c44`, `4171a62e` → `964046b2`. The Git Commit skill now invokes `node scripts/resolve-codex-model.mjs` to verify the active session rather than guessing from a generic GPT family instruction.
 
 The owner approved the UI on 2026-10-07 (“amazing all lgtm”). No further UI approval is required. The earlier pause was revoked by “resume here itself”. Commit and branch push were authorised. The owner subsequently requested merge/deploy and no merge commits, authorising publication; archive remains separate. Category-based discount presentation is deliberately deferred.
 
