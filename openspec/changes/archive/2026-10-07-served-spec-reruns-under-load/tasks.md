@@ -6,4 +6,4 @@
 - [x] 4. `DRAIN_MS = MAX_BILLING_RETRY_MS + 30_000`; `unsentCardsAt` for the member's takeaway; `payCard` and `serveCard` take a locator.
 - [x] 5. Under the same harness, with #45 still on the rail: passed, drained in 62.9 s.
 - [x] 6. Harness removed. `npm run typecheck`, Prettier and ESLint on the spec, and the whole file run normally with #45 still present.
-- [ ] 7. GATE: CI's `gate / database + auth tests` green on the commit. The owner picks the push; this commit is local until then.
+- [x] 7. GATE: CI's `gate / database + auth tests` green on the commit. The owner picks the push; this commit is local until then. *(Pushed with the 2026-10-04 release as `d1b942bc`. `gate / database + auth tests` has passed in every Deploy since, through run 37453264196 at `f319b8ad` on 2026-10-06.)*
