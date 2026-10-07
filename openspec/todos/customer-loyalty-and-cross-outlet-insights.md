@@ -4,7 +4,7 @@
 
 ## Promoted again, 2026-09-28
 
-[`a-regular-earns-points-and-gold`](../changes/a-regular-earns-points-and-gold/proposal.md)
+[`a-regular-earns-points-and-gold`](../changes/archive/2026-10-07-a-regular-earns-points-and-gold/proposal.md)
 (#62) took three more items off the list below: **benefits the system applies
 itself** (points earned and spent, a gold points cap and multiplier, each with its
 own discount source, so what they cost is attributable), **automated eligibility**

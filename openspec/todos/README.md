@@ -15,7 +15,7 @@ Keep entries behavior-focused:
 | --- | --- | --- | --- | --- |
 | [Bill Thermal Printing](./bill-thermal-printing.md) | Feature | Anticipated | Billing | A customer or regulator asks for a printed bill |
 | [Bill GST Breakup](./bill-gst-breakup.md) | Feature | Anticipated | Billing | The business registers for GST or a customer requires a tax invoice |
-| [Bill Receipt Delivery](./bill-receipt-delivery.md) | Feature | **Promoted 2026-09-21** | Billing | Fired: consent is taken at the counter, published and filed with an RCS registration; the channel moved to SMS via MSG91 (Airtel DLT pending) on 2026-09-29. Seeded as `bill-receipt-delivery` (#59) |
+| [Bill Receipt Delivery](./bill-receipt-delivery.md) | Feature | **Promoted 2026-09-21** | Billing | Fired: consent is taken at the counter, published and filed with an RCS registration; the channel moved to SMS via MSG91 on 2026-09-29. Seeded as `bill-receipt-delivery` (#59), shipped 2026-10-04 and archived 2026-10-07 |
 | [The Tablet Name On A Ticket Costs A Round Trip](./the-tablet-name-on-a-ticket-costs-a-round-trip.md) | Scaling risk | Open, sized and deferred 2026-09-21 | Billing | The label call reappears as a visible share of egress after a cycle, or a change is already migrating `orders` and `bills` and can carry the backfill |
 | [Supply Bills Paid Outside The Payout](./supply-bills-paid-outside-the-payout.md) | Feature | Owner asked to explore, 2026-08-18 | Outlet expenses | The owner asks in earnest and picks a route: supplier portal, invoice email, or bank statement |
 | [Six Tabs For One Person](./six-tabs-for-one-person.md) | Gap | Open | App shell | Somebody holding two roles says the bar is crowded, or a new surface pushes a common shape past five |

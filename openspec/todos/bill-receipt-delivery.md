@@ -1,6 +1,6 @@
 # Bill Receipt Delivery
 
-**Type**: Feature · **Status**: **Promoted 2026-09-21** — seeded as [`bill-receipt-delivery`](../changes/bill-receipt-delivery/proposal.md) (#59) · **Area**: Billing
+**Type**: Feature · **Status**: **Promoted 2026-09-21** — seeded as [`bill-receipt-delivery`](../changes/archive/2026-10-07-bill-receipt-delivery/proposal.md) (#59), shipped 2026-10-04 and archived 2026-10-07 · **Area**: Billing
 
 ## Expectation
 

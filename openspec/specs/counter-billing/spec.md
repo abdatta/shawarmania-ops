@@ -237,25 +237,25 @@ already on the bill or a bill already settled.
 
 ### Requirement: A customer is identified by their phone, and their name is recorded with it
 
-Both customer snapshots SHALL remain nullable, and the **database** SHALL never
+Both customer snapshots SHALL remain nullable, and the database SHALL never
 require either: a bill or order carrying no customer at all is valid, and nothing
 downstream may assume one.
 
-The **phone is the identity** — it is what resolves a returning customer and what
-a customer record is created against. The **name is that customer's own name**,
-given along with their number and snapshotted onto the order and the bill as it
-stood at the sale.
+The phone is the identity that resolves a returning customer and creates a
+customer record. The name is that customer's own name, given with their number
+and snapshotted onto the order and bill as it stood at the sale.
 
 A name SHALL be recorded only for a customer identified by phone. The counter
-SHALL NOT request or store a name for an order whose customer gave no number:
-such an order is identified by its own order number, which is what the
-preparation pipeline and the shift's bill list display for it.
+SHALL NOT request or store a name for an order whose customer gave no number;
+the preparation pipeline and shift list SHALL identify it by its order number.
+Previously captured historical names SHALL remain intact.
 
-The counter SHALL require that the biller has **made a decision** — identified a
-customer, or deliberately skipped — before Order or Mark Paid. It SHALL NOT
-require a phone, and SHALL NOT accept a name in place of one as identification.
-This requirement SHALL exist only in the UI; no database constraint SHALL be
-added for it.
+Customer entry SHALL be optional when placing or editing an order. The counter
+SHALL NOT require identification or Skip before Order or Save changes. At outlets
+collecting customer details, payment SHALL ask for a number when none is attached
+and offer one-tap Skip before tender. An attached number SHALL be shown and kept.
+Collection off SHALL hide entry and bypass the payment prompt. No database
+constraint SHALL be added for this UI checkpoint.
 
 A phone SHALL be a complete Indian mobile number canonicalised by the same rule
 the database uses, or resolve and create nothing. The counter SHALL NOT report a
@@ -263,15 +263,15 @@ number as malformed while it is still being typed.
 
 #### Scenario: A bill with no customer reaches the database
 - **WHEN** a bill or order is written with both customer fields null
-- **THEN** the database accepts it, because the requirement is the counter's habit and not the schema's promise
+- **THEN** the database accepts it without a customer requirement
 
 #### Scenario: An order is rung for a customer who gave no number
-- **WHEN** the biller skips customer identification
-- **THEN** the order carries no customer name, no phone and no customer id, no customer record is created or matched, and the order is identified by its order number
+- **WHEN** the biller places an order without entering a customer or pressing Skip
+- **THEN** the order carries no customer name, phone or id, no customer record is created or matched, and its order number identifies it
 
 #### Scenario: An identified customer is snapshotted whole
 - **WHEN** the biller identifies a customer and the order is accepted
-- **THEN** the order and the bill carry the customer id, the canonical phone and the name, not the id alone
+- **THEN** the order and bill carry the customer id, canonical phone and name, not the id alone
 
 #### Scenario: The saved profile is never rewritten from the till
 - **WHEN** a name differing from the matched customer's saved name is given at the counter
@@ -627,37 +627,47 @@ and SHALL expose no payload or customer details.
 
 ### Requirement: The composer supports immediate payment and saving an order
 
-The billing composer SHALL offer primary Order and secondary Mark Paid once at
-least one line exists and the biller has either identified a customer or skipped.
-Order SHALL create a tablet-owned order without assigning a bill number and SHALL
-clear the composer only after the adapter accepts it. Mark Paid SHALL open the
-tender dialog and create a paid result after exact payment allocation. This
-identification requirement SHALL exist only in the UI; the database SHALL keep
-both snapshots nullable.
+The billing composer SHALL offer primary Order and secondary Paid when at least
+one line exists, required service choices are answered and local acceptance is
+not busy. Customer entry SHALL NOT govern either action's availability. The same
+rule SHALL permit Save changes on an anonymous order.
 
-The composer SHALL offer an **Add discount** control, positioned below the lines
-in the bill column, and both paths SHALL carry whatever discount results.
+Order SHALL create a tablet-owned order without assigning a bill number and
+clear the composer only after the adapter accepts it. Paid SHALL open checkout,
+asking for a missing number where collection is on, then show customer benefits,
+the final total and tender. Exact payment allocation SHALL be required for
+settlement. Both customer snapshots SHALL remain nullable.
+
+The composer SHALL offer Add discount below the lines in the bill column, and
+both paths SHALL carry the discount, its basis and rounding.
 
 #### Scenario: Customer pays upfront
-- **WHEN** an operator opens Mark Paid, allocates the exact total and confirms Mark Paid
+- **WHEN** the operator opens Paid, supplies or skips a missing number where required, allocates the exact total and confirms
 - **THEN** a paid result is created directly, with no order saved first
 
 #### Scenario: A discount is applied before the order leaves
-- **WHEN** an operator adds a discount and then chooses Order or Mark Paid
-- **THEN** the accepted command carries that discount, its basis, and the bill's
-  rounding
+- **WHEN** the operator adds a discount and chooses Order or Paid
+- **THEN** the accepted command carries that discount, its basis and the bill's rounding
 
 #### Scenario: Food has to be made first
-- **WHEN** an operator chooses Order
-- **THEN** the order appears at the newest end of the pipeline list with its order number and no bill number
+- **WHEN** the operator chooses Order without touching customer entry
+- **THEN** the order appears at the newest end of the pipeline with its order number and no bill number
 
 #### Scenario: The biller has not decided yet
-- **WHEN** the current bill has items and the customer control has not been used
-- **THEN** Order and Mark Paid remain disabled, the control is the only thing that resolves it, and no database constraint is added
+- **WHEN** the current bill has items, required service choices are answered and customer entry is untouched
+- **THEN** Order and Paid are available without Skip; payment asks for the missing number when collection is on
 
 #### Scenario: The biller skipped
-- **WHEN** the biller has skipped customer identification
-- **THEN** both terminal actions become available
+- **WHEN** the biller has skipped identification while ordering
+- **THEN** both actions remain available and payment still asks if no number is attached and collection is on
+
+#### Scenario: Required service choice is missing
+- **WHEN** the outlet requires a service or table decision that has not been answered
+- **THEN** Order, Save changes and Paid remain unavailable regardless of customer entry
+
+#### Scenario: Empty or busy composer
+- **WHEN** no line exists or a local acceptance is in progress
+- **THEN** Order, Save changes and Paid remain unavailable
 
 ### Requirement: A saved order enters the preparation pipeline
 
@@ -1741,8 +1751,8 @@ The rounding SHALL appear as its own row, below the discounts and above the tota
 
 > Restated by `a-receipt-goes-out-on-whatsapp`. #54 built one Share control. The
 > owner used it almost only to reach the link, and wanted a customer's own bill
-> sent to the number already on it, while automatic delivery (#59) waits on SMS
-> registration.
+> sent to the number already on it. Automatic SMS delivery (#59) has since
+> shipped beside it, and Send receipt remains the manual way to send.
 
 An expanded bill in Billing history SHALL offer **exactly one receipt action**,
 for the Super Admin and the Franchise Admin, positioned in the same action row as
@@ -1801,55 +1811,41 @@ act only on a bill it can already read, and never another outlet's.
 
 ### Requirement: The customer is identified from one control that opens a keypad
 
-> Extended from `a-customer-is-a-phone-number` (#56), which built this control
-> and deliberately left the mark's place on it empty.
->
-> **Also corrected here.** The previous text required *"a single action that
-> clears it back to nothing chosen"*. That was the ✕ the owner had removed at
-> #56's checkpoint on 2026-09-19 — it returned the row to a state the biller then
-> had to leave again through the same dialog — and the requirement outlived it. A
-> decision is revised by reopening the control and making a different one.
+At outlets collecting details, the composer SHALL present optional customer
+identification as one control, rather than separate name and phone inputs,
+reading in three states: nothing chosen, a customer chosen or deliberately
+skipped. It SHALL show a chosen customer's name and canonical phone. There SHALL
+be no separate action beside it; tapping SHALL reopen the dialog, and accepting
+a different number or skipping there SHALL revise the choice.
 
-The composer SHALL present customer identification as **one control**, not as
-separate name and phone inputs, reading in three states: nothing chosen, a
-customer chosen, or deliberately skipped. It SHALL show the chosen customer's
-name and canonical phone. It SHALL NOT carry a separate action beside it; tapping
-the control SHALL reopen the dialog, and a decision SHALL be revised by making a
-different one there.
+Where the chosen customer holds membership, the control SHALL carry the member
+mark, and the dialog SHALL carry it on a resolved match or partial-number
+suggestion before acceptance.
 
-Where the chosen customer holds a membership, the control SHALL carry the member
-mark, and the dialog SHALL carry it on the resolved match and on a partial-number
-suggestion before the biller accepts either, so that membership is known while
-there is still a choice to make about the order.
-
-The control SHALL open a dialog carrying an on-screen numeric keypad built in the
-same idiom as tender capture, so a number is entered by thumb without a system
-keyboard. The dialog SHALL NOT offer a search button; entry alone SHALL be
-sufficient.
-
-The composer SHALL NOT display a separate sentence instructing the biller to add
-a customer; the state of the control and the availability of the terminal actions
-SHALL carry that.
+The dialog SHALL carry an on-screen numeric keypad in the tender-capture idiom.
+It SHALL NOT offer a search button; entry alone SHALL suffice. The composer
+SHALL NOT add a sentence instructing the biller to enter a customer or disable
+ordering to force use of the control.
 
 #### Scenario: The biller opens the control
 - **WHEN** the customer control is tapped
 - **THEN** a dialog opens with a numeric keypad and an empty number readout
 
 #### Scenario: A member is resolved in the dialog
-- **WHEN** a complete phone matches a customer holding a membership
-- **THEN** the match carries the member mark before it is accepted, and shows no date, actor or figure
+- **WHEN** a complete phone matches a customer holding membership
+- **THEN** the match carries the member mark before acceptance, without a date, actor or figure
 
 #### Scenario: A member is suggested from a partial number
-- **WHEN** a partial number suggests a customer this outlet has served who holds a membership
-- **THEN** the suggestion carries the member mark, and shows no date, actor or figure
+- **WHEN** a partial number suggests a member this outlet has served
+- **THEN** the suggestion carries the member mark, without a date, actor or figure
 
 #### Scenario: A chosen customer is changed
 - **WHEN** the biller taps the chosen customer's control
-- **THEN** the dialog reopens, and the choice changes only when a different number is accepted or the biller skips
+- **THEN** the dialog reopens, and the choice changes only on accepting another number or skipping
 
 #### Scenario: The number is entered without a system keyboard
 - **WHEN** the biller enters a number in the dialog
-- **THEN** every digit is entered from the on-screen pad, and no device keyboard is required
+- **THEN** every digit can be entered from its on-screen pad without a device keyboard
 
 ### Requirement: Skipping customer identification is deliberate and takes one tap
 

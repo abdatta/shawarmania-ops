@@ -16,7 +16,7 @@
       (customer attached at pay time) and therefore the counter, the outbox payload and the
       demo seam: run the full gate set, offline replay included, and keep the existing
       order-time flow working. `/messages/` already says the counter asks "when you pay".
-- [ ] 8. **Confirm points actually earn before customers read "You earned 0 points".** Kalyani
+- [x] 8. **Confirm points actually earn before customers read "You earned 0 points".** Kalyani
       Cafe has points on (5 per ₹200, 10% cap) but bill 199 (3 October, ₹270, the first bill
       with a customer; its order had the customer at ordering) has no `earned` row, where the
       rule gives 6. The likely cause is the switch going on after that bill (earning reads it
@@ -26,6 +26,15 @@
       `select b.bill_number, b.paid_at, e.points from bills b join outlets o on o.id = b.outlet_id
       left join customer_points_entries e on e.bill_id = b.id and e.kind = 'earned' where o.name =
       'Kalyani Cafe' and b.customer_id is not null order by b.paid_at desc;`
+      *(Checked read-only 2026-10-07: points earn, and the SMS figures are real. Bill 199
+      was rung on 3 October, before points went on: the ledger's first entry is 4 October
+      at 18:53 IST. The first customer bill after that, 237 (₹200), earned 5, which is
+      what the rule gives. All 187 settled customer bills since then carry exactly one
+      `earned` entry, each equal to `floor(basis × points ÷ block)`. Every one has exactly
+      one delivery row, and the delivery rows' earned points sum to the ledger's. Delivery
+      states at the time: 181 delivered, 5 `provider_failed`, 1 still `submitted` awaiting
+      its report; `receipt-sms-status-and-manual-resend` (#67) holds that policy question.
+      `bills_points_on_settle` is not at fault.)*
 - [x] 9. **Owner reviews the expanded checkout UI** before commit/finalization, push or deployment.
       Owner approved the reviewed checkout and collection switch on 4 October
       2026 and explicitly authorized pushing. Release may proceed; task 8 stays open.
