@@ -68,6 +68,7 @@ import {
   OutletLoyaltySection,
   OutletLoyaltyShimmer,
 } from '@/features/outlets/outlet-loyalty-section'
+import { OutletReviewSection, OutletReviewShimmer } from '@/features/outlets/outlet-review-section'
 import { OutletSettingsLinkProvider } from '@/features/outlets/outlet-settings-link'
 import { OutletDiscountPresets } from './outlet-discount-presets'
 import { getPartState, isRenderable } from '@/gates/registry'
@@ -711,6 +712,7 @@ export function OutletPage() {
   const showService = isRenderable(getPartState('outlet-service-choices'), session.mode)
   // Points and gold, `demo` until #62's database section makes them real.
   const showLoyalty = isRenderable(getPartState('outlet-points'), session.mode)
+  const showReviewAsk = isRenderable(getPartState('outlet-review-ask'), session.mode)
   /**
    * Whether this outlet has gold, as its Loyalty section last read or saved it.
    * Where that section is not shown yet, gold is as #57 and #60 left it, so
@@ -792,6 +794,7 @@ export function OutletPage() {
           <Shimmer className="h-[24.1875rem]" />
           {showService && <OutletServiceShimmer withDiscounts />}
           {showLoyalty && <OutletLoyaltyShimmer />}
+          {showReviewAsk && <OutletReviewShimmer />}
           <Shimmer className="h-[18.5rem]" />
         </LoadingRegion>
       ) : shown === null ? (
@@ -837,6 +840,15 @@ export function OutletPage() {
                 onSettings={(settings) =>
                   setLoyaltyGold({ outletId: shown.id, on: settings.goldEnabled })
                 }
+              />
+            )}
+            {shown.is_active && showReviewAsk && (
+              <OutletReviewSection
+                key={`review-${shown.id}`}
+                outletId={shown.id}
+                // The owner, and a manager at the outlets they manage, as
+                // Orders and Loyalty: the thank-you is this outlet's to give.
+                mayWrite={mayAdminister}
               />
             )}
             {shown.is_active && (

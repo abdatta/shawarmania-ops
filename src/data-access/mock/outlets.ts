@@ -1,9 +1,12 @@
 import {
   ALL_OFF_LOYALTY_SETTINGS,
   ALL_OFF_SERVICE_SETTINGS,
+  DEFAULT_REVIEW_ASK,
   LOYALTY_SETTINGS_PROBLEM_MESSAGES,
   loyaltySettingsProblem,
   type OutletLoyaltySettings,
+  REVIEW_ASK_PROBLEM_MESSAGES,
+  reviewAskProblem,
   SERVICE_SETTINGS_PROBLEM_MESSAGES,
   serviceSettingsProblem,
   type OutletServiceSettings,
@@ -18,6 +21,7 @@ import {
 } from '../adapters'
 import { assignmentFixtures } from './fixtures/accounts'
 import { ALL_OFF_LOYALTY_COLUMNS } from '../outlet-loyalty-row'
+import { reviewAskFromRow } from '../outlet-review-ask-row'
 import { outletFixtures } from './fixtures/outlets'
 import { menuSlugFrom, menuSlugProblem, normaliseMenuSlug } from '@/lib/public-menu-link'
 
@@ -204,6 +208,10 @@ export function createMockOutletsAdapter(
         // A new outlet is unlinked from any aggregator until it is deliberately connected.
         zomato_res_id: null,
         hyperpure_delivery: false,
+        // A new outlet does not ask for reviews until somebody turns it on.
+        review_ask_enabled: DEFAULT_REVIEW_ASK.enabled,
+        review_ask_url: DEFAULT_REVIEW_ASK.url,
+        review_ask_percent: DEFAULT_REVIEW_ASK.percent,
         is_active: true,
         created_at: new Date().toISOString(),
         // A new outlet has never been stood in, so it judges nobody until
@@ -327,6 +335,33 @@ export function createMockOutletsAdapter(
         gold_threshold_paise: stored.goldThresholdPaise,
       })
       return { ...stored }
+    },
+
+    async getReviewAsk(id: string) {
+      // Outside the caller's reach reads as an outlet that does not ask.
+      if (readable !== null && !readable.includes(id)) return { ...DEFAULT_REVIEW_ASK }
+      return reviewAskFromRow(find(id))
+    },
+
+    async updateReviewAsk(id, ask) {
+      if (service.writable !== null && !service.writable.includes(id)) {
+        throw new DataActionError(
+          'not_permitted',
+          'Only the owner or this outlet’s manager changes its review ask.',
+        )
+      }
+      const outlet = find(id)
+      const problem = reviewAskProblem(ask)
+      if (problem !== null) {
+        throw new DataActionError(problem, REVIEW_ASK_PROBLEM_MESSAGES[problem])
+      }
+      // As `set_outlet_review_ask` stores it: the link trimmed, blank as none.
+      Object.assign(outlet, {
+        review_ask_enabled: ask.enabled,
+        review_ask_url: ask.url?.trim() || null,
+        review_ask_percent: ask.percent,
+      })
+      return reviewAskFromRow(outlet)
     },
 
     async updateServiceSettings(id, settings) {

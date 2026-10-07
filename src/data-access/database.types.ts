@@ -3740,6 +3740,9 @@ export type Database = {
           points_enabled: boolean
           points_gold_use_cap_bp: number | null
           points_use_cap_bp: number | null
+          review_ask_enabled: boolean
+          review_ask_percent: number
+          review_ask_url: string | null
           table_numbers: boolean
           takeaway_offered: boolean
           zomato_res_id: string | null
@@ -3782,6 +3785,9 @@ export type Database = {
           points_enabled?: boolean
           points_gold_use_cap_bp?: number | null
           points_use_cap_bp?: number | null
+          review_ask_enabled?: boolean
+          review_ask_percent?: number
+          review_ask_url?: string | null
           table_numbers?: boolean
           takeaway_offered?: boolean
           zomato_res_id?: string | null
@@ -3824,6 +3830,9 @@ export type Database = {
           points_enabled?: boolean
           points_gold_use_cap_bp?: number | null
           points_use_cap_bp?: number | null
+          review_ask_enabled?: boolean
+          review_ask_percent?: number
+          review_ask_url?: string | null
           table_numbers?: boolean
           takeaway_offered?: boolean
           zomato_res_id?: string | null
@@ -5579,6 +5588,68 @@ export type Database = {
           points_enabled: boolean
           points_gold_use_cap_bp: number | null
           points_use_cap_bp: number | null
+          review_ask_enabled: boolean
+          review_ask_percent: number
+          review_ask_url: string | null
+          table_numbers: boolean
+          takeaway_offered: boolean
+          zomato_res_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "outlets"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      set_outlet_review_ask: {
+        Args: {
+          p_enabled: boolean
+          p_outlet: string
+          p_percent: number
+          p_url: string
+        }
+        Returns: {
+          address_line1: string | null
+          address_line2: string | null
+          arrival_deadline: string
+          business_day_cutover: string
+          city: string | null
+          code: string
+          collect_customer_details: boolean
+          created_at: string
+          dine_in_offered: boolean
+          discount_presets: Json
+          district: string | null
+          geofence_radius_m: number
+          gold_counter_grant: boolean
+          gold_duration_months: number
+          gold_earn_multiplier_x100: number
+          gold_enabled: boolean
+          gold_threshold_paise: number | null
+          hyperpure_delivery: boolean
+          id: string
+          is_active: boolean
+          latitude: number | null
+          location_accuracy_m: number | null
+          location_captured_at: string | null
+          location_label: string
+          longitude: number | null
+          menu_slug: string
+          name: string
+          packaging_free_for_gold: boolean
+          packaging_mode: Database["public"]["Enums"]["packaging_mode"]
+          packaging_price_paise: number | null
+          phone: string | null
+          pincode: string | null
+          points_earn_block_paise: number | null
+          points_earn_per_block: number | null
+          points_enabled: boolean
+          points_gold_use_cap_bp: number | null
+          points_use_cap_bp: number | null
+          review_ask_enabled: boolean
+          review_ask_percent: number
+          review_ask_url: string | null
           table_numbers: boolean
           takeaway_offered: boolean
           zomato_res_id: string | null
@@ -5639,6 +5710,9 @@ export type Database = {
           points_enabled: boolean
           points_gold_use_cap_bp: number | null
           points_use_cap_bp: number | null
+          review_ask_enabled: boolean
+          review_ask_percent: number
+          review_ask_url: string | null
           table_numbers: boolean
           takeaway_offered: boolean
           zomato_res_id: string | null

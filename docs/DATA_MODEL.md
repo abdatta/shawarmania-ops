@@ -71,6 +71,14 @@ exactly while points **and** gold are on, the counter grant only with gold, and 
 threshold exactly while the counter grant is on. The thirty-day eligibility window
 is a constant, not a column. The rules travel to the tablet with its menu.
 
+**Google review ask** *(the-menu-asks-for-a-review)* — three more columns, off by
+default, written only through `set_outlet_review_ask(outlet, enabled, url, percent)`
+with the same authority: `review_ask_enabled`; `review_ask_url` (`https://`, no
+whitespace, quotes or angle brackets, at most 500 characters — it lands in an
+`href` on the public menu); `review_ask_percent` (whole, 1–50, default 5). Asking
+needs a link; the link and percentage are kept while the ask is off. The
+percentage is the public menu's wording only: no bill applies it by itself.
+
 There is no `billing_live_from`. It was the per-outlet handover after which the
 temporary ledger read Cash and UPI from bills, and it went with the ledger in
 `retire-the-manual-ledger` (#12): with one record of a trading day there is no
@@ -260,7 +268,7 @@ Menu is per-outlet from day one. Two outlets may share item names and differ on 
 
 **The public menu** *(the-menu-is-public)*. `outlets.menu_slug` is where a customer reads an outlet's menu: `shawarmania.in/menu/<menu_slug>/`, the address a table's QR code carries. It is derived from the name when the outlet is created (`menu_slug_from`: lowercase letters and digits, words joined by single hyphens), given `-2`, `-3` … by `free_menu_slug` when that is taken, and then **kept** — a rename does not move it, and a blank written on an update keeps the old value, because printed codes point at it. A unique key and a shape check refuse a collision or a non-URL-safe value from any request. It is deliberately not `code`, which is internal shorthand the owner edits freely and staff codes derive from.
 
-`public_menu(slug)` is the only way the menu leaves the database for a customer. It is `security definer`, executable by `service_role` alone — the brand site's Worker, exactly as `bill_public_receipt` — and answers the outlet's name and address, optional nonempty highlights first, then ordinary active categories in counter order. Each item carries exactly `name`, `description`, `price_paise`, `is_veg` and `is_available`; no IDs, discounts or extra outlet fields leave this boundary. Highlighted dishes remain in their categories and use the same current facts. Removed dishes and inactive categories are absent, empty highlights are omitted and unavailable dishes are present and flagged. A closed outlet, an empty menu and an unknown address all answer null, alike.
+`public_menu(slug)` is the only way the menu leaves the database for a customer. It is `security definer`, executable by `service_role` alone — the brand site's Worker, exactly as `bill_public_receipt` — and answers the outlet's name and address, optional nonempty highlights first, then ordinary active categories in counter order. Each item carries exactly `name`, `description`, `price_paise`, `is_veg` and `is_available`; no IDs, discounts or extra outlet fields leave this boundary. Highlighted dishes remain in their categories and use the same current facts. Removed dishes and inactive categories are absent, empty highlights are omitted and unavailable dishes are present and flagged. A closed outlet, an empty menu and an unknown address all answer null, alike. Beside the sections it carries `review` — `{url, percent}` while the outlet asks for a Google review, null while it does not — which the brand site's Worker turns into the menu's review popup.
 
 ## Billing
 

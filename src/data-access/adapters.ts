@@ -4,6 +4,7 @@ import type {
   MonthDayInput,
   MonthReading,
   OutletLoyaltySettings,
+  OutletReviewAsk,
   OutletServiceSettings,
   ServiceType,
   SyncStateKind,
@@ -175,6 +176,17 @@ export interface OutletsAdapter {
    * inconsistent combination is refused with the problem's own code.
    */
   updateLoyaltySettings(id: string, settings: OutletLoyaltySettings): Promise<OutletLoyaltySettings>
+  /**
+   * Whether the outlet's public table menu opens by asking for a Google review,
+   * where its listing takes one, and the thank-you percentage the ask names
+   * (the-menu-asks-for-a-review). Off for an outlet that has chosen nothing.
+   */
+  getReviewAsk(id: string): Promise<OutletReviewAsk>
+  /**
+   * Replace the outlet's review ask as one write: the owner for any outlet, a
+   * Franchise Admin for the outlets they manage, nobody else.
+   */
+  updateReviewAsk(id: string, ask: OutletReviewAsk): Promise<OutletReviewAsk>
 }
 
 export type AppRole = Tables<'assignments'>['role']

@@ -75,6 +75,11 @@ export const outletFixtures: Tables<'outlets'>[] = [
     gold_duration_months: 6,
     gold_counter_grant: true,
     gold_threshold_paise: 200_000,
+    // Asks for a Google review on its table menu, as the cafe does
+    // [owner, 2026-10-07].
+    review_ask_enabled: true,
+    review_ask_url: 'https://g.page/r/Cef3CrZy-ZyuEBE/review',
+    review_ask_percent: 5,
     created_at: FIXTURE_CREATED_AT,
     location_accuracy_m: 9,
     location_captured_at: '2026-07-24T09:15:00+00:00',
@@ -126,6 +131,9 @@ export const outletFixtures: Tables<'outlets'>[] = [
     packaging_price_paise: 500,
     packaging_free_for_gold: true,
     ...ALL_OFF_LOYALTY_COLUMNS,
+    review_ask_enabled: false,
+    review_ask_url: null,
+    review_ask_percent: 5,
     created_at: FIXTURE_CREATED_AT,
     // Never surveyed, mirroring supabase/seed.sql — so the demo shows both
     // states of the owner's outlet screen without anyone travelling.
@@ -174,6 +182,9 @@ export const outletFixtures: Tables<'outlets'>[] = [
     packaging_price_paise: null,
     packaging_free_for_gold: false,
     ...ALL_OFF_LOYALTY_COLUMNS,
+    review_ask_enabled: false,
+    review_ask_url: null,
+    review_ask_percent: 5,
     created_at: FIXTURE_CREATED_AT,
     location_accuracy_m: null,
     location_captured_at: null,

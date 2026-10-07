@@ -9,9 +9,14 @@ import {
 } from '../adapters'
 import type { Database, Tables, TablesInsert, TablesUpdate } from '../database.types'
 import { loyaltySettingsFromRow, OUTLET_LOYALTY_COLUMNS } from '../outlet-loyalty-row'
+import { OUTLET_REVIEW_ASK_COLUMNS, reviewAskFromRow } from '../outlet-review-ask-row'
 import { serviceSettingsFromRow } from '../outlet-service-row'
 import {
   ALL_OFF_LOYALTY_SETTINGS,
+  DEFAULT_REVIEW_ASK,
+  REVIEW_ASK_PROBLEM_MESSAGES,
+  reviewAskProblem,
+  type OutletReviewAsk,
   ALL_OFF_SERVICE_SETTINGS,
   LOYALTY_SETTINGS_PROBLEM_MESSAGES,
   loyaltySettingsProblem,
@@ -23,6 +28,29 @@ import {
   type ServiceSettingsProblem,
 } from '@/domain'
 import type { CounterResumeCoordinator, CounterResumeRecord } from '@/outbox'
+
+/** A refused review-ask write, as the sentence the section shows. */
+function reviewAskRefusal(
+  error: { code?: string; message: string },
+  sent: OutletReviewAsk,
+): unknown {
+  if (error.code === '42501') {
+    return new DataActionError(
+      'not_permitted',
+      'Only the owner or this outlet’s manager changes its review ask.',
+    )
+  }
+  if (error.code === 'P0002') {
+    return new DataActionError('not_found', 'That outlet no longer exists.')
+  }
+  if (error.code !== '23514') return error
+  const problem = error.message.includes('outlets_review_ask_percent_range')
+    ? 'percent_out_of_range'
+    : error.message.includes('outlets_review_ask_needs_url') && sent.enabled
+      ? 'url_required'
+      : 'url_invalid'
+  return new DataActionError(problem, REVIEW_ASK_PROBLEM_MESSAGES[problem])
+}
 
 /**
  * The real outlets adapter.
@@ -415,6 +443,38 @@ export function createSupabaseOutletsAdapter(
       const row = data as Tables<'outlets'>
       remember(row)
       return loyaltySettingsFromRow(row)
+    },
+
+    async getReviewAsk(id) {
+      const { data, error } = await table()
+        .select(OUTLET_REVIEW_ASK_COLUMNS)
+        .eq('id', id)
+        .maybeSingle()
+      if (error) throw error
+      return data ? reviewAskFromRow(data) : { ...DEFAULT_REVIEW_ASK }
+    },
+
+    /*
+      Through `set_outlet_review_ask`, never `outlets_update`: the owner and
+      the outlet's own managers may call it, it re-derives the caller's
+      authority, and it writes these three columns and nothing else.
+    */
+    async updateReviewAsk(id, ask) {
+      const problem = reviewAskProblem(ask)
+      if (problem !== null) {
+        throw new DataActionError(problem, REVIEW_ASK_PROBLEM_MESSAGES[problem])
+      }
+      const { data, error } = await client.rpc('set_outlet_review_ask', {
+        p_outlet: id,
+        p_enabled: ask.enabled,
+        // Null while there is no link; the generator types it non-null.
+        p_url: (ask.url?.trim() || null) as string,
+        p_percent: ask.percent,
+      })
+      if (error) throw reviewAskRefusal(error, ask)
+      const row = data as Tables<'outlets'>
+      remember(row)
+      return reviewAskFromRow(row)
     },
 
     async getServiceSettings(id) {
