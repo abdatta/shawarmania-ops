@@ -16,6 +16,11 @@ export interface OutletReviewAsk {
   url: string | null
   /** The review discount, in whole percent. */
   percent: number
+  /**
+   * Whether the menu opens with the popup (which docks into the bottom banner),
+   * or shows only the banner — the quieter version.
+   */
+  popup: boolean
 }
 
 export const MIN_REVIEW_PERCENT = 1
@@ -26,6 +31,7 @@ export const DEFAULT_REVIEW_ASK: Readonly<OutletReviewAsk> = Object.freeze({
   enabled: false,
   url: null,
   percent: 5,
+  popup: true,
 })
 
 /** The database's `outlets_review_ask_url_shape`, as the form says it. */

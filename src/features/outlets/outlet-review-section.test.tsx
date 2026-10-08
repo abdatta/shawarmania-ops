@@ -33,7 +33,20 @@ describe('the Google review section', () => {
       enabled: true,
       url: 'https://g.page/r/Cef3CrZy-ZyuEBE/review',
       percent: 8,
+      popup: true,
     })
+  })
+
+  it('keeps only the banner when the popup is switched off', async () => {
+    const user = userEvent.setup()
+    const adapters = setup(OUTLET_KALYANI_ID)
+    await screen.findByTestId('review-ask-section')
+    expect(screen.getByTestId('review-ask-popup-switch')).toBeChecked()
+    await user.click(screen.getByTestId('review-ask-popup-switch'))
+    expect(screen.getByText('Off: only the bottom banner')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await screen.findByTestId('review-ask-saved')
+    expect((await adapters.outlets.getReviewAsk(OUTLET_KALYANI_ID)).popup).toBe(false)
   })
 
   it('refuses to ask with no review link, in a sentence, and stores nothing', async () => {

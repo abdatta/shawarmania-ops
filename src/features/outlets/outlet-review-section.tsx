@@ -1,4 +1,4 @@
-import { Link2, Percent, Star } from 'lucide-react'
+import { Link2, MessageSquare, Percent, Star } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { Card } from '@/components/ui/card'
@@ -32,14 +32,17 @@ import { usePrefersReducedMotion } from '@/lib/use-prefers-reduced-motion'
  *
  * ```
  * GOOGLE REVIEW
- * ┌ Review popup on the menu                           [ on ] ┐
+ * ┌ Review prompt on the menu                          [ on ] ┐
  * │ ┌ Review link   [https://g.page/r/…/review              ] ┐│
  * │ ┌ Review discount                               [5] %     ┐│
+ * │ ┌ Popup when the menu opens                       [ on ] ┐│
  * ```
  *
- * While it is on, the outlet's public menu opens with a popup asking the
- * customer to share a review on Google, naming the review discount; within the menu's
- * one-minute cache, with no website deploy. The percentage is the promise the
+ * While it is on, the outlet's public menu asks the customer for a Google
+ * review, naming the review discount: a popup when the menu opens, docking into
+ * a banner at the bottom — or, with the popup off, only the banner, the quieter
+ * version [owner, 2026-10-07]. It reaches the menu within its one-minute cache,
+ * with no website deploy. The percentage is the promise the
  * menu makes — the biller gives it with the ordinary bill discount.
  *
  * The owner sets it for any outlet and a manager for the outlets they manage,
@@ -132,6 +135,7 @@ function ReviewAskSection({
   const [on, setOn] = useState(stored.enabled)
   const [url, setUrl] = useState(stored.url ?? '')
   const [percent, setPercent] = useState(String(stored.percent))
+  const [popup, setPopup] = useState(stored.popup)
   const [error, setError] = useState<string | null>(null)
   const [phase, setPhase] = useState<SavePhase>('idle')
   const busy = phase === 'saving'
@@ -157,6 +161,7 @@ function ReviewAskSection({
     enabled: on,
     url: url.trim() === '' ? null : url.trim(),
     percent: /^\d{1,2}$/.test(percent.trim()) ? Number(percent.trim()) : 0,
+    popup,
   }
   const dirty = JSON.stringify(next) !== JSON.stringify(stored)
   const id = `review-${outletId}`
@@ -165,6 +170,7 @@ function ReviewAskSection({
     setOn(ask.enabled)
     setUrl(ask.url ?? '')
     setPercent(String(ask.percent))
+    setPopup(ask.popup)
   }
 
   async function submit() {
@@ -196,12 +202,12 @@ function ReviewAskSection({
         <SettingTile
           depth={1}
           icon={Star}
-          caption="Review popup on the menu"
-          hint={on ? undefined : 'Menu opens with a popup asking for a Google review'}
+          caption="Review prompt on the menu"
+          hint={on ? undefined : 'Menu asks for a Google review'}
           control={
             <Switch
               checked={on}
-              label="Review popup on the menu"
+              label="Review prompt on the menu"
               testId="review-ask-switch"
               disabled={busy}
               onChange={(value) => {
@@ -264,6 +270,24 @@ function ReviewAskSection({
                   />
                 }
               />
+              <SettingTile
+                depth={2}
+                icon={MessageSquare}
+                caption="Popup when the menu opens"
+                hint={popup ? 'Closes into the bottom banner' : 'Off: only the bottom banner'}
+                control={
+                  <Switch
+                    checked={popup}
+                    label="Popup when the menu opens"
+                    testId="review-ask-popup-switch"
+                    disabled={busy}
+                    onChange={(value) => {
+                      setPopup(value)
+                      setError(null)
+                    }}
+                  />
+                }
+              />
             </>
           )}
         </SettingTile>
@@ -291,8 +315,14 @@ function ReadOnlyReviewAsk({ outletId, stored }: { outletId: string; stored: Out
         <SettingTile
           depth={1}
           icon={Star}
-          caption="Review popup on the menu"
-          control={<Answer>{stored.enabled ? `${stored.percent}% review discount` : 'Off'}</Answer>}
+          caption="Review prompt on the menu"
+          control={
+            <Answer>
+              {stored.enabled
+                ? `${stored.percent}% review discount${stored.popup ? '' : ', banner only'}`
+                : 'Off'}
+            </Answer>
+          }
         />
       </Card>
     </OutletSection>

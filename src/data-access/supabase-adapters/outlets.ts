@@ -457,7 +457,7 @@ export function createSupabaseOutletsAdapter(
     /*
       Through `set_outlet_review_ask`, never `outlets_update`: the owner and
       the outlet's own managers may call it, it re-derives the caller's
-      authority, and it writes these three columns and nothing else.
+      authority, and it writes these four columns and nothing else.
     */
     async updateReviewAsk(id, ask) {
       const problem = reviewAskProblem(ask)
@@ -470,6 +470,7 @@ export function createSupabaseOutletsAdapter(
         // Null while there is no link; the generator types it non-null.
         p_url: (ask.url?.trim() || null) as string,
         p_percent: ask.percent,
+        p_popup: ask.popup,
       })
       if (error) throw reviewAskRefusal(error, ask)
       const row = data as Tables<'outlets'>

@@ -4,8 +4,9 @@
 
 Each outlet SHALL hold a Google review ask: whether its public menu asks, the
 `https://` link where its Google listing takes a review, and a review discount
-percentage, a whole number from 1 to 50, five by default. Every outlet SHALL start
-with the ask off. The database SHALL refuse an ask that is on with no link, a link
+percentage, a whole number from 1 to 50, five by default, and whether the menu
+opens with a popup or shows only its bottom banner, the popup by default. Every
+outlet SHALL start with the ask off. The database SHALL refuse an ask that is on with no link, a link
 that is not `https://` or that contains whitespace, a quote or an angle bracket,
 and a percentage outside 1–50, whatever the caller.
 
@@ -17,6 +18,10 @@ gives it with the ordinary bill discount.
 #### Scenario: A manager raises the review discount
 - **WHEN** Kalyani's manager saves the Google review section at eight percent
 - **THEN** the public menu names eight percent within its cache minute, with no website deploy
+
+#### Scenario: The quieter version
+- **WHEN** a manager switches the popup off
+- **THEN** the public menu carries `popup: false` and the menu shows only the banner
 
 #### Scenario: An ask with nowhere to go
 - **WHEN** a request turns the ask on with no review link
@@ -43,8 +48,8 @@ name, description, price in integer paise, veg flag and whether it is available
 no ids, no other outlet fields, no discounts. A removed item SHALL be absent; an
 unavailable item SHALL be present and flagged, because the customer should see
 what is off today rather than wonder where it went. Beside the sections it SHALL
-carry `review`: the outlet's review link and review discount percentage while the
-outlet asks for a Google review, and null while it does not.
+carry `review`: the outlet's review link, review discount percentage and whether
+to open with the popup while the outlet asks for a Google review, and null while it does not.
 
 It SHALL answer null — one answer for all three — for an address no outlet holds,
 a closed outlet, and an outlet with nothing on its menu, so nothing can be learned

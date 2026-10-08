@@ -51,7 +51,7 @@ select throws_ok($q$update public.outlets set review_ask_percent=51
 -- The owner writes any outlet's ask through the one function.
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000001');
 select lives_ok($q$select public.set_outlet_review_ask('00000000-0000-4000-a000-000000000002', true,
-  '  https://g.page/r/kanchrapara/review  ', 7)$q$, 'the owner sets another outlet''s ask');
+  '  https://g.page/r/kanchrapara/review  ', 7, true)$q$, 'the owner sets another outlet''s ask');
 reset role;
 select is((select row(review_ask_enabled, review_ask_url, review_ask_percent)::text from public.outlets
   where id='00000000-0000-4000-a000-000000000002'), '(t,https://g.page/r/kanchrapara/review,7)',
@@ -60,15 +60,15 @@ select is((select row(review_ask_enabled, review_ask_url, review_ask_percent)::t
 -- A manager writes their own outlet's ask, and not another's.
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002');
 select lives_ok($q$select public.set_outlet_review_ask('00000000-0000-4000-a000-000000000001', true,
-  'https://g.page/r/Cef3CrZy-ZyuEBE/review', 5)$q$, 'a manager sets their own outlet''s ask');
-select throws_ok($q$select public.set_outlet_review_ask('00000000-0000-4000-a000-000000000002', false, null, 5)$q$,
+  'https://g.page/r/Cef3CrZy-ZyuEBE/review', 5, true)$q$, 'a manager sets their own outlet''s ask');
+select throws_ok($q$select public.set_outlet_review_ask('00000000-0000-4000-a000-000000000002', false, null, 5, true)$q$,
   '42501', null, 'a manager cannot set another outlet''s ask');
-select throws_ok($q$select public.set_outlet_review_ask('00000000-0000-4000-a000-000000000001', true, '', 5)$q$,
+select throws_ok($q$select public.set_outlet_review_ask('00000000-0000-4000-a000-000000000001', true, '', 5, true)$q$,
   '23514', null, 'a blank link is no link, so asking with it is refused');
 
 -- Staff cannot set it at all.
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000006');
-select throws_ok($q$select public.set_outlet_review_ask('00000000-0000-4000-a000-000000000001', false, null, 5)$q$,
+select throws_ok($q$select public.set_outlet_review_ask('00000000-0000-4000-a000-000000000001', false, null, 5, true)$q$,
   '42501', null, 'an employee cannot change the ask');
 
 -- ---------------------------------------------------------------------------
@@ -77,7 +77,7 @@ select throws_ok($q$select public.set_outlet_review_ask('00000000-0000-4000-a000
 reset role;
 set local role service_role;
 select is(public.public_menu('shawarmania-kalyani')->'review',
-  '{"url":"https://g.page/r/Cef3CrZy-ZyuEBE/review","percent":5}'::jsonb,
+  '{"url":"https://g.page/r/Cef3CrZy-ZyuEBE/review","percent":5,"popup":true}'::jsonb,
   'the public menu carries the outlet''s own ask');
 select is(public.public_menu('shawarmania-kanchrapara')->'review'->>'percent', '7',
   'each outlet carries its own review discount');
@@ -94,7 +94,7 @@ reset role;
 set local role anon;
 select throws_ok($q$select public.public_menu('shawarmania-kalyani')$q$, '42501', null,
   'the anonymous role still cannot read the public menu');
-select throws_ok($q$select public.set_outlet_review_ask('00000000-0000-4000-a000-000000000001', false, null, 5)$q$,
+select throws_ok($q$select public.set_outlet_review_ask('00000000-0000-4000-a000-000000000001', false, null, 5, true)$q$,
   '42501', null, 'the anonymous role cannot call the write');
 
 select * from finish();

@@ -23,6 +23,8 @@ it must not read as paying for a good review.
   and null while it does not. Its privilege and every other field are unchanged.
 - The brand site's Worker reads `review` and draws the popup and its docked
   banner; with null, or from a reader that predates this, there is none.
+- **The popup can be switched off** [owner, 2026-10-07]: with it off, the menu shows
+  only the bottom banner — the quieter version. On by default.
 - Kalyani Cafe starts with it on, with its real listing's link and five percent.
 
 The percentage is copy, not arithmetic: the biller gives it at the counter with

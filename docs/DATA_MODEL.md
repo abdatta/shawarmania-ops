@@ -71,11 +71,13 @@ exactly while points **and** gold are on, the counter grant only with gold, and 
 threshold exactly while the counter grant is on. The thirty-day eligibility window
 is a constant, not a column. The rules travel to the tablet with its menu.
 
-**Google review ask** *(the-menu-asks-for-a-review)* — three more columns, off by
-default, written only through `set_outlet_review_ask(outlet, enabled, url, percent)`
+**Google review ask** *(the-menu-asks-for-a-review)* — four more columns, off by
+default, written only through `set_outlet_review_ask(outlet, enabled, url, percent, popup)`
 with the same authority: `review_ask_enabled`; `review_ask_url` (`https://`, no
 whitespace, quotes or angle brackets, at most 500 characters — it lands in an
-`href` on the public menu); `review_ask_percent` (whole, 1–50, default 5). Asking
+`href` on the public menu); `review_ask_percent` (whole, 1–50, default 5); `review_ask_popup` (default true:
+the menu opens with the popup, which docks into the bottom banner; false shows only
+the banner). Asking
 needs a link; the link and percentage are kept while the ask is off. The
 percentage is the public menu's wording only: no bill applies it by itself.
 

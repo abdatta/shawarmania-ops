@@ -80,6 +80,7 @@ export const outletFixtures: Tables<'outlets'>[] = [
     review_ask_enabled: true,
     review_ask_url: 'https://g.page/r/Cef3CrZy-ZyuEBE/review',
     review_ask_percent: 5,
+    review_ask_popup: true,
     created_at: FIXTURE_CREATED_AT,
     location_accuracy_m: 9,
     location_captured_at: '2026-07-24T09:15:00+00:00',
@@ -134,6 +135,7 @@ export const outletFixtures: Tables<'outlets'>[] = [
     review_ask_enabled: false,
     review_ask_url: null,
     review_ask_percent: 5,
+    review_ask_popup: true,
     created_at: FIXTURE_CREATED_AT,
     // Never surveyed, mirroring supabase/seed.sql — so the demo shows both
     // states of the owner's outlet screen without anyone travelling.
@@ -185,6 +187,7 @@ export const outletFixtures: Tables<'outlets'>[] = [
     review_ask_enabled: false,
     review_ask_url: null,
     review_ask_percent: 5,
+    review_ask_popup: true,
     created_at: FIXTURE_CREATED_AT,
     location_accuracy_m: null,
     location_captured_at: null,

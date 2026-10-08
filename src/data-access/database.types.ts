@@ -3742,6 +3742,7 @@ export type Database = {
           points_use_cap_bp: number | null
           review_ask_enabled: boolean
           review_ask_percent: number
+          review_ask_popup: boolean
           review_ask_url: string | null
           table_numbers: boolean
           takeaway_offered: boolean
@@ -3787,6 +3788,7 @@ export type Database = {
           points_use_cap_bp?: number | null
           review_ask_enabled?: boolean
           review_ask_percent?: number
+          review_ask_popup?: boolean
           review_ask_url?: string | null
           table_numbers?: boolean
           takeaway_offered?: boolean
@@ -3832,6 +3834,7 @@ export type Database = {
           points_use_cap_bp?: number | null
           review_ask_enabled?: boolean
           review_ask_percent?: number
+          review_ask_popup?: boolean
           review_ask_url?: string | null
           table_numbers?: boolean
           takeaway_offered?: boolean
@@ -5590,6 +5593,7 @@ export type Database = {
           points_use_cap_bp: number | null
           review_ask_enabled: boolean
           review_ask_percent: number
+          review_ask_popup: boolean
           review_ask_url: string | null
           table_numbers: boolean
           takeaway_offered: boolean
@@ -5607,6 +5611,7 @@ export type Database = {
           p_enabled: boolean
           p_outlet: string
           p_percent: number
+          p_popup: boolean
           p_url: string
         }
         Returns: {
@@ -5649,6 +5654,7 @@ export type Database = {
           points_use_cap_bp: number | null
           review_ask_enabled: boolean
           review_ask_percent: number
+          review_ask_popup: boolean
           review_ask_url: string | null
           table_numbers: boolean
           takeaway_offered: boolean
@@ -5712,6 +5718,7 @@ export type Database = {
           points_use_cap_bp: number | null
           review_ask_enabled: boolean
           review_ask_percent: number
+          review_ask_popup: boolean
           review_ask_url: string | null
           table_numbers: boolean
           takeaway_offered: boolean

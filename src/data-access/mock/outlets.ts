@@ -212,6 +212,7 @@ export function createMockOutletsAdapter(
         review_ask_enabled: DEFAULT_REVIEW_ASK.enabled,
         review_ask_url: DEFAULT_REVIEW_ASK.url,
         review_ask_percent: DEFAULT_REVIEW_ASK.percent,
+        review_ask_popup: DEFAULT_REVIEW_ASK.popup,
         is_active: true,
         created_at: new Date().toISOString(),
         // A new outlet has never been stood in, so it judges nobody until
@@ -360,6 +361,7 @@ export function createMockOutletsAdapter(
         review_ask_enabled: ask.enabled,
         review_ask_url: ask.url?.trim() || null,
         review_ask_percent: ask.percent,
+        review_ask_popup: ask.popup,
       })
       return reviewAskFromRow(outlet)
     },
