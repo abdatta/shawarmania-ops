@@ -132,10 +132,19 @@ once it exists — until a tick or the cutover, whichever comes first.
 Why this is safe for money: the requirement *Nothing moves after the day is closed*
 (`counter-billing`) already has the database refuse a take-back, a cancel-after-paid
 and a tender correction for a bill whose day was finished, proved by hand-crafted
-request in #55. The open-ended window on an unprepared payment therefore cannot be
-used behind a closed day, which was the second half of the refusal's original
-justification. The first half — a paying customer still owed food — is exactly the
-case where marking it prepared would be wrong and keeping it visible is right.
+request in #55. That refusal is **the ended shift and nothing else**
+(`billing_device_context`), which implementation made explicit: before this change
+no order could be paid and unprepared behind a closed day, so it never mattered
+that a *new* shift on the same tablet could still reach a payment whose window had
+not started. Now it can. A biller who opens another shift that night may take back
+the payment on an order whose food never came — a legitimate refund — and the
+accepted command makes that tablet's end-of-day confirmation stale, exactly as any
+command after a close always has, so the manager sees the day is no longer final.
+`54_the_ticket_is_two_switches.sql` proves both halves. No new lock was added: the
+staleness rule is the repo's existing answer to "money moved after the day was
+closed", and the first half of the refusal's justification — a paying customer
+still owed food — is exactly the case where marking it prepared would be wrong and
+keeping it visible is right.
 
 Unpaid open orders still refuse, unchanged: money is still to be collected.
 
@@ -186,9 +195,15 @@ is replaced by the measurement query and a check for whether the cron job is run
 
 The mock billing adapter has no scheduler. It applies D1 as a projection at read
 time over the demo clock: a paid, unprepared mock order whose payment business date
-has ended is returned with `preparedAt` at that cutover and `preparedSource:
-'day_change'`. The demo scenario keeps one paid, unprepared order on today's date so
-Finish Day's new advisory is demonstrable. The demo never writes.
+has ended is returned with `preparedAt` at that cutover. The demo holds an upfront
+payment beside its order until preparation and writes the bill only then, so the
+payment's business date comes from the bill where there is one and from the held
+payment otherwise. The demo never writes.
+
+**No client reads `prepared_source`.** Nothing on any screen differs between a
+tick and the day change — the order is prepared either way — so the source is not
+added to `BillingOrder`; it is a database fact for the counting query. A future
+surface that needs it adds it then.
 
 ## Money, RLS and offline, called out
 

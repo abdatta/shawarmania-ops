@@ -84,6 +84,7 @@ export {
   formatRecentAge,
   formatTime,
   instantOnBusinessDay,
+  businessDayEnd,
   OUTLET_TIME_ZONE,
   QUIET_HOURS_FROM,
   QUIET_HOURS_UNTIL,

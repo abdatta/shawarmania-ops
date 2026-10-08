@@ -226,30 +226,22 @@ select is(pg_temp.pay_order('f6000000-0000-4000-a000-0000000000b1',
   now(), public.app_business_date(now(), time '04:00'), :'TODAYS_SHIFT'),
   'accepted', 'and it is paid upfront, before the food is made');
 
--- Closing a day while a paying customer is still owed food is wrong on its own
--- terms, and under the derived window it would leave an unbounded undo open
--- behind a confirmed day. It is its own refusal, not an open order and not a
--- recent payment, because it sends the biller to different work.
+-- #69 the-day-change-finishes-paid-orders: a paying customer still owed food
+-- no longer holds the day open. The food may still be on the grill, so the
+-- close does not mark it prepared either: the order stays on every rail until a
+-- tick or the cutover. #55 refused here; the owner re-examined the refusal and
+-- kept only the advisory on the sheet.
 select is(pg_temp.finish_day('f1000000-0000-4000-a000-000000000003', now(),
   public.app_business_date(now(), time '04:00')),
-  'unresolved_preparation',
-  'Finish Day refuses while an order is paid and not prepared, in its own words');
-select ok((select ended_at is null from public.counter_shifts where id = :'TODAYS_SHIFT'),
-  'a refused finish leaves the live shift open');
-
-select is(pg_temp.set_prepared('f2000000-0000-4000-a000-0000000000b1',
-  'f1000000-0000-4000-a000-000000000004', now(), :'TODAYS_SHIFT'),
-  'accepted', 'the food is made');
--- However recent the payment: no guard refuses a day close on the grounds that
--- a payment is still editable. Closing the day ends the window instead.
-select is(pg_temp.finish_day('f1000000-0000-4000-a000-000000000005', now(),
-  public.app_business_date(now(), time '04:00')),
-  'accepted', 'and the day then closes at once, a minute after the money landed');
+  'accepted',
+  'Finish Day closes with an order paid and not prepared');
 -- Read unimpersonated: an ended shift is no longer the tablet's own live shift,
 -- and the tablet cannot see it.
 select pg_temp.unimpersonate();
 select is((select ended_reason from public.counter_shifts where id = :'TODAYS_SHIFT'),
   'day_finished', 'the closed day ended its shift');
+select is((select prepared_at from public.orders where id = 'f2000000-0000-4000-a000-0000000000b1'),
+  null::timestamptz, 'and leaves that order unprepared, still on the rail');
 select pg_temp.impersonate(:'DEVICE_KAL');
 
 -- Now the claim the trigger's removal rests on, proved three times: a command
@@ -270,6 +262,29 @@ select is(pg_temp.correct('f6000000-0000-4000-a000-0000000000b1', 0,
 select pg_temp.unimpersonate();
 select is((select status from public.bills where id = 'f6000000-0000-4000-a000-0000000000b1'),
   'settled', 'and none of the three moved the money');
+
+-- The still-unprepared order's payment has no deadline, so what stands between
+-- it and a refund after the close is the ended shift alone. A new shift opened
+-- on the same tablet the same night can take it back -- a customer who never
+-- got their food -- and, as every command after a close always has, that makes
+-- the tablet's confirmation for the day stale for the manager to see.
+insert into public.counter_shifts
+  (id, device_id, outlet_id, person_id, opened_at, business_date, expires_at)
+values ('f5000000-0000-4000-a000-000000000002', :'DEVICE_KAL', :'KAL', :'BILLER_KAL',
+  clock_timestamp(), public.app_business_date(now(), time '04:00'),
+  public.app_next_cutover(now(), time '04:00'));
+select pg_temp.impersonate(:'DEVICE_KAL');
+select is(pg_temp.take_back('f2000000-0000-4000-a000-0000000000b1',
+  'f6000000-0000-4000-a000-0000000000b1', 'f1000000-0000-4000-a000-000000000009',
+  clock_timestamp(), 'f5000000-0000-4000-a000-000000000002'),
+  'accepted', 'a new shift after the close may refund food never served');
+select pg_temp.unimpersonate();
+select ok((select invalidated_at is not null from public.billing_end_of_day_confirmations
+    where device_id = :'DEVICE_KAL'
+      and business_date = public.app_business_date(now(), time '04:00')),
+  'and the closed day''s confirmation is stale, not silently still final');
+update public.counter_shifts set ended_at = clock_timestamp(), ended_reason = 'operator'
+ where id = 'f5000000-0000-4000-a000-000000000002';
 
 -- ---------------------------------------------------------------------------
 -- Part two: the window itself, on a shift of this file's own.

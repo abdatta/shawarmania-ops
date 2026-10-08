@@ -24,7 +24,11 @@ export type BillingCommandRefusal =
   | 'malformed_payload'
   | 'arithmetic_invalid'
   | 'unresolved_operations'
-  /** An order at this business date is paid and its preparation unrecorded. */
+  /**
+   * An order at this business date was paid and its preparation unrecorded.
+   * No longer produced since #69, which made it an advisory; kept because an
+   * exact replay of a Finish Day refused before then returns its stored result.
+   */
   | 'unresolved_preparation'
   | 'identity_conflict'
   | 'stale_revision'

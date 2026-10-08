@@ -398,6 +398,23 @@ Nothing is stored for any of this. A deadline written to a column would be a
 fourth copy of the rule and the first one to go stale, since preparation can
 land minutes after payment and move the answer.
 
+**Who finished it, and the day change** *(#69)*. `orders.prepared_source` is
+`counter` (a Prepared tick) or `day_change`, and is null exactly when
+`prepared_at` is, by check constraint. A paid order is *eventually* served — not
+necessarily when the day is closed, but by the time the shop has shut — so
+`public.finish_paid_orders_at_day_change()`, scheduled by `pg_cron` every minute,
+marks every order that is `paid` with a null `prepared_at` as prepared **at the
+cutover ending its payment's business day**:
+`app_business_day_end(bills.payment_business_date, outlets.business_day_cutover)`,
+the same definition a shift's `expires_at` is computed from. The value depends only
+on stored facts, so a sweep that runs late writes what one on the minute would
+have. It writes no `billing_commands` receipt and invalidates no end-of-day
+confirmation. No client role may run it or write the column. A counter Prepared
+command delivered after the stamp, with an earlier command time, replaces it with
+the counter's time and source; a payment take-back clears it. Rows prepared before
+#69 — including those the retired laptop repair stamped at `paid_at` — read
+`counter`, because nothing tells them apart.
+
 **`billing_commands`** — compact idempotency receipts containing envelope
 identity, attribution, command type/version/hash, client and server clocks,
 affected dates, result category, entity references and a server watermark. They

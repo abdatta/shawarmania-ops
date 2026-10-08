@@ -29,6 +29,7 @@ describe('Finish Day readiness sheet', () => {
       needsAttentionCount: 0,
       openOrderCount: 0,
       foodOwedCount: 0,
+      foodOwedFinishesAt: '2026-09-17T22:30:00.000Z',
       editablePaymentCount: 1,
       serverReachable: true,
       attributionExceptionCount: 0,
@@ -49,6 +50,7 @@ describe('Finish Day readiness sheet', () => {
       needsAttentionCount: 1,
       openOrderCount: 3,
       foodOwedCount: 0,
+      foodOwedFinishesAt: '2026-09-17T22:30:00.000Z',
       editablePaymentCount: 0,
       serverReachable: false,
       attributionExceptionCount: 0,
@@ -64,25 +66,30 @@ describe('Finish Day readiness sheet', () => {
     expect(screen.getByRole('button', { name: /keep billing/i })).toBeInTheDocument()
   })
 
-  it('blocks the day while a paying customer is still owed food, in its own words', async () => {
-    renderSheet({
+  it('names food still owed on a paid order as advisory, with the cutover, and finishes', async () => {
+    const user = userEvent.setup()
+    const { adapters, onFinished } = renderSheet({
       unsentCount: 0,
       needsAttentionCount: 0,
       openOrderCount: 0,
       foodOwedCount: 1,
+      foodOwedFinishesAt: '2026-09-17T22:30:00.000Z',
       editablePaymentCount: 1,
       serverReachable: true,
-      canFinish: false,
+      canFinish: true,
       attributionExceptionCount: 0,
     })
 
-    // Not counted among open orders and not among recent payments: closing a day
-    // while a customer who has paid is still waiting for food is wrong on its
-    // own terms, and it sends the biller to a different card.
+    // Its own words still — not an open order, not a recent payment — but no
+    // longer a blocker (#69). The food may still be cooking, so the day closes
+    // and the order stays on the rail until a tick or the cutover.
     expect(await screen.findByText(/1 order is paid but not marked prepared/i)).toBeInTheDocument()
-    expect(screen.getByText(/tick Prepared on those cards in the pipeline/i)).toBeInTheDocument()
+    expect(screen.getByText(/will be marked prepared at 04:00 am/i)).toBeInTheDocument()
     expect(screen.queryByText(/open orders?$/i)).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /finish day now/i })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /finish day now/i }))
+
+    expect(adapters.billing.closeShift).toHaveBeenCalledWith('shift-1')
+    expect(onFinished).toHaveBeenCalledOnce()
   })
 
   it('keeps earlier attribution exceptions informational and financially included', async () => {
@@ -91,6 +98,7 @@ describe('Finish Day readiness sheet', () => {
       needsAttentionCount: 0,
       openOrderCount: 0,
       foodOwedCount: 0,
+      foodOwedFinishesAt: '2026-09-17T22:30:00.000Z',
       editablePaymentCount: 0,
       serverReachable: true,
       attributionExceptionCount: 2,

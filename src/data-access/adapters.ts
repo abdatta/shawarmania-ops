@@ -1623,10 +1623,16 @@ export interface FinishDayReadiness {
   /**
    * Orders at this business date that are paid and whose preparation is not
    * recorded. Its own count, not folded into `openOrderCount`: a paying
-   * customer still owed food sends the biller to different work, and it is a
-   * blocker where a recent payment is not.
+   * customer still owed food sends the biller to different work. Never a
+   * blocker since #69 — the food may still be cooking, and the day change
+   * finishes the order at `foodOwedFinishesAt` if nobody ticks it first.
    */
   foodOwedCount: number
+  /**
+   * When the day change will mark those orders prepared: the cutover ending
+   * this shift's business day, which is the shift's own expiry.
+   */
+  foodOwedFinishesAt: string
   /**
    * Payments whose edit window has not passed — including those whose window
    * has not started, because their order is not prepared yet. Never a blocker:

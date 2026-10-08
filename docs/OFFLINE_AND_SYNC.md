@@ -312,6 +312,7 @@ re-close, or automatic recovery path.
 | Tablet removed while holding a queue | Draining stops and envelopes remain on that tablet. The removal confirmation names what it last reported unresolved, so the admin is told before rather than after |
 | A command is accepted while the pipeline is refreshing | The read consults the outbox before the server, so the acceptance is never lost between them and the order does not return to the counter as unpaid |
 | A refusal a resend cannot fix | Discard is the only resolution offered. Correcting it would earn the same refusal and add another permanent diagnostics row |
+| A Prepared tick queued overnight lands after the day change finished the order | Accepted, never needs-attention *(#69)*. An earlier tick replaces the cutover stamp with the counter's own time and source; a queued take-back clears the stamp, since the payment it rested on is gone |
 
 There is deliberately no order transfer and no privileged recovery upload.
 Open orders are short-lived kitchen tickets: a manager cancels a stranded one

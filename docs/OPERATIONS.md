@@ -1386,39 +1386,35 @@ counter.
 
 **Bills are not syncing** → check whether Tablets says **unresolved** or **out of touch**, then check the counter's network. Unresolved names the tablet's fresh retained-envelope count; out of touch means even a displayed zero is no longer current evidence. The queue is durable while the device is intact. Bring the counter app to the foreground and wait through a minute heartbeat; do not reinstall or clear site data, because that destroys the outbox.
 
-**Finish Day refuses and names an order that is paid but not prepared** → that
-is the guard working, and it is the newest of the hard blockers *(#55)*. A
-customer has handed over money and is still waiting for food, so the day's
-figures are not final and the shift is not over. Close the sheet, find that card
-in the pipeline and tick **Prepared** once the food is handed over; if it is not
-coming, take the payment back or cancel after paid, with a reason. The database
-refuses the close on the same condition, so there is no way round it from the
-screen and none is wanted. Open orders and food owed on a paid order are
-separate counts on purpose: they send the biller to different work.
+**A paid order is still on the rail the morning after** → it should not be
+*(#69)*. The day change marks every paid order nobody ticked Prepared as prepared
+at the cutover ending its payment's business day, within a minute of that
+cutover. If one survives, the job has stopped: check
+`select status, start_time from cron.job_run_details where jobid = (select jobid
+from cron.job where jobname = 'day-change-finishes-paid-orders') order by
+start_time desc limit 5`. Nothing is wrong with the data while it is stopped —
+the stamp is computed from stored dates, so when the job resumes it writes the
+same rows it would have written on time. An **unpaid** order is never finished
+this way: money is still to be collected, so it stays on the rail, and Finish Day
+still refuses over it.
 
-**…and the till that took that order is no longer switched on** → the advice
-above assumes somebody can press the button, and **only the tablet that took an
-order may touch it**. Where the order came from a till that has no live shift —
-an older day, or the other counter at the same outlet — nobody can tick
-**Prepared** on it from any screen, and the blocker cannot be cleared by hand.
-That is what `public.backfill_prepared_history()` is for: it stamps every paid
-order whose preparation was never recorded as prepared **at the moment it was
-paid**, touches nothing else, and leaves bills byte-for-byte. Execute is revoked
-from every client role, so it is run from a laptop over a direct database
-connection — the production password lives in the gitignored `.env` and is
-deliberately not written down here — never from a tablet, and never as a
-migration. Treat it as the narrow end of
-[Production historical repairs](#production-historical-repairs).
-Check first what it would move — `select count(*) from public.orders where
-status = 'paid' and prepared_at is null and paid_at is not null` — because it
-moves **all** of them, not one; capture the rows as a before-image, and verify
-the bill afterwards. It writes no command receipt, so the only record of who
-decided it is the one you keep.
+**How often did the counter forget the Prepared tick?** Every order the day
+change finished says so. Counting started at #69's deploy:
 
-Run for real on 2026-09-19 after #55 deployed: order 35 at Kalyani, ₹180, paid
-17 Sep 22:05 and never marked prepared. The biller confirmed the food had gone
-out and the tick was simply forgotten. Its till had no live shift, so the screen
-path could not have worked. One row moved; bill 1061 unchanged.
+```sql
+select o.name, b.payment_business_date, count(*)
+  from orders x
+  join bills b on b.id = x.bill_id
+  join outlets o on o.id = x.outlet_id
+ where x.prepared_source = 'day_change'
+ group by 1, 2 order by 2 desc;
+```
+
+A tick that was made but delivered late — a tablet offline overnight — replaces
+the stamp with the counter's own time and is not counted. The laptop repair this
+replaced, `backfill_prepared_history()`, was dropped in the same change: it did
+the job by hand, outlet-wide, at `paid_at`. Order 35 at Kalyani (paid 17 Sep
+22:05, cleared by it on the 19th) is why the day change exists.
 
 **Finish Day closes a day a minute after a payment** → that is correct, and it
 is deliberate *(#55)*. **Closing the day ends any open payment-edit window

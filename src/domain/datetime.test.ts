@@ -14,6 +14,7 @@ import {
   QUIET_HOURS_FROM,
   QUIET_HOURS_UNTIL,
   instantOnBusinessDay,
+  businessDayEnd,
   resolveBusinessDate,
   shiftBusinessDate,
 } from './datetime'
@@ -331,6 +332,25 @@ describe('shiftBusinessDate', () => {
  * straight. It answers both "where does an admin's typed-in time land" and "when
  * does the outlet's arrival deadline fall", because those are the same question.
  */
+describe('businessDayEnd', () => {
+  it('ends a business day at the cutover on the next calendar day', () => {
+    // Business day 17 Sep ends at 04:00 IST on 18 Sep, which is 22:30 UTC on the 17th.
+    expect(businessDayEnd('2026-09-17', '04:00')).toBe('2026-09-17T22:30:00.000Z')
+  })
+
+  it('is what a payment taken after midnight is finished at', () => {
+    // Paid 01:46 IST on 18 Sep: still business day 17 Sep, so the same cutover.
+    const paidAt = '2026-09-17T20:16:00.000Z'
+    expect(businessDayEnd(resolveBusinessDate(paidAt, '04:00'), '04:00')).toBe(
+      '2026-09-17T22:30:00.000Z',
+    )
+  })
+
+  it('accepts the HH:MM:SS spelling Postgres returns', () => {
+    expect(businessDayEnd('2026-09-17', '04:00:00')).toBe('2026-09-17T22:30:00.000Z')
+  })
+})
+
 describe('instantOnBusinessDay', () => {
   it('places a time after the cutover on the business date itself', () => {
     // 13:00 IST on 25 Jul is 07:30 UTC the same day.

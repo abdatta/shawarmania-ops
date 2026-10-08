@@ -274,6 +274,14 @@ customer or bill contents. A phone reads on open and on an explicit **Re-read**;
 it has no subscription, poll or timer, so every figure stays visibly tied to the
 same stated moment rather than changing piecemeal.
 
+**The database runs two scheduled jobs, and neither is load-bearing for
+correctness.** `bill-receipt-recovery` retries queued receipt wakeups, and
+`day-change-finishes-paid-orders` (#69) marks a paid order nobody ticked as
+prepared at the cutover ending its payment's day. Both run every minute under
+`pg_cron`, and both write only what stored facts already determine: a missed run
+delays an SMS or leaves an order on the rail a little longer, and the next run
+writes exactly what the missed one would have.
+
 ## How permissions are evaluated
 
 **Nothing about authority is carried in the access token** (owner, 2026-07-29). A person's roles and outlets are rows in `public.assignments`, and RLS policies resolve scope by membership:

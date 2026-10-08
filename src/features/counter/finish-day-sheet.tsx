@@ -5,6 +5,7 @@ import { FormSheet } from '@/components/layout/form-sheet'
 import { Button } from '@/components/ui/button'
 import { useAdapters } from '@/data-access'
 import type { FinishDayReadiness } from '@/data-access/adapters'
+import { formatTime } from '@/domain'
 
 export function FinishDaySheet({
   open,
@@ -84,7 +85,7 @@ export function FinishDaySheet({
               <Button size="phone" onClick={() => void finish()} disabled={busy}>
                 {finishing
                   ? 'Finishing…'
-                  : readiness.editablePaymentCount > 0
+                  : readiness.editablePaymentCount > 0 || readiness.foodOwedCount > 0
                     ? 'Finish day now'
                     : 'Finish day'}
               </Button>
@@ -150,17 +151,22 @@ export function FinishDaySheet({
             />
           )}
           {/*
-            Its own blocker, in the biller's words. A customer has handed over
-            money and is still waiting for food, which is not the same work as
-            an open order and not the same thing as a recent payment.
+            In the biller's words, and not a blocker since #69: the food may
+            still be cooking, so finishing leaves the order on the rail, and the
+            day change marks it prepared at the cutover if nobody ticks it.
           */}
           {readiness.foodOwedCount > 0 && (
-            <Blocker
-              title={`${readiness.foodOwedCount} order${
-                readiness.foodOwedCount === 1 ? ' is' : 's are'
-              } paid but not marked prepared`}
-              resolution="Close this sheet and tick Prepared on those cards in the pipeline, or take the payment back if the food is not coming."
-            />
+            <div className="rounded-xl border border-warning p-3">
+              <p className="font-semibold text-content">
+                {readiness.foodOwedCount} order{readiness.foodOwedCount === 1 ? ' is' : 's are'}{' '}
+                paid but not marked prepared
+              </p>
+              <p className="mt-1 text-sm text-content-muted">
+                {readiness.foodOwedCount === 1 ? 'It' : 'They'} will be marked prepared at{' '}
+                {formatTime(readiness.foodOwedFinishesAt)}. Tick Prepared on the card now if the
+                food has gone out, or finish and leave it for the cook.
+              </p>
+            </div>
           )}
 
           {readiness.editablePaymentCount > 0 && (

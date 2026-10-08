@@ -50,6 +50,9 @@ never edited sale facts.
 Short-lived working state for food being prepared. It is editable only while
 open and belongs to the tablet that created it. Full payment converts it to an
 immutable bill; cancellation keeps attributed history and consumes no bill number.
+Its preparation is finished by the counter's **Prepared** tick or, for a paid
+order nobody ticked, by the **day change** at the cutover ending its payment's
+business day (#69).
 
 ### Order number
 

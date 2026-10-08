@@ -375,6 +375,17 @@ export function instantOnBusinessDay(businessDate: string, time: string, cutover
   return new Date(`${calendarDate}T${clock}+05:30`).toISOString()
 }
 
+/**
+ * The instant a business day ends: its outlet's cutover on the next calendar
+ * day. The client's copy of `public.app_business_day_end`, which is also what a
+ * shift's expiry is.
+ *
+ * `('2026-09-17', '04:00')` -> `2026-09-17T22:30:00.000Z` (04:00 IST on 18 Sep).
+ */
+export function businessDayEnd(businessDate: string, cutover: string): string {
+  return instantOnBusinessDay(shiftBusinessDate(businessDate, 1), cutover, cutover)
+}
+
 function timeToSeconds(value: string): number {
   const match = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value)
   if (!match) {

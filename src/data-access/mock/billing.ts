@@ -3,7 +3,9 @@ import {
   isAwaitingOrderNumber,
   UNSENT_ORDER_REFERENCE,
   billTotals,
+  businessDayEnd,
   classifySync,
+  resolveBusinessDate,
   isPackagingLine,
   lineTotalPaise,
   isTableNumber,
@@ -48,6 +50,7 @@ function billsAt(personId: string, outletId: string): boolean {
   )
 }
 import { DEMO_BILLER_ID, DEMO_COUNTER_DEVICE_ID } from './fixtures/billing'
+import { outletFixtures } from './fixtures/outlets'
 import type { DemoLoyaltyHooks } from './customers'
 import { DEMO_BILL_NUMBER_BASE, DEMO_OUTLET_ID, type DemoStore } from './store'
 
@@ -384,6 +387,29 @@ export function createMockBillingAdapter(
     )
   }
 
+  /**
+   * The day change, projected at read time because the demo has no scheduler:
+   * a paid order nobody ticked reads prepared at the cutover ending its
+   * payment's business day once that has passed, as the live sweep stamps it
+   * (#69). Nothing is written.
+   */
+  function preparedAtOf(row: Tables<'orders'>): string | null {
+    if (row.prepared_at !== null || row.status !== 'paid') return row.prepared_at
+    const cutover = outletFixtures.find(
+      (outlet) => outlet.id === row.outlet_id,
+    )?.business_day_cutover
+    if (!cutover) return null
+    // The demo holds an upfront payment beside its order until preparation, and
+    // only then writes the bill; either one says which day the money landed on.
+    const bill = row.bill_id ? store.bills.find((candidate) => candidate.id === row.bill_id) : null
+    const held = store.orderPayments.get(row.id)
+    const paymentDate =
+      bill?.payment_business_date ?? (held ? resolveBusinessDate(held.paidAt, cutover) : null)
+    if (paymentDate === null) return null
+    const end = businessDayEnd(paymentDate, cutover)
+    return Date.parse(end) <= paymentNow() ? end : null
+  }
+
   function orderView(row: Tables<'orders'>): BillingOrder {
     return {
       id: row.id,
@@ -394,7 +420,7 @@ export function createMockBillingAdapter(
       // of a local reference — matching the live adapter exactly.
       businessDate: row.business_date,
       orderedAt: row.ordered_at,
-      preparedAt: row.prepared_at,
+      preparedAt: preparedAtOf(row),
       status: row.status,
       creatorId: row.created_by,
       creatorName: actorName(row.created_by) ?? 'Unknown operator',
@@ -889,6 +915,7 @@ export function createMockBillingAdapter(
       rounding_paise: totals.roundingPaise,
       total_paise: totals.totalPaise,
       prepared_at: null,
+      prepared_source: null,
       status: 'open',
       bill_id: null,
       paid_at: null,
@@ -965,6 +992,7 @@ export function createMockBillingAdapter(
     const row = store.orders.find((candidate) => candidate.id === orderId)
     if (!row || (row.status !== 'open' && !(row.status === 'paid' && prepared))) return
     row.prepared_at = prepared ? new Date(atMs).toISOString() : null
+    row.prepared_source = prepared ? 'counter' : null
     // Settling the upfront payer: money is already held against this order,
     // and preparation was the last thing its bill waited for.
     if (prepared && row.status === 'paid') {
@@ -1516,8 +1544,9 @@ export function createMockBillingAdapter(
       const unsentCount = pending.size
       const projected = projectedOrders(row.outlet_id)
       const openOrderCount = projected.filter((order) => order.status === 'open').length
-      // A customer who has paid and is still waiting for food. Its own blocker,
-      // exactly as the live database refuses it (#55).
+      // A customer who has paid and may still be waiting for food. An advisory
+      // since #69, exactly as the live sheet reads it: the day change finishes
+      // the order at the cutover if nobody ticks it first.
       const foodOwedCount = projected.filter(
         (order) => order.status === 'paid' && order.preparedAt === null,
       ).length
@@ -1542,17 +1571,14 @@ export function createMockBillingAdapter(
         needsAttentionCount,
         openOrderCount,
         foodOwedCount,
+        foodOwedFinishesAt: row.expires_at,
         editablePaymentCount,
         serverReachable: isOnline(),
         attributionExceptionCount: store.bills.filter(
           (bill) => bill.recorded_after_shift_end && bill.business_date === row.business_date,
         ).length,
         canFinish:
-          isOnline() &&
-          unsentCount === 0 &&
-          needsAttentionCount === 0 &&
-          openOrderCount === 0 &&
-          foodOwedCount === 0,
+          isOnline() && unsentCount === 0 && needsAttentionCount === 0 && openOrderCount === 0,
       }
     },
 

@@ -242,13 +242,14 @@ Above the controls, every quantity and item name stays readable without expansio
 
 **Finish day** always opens a readiness sheet. Opening it immediately asks the
 tablet to drain and names every hard blocker with the action that resolves it:
-work still sending, work needing attention, open orders, **an order that is paid
-and not marked prepared**, or an unavailable server. That last blocker is its
-own, in the biller's words — *1 order is paid but not marked prepared* — and
-points at the pipeline rather than counting the order among open orders or among
-recent payments: closing a day while a paying customer is still owed food is
-wrong on its own terms, and the database refuses it too. A payment whose
-correction window remains open is an advisory, not a blocker: the biller can
+work still sending, work needing attention, open orders, or an unavailable
+server. **An order that is paid and not marked prepared** is named in the
+biller's words — *1 order is paid but not marked prepared* — as an **advisory**,
+not a blocker *(#69)*: *It will be marked prepared at 04:00*, with the outlet's
+own cutover. The food may still be cooking, so finishing neither waits for it nor
+marks it: the order stays on the rail until somebody ticks it or the day change
+finishes it. A payment whose
+correction window remains open is an advisory too: the biller can
 review it, keep billing, or finish now, and finishing **ends that window early**
 rather than waiting it out. No guard refuses the day close on the grounds that a
 payment is still editable; what refuses a later unwind is the live shift every

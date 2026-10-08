@@ -1491,8 +1491,9 @@ export function createSupabaseBillingAdapter(
             .eq('device_id', session.device.deviceId)
             .eq('business_date', shift.businessDate)
             .eq('status', 'open'),
-          // Paid and not prepared: a customer who has handed over money and is
-          // still waiting for food. The database refuses the close on it too.
+          // Paid and not prepared: a customer who has handed over money and may
+          // still be waiting for food. An advisory since #69: the close goes
+          // ahead and the day change finishes the order at the cutover.
           client
             .from('orders')
             .select('id', { count: 'exact', head: true })
@@ -1547,15 +1548,12 @@ export function createSupabaseBillingAdapter(
         needsAttentionCount: attentionCount,
         openOrderCount,
         foodOwedCount,
+        foodOwedFinishesAt: shift.expiresAt,
         editablePaymentCount,
         serverReachable,
         attributionExceptionCount: 0,
         canFinish:
-          serverReachable &&
-          unsentCount === 0 &&
-          attentionCount === 0 &&
-          openOrderCount === 0 &&
-          foodOwedCount === 0,
+          serverReachable && unsentCount === 0 && attentionCount === 0 && openOrderCount === 0,
       }
     },
     async closeShift(shiftId: string): Promise<void> {

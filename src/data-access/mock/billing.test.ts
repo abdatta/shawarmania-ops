@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   AWAITING_ORDER_NUMBER,
+  businessDayEnd,
   PAYMENT_EDIT_WINDOW_MS,
+  resolveBusinessDate,
   SYNC_ESCALATION_COUNT,
   SYNC_ESCALATION_MS,
 } from '@/domain'
@@ -749,6 +751,29 @@ describe('mock billing adapter', () => {
       expect(store.bills.some((bill) => bill.order_id === saved.id)).toBe(true)
       const settled = await adapter.listOpenOrders(DEMO_OUTLET_ID)
       expect(settled.find((order) => order.id === saved.id)).toBeUndefined()
+    })
+
+    it('lets the day change finish a paid order nobody ticked, at the cutover (#69)', async () => {
+      const store = createDemoStore()
+      const adapter = createMockBillingAdapter(store)
+      const saved = await adapter.saveOrder(
+        orderDraft(store, '62000000-0000-4000-8000-000000000002'),
+      )
+      await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+      await adapter.payOrder(saved.id, [{ method: 'cash', amountPaise: saved.totalPaise }])
+      await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+
+      // Still trading: the order waits on the rail for its tick.
+      const before = await adapter.listOpenOrders(DEMO_OUTLET_ID)
+      expect(before.find((order) => order.id === saved.id)).toMatchObject({ preparedAt: null })
+
+      // Past the cutover ending the day it was paid on, it reads prepared at
+      // that cutover — not at the moment it was read — and leaves the rail.
+      const end = businessDayEnd(resolveBusinessDate(new Date(), '04:00'), '04:00')
+      vi.setSystemTime(new Date(Date.parse(end) + 3 * 60 * 60 * 1000))
+      const after = await adapter.listOpenOrders(DEMO_OUTLET_ID)
+      expect(after.find((order) => order.id === saved.id)).toBeUndefined()
+      expect(store.orders.find((order) => order.id === saved.id)?.prepared_at).toBeNull()
     })
 
     it('takes a payment back within the window as one atomic unwind, and refuses outside it', async () => {

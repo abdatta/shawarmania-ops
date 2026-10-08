@@ -3445,6 +3445,7 @@ export type Database = {
           paid_by: string | null
           paid_shift_id: string | null
           prepared_at: string | null
+          prepared_source: string | null
           pricing_mode: Database["public"]["Enums"]["pricing_mode"]
           rounding_paise: number
           service_type: Database["public"]["Enums"]["service_type"] | null
@@ -3483,6 +3484,7 @@ export type Database = {
           paid_by?: string | null
           paid_shift_id?: string | null
           prepared_at?: string | null
+          prepared_source?: string | null
           pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
           rounding_paise?: number
           service_type?: Database["public"]["Enums"]["service_type"] | null
@@ -3521,6 +3523,7 @@ export type Database = {
           paid_by?: string | null
           paid_shift_id?: string | null
           prepared_at?: string | null
+          prepared_source?: string | null
           pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
           rounding_paise?: number
           service_type?: Database["public"]["Enums"]["service_type"] | null
@@ -4144,6 +4147,10 @@ export type Database = {
         Args: { cutover: string; ts: string }
         Returns: string
       }
+      app_business_day_end: {
+        Args: { cutover: string; d: string }
+        Returns: string
+      }
       app_counter_device: { Args: never; Returns: string }
       app_counter_device_concerns_me: {
         Args: { p_device: string }
@@ -4416,7 +4423,6 @@ export type Database = {
         }
       }
       backfill_bill_public_links: { Args: never; Returns: number }
-      backfill_prepared_history: { Args: never; Returns: number }
       bill_public_discount_rows: { Args: { p_bill_id: string }; Returns: Json }
       bill_public_link_token: { Args: never; Returns: string }
       bill_public_points: { Args: { p_bill_id: string }; Returns: Json }
@@ -5074,6 +5080,10 @@ export type Database = {
           full_name: string
           id: string
         }[]
+      }
+      finish_paid_orders_at_day_change: {
+        Args: { p_now?: string }
+        Returns: number
       }
       fold_expense_category: { Args: { p_value: string }; Returns: string }
       forget_aggregator_session: {

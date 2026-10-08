@@ -264,8 +264,9 @@ End-to-end, with the network genuinely disabled rather than mocked away.
   deliverable, but no new work opens without the backend and a fresh shift.
 - Remove a tablet with pending work → draining stops and the envelopes remain.
 - Finish day names and refuses unsent, needs-attention, server-open and
-  unreachable-server states; a still-editable payment is advisory, and after a
-  clean drain either Finish day choice writes exactly one confirmation.
+  unreachable-server states; a still-editable payment and an order paid but not
+  prepared are advisory, and after a clean drain either Finish day choice writes
+  exactly one confirmation.
 - Force a duplicate submission of the same client UUID → one row.
 - Bill numbers are assigned by the server, are sequential per outlet, and never collide across two devices.
 - A bill settled at 00:20, synced at 09:00, carries the **previous** business date.

@@ -760,6 +760,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       rounding_paise: totals.roundingPaise,
       total_paise: totals.totalPaise,
       prepared_at: preparedAt,
+      prepared_source: preparedAt === null ? null : 'counter',
       status: seed.status,
       bill_id: sourceBill?.id ?? null,
       paid_at: sourceBill?.paid_at ?? null,
