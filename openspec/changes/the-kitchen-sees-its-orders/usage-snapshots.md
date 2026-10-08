@@ -1,9 +1,10 @@
 # Supabase Usage Snapshots
 
-What this release costs in usage, measured rather than guessed. #69
-(`the-day-change-finishes-paid-orders`) and #70 (this change) ship in one push
-(owner, 2026-10-08); the readings below bracket it. Task 11.2 adds the
-before-push reading and, about a week after the push, a third.
+What the kitchen work costs in usage, measured rather than guessed. #69
+(`the-day-change-finishes-paid-orders`) shipped on its own on 2026-10-08, and
+#70 (this change) ships after it, so the readings bracket each release: a
+baseline before #69, a reading before #70's push that carries #69's effect, and
+one about a week after #70's push. Task 11.2 adds the last two.
 
 Read from the owner's signed-in dashboard: Organization → Usage, filtered to the
 production project `iefcidjbfnmsiqithqbj`. Figures are **cycle-to-date** for the
@@ -15,7 +16,7 @@ seconds while visible and holds one Realtime subscription per kitchen tablet,
 and every order write bumps a pulse row that kitchens listen to. #69 adds a
 minute `pg_cron` job inside the database, which costs no egress.
 
-## 2026-10-08 08:37 IST — baseline, before either change was built
+## 2026-10-08 08:37 IST — baseline, before #69 shipped
 
 Billing cycle 27 Sep – 27 Oct 2026, day 12 of 31. Kalyani Cafe has traded since
 1 Oct, so roughly 8 trading days are in these totals; nothing traded 27–30 Sep.
@@ -36,10 +37,10 @@ Billing cycle 27 Sep – 27 Oct 2026, day 12 of 31. Kalyani Cafe has traded sinc
 API request counts are not on this page; they are under the project's own
 Reports → API, if a later reading wants them.
 
-## Before the push
+## Before #70's push (after #69)
 
 *To be recorded (task 11.2).*
 
-## About a week after the push
+## About a week after #70's push
 
 *To be recorded (task 11.2).*

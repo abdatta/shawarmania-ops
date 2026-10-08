@@ -91,8 +91,8 @@
 
 ## 11. Before The Push
 
-- [ ] 11.1 **#69 and #70 are released together, in one push** (owner, 2026-10-08). #69 is committed locally and waits for this change; do not push it alone.
-- [ ] 11.2 **Snapshot Supabase usage before pushing**, from the owner's signed-in dashboard (Organization → Usage, project `iefcidjbfnmsiqithqbj`): egress, database size, Realtime messages and peak connections, Edge Function invocations, storage, monthly active users, and API request counts if shown, each with the billing period it covers. Record it in `usage-snapshots.md` in this folder under the date, beside the baseline already there (taken 2026-10-08 08:37 IST, before either change was built). The point is the **delta** this release causes — the kitchen polls every 20 seconds and adds a Realtime subscription per kitchen tablet — so take the same readings again about a week after the push and add them as a third entry.
+- [ ] 11.1 **#69 shipped on its own on 2026-10-08**, ahead of this change (the owner reversed the earlier plan to release both together, because #69 does not depend on #70 and the counter was quiet). Confirm it is live — `orders.prepared_source` exists in production and the `day-change-finishes-paid-orders` cron job is scheduled — before relying on it here.
+- [ ] 11.2 **Snapshot Supabase usage before pushing**, from the owner's signed-in dashboard (Organization → Usage, project `iefcidjbfnmsiqithqbj`): egress, database size, Realtime messages and peak connections, Edge Function invocations, storage, monthly active users, and API request counts if shown, each with the billing period it covers. Record it in `usage-snapshots.md` in this folder under the date, beside the readings already there. The 2026-10-08 08:37 IST baseline predates #69; this reading predates #70, so the two releases' deltas can be told apart. The point is the **delta** this release causes — the kitchen polls every 20 seconds and adds a Realtime subscription per kitchen tablet — so take the same readings again about a week after the push and add them as a third entry.
 
 ## 12. Phase Gate
 
