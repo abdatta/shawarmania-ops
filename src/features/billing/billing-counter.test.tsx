@@ -20,6 +20,7 @@ import { createMockMenuAdapter } from '@/data-access/mock/menu'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
+import { layOutAnchoredMenu } from '@/test/anchored-layout'
 
 import { ALL_OFF_SERVICE_SETTINGS, type OutletServiceSettings } from '@/domain'
 
@@ -715,23 +716,23 @@ describe('BillingCounter', () => {
       'false',
     )
 
-    const getBoundingClientRect = vi
-      .spyOn(HTMLDivElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue({ top: 120, right: 320 } as DOMRect)
+    const layout = layOutAnchoredMenu({
+      isTrigger: (element) =>
+        element.querySelector(':scope > button[aria-label^="More actions"]') !== null,
+      trigger: { top: 120, left: 284, width: 36, height: 36 },
+      panel: { width: 176, height: 100 },
+    })
     // No wait: an unprepared order's payment has no deadline, so the card knows
     // the take-back is available without first measuring a clock.
     await person.click(
       within(preparing).getByRole('button', { name: /^More actions for Order .105$/ }),
     )
     const menu = within(preparing).getByRole('menu')
-    expect(menu).toHaveStyle({
-      position: 'fixed',
-      bottom: `${window.innerHeight - 116}px`,
-      right: `${window.innerWidth - 320}px`,
-    })
+    // Above its trigger, with its right edge on the trigger's.
+    expect(menu).toHaveStyle({ position: 'fixed', top: '16px', left: '144px' })
     expect(within(menu).queryByRole('menuitem', { name: 'Un-pay' })).not.toBeInTheDocument()
     expect(within(menu).getByRole('menuitem', { name: 'Cancel after paid' })).toBeVisible()
-    getBoundingClientRect.mockRestore()
+    layout.mockRestore()
   })
 
   it('opens the composer over the bills column on the first tap and gives way again', async () => {

@@ -430,6 +430,8 @@ function PhoneBar({
   return (
     <nav
       aria-label="Primary"
+      // Fixed over the window's foot, so a menu takes its top as the bottom edge.
+      data-window-edge="bottom"
       /*
         The rule sits on the **whole block**, not between the card and the tabs,
         so it rises as a group opens and the card is enclosed by the same

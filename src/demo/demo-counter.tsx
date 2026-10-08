@@ -79,7 +79,9 @@ export function DemoCounter({
         renders nothing.
       */}
       <DemoConnectivityContext.Provider value={session.connectivity}>
-        <div className="sticky top-0 z-40">{banner}</div>
+        <div className="sticky top-0 z-40" data-window-edge="top">
+          {banner}
+        </div>
       </DemoConnectivityContext.Provider>
       <DemoCounterDelivery />
       <CounterShell shift={session.device.shift} onShiftChanged={session.reread} />

@@ -2,7 +2,12 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import { isInsideWindow, layOutAnchoredMenu } from '@/test/anchored-layout'
+
 import { RowActionsMenu } from './row-actions-menu'
+
+const PANEL = { width: 160, height: 50 }
+const isRowTrigger = (element: Element) => element.tagName === 'DETAILS'
 
 describe('RowActionsMenu', () => {
   it('keeps its actions hidden behind the trigger until opened', async () => {
@@ -60,9 +65,11 @@ describe('RowActionsMenu', () => {
 
   it("opens inward from the trigger's left edge when start-aligned", async () => {
     const user = userEvent.setup()
-    const getBoundingClientRect = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue({ bottom: 80, left: 48, right: 80 } as DOMRect)
+    const layout = layOutAnchoredMenu({
+      isTrigger: isRowTrigger,
+      trigger: { top: 48, left: 48, width: 32, height: 32 },
+      panel: PANEL,
+    })
 
     render(
       <RowActionsMenu
@@ -78,6 +85,62 @@ describe('RowActionsMenu', () => {
     expect(panel).toHaveStyle({ left: '48px', top: '84px' })
     expect(panel).not.toHaveStyle({ right: `${window.innerWidth - 80}px` })
 
-    getBoundingClientRect.mockRestore()
+    layout.mockRestore()
+  })
+
+  it('opens above its trigger, on screen, when the row is at the foot of the window', async () => {
+    const user = userEvent.setup()
+    const top = window.innerHeight - 40
+    const layout = layOutAnchoredMenu({
+      isTrigger: isRowTrigger,
+      trigger: { top, left: 600, width: 32, height: 32 },
+      panel: PANEL,
+    })
+
+    render(
+      <RowActionsMenu
+        label="Actions for Demo Person"
+        actions={[{ label: 'Edit', onSelect: () => {} }]}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Actions for Demo Person' }))
+
+    const panel = screen.getByRole('button', { name: 'Edit' }).closest('div[style]')!
+    expect(panel.getBoundingClientRect().bottom).toBe(top - 4)
+    expect(isInsideWindow(panel)).toBe(true)
+
+    layout.mockRestore()
+  })
+
+  it("opens above a row that sits just over the phone's bottom bar", async () => {
+    const user = userEvent.setup()
+    const barTop = window.innerHeight - 130
+    const top = barTop - 50
+    const layout = layOutAnchoredMenu({
+      isTrigger: isRowTrigger,
+      trigger: { top, left: 600, width: 32, height: 32 },
+      panel: PANEL,
+      others: (element) =>
+        element.getAttribute('data-window-edge') === 'bottom'
+          ? { top: barTop, left: 0, width: window.innerWidth, height: 130 }
+          : undefined,
+    })
+
+    render(
+      <>
+        <RowActionsMenu
+          label="Actions for Demo Person"
+          actions={[{ label: 'Edit', onSelect: () => {} }]}
+        />
+        <nav data-window-edge="bottom" />
+      </>,
+    )
+    await user.click(screen.getByRole('button', { name: 'Actions for Demo Person' }))
+
+    // Below would have fitted the window and gone over the bar.
+    const panel = screen.getByRole('button', { name: 'Edit' }).closest('div[style]')!
+    expect(panel.getBoundingClientRect().bottom).toBe(top - 4)
+
+    layout.mockRestore()
   })
 })

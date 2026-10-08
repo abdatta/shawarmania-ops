@@ -6,6 +6,7 @@ import { Chip } from '@/components/ui/chip'
 import { MemberMark } from '@/components/ui/member-mark'
 import { Modal } from '@/components/ui/modal'
 import { Shimmer } from '@/components/ui/loading'
+import { useAnchoredPanel } from '@/components/ui/anchored-panel'
 import { Money } from '@/components/ui/money'
 import type { BillingOrder } from '@/data-access/adapters'
 import type { SharedTable } from '@/domain'
@@ -94,38 +95,23 @@ export function PipelineCard({
   onCancelAfterPaid: (order: BillingOrder, reason: string) => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
-  const [menuPosition, setMenuPosition] = useState<{ bottom: number; right: number } | null>(null)
   const [unpaying, setUnpaying] = useState(false)
   const [cancellingAfterPaid, setCancellingAfterPaid] = useState(false)
   const [customerOpen, setCustomerOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
-
-  function placeMenu() {
-    const rect = menuRef.current?.getBoundingClientRect()
-    if (!rect) return
-    // The counter workspace scrolls horizontally, which necessarily clips
-    // vertical overflow too. A fixed panel still opens above its trigger but
-    // belongs to the viewport instead of that clipped scrolling box.
-    setMenuPosition({
-      bottom: window.innerHeight - rect.top + 4,
-      right: window.innerWidth - rect.right,
-    })
-  }
+  const menuPanelRef = useRef<HTMLDivElement>(null)
+  // The counter workspace scrolls horizontally, which necessarily clips vertical
+  // overflow too, so the panel is placed in the window. It opens above its
+  // trigger when there is room, and below it when there is not.
+  const menuStyle = useAnchoredPanel(menuRef, menuPanelRef, menuOpen, { prefer: 'above' })
 
   useEffect(() => {
     if (!menuOpen) return
     function onPointerDown(event: PointerEvent) {
       if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false)
     }
-    placeMenu()
-    window.addEventListener('resize', placeMenu)
-    window.addEventListener('scroll', placeMenu, true)
     document.addEventListener('pointerdown', onPointerDown)
-    return () => {
-      window.removeEventListener('resize', placeMenu)
-      window.removeEventListener('scroll', placeMenu, true)
-      document.removeEventListener('pointerdown', onPointerDown)
-    }
+    return () => document.removeEventListener('pointerdown', onPointerDown)
   }, [menuOpen])
 
   /**
@@ -475,18 +461,16 @@ export function PipelineCard({
               aria-label={`More actions for ${reference}`}
               aria-expanded={menuOpen}
               disabled={actionsDisabled}
-              onClick={() => {
-                if (!menuOpen) placeMenu()
-                setMenuOpen((open) => !open)
-              }}
+              onClick={() => setMenuOpen((open) => !open)}
             >
               <MoreVertical aria-hidden size={17} />
             </Button>
             {menuOpen && (
               <div
+                ref={menuPanelRef}
                 role="menu"
                 aria-label={`More actions for ${reference}`}
-                style={{ position: 'fixed', ...menuPosition }}
+                style={menuStyle}
                 className="z-30 w-44 rounded-xl border border-border bg-surface p-1 shadow-lg"
               >
                 {kebabRows.map((row) => (
