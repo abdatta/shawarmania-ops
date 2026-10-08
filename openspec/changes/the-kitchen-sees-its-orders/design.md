@@ -27,8 +27,20 @@ forgotten Prepared tick would sit on the kitchen screen indefinitely.
 ### D1. A tablet has a kind
 
 `counter_devices.kind text not null default 'counter' check (kind in
-('counter','kitchen'))`. Setup is unchanged and produces a counter. The kind is
-changed through the Tablets list's existing **Edit** dialog, as a third field beside
+('counter','kitchen'))`.
+
+**The kind is chosen at setup**, on the admin's phone, where the setup code is
+created (owner, 2026-10-08). The issue form gains *Use this tablet for* with
+**Billing** (the default, and what every tablet was before) and **Kitchen**, beside
+the name it already asks for. `counter_device_setup_codes.kind` stores the choice
+with the code; redeeming the code creates the device with that kind. The tablet's
+own setup screen does not change — it never asked anything but the code — and the
+device session it receives resolves to the kind's route (D13). *Billing* and
+*Kitchen* are the words on screen because they name the job; `counter` and
+`kitchen` remain the stored values, and *counter* remains the repo's word for the
+billing tablet everywhere else.
+
+The kind is changed afterwards through the Tablets list's existing **Edit** dialog, as a third field beside
 name and outlet, by the same people and the same server path that rename a tablet
 (find how the dialog reaches `rename_counter_device` and follow it; do not invent a
 second path). A Super Admin may change any tablet's kind; a Franchise Admin may
@@ -408,8 +420,10 @@ nothing real is shared between tablets except through the server.
   opener answerable for the till's cash without their agreement.
 - **Refusing a switch while a shift is live.** The transfer rule does this; for a
   type change the owner preferred ending the shift.
-- **A kind chosen at setup.** Kept out for scope; a new tablet is a counter and one
-  Edit away from being a kitchen.
+- **Every tablet set up as a counter, switched afterwards.** Proposed first, to
+  keep setup unchanged; the owner pointed out that the code is created on an
+  admin's phone anyway, so the choice belongs there and the tablet needs no new
+  screen to learn it.
 - **Kitchen actions: Prepared, Ready, bump.** The owner kept the screen passive in
   this version apart from ACK. Preparation stays the counter's tick.
 - **No ACK at all.** The owner's first position; reversed in discussion, because a

@@ -2,8 +2,12 @@
 
 ### Requirement: A tablet is a counter or a kitchen, and an admin changes which
 
-Every set-up tablet SHALL have a kind, `counter` or `kitchen`. Setup SHALL produce a
-counter. A Super Admin MAY change the kind of any tablet, and a Franchise Admin MAY
+Every set-up tablet SHALL have a kind, `counter` or `kitchen`. The admin issuing a
+setup code SHALL choose the kind, offered as *Use this tablet for* **Billing** or
+**Kitchen** with Billing preselected; the code SHALL carry it, and redeeming the
+code SHALL create the tablet with that kind and open it on that kind's
+shift-start screen. The tablet's setup screen SHALL ask for nothing more than it
+does today. A Super Admin MAY change the kind of any tablet, and a Franchise Admin MAY
 change the kind of a tablet at an outlet they actively manage, from the Tablets
 section's Edit action; the database SHALL enforce this independently of the
 surface. The tablet's identity, name, outlet, session and history SHALL be
@@ -18,6 +22,16 @@ Changing a tablet to `kitchen` SHALL be refused, naming what is outstanding, whi
 its latest sufficiently fresh device report does not state zero unresolved local
 work, or while any order it took is open or paid and not prepared. Changing a tablet
 to `counter` SHALL NOT be refused on those grounds.
+
+#### Scenario: A kitchen tablet is set up
+
+- **WHEN** an FA creates a setup code naming the tablet *Kitchen 1* and choosing Kitchen, and the code is entered on a new tablet
+- **THEN** the tablet opens on the kitchen's shift-start screen, having asked for nothing but the code
+
+#### Scenario: The default is billing
+
+- **WHEN** an FA creates a setup code without changing *Use this tablet for*
+- **THEN** the tablet it sets up is a counter, exactly as before this change
 
 #### Scenario: A counter becomes a kitchen at the start of the day
 

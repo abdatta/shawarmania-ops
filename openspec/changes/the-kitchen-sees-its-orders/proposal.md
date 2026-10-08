@@ -1,8 +1,10 @@
 # Proposal: The Kitchen Sees Its Orders
 
 > **Model**: Opus · **Wave**: F · **Depends on**: **#69**, #35, #61 · **Gate**: an
-> owner or Franchise Admin switches a set-up tablet between **Counter** and
-> **Kitchen** from the outlet's Tablets list, keeping its identity, ending any live
+> owner or Franchise Admin chooses **Billing** or **Kitchen** when creating a
+> tablet's setup code, and the tablet opens as that kind on redeeming it with no
+> change to its own setup screen; they switch a set-up tablet between the two
+> from the outlet's Tablets list, keeping its identity, ending any live
 > shift on it, and being refused a switch to Kitchen while that tablet still holds
 > unsent work or orders it took that are still on the rail; a kitchen tablet opens
 > a **kitchen shift** through the counter's own shift-start screen and phone code,
@@ -52,7 +54,11 @@ until somebody acknowledges it.
   work in its offline queue, or an order it took that is still on the rail (unpaid,
   or paid and not prepared — only the tablet that took an order may ever finish
   it). The refusal names what is outstanding. Becoming a Counter is never refused.
-- Tablets are set up as Counters, as now, and switched afterwards.
+- **The type is chosen when the tablet is set up.** The admin creating the
+  setup code on their phone answers *Use this tablet for: Billing / Kitchen*
+  beside the tablet's name. The code carries the choice, so the tablet's own
+  setup screen is unchanged: it enters the code and opens as whatever it was
+  set up to be.
 
 ### A kitchen shift
 
