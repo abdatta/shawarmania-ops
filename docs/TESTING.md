@@ -117,6 +117,13 @@ A spare tablet is seeded **removed**, so it counts as no counter, holds no label
 and appears nowhere. The four suites that need two tills bring it into service
 themselves and say so in the file: two tablets at one outlet is a state a test
 asks for, never one every test inherits. A test that activates it puts it back.
+**A till hears of the other till's work by Realtime, on no schedule a test
+controls**, and its pipeline cards slide when it does. Before pressing anything
+on a till right after the other one acted, wait for that change to show there,
+then for the rail to settle (`railSettled` in `e2e-auth/tills.ts`). A click on a
+sliding card is retried until Playwright scrolls it to the top of the window,
+where its upward menu opens off screen: that is what failed "across UTC
+midnight", which had nothing to do with the hour.
 | Identity migration/tooling | Vitest + local rehearsal + deployment probe | Canonical namespace, private approval seal, permanent dual sign-in, drift refusal, password/session/history preservation, rollback, fail-closed publication |
 | Component tests | Vitest + Testing Library | Interactive components, especially the billing surface |
 | End-to-end | Playwright | The critical paths, including username activation/reset and offline billing |

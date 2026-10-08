@@ -11,6 +11,7 @@ import {
   TILL_TWO,
   openTill,
   orderCard,
+  railSettled,
   saveNewOrder,
   setSpareTillInService,
 } from './tills'
@@ -246,6 +247,7 @@ async function serveCard(card: Locator) {
  */
 async function cancelCard(page: Page, orderId: string) {
   const card = orderCard(page, orderId)
+  await railSettled(page)
   await card.getByRole('button', { name: /^More actions for / }).click()
   await card.getByRole('menuitem', { name: 'Cancel order' }).click()
   const dialog = page.getByRole('dialog', { name: /^Cancel/ })
@@ -507,6 +509,10 @@ test('two tills seat one table while one is offline, and both orders say so', as
 
     // Each till takes its own off the rail; neither may cancel the other's.
     await cancelCard(one.page, seatedOneOrder)
+    // Till two hears of that cancellation by Realtime, on no schedule of ours,
+    // and slides its own card up when it does. Acting before then clicked a
+    // moving card: see `railSettled`.
+    await expect(orderCard(two.page, seatedOneOrder)).toHaveCount(0, { timeout: 20_000 })
     await cancelCard(two.page, seatedTwoOrder)
   } finally {
     await one.context.close()

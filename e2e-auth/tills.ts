@@ -210,6 +210,39 @@ export async function saveNewOrder(
   return added[0]!
 }
 
+/**
+ * Wait until a till's pipeline has stopped moving, before pressing anything on it.
+ *
+ * A card slides (`useFlip`, 280 ms) whenever a card above it leaves, and on a
+ * second till that happens when Realtime delivers the other till's change, which
+ * is whenever it arrives. A click that lands mid-slide is retried by Playwright,
+ * and its fourth attempt scrolls the target to the top of the window. A card's
+ * menu opens upward from its fixed position, so it then lands above the screen,
+ * and the click on its item waits out the test. That was the "fails across UTC
+ * midnight" failure: it was this race, which midnight had nothing to do with.
+ *
+ * Settling only means what has started has finished. A caller acting after
+ * another till's change waits first for that change to show.
+ */
+export async function railSettled(page: Page) {
+  await expect
+    .poll(() =>
+      page
+        .getByTestId('counter-activity-rail')
+        .evaluate(
+          (rail) =>
+            rail
+              .getAnimations({ subtree: true })
+              .filter(
+                (animation) =>
+                  animation.playState === 'running' &&
+                  animation.effect?.getComputedTiming().iterations !== Infinity,
+              ).length,
+        ),
+    )
+    .toBe(0)
+}
+
 /** One order's pipeline card, by the id `saveNewOrder` returned. */
 export function orderCard(page: Page, id: string) {
   return page.getByTestId('counter-activity-rail').locator(`[data-flip-id="${id}"]`)
