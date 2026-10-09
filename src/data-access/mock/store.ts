@@ -39,6 +39,7 @@ import {
   type BillSeed,
 } from './fixtures/billing'
 import { manualLedgerDaySeeds, manualLedgerExpenseSeeds } from './fixtures/retirement-history'
+import { analyticsHistorySeeds } from './fixtures/analytics-history'
 import { menuCategoryFixtures, menuDiscountFixtures, menuItemFixtures } from './fixtures/menu'
 import { expenseSeeds, OPENING_CASH_PAISE } from './fixtures/operations'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID, outletFixtures } from './fixtures/outlets'
@@ -382,7 +383,9 @@ function notLaterThanNow(instant: string): string {
   return instant > now ? now : instant
 }
 
-export function createDemoStore(options: { billingLifecycle?: boolean } = {}): DemoStore {
+export function createDemoStore(
+  options: { billingLifecycle?: boolean; matureHistory?: boolean } = {},
+): DemoStore {
   const tradingOutletIds = [OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID]
 
   // Resolved once, through the outlet's own cutover — never derived from a
@@ -475,7 +478,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
    * the same domain function the screen uses, and a number taken from **that
    * outlet's** sequence in the order its bills were sent.
    */
-  function materialise(seed: BillSeed, index: number) {
+  function materialise(seed: BillSeed, index: number, historical = false) {
     const outletId = billSeedOutlet(seed)
     const date = businessDate(seed.daysAgo)
     const createdAt = instantAt(date, seed.time)
@@ -528,16 +531,16 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
         ? DEMO_MORNING_BILLER_ID
         : billerForOutlet(outletId),
       counter_device_id: deviceForOutlet(outletId),
-      // As production writes them: the live counter shift, and nothing in the
-      // retired column. Every demo bill is within four days of today, so none of
-      // them is the pre-tablet history `shift_id` was left alive to hold.
+      // Recent bills use the live tablet; archival history has no tablet shift.
       shift_id: null,
       // A sale the tablet captured in the gap after a remote departure stays
       // under the shift that was live when the tablet last knew — never under
       // the operator who came next.
-      counter_shift_id: seed.recordedAfterDeparture
-        ? DEMO_MORNING_SHIFT_ID
-        : shiftForOutlet(outletId),
+      counter_shift_id: historical
+        ? null
+        : seed.recordedAfterDeparture
+          ? DEMO_MORNING_SHIFT_ID
+          : shiftForOutlet(outletId),
       order_id: null,
       business_date: date,
       created_at: createdAt,
@@ -587,7 +590,9 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
         line_total_paise: lineTotalPaise(line.item.price_paise, line.quantity),
         discount_paise: 0,
         discount_percent_bp: null,
-        category_name: null,
+        category_name: historical
+          ? (menuCategoryFixtures.find((c) => c.id === line.item.category_id)?.name ?? null)
+          : null,
         kind: 'item',
       })
     })
@@ -596,9 +601,11 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
   // Oldest first, so each outlet's numbering runs in the order its bills were
   // sent. Sorting the whole set at once is safe because the sequence is taken
   // per outlet inside `materialise`.
+  if (options.matureHistory)
+    analyticsHistorySeeds(today).forEach((seed, index) => materialise(seed, index + 10000, true))
   ;[...billSeeds]
     .sort((a, b) => b.daysAgo - a.daysAgo || a.time.localeCompare(b.time))
-    .forEach(materialise)
+    .forEach((seed, index) => materialise(seed, index))
 
   /**
    * **Nothing in the demo may claim to have happened later than now.**
@@ -675,6 +682,11 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
   const lifecycleBills = bills
     .filter((bill) => bill.outlet_id === DEMO_OUTLET_ID && bill.business_date === today)
     .slice(2, 4)
+  // Keep the rehearsed tickets tied to the original counter fixture. Resolve
+  // once, rather than rescanning archived bills for every candidate line.
+  const openOrderSample = bills.find(
+    (bill) => bill.outlet_id === DEMO_OUTLET_ID && bill.counter_shift_id !== null,
+  )
   const lifecycle: Array<{
     status: Tables<'orders'>['status']
     bill: Tables<'bills'> | null
@@ -702,11 +714,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     const sourceBill = seed.bill
     const sourceLines = sourceBill
       ? billItems.filter((line) => line.bill_id === sourceBill.id)
-      : billItems
-          .filter(
-            (line) => line.bill_id === bills.find((bill) => bill.outlet_id === DEMO_OUTLET_ID)?.id,
-          )
-          .slice(0, 1)
+      : billItems.filter((line) => line.bill_id === openOrderSample?.id).slice(0, 1)
     const orderedAt =
       sourceBill?.ordered_at ??
       notLaterThanNow(instantAt(today, index === 2 ? '18:15' : index === 3 ? '18:40' : '19:10'))
@@ -1013,6 +1021,37 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       ),
     )
     .filter((row): row is Tables<'aggregator_channel_days'> => row !== null)
+
+  if (options.matureHistory) {
+    const revenueByDay = new Map<string, number>()
+    const archivalEnd = businessDate(4)
+    for (const bill of bills) {
+      if (bill.business_date > archivalEnd || bill.status !== 'settled') continue
+      const key = `${bill.outlet_id}:${bill.business_date}`
+      revenueByDay.set(key, (revenueByDay.get(key) ?? 0) + bill.total_paise)
+    }
+    const sourceDays = new Set(
+      aggregatorChannelDays.map((row) => `${row.outlet_id}:${row.business_date}:${row.channel}`),
+    )
+    let index = 10000
+    for (let age = 185; age >= 4; age--)
+      for (const outletId of [OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID]) {
+        const date = businessDate(age)
+        const counter = revenueByDay.get(`${outletId}:${date}`) ?? 0
+        for (const channel of ['zomato', 'swiggy']) {
+          const sourceKey = `${outletId}:${date}:${channel}`
+          if (sourceDays.has(sourceKey)) continue
+          // A few missing imports exercise coverage without inventing zero takings.
+          if (channel === 'swiggy' && age % 13 === 0) continue
+          const revenue = Math.round(
+            counter * (channel === 'zomato' ? 0.34 : 0.23) * (0.85 + (age % 7) * 0.05),
+          )
+          const row = figureFor(outletId, age, index++, revenue, Math.round(revenue * 0.25))!
+          aggregatorChannelDays.push({ ...row, channel })
+          sourceDays.add(sourceKey)
+        }
+      }
+  }
 
   const categoryNames = new Map<string, string>()
   for (const row of expenses) {

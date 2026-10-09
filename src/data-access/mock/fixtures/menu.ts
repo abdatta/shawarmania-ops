@@ -623,6 +623,7 @@ const ITEM_BLUEPRINT = [
 ] as const satisfies readonly ItemBlueprint[]
 
 export type MenuItemKey = (typeof ITEM_BLUEPRINT)[number]['key']
+export const menuItemKeys: readonly MenuItemKey[] = ITEM_BLUEPRINT.map((item) => item.key)
 
 /** The stable id of one outlet's menu item. */
 export function menuItemId(outletId: string, key: MenuItemKey): string {

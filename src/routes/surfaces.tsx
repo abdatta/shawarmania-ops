@@ -20,6 +20,7 @@ import { DeliverySyncSurface } from '@/features/aggregator-sync/delivery-sync-su
 
 import { GatedSurface } from './gated-surface'
 import { NotFound } from './not-found'
+import { AnalyticsSurface } from '@/features/analytics/analytics-surface'
 
 /**
  * The children shared by the real and demo role branches.
@@ -31,6 +32,22 @@ import { NotFound } from './not-found'
  * property every `*-live` change on the roadmap depends on.
  */
 export const roleSurfaceRoutes: RouteObject[] = [
+  {
+    path: 'analytics/items',
+    element: (
+      <GatedSurface path="analytics/items">
+        <AnalyticsSurface kind="items" />
+      </GatedSurface>
+    ),
+  },
+  {
+    path: 'analytics/sales',
+    element: (
+      <GatedSurface path="analytics/sales">
+        <AnalyticsSurface kind="trends" />
+      </GatedSurface>
+    ),
+  },
   {
     index: true,
     element: (

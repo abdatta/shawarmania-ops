@@ -2601,6 +2601,7 @@ export type ChannelSettlement = ZomatoSettlement
 
 /** The bag of domain adapters a session provider supplies to its tree. */
 export interface DataAdapters {
+  analytics: import('./analytics').AnalyticsAdapter
   overview: import('./overview').OverviewAdapter
   outlets: OutletsAdapter
   accounts: AccountsAdapter

@@ -5524,6 +5524,16 @@ export type Database = {
         Args: { p_bill_id: string }
         Returns: undefined
       }
+      sales_analytics: {
+        Args: {
+          p_from: string
+          p_outlet_id: string
+          p_periods?: number
+          p_to: string
+          p_view?: string
+        }
+        Returns: Json
+      }
       save_aggregator_session: {
         Args: { p_channel: string; p_expires_at: string; p_session: string }
         Returns: undefined

@@ -1290,3 +1290,8 @@ Every check below is enforced by the schema and covered by the suites in `supaba
 - `expected_closing_paise` matches the invariant above from its own snapshotted inputs.
 - No order or bill date disagrees with what the outlet cutover implies for its
   matching order or payment timestamp.
+
+
+## Sales and menu analytics
+
+sales_analytics(uuid,date,date,text,integer) returns bounded aggregate JSON to owners and assigned outlet managers. The client requests items/2 or sales/N (N=1–4). Items returns one summary per window plus captured dish/category aggregates, without delivery or hours. Sales returns zero-inclusive days and imported delivery gross, no dish/category rows, and period/hour aggregates capped at 24 × N; it skips bill-line reads. Ranges are 1–92 days per window. No raw tickets, line records, identities or engagement data are returned. Settled bill totals and explicit business dates are authoritative; item lines exclude packaging. No tracking table or ingestion RPC is introduced.

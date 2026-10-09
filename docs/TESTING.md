@@ -34,6 +34,8 @@ npm run auth:readiness # hosted read-only pre-publication identity readiness pro
 
 `test:db`, `test:rls` and `test:e2e:auth` need the local stack running with the seed applied (`db:start`, then `db:reset`). They are excluded from plain `npm test` so unit feedback stays instant; CI runs them in their own job against a fresh stack.
 
+Before repeating the full authenticated browser suite locally, reset its database fixture. The two-tablet billing test uses fixed customer names and settled bills are immutable; retained bills from an earlier run otherwise inflate its exact-two assertion.
+
 To rehearse `.github/workflows/verify.yml`, use a clean checkout, Node 22 and `CI=true`, and preserve each job's command order. Establish the fresh seeded database **once before pgTAP**, then carry that state through all six `test:rls` phases, auth E2E and generated-type verification without another reset. The suites' own cleanup still runs. Give the demo and auth browser jobs separate checkouts, or run them sequentially: both build into `dist/` with different backend configuration. Install dependencies with `npm ci` and browsers with the workflow's `npx playwright install --with-deps chromium`; do not replace the configured workers, retries or timeouts for a rehearsal.
 
 `test:e2e:auth` has its own Playwright config and its own port, because it is the one browser suite that needs a **real backend** — everything in `e2e/` runs against a build wired to a deliberately unreachable Supabase, which is what lets `npm run test:e2e` work on a laptop with no Docker. That unreachable build also proves sign-in shows connection guidance without implying whether an identifier or password is valid. The real-backend suite separately proves unknown usernames and wrong passwords keep identical refusal copy. Keeping the ports apart means a preview server left running by one suite can never be reused by the other.
@@ -532,3 +534,12 @@ A change to the interval arithmetic is now covered by the drawer's own unit and
 database tests; if a future change needs a fresh replay, take a new snapshot and
 write the rehearsal against the month in question rather than restoring this
 one, whose findings are already spent.
+
+
+## Sales and menu analytics
+
+Analytics tests reconcile settled counter revenue and captured item lines, exclude void/packaging rows, preserve historical prices, verify weighted AOV and aligned periods, and reject invalid/unbounded or foreign-outlet reads. pgTAP and real HTTP probes exercise the aggregate RPC with one to four windows, Items summaries, omitted unused arrays and a maximum of 24 hourly rows per window. Live browser tests count RPCs to prove measure/group switches reuse a snapshot and inspect payload sizes. Demo browser tests cover 1d/7d/30d default 7d, fixed internal infinite scrolling, two-dish comparison, all metrics, four chart series, actual-range point details, reloads, empty states, both themes and no backend requests.
+
+Pattern tests distinguish per-day clock-hour averages from main Hour totals, count zero-sale dates in weekday/hour denominators, preserve weighted AOV, and verify measure-dependent visible and accessible headings.
+
+Hourly comparison checks cover four solid series without hatch patterns, focused hours across earlier periods, retained internal zero gaps, complete 24-hour empty axes and unchanged total exports. Phone/tablet browser tests exercise all metrics and two/four-period legends with pointer/touch/keyboard details. The contrast gate covers the four numbered series badges in both themes.

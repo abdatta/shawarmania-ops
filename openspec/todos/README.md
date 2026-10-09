@@ -13,6 +13,7 @@ Keep entries behavior-focused:
 
 | Item | Type | Status | Area | Trigger to promote |
 | --- | --- | --- | --- | --- |
+| [Menu Measurement And Experiment Advice](./menu-measurement-and-experiment-advice.md) | Feature | Deferred by owner, 2026-10-09 | Analytics / public menu | The owner resumes menu measurement or experiment advice |
 | [Bill Thermal Printing](./bill-thermal-printing.md) | Feature | Anticipated | Billing | A customer or regulator asks for a printed bill |
 | [Bill GST Breakup](./bill-gst-breakup.md) | Feature | Anticipated | Billing | The business registers for GST or a customer requires a tax invoice |
 | [Bill Receipt Delivery](./bill-receipt-delivery.md) | Feature | **Promoted 2026-09-21** | Billing | Fired: consent is taken at the counter, published and filed with an RCS registration; the channel moved to SMS via MSG91 on 2026-09-29. Seeded as `bill-receipt-delivery` (#59), shipped 2026-10-04 and archived 2026-10-07 |

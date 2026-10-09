@@ -32,7 +32,7 @@ not access control.
 
 Navigation had grown to sixteen flat entries, which on the owner's phone was a bottom bar that scrolled sideways with roughly half of it off the right edge and nothing saying it was there. **A tab you have to remember exists and scroll to find is not navigation**, so #51 both cut the surfaces the business had abandoned and folded what remained.
 
-The owner and a manager now see **four top-level entries**: **Overview**, **Finances** — Billing, Drawer, Expenses, Ledger — **Attendance**, and **Setup** — Outlets, Team, Delivery, Menu. Finances rather than Sales, because it holds Expenses, which is money out. Setup is the things you change when something changes, rather than the things you read every evening. **Delivery is in Setup**, and the owner's reason is worth keeping: that page is less about revenue than about whether the Zomato and Swiggy sync is working, and setting it up again with an OTP when it is not; the figures it produces are read in the Ledger.
+The owner and a manager now see **five top-level entries**: **Overview**, **Finances** — Billing, Drawer, Expenses, Ledger — **Attendance**, **Setup** — Outlets, Team, Customers, Delivery, Menu — and **Analytics** — Items, Sales. Finances rather than Sales, because it holds Expenses, which is money out. Setup is the things you change when something changes, rather than the things you read every evening. **Delivery is in Setup**, and the owner's reason is worth keeping: that page is less about revenue than about whether the Zomato and Swiggy sync is working, and setting it up again with an OTP when it is not; the figures it produces are read in the Ledger.
 
 **There is no Tablets entry, and since outlets-one-at-a-time no Tablets page.** A tablet is administered on the page of the outlet it stands in, under that outlet's name, which is also the only place a setup code is minted. That is the reason the manager's Outlets surface exists at all.
 
@@ -760,3 +760,14 @@ the link and the reader.
 - **The app is installable** and launches full-screen from the home screen.
 - **Rupees everywhere**, Indian digit grouping, tabular figures.
 - **Asia/Kolkata everywhere.** Business dates display as dates, never as timestamps.
+
+
+## Sales and menu analytics
+
+The fifth owner/manager navigation group contains Items and Sales for one selected outlet. Compact 1d/7d/30d presets default to 7d. Items shows full-name Dishes in a fixed 320px internal scroll container, All/Worst/Rising/Slow ordering, search, comparison of exactly two dishes, category bars and an expandable table/export. Ideas and Browsing are absent. Sales uses page-wide Revenue/Orders/AOV, Hour/Day/Week grouping and one to four adjacent periods. Revenue includes imported delivery gross; Orders and weighted AOV are counter-only. Trend, weekday and Kolkata-hour charts expose exact figures and actual dates on tap/hover/keyboard inspection. Missing AOV is a gap. Tables/export follow the same metric and ranges. Loading placeholders mirror the revised card layout.
+
+Hour grouping shows counter clock-hour totals across the range; the headline Revenue remains counter + imported delivery. The bottom Hours graph uses grouped columns. Compare is a compact icon pill with the selected total number of periods; choices show their actual ranges.
+
+Lower pattern headings name the measure: Daily average revenue/orders (by weekday), Hourly average revenue/orders (per selected day), or Average bill by weekday/hour for AOV. Selected zero-sales days contribute to average denominators. Hourly averages use counter clock-hour aggregates divided by the inclusive date span; main Hour grouping and table/export remain totals. AOV remains weighted counter revenue/orders. All charts remain available pending the owner's decision on overlap.
+
+Hourly comparison bars are solid orange/slate/blue/violet with rounded corners, spacing and numbered date-range legends/details. The lower plot focuses on trading hours across all compared periods with one adjacent hour on each side; intervening zero hours remain. Empty plots and the main Hour totals/table retain all 24 hours. Selection highlights the complete hour group. Chart tokens and badge contrast are checked in both themes.
