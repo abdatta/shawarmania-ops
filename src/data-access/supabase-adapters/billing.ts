@@ -140,7 +140,6 @@ function joined<T>(value: T | T[] | null): T | null {
 
 function lineView(row: Tables<'order_items'> | Tables<'bill_items'>): BillLineDraft {
   return {
-    ...('order_id' in row ? { orderLineId: row.id } : {}),
     menuItemId: row.menu_item_id ?? '',
     itemName: row.item_name,
     unitPricePaise: row.unit_price_paise,
@@ -152,6 +151,30 @@ function lineView(row: Tables<'order_items'> | Tables<'bill_items'>): BillLineDr
     categoryName: row.category_name,
     kind: row.kind,
   }
+}
+
+/**
+ * A stored order line, under its own identity. A revision that sends it back
+ * under that identity is compared with what the server holds and keeps its
+ * captured price; under any other it is a new line, checked against today's
+ * menu, and refused once the price has moved (design D8 of
+ * `each-outlet-chooses-how-it-serves`).
+ *
+ * Its own function rather than a guess inside `lineView` from which columns
+ * came back: a read that stopped selecting `order_id` would otherwise drop
+ * every identity without a type error, and the refusal would return.
+ */
+function orderLineView(row: Tables<'order_items'>): BillLineDraft {
+  return { orderLineId: row.id, ...lineView(row) }
+}
+
+/**
+ * An order's lines as its bill holds them: without the order-item identity,
+ * which belongs to the order. A bill read from the server never carries one, so
+ * the bill shown before delivery matches the one shown after.
+ */
+function asBillLines(lines: readonly BillLineDraft[]): BillLineDraft[] {
+  return lines.map(({ orderLineId: _orderLineId, ...line }) => line)
 }
 
 /**
@@ -195,7 +218,7 @@ function orderView(row: OrderReadRow, historicalDeviceLabel: string | null): Bil
     customerTier: row.customer_tier,
     serviceType: row.service_type,
     tableNumber: row.table_number,
-    lines: row.order_items.map(lineView),
+    lines: row.order_items.map(orderLineView),
     discounts: (row.order_discounts ?? []).map((discount) => ({
       source: discount.source,
       basis: discount.basis,
@@ -1231,7 +1254,7 @@ export function createSupabaseBillingAdapter(
             customerTier: order.customerTier ?? null,
             serviceType: order.serviceType ?? null,
             tableNumber: order.tableNumber ?? null,
-            lines: order.lines,
+            lines: asBillLines(order.lines),
             totalPaise: order.totalPaise,
             voidKind: null,
             voidReason: null,
@@ -1883,7 +1906,7 @@ export function createSupabaseBillingAdapter(
         customerTier: existing.customerTier ?? null,
         serviceType: existing.serviceType ?? null,
         tableNumber: existing.tableNumber ?? null,
-        lines: existing.lines,
+        lines: asBillLines(existing.lines),
         totalPaise: existing.totalPaise,
         voidKind: null,
         voidReason: null,

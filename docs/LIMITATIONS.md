@@ -611,36 +611,32 @@ having shared the table, and each card says which of the two it is, *1 of 2* or
 room, which is the only place it can be sorted out. How often it happens is one
 query ([Operations](OPERATIONS.md)).
 
-### A price change refuses an edit that still carries the old price
+### A new sale rung offline at an old price is refused
 
 The command boundary checks a **new** line against the menu as it stands when the
 command arrives: its name, and its current price. A line already on the order is
-compared by identity instead, and keeps the price it was captured at. The live
-counter, though, gives every line a new identity each time it saves an order, so
-at the boundary every line of every save is new.
+compared by identity instead, and keeps the price it was captured at. The counter
+sends every line it already holds back under its stored identity, whether the
+order was read from the server, is still queued on the tablet, or was paid and
+taken back, and mints one only for a line the biller adds. So editing an open
+order after a price change is accepted, at the prices its lines were captured at.
 
-So once the owner changes an item's price, anything that still carries the old
-one is refused as not adding up: an edit of an open order that holds the item, and
-work a tablet queued offline before it heard of the change. The refusal is
-terminal: it is reported in **Needs attention** on its tablet, where it can be
-discarded, since resending the same lines would be refused the same way. The
-order itself is untouched, and **paying** it is unaffected, because payment
-settles the order at the figures it was saved with and re-checks no line. What
-cannot be done is editing it: the biller cancels and re-rings, or takes payment
-as it stands.
+What is still refused is a line with **no stored identity to compare**: work a
+tablet rang offline, from its persisted menu, before it heard of the change. A
+new order is refused as not adding up, and every edit queued behind it with it.
+The refusal is terminal: it is reported in **Needs attention** on its tablet,
+where it can be discarded, since resending the same lines would be refused the
+same way.
 
 The sharp case is a **direct sale rung offline** at the old price. Its money was
 taken at the counter, and its refusal leaves that money with no bill: the
 command stays on its tablet in Needs attention, and discarding it would drop the
-record of a real sale. Until the counter keeps line identities, a price change is
-best made when no tablet is offline.
-
-A packaging line follows exactly the same rule against the outlet's packaging
-charge (#60), so a bag price changed while takeaway orders are open refuses their
-edits in the same way. The owner changing a price in the middle of service is
-rare, which is why this is recorded rather than engineered away; the way out is
-for the counter to keep each saved line's identity across edits, so the boundary
-can compare it rather than re-price it.
+record of a real sale. Until the server can tell an old price from a wrong one, a
+price change is best made when no tablet is offline. A packaging line follows the
+same rule against the outlet's packaging charge (#60). The owner changing a price
+while a tablet is offline is rare, which is why this is recorded rather than
+engineered away for now: see
+[An Offline Sale Keeps Its Price](../openspec/todos/an-offline-sale-keeps-its-price.md).
 
 ### Late bills against a closed day
 

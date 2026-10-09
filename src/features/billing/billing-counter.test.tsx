@@ -975,6 +975,53 @@ describe('BillingCounter', () => {
     expect(metadata).toHaveTextContent('Demo Morning Biller')
   })
 
+  it('sends a saved order’s lines back under their stored identities and captured prices', async () => {
+    // The order was rung before the menu price moved. A line sent back under its
+    // stored identity keeps the price it was captured at; under a new identity
+    // the server checks it against today's menu and refuses the revision.
+    const store = createDemoStore()
+    const saved = store.orders.find((order) => order.order_number === 104)
+    if (!saved) throw new Error('Expected the demo open order')
+    const classic = store.orderItems.find(
+      (line) => line.order_id === saved.id && line.menu_item_id === MENU_ITEM_CLASSIC_ID,
+    )
+    if (!classic) throw new Error('Expected a Classic line on the demo open order')
+    const capturedPricePaise = classic.unit_price_paise - 1_000
+    classic.unit_price_paise = capturedPricePaise
+    classic.line_total_paise = capturedPricePaise * classic.quantity
+
+    const adapters: DataAdapters = {
+      ...createMockAdapters('biller'),
+      billing: createMockBillingAdapter(store),
+    }
+    const person = user()
+    renderCounter(adapters)
+    const reviseOrder = vi.spyOn(adapters.billing, 'reviseOrder')
+
+    const rail = await screen.findByTestId('counter-activity-rail')
+    const openOrder = await within(rail).findByTestId('open-order-104')
+    await person.click(
+      within(openOrder).getByRole('button', { name: /^More actions for Order .104$/ }),
+    )
+    await person.click(within(openOrder).getByRole('menuitem', { name: 'Edit' }))
+
+    // One more of a line already on the order, and one the biller adds.
+    await person.click(screen.getByRole('button', { name: 'Classic Chicken Shawarma' }))
+    await person.click(screen.getByRole('button', { name: 'Mayonnaise Chicken Shawarma' }))
+    await person.click(screen.getByTestId('save-order'))
+
+    await waitFor(() => expect(reviseOrder).toHaveBeenCalledTimes(1))
+    const lines = reviseOrder.mock.calls[0]![1].lines
+    expect(lines.find((line) => line.menuItemId === MENU_ITEM_CLASSIC_ID)).toMatchObject({
+      orderLineId: classic.id,
+      unitPricePaise: capturedPricePaise,
+      quantity: classic.quantity + 1,
+    })
+    const added = lines.find((line) => line.menuItemId === MENU_ITEM_MAYO_ID)
+    expect(added).toBeDefined()
+    expect(added!.orderLineId).toBeUndefined()
+  })
+
   it('edits every order field in the composer and restores the suspended draft', async () => {
     const person = user()
     const { adapters } = renderCounter()

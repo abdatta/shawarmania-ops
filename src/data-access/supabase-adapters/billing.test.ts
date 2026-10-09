@@ -1378,6 +1378,62 @@ describe('the delivery handoff cannot lose accepted work', () => {
     ).resolves.toMatchObject({ totalPaise: 48_000 })
   })
 
+  it('edits a server-read order, paid and taken back, under its stored line identities', async () => {
+    // A line the server already stores is compared by identity and keeps the
+    // price it was captured at; a line it has never seen is checked against
+    // today's menu. So a revision that renamed this line would be refused the
+    // moment the menu price moved off the captured ₹480.
+    const storedLineId = '10000000-0000-4000-a000-0000000000d1'
+    const row = openPreparedRow({
+      order_items: [
+        {
+          id: storedLineId,
+          menu_item_id: 'item-1',
+          item_name: 'Classic Chicken Shawarma',
+          unit_price_paise: 48_000,
+          quantity: 1,
+          line_total_paise: 48_000,
+        },
+      ],
+    })
+    const billing = createSupabaseBillingAdapter(
+      raceOrdersClient(row, async () => undefined),
+      session,
+    )
+
+    const bill = await billing.payOrder(PREPARED_ORDER_ID, [
+      { method: 'cash' as PaymentMethod, amountPaise: 48_000 },
+    ])
+    await billing.unpayOrder(PREPARED_ORDER_ID, bill!.id, 'Wrong tender')
+    const [reopened] = (await billing.listOpenOrders('outlet-1')).filter(
+      (order) => order.id === PREPARED_ORDER_ID,
+    )
+    expect(reopened).toMatchObject({ status: 'open' })
+
+    await billing.reviseOrder(PREPARED_ORDER_ID, {
+      lines: [
+        { ...reopened!.lines[0]!, quantity: 2 },
+        {
+          menuItemId: 'item-2',
+          itemName: 'Mayonnaise Chicken Shawarma',
+          unitPricePaise: 15_900,
+          quantity: 1,
+        },
+      ],
+    })
+
+    const database = new BillingDeliveryDatabase()
+    const revision = (await database.envelopes.toArray()).find(
+      (row) => row.command.type === 'revise_order',
+    )!.command
+    database.close()
+    if (revision.type !== 'revise_order') throw new Error('missing revision')
+    const [kept, added] = revision.payload.lines
+    expect(kept).toMatchObject({ id: storedLineId, unitPricePaise: 48_000, quantity: 2 })
+    expect(added!.id).toMatch(/^[0-9a-f-]{36}$/)
+    expect(added!.id).not.toBe(storedLineId)
+  })
+
   it('shows a command created during an in-flight read on the next read', async () => {
     const commandId = '10000000-0000-4000-a000-0000000000c5'
     const client = raceOrdersClient(openPreparedRow(), async () => undefined)

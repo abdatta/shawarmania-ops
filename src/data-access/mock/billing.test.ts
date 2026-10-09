@@ -12,7 +12,7 @@ import {
 import type { BillDraft, SaveOrderInput } from '../adapters'
 import { createMockBillingAdapter } from './billing'
 import { DEMO_OPEN_SHIFT_ID } from './fixtures/billing'
-import { MENU_ITEM_CLASSIC_ID } from './fixtures/menu'
+import { MENU_ITEM_CLASSIC_ID, MENU_ITEM_MAYO_ID } from './fixtures/menu'
 import { personaFixtures } from './fixtures/personas'
 import { createDemoStore, DEMO_OUTLET_ID, type DemoStore } from './store'
 
@@ -1068,5 +1068,90 @@ describe('mock billing adapter', () => {
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
       expect(store.orders.length).toBe(before)
     })
+  })
+})
+
+/**
+ * A line already on an order keeps its identity, and only a line the biller
+ * adds is given one — the rule `revise_billing_order` compares by. The demo
+ * holds it the way the live adapter does: minted when the command is accepted,
+ * so a queued order reads back under the identities it will be stored with.
+ */
+describe('mock order line identities', () => {
+  const MAYO = {
+    menuItemId: MENU_ITEM_MAYO_ID,
+    itemName: 'Mayonnaise Chicken Shawarma',
+    unitPricePaise: 15_900,
+    quantity: 1,
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setOnline(true)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    Reflect.deleteProperty(navigator, 'onLine')
+  })
+
+  function storedIds(store: DemoStore, orderId: string) {
+    return store.orderItems.filter((line) => line.order_id === orderId).map((line) => line.id)
+  }
+
+  it('keeps a kept line’s identity and gives an added line one of its own', async () => {
+    const store = createDemoStore()
+    const adapter = createMockBillingAdapter(store)
+    const input = orderDraft(store, '10000000-0000-4000-8000-000000000031')
+    await adapter.saveOrder({ ...input, lines: [...input.lines, MAYO] })
+    await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+
+    const [order] = (await adapter.listOpenOrders(DEMO_OUTLET_ID)).filter(
+      (candidate) => candidate.id === input.clientId,
+    )
+    const mayo = order!.lines.find((line) => line.menuItemId === MENU_ITEM_MAYO_ID)!
+    expect(mayo.orderLineId).toEqual(expect.any(String))
+
+    // The first line goes and a new one comes: the survivor sits where the
+    // removed line was, which is exactly where a positional identity collides.
+    await adapter.reviseOrder(order!.id, {
+      lines: [mayo, { ...input.lines[0]!, quantity: 2 }],
+    })
+    await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+
+    const ids = storedIds(store, order!.id)
+    expect(ids).toHaveLength(2)
+    expect(new Set(ids).size).toBe(2)
+    expect(ids).toContain(mayo.orderLineId)
+  })
+
+  it('reads a queued order back under the identities it is stored with', async () => {
+    const store = createDemoStore()
+    const adapter = createMockBillingAdapter(store)
+    const unsubscribe = adapter.subscribeCounter(() => {})
+    setOnline(false)
+
+    const input = orderDraft(store, '10000000-0000-4000-8000-000000000032')
+    const saved = await adapter.saveOrder(input)
+    const [queued] = (await adapter.listOpenOrders(DEMO_OUTLET_ID)).filter(
+      (candidate) => candidate.id === saved.id,
+    )
+    const classicId = queued!.lines[0]!.orderLineId
+    expect(classicId).toEqual(expect.any(String))
+    expect(saved.lines[0]!.orderLineId).toBe(classicId)
+
+    // Revised before the create is delivered, from the queue's own reading.
+    const revised = await adapter.reviseOrder(saved.id, {
+      lines: [{ ...queued!.lines[0]!, quantity: 3 }, MAYO],
+    })
+    expect(revised.lines[0]!.orderLineId).toBe(classicId)
+    const addedId = revised.lines[1]!.orderLineId
+    expect(addedId).toEqual(expect.any(String))
+    expect(addedId).not.toBe(classicId)
+
+    setOnline(true)
+    await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+    expect(storedIds(store, saved.id).sort()).toEqual([classicId, addedId].sort())
+    unsubscribe()
   })
 })

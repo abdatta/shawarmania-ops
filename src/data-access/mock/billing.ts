@@ -139,6 +139,15 @@ function mockRefusedOrderNumber(result: unknown): number | null {
   return typeof named === 'number' && Number.isFinite(named) ? named : null
 }
 
+/**
+ * An order's lines as its bill holds them: without the order-item identity,
+ * which belongs to the order. A bill read from the server never carries one, so
+ * the bill shown before delivery matches the one shown after.
+ */
+function asBillLines(lines: readonly BillLineDraft[]): BillLineDraft[] {
+  return lines.map(({ orderLineId: _orderLineId, ...line }) => line)
+}
+
 export function createMockBillingAdapter(
   store: DemoStore,
   context: MockBillingContext = {
@@ -618,15 +627,29 @@ export function createMockBillingAdapter(
     return requireOpenShift()
   }
 
+  /**
+   * Each line under its order-item identity: a line already on the order keeps
+   * its own, and a line the biller added is given one now, when the command is
+   * accepted. Minted here rather than when the command is applied, as the live
+   * adapter does, so an order still in the queue reads back under the
+   * identities it will be stored with, and a revision queued behind its create
+   * names the same lines.
+   */
+  function identifiedLines(lines: readonly BillLineDraft[]): BillLineDraft[] {
+    return lines.map((line) => ({ ...line, orderLineId: line.orderLineId ?? crypto.randomUUID() }))
+  }
+
   function replaceOrderLines(
     orderId: string,
     lines: BillLineDraft[],
     discounts: readonly BillDiscountDraft[] = [],
   ) {
     store.orderItems = store.orderItems.filter((line) => line.order_id !== orderId)
-    lines.forEach((line, index) => {
+    lines.forEach((line) => {
       store.orderItems.push({
-        id: line.orderLineId ?? `${orderId}-${index}`,
+        // Positional identities collided: drop the first line, add another, and
+        // the new one took the identity the survivor already held.
+        id: line.orderLineId ?? crypto.randomUUID(),
         order_id: orderId,
         menu_item_id: line.menuItemId || null,
         item_name: line.itemName,
@@ -1724,7 +1747,7 @@ export function createMockBillingAdapter(
       ) {
         throw new BillingActionError('duplicate', 'That order has already been saved.')
       }
-      const inputCopy = structuredClone(input)
+      const inputCopy = structuredClone({ ...input, lines: identifiedLines(input.lines) })
       const acceptedAtMs = Date.now()
       pendingOrderInputs.set(input.clientId, inputCopy)
       accept({
@@ -1751,7 +1774,7 @@ export function createMockBillingAdapter(
         customerPhone: input.customerPhone?.trim() || null,
         customerTier: input.customerTier ?? null,
         ...serviceOf(input),
-        lines: structuredClone(input.lines),
+        lines: structuredClone(inputCopy.lines),
         discounts: structuredClone(input.discounts ?? []),
         roundingPaise: totalsOf(input.lines, input.discounts ?? []).roundingPaise,
         totalPaise: totalsOf(input.lines, input.discounts ?? []).totalPaise,
@@ -1797,6 +1820,7 @@ export function createMockBillingAdapter(
       const commandId = crypto.randomUUID()
       const inputCopy = structuredClone({
         ...input,
+        lines: identifiedLines(input.lines),
         clientId: orderId,
         outletId: projected.outletId,
         shiftId: shift.id,
@@ -1815,7 +1839,7 @@ export function createMockBillingAdapter(
         customerPhone: input.customerPhone?.trim() || null,
         customerTier: input.customerTier ?? null,
         ...serviceOf(input),
-        lines: structuredClone(input.lines),
+        lines: structuredClone(inputCopy.lines),
         totalPaise: totalsOf(input.lines, input.discounts ?? []).totalPaise,
       }
     },
@@ -2042,7 +2066,7 @@ export function createMockBillingAdapter(
         customerPhone: projected.customerPhone,
         customerTier: projected.customerTier ?? null,
         service: projected,
-        lines: projected.lines,
+        lines: asBillLines(projected.lines),
         totalPaise: projected.totalPaise,
         orderId: projected.id,
         orderNumber: projected.orderNumber,
