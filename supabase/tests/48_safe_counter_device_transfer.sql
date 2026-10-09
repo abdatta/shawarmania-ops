@@ -358,7 +358,7 @@ select pg_temp.unimpersonate();
 select ok(
   not has_function_privilege(
     'authenticated',
-    'public.edit_counter_device(uuid,uuid,text,uuid)',
+    'public.edit_counter_device(uuid,uuid,text,uuid,text)',
     'EXECUTE'),
   'the reusable edit RPC is not callable by an application session');
 select ok(

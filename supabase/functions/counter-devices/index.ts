@@ -44,7 +44,11 @@ import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2'
 interface DeviceCaller {
   deviceId: string
   outletId: string
+  /** `counter` or `kitchen`; the tablet routes itself by it (#70). */
+  kind: string
 }
+
+const KINDS = ['counter', 'kitchen']
 
 /** The tablet this token belongs to, or null because it belongs to a person. */
 async function deviceCallerFrom(
@@ -61,12 +65,16 @@ async function deviceCallerFrom(
 
   const { data: device } = await service
     .from('counter_devices')
-    .select('id, outlet_id')
+    .select('id, outlet_id, kind')
     .eq('id', data.user.id)
     .is('removed_at', null)
     .maybeSingle()
   if (!device) return null
-  return { deviceId: device.id as string, outletId: device.outlet_id as string }
+  return {
+    deviceId: device.id as string,
+    outletId: device.outlet_id as string,
+    kind: device.kind as string,
+  }
 }
 
 /** May this person set up or remove a tablet at this outlet? */
@@ -128,6 +136,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
       requestId: row['request_id'],
       code,
       expiresAt: row['expires_at'],
+      // What this tablet is now. An admin may have changed it since the tablet
+      // loaded, and a request is the tablet's first contact after that (#70).
+      deviceKind: device.kind,
     })
   }
 
@@ -144,7 +155,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (action === 'issue-setup-code') {
     const outletId = str(body['outletId'])
     const label = str(body['label'])
-    if (!outletId || !label) return json(INVALID, 400)
+    const kind = str(body['kind']) ?? 'counter'
+    if (!outletId || !label || !KINDS.includes(kind)) return json(INVALID, 400)
     if (!mayAdminister(caller, outletId)) return json(FORBIDDEN, 403)
 
     const code = generateCode()
@@ -154,6 +166,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       p_label: label,
       p_code_hash: await hashCode(normaliseCode(code)),
       p_valid_for: SETUP_CODE_VALID_FOR,
+      p_kind: kind,
     })
     const row = firstRow(data)
     if (error) return json({ error: 'unavailable' }, 503)
@@ -182,13 +195,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const deviceId = str(body['deviceId'])
     const outletId = str(body['outletId'])
     const label = str(body['label'])
+    // Absent means "leave the kind as it is", which is every edit made before #70.
+    const kind = str(body['kind'])
     if (!deviceId || !outletId || !label) return json(INVALID, 400)
+    if (kind !== undefined && !KINDS.includes(kind)) return json(INVALID, 400)
 
     const { data, error } = await service.rpc('edit_counter_device', {
       p_device_id: deviceId,
       p_edited_by: caller.id,
       p_label: label,
       p_outlet_id: outletId,
+      ...(kind !== undefined ? { p_kind: kind } : {}),
     })
     if (error) return json({ error: 'unavailable' }, 503)
     if (data === 'ok' || data === 'no_change') return noContent()
@@ -200,6 +217,24 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (data === 'pending_request') return json({ error: 'pending_request' }, 409)
     if (data === 'stale_telemetry') return json({ error: 'stale_telemetry' }, 409)
     if (data === 'unresolved_work') return json({ error: 'unresolved_work' }, 409)
+    if (data === 'rail_orders') {
+      // The database refuses without numbers; the admin needs them to go and
+      // finish those orders, so they are read here with the service role. The
+      // caller was just authorised for this tablet by the refusal itself.
+      const { data: orders } = await service
+        .from('orders')
+        .select('order_number, status, prepared_at')
+        .eq('device_id', deviceId)
+        .or('status.eq.open,and(status.eq.paid,prepared_at.is.null)')
+        .order('order_number')
+      return json(
+        {
+          error: 'rail_orders',
+          orderNumbers: (orders ?? []).map((row) => row.order_number as number),
+        },
+        409,
+      )
+    }
     return json(INVALID, 400)
   }
 
