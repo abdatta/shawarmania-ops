@@ -1,5 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
+import { getPartState, isRenderable } from '../src/gates/registry'
+
 /**
  * The counter, in a real browser, on the device it actually runs on.
  *
@@ -1511,11 +1513,14 @@ test.describe('the demo indicator on the counter', () => {
 
     await openCounterWithNothingChosen(page)
     await expect(page.getByTestId('demo-connectivity')).toBeVisible()
+    // The four roles, and the kitchen tablet beside them while its part gate
+    // shows it (#70).
+    const kitchens = isRenderable(getPartState('kitchen-tablets'), 'demo')
     const atCounter = await positions()
-    expect(atCounter).toHaveLength(4)
+    expect(atCounter).toHaveLength(kitchens ? 5 : 4)
 
-    // Every other role, each of which offers no connectivity control at all.
-    for (const segment of ['owner', 'admin', 'staff']) {
+    // Every other surface, none of which offers a connectivity control.
+    for (const segment of ['owner', 'admin', 'staff', ...(kitchens ? ['kitchen'] : [])]) {
       await page.getByRole('link', { name: new RegExp(`^${segment}$`, 'i') }).click()
       await expect(page.getByTestId('demo-connectivity')).toHaveCount(0)
       expect(await positions()).toEqual(atCounter)

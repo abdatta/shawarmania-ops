@@ -2,6 +2,7 @@ import { createBrowserRouter, redirect, type RouteObject } from 'react-router'
 
 import { Activate } from '@/auth/activate'
 import { CounterRoot } from '@/auth/counter-root'
+import { KitchenRoot } from '@/auth/kitchen-root'
 import { CounterSetup } from '@/auth/counter-setup'
 import { RealRoot } from '@/auth/real-root'
 import { RealSessionProvider } from '@/auth/real-session-provider'
@@ -86,6 +87,7 @@ export const appRoutes: RouteObject[] = [
       // and a person who wanders here is sent to their own shell.
       { path: '/counter/setup', Component: CounterSetup },
       { path: '/counter', Component: CounterRoot },
+      { path: '/kitchen', Component: KitchenRoot },
       {
         path: '/:roleSegment',
         Component: RealRoot,

@@ -10,6 +10,7 @@ import { createSupabaseAttendanceAdapter } from './attendance'
 import { createSupabaseBillingAdapter } from './billing'
 import { createSupabaseCashDrawerAdapter } from './cash-drawer'
 import { createSupabaseCounterAdapter } from './counter'
+import { createSupabaseKitchenAdapter } from './kitchen'
 import { createSupabaseCustomersAdapter } from './customers'
 import { createSupabaseExpenseCategoriesAdapter } from './expense-categories'
 import { createSupabaseExpensesAdapter } from './expenses'
@@ -61,6 +62,9 @@ export function createSupabaseAdapters(
     // reason: the tablets, the handshake and the shift are what #9 is, and a
     // stub would leave the boundary untested by the only screens that use it.
     counter: createSupabaseCounterAdapter(client),
+    // The kitchen board, filter and acknowledgements (#70). Online-only by
+    // design: a kitchen tablet holds no outbox and caches nothing.
+    kitchen: createSupabaseKitchenAdapter(client),
     // The exception among the not-yet-connected adapters: the global customer
     // directory is REAL from today, because the boundary that protects it is.
     // The billing surfaces that call it are still `demo`-gated (#31, #10).

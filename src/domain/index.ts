@@ -211,3 +211,21 @@ export {
   type OutletReviewAsk,
   type ReviewAskProblem,
 } from './review-ask'
+export {
+  acknowledgementFor,
+  diffKitchenLines,
+  formatKitchenWait,
+  KITCHEN_REREAD_MS,
+  KITCHEN_STALE_AFTER_MS,
+  KITCHEN_WAIT_DANGER_MINUTES,
+  KITCHEN_WAIT_WARNING_MINUTES,
+  kitchenCardState,
+  kitchenWaitTone,
+  sameLines,
+  type KitchenCardFacts,
+  type KitchenCardState,
+  type KitchenLineChange,
+  type KitchenLineDiff,
+  type KitchenLineFacts,
+  type KitchenWaitTone,
+} from './kitchen'

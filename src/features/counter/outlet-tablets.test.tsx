@@ -422,3 +422,41 @@ describe('an outlet’s tablets', () => {
     expect(consequence).toHaveTextContent(/nothing else can send it/i)
   })
 })
+
+describe('a tablet’s use (#70)', () => {
+  it('asks whether a new tablet is for billing or the kitchen, and the code carries it', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin')
+    const issue = vi.spyOn(adapters.counter, 'issueSetupCode')
+    renderSection('franchise_admin', adapters)
+
+    await user.click(await screen.findByTestId('add-tablet'))
+    expect(screen.getByRole('radio', { name: 'Billing' })).toHaveAttribute('aria-checked', 'true')
+    await user.type(screen.getByLabelText('What to call it'), 'Kitchen 1')
+    await user.click(screen.getByRole('radio', { name: 'Kitchen' }))
+    await user.click(screen.getByRole('button', { name: 'Generate a code' }))
+
+    await waitFor(() =>
+      expect(issue).toHaveBeenCalledWith(OUTLET_KALYANI_ID, 'Kitchen 1', 'kitchen'),
+    )
+  })
+
+  it('switches a tablet to the kitchen after a confirmation naming whose shift ends', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin')
+    const edit = vi.spyOn(adapters.counter, 'editDevice').mockResolvedValue()
+    renderSection('franchise_admin', adapters)
+
+    const [firstEdit] = await screen.findAllByRole('button', { name: /^Edit / })
+    await user.click(firstEdit!)
+    await user.click(screen.getByRole('radio', { name: 'Kitchen' }))
+    await user.click(screen.getByRole('button', { name: 'Save tablet' }))
+
+    const dialog = await screen.findByRole('dialog', { name: /a kitchen tablet\?/i })
+    expect(dialog).toHaveTextContent(/shift on it ends now|starts a shift on the tablet/)
+    await user.click(within(dialog).getByRole('button', { name: 'Change' }))
+    await waitFor(() =>
+      expect(edit).toHaveBeenCalledWith(expect.objectContaining({ kind: 'kitchen' })),
+    )
+  })
+})

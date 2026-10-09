@@ -5,7 +5,9 @@ import { Card, CardBody, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { useAdapters } from '@/data-access'
 import { DataActionError, type IssuedShiftRequest } from '@/data-access/adapters'
+import { unlockAudio } from '@/features/kitchen/tunes'
 import { useCounterDevice } from '@/session/counter-context'
+import { tabletKind } from '@/session/counter-session'
 
 /**
  * The tablet's own screen: ask for somebody, then show them four digits.
@@ -43,6 +45,9 @@ export function ShiftRequestScreen({
 }) {
   const { counter } = useAdapters()
   const device = useCounterDevice()
+  // The kitchen opens through this same screen, worded for its job (#70).
+  const kind = tabletKind(device.device)
+  const job = kind === 'kitchen' ? 'kitchen' : 'counter'
 
   const [username, setUsername] = useState('')
   const [waiting, setWaiting] = useState<Waiting | null>(null)
@@ -86,7 +91,7 @@ export function ShiftRequestScreen({
               : resolution === 'exhausted'
                 ? 'Too many wrong codes. Ask again for a fresh one.'
                 : resolution === 'not_eligible'
-                  ? 'That person is not set up to bill at this outlet.'
+                  ? `That person cannot open the ${job} at this outlet.`
                   : 'That request is no longer waiting.',
           )
         })
@@ -108,7 +113,7 @@ export function ShiftRequestScreen({
       window.clearInterval(timer)
       window.clearTimeout(expiry)
     }
-  }, [waiting, counter, device.device.deviceId, onOpened, stopWaiting])
+  }, [waiting, counter, device.device.deviceId, onOpened, stopWaiting, job])
 
   useEffect(() => {
     if (!waiting) nameField.current?.focus()
@@ -119,8 +124,17 @@ export function ShiftRequestScreen({
     setBusy(true)
     setError(null)
     setOutcome(null)
+    // Typing a name is a gesture, and it is the one a kitchen gets before its
+    // board: it lets the browser make the kitchen's sounds for the page's life.
+    if (kind === 'kitchen') unlockAudio()
     try {
       const issued = await counter.requestShift(username.trim())
+      // An admin changed what this tablet is since it loaded; become that.
+      if (issued.deviceKind && issued.deviceKind !== kind) {
+        await counter.cancelRequest().catch(() => undefined)
+        window.location.reload()
+        return
+      }
       setWaiting({ ...issued, username: username.trim() })
     } catch (cause) {
       setError(
@@ -178,9 +192,9 @@ export function ShiftRequestScreen({
             <CardBody className="space-y-4">
               <p>
                 {onGiveUp
-                  ? 'Type the username of the person taking over. The counter stays open under its ' +
+                  ? `Type the username of the person taking over. The ${job} stays open under its ` +
                     'current operator until they approve it on their own phone.'
-                  : 'Nobody is on this counter. Type the username of the person taking it, then ' +
+                  : `Nobody is on this ${job}. Type the username of the person taking it, then ` +
                     'have them approve it on their own phone.'}
               </p>
 
@@ -226,7 +240,7 @@ export function ShiftRequestScreen({
                     disabled={busy || username.trim() === ''}
                     className={buttonVariants({ size: 'phone' })}
                   >
-                    {busy ? 'Asking…' : 'Ask to open the counter'}
+                    {busy ? 'Asking…' : `Ask to open the ${job}`}
                   </button>
                   {onGiveUp && (
                     <button
@@ -235,7 +249,7 @@ export function ShiftRequestScreen({
                       disabled={busy}
                       className={buttonVariants({ variant: 'secondary', size: 'phone' })}
                     >
-                      Back to the counter
+                      Back to the {job}
                     </button>
                   )}
                 </div>

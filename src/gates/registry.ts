@@ -744,6 +744,15 @@ const partDefs = {
    * `public_menu`; every outlet but Kalyani Cafe starts with it off.
    */
   'outlet-review-ask': { state: 'live' },
+  /**
+   * Kitchen tablets (the-kitchen-sees-its-orders, #70): the *Use this tablet
+   * for* choice when a setup code is issued and when a tablet is edited, and
+   * the demo's kitchen walkthrough. While this is not live no real tablet can be
+   * made a kitchen, so no real kitchen screen exists to reach. Live since the
+   * board, the authority split and the acknowledgements are real (#70); every
+   * tablet stays a billing tablet until an admin chooses Kitchen for one.
+   */
+  'kitchen-tablets': { state: 'live' },
 } as const satisfies Record<string, { state: GateState }>
 
 export type PartId = keyof typeof partDefs

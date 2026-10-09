@@ -14,6 +14,9 @@ import type { PositionReading } from '@/lib/geolocation'
 import type { BillingCommand } from '../../shared/billing-command'
 
 import type { Tables } from './database.types'
+import type { TabletKind } from '@/session/counter-session'
+
+export type { TabletKind } from '@/session/counter-session'
 
 /**
  * The adapter seam — one typed interface per domain area, two implementations
@@ -1887,6 +1890,8 @@ export interface CounterDeviceSummary {
   lastReportedUnresolved: number
   /** Null for a clear report and for legacy positive reports that did not carry it. */
   lastReportedOldestUnresolvedAt: string | null
+  /** What the tablet is for (#70). Absent means `counter`, as every tablet was before. */
+  kind?: TabletKind
 }
 
 /**
@@ -1914,7 +1919,19 @@ export interface CounterDeviceOperations {
  */
 export interface CounterDeviceOperationalSnapshot extends CounterDeviceSummary {
   readAt: string
+  /** A live counter shift's figures. Always null on a kitchen, which has none. */
   operations: CounterDeviceOperations | null
+  /** Who holds a kitchen's live shift, and since when. Null on a counter (#70). */
+  kitchenShift?: { shiftId: string; operatorName: string; openedAt: string } | null
+  /** A kitchen's filter, in words. Null on a counter. */
+  kitchenFilter?: KitchenFilterSummary | null
+}
+
+/** A kitchen's category filter as the Tablets list states it. */
+export interface KitchenFilterSummary {
+  mode: KitchenFilterMode
+  /** Active categories named by the filter, in menu order. */
+  categoryNames: string[]
 }
 
 /**
@@ -1927,6 +1944,8 @@ export interface CounterDeviceOperationalSnapshot extends CounterDeviceSummary {
  */
 export interface CounterShiftRequest {
   id: string
+  /** Whether the person is being asked to open a counter or a kitchen. Absent means counter. */
+  kind?: TabletKind
   deviceId: string
   deviceLabel: string | null
   outletId: string
@@ -1944,6 +1963,8 @@ export interface LiveCounterShift {
    * is a question the reader has to be able to answer rather than assume.
    */
   personId: string
+  /** A counter shift or a kitchen shift (#70). Absent means counter. */
+  kind?: TabletKind
   deviceId: string
   deviceLabel: string | null
   outletId: string
@@ -1959,6 +1980,11 @@ export interface IssuedShiftRequest {
   /** Four digits, displayed large. Returned to the requesting tablet alone. */
   code: string
   expiresAt: string
+  /**
+   * What the tablet is now. An admin may have changed it since the tablet
+   * loaded; a tablet that finds itself a different kind reloads into it (#70).
+   */
+  deviceKind?: TabletKind
 }
 
 /**
@@ -1996,12 +2022,22 @@ export interface CounterAdapter {
    * Mint a setup code for an outlet with no live tablet. Returned once and never
    * retrievable: only its hash is kept.
    */
-  issueSetupCode(outletId: string, label: string): Promise<{ code: string; validFor: string }>
+  issueSetupCode(
+    outletId: string,
+    label: string,
+    kind?: TabletKind,
+  ): Promise<{ code: string; validFor: string }>
   /**
    * Rename a tablet, and for a Super Admin optionally transfer its future work
    * to another outlet without replacing its machine identity or session.
    */
-  editDevice(input: { deviceId: string; label: string; outletId: string }): Promise<void>
+  editDevice(input: {
+    deviceId: string
+    label: string
+    outletId: string
+    /** Omitted leaves the kind as it is. A change ends any live shift on the tablet. */
+    kind?: TabletKind
+  }): Promise<void>
   /** Permanent, immediate, and it ends any live shift with it. */
   removeDevice(deviceId: string): Promise<void>
 
@@ -2041,6 +2077,107 @@ export interface CounterAdapter {
   subscribeToOutletBilling(outletId: string, onChange: () => void): () => void
   /** The tablet's heartbeat: what it last said about unresolved local work. */
   reportState(unresolved: number, oldestUnresolvedAt: string | null): Promise<void>
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The kitchen (#70): a filtered copy of the counter's rail, with alerts.
+
+export type KitchenFilterMode = 'include' | 'exclude'
+/** The board's order, the tablet's own choice; cooks work oldest first. */
+export type KitchenSort = 'oldest_first' | 'newest_first'
+export type KitchenAlertKind = 'new' | 'edit' | 'cancel'
+
+/** One line as the kitchen sees it: a dish and how many. Never a price. */
+export interface KitchenLine {
+  id: string
+  menuItemId: string | null
+  itemName: string
+  quantity: number
+}
+
+/** This tablet's latest acknowledgement of an order, with what it acknowledged. */
+export interface KitchenAcknowledgement {
+  kind: KitchenAlertKind
+  orderVersion: string
+  lines: KitchenLine[]
+  ackedAt: string
+}
+
+/**
+ * One order on the kitchen board.
+ *
+ * **What is absent is the design.** No customer, no amount, no discount, no
+ * payment, no packaging: the database's board function returns none of them,
+ * and a kitchen shift holds no select on the tables that carry them.
+ */
+export interface KitchenOrder {
+  id: string
+  orderNumber: number
+  serviceType: ServiceType | null
+  tableNumber: number | null
+  orderedAt: string
+  /** The order's last revision or creation; an acknowledgement names it. */
+  version: string
+  status: 'open' | 'paid' | 'cancelled'
+  cancelledAt: string | null
+  /** This kitchen's lines under its filter. */
+  lines: KitchenLine[]
+  /** Item lines another kitchen holds. */
+  otherItemCount: number
+  /** Whether this tablet ever acknowledged the order as new. */
+  acknowledged: boolean
+  latestAck: KitchenAcknowledgement | null
+}
+
+export interface KitchenBoard {
+  readAt: string
+  outletId: string
+  businessDate: string
+  shiftId: string
+  /** Who holds this kitchen's shift, as the counter's header names its operator. */
+  operatorName: string
+  filter: { mode: KitchenFilterMode; categoryIds: string[] }
+  /** How this tablet lays the board out; the orders below arrive oldest first either way. */
+  sort: KitchenSort
+  /** Oldest first. */
+  orders: KitchenOrder[]
+}
+
+export interface KitchenCategory {
+  id: string
+  name: string
+  isActive: boolean
+}
+
+/** Why an acknowledgement did not land. `stale`: the order changed; re-read. */
+export type KitchenAcknowledgeOutcome = 'accepted' | 'stale'
+
+/**
+ * The kitchen tablet's whole reach: one board, the outlet's categories for its
+ * filter, its own filter, and its own acknowledgements. Everything is online:
+ * the kitchen holds no outbox and caches nothing for a restart.
+ */
+export interface KitchenAdapter {
+  readBoard(): Promise<KitchenBoard>
+  listCategories(): Promise<KitchenCategory[]>
+  /** Saves the filter and the sort together, as the one sheet on the tablet does. */
+  setFilter(
+    mode: KitchenFilterMode,
+    categoryIds: readonly string[],
+    sort: KitchenSort,
+  ): Promise<void>
+  acknowledge(input: {
+    id: string
+    orderId: string
+    kind: KitchenAlertKind
+    orderVersion: string
+  }): Promise<KitchenAcknowledgeOutcome>
+  /**
+   * Be told the outlet's orders moved. A nudge only, like the counter's: the
+   * screen also re-reads on a timer and on foreground. `onStatus` reports
+   * whether the live channel is subscribed, which the sync alert reads.
+   */
+  subscribe(outletId: string, onNudge: () => void, onStatus?: (live: boolean) => void): () => void
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2615,6 +2752,8 @@ export interface DataAdapters {
   billing: BillingAdapter
   /** Tablets, and the handshake that opens a shift on one (#9). */
   counter: CounterAdapter
+  /** The kitchen tablet's board, filter and acknowledgements (#70). */
+  kitchen: KitchenAdapter
   customers: CustomersAdapter
   /** The owner's customers: search, two lists, a card, and membership (#57). */
   customerDirectory: CustomerDirectoryAdapter

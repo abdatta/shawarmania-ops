@@ -8,6 +8,7 @@ import {
   type CounterShiftRequest,
   type IssuedShiftRequest,
   type LiveCounterShift,
+  type TabletKind,
 } from '../adapters'
 import {
   counterDeviceFixtures,
@@ -84,6 +85,7 @@ function toLiveShift(
   return {
     id: row.id,
     personId: row.person_id,
+    kind: row.kind === 'kitchen' ? 'kitchen' : 'counter',
     deviceId: row.device_id,
     deviceLabel: devices.find((device) => device.id === row.device_id)?.label ?? null,
     outletId: row.outlet_id,
@@ -207,7 +209,10 @@ export function createMockCounterAdapter(
    * finished and a tablet being removed are three different facts, and #50 made
    * them behave differently for work that arrives afterwards.
    */
-  function endOpenShiftOn(deviceId: string, reason: 'operator' | 'device_removed'): void {
+  function endOpenShiftOn(
+    deviceId: string,
+    reason: 'operator' | 'device_removed' | 'device_kind_changed',
+  ): void {
     for (const row of store.shifts) {
       if (row.device_id === deviceId && row.ended_at === null) {
         row.ended_at = new Date().toISOString()
@@ -239,6 +244,25 @@ export function createMockCounterAdapter(
               candidate.outlet_id === device.outletId &&
               candidate.ended_at === null,
           )
+          if ((device.kind ?? 'counter') === 'kitchen') {
+            const operator = shift
+              ? accounts.find((account) => account.id === shift.person_id)
+              : undefined
+            return {
+              ...device,
+              readAt,
+              operations: null,
+              kitchenShift: shift
+                ? {
+                    shiftId: shift.id,
+                    operatorName: operator?.fullName ?? 'Unknown operator',
+                    openedAt: shift.opened_at,
+                  }
+                : null,
+              // A tablet turned into a kitchen in the demo starts showing everything.
+              kitchenFilter: { mode: 'exclude' as const, categoryNames: [] },
+            }
+          }
           if (!shift) return { ...device, readAt, operations: null }
 
           const bills = store.bills.filter((bill) => bill.counter_shift_id === shift.id)
@@ -275,7 +299,7 @@ export function createMockCounterAdapter(
         })
     },
 
-    async issueSetupCode(outletId: string, label: string) {
+    async issueSetupCode(outletId: string, label: string, _kind: TabletKind = 'counter') {
       if (!mayAdminister(outletId)) {
         throw new CounterActionError('forbidden', 'You are not allowed to do that.')
       }
@@ -361,7 +385,57 @@ export function createMockCounterAdapter(
         )
       }
 
-      if (label === device.label && input.outletId === device.outletId) return
+      const kind = input.kind ?? device.kind ?? 'counter'
+      const changingKind = kind !== (device.kind ?? 'counter')
+      if (changingKind && kind === 'kitchen') {
+        if (!isCounterTelemetryFresh(device.lastSeenAt)) {
+          throw new CounterActionError(
+            'stale_telemetry',
+            'The tablet must report an empty queue within the last 30 minutes before it can change.',
+          )
+        }
+        if (device.lastReportedUnresolved !== 0) {
+          throw new CounterActionError(
+            'unresolved_work',
+            'The tablet still reports unresolved work. Sync it before changing it.',
+          )
+        }
+        const owed = store.orders
+          .filter(
+            (order) =>
+              order.device_id === device.id &&
+              (order.status === 'open' || (order.status === 'paid' && order.prepared_at === null)),
+          )
+          .map((order) => order.order_number)
+          .sort((a, b) => a - b)
+        if (owed.length > 0) {
+          throw new CounterActionError(
+            'rail_orders',
+            `This tablet took ${owed.length === 1 ? 'order' : 'orders'} ${owed
+              .map((n) => `#${n}`)
+              .join(
+                ', ',
+              )}, still unfinished. Finish or cancel them on this tablet first: only it can.`,
+          )
+        }
+      }
+
+      if (changingKind) {
+        endOpenShiftOn(device.id, 'device_kind_changed')
+        counter.requests = counter.requests.map((request) =>
+          request.deviceId === device.id && request.resolution === null
+            ? { ...request, resolution: 'cancelled' }
+            : request,
+        )
+        device.kind = kind
+        const stored = store.counterDevices.find((row) => row.id === device.id)
+        if (stored) stored.kind = kind
+      }
+
+      if (label === device.label && input.outletId === device.outletId) {
+        if (changingKind) announce(counter)
+        return
+      }
 
       const boundary = new Date().toISOString()
       const currentHistory = store.counterDeviceHistory.find(
@@ -432,7 +506,7 @@ export function createMockCounterAdapter(
         resolution: null,
       })
       announce(counter)
-      return { requestId, code, expiresAt }
+      return { requestId, code, expiresAt, deviceKind: device.kind ?? 'counter' }
     },
 
     async cancelRequest(): Promise<void> {
@@ -454,6 +528,7 @@ export function createMockCounterAdapter(
     async listPendingRequests(): Promise<CounterShiftRequest[]> {
       return livePendingFor(counter, displayName).map((request) => ({
         id: request.id,
+        kind: counter.devices.find((device) => device.id === request.deviceId)?.kind ?? 'counter',
         deviceId: request.deviceId,
         deviceLabel: request.deviceLabel,
         outletId: request.outletId,
@@ -515,6 +590,7 @@ export function createMockCounterAdapter(
         outlet_id: request.outletId,
         person_id: personId,
         device_id: request.deviceId,
+        kind: counter.devices.find((device) => device.id === request.deviceId)?.kind ?? 'counter',
         // Through the outlet's own cutover, exactly as `app_business_date` and
         // `app_next_cutover` resolve them. A demo walked at 00:30 opened a shift
         // on tomorrow's date under the old device-clock arithmetic, while every

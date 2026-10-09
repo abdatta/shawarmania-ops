@@ -7,7 +7,7 @@ import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { useAdapters } from '@/data-access'
 import { DataActionError } from '@/data-access/adapters'
 import type { CounterShiftRequest, LiveCounterShift } from '@/data-access/adapters'
-import { formatDateTime } from '@/domain'
+import { formatDateTime, formatTime } from '@/domain'
 
 import { useCounterHandshake } from './use-counter-handshake'
 
@@ -47,9 +47,11 @@ export function CounterHandshakeCards() {
       {requests.map((request) => (
         <ShiftRequestCard key={request.id} request={request} onSettled={reread} />
       ))}
-      {shifts.map((shift) => (
-        <LiveShiftCard key={shift.id} shift={shift} onEnded={reread} />
-      ))}
+      {shifts.length > 1 ? (
+        <ShiftListCard shifts={shifts} onEnded={reread} />
+      ) : (
+        shifts.map((shift) => <LiveShiftCard key={shift.id} shift={shift} onEnded={reread} />)
+      )}
     </div>
   )
 }
@@ -133,7 +135,7 @@ function ShiftRequestCard({
       setError(
         cause instanceof DataActionError
           ? cause.message
-          : 'Could not open the counter. Try again in a moment.',
+          : `Could not open the ${request.kind === 'kitchen' ? 'kitchen' : 'counter'}. Try again in a moment.`,
       )
       setCode('')
       setBusy(false)
@@ -155,17 +157,19 @@ function ShiftRequestCard({
     onSettled()
   }
 
+  const job = request.kind === 'kitchen' ? 'kitchen' : 'counter'
+
   return (
     <Card data-testid="counter-request-card" className="border-accent">
-      <CardTitle>Open the counter?</CardTitle>
+      <CardTitle>Open the {job}?</CardTitle>
       <CardBody className="space-y-3">
         <p className="text-content">
-          {request.deviceLabel ?? 'A counter tablet'}
+          {request.deviceLabel ?? `A ${job} tablet`}
           {request.outletName ? ` at ${request.outletName}` : ''} asked for you{' '}
           {waitingFor(request.createdAt)}.
         </p>
         <p>
-          Type the four digits showing on that tablet. If you are not at that counter, reject this.
+          Type the four digits showing on that tablet. If you are not at that {job}, reject this.
         </p>
 
         <form onSubmit={confirm} className="flex flex-wrap items-end gap-2" noValidate>
@@ -192,7 +196,7 @@ function ShiftRequestCard({
             disabled={busy || code.length < 4}
             className={buttonVariants({ size: 'phone' })}
           >
-            Open counter
+            Open {job}
           </button>
           <button
             type="button"
@@ -243,15 +247,20 @@ function LiveShiftCard({ shift, onEnded }: { shift: LiveCounterShift; onEnded: (
     onEnded()
   }
 
+  const kitchen = shift.kind === 'kitchen'
+
   return (
     <Card data-testid="counter-shift-card">
-      <CardTitle>You are on the counter</CardTitle>
+      <CardTitle>{kitchen ? 'You have the kitchen open' : 'You are on the counter'}</CardTitle>
       <CardBody className="space-y-3">
         <p className="text-content">
-          {shift.deviceLabel ?? 'A counter tablet'}
+          {shift.deviceLabel ?? (kitchen ? 'A kitchen tablet' : 'A counter tablet')}
           {shift.outletName ? ` at ${shift.outletName}` : ''}, since{' '}
-          {formatDateTime(shift.openedAt)}. Bills recorded before you leave use your shift. If the
-          tablet is offline, later sales keep your name only as flagged last-known context.
+          {formatDateTime(shift.openedAt)}.
+          {kitchen
+            ? ' It shows the orders for this kitchen until you leave or the day ends.'
+            : ' Bills recorded before you leave use your shift. If the tablet is offline, later ' +
+              'sales keep your name only as flagged last-known context.'}
         </p>
         <button
           type="button"
@@ -259,18 +268,125 @@ function LiveShiftCard({ shift, onEnded }: { shift: LiveCounterShift; onEnded: (
           disabled={busy}
           className={buttonVariants({ variant: 'secondary', size: 'phone' })}
         >
-          {busy ? 'Leaving…' : 'Leave counter'}
+          {busy ? 'Leaving…' : kitchen ? 'Leave kitchen' : 'Leave counter'}
         </button>
-        <ConfirmDialog
+        <LeaveDialog
+          shift={shift}
           open={confirming}
-          title="Leave this counter now?"
-          consequence="Your authority ends immediately. For an ordinary operator change, use Hand over on the tablet instead. If that tablet is offline, sales it records before learning you left remain under your shift as flagged last-known context for a manager to review."
-          confirmLabel={busy ? 'Leaving…' : 'Leave counter'}
-          cancelLabel="Stay on counter"
           busy={busy}
           onClose={() => setConfirming(false)}
           onConfirm={() => void end()}
         />
+      </CardBody>
+    </Card>
+  )
+}
+
+/**
+ * Leaving one shift, said so it cannot be mistaken for the other (#70). A
+ * kitchen's consequence is small and says so; a counter's keeps its warning
+ * about sales an offline tablet records after.
+ */
+function LeaveDialog({
+  shift,
+  open,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  shift: LiveCounterShift
+  open: boolean
+  busy: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const kitchen = shift.kind === 'kitchen'
+  const tablet = shift.deviceLabel ?? (kitchen ? 'the kitchen tablet' : 'the counter tablet')
+  return (
+    <ConfirmDialog
+      open={open}
+      title={kitchen ? `Leave the kitchen on ${tablet}?` : `Leave the counter on ${tablet}?`}
+      consequence={
+        kitchen
+          ? 'The kitchen tablet stops showing orders and asks for a new shift. Nothing is lost.'
+          : 'Your authority ends immediately. For an ordinary operator change, use Hand over on the tablet instead. If that tablet is offline, sales it records before learning you left remain under your shift as flagged last-known context for a manager to review.'
+      }
+      confirmLabel={busy ? 'Leaving…' : kitchen ? 'Leave kitchen' : 'Leave counter'}
+      cancelLabel={kitchen ? 'Stay on kitchen' : 'Stay on counter'}
+      busy={busy}
+      onClose={onClose}
+      onConfirm={onConfirm}
+    />
+  )
+}
+
+/**
+ * Several shifts held at once — a counter and a kitchen, often (#70, design
+ * D11). One compact card, grouped by outlet, a row per shift naming its kind,
+ * tablet and start, each with its own Leave. Leaving one ends only that one.
+ */
+function ShiftListCard({ shifts, onEnded }: { shifts: LiveCounterShift[]; onEnded: () => void }) {
+  const { counter } = useAdapters()
+  const [leaving, setLeaving] = useState<LiveCounterShift | null>(null)
+  const [busy, setBusy] = useState(false)
+  const byOutlet = new Map<string, LiveCounterShift[]>()
+  for (const shift of shifts) {
+    const key = shift.outletName ?? shift.outletId
+    byOutlet.set(key, [...(byOutlet.get(key) ?? []), shift])
+  }
+
+  async function end(shift: LiveCounterShift) {
+    setBusy(true)
+    try {
+      await counter.endShift(shift.id)
+    } catch {
+      // Ended already or ended now; the re-read settles which.
+    }
+    setBusy(false)
+    setLeaving(null)
+    onEnded()
+  }
+
+  return (
+    <Card data-testid="counter-shift-list">
+      <CardTitle>Your shifts</CardTitle>
+      <CardBody className="space-y-4">
+        {[...byOutlet.entries()].map(([outlet, rows]) => (
+          <section key={outlet} className="space-y-2">
+            <h3 className="text-sm font-semibold text-content-muted">{outlet}</h3>
+            <ul className="divide-y divide-border rounded-xl border border-border">
+              {rows.map((shift) => (
+                <li
+                  key={shift.id}
+                  data-testid={`counter-shift-row-${shift.kind ?? 'counter'}`}
+                  className="flex items-center justify-between gap-3 px-3 py-2"
+                >
+                  <span className="text-content">
+                    {shift.kind === 'kitchen' ? 'Kitchen' : 'Counter'} ·{' '}
+                    {shift.deviceLabel ?? 'Tablet'} · since {formatTime(shift.openedAt)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setLeaving(shift)}
+                    disabled={busy}
+                    className={buttonVariants({ variant: 'secondary', size: 'phone' })}
+                  >
+                    Leave
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+        {leaving && (
+          <LeaveDialog
+            shift={leaving}
+            open
+            busy={busy}
+            onClose={() => setLeaving(null)}
+            onConfirm={() => void end(leaving)}
+          />
+        )}
       </CardBody>
     </Card>
   )

@@ -133,6 +133,23 @@ export const CHECKS = [
     note: 'primary button is distinguishable from the page',
   },
 
+  // The kitchen board's alert fills (#70): the ribbon, the ACK and the edited
+  // quantity tile carry their label in the fill's own ink, and an edit's
+  // badges and order number are its text tone on the card.
+  {
+    fg: '--on-kitchen-edit',
+    bg: '--kitchen-edit',
+    min: AA_TEXT,
+    note: 'label on a kitchen edit fill',
+  },
+  {
+    fg: '--on-kitchen-cancel',
+    bg: '--kitchen-cancel',
+    min: AA_TEXT,
+    note: 'label on a kitchen cancel fill',
+  },
+  { fg: '--kitchen-edit-text', bg: '--surface', min: AA_TEXT, note: 'kitchen edit text on a card' },
+
   // A pipeline card's two state controls (#55) are identified by the colour of
   // the box they carry while unchecked, drawn straight onto the raised card. So
   // the tone itself — not the pair it ships with — has to clear the 3:1

@@ -181,7 +181,7 @@ export async function verifiedCurrentUser(): Promise<AuthedUser | null> {
 export async function loadOwnCounterDevice(userId: string): Promise<CounterDevice | null> {
   const { data, error } = await getSupabaseClient()
     .from('counter_devices')
-    .select('id, outlet_id, label, last_seen_at, last_reported_unsent')
+    .select('id, outlet_id, label, kind, last_seen_at, last_reported_unsent')
     .eq('id', userId)
     .is('removed_at', null)
     .maybeSingle()
@@ -191,6 +191,7 @@ export async function loadOwnCounterDevice(userId: string): Promise<CounterDevic
         deviceId: data.id,
         outletId: data.outlet_id,
         label: data.label,
+        kind: data.kind === 'kitchen' ? 'kitchen' : 'counter',
       }
     : null
 }
@@ -207,7 +208,7 @@ export async function loadOwnCounterDevice(userId: string): Promise<CounterDevic
 export async function loadCounterShift(deviceId: string): Promise<CounterShift | null> {
   const { data, error } = await getSupabaseClient()
     .from('counter_shifts')
-    .select('id, person_id, outlet_id, opened_at, business_date, expires_at')
+    .select('id, person_id, outlet_id, opened_at, business_date, expires_at, kind')
     .eq('device_id', deviceId)
     .is('ended_at', null)
     .gt('expires_at', new Date().toISOString())
@@ -221,6 +222,7 @@ export async function loadCounterShift(deviceId: string): Promise<CounterShift |
         openedAt: data.opened_at,
         businessDate: data.business_date,
         expiresAt: data.expires_at,
+        kind: data.kind === 'kitchen' ? 'kitchen' : 'counter',
       }
     : null
 }

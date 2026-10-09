@@ -412,6 +412,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       // from there, and reset puts this back.
       ended_at: null,
       ended_reason: null,
+      kind: 'counter',
     },
     {
       // **The morning operator, who left from their phone at 11:00.**
@@ -430,6 +431,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       expires_at: nextCutover(today, DEMO_OUTLET_ID),
       ended_at: instantAt(today, '11:00'),
       ended_reason: 'operator',
+      kind: 'counter',
     },
     {
       // Kanchrapara's, ended. Its bills need a shift to be attributed to, and
@@ -445,6 +447,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       expires_at: nextCutover(today, DEMO_SECOND_OUTLET_ID),
       ended_at: instantAt(today, '21:30'),
       ended_reason: 'operator',
+      kind: 'counter',
     },
   ]
 

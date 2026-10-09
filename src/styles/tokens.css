@@ -153,6 +153,23 @@
      mark. Like --danger, the shade moves with the theme so it reads on the
      card: WhatsApp's own teal green on light. */
   --whatsapp: var(--thirdparty-whatsapp-teal-green);
+
+  /* The kitchen board's alert fills (#70). A new order wears --primary; an edit
+     and a cancellation need fills of their own, because the themed --warning
+     and --danger are the wrong shapes for a filled ribbon and button:
+       - an edit is the bright amber in both themes, with dark ink. On light,
+         --warning is the deep amber, which sits beside the ember as nearly the
+         same colour; the bright fill is what keeps an edit from reading as new.
+         Its text tone still deepens on light, where the bright amber cannot
+         carry type.
+       - a cancellation is the brand's flame red in both themes, with white
+         ink: the soft dark-theme --danger reads pink as a fill (judged on
+         screen, 2026-10-09). */
+  --kitchen-edit: var(--brand-amber);
+  --on-kitchen-edit: var(--brand-stone-900);
+  --kitchen-edit-text: var(--brand-amber-deep);
+  --kitchen-cancel: var(--brand-flame-red);
+  --on-kitchen-cancel: var(--brand-white);
 }
 
 /* ── Semantic layer: dark — for phones in the evening ──────────────────── */
@@ -194,4 +211,11 @@
 
   /* WhatsApp's own bright green, which carries itself on a dark card. */
   --whatsapp: var(--thirdparty-whatsapp-green);
+
+  /* The kitchen's alert fills, as on light; only the edit's text tone lifts. */
+  --kitchen-edit: var(--brand-amber);
+  --on-kitchen-edit: var(--brand-stone-900);
+  --kitchen-edit-text: var(--brand-amber);
+  --kitchen-cancel: var(--brand-flame-red);
+  --on-kitchen-cancel: var(--brand-white);
 }

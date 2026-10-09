@@ -135,7 +135,7 @@ describe('classifying a counter action failure', () => {
       validFor: '15 mins',
     })
     expect(invoke).toHaveBeenCalledWith('counter-devices', {
-      body: { action: 'issue-setup-code', outletId: 'outlet-1', label: 'Tablet' },
+      body: { action: 'issue-setup-code', outletId: 'outlet-1', label: 'Tablet', kind: 'counter' },
     })
   })
 
@@ -257,6 +257,10 @@ describe('the remote counter snapshot', () => {
         lastReportedUnresolved: 0,
         lastReportedOldestUnresolvedAt: null,
         readAt: '2026-08-12T10:05:00.000Z',
+        // A counter carries its figures; the kitchen fields are empty on it (#70).
+        kind: 'counter',
+        kitchenShift: null,
+        kitchenFilter: null,
         operations: {
           shiftId: 'shift-1',
           operatorName: 'Counter Biller',

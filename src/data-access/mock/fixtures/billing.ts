@@ -74,6 +74,12 @@ export const counterDeviceFixtures: Tables<'counter_devices'>[] = [
     // can see.
     session_proven_at: '2026-07-26T00:00:00+00:00',
     proof_expires_at: null,
+    kind: 'counter',
+    kitchen_filter_mode: 'exclude',
+    kitchen_category_ids: [],
+    kitchen_filter_changed_by: null,
+    kitchen_filter_changed_at: null,
+    kitchen_sort: 'oldest_first',
   },
   {
     id: DEMO_COUNTER_DEVICE_TWO_ID,
@@ -87,6 +93,12 @@ export const counterDeviceFixtures: Tables<'counter_devices'>[] = [
     removed_at: null,
     session_proven_at: '2026-08-30T00:00:00+00:00',
     proof_expires_at: null,
+    kind: 'counter',
+    kitchen_filter_mode: 'exclude',
+    kitchen_category_ids: [],
+    kitchen_filter_changed_by: null,
+    kitchen_filter_changed_at: null,
+    kitchen_sort: 'oldest_first',
   },
   {
     id: DEMO_KANCHRAPARA_DEVICE_ID,
@@ -100,6 +112,12 @@ export const counterDeviceFixtures: Tables<'counter_devices'>[] = [
     removed_at: null,
     session_proven_at: '2026-07-26T00:00:00+00:00',
     proof_expires_at: null,
+    kind: 'counter',
+    kitchen_filter_mode: 'exclude',
+    kitchen_category_ids: [],
+    kitchen_filter_changed_by: null,
+    kitchen_filter_changed_at: null,
+    kitchen_sort: 'oldest_first',
   },
 ]
 

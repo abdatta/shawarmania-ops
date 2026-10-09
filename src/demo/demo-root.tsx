@@ -5,6 +5,7 @@ import { AdaptersContext } from '@/data-access/adapters-context'
 import { enterDemoScope, exitDemoScope } from '@/data-access/demo-scope'
 import { createDemoData, createMockAdapters, personaFixtures } from '@/data-access/mock'
 import { trackAdapterWrites } from '@/data-access/track-adapter-writes'
+import { getPartState, isRenderable } from '@/gates/registry'
 import { NotFound } from '@/routes/not-found'
 import { PhoneShell } from '@/shell/phone-shell'
 import { SessionContext } from '@/session/context'
@@ -12,6 +13,8 @@ import { deriveSessionScope, roleFromSegment, type Session } from '@/session/ses
 
 import { DemoBanner } from './demo-banner'
 import { DemoCounter } from './demo-counter'
+import { DemoKitchen } from './demo-kitchen'
+import { announceDemoReset, mirrorDemoOrders } from './demo-orders-mirror'
 import { DemoResetContext } from './demo-reset'
 
 /**
@@ -24,7 +27,10 @@ import { DemoResetContext } from './demo-reset'
 export function DemoRoot() {
   const { roleSegment } = useParams()
   const { pathname } = useLocation()
-  const role = roleFromSegment(roleSegment)
+  // The kitchen tablet is a tablet, not a role: it walks as the Biller, whose
+  // shift a kitchen holds, behind the kitchen-tablets part gate (#70).
+  const kitchen = roleSegment === 'kitchen' && isRenderable(getPartState('kitchen-tablets'), 'demo')
+  const role = kitchen ? 'biller' : roleFromSegment(roleSegment)
 
   // Mark the demo scope during render, not in an effect: children render
   // (and run their effects) before a parent's effect, and the tripwire must
@@ -70,8 +76,20 @@ export function DemoRoot() {
    * The role stays in the URL, so a reset returns to the surface it was called
    * from rather than sending the reader back to the owner.
    */
-  const [resetCount, setResetCount] = useState(0)
-  const reset = useCallback(() => setResetCount((count) => count + 1), [])
+  const [started, setStarted] = useState({ count: 0, epoch: 0 })
+  const resetCount = started.count
+  const reset = useCallback(() => {
+    const epoch = Date.now()
+    // Every other demo tab starts again with this one (#70): a counter and a
+    // kitchen walked side by side must stay one demo.
+    announceDemoReset(epoch)
+    setStarted((held) => ({ count: held.count + 1, epoch }))
+  }, [])
+  const resetFromAnotherTab = useCallback(
+    (epoch: number) =>
+      setStarted((held) => (epoch > held.epoch ? { count: held.count + 1, epoch } : held)),
+    [],
+  )
 
   /**
    * The demo's data, which **outlives a role switch**. Several mocks are built
@@ -99,6 +117,15 @@ export function DemoRoot() {
     [role, data],
   )
 
+  // A counter in one tab rings a kitchen in another (#70): the demo's orders are
+  // mirrored between same-origin demo tabs. Demo only; real tablets meet at the
+  // server and nowhere else.
+  const epoch = started.epoch
+  useEffect(
+    () => mirrorDemoOrders(data.store, epoch, resetFromAnotherTab),
+    [data, epoch, resetFromAnotherTab],
+  )
+
   // The tablet's own address, with nothing after it.
   const atTabletRoot = pathname.replace(/\/$/, '') === `/demo/${roleSegment}`
 
@@ -117,7 +144,16 @@ export function DemoRoot() {
             one. The other three roles are people holding phones, which is what
             `PhoneShell` is for.
           */}
-          {session.role === 'biller' ? (
+          {kitchen ? (
+            atTabletRoot ? (
+              <DemoKitchen banner={<DemoBanner />} today={data.store.today} />
+            ) : (
+              <>
+                <DemoBanner />
+                <NotFound />
+              </>
+            )
+          ) : session.role === 'biller' ? (
             /*
               A tablet has exactly one screen. Production mounts `/counter` as a
               leaf route, so `/counter/team` and `/counter/billing` are equally

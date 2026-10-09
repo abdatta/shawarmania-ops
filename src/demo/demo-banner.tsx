@@ -1,8 +1,9 @@
 import { ChevronDown, LogOut, RotateCcw, TriangleAlert, Unplug, Wifi, WifiOff } from 'lucide-react'
 import { useState, type ComponentType } from 'react'
-import { Link, NavLink, useNavigate } from 'react-router'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
+import { getPartState, isRenderable } from '@/gates/registry'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/session/context'
 import { ROLE_LABELS, ROLE_SEGMENTS, type Role } from '@/session/session'
@@ -81,6 +82,9 @@ export function DemoBanner() {
   const connectivity = useDemoConnectivity()
   const navigate = useNavigate()
   const [confirming, setConfirming] = useState(false)
+  // The kitchen tablet walks beside the four roles while its part gate allows (#70).
+  const kitchens = isRenderable(getPartState('kitchen-tablets'), 'demo')
+  const onKitchen = useLocation().pathname.replace(/\/$/, '') === '/demo/kitchen'
 
   return (
     <div
@@ -181,13 +185,19 @@ export function DemoBanner() {
                 already answer that with "then none of them is current". The
                 pill answers it the same way rather than naming a role the
                 session does not hold. */}
-              {session.role ? ROLE_LABELS[session.role] : 'Role'}
+              {onKitchen ? 'Kitchen' : session.role ? ROLE_LABELS[session.role] : 'Role'}
               <ChevronDown size={12} />
             </span>
             <select
               aria-label="Demo role"
-              value={session.role ?? ''}
-              onChange={(event) => navigate(`/demo/${ROLE_SEGMENTS[event.target.value as Role]}`)}
+              value={onKitchen ? 'kitchen' : (session.role ?? '')}
+              onChange={(event) =>
+                navigate(
+                  event.target.value === 'kitchen'
+                    ? '/demo/kitchen'
+                    : `/demo/${ROLE_SEGMENTS[event.target.value as Role]}`,
+                )
+              }
               className="absolute inset-0 h-full w-full cursor-pointer appearance-none border-0 bg-transparent p-0 text-transparent outline-none"
             >
               {ROLES.map((role) => (
@@ -195,6 +205,11 @@ export function DemoBanner() {
                   {ROLE_LABELS[role]}
                 </option>
               ))}
+              {kitchens && (
+                <option value="kitchen" className="bg-surface text-content">
+                  Kitchen
+                </option>
+              )}
             </select>
           </span>
 
@@ -203,10 +218,10 @@ export function DemoBanner() {
               <NavLink
                 key={role}
                 to={`/demo/${ROLE_SEGMENTS[role]}`}
-                aria-current={session.role === role ? 'page' : undefined}
+                aria-current={session.role === role && !onKitchen ? 'page' : undefined}
                 className={cn(
                   'rounded px-2 py-1 text-xs font-semibold focus-visible:focus-ring',
-                  session.role === role
+                  session.role === role && !onKitchen
                     ? 'bg-on-warning/15 underline underline-offset-2'
                     : 'hover:bg-on-warning/10',
                 )}
@@ -214,6 +229,20 @@ export function DemoBanner() {
                 {ROLE_LABELS[role]}
               </NavLink>
             ))}
+            {kitchens && (
+              <NavLink
+                to="/demo/kitchen"
+                aria-current={onKitchen ? 'page' : undefined}
+                className={cn(
+                  'rounded px-2 py-1 text-xs font-semibold focus-visible:focus-ring',
+                  onKitchen
+                    ? 'bg-on-warning/15 underline underline-offset-2'
+                    : 'hover:bg-on-warning/10',
+                )}
+              >
+                Kitchen
+              </NavLink>
+            )}
           </span>
         </nav>
 

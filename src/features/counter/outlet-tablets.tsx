@@ -4,13 +4,22 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  SlidersHorizontal,
   TabletSmartphone,
   Trash2,
   UserRound,
   Wifi,
   WifiOff,
 } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { EmptyState } from '@/components/layout/empty-state'
@@ -21,10 +30,16 @@ import { Input } from '@/components/ui/input'
 import { LoadingFigures } from '@/components/ui/loading'
 import { Select } from '@/components/ui/select'
 import { useAdapters } from '@/data-access'
-import { DataActionError, type CounterDeviceOperationalSnapshot } from '@/data-access/adapters'
+import {
+  DataActionError,
+  type CounterDeviceOperationalSnapshot,
+  type TabletKind,
+} from '@/data-access/adapters'
 import { formatDateTime, formatFreshness, isCounterTelemetryFresh } from '@/domain'
 import { DANGER_OUTLINE, OutletSection } from '@/features/outlets/outlet-section'
+import { getPartState, isRenderable } from '@/gates/registry'
 import { cn } from '@/lib/cn'
+import { SessionContext } from '@/session/context'
 
 /**
  * The tablets at one outlet, as a section of that outlet's page
@@ -73,6 +88,7 @@ export function OutletTablets({
 
   const [adding, setAdding] = useState(false)
   const [label, setLabel] = useState('')
+  const [kind, setKind] = useState<TabletKind>('counter')
   const [issued, setIssued] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [removing, setRemoving] = useState<CounterDeviceOperationalSnapshot | null>(null)
@@ -80,6 +96,13 @@ export function OutletTablets({
   const [editLabel, setEditLabel] = useState('')
   const [editOutletId, setEditOutletId] = useState('')
   const [confirmingMove, setConfirmingMove] = useState(false)
+  const [editKind, setEditKind] = useState<TabletKind>('counter')
+  const [confirmingKind, setConfirmingKind] = useState(false)
+  // Kitchen tablets are a gated part (#70): the choice is absent until promoted.
+  const kitchens = isRenderable(
+    getPartState('kitchen-tablets'),
+    useContext(SessionContext)?.mode ?? 'real',
+  )
 
   const read = useCallback(() => {
     const request = ++latestRead.current
@@ -149,10 +172,15 @@ export function OutletTablets({
     setBusy(true)
     setError(null)
     try {
-      const result = await counter.issueSetupCode(outletId, label.trim())
+      const result = await counter.issueSetupCode(
+        outletId,
+        label.trim(),
+        kitchens ? kind : 'counter',
+      )
       setIssued(result.code)
       setAdding(false)
       setLabel('')
+      setKind('counter')
       await read()
     } catch (cause) {
       setError(
@@ -189,6 +217,7 @@ export function OutletTablets({
     setEditing(device)
     setEditLabel(device.label)
     setEditOutletId(device.outletId)
+    setEditKind(device.kind ?? 'counter')
   }
 
   async function saveEdit() {
@@ -200,12 +229,15 @@ export function OutletTablets({
         deviceId: editing.id,
         label: editLabel.trim(),
         outletId: editOutletId,
+        ...(editKind !== (editing.kind ?? 'counter') ? { kind: editKind } : {}),
       })
       setEditing(null)
       setConfirmingMove(false)
+      setConfirmingKind(false)
       await read()
     } catch (cause) {
       setConfirmingMove(false)
+      setConfirmingKind(false)
       setError(
         cause instanceof DataActionError
           ? cause.message
@@ -221,6 +253,10 @@ export function OutletTablets({
     if (!editing || !editLabel.trim() || !editOutletId) return
     if (editOutletId !== editing.outletId) {
       setConfirmingMove(true)
+      return
+    }
+    if (editKind !== (editing.kind ?? 'counter')) {
+      setConfirmingKind(true)
       return
     }
     void saveEdit()
@@ -278,9 +314,9 @@ export function OutletTablets({
               {issued}
             </p>
             <p>
-              On the counter tablet, open the app and choose <strong>Set up this tablet</strong>{' '}
-              from sign in, then type this code. It is good for fifteen minutes, works once, and is
-              not shown again — generate another if you lose it.
+              On the tablet, open the app and choose <strong>Set up this tablet</strong> from sign
+              in, then type this code. It is good for fifteen minutes, works once, and is not shown
+              again — generate another if you lose it.
             </p>
             <button
               type="button"
@@ -312,7 +348,17 @@ export function OutletTablets({
             return (
               <Card key={device.id} className="flex items-stretch justify-between gap-3">
                 <div className="min-w-0 space-y-2">
-                  <CardTitle>{device.label}</CardTitle>
+                  <CardTitle className="flex flex-wrap items-center gap-2">
+                    {device.label}
+                    {device.kind === 'kitchen' && (
+                      <span
+                        data-testid={`device-kind-${device.id}`}
+                        className="rounded-md border border-border px-2 py-0.5 text-xs font-semibold text-content"
+                      >
+                        Kitchen
+                      </span>
+                    )}
+                  </CardTitle>
                   {/*
                     Three short lines, each led by an icon, instead of two
                     sentences (owner, 2026-09-26). What the long sentence carried
@@ -344,15 +390,36 @@ export function OutletTablets({
                           All sent
                         </TabletLine>
                       ))}
-                    <TabletLine
-                      icon={UserRound}
-                      tone={device.operations ? 'plain' : 'muted'}
-                      testId={`device-operations-${device.id}`}
-                    >
-                      {device.operations
-                        ? `${device.operations.operatorName} · since ${formatFreshness(device.operations.openedAt)}`
-                        : 'Nobody on shift'}
-                    </TabletLine>
+                    {device.kind === 'kitchen' ? (
+                      <>
+                        <TabletLine
+                          icon={UserRound}
+                          tone={device.kitchenShift ? 'plain' : 'muted'}
+                          testId={`device-operations-${device.id}`}
+                        >
+                          {device.kitchenShift
+                            ? `${device.kitchenShift.operatorName} · since ${formatFreshness(device.kitchenShift.openedAt)}`
+                            : 'Nobody on shift'}
+                        </TabletLine>
+                        <TabletLine
+                          icon={SlidersHorizontal}
+                          tone="plain"
+                          testId={`device-kitchen-filter-${device.id}`}
+                        >
+                          {kitchenFilterWords(device)}
+                        </TabletLine>
+                      </>
+                    ) : (
+                      <TabletLine
+                        icon={UserRound}
+                        tone={device.operations ? 'plain' : 'muted'}
+                        testId={`device-operations-${device.id}`}
+                      >
+                        {device.operations
+                          ? `${device.operations.operatorName} · since ${formatFreshness(device.operations.openedAt)}`
+                          : 'Nobody on shift'}
+                      </TabletLine>
+                    )}
                   </ul>
                 </div>
                 {mayAdminister && (
@@ -434,6 +501,7 @@ export function OutletTablets({
             This is the name the person approving a shift will read on their own phone, so make it
             match what is written on the hardware.
           </p>
+          {kitchens && <UseFor value={kind} onChange={setKind} name="device-setup-kind" />}
         </form>
       </FormSheet>
 
@@ -500,6 +568,7 @@ export function OutletTablets({
                 : 'Only a Super Admin can move a tablet to another outlet.'}
             </p>
           </div>
+          {kitchens && <UseFor value={editKind} onChange={setEditKind} name="device-edit-kind" />}
         </form>
       </FormSheet>
 
@@ -517,6 +586,19 @@ export function OutletTablets({
         }
         confirmLabel={busy ? 'Moving…' : 'Move tablet'}
         onClose={() => setConfirmingMove(false)}
+        onConfirm={saveEdit}
+      />
+
+      <ConfirmDialog
+        open={confirmingKind && editing !== null}
+        title={
+          editing
+            ? `Make ${editing.label} a ${editKind === 'kitchen' ? 'kitchen' : 'billing'} tablet?`
+            : 'Change this tablet?'
+        }
+        consequence={editing ? kindChangeConsequence(editing, editKind) : ''}
+        confirmLabel={busy ? 'Saving…' : 'Change'}
+        onClose={() => setConfirmingKind(false)}
         onConfirm={saveEdit}
       />
 
@@ -582,5 +664,69 @@ function TabletLine({
       />
       <span className="min-w-0">{children}</span>
     </li>
+  )
+}
+
+/** A kitchen's filter, in words, as the kitchen's own header reads it (#70). */
+function kitchenFilterWords(device: CounterDeviceOperationalSnapshot): string {
+  const filter = device.kitchenFilter
+  if (!filter) return 'Everything'
+  const names = filter.categoryNames.join(', ')
+  if (filter.mode === 'include') return names ? `Only ${names}` : 'Nothing chosen yet'
+  return names ? `Everything except ${names}` : 'Everything'
+}
+
+/** What switching a tablet's use will do, said before it is done (#70, design D12). */
+function kindChangeConsequence(device: CounterDeviceOperationalSnapshot, next: TabletKind): string {
+  const holder = device.operations?.operatorName ?? device.kitchenShift?.operatorName ?? null
+  const ends = holder
+    ? `${holder}'s shift on it ends now, and somebody starts a new one on the tablet. `
+    : 'Somebody starts a shift on the tablet the usual way. '
+  return next === 'kitchen'
+    ? `${ends}As a kitchen it shows the orders taken at the counter and takes no money. ` +
+        'This is refused while it holds unsent work or orders it took that are still unfinished, ' +
+        'because only it can finish them.'
+    : `${ends}As a billing tablet it takes orders and money like any counter.`
+}
+
+/** The tablet's use, as a two-way choice: Billing or Kitchen. */
+function UseFor({
+  value,
+  onChange,
+  name,
+}: {
+  value: TabletKind
+  onChange: (next: TabletKind) => void
+  name: string
+}) {
+  return (
+    <fieldset className="mt-4 space-y-1">
+      <legend className="block text-sm font-semibold">Use this tablet for</legend>
+      <div role="radiogroup" aria-label="Use this tablet for" className="grid grid-cols-2 gap-2">
+        {(
+          [
+            ['counter', 'Billing'],
+            ['kitchen', 'Kitchen'],
+          ] as const
+        ).map(([option, words]) => (
+          <button
+            key={option}
+            type="button"
+            role="radio"
+            name={name}
+            aria-checked={value === option}
+            onClick={() => onChange(option)}
+            className={cn(
+              'min-h-11 rounded-xl border-2 px-3 font-semibold',
+              value === option
+                ? 'border-primary bg-primary text-on-primary'
+                : 'border-border bg-surface text-content',
+            )}
+          >
+            {words}
+          </button>
+        ))}
+      </div>
+    </fieldset>
   )
 }

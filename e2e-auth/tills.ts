@@ -32,8 +32,8 @@ export const TILL_ONE = { alias: 'tablet.kalyani', label: 'Kalyani counter table
 export const TILL_TWO = { alias: 'tablet.kalyani.two', label: 'Kalyani second counter' }
 
 export const OUTLET_KALYANI = '00000000-0000-4000-a000-000000000001'
-const SPARE_TILL = '10000000-0000-4000-a000-00000000000f'
-const SPARE_SHIFT = '90000000-0000-4000-a000-000000000003'
+export const SPARE_TILL = '10000000-0000-4000-a000-00000000000f'
+export const SPARE_SHIFT = '90000000-0000-4000-a000-000000000003'
 const SECOND_BILLER = '10000000-0000-4000-a000-000000000010'
 
 /**
@@ -70,9 +70,11 @@ export async function setSpareTillInService(request: APIRequestContext, inServic
   const device = await request.patch(`${SUPABASE_URL}/rest/v1/counter_devices`, {
     headers,
     params: { id: `eq.${SPARE_TILL}` },
+    // A billing till, always: the kitchen spec turns this tablet into a kitchen
+    // and a run that failed before its teardown must not leave it one (#70).
     data: inService
-      ? { removed_at: null, last_seen_at: new Date().toISOString() }
-      : { removed_at: new Date().toISOString() },
+      ? { removed_at: null, last_seen_at: new Date().toISOString(), kind: 'counter' }
+      : { removed_at: new Date().toISOString(), kind: 'counter' },
   })
   expect(device.ok(), 'could not change the spare till').toBe(true)
 
@@ -139,6 +141,7 @@ export async function setSpareTillInService(request: APIRequestContext, inServic
       expires_at: new Date(Date.now() + 6 * 60 * 60_000).toISOString(),
       ended_at: null,
       ended_reason: null,
+      kind: 'counter',
     },
   })
   expect(shift.ok(), 'could not open a shift on the spare till').toBe(true)

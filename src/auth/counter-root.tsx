@@ -8,6 +8,7 @@ import { CounterShell } from '@/features/counter/counter-shell'
 import { useCounterState } from '@/features/billing/use-counter-state'
 import { NotFound } from '@/routes/not-found'
 import { CounterDeviceContext } from '@/session/counter-context'
+import { tabletKind } from '@/session/counter-session'
 
 import { useRealSessionContext } from './real-session-context'
 import { UnconfirmedSession } from './unconfirmed-session'
@@ -50,6 +51,8 @@ export function CounterRoot() {
   // belong. A person who types /counter is not doing anything wrong; they are
   // simply not this.
   if (state.status !== 'counter') return <Navigate to="/" replace />
+  // A kitchen tablet is not a counter, whatever URL it was opened at (#70).
+  if (tabletKind(state.device.device) === 'kitchen') return <Navigate to="/kitchen" replace />
 
   if (!adapters) return <NotFound />
 

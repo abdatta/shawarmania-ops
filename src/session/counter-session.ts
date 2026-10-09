@@ -14,12 +14,26 @@
  * confused by accident; the compiler refuses.
  */
 
+/**
+ * What a set-up tablet is for (#70): `counter` takes money, `kitchen` shows the
+ * outlet's unfinished orders. Chosen when its setup code is issued and changed
+ * from the outlet's Tablets list; the tablet routes itself by it.
+ */
+export type TabletKind = 'counter' | 'kitchen'
+
 /** The hardware, as the database knows it. Present from setup until removal. */
 export interface CounterDevice {
   deviceId: string
   outletId: string
   /** What an admin called this tablet when they set it up. */
   label: string
+  /** Absent means `counter`, which every tablet was before #70. */
+  kind?: TabletKind
+}
+
+/** The tablet's kind, reading absence as the counter it always was. */
+export function tabletKind(device: Pick<CounterDevice, 'kind'>): TabletKind {
+  return device.kind ?? 'counter'
 }
 
 /** Who is standing at it, for which trading day. */
@@ -32,6 +46,8 @@ export interface CounterShift {
   businessDate: string
   /** The outlet's next cutover. A shift is live only while this is ahead. */
   expiresAt: string
+  /** A kitchen shift reaches the kitchen board and nothing billing. Absent means `counter`. */
+  kind?: TabletKind
 }
 
 /**

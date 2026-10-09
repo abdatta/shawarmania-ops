@@ -32,6 +32,11 @@
   --color-qr-module: var(--qr-module);
   --color-qr-field: var(--qr-field);
   --color-whatsapp: var(--whatsapp);
+  --color-kitchen-edit: var(--kitchen-edit);
+  --color-on-kitchen-edit: var(--on-kitchen-edit);
+  --color-kitchen-edit-text: var(--kitchen-edit-text);
+  --color-kitchen-cancel: var(--kitchen-cancel);
+  --color-on-kitchen-cancel: var(--on-kitchen-cancel);
 
   --font-sans: 'Nunito Sans Variable', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Lilita One', ui-sans-serif, system-ui, sans-serif;
@@ -188,4 +193,82 @@
   &::-webkit-scrollbar {
     display: none;
   }
+}
+
+/*
+ * A kitchen card asking to be acknowledged (#70). An entry animation whose
+ * resting state is the card standing still, for the reason `dock-in` gives;
+ * the card replays it by remounting when it starts alerting again. Under
+ * reduced motion it fades and returns instead of moving.
+ */
+@keyframes kitchen-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  15%,
+  45%,
+  75% {
+    transform: translateX(-10px);
+  }
+  30%,
+  60%,
+  90% {
+    transform: translateX(10px);
+  }
+}
+
+@keyframes kitchen-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@utility kitchen-shake {
+  animation: kitchen-shake 900ms ease-in-out 1;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: kitchen-pulse 900ms ease-in-out 2;
+  }
+}
+
+/*
+ * An ACK whose order is still ringing (#70): it wiggles in bursts for as long
+ * as the order is owed a ring or one is sounding, then stands still while the
+ * card waits for its ACK in silence.
+ */
+@keyframes kitchen-ringing {
+  0%,
+  40%,
+  100% {
+    transform: rotate(0);
+  }
+  5%,
+  15%,
+  25% {
+    transform: rotate(-2.5deg) scale(1.02);
+  }
+  10%,
+  20%,
+  30% {
+    transform: rotate(2.5deg) scale(1.02);
+  }
+}
+
+@utility kitchen-ringing {
+  animation: kitchen-ringing 1100ms ease-in-out infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: kitchen-pulse 1100ms ease-in-out infinite;
+  }
+}
+
+/*
+ * The kitchen card's torn top edge (#70): a bite every 22px, so each order
+ * reads as a ticket torn off the counter's pad.
+ */
+@utility kitchen-ticket {
+  -webkit-mask: radial-gradient(circle 7px at 50% 0, transparent 98%, black) 50% 0 / 22px 100%
+    repeat-x;
+  mask: radial-gradient(circle 7px at 50% 0, transparent 98%, black) 50% 0 / 22px 100% repeat-x;
 }

@@ -17,6 +17,7 @@ import {
 import { createMockExpensesAdapter } from './expenses'
 import { createMockExpenseCategoriesAdapter } from './expense-categories'
 import { createMockInsightsAdapter } from './insights'
+import { createDemoKitchen, createMockKitchenAdapter, type DemoKitchen } from './kitchen'
 import { createMockOverviewAdapter } from './overview'
 import { createMockLedgerStatementAdapter } from './ledger-statement'
 import { createMockMenuAdapter } from './menu'
@@ -64,6 +65,8 @@ export interface DemoData {
    * for, and role-scoped state would lose the request in between.
    */
   counter: DemoCounter
+  /** The demo kitchen tablet's filter and acknowledgements (#70). */
+  kitchen: DemoKitchen
 }
 
 export function createDemoData(): DemoData {
@@ -76,6 +79,7 @@ export function createDemoData(): DemoData {
     // and the bills they are counted from agree about which day it is.
     customers: createDemoCustomers(store.today),
     counter: createDemoCounter(),
+    kitchen: createDemoKitchen(),
   }
 }
 
@@ -190,6 +194,7 @@ export function createMockAdapters(
     // The role scopes the tablet list as `counter_devices_select` will, and the
     // persona's name stands in for the username the tablet types — demo mode has
     // no usernames, and a handshake with nobody to name is not a handshake.
+    kitchen: createMockKitchenAdapter(store, data.kitchen),
     counter: createMockCounterAdapter(
       data.counter,
       store,

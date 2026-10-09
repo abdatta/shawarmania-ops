@@ -12,6 +12,7 @@ import {
   OUTLET_MISTAKE_ID,
 } from '@/data-access/mock'
 import { getSupabaseClient } from '@/data-access/supabase'
+import { getPartState, isRenderable } from '@/gates/registry'
 import { appRoutes } from '@/routes'
 
 /**
@@ -229,10 +230,11 @@ describe('demo mode safety', () => {
     renderDemo('/demo/owner')
     const banner = await screen.findByTestId('demo-banner')
 
-    // The role switcher's four links all stay inside /demo.
+    // The role switcher's links all stay inside /demo: the four roles, and the
+    // kitchen tablet beside them while its part gate shows it (#70).
     const switcher = within(banner).getByRole('navigation', { name: 'Demo role switcher' })
     const links = switcher.querySelectorAll('a')
-    expect(links).toHaveLength(4)
+    expect(links).toHaveLength(isRenderable(getPartState('kitchen-tablets'), 'demo') ? 5 : 4)
     for (const link of links) {
       expect(link.getAttribute('href')).toMatch(/^\/demo\//)
     }

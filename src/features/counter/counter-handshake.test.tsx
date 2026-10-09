@@ -222,7 +222,7 @@ describe('the phone answering', () => {
     await screen.findByTestId('counter-shift-card')
 
     await user.click(screen.getByRole('button', { name: /leave counter/i }))
-    const dialog = screen.getByRole('dialog', { name: /leave this counter now/i })
+    const dialog = screen.getByRole('dialog', { name: /leave the counter on /i })
     expect(dialog).toHaveTextContent(/authority ends immediately/i)
     expect(dialog).toHaveTextContent(/use Hand over on the tablet/i)
     expect(dialog).toHaveTextContent(/flagged last-known context/i)
@@ -242,5 +242,47 @@ describe('the phone answering', () => {
 
     renderPhone(phone)
     expect(await screen.findByTestId('counter-request-card')).toBeInTheDocument()
+  })
+})
+
+describe('several shifts on one phone (#70)', () => {
+  it('lists each shift with its own Leave, and leaving one names it and ends only it', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('employee')
+    const me = demoSessionFor('employee').userId
+    const later = new Date(Date.now() + 3_600_000).toISOString()
+    const shift = (id: string, kind: 'counter' | 'kitchen', deviceLabel: string) => ({
+      id,
+      personId: me,
+      kind,
+      deviceId: `${id}-device`,
+      deviceLabel,
+      outletId: 'outlet',
+      outletName: 'Kalyani Cafe',
+      openedAt: new Date().toISOString(),
+      businessDate: '2026-10-08',
+      expiresAt: later,
+    })
+    vi.spyOn(adapters.counter, 'listPendingRequests').mockResolvedValue([])
+    vi.spyOn(adapters.counter, 'listLiveShifts').mockResolvedValue([
+      shift('s-counter', 'counter', 'Till 1'),
+      shift('s-kitchen', 'kitchen', 'Kitchen 1'),
+    ])
+    const end = vi.spyOn(adapters.counter, 'endShift').mockResolvedValue()
+    renderPhone(adapters)
+
+    const list = await screen.findByTestId('counter-shift-list')
+    expect(within(list).getByText('Kalyani Cafe')).toBeInTheDocument()
+    const kitchenRow = within(list).getByTestId('counter-shift-row-kitchen')
+    expect(kitchenRow).toHaveTextContent(/Kitchen · Kitchen 1 · since/)
+    expect(within(list).getByTestId('counter-shift-row-counter')).toHaveTextContent(
+      /Counter · Till 1/,
+    )
+
+    await user.click(within(kitchenRow).getByRole('button', { name: 'Leave' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Leave the kitchen on Kitchen 1?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Leave kitchen' }))
+    await waitFor(() => expect(end).toHaveBeenCalledWith('s-kitchen'))
+    expect(end).toHaveBeenCalledTimes(1)
   })
 })

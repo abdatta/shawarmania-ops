@@ -2006,6 +2006,7 @@ export type Database = {
           id: string
           issued_at: string
           issued_by: string
+          kind: string
           label: string
           outlet_id: string
           superseded_at: string | null
@@ -2019,6 +2020,7 @@ export type Database = {
           id?: string
           issued_at?: string
           issued_by: string
+          kind?: string
           label: string
           outlet_id: string
           superseded_at?: string | null
@@ -2032,6 +2034,7 @@ export type Database = {
           id?: string
           issued_at?: string
           issued_by?: string
+          kind?: string
           label?: string
           outlet_id?: string
           superseded_at?: string | null
@@ -2063,6 +2066,12 @@ export type Database = {
       counter_devices: {
         Row: {
           id: string
+          kind: string
+          kitchen_category_ids: string[]
+          kitchen_filter_changed_at: string | null
+          kitchen_filter_changed_by: string | null
+          kitchen_filter_mode: string
+          kitchen_sort: string
           label: string
           last_reported_oldest_unresolved_at: string | null
           last_reported_unsent: number
@@ -2076,6 +2085,12 @@ export type Database = {
         }
         Insert: {
           id: string
+          kind?: string
+          kitchen_category_ids?: string[]
+          kitchen_filter_changed_at?: string | null
+          kitchen_filter_changed_by?: string | null
+          kitchen_filter_mode?: string
+          kitchen_sort?: string
           label: string
           last_reported_oldest_unresolved_at?: string | null
           last_reported_unsent?: number
@@ -2089,6 +2104,12 @@ export type Database = {
         }
         Update: {
           id?: string
+          kind?: string
+          kitchen_category_ids?: string[]
+          kitchen_filter_changed_at?: string | null
+          kitchen_filter_changed_by?: string | null
+          kitchen_filter_mode?: string
+          kitchen_sort?: string
           label?: string
           last_reported_oldest_unresolved_at?: string | null
           last_reported_unsent?: number
@@ -2104,6 +2125,13 @@ export type Database = {
           {
             foreignKeyName: "counter_devices_enrolled_by_fkey"
             columns: ["set_up_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "counter_devices_kitchen_filter_changed_by_fkey"
+            columns: ["kitchen_filter_changed_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -2125,6 +2153,7 @@ export type Database = {
           device_id: string
           expires_at: string
           id: string
+          kind: string
           outlet_id: string
           person_id: string | null
           requested_username: string
@@ -2139,6 +2168,7 @@ export type Database = {
           device_id: string
           expires_at: string
           id?: string
+          kind?: string
           outlet_id: string
           person_id?: string | null
           requested_username: string
@@ -2153,6 +2183,7 @@ export type Database = {
           device_id?: string
           expires_at?: string
           id?: string
+          kind?: string
           outlet_id?: string
           person_id?: string | null
           requested_username?: string
@@ -2192,6 +2223,7 @@ export type Database = {
           ended_reason: string | null
           expires_at: string
           id: string
+          kind: string
           opened_at: string
           outlet_id: string
           person_id: string
@@ -2203,6 +2235,7 @@ export type Database = {
           ended_reason?: string | null
           expires_at: string
           id?: string
+          kind?: string
           opened_at?: string
           outlet_id: string
           person_id: string
@@ -2214,6 +2247,7 @@ export type Database = {
           ended_reason?: string | null
           expires_at?: string
           id?: string
+          kind?: string
           opened_at?: string
           outlet_id?: string
           person_id?: string
@@ -3023,6 +3057,104 @@ export type Database = {
           ip_hash?: string | null
         }
         Relationships: []
+      }
+      kitchen_acknowledgements: {
+        Row: {
+          acked_at: string
+          device_id: string
+          id: string
+          kind: string
+          lines: Json
+          order_id: string
+          order_version: string
+          outlet_id: string
+          person_id: string
+          shift_id: string
+        }
+        Insert: {
+          acked_at?: string
+          device_id: string
+          id: string
+          kind: string
+          lines: Json
+          order_id: string
+          order_version: string
+          outlet_id: string
+          person_id: string
+          shift_id: string
+        }
+        Update: {
+          acked_at?: string
+          device_id?: string
+          id?: string
+          kind?: string
+          lines?: Json
+          order_id?: string
+          order_version?: string
+          outlet_id?: string
+          person_id?: string
+          shift_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kitchen_acknowledgements_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "counter_devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kitchen_acknowledgements_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kitchen_acknowledgements_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kitchen_acknowledgements_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kitchen_acknowledgements_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "counter_shifts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kitchen_pulses: {
+        Row: {
+          bumped_at: string
+          outlet_id: string
+        }
+        Insert: {
+          bumped_at?: string
+          outlet_id: string
+        }
+        Update: {
+          bumped_at?: string
+          outlet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kitchen_pulses_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: true
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ledger_day_verifications: {
         Row: {
@@ -4174,6 +4306,8 @@ export type Database = {
         Returns: boolean
       }
       app_is_owner: { Args: never; Returns: boolean }
+      app_kitchen_shift: { Args: never; Returns: string }
+      app_kitchen_shift_outlet: { Args: never; Returns: string }
       app_may_hold_counter_shift: {
         Args: { outlet: string; person: string }
         Returns: boolean
@@ -4632,6 +4766,9 @@ export type Database = {
           cash_total_paise: number
           device_id: string
           drawer_cash_paise: number
+          kind: string
+          kitchen_category_names: string[]
+          kitchen_filter_mode: string
           label: string
           last_reported_unsent: number
           last_seen_at: string
@@ -4653,6 +4790,9 @@ export type Database = {
           cash_total_paise: number
           device_id: string
           drawer_cash_paise: number
+          kind: string
+          kitchen_category_names: string[]
+          kitchen_filter_mode: string
           label: string
           last_reported_oldest_unresolved_at: string
           last_reported_unsent: number
@@ -5008,6 +5148,7 @@ export type Database = {
         Args: {
           p_device_id: string
           p_edited_by: string
+          p_kind?: string
           p_label: string
           p_outlet_id: string
         }
@@ -5152,6 +5293,7 @@ export type Database = {
         Args: {
           p_code_hash: string
           p_issued_by: string
+          p_kind?: string
           p_label: string
           p_outlet_id: string
           p_valid_for: string
@@ -5160,6 +5302,28 @@ export type Database = {
           code_id: string
           status: string
         }[]
+      }
+      kitchen_acknowledge: {
+        Args: {
+          p_id: string
+          p_kind: string
+          p_order_id: string
+          p_order_version: string
+        }
+        Returns: Json
+      }
+      kitchen_board: { Args: never; Returns: Json }
+      kitchen_line_visible: {
+        Args: { p_category: string; p_category_ids: string[]; p_mode: string }
+        Returns: boolean
+      }
+      kitchen_order_version: {
+        Args: { p_order: Database["public"]["Tables"]["orders"]["Row"] }
+        Returns: string
+      }
+      kitchen_visible_lines: {
+        Args: { p_category_ids: string[]; p_mode: string; p_order_id: string }
+        Returns: Json
       }
       ledger_assert_reach: { Args: { p_outlet_id: string }; Returns: undefined }
       ledger_day_takings: {
@@ -5544,6 +5708,10 @@ export type Database = {
       set_aggregator_login_identifier: {
         Args: { p_channel: string; p_identifier: string }
         Returns: undefined
+      }
+      set_kitchen_filter: {
+        Args: { p_category_ids: string[]; p_mode: string; p_sort?: string }
+        Returns: string
       }
       set_menu_highlights: {
         Args: { p_item_ids: string[]; p_outlet_id: string; p_title: string }

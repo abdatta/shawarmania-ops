@@ -12,6 +12,7 @@ import {
   type CounterShiftRequest,
   type IssuedShiftRequest,
   type LiveCounterShift,
+  type TabletKind,
 } from '../adapters'
 import { failureCode } from '../auth'
 import type { Database } from '../database.types'
@@ -32,11 +33,11 @@ import type { Database } from '../database.types'
  */
 
 const REQUEST_COLUMNS =
-  'id, device_id, outlet_id, created_at, expires_at, resolution, ' +
+  'id, device_id, outlet_id, created_at, expires_at, resolution, kind, ' +
   'counter_devices(label), outlets(name)'
 
 const SHIFT_COLUMNS =
-  'id, person_id, device_id, outlet_id, opened_at, business_date, expires_at, ' +
+  'id, person_id, device_id, outlet_id, opened_at, business_date, expires_at, kind, ' +
   'counter_devices(label), outlets(name)'
 
 const MESSAGES: Record<string, string> = {
@@ -49,6 +50,8 @@ const MESSAGES: Record<string, string> = {
   stale_telemetry:
     'The tablet must report an empty queue within the last 30 minutes before it can move.',
   unresolved_work: 'The tablet still reports unresolved work. Sync it before moving it.',
+  rail_orders:
+    'This tablet took orders that are still unfinished. Finish or cancel them on this tablet first: only it can.',
   wrong_code: 'That is not the code on the tablet. Check it and try again.',
   exhausted: 'Too many wrong codes. Ask the tablet to try again with a new one.',
   not_eligible: 'You are not set up to bill at that outlet.',
@@ -70,6 +73,7 @@ function joined<T>(value: T | T[] | null | undefined): T | null {
 
 interface RequestRow {
   id: string
+  kind: string
   device_id: string
   outlet_id: string
   created_at: string
@@ -80,6 +84,7 @@ interface RequestRow {
 
 interface ShiftRow {
   id: string
+  kind: string
   person_id: string
   device_id: string
   outlet_id: string
@@ -108,6 +113,24 @@ interface OperationsRow {
   upi_total_paise: number | null
   open_order_count: number | null
   drawer_cash_paise: number | null
+  kind: string
+  kitchen_filter_mode: string
+  kitchen_category_names: string[] | null
+}
+
+function asKind(value: string | null | undefined): TabletKind {
+  return value === 'kitchen' ? 'kitchen' : 'counter'
+}
+
+/** A refusal's extra facts, when the function sent them alongside its name. */
+async function failureDetail(error: unknown): Promise<Record<string, unknown> | null> {
+  const context = (error as { context?: unknown }).context
+  if (!(context instanceof Response)) return null
+  try {
+    return (await context.clone().json()) as Record<string, unknown>
+  } catch {
+    return null
+  }
 }
 
 interface SharedChannel {
@@ -146,6 +169,18 @@ export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): 
 
     const named = await failureCode(error)
     const code = named ?? (error instanceof FunctionsFetchError ? 'unavailable' : 'unsendable')
+    if (code === 'rail_orders') {
+      // Named, because the admin has to go and finish exactly those (#70).
+      const numbers = (await failureDetail(error))?.['orderNumbers']
+      if (Array.isArray(numbers) && numbers.length > 0) {
+        const list = numbers.map((n) => `#${String(n)}`).join(', ')
+        throw new CounterActionError(
+          code,
+          `This tablet took ${numbers.length === 1 ? 'order' : 'orders'} ${list}, still unfinished. ` +
+            'Finish or cancel them on this tablet first: only it can.',
+        )
+      }
+    }
     throw new CounterActionError(
       code,
       MESSAGES[code] ?? 'That did not work. Try again in a moment.',
@@ -210,7 +245,7 @@ export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): 
       const { data, error } = await client
         .from('counter_devices')
         .select(
-          'id, outlet_id, label, set_up_at, last_seen_at, last_reported_unsent, last_reported_oldest_unresolved_at',
+          'id, outlet_id, label, kind, set_up_at, last_seen_at, last_reported_unsent, last_reported_oldest_unresolved_at',
         )
         .is('removed_at', null)
         .order('label')
@@ -223,6 +258,7 @@ export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): 
         lastSeenAt: row.last_seen_at,
         lastReportedUnresolved: row.last_reported_unsent,
         lastReportedOldestUnresolvedAt: row.last_reported_oldest_unresolved_at,
+        kind: asKind(row.kind),
       }))
     },
 
@@ -234,20 +270,38 @@ export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): 
       })
       if (error) throw error
       return ((data ?? []) as OperationsRow[]).map((row) => {
-        const operations = row.shift_id
-          ? {
-              shiftId: row.shift_id,
-              operatorName: row.operator_name ?? 'Unknown operator',
-              openedAt: row.opened_at!,
-              businessDate: row.business_date!,
-              billCount: row.bill_count ?? 0,
-              cashTotalPaise: row.cash_total_paise ?? 0,
-              upiTotalPaise: row.upi_total_paise ?? 0,
-              openOrderCount: row.open_order_count ?? 0,
-              drawerCashPaise: row.drawer_cash_paise ?? 0,
-            }
-          : null
+        const kind = asKind(row.kind)
+        const operations =
+          row.shift_id && kind === 'counter'
+            ? {
+                shiftId: row.shift_id,
+                operatorName: row.operator_name ?? 'Unknown operator',
+                openedAt: row.opened_at!,
+                businessDate: row.business_date!,
+                billCount: row.bill_count ?? 0,
+                cashTotalPaise: row.cash_total_paise ?? 0,
+                upiTotalPaise: row.upi_total_paise ?? 0,
+                openOrderCount: row.open_order_count ?? 0,
+                drawerCashPaise: row.drawer_cash_paise ?? 0,
+              }
+            : null
         return {
+          kind,
+          kitchenShift:
+            kind === 'kitchen' && row.shift_id
+              ? {
+                  shiftId: row.shift_id,
+                  operatorName: row.operator_name ?? 'Unknown operator',
+                  openedAt: row.opened_at!,
+                }
+              : null,
+          kitchenFilter:
+            kind === 'kitchen'
+              ? {
+                  mode: row.kitchen_filter_mode === 'include' ? 'include' : 'exclude',
+                  categoryNames: row.kitchen_category_names ?? [],
+                }
+              : null,
           id: row.device_id,
           outletId: row.outlet_id,
           label: row.label,
@@ -261,11 +315,12 @@ export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): 
       })
     },
 
-    async issueSetupCode(outletId: string, label: string) {
+    async issueSetupCode(outletId: string, label: string, kind: TabletKind = 'counter') {
       return await call<{ code: string; validFor: string }>({
         action: 'issue-setup-code',
         outletId,
         label,
+        kind,
       })
     },
 
@@ -275,6 +330,7 @@ export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): 
         deviceId: input.deviceId,
         label: input.label,
         outletId: input.outletId,
+        ...(input.kind ? { kind: input.kind } : {}),
       })
     },
 
@@ -317,6 +373,7 @@ export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): 
       if (error) throw error
       return ((data ?? []) as unknown as RequestRow[]).map((row) => ({
         id: row.id,
+        kind: asKind(row.kind),
         deviceId: row.device_id,
         deviceLabel: joined(row.counter_devices)?.label ?? null,
         outletId: row.outlet_id,
@@ -337,6 +394,7 @@ export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): 
       return ((data ?? []) as unknown as ShiftRow[]).map((row) => ({
         id: row.id,
         personId: row.person_id,
+        kind: asKind(row.kind),
         deviceId: row.device_id,
         deviceLabel: joined(row.counter_devices)?.label ?? null,
         outletId: row.outlet_id,

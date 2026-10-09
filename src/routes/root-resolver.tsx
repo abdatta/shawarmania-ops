@@ -3,6 +3,7 @@ import { Navigate } from 'react-router'
 import { useRealSessionContext } from '@/auth/real-session-context'
 import { UnconfirmedSession } from '@/auth/unconfirmed-session'
 import { LoadingShell } from '@/components/ui/loading'
+import { tabletKind } from '@/session/counter-session'
 import { heldRoles, ROLE_SEGMENTS } from '@/session/session'
 
 /**
@@ -56,7 +57,12 @@ export function RootResolver() {
 
     // A tablet, which has no roles to be sent to the most senior of.
     case 'counter':
-      return <Navigate to="/counter" replace />
+      return (
+        <Navigate
+          to={tabletKind(state.device.device) === 'kitchen' ? '/kitchen' : '/counter'}
+          replace
+        />
+      )
 
     case 'ready': {
       // The most senior role they hold. Somebody assigned nowhere has none, and
