@@ -72,6 +72,15 @@ export const CHECKS = [
   { fg: '--danger', bg: '--surface-raised', min: AA_TEXT, note: 'danger text in a callout' },
 
   { fg: '--on-primary', bg: '--primary', min: AA_TEXT, note: 'label on a primary button' },
+  // The same solid series fill carries chart bars and a numbered legend badge.
+  // Contrast is symmetric: this gates the badge digit and more than the 3:1
+  // needed for its bar against the chart surface.
+  ...['--primary', '--chart-previous', '--chart-earlier', '--chart-oldest'].map((series) => ({
+    fg: '--surface',
+    bg: series,
+    min: AA_TEXT,
+    note: 'numbered analytics series and solid columns',
+  })),
   { fg: '--on-warning', bg: '--warning', min: AA_TEXT, note: 'ink on warning — never white' },
   { fg: '--on-success', bg: '--success', min: AA_TEXT, note: 'label on a success button' },
   {

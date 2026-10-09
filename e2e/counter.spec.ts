@@ -122,15 +122,35 @@ async function switchToBiller(page: Page) {
  * the owner's own Orders switch, as `billing-counter.test.tsx` does with its
  * `serving` option. The demo as shipped is walked by its own test.
  */
-async function openCounterWithNothingChosen(page: Page) {
+async function openCounterWithNothingChosen(page: Page, beforeSwitch?: () => Promise<void>) {
   await page.goto(`demo/owner/outlets/${KALYANI}`)
   const orders = page.getByTestId('service-orders-switch')
   await expect(orders).toHaveAttribute('aria-checked', 'true')
   await orders.click()
   await page.getByTestId('service-save').click()
   await expect(page.getByTestId('service-save')).toBeHidden()
+  await beforeSwitch?.()
   await switchToBiller(page)
 }
+
+test('the counter lands on the enrolled tablet itself, with a shift already open', async ({
+  page,
+}) => {
+  // Pin time before the counter subscribes: its seeded payment sends after
+  // 400ms, so host/browser load must not decide whether we observe the queue.
+  const now = new Date()
+  await page.clock.install({ time: new Date(now.getTime() - 60_000) })
+  await openCounterWithNothingChosen(page, () => page.clock.pauseAt(now))
+  // The demo mounts the same shell /counter mounts, at the tablet's one address.
+  await expect(page).toHaveURL(/\/demo\/biller$/)
+  await expect(page.getByRole('heading', { name: 'Counter tablet' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Hand over' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Finish day' })).toBeVisible()
+  await expect(page.getByTestId('sync-indicator')).toHaveAttribute('data-sync', 'pending')
+  await expect(page.getByTestId('sync-indicator')).toContainText('1 pending')
+  await page.clock.runFor(500)
+  await expect(page.getByTestId('sync-indicator')).toHaveAttribute('data-sync', 'synced')
+})
 
 test.describe('the counter', () => {
   test.beforeEach(async ({ page }) => {
@@ -174,18 +194,6 @@ test.describe('the counter', () => {
       )
     })
   }
-
-  test('lands on the enrolled tablet itself, with a shift already open', async ({ page }) => {
-    // The demo mounts the same shell `/counter` mounts, so it stays at the
-    // tablet's one address rather than redirecting into a role-shell tab. The
-    // chrome names the *device*: a tablet is set up, not signed in.
-    await expect(page).toHaveURL(/\/demo\/biller$/)
-    await expect(page.getByRole('heading', { name: 'Counter tablet' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Hand over' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Finish day' })).toBeVisible()
-    await expect(page.getByTestId('sync-indicator')).toHaveAttribute('data-sync', 'pending')
-    await expect(page.getByTestId('sync-indicator')).toContainText('1 pending')
-  })
 
   for (const outcome of ['identify', 'skip'] as const) {
     test(`orders and edits without customer entry, then ${outcome === 'identify' ? 'identifies' : 'skips'} at payment`, async ({
@@ -1399,10 +1407,15 @@ test.describe('the counter offline', () => {
     page,
     context,
   }) => {
-    await openCounterWithNothingChosen(page)
+    const now = new Date()
+    await page.clock.install({ time: new Date(now.getTime() - 60_000) })
+    await openCounterWithNothingChosen(page, () => page.clock.pauseAt(now))
     await expect(page.getByTestId('sync-indicator')).toHaveAttribute('data-sync', 'pending')
 
     await context.setOffline(true)
+    // Hold the seeded bill until offline is established, then restore normal
+    // timers so the queued payments and reconnect exercise the real send path.
+    await page.clock.resume()
 
     // Five bills is the escalation threshold from src/domain/billing.ts.
     for (let index = 0; index < 5; index += 1) {
@@ -1439,10 +1452,13 @@ test.describe('the counter offline', () => {
   test('the demonstrator can drop the network from the indicator and bring it back', async ({
     page,
   }) => {
-    await openCounterWithNothingChosen(page)
+    const now = new Date()
+    await page.clock.install({ time: new Date(now.getTime() - 60_000) })
+    await openCounterWithNothingChosen(page, () => page.clock.pauseAt(now))
     await expect(page.getByTestId('sync-indicator')).toHaveAttribute('data-sync', 'pending')
 
     await setConnectivity(page, 'network-dropped')
+    await page.clock.resume()
 
     // Still open, still taking money — and not resuming from a stored record,
     // which is what separates this scene from the cold start above.

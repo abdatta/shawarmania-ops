@@ -27,7 +27,7 @@ const BASE_URL = `${ORIGIN}${BASE_PATH}`
  * of this suite.
  */
 /** The one spec whose subject is the phone bar, and which only it runs. */
-const PHONE_ONLY = /phone-navigation\.spec\.ts/
+const PHONE_ONLY = /(phone-navigation|analytics)\.spec\.ts/
 
 export default defineConfig({
   testDir: './e2e',
@@ -48,7 +48,11 @@ export default defineConfig({
 
   projects: [
     // The counter tablet is the device that matters most for the offline path.
-    { name: 'tablet', use: { ...devices['Galaxy Tab S4 landscape'] }, testIgnore: PHONE_ONLY },
+    {
+      name: 'tablet',
+      use: { ...devices['Galaxy Tab S4 landscape'] },
+      testIgnore: /phone-navigation\.spec\.ts/,
+    },
     { name: 'desktop', use: { ...devices['Desktop Chrome'] }, testIgnore: PHONE_ONLY },
     /**
      * The owner's actual phone (#51).

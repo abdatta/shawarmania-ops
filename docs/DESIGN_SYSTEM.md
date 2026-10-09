@@ -235,6 +235,10 @@ The counter numbers are larger on purpose. Billing happens fast, one-handed, som
 - **This governs reads. A pending write stays on its control.** A submitted form or a triggered action shows its pending state where the person pressed — a disabled button reading "Saving…", the position capture reporting the accuracy it has so far — because they are waiting on something they just did, not on the surface arriving. Replacing a submitted form with a placeholder would hide the very thing they are asking about. A spinner on such a control is correct and stays.
 - **Loading never blocks the counter.** Optimistic UI on the billing path: a bill is rung, shown and settled without waiting for the network, which is about writes and is unaffected by any of the above.
 
+## Analytics series
+
+Analytics comparison series use semantic `--primary`, `--chart-previous`, `--chart-earlier` and `--chart-oldest`: orange, slate, blue and violet, corrected for each theme. Columns use solid rounded fills and numbered legends in stable left-to-right period order; no hatch textures. Lines also retain distinct dash patterns. Numbered badge ink uses `--surface`; the contrast validator gates all four fill/ink pairs at 4.5:1, also exceeding the 3:1 needed for chart marks against their surface. These are data-series roles, separate from success/danger status semantics.
+
 ## What we deliberately do not import from the marketing site
 
 Flame gradients as surfaces, the animated marquee, scroll-driven motion, hero-scale type, and the paper-texture treatment. They are excellent at selling shawarma and actively harmful in a tool for counting money. The brand shows up here as colour, warmth, and the wordmark — not as atmosphere.

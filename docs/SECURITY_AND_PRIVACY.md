@@ -516,3 +516,8 @@ customer legitimately kept. An expiry can be computed statelessly from
 `business_date` later if it is ever wanted.
 
 Two things to revisit when the business grows: customer PII has no defined retention period, and attendance location data accumulates indefinitely. Both are noted in [Limitations](LIMITATIONS.md) rather than silently deferred. Global customer identity sharpens the first without changing what it collects — a phone and an optional name, exactly as before — because the rows now accumulate in one business-wide list rather than two outlet-sized ones, and a retention rule will have to be written once for the business rather than per outlet. See [`openspec/todos/data-retention-policy.md`](../openspec/todos/data-retention-policy.md).
+
+
+## Sales and menu analytics
+
+Analytics reads aggregate business facts only. The RPC checks current owner/manager assignments before computing and rejects foreign-outlet, staff and anonymous access. No customer fields, raw bills/lines or public-menu telemetry are transferred. Per-view and per-window bounds constrain payloads. No new browser service-role use, cookies, tracking identities, ingestion endpoint or retention job is added.

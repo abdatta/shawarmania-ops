@@ -15,6 +15,8 @@ import {
   UtensilsCrossed,
   Wallet,
   ReceiptText,
+  ChartNoAxesCombined,
+  ChartLine,
 } from 'lucide-react'
 
 import type { Role, SessionMode } from '@/session/session'
@@ -72,7 +74,7 @@ export type AttentionSourceId =
  * keeps the path it has, so every link already in circulation still resolves —
  * only where an entry is *drawn* changes.
  */
-export type NavGroupId = 'finances' | 'setup'
+export type NavGroupId = 'finances' | 'setup' | 'analytics'
 
 export interface NavGroup {
   id: NavGroupId
@@ -103,6 +105,7 @@ export interface NavGroup {
 export const NAV_GROUPS: Record<NavGroupId, NavGroup> = {
   finances: { id: 'finances', label: 'Finances', icon: IndianRupee, order: 3 },
   setup: { id: 'setup', label: 'Setup', icon: Settings2, order: 5 },
+  analytics: { id: 'analytics', label: 'Analytics', icon: ChartNoAxesCombined, order: 8 },
 }
 
 /**
@@ -158,6 +161,30 @@ interface SurfaceDefInput {
 }
 
 const defs = {
+  'owner-item-analytics': {
+    role: 'super_admin',
+    path: 'analytics/items',
+    nav: { label: 'Items', icon: UtensilsCrossed, order: 1, group: 'analytics' },
+    state: 'live',
+  },
+  'owner-sales-analytics': {
+    role: 'super_admin',
+    path: 'analytics/sales',
+    nav: { label: 'Sales', icon: ChartLine, order: 2, group: 'analytics' },
+    state: 'live',
+  },
+  'admin-item-analytics': {
+    role: 'franchise_admin',
+    path: 'analytics/items',
+    nav: { label: 'Items', icon: UtensilsCrossed, order: 1, group: 'analytics' },
+    state: 'live',
+  },
+  'admin-sales-analytics': {
+    role: 'franchise_admin',
+    path: 'analytics/sales',
+    nav: { label: 'Sales', icon: ChartLine, order: 2, group: 'analytics' },
+    state: 'live',
+  },
   // ── Super Admin — all outlets, on a phone ────────────────────────────────
   /**
    * Badged by `counter-request-waiting`: a tablet has asked for this person and

@@ -409,3 +409,10 @@ When a new surface is added:
 3. If the surface shows a derived figure, derive it in the mock from rows already in the store rather than adding a total to a fixture. A fixture that may state its own total is a demo that can show a number the system could not produce.
 4. If the invariant is worth relying on, assert it in `createDemoStore()`. The one there now — each outlet's bill numbers are gapless from 1001 — exists because getting it wrong would be invisible until somebody read two screens in a row. A second, that a stock quantity equalled its own ledger, went with the stock surfaces in #51.
 5. Later, swap the adapter and promote the gate in a `*-live` change — **without redesigning the screen**. If that turns out to be impossible, the mock was the wrong shape; fix the mock's shape and record why in the change.
+
+
+## Sales and menu analytics
+
+Analytics shares the mature demo history: 182 older business dates plus the original recent fixture, 8,634 bills and 18,658 lines across both outlets. It preserves billing snapshots, varied dish growth/decline, active zero sellers, closed Mondays, hour variation and delivery imports. Items and Sales use the same aggregate contract with view/period bounds. The selected default is 7d; four 30-day windows have meaningful comparisons. No invented browsing visits or tracking data are generated, and demo Analytics sends no backend requests.
+
+Sales pattern cards identify daily averages by weekday and per-day hourly averages. Closed/zero-sale dates remain in the denominator; weighted AOV remains revenue/orders. Main Hour grouping still displays counter totals. These derivations reuse the same bounded snapshot without extra reads.

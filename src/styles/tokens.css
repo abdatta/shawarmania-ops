@@ -78,6 +78,15 @@
   --brand-nonveg-soft: #f87171;
   --brand-amber-deep: #b45309;
   --brand-amber: #fbbf24;
+
+  /* Analytics series: distinct from status semantics, with solid fills that
+     carry at least 3:1 against each theme's chart surface. */
+  --brand-chart-slate: #64748b;
+  --brand-chart-slate-soft: #94a3b8;
+  --brand-chart-blue: #0369a1;
+  --brand-chart-blue-soft: #7dd3fc;
+  --brand-chart-violet: #7c3aed;
+  --brand-chart-violet-soft: #a78bfa;
 }
 
 /* ── Third-party layer ─────────────────────────────────────────────────
@@ -111,6 +120,9 @@
   --primary: var(--brand-ember);
   --on-primary: var(--brand-white);
   --accent-text: var(--brand-ember-deep);
+  --chart-previous: var(--brand-chart-slate);
+  --chart-earlier: var(--brand-chart-blue);
+  --chart-oldest: var(--brand-chart-violet);
 
   --success: var(--brand-veg-deep);
   --on-success: var(--brand-white);
@@ -188,6 +200,9 @@
   --primary: var(--brand-flame-orange);
   --on-primary: var(--brand-stone-900);
   --accent-text: var(--brand-ember-soft);
+  --chart-previous: var(--brand-chart-slate-soft);
+  --chart-earlier: var(--brand-chart-blue-soft);
+  --chart-oldest: var(--brand-chart-violet-soft);
 
   --success: var(--brand-veg-soft);
   --on-success: var(--brand-stone-900);

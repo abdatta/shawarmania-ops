@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../supabase'
+import { createSupabaseAnalyticsAdapter } from './analytics'
 import type { DataAdapters } from '../adapters'
 import { createAddressLookupAdapter } from './address-lookup'
 import {
@@ -47,6 +48,7 @@ export function createSupabaseAdapters(
       })
   }
   return {
+    analytics: createSupabaseAnalyticsAdapter(client),
     overview: createSupabaseOverviewAdapter(client),
     outlets: createSupabaseOutletsAdapter(client, resumeCoordinator, offlineResume),
     aggregatorSync: createSupabaseAggregatorSyncAdapter(client),

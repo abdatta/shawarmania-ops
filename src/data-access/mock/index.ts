@@ -1,4 +1,5 @@
 import type { AppRole, AttendanceAdapter, DataAdapters } from '../adapters'
+import { createMockAnalyticsAdapter } from './analytics'
 import { assignedOutlets, outletsForRole } from '../adapters'
 import { createMockAddressLookupAdapter } from './address-lookup'
 import { createMockAggregatorSyncAdapter } from './aggregator-sync'
@@ -69,8 +70,8 @@ export interface DemoData {
   kitchen: DemoKitchen
 }
 
-export function createDemoData(): DemoData {
-  const store = createDemoStore({ billingLifecycle: true })
+export function createDemoData(options: { matureHistory?: boolean } = {}): DemoData {
+  const store = createDemoStore({ billingLifecycle: true, ...options })
   return {
     accounts: createDemoAccounts(),
     store,
@@ -137,6 +138,14 @@ export function createMockAdapters(
 
   return {
     // Financial Overview is available only to owners and assigned managers.
+    analytics: createMockAnalyticsAdapter(
+      store,
+      role === 'super_admin'
+        ? null
+        : role === 'franchise_admin'
+          ? outletsForRole(persona.assignments, 'franchise_admin')
+          : [],
+    ),
     overview: createMockOverviewAdapter(
       store,
       data.counter,

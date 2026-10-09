@@ -78,7 +78,7 @@ describe('a navigation group', () => {
     const top = [...(bar.lastElementChild?.children ?? [])].map((entry) =>
       entry.textContent?.replace(/\d|:.*/g, '').trim(),
     )
-    expect(top).toEqual(['Overview', 'Finances', 'Attendance', 'Setup'])
+    expect(top).toEqual(['Overview', 'Finances', 'Attendance', 'Setup', 'Analytics'])
   })
 
   it('keeps a shut group’s children off the page rather than merely hidden', () => {

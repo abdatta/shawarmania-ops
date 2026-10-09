@@ -166,20 +166,20 @@ describe('gate registry', () => {
    * `app-shell` says a phone-first shell presents no more than five top-level
    * entries and that the bar never scrolls sideways to reach one.
    *
-   * **One session shape produces six**, and it is worth naming rather than
+   * **One session shape produces seven**, and it is worth naming rather than
    * rounding off: a manager who also works a shift at another outlet holds both
    * a manager assignment and an Employee one, so they get both homes — Today
-   * and Home — plus Finances, Attendance, Setup and My attendance. `design.md`
+   * and Home — plus Finances, Attendance, Setup, Analytics and My attendance. `design.md`
    * predicted five for this person and forgot the Employee home; the count is
-   * six and always was. It was **eleven** before this change.
+   * six before Analytics added a seventh. It was **eleven** before grouping.
    *
    * Losing Home is not the fix: it is where the check-in button lives, and it
-   * is the one action their manager role cannot do for them. Which of the six
+   * is the one action their manager role cannot do for them. Which entries
    * should fold is a product question for the owner, recorded in
    * `openspec/todos/six-tabs-for-one-person.md`.
    *
    * What is fixed here is the harm the requirement is actually about. The bar
-   * shares its width equally with a floor of one phone touch target, so six
+   * shares its width equally with a floor of one phone touch target, so seven
    * entries clear the narrowest phone anybody uses instead of overflowing a
    * 375px one by three pixels.
    */
@@ -207,23 +207,23 @@ describe('gate registry', () => {
     }
   })
 
-  it('gives the production owner four top-level entries and the Employee three', () => {
+  it('gives the production owner five top-level entries and the Employee three', () => {
     const count = (roles: readonly string[], held: readonly string[]) =>
       navTree(visibleSurfaces(roles as never, 'real', held as never)).length
 
-    expect(count(['super_admin', 'franchise_admin'], ['super_admin'])).toBe(4)
-    expect(count(['franchise_admin'], ['franchise_admin'])).toBe(4)
+    expect(count(['super_admin', 'franchise_admin'], ['super_admin'])).toBe(5)
+    expect(count(['franchise_admin'], ['franchise_admin'])).toBe(5)
     expect(count(['employee'], ['employee'])).toBe(3)
-    // **An owner who also runs a shop gets four as well**, where they used to
+    // **An owner who also runs a shop gets five as well**, where they used to
     // get five. Both homes are the same screen since #51, so they share the
     // label `Overview` and label dedup leaves one — which is the point of
     // sharing it. The second tab showed exactly what the first one showed.
-    expect(count(['super_admin', 'franchise_admin'], ['super_admin', 'franchise_admin'])).toBe(4)
-    // Six, and the only shape that exceeds the ceiling: a manager who also
+    expect(count(['super_admin', 'franchise_admin'], ['super_admin', 'franchise_admin'])).toBe(5)
+    // Seven, and the only shape that exceeds the ceiling: a manager who also
     // works a shift holds the Employee home too, and `Home` is a different
     // screen carrying their own check-in — so it is not a duplicate to fold
     // away. See `openspec/todos/six-tabs-for-one-person.md`.
-    expect(count(['franchise_admin', 'employee'], ['franchise_admin', 'employee'])).toBe(6)
+    expect(count(['franchise_admin', 'employee'], ['franchise_admin', 'employee'])).toBe(7)
   })
 
   it('draws one door in one place, whichever shell it is drawn in', () => {
@@ -259,7 +259,7 @@ describe('gate registry', () => {
     }
   })
 
-  it('folds the owner’s seventeen entries into four top-level ones', () => {
+  it('folds the owner’s entries into five top-level ones', () => {
     // The gate, stated as a test: Overview, Finances, Attendance, Setup. The
     // production owner holds no manager assignment, so `Today` is not theirs.
     const tree = navTree(
@@ -267,7 +267,7 @@ describe('gate registry', () => {
     )
     expect(
       tree.map((node) => (node.kind === 'group' ? node.group.label : node.surface.nav?.label)),
-    ).toEqual(['Overview', 'Finances', 'Attendance', 'Setup'])
+    ).toEqual(['Overview', 'Finances', 'Attendance', 'Setup', 'Analytics'])
 
     const finances = tree.find((node) => node.kind === 'group' && node.group.id === 'finances')
     const setup = tree.find((node) => node.kind === 'group' && node.group.id === 'setup')

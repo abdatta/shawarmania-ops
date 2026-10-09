@@ -1,0 +1,36 @@
+# Tasks
+
+Tasks 1–13 record the earlier verified iterations. The owner's latest scope in tasks 14–20 supersedes their tracking, recommendations and older preset wording; those features are removed from the final implementation.
+
+- [x] 1. Seed roadmap #71, proposal, design and testable deltas; preserve skipped numbers.
+- [x] 2. Implement aggregate RPC, engagement schema and ingestion, authority checks and database/isolation tests; regenerate types.
+- [x] 3. Implement typed live/demo adapters and honest comparison/recommendation domain functions with tests.
+- [x] 4. Build both pages, fifth navigation entry, charts/tables/CSV, empty/error/loading states and responsive themed layouts.
+- [x] 5. Integrate anonymous public/landing menu recording through the existing website Worker; verify payload bounds, privacy and failure independence.
+- [x] 6. Update durable docs and run format before lint/typecheck/functions/unit/contrast/build/e2e/database/RLS/auth/schema checks; inspect UI and console/network in both themes and viewport sizes.
+- [x] 7. PHASE GATE: Both pages live and demo; fifth navigation reloads; snapshot totals and empty/partial/zero-baseline cases proved; outlet isolation and bounded idempotent engagement proved; all applicable gates recorded in verification.md.
+
+## Phone-first follow-up
+
+- [x] 8. Review app widgets and revise the design for the owner's phone-first direction: Items/Sales, simultaneous best/worst boards, compact controls and progressive disclosure.
+- [x] 9. Implement visual dish rows, two-dish comparison, compact date/source/group pickers, charts and matching shimmers; preserve full names and honest metrics.
+- [x] 10. Verify both themes on phone/tablet, comparison and date flows, live/demo error recovery and applicable repository gates; deliver screenshots of both pages.
+
+## Scrollable rankings and mature demo
+
+- [x] 11. Replace separate boards with Dishes and All/Worst/Rising/Slow ordering, bounded infinite scroll, and 7d/1 month/3 months presets (7/30/90 days).
+- [x] 12. Generate bounded shared demo bill history spanning both 90-day comparison periods, with category, hour, delivery and browsing variation; preserve snapshot arithmetic and demo isolation.
+- [x] 13. Verify ordering, internal scrolling, 30/90-day comparisons, rich demo consistency, themes and applicable gates; refresh the tunneled demo and captures.
+
+## Interactive metrics and low egress follow-up
+
+- [x] 14. Revise artifacts and defer Ideas/Browsing/collectors; restore the website checkout and remove the unpublished database collector.
+- [x] 15. Implement 1d/7d/30d (default 7d), page-wide metrics, up to four periods, actual range labels and pointer/touch/keyboard chart details with weighted counter AOV.
+- [x] 16. Bound SQL and adapter reads by view/count, skip Sales bill-line reads, compress Items periods and cap hourly records; prove reconciliation, isolation and reuse without metric/group RPCs.
+- [x] 17. Run all applicable gates against the revised migration and UI, inspect phone/tablet themes, refresh the existing tunnel and deliver both screenshots with an evidence report.
+
+- [x] 18. Replace month grouping with Hour/Day/Week using bounded clock-hour aggregates; restore interactive hourly columns and distinguish the compact comparison pill with actual-range choices. Verify metrics, table/export, no extra RPCs and phone/tablet layouts.
+
+- [x] 19. Name pattern cards by the selected metric and aggregation; normalize lower hourly Revenue/Orders per selected day while preserving weighted AOV and main Hour totals. Verify zero-sale days, comparison windows, metric-dependent titles, themes and applicable gates. Assess redundancy without removing charts; refresh the existing preview.
+
+- [x] 20. Replace hatched hourly comparisons with solid semantic colors, rounded spaced columns, numbered legends/details and focused active-hour axes. Verify two/four periods, empty hours, pointer/touch/keyboard interaction, theme contrast and phone/tablet appearance.

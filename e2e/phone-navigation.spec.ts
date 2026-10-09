@@ -48,7 +48,7 @@ test('the owner’s whole navigation fits the bar without scrolling sideways', a
   const labels = await topLevel(page)
   // Four. The demo owner holds a manager assignment too, but both homes are
   // the same screen since #51 and share a label, so dedup leaves one.
-  expect(labels).toEqual(['Overview', 'Finances', 'Attendance', 'Setup'])
+  expect(labels).toEqual(['Overview', 'Finances', 'Attendance', 'Setup', 'Analytics'])
 })
 
 test('a group opens a card above the bar, anchored to the tab that opened it', async ({ page }) => {
