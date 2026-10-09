@@ -161,30 +161,6 @@ interface SurfaceDefInput {
 }
 
 const defs = {
-  'owner-item-analytics': {
-    role: 'super_admin',
-    path: 'analytics/items',
-    nav: { label: 'Items', icon: UtensilsCrossed, order: 1, group: 'analytics' },
-    state: 'live',
-  },
-  'owner-sales-analytics': {
-    role: 'super_admin',
-    path: 'analytics/sales',
-    nav: { label: 'Sales', icon: ChartLine, order: 2, group: 'analytics' },
-    state: 'live',
-  },
-  'admin-item-analytics': {
-    role: 'franchise_admin',
-    path: 'analytics/items',
-    nav: { label: 'Items', icon: UtensilsCrossed, order: 1, group: 'analytics' },
-    state: 'live',
-  },
-  'admin-sales-analytics': {
-    role: 'franchise_admin',
-    path: 'analytics/sales',
-    nav: { label: 'Sales', icon: ChartLine, order: 2, group: 'analytics' },
-    state: 'live',
-  },
   // ── Super Admin — all outlets, on a phone ────────────────────────────────
   /**
    * Badged by `counter-request-waiting`: a tablet has asked for this person and
@@ -416,6 +392,19 @@ const defs = {
     state: 'demo',
   },
 
+  // Items and Sales (#71): one outlet's aggregates, read by sales_analytics().
+  'owner-item-analytics': {
+    role: 'super_admin',
+    path: 'analytics/items',
+    nav: { label: 'Items', icon: UtensilsCrossed, order: 1, group: 'analytics' },
+    state: 'live',
+  },
+  'owner-sales-analytics': {
+    role: 'super_admin',
+    path: 'analytics/sales',
+    nav: { label: 'Sales', icon: ChartLine, order: 2, group: 'analytics' },
+    state: 'live',
+  },
   // ── Franchise Admin — one outlet, on a phone ─────────────────────────────
   /**
    * **Labelled `Overview`, the same word the owner's home carries**, because
@@ -571,6 +560,19 @@ const defs = {
     state: 'live',
   },
 
+  // The same two pages, scoped to the outlets this person manages.
+  'admin-item-analytics': {
+    role: 'franchise_admin',
+    path: 'analytics/items',
+    nav: { label: 'Items', icon: UtensilsCrossed, order: 1, group: 'analytics' },
+    state: 'live',
+  },
+  'admin-sales-analytics': {
+    role: 'franchise_admin',
+    path: 'analytics/sales',
+    nav: { label: 'Sales', icon: ChartLine, order: 2, group: 'analytics' },
+    state: 'live',
+  },
   // ── Biller — the counter tablet ──────────────────────────────────────────
   /**
    * The tablet's index, and **deliberately without a navigation entry** since

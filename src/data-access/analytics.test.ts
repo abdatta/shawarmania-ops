@@ -8,7 +8,7 @@ import {
   shiftDate,
   totalDays,
 } from '@/domain/sales-analytics'
-import { analyticsSnapshot, type AnalyticsSnapshot } from '@/data-access/analytics'
+import { analyticsSeries, analyticsSnapshot, type AnalyticsSnapshot } from '@/data-access/analytics'
 import { createMockAdapters } from '@/data-access/mock'
 import { createDemoData } from '@/data-access/mock'
 import { analyticsRevenueDays, validAnalyticsDate } from '@/domain/sales-analytics'
@@ -221,8 +221,69 @@ describe('analytics periods and bounded aggregates', () => {
     expect(bucketDays(days, 'month').map((d) => d.revenue)).toEqual([100, 200])
     expect(totalDays(bucketDays(days, 'week'))).toEqual(totalDays(days))
   })
+  it('charts any dish or category from a series that reconciles to the snapshot', async () => {
+    const fixture = createDemoData({ matureHistory: true })
+    const adapter = createMockAdapters('super_admin', fixture).analytics
+    const to = shiftDate(fixture.store.today, -1)
+    const from = shiftDate(fixture.store.today, -30)
+    const snapshot = await adapter.read(DEMO_OUTLET_ID, from, to, { view: 'items', periods: 2 })
+    // Split a two-window series into its windows: [previous, current].
+    const windows = async (subject: Parameters<typeof adapter.series>[4]) => {
+      const series = await adapter.series(DEMO_OUTLET_ID, from, to, 2, subject)
+      expect(series.from).toBe(shiftDate(from, -30))
+      expect(series.units).toHaveLength(60)
+      const sum = (rows: number[]) => rows.reduce((total, n) => total + n, 0)
+      return {
+        previous: {
+          units: sum(series.units.slice(0, 30)),
+          revenue: sum(series.revenue.slice(0, 30)),
+        },
+        current: { units: sum(series.units.slice(30)), revenue: sum(series.revenue.slice(30)) },
+      }
+    }
+    const all = await windows({ kind: 'all' })
+    expect(all.current.units).toBe(snapshot.items.reduce((sum, i) => sum + i.units, 0))
+    for (const item of snapshot.items.filter((i) => i.units).slice(0, 5)) {
+      const dish = await windows({ kind: 'item', key: item.key })
+      expect(dish.current).toEqual({ units: item.units, revenue: item.revenue })
+      expect(dish.previous.units).toBe(item.previousUnits)
+    }
+    expect(snapshot.categories.some((c) => c.previousUnits > 0)).toBe(true)
+    for (const category of snapshot.categories) {
+      const chart = await windows({ kind: 'category', name: category.name })
+      expect(chart.current).toEqual({ units: category.units, revenue: category.revenue })
+      expect(chart.previous).toEqual({
+        units: category.previousUnits,
+        revenue: category.previousRevenue,
+      })
+    }
+    await expect(
+      createMockAdapters('franchise_admin', fixture).analytics.series(
+        DEMO_SECOND_OUTLET_ID,
+        from,
+        to,
+        2,
+        { kind: 'all' },
+      ),
+    ).rejects.toThrow()
+    await expect(adapter.series(DEMO_OUTLET_ID, from, to, 5, { kind: 'all' })).rejects.toThrow()
+  })
   it('fails closed on malformed aggregates and makes CSV names inert', () => {
     expect(() => analyticsSnapshot({ days: [] })).toThrow()
+    expect(analyticsSeries({ from: '2026-10-01', units: [1, 0], revenue: [100, 0] })).toEqual({
+      from: '2026-10-01',
+      units: [1, 0],
+      revenue: [100, 0],
+    })
+    for (const bad of [
+      null,
+      { from: '2026-02-31', units: [], revenue: [] },
+      { from: '2026-10-01', units: [1], revenue: [] },
+      { from: '2026-10-01', units: [-1], revenue: [0] },
+      { from: '2026-10-01', units: [1.5], revenue: [0] },
+      { from: '2026-10-01', units: Array(369).fill(0), revenue: Array(369).fill(0) },
+    ])
+      expect(() => analyticsSeries(bad)).toThrow()
     expect(csvCell('=HYPERLINK("bad")')).toBe('"\'=HYPERLINK(""bad"")"')
   })
   it('uses weighted counter AOV and leaves missing values unknown', () => {

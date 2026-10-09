@@ -39,7 +39,7 @@ import {
   type BillSeed,
 } from './fixtures/billing'
 import { manualLedgerDaySeeds, manualLedgerExpenseSeeds } from './fixtures/retirement-history'
-import { analyticsHistorySeeds } from './fixtures/analytics-history'
+import { analyticsHistorySeeds, HISTORY_OLDEST_AGE } from './fixtures/analytics-history'
 import { menuCategoryFixtures, menuDiscountFixtures, menuItemFixtures } from './fixtures/menu'
 import { expenseSeeds, OPENING_CASH_PAISE } from './fixtures/operations'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID, outletFixtures } from './fixtures/outlets'
@@ -481,6 +481,8 @@ export function createDemoStore(
    * the same domain function the screen uses, and a number taken from **that
    * outlet's** sequence in the order its bills were sent.
    */
+  const menuItemsById = new Map(menuItems.map((item) => [item.id, item]))
+  const categoryNamesById = new Map(menuCategoryFixtures.map((c) => [c.id, c.name]))
   function materialise(seed: BillSeed, index: number, historical = false) {
     const outletId = billSeedOutlet(seed)
     const date = businessDate(seed.daysAgo)
@@ -501,7 +503,7 @@ export function createDemoStore(
 
     const lines = seed.lines.map((line) => {
       const itemId = billSeedItemId(seed, line)
-      const item = menuItems.find((candidate) => candidate.id === itemId)
+      const item = menuItemsById.get(itemId)
       if (!item) throw new Error(`No demo menu item: ${itemId}`)
       return { item, quantity: line.quantity }
     })
@@ -593,9 +595,9 @@ export function createDemoStore(
         line_total_paise: lineTotalPaise(line.item.price_paise, line.quantity),
         discount_paise: 0,
         discount_percent_bp: null,
-        category_name: historical
-          ? (menuCategoryFixtures.find((c) => c.id === line.item.category_id)?.name ?? null)
-          : null,
+        // Captured at sale, as the counter does, so Analytics groups demo
+        // dishes by a real category rather than "Uncategorised".
+        category_name: categoryNamesById.get(line.item.category_id ?? '') ?? null,
         kind: 'item',
       })
     })
@@ -1028,6 +1030,8 @@ export function createDemoStore(
 
   if (options.matureHistory) {
     const revenueByDay = new Map<string, number>()
+    // Delivery history stops before the rehearsed days, whose imports (revised,
+    // disputed, missing) are the delivery-sync walkthrough's own.
     const archivalEnd = businessDate(4)
     for (const bill of bills) {
       if (bill.business_date > archivalEnd || bill.status !== 'settled') continue
@@ -1038,7 +1042,7 @@ export function createDemoStore(
       aggregatorChannelDays.map((row) => `${row.outlet_id}:${row.business_date}:${row.channel}`),
     )
     let index = 10000
-    for (let age = 185; age >= 4; age--)
+    for (let age = HISTORY_OLDEST_AGE; age >= 4; age--)
       for (const outletId of [OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID]) {
         const date = businessDate(age)
         const counter = revenueByDay.get(`${outletId}:${date}`) ?? 0

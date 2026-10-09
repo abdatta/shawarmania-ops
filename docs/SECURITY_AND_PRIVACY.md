@@ -520,4 +520,4 @@ Two things to revisit when the business grows: customer PII has no defined reten
 
 ## Sales and menu analytics
 
-Analytics reads aggregate business facts only. The RPC checks current owner/manager assignments before computing and rejects foreign-outlet, staff and anonymous access. No customer fields, raw bills/lines or public-menu telemetry are transferred. Per-view and per-window bounds constrain payloads. No new browser service-role use, cookies, tracking identities, ingestion endpoint or retention job is added.
+Analytics reads aggregate business facts only. Both RPCs (`sales_analytics`, `sales_analytics_series`) check an active account and current owner/manager assignments before scanning anything, and refuse foreign-outlet, staff and anonymous requests, proved by crafted requests. No customer fields, raw bills/lines or public-menu telemetry are transferred. Per-view and per-window bounds constrain payloads. No new browser service-role use, cookies, tracking identities, ingestion endpoint or retention job is added.

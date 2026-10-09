@@ -18,8 +18,24 @@ export interface AnalyticsItem {
   available: boolean
   highlighted: boolean
 }
+export interface AnalyticsCategory {
+  name: string
+  units: number
+  revenue: number
+  previousUnits: number
+  previousRevenue: number
+}
+/** What the Items chart draws: every dish, one dish, or one captured category. */
+export type AnalyticsSubject =
+  { kind: 'all' } | { kind: 'item'; key: string } | { kind: 'category'; name: string }
+/** Daily dish units and dish revenue from `from`, one value per day of every window. */
+export interface AnalyticsSeries {
+  from: string
+  units: number[]
+  revenue: number[]
+}
 export interface AnalyticsSnapshot {
-  categories: { name: string; revenue: number; units: number }[]
+  categories: AnalyticsCategory[]
   days: AnalyticsDay[]
   items: AnalyticsItem[]
   delivery: { date: string; channel: string; revenue: number; provisional: boolean }[]

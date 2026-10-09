@@ -1,7 +1,14 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { AnalyticsChart, metricText, rangeLabel } from './analytics-chart'
-import { SalesControls, SalesPanel } from './sales-panel'
+import { AnalyticsControls } from './analytics-controls'
+import { SALES_GRAINS, SALES_METRICS } from './analytics-trend'
+import { SalesPanel } from './sales-panel'
+import { MemoryRouter } from 'react-router'
+import type { ReactElement } from 'react'
+
+/** The trend card keeps Chart/Table in the address, so panels render under a router. */
+const inRouter = (ui: ReactElement) => render(<MemoryRouter>{ui}</MemoryRouter>)
 import type { AnalyticsSnapshot } from '@/data-access/analytics'
 
 describe('interactive sales figures', () => {
@@ -23,7 +30,7 @@ describe('interactive sales figures', () => {
     expect(ticks[0]).toHaveAttribute('x', '195')
     expect(ticks[0]).toHaveAttribute('text-anchor', 'middle')
     fireEvent.keyDown(within(plot).getByRole('group'), { key: 'Home' })
-    expect(within(plot).getByRole('status')).toHaveTextContent('8 Oct₹123.45')
+    expect(within(plot).getByRole('status')).toHaveTextContent('8 Oct₹123')
   })
   it('keyboard inspection identifies actual dates and missing AOV for every period', () => {
     render(
@@ -54,7 +61,7 @@ describe('interactive sales figures', () => {
     fireEvent.keyDown(chart, { key: 'Home' })
     let detail = screen.getByRole('status')
     expect(within(detail).getByText('1 Oct')).toBeVisible()
-    expect(within(detail).getByText('₹100.5')).toBeVisible()
+    expect(within(detail).getByText('₹101')).toBeVisible()
     expect(within(detail).getByText('29 Sept')).toBeVisible()
     expect(within(detail).getByText('₹234')).toBeVisible()
     fireEvent.keyDown(chart, { key: 'ArrowRight' })
@@ -63,9 +70,14 @@ describe('interactive sales figures', () => {
     expect(within(detail).getByText('—')).toBeVisible()
     expect(within(detail).getByText('₹123')).toBeVisible()
     expect(metricText(0, 'orders')).toBe('0')
+    // Whole rupees from ₹100, two paise digits below it, exact in the table.
+    expect(metricText(3_011_089, 'revenue')).toBe('₹30,111')
+    expect(metricText(1_050, 'aov')).toBe('₹10.50')
+    expect(metricText(700, 'revenue')).toBe('₹7')
+    expect(metricText(3_011_089, 'revenue', false, true)).toBe('₹30,110.89')
     expect(rangeLabel('2026-12-30', '2027-01-02')).toBe("30 Dec '26–2 Jan '27")
   })
-  it('page-wide AOV remains weighted and counter-only in trend, weekday and hour charts', () => {
+  it('page-wide AOV remains weighted and counter-only in trend and hour charts', () => {
     const data: AnalyticsSnapshot = {
       items: [],
       categories: [],
@@ -76,7 +88,7 @@ describe('interactive sales figures', () => {
       delivery: [{ date: '2026-10-01', channel: 'swiggy', revenue: 990000, provisional: false }],
       hours: [{ period: 0, hour: 12, revenue: 10500, orders: 10 }],
     }
-    render(
+    inRouter(
       <SalesPanel
         data={data}
         from="2026-10-01"
@@ -86,13 +98,10 @@ describe('interactive sales figures', () => {
         periods={1}
       />,
     )
-    expect(screen.getByTestId('sales-value')).toHaveTextContent('₹10.5')
+    expect(screen.getByTestId('sales-trend-value')).toHaveTextContent('₹10.50')
     const trend = within(screen.getByTestId('sales-trend'))
     fireEvent.keyDown(trend.getByRole('group'), { key: 'Home' })
     expect(trend.getByRole('status')).toHaveTextContent('1–2 Oct₹10.5')
-    const weekday = within(screen.getByTestId('sales-weekdays'))
-    fireEvent.keyDown(weekday.getByRole('group'), { key: 'End' })
-    expect(weekday.getByRole('status')).toHaveTextContent('Sun—')
     const hours = within(screen.getByTestId('sales-hours'))
     fireEvent.keyDown(hours.getByRole('group'), { key: 'Home' })
     fireEvent.keyDown(hours.getByRole('group'), { key: 'ArrowRight' })
@@ -100,7 +109,7 @@ describe('interactive sales figures', () => {
     expect(screen.queryByText('Counter + delivery')).toBeNull()
   })
   it('hour grouping reconciles counter totals while keeping delivery in the revenue headline', () => {
-    render(
+    inRouter(
       <SalesPanel
         from="2026-10-01"
         to="2026-10-02"
@@ -121,8 +130,10 @@ describe('interactive sales figures', () => {
         }}
       />,
     )
-    expect(screen.getByTestId('sales-value')).toHaveTextContent('₹10,005')
-    expect(screen.getByText('Hourly pattern · counter only · Kolkata')).toBeVisible()
+    expect(screen.getByTestId('sales-trend-value')).toHaveTextContent('₹10,005')
+    expect(
+      screen.getByText('Counter bills by Kolkata clock hour, totals across the range'),
+    ).toBeVisible()
     for (const id of ['sales-trend', 'sales-hours']) {
       const chart = within(screen.getByTestId(id))
       fireEvent.keyDown(chart.getByRole('group'), { key: 'Home' })
@@ -138,18 +149,21 @@ describe('interactive sales figures', () => {
     const hours = screen.getByTestId('sales-hours')
     expect(within(hours).getAllByTestId('chart-column')).toHaveLength(3)
     expect(hours.querySelectorAll('[data-testid="chart-series"] line')).toHaveLength(0)
-    fireEvent.click(screen.getByText('Table & export'))
-    const row = screen.getByRole('row', { name: '12:00 ₹105 ₹77.77' })
+    // The same card as a table: every hour, every period, exact paise, the change.
+    fireEvent.click(screen.getByRole('button', { name: 'Table' }))
+    expect(screen.getByRole('button', { name: 'Table' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByTestId('sales-trend')).toBeNull()
+    const row = screen.getByRole('row', { name: /^12:00 ₹105 ₹77\.77 \+35%/ })
     expect(row).toBeVisible()
-    expect(screen.getAllByRole('row')).toHaveLength(25)
+    expect(within(screen.getByTestId('sales-trend-table')).getAllByRole('row')).toHaveLength(25)
   })
   it.each([
-    ['revenue', 'Daily average revenue', 'Hourly average revenue', '₹35', '₹7', '₹0'],
-    ['orders', 'Daily average orders', 'Hourly average orders', '3.3', '0.7', '0'],
-    ['aov', 'Average bill by weekday', 'Average bill by hour', '₹10.5', '₹10.5', '—'],
+    ['revenue', 'Hourly average revenue', '₹7'],
+    ['orders', 'Hourly average orders', '0.7'],
+    ['aov', 'Average bill by hour', '₹10.50'],
   ] as const)(
-    '%s pattern titles and values include zero-sale dates and preserve weighted AOV',
-    (metric, weekdayTitle, hourlyTitle, weekdayValue, hourlyValue, emptyValue) => {
+    '%s hourly pattern includes zero-sale dates and preserves weighted AOV',
+    (metric, hourlyTitle, hourlyValue) => {
       const days = Array.from({ length: 15 }, (_, index) => ({
         date: `2026-10-${String(index + 1).padStart(2, '0')}`,
         revenue: index === 0 ? 1000 : index === 7 ? 9500 : 0,
@@ -157,7 +171,7 @@ describe('interactive sales figures', () => {
         units: 0,
         discounts: 0,
       }))
-      render(
+      inRouter(
         <SalesPanel
           data={{
             days,
@@ -173,14 +187,9 @@ describe('interactive sales figures', () => {
           periods={1}
         />,
       )
-      expect(screen.getByRole('heading', { name: weekdayTitle })).toBeVisible()
       expect(screen.getByRole('heading', { name: hourlyTitle })).toBeVisible()
-      const weekday = within(screen.getByTestId('sales-weekdays'))
-      fireEvent.keyDown(weekday.getByRole('group'), { key: 'Home' })
-      expect(weekday.getByRole('status')).toHaveTextContent(`Mon${emptyValue}`)
-      for (let i = 0; i < 3; i++)
-        fireEvent.keyDown(weekday.getByRole('group'), { key: 'ArrowRight' })
-      expect(weekday.getByRole('status')).toHaveTextContent(`Thu${weekdayValue}`)
+      // The weekday card is gone: on a week it only re-ordered the daily chart.
+      expect(screen.queryByTestId('sales-weekdays')).toBeNull()
       const hours = within(screen.getByTestId('sales-hours'))
       fireEvent.keyDown(hours.getByRole('group'), { key: 'Home' })
       fireEvent.keyDown(hours.getByRole('group'), { key: 'ArrowRight' })
@@ -188,7 +197,7 @@ describe('interactive sales figures', () => {
     },
   )
   it('solid four-period columns include earlier trading hours and preserve zero-sale gaps', () => {
-    render(
+    inRouter(
       <SalesPanel
         data={{
           items: [],
@@ -234,11 +243,13 @@ describe('interactive sales figures', () => {
   it('comparison has its own compact trigger and names the chosen ranges', () => {
     const changes: Record<string, string>[] = []
     render(
-      <SalesControls
+      <AnalyticsControls
         from="2026-10-02"
         to="2026-10-08"
         grain="day"
+        grains={SALES_GRAINS}
         metric="revenue"
+        metrics={SALES_METRICS}
         periods={2}
         onChange={(value) => changes.push(value)}
       />,

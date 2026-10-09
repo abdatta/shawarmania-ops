@@ -1,6 +1,6 @@
 # Sales and menu analytics
 
-> **Model**: Codex · **Wave**: F · **Dependencies**: #10, #61, #68 · **Roadmap**: #71 (explicit owner request; leave missing numbers unused)
+> **Model**: GPT-6.1 Sol · **Wave**: F · **Dependencies**: #10, #61, #68 · **Roadmap**: #71 (explicit owner request; leave missing numbers unused)
 
 ## Why
 
@@ -8,7 +8,7 @@ The owner needs to see which dishes sell, which lag, and whether sales improve o
 
 ## What changes
 
-A fifth navigation group, Analytics, contains **Items** and **Sales** for owners and outlet managers, scoped to one outlet. Items has one fixed-height Dishes card with All/Worst/Rising/Slow ordering, search and incremental internal scrolling. Full dish names, units, order share, prior changes, two-dish comparison, category bars and an expandable table/export show actual performance. Separate best/worst boards, Ideas and Browsing are removed by the owner's latest direction.
+A fifth navigation group, Analytics, contains **Items** and **Sales** for owners and outlet managers, scoped to one outlet. Items leads with a trend chart of dish units or dish revenue for all dishes, one dish or one captured category, against up to three earlier equal periods; below it, one fixed-height Dishes card with All/Worst/Rising/Slow ordering, search and incremental internal scrolling, and a Categories list with change against the previous period. Tapping a dish or category charts it. Separate best/worst boards, two-dish comparison, Ideas and Browsing are removed by the owner's direction.
 
 Both pages offer compact 1d/7d/30d controls, defaulting to 7d, and custom dates. Sales has a page-wide Revenue/Orders/AOV selector and up to four equal-length periods. Revenue includes recorded counter and imported delivery gross; Orders and weighted AOV use settled counter bills only. Hour/day/week trends, weekday and Kolkata-hour charts, period rows and exports all follow the chosen metric. Hour grouping shows counter totals by Kolkata clock hour across each selected range; the bottom Hours graph uses grouped columns. A compact comparison pill opens choices labeled by total periods and their actual ranges. Charts respond to pointer, touch and keyboard inspection with exact figures and actual short date ranges.
 
@@ -31,3 +31,13 @@ Outlet comparison, automated menu changes, recommendations, menu engagement trac
 ## Durable documentation
 
 Update SCREENS, DATA_MODEL, SECURITY_AND_PRIVACY, OPERATIONS, TESTING and DEMO_MODE. No website deployment or production schema write is part of this implementation.
+
+## Owner review, 2026-10-09
+
+After using both pages the owner asked for:
+
+- **Items charts items over time.** Comparing exactly two dishes is removed. Items gets the same kind of trend chart as Sales, of dish units or dish revenue, against earlier equal periods, for every dish together, any single dish, or any captured category. The goal named: see which dishes and categories perform well or badly, and how that changed across comparable periods.
+- **Sales shows one trend, two ways.** The Revenue chart and the Days list showed the same figures twice. They become one card with a Chart / Table switch, and neither view drops data: the table holds every bucket of every compared period, with the change.
+- **The weekday-average card is dropped.** It averaged each weekday's revenue within each period. On the default 7-day range every weekday occurs once, so it only re-ordered the daily chart; its one use (Saturdays against Tuesdays over 30 days or more) did not justify a card the owner could not read.
+
+Rejected along the way: sending a series per dish inside the Items snapshot (about a hundred dishes times every day of two windows, on every page view) in favour of reading one subject's series only when it is charted; and moving Customers into Analytics inside this change, which stays the owner's call (see design).

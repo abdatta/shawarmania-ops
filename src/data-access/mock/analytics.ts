@@ -6,10 +6,48 @@ export function createMockAnalyticsAdapter(
   store: DemoStore,
   allowed: string[] | null,
 ): AnalyticsAdapter {
+  const authorise = (outletId: string) => {
+    if (allowed && !allowed.includes(outletId))
+      throw new Error('Analytics is available to outlet managers')
+  }
+  const window = (from: string, to: string, periods: number) => {
+    const span = periodDays(from, to)
+    if (span < 1 || span > 92 || !Number.isInteger(periods) || periods < 1 || periods > 4)
+      throw new Error('Invalid analytics range')
+    return { span, start: shiftDate(from, -(periods - 1) * span) }
+  }
   return {
+    async series(outletId, from, to, periods, subject) {
+      authorise(outletId)
+      const { start } = window(from, to, periods)
+      const dayIndex = new Map<string, number>()
+      for (let date = start; date <= to; date = shiftDate(date, 1))
+        dayIndex.set(date, dayIndex.size)
+      const units = Array<number>(dayIndex.size).fill(0)
+      const revenue = Array<number>(dayIndex.size).fill(0)
+      const billDay = new Map<string, number>()
+      for (const bill of store.bills) {
+        const day = dayIndex.get(bill.business_date)
+        if (bill.outlet_id === outletId && bill.status === 'settled' && day !== undefined)
+          billDay.set(bill.id, day)
+      }
+      for (const line of store.billItems) {
+        const day = billDay.get(line.bill_id)
+        if (day === undefined || line.kind !== 'item') continue
+        if (
+          subject.kind === 'item' &&
+          (line.menu_item_id ?? `snapshot:${line.item_name}`) !== subject.key
+        )
+          continue
+        if (subject.kind === 'category' && (line.category_name ?? 'Uncategorised') !== subject.name)
+          continue
+        units[day]! += line.quantity
+        revenue[day]! += line.line_total_paise - line.discount_paise
+      }
+      return { from: start, units, revenue }
+    },
     async read(outletId, from, to, options) {
-      if (allowed && !allowed.includes(outletId))
-        throw new Error('Analytics is available to outlet managers')
+      authorise(outletId)
       const result: AnalyticsSnapshot = {
         days: [],
         items: [],
@@ -35,15 +73,20 @@ export function createMockAnalyticsAdapter(
           highlighted: store.menuHighlights.get(outletId)?.itemIds.includes(item.id) ?? false,
         })
       }
-      const span = periodDays(from, to)
       const periods = options?.periods ?? 2
-      if (span < 1 || span > 92 || !Number.isInteger(periods) || periods < 1 || periods > 4)
-        throw new Error('Invalid analytics range')
+      const { span, start } = window(from, to, periods)
       const priorStart = shiftDate(from, -span)
-      const start = shiftDate(from, -(periods - 1) * span)
       for (let date = start; date <= to; date = shiftDate(date, 1))
         result.days.push({ date, revenue: 0, orders: 0, units: 0, discounts: 0 })
       const days = new Map(result.days.map((day) => [day.date, day]))
+      const categoryRow = (name: string) => {
+        let row = result.categories.find((c) => c.name === name)
+        if (!row) {
+          row = { name, revenue: 0, units: 0, previousRevenue: 0, previousUnits: 0 }
+          result.categories.push(row)
+        }
+        return row
+      }
       const linesByBill = new Map<string, typeof store.billItems>()
       for (const line of store.billItems) {
         if (options?.view === 'sales') break
@@ -91,15 +134,16 @@ export function createMockAnalyticsAdapter(
             row.revenue += line.line_total_paise - line.discount_paise
             row.discounts += line.discount_paise
             const category = line.category_name ?? 'Uncategorised'
-            let mix = result.categories.find((c) => c.name === category)
-            if (!mix) {
-              mix = { name: category, revenue: 0, units: 0 }
-              result.categories.push(mix)
-            }
+            const mix = categoryRow(category)
             mix.revenue += line.line_total_paise - line.discount_paise
             mix.units += line.quantity
             if (!seen.has(key)) row.orders++
-          } else if (bill.business_date >= priorStart) row.previousUnits += line.quantity
+          } else if (bill.business_date >= priorStart) {
+            row.previousUnits += line.quantity
+            const mix = categoryRow(line.category_name ?? 'Uncategorised')
+            mix.previousRevenue += line.line_total_paise - line.discount_paise
+            mix.previousUnits += line.quantity
+          }
           // Sold categories follow the snapshot, including missing legacy snapshots.
           row.category = line.category_name ?? 'Uncategorised'
           items.set(key, row)
@@ -126,6 +170,7 @@ export function createMockAnalyticsAdapter(
           provisional: d.settlement_state !== 'settled',
         }))
       result.items = [...items.values()].sort((a, b) => b.units - a.units)
+      result.categories.sort((a, b) => b.revenue - a.revenue || a.name.localeCompare(b.name))
       result.hours.sort((a, b) => a.hour - b.hour)
       if (options?.view === 'sales') {
         result.items = []

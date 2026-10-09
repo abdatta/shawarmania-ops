@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '../database.types'
-import { analyticsSnapshot, type AnalyticsAdapter } from '../analytics'
+import { analyticsSeries, analyticsSnapshot, type AnalyticsAdapter } from '../analytics'
 
 export function createSupabaseAnalyticsAdapter(client: SupabaseClient<Database>): AnalyticsAdapter {
   return {
@@ -14,6 +14,18 @@ export function createSupabaseAnalyticsAdapter(client: SupabaseClient<Database>)
       })
       if (error) throw new Error(error.message)
       return analyticsSnapshot(data)
+    },
+    async series(outletId, from, to, periods, subject) {
+      const { data, error } = await client.rpc('sales_analytics_series', {
+        p_outlet_id: outletId,
+        p_from: from,
+        p_to: to,
+        p_periods: periods,
+        ...(subject.kind === 'item' ? { p_item: subject.key } : {}),
+        ...(subject.kind === 'category' ? { p_category: subject.name } : {}),
+      })
+      if (error) throw new Error(error.message)
+      return analyticsSeries(data)
     },
   }
 }

@@ -99,4 +99,41 @@ describe('analytics HTTP authority and bounded projection', () => {
       `Analytics HTTP JSON bytes: Items/30d/2=${Buffer.byteLength(JSON.stringify(items))}; Sales/30d/4=${Buffer.byteLength(JSON.stringify(sales))}; Sales/7d/1=${Buffer.byteLength(JSON.stringify(one))}`,
     )
   })
+  it('charts one subject as two bounded arrays, refusing other outlets and roles', async () => {
+    const adapter = createSupabaseAnalyticsAdapter(manager)
+    const all = await adapter.series(outlet, '2026-01-01', '2026-01-30', 4, { kind: 'all' })
+    expect(all.from).toBe('2025-10-03')
+    expect(all.units).toHaveLength(120)
+    expect(all.revenue).toHaveLength(120)
+    const items = await adapter.read(outlet, '2026-01-01', '2026-01-30', {
+      view: 'items',
+      periods: 2,
+    })
+    const dish = items.items[0]!
+    const one = await adapter.series(outlet, '2026-01-01', '2026-01-30', 2, {
+      kind: 'item',
+      key: dish.key,
+    })
+    expect(one.units.slice(30).reduce((sum, n) => sum + n, 0)).toBe(dish.units)
+    const category = await adapter.series(outlet, '2026-01-01', '2026-01-30', 2, {
+      kind: 'category',
+      name: 'Uncategorised',
+    })
+    expect(category.units).toHaveLength(60)
+    expect(JSON.stringify(all)).not.toMatch(/customer|bill_id|ordered_at|item_name/)
+    await expect(
+      adapter.series(foreign, '2026-01-01', '2026-01-07', 2, { kind: 'all' }),
+    ).rejects.toThrow()
+    await expect(
+      createSupabaseAnalyticsAdapter(employee).series(outlet, '2026-01-01', '2026-01-07', 2, {
+        kind: 'all',
+      }),
+    ).rejects.toThrow()
+    await expect(
+      adapter.series(outlet, '2026-01-01', '2026-01-07', 2, { kind: 'item', key: 'not-a-dish' }),
+    ).rejects.toThrow()
+    console.info(
+      `Analytics series JSON bytes: 30d/4=${Buffer.byteLength(JSON.stringify(all))}; dish 30d/2=${Buffer.byteLength(JSON.stringify(one))}`,
+    )
+  })
 })

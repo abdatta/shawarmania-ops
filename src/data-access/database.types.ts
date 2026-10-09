@@ -5711,6 +5711,17 @@ export type Database = {
         }
         Returns: Json
       }
+      sales_analytics_series: {
+        Args: {
+          p_category?: string
+          p_from: string
+          p_item?: string
+          p_outlet_id: string
+          p_periods?: number
+          p_to: string
+        }
+        Returns: Json
+      }
       save_aggregator_session: {
         Args: { p_channel: string; p_expires_at: string; p_session: string }
         Returns: undefined

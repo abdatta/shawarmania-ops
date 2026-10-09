@@ -1,6 +1,8 @@
 import { useState, type PointerEvent } from 'react'
 import type { SalesMetric } from '@/domain/sales-analytics'
 
+/** Sales measures, plus dish units for the Items chart. */
+export type ChartMetric = SalesMetric | 'units'
 export interface ChartPoint {
   label: string
   value: number | null
@@ -16,7 +18,7 @@ const strokes = [
   'var(--chart-oldest)',
 ]
 const dashes = [undefined, '6 4', '10 3 2 3', '2 4']
-function SeriesNumber({ period }: { period: number }) {
+export function SeriesNumber({ period }: { period: number }) {
   return (
     <span
       aria-hidden
@@ -27,13 +29,30 @@ function SeriesNumber({ period }: { period: number }) {
     </span>
   )
 }
-export function metricText(value: number | null, metric: SalesMetric, compact = false) {
+/**
+ * Rupees read whole from ₹100 up, so a column never mixes `₹7,365` with
+ * `₹30,110.89`; below that, paise always show two digits (`₹10.50`). `exact`
+ * keeps the paise at any size, for the table that reconciles to the bills.
+ */
+export function metricText(
+  value: number | null,
+  metric: ChartMetric,
+  compact = false,
+  exact = false,
+) {
   if (value === null) return '—'
-  const number = new Intl.NumberFormat('en-IN', {
+  if (metric === 'orders' || metric === 'units')
+    return new Intl.NumberFormat('en-IN', {
+      notation: compact ? 'compact' : 'standard',
+      maximumFractionDigits: 1,
+    }).format(value)
+  const rupees = value / 100
+  const paise = !compact && (exact || Math.abs(rupees) < 100) && Math.round(value) % 100 !== 0
+  return `₹${new Intl.NumberFormat('en-IN', {
     notation: compact ? 'compact' : 'standard',
-    maximumFractionDigits: metric === 'orders' ? 1 : compact ? 1 : 2,
-  }).format(metric === 'orders' ? value : value / 100)
-  return metric === 'orders' ? number : `₹${number}`
+    minimumFractionDigits: paise ? 2 : 0,
+    maximumFractionDigits: compact ? 1 : paise ? 2 : 0,
+  }).format(rupees)}`
 }
 export function rangeLabel(from: string, to: string) {
   const month = (d: string) =>
@@ -58,13 +77,15 @@ export function AnalyticsChart({
   id: string
   title: string
   series: ChartSeries[]
-  metric: SalesMetric
+  metric: ChartMetric
   axis: string[]
   variant?: 'line' | 'columns'
 }) {
   const [selected, setSelected] = useState<number | null>(null)
   const length = Math.max(1, axis.length)
-  const max = Math.max(1, ...series.flatMap((s) => s.points.map((p) => p.value ?? 0)))
+  const peak = Math.max(1, ...series.flatMap((s) => s.points.map((p) => p.value ?? 0)))
+  // A count's half-way gridline should be a whole number too.
+  const max = metric === 'orders' || metric === 'units' ? Math.ceil(peak / 2) * 2 : peak
   const columns = variant === 'columns'
   const slot = 302 / length
   const barGap = 1.25
@@ -73,16 +94,21 @@ export function AnalyticsChart({
     (slot * 0.78 - barGap * (series.length - 1)) / Math.max(1, series.length),
   )
   const groupWidth = series.length * barWidth + (series.length - 1) * barGap
-  const ticks = columns
-    ? [
-        ...new Set([
-          0,
-          Math.round((length - 1) / 3),
-          Math.round((2 * (length - 1)) / 3),
-          length - 1,
-        ]),
-      ]
-    : [...new Set([0, length - 1])]
+  // Up to seven short labels (weekdays, single dates) are all drawn; longer
+  // axes, and week ranges, keep a few anchors so labels never collide.
+  const ticks =
+    length <= 7 && axis.every((label) => label.length <= 6)
+      ? Array.from({ length }, (_, i) => i)
+      : columns
+        ? [
+            ...new Set([
+              0,
+              Math.round((length - 1) / 3),
+              Math.round((2 * (length - 1)) / 3),
+              length - 1,
+            ]),
+          ]
+        : [...new Set([0, length - 1])]
   const x = (index: number) =>
     columns ? 44 + slot * (index + 0.5) : length === 1 ? 195 : 44 + (index / (length - 1)) * 302
   const y = (value: number) => 146 - (value / max) * 122
@@ -226,10 +252,16 @@ export function AnalyticsChart({
         {ticks.map((i) => (
           <text
             key={i}
-            x={columns || length === 1 ? x(i) : i === 0 ? 44 : 346}
+            x={columns || length === 1 ? x(i) : i === 0 ? 44 : i === length - 1 ? 346 : x(i)}
             y="174"
             textAnchor={
-              length === 1 ? 'middle' : i === 0 ? 'start' : i === length - 1 ? 'end' : 'middle'
+              columns || length === 1
+                ? 'middle'
+                : i === 0
+                  ? 'start'
+                  : i === length - 1
+                    ? 'end'
+                    : 'middle'
             }
             fill="currentColor"
             fontSize="11"

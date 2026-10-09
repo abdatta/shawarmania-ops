@@ -1,5 +1,17 @@
-import type { AnalyticsSnapshot } from '@/domain/sales-analytics-types'
-export type { AnalyticsDay, AnalyticsItem, AnalyticsSnapshot } from '@/domain/sales-analytics-types'
+import type {
+  AnalyticsSeries,
+  AnalyticsSnapshot,
+  AnalyticsSubject,
+} from '@/domain/sales-analytics-types'
+import { validAnalyticsDate } from '@/domain/sales-analytics'
+export type {
+  AnalyticsCategory,
+  AnalyticsDay,
+  AnalyticsItem,
+  AnalyticsSeries,
+  AnalyticsSnapshot,
+  AnalyticsSubject,
+} from '@/domain/sales-analytics-types'
 
 export interface AnalyticsAdapter {
   read(
@@ -8,6 +20,14 @@ export interface AnalyticsAdapter {
     to: string,
     options?: { view?: 'items' | 'sales'; periods?: number },
   ): Promise<AnalyticsSnapshot>
+  /** One subject's daily units and revenue across `periods` equal windows ending `to`. */
+  series(
+    outletId: string,
+    from: string,
+    to: string,
+    periods: number,
+    subject: AnalyticsSubject,
+  ): Promise<AnalyticsSeries>
 }
 
 /** Fail closed on a malformed aggregate rather than displaying invented zeroes. */
@@ -15,7 +35,11 @@ export function analyticsSnapshot(value: unknown): AnalyticsSnapshot {
   if (!value || typeof value !== 'object') throw new Error('Invalid analytics response')
   const record = value as Record<string, unknown>
   const fields = {
-    categories: { strings: ['name'], numbers: ['revenue', 'units'], booleans: [] },
+    categories: {
+      strings: ['name'],
+      numbers: ['revenue', 'units', 'previousRevenue', 'previousUnits'],
+      booleans: [],
+    },
     days: { strings: ['date'], numbers: ['revenue', 'orders', 'units', 'discounts'], booleans: [] },
     items: {
       strings: ['key', 'name', 'category'],
@@ -40,4 +64,22 @@ export function analyticsSnapshot(value: unknown): AnalyticsSnapshot {
     }
   }
   return value as AnalyticsSnapshot
+}
+
+/** The same fail-closed rule for a chart series: a valid date and two equal arrays. */
+export function analyticsSeries(value: unknown): AnalyticsSeries {
+  if (!value || typeof value !== 'object') throw new Error('Invalid analytics response')
+  const { from, units, revenue } = value as Record<string, unknown>
+  const counts = (rows: unknown): rows is number[] =>
+    Array.isArray(rows) && rows.every((n) => Number.isSafeInteger(n) && (n as number) >= 0)
+  if (
+    typeof from !== 'string' ||
+    !validAnalyticsDate(from) ||
+    !counts(units) ||
+    !counts(revenue) ||
+    units.length !== revenue.length ||
+    units.length > 4 * 92
+  )
+    throw new Error('Invalid analytics response')
+  return { from, units, revenue }
 }

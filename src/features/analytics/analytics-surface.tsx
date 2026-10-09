@@ -8,13 +8,15 @@ import { Chip } from '@/components/ui/chip'
 import { Explain } from '@/components/ui/why'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { useAdapters } from '@/data-access'
-import type { AnalyticsSnapshot } from '@/data-access/analytics'
+import type { AnalyticsSnapshot, AnalyticsSubject } from '@/data-access/analytics'
 import { resolveBusinessDate } from '@/domain'
 import { validAnalyticsDate, periodDays, shiftDate } from '@/domain/sales-analytics'
 import { useOutletScope } from '@/features/outlet-scope'
 import { AnalyticsRange } from './analytics-range'
 import { ItemsPanel } from './items-panel'
-import { SalesControls, SalesPanel } from './sales-panel'
+import { AnalyticsControls } from './analytics-controls'
+import { ITEM_GRAINS, ITEM_METRICS, SALES_GRAINS, SALES_METRICS } from './analytics-trend'
+import { SalesPanel } from './sales-panel'
 
 export function AnalyticsSurface({ kind }: { kind: 'items' | 'trends' }) {
   const { outletId, selector } = useOutletScope()
@@ -47,13 +49,24 @@ function OutletAnalytics({
   const from = params.get('from') ?? (today ? shiftDate(today, -7) : '')
   const to = params.get('to') ?? (today ? shiftDate(today, -1) : '')
   const grain =
-    params.get('grain') === 'hour' ? 'hour' : params.get('grain') === 'week' ? 'week' : 'day'
+    params.get('grain') === 'week'
+      ? 'week'
+      : params.get('grain') === 'hour' && kind === 'trends'
+        ? 'hour'
+        : 'day'
   const metric =
     params.get('metric') === 'orders'
       ? 'orders'
       : params.get('metric') === 'aov'
         ? 'aov'
         : 'revenue'
+  const itemMetric = params.get('metric') === 'revenue' ? 'revenue' : 'units'
+  // What the Items chart draws, so a reload or a shared link keeps it.
+  const subject: AnalyticsSubject = params.get('dish')
+    ? { kind: 'item', key: params.get('dish')! }
+    : params.get('category')
+      ? { kind: 'category', name: params.get('category')! }
+      : { kind: 'all' }
   const periods = Math.max(1, Math.min(4, Number(params.get('periods')) || 2))
   const [loaded, setLoaded] = useState<{ key: string; data: AnalyticsSnapshot } | null>(null)
   const readPeriods = kind === 'items' ? 2 : Math.floor(periods)
@@ -107,7 +120,9 @@ function OutletAnalytics({
     }
     setParams((previous) => {
       const next = new URLSearchParams(previous)
-      Object.entries(values).forEach(([key, value]) => next.set(key, value))
+      Object.entries(values).forEach(([key, value]) =>
+        value ? next.set(key, value) : next.delete(key),
+      )
       return next
     })
   }
@@ -152,16 +167,16 @@ function OutletAnalytics({
         }
       />
       <AnalyticsRange from={from} to={to} today={today} onChange={(next) => change(next)} />
-      {kind === 'trends' && (
-        <SalesControls
-          grain={grain}
-          metric={metric}
-          periods={Math.floor(periods)}
-          from={from}
-          to={to}
-          onChange={change}
-        />
-      )}
+      <AnalyticsControls
+        grain={grain}
+        grains={kind === 'items' ? ITEM_GRAINS : SALES_GRAINS}
+        metric={kind === 'items' ? itemMetric : metric}
+        metrics={kind === 'items' ? ITEM_METRICS : SALES_METRICS}
+        periods={Math.floor(periods)}
+        from={from}
+        to={to}
+        onChange={change}
+      />
       {today && !valid && (
         <p role="alert" className="text-sm text-danger">
           Choose a valid range of 1–92 days.
@@ -186,7 +201,23 @@ function OutletAnalytics({
       ) : today && !valid ? null : !data ? (
         <AnalyticsLoading kind={kind} />
       ) : kind === 'items' ? (
-        <ItemsPanel key={readKey} data={data} from={from} />
+        <ItemsPanel
+          key={readKey}
+          data={data}
+          outletId={outletId!}
+          from={from}
+          to={to}
+          grain={grain === 'week' ? 'week' : 'day'}
+          metric={itemMetric}
+          periods={Math.floor(periods)}
+          subject={subject}
+          onSubject={(next) =>
+            change({
+              dish: next.kind === 'item' ? next.key : '',
+              category: next.kind === 'category' ? next.name : '',
+            })
+          }
+        />
       ) : (
         <SalesPanel
           data={data}
@@ -204,22 +235,9 @@ function OutletAnalytics({
 function AnalyticsLoading({ kind }: { kind: 'items' | 'trends' }) {
   return (
     <LoadingRegion label="Loading analytics">
-      {kind === 'items' ? (
-        <>
-          <Shimmer className="h-11" />
-          <Shimmer className="mt-3 h-[32rem]" />
-          <Shimmer className="mt-3 h-96" />
-        </>
-      ) : (
-        <>
-          <Shimmer className="h-[22rem]" />
-          <Shimmer className="mt-3 h-[25rem]" />
-          <div className="mt-3 grid gap-3 xl:grid-cols-2">
-            <Shimmer className="h-64" />
-            <Shimmer className="h-64" />
-          </div>
-        </>
-      )}
+      {/* The trend card, then the lists or the hourly card beneath it. */}
+      <Shimmer className="h-[24rem]" />
+      <Shimmer className={`mt-3 ${kind === 'items' ? 'h-[32rem]' : 'h-72'}`} />
     </LoadingRegion>
   )
 }

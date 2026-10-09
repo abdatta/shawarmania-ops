@@ -13,11 +13,17 @@ for (const [username, segment] of [
     await page.getByRole('button', { name: 'Sign in' }).click()
     await expect(page).not.toHaveURL(/\/sign-in$/)
     const analyticsRequests: Record<string, unknown>[] = []
+    const seriesRequests: Record<string, unknown>[] = []
     page.on('request', (r) => {
-      if (r.url().includes('/rpc/sales_analytics')) analyticsRequests.push(r.postDataJSON())
+      if (r.url().endsWith('/rpc/sales_analytics')) analyticsRequests.push(r.postDataJSON())
+      if (r.url().endsWith('/rpc/sales_analytics_series')) seriesRequests.push(r.postDataJSON())
     })
     for (const route of ['items', 'sales']) {
-      const response = page.waitForResponse((r) => r.url().includes('/rpc/sales_analytics'))
+      const response = page.waitForResponse((r) => r.url().endsWith('/rpc/sales_analytics'))
+      const series =
+        route === 'items'
+          ? page.waitForResponse((r) => r.url().endsWith('/rpc/sales_analytics_series'))
+          : null
       await page.goto(`${segment}/analytics/${route}?from=2020-01-01&to=2020-01-07`)
       const result = await response
       expect(result.status()).toBe(200)
@@ -27,6 +33,13 @@ for (const [username, segment] of [
       console.info(
         segment + ' ' + route + ' 7d/2 response bytes: ' + (await result.body()).byteLength,
       )
+      if (series) {
+        // The Items chart: every dish, two windows of seven days, two arrays.
+        const chart = await (await series).json()
+        expect(Object.keys(chart).sort()).toEqual(['from', 'revenue', 'units'])
+        expect(chart.units).toHaveLength(14)
+        await expect(page.getByTestId('items-trend-card')).toBeVisible()
+      }
       await expect(
         page.getByRole('heading', { name: 'No settled sales in this period' }),
       ).toBeVisible()
@@ -43,7 +56,8 @@ for (const [username, segment] of [
     }
     await page.getByRole('button', { name: 'Group by: Day' }).click()
     await page.getByRole('button', { name: 'Week', exact: true }).click()
-    await expect(page.getByRole('heading', { name: 'Weeks', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Table', exact: true }).click()
+    await expect(page.getByTestId('sales-trend-table')).toBeVisible()
     await page.getByRole('button', { name: 'Group by: Week' }).click()
     await page.getByRole('button', { name: 'Hour', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Group by: Hour' })).toBeVisible()
@@ -55,6 +69,7 @@ for (const [username, segment] of [
     expect((await four.json()).days).toHaveLength(28)
     expect(analyticsRequests.at(-1)).toMatchObject({ p_view: 'sales', p_periods: 4 })
     expect(analyticsRequests.length).toBe(reads + 1)
+    expect(seriesRequests).toHaveLength(1)
     expect(errors).toEqual([])
   })
 }
@@ -81,5 +96,6 @@ test('a failed analytics read remains retryable when grouping changes', async ({
   // Re-selecting the same range also retries; it must not hide the error and
   // leave a loading placeholder waiting for a date change that never happened.
   await page.getByRole('button', { name: 'Last 7 days' }).click()
-  await expect(page.getByRole('heading', { name: 'Weeks', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Group by: Week' })).toBeVisible()
+  await expect(page.getByTestId('sales-trend-card')).toBeVisible()
 })

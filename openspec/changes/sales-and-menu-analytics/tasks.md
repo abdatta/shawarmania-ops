@@ -34,3 +34,11 @@ Tasks 1–13 record the earlier verified iterations. The owner's latest scope in
 - [x] 19. Name pattern cards by the selected metric and aggregation; normalize lower hourly Revenue/Orders per selected day while preserving weighted AOV and main Hour totals. Verify zero-sale days, comparison windows, metric-dependent titles, themes and applicable gates. Assess redundancy without removing charts; refresh the existing preview.
 
 - [x] 20. Replace hatched hourly comparisons with solid semantic colors, rounded spaced columns, numbered legends/details and focused active-hour axes. Verify two/four periods, empty hours, pointer/touch/keyboard interaction, theme contrast and phone/tablet appearance.
+
+## Review and owner follow-up (2026-10-09)
+
+- [x] 21. Review the branch after rebasing on main: date the migration after main's newest (`20261012000000`) and move its pgTAP file to the free `82_`; require an active account in the RPC; pre-aggregate daily item units; attribute the commits.
+- [x] 22. Cut demo history build time with indexed lookups, run the history to yesterday, and capture every demo line's category; keep the rehearsed drawer and delivery days unchanged.
+- [x] 23. Items: remove two-dish comparison; add the item/category trend card (Units/Revenue, Day/Week, one to four periods) backed by `sales_analytics_series`, tappable dish and category rows, category change against the previous period.
+- [x] 24. Sales: merge the trend chart and Days list into one Chart / Table card that drops no figure; remove the weekday-average card and the separate table/export.
+- [x] 25. Verify with pgTAP, HTTP, unit and demo/live browser tests in both themes on phone and tablet, and update SCREENS, DATA_MODEL, SECURITY_AND_PRIVACY, OPERATIONS, TESTING and DEMO_MODE.

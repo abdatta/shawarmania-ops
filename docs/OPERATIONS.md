@@ -1493,4 +1493,6 @@ email, or enable unreviewed authentication mail to solve the lockout.
 
 ## Sales and menu analytics
 
-Analytics is a live, read-only Items/Sales group for owners and managers. Apply the Ops migration and frontend through the existing gated deployment workflow when publication is separately requested. The website requires no change. There is no menu collector, GA account, tracking secret or retention job in this change. Public-menu measurement and experiment advice are deferred in the behavior backlog. A temporary demo tunnel serves a dummy-backend build only. Production has not been changed by local implementation or verification.
+Analytics is a live, read-only Items/Sales group for owners and managers. Its migration (`20261012000000_sales_and_menu_analytics.sql`) creates two read functions and nothing else, so it deploys through the existing gated workflow with no data step. The website requires no change. There is no menu collector, GA account, tracking secret or retention job in this change; public-menu measurement and experiment advice are deferred in the behavior backlog.
+
+Egress per page view is small and bounded: a Sales read for four 30-day windows, or an Items read, is tens of kilobytes of JSON before compression, and an Items chart series is two arrays of at most 368 integers. Changing the measure, the grouping or Chart/Table reuses what was read; changing dates, outlet, the period count or the charted subject reads again, and a subject already charted on the page is not read twice.

@@ -49,5 +49,30 @@ select throws_ok($q$select public.sales_analytics('00000000-0000-4000-a000-00000
 select ok(not exists(select 1 from expected e where (select sum((h->>'orders')::bigint) from jsonb_array_elements(public.sales_analytics('00000000-0000-4000-a000-000000000001',e.business_date,e.business_date,'sales',4)->'hours') h where (h->>'period')::int=0)<>e.orders or (select sum((h->>'revenue')::bigint) from jsonb_array_elements(public.sales_analytics('00000000-0000-4000-a000-000000000001',e.business_date,e.business_date,'sales',4)->'hours') h where (h->>'period')::int=0)<>e.revenue),'current hourly aggregates reconcile to settled bill totals');
 select ok(not exists(select 1 from expected e where jsonb_array_length(public.sales_analytics('00000000-0000-4000-a000-000000000001',e.business_date,e.business_date,'sales',4)->'hours')>96),'hours capped at twenty-four times selected windows');
 select ok(not exists(select 1 from expected e where (select sum((d->>'revenue')::bigint) from jsonb_array_elements(public.sales_analytics('00000000-0000-4000-a000-000000000001',e.business_date,e.business_date,'items',2)->'days') d where d->>'date'=e.business_date::text)<>e.revenue),'compressed Items current revenue reconciles');
+-- The Items chart: one subject, two arrays, one value per day of every window.
+select is(jsonb_array_length(public.sales_analytics_series('00000000-0000-4000-a000-000000000001','2026-01-01','2026-01-30',4)->'units'),120,'series carries one day per day of every window');
+select is((public.sales_analytics_series('00000000-0000-4000-a000-000000000001','2026-01-01','2026-01-30',4)->>'from'),'2025-10-03','series names its first day');
+select is((select count(*) from jsonb_object_keys(public.sales_analytics_series('00000000-0000-4000-a000-000000000001','2026-01-01','2026-01-30',2))),3::bigint,'series carries only its dates and two arrays');
+select ok(not exists(select 1 from expected_lines e where (public.sales_analytics_series('00000000-0000-4000-a000-000000000001',e.business_date,e.business_date,1,e.menu_item_id::text)->'units'->>0)::bigint<>e.units or (public.sales_analytics_series('00000000-0000-4000-a000-000000000001',e.business_date,e.business_date,1,e.menu_item_id::text)->'revenue'->>0)::bigint<>e.revenue),'a dish series reconciles to its captured lines');
+reset role;
+create temp table expected_categories as select b.business_date,coalesce(i.category_name,'Uncategorised') as category,sum(i.quantity) as units from public.bills b join public.bill_items i on i.bill_id=b.id where b.outlet_id='00000000-0000-4000-a000-000000000001' and b.status='settled' and i.kind='item' group by 1,2;
+grant select on expected_categories to authenticated;
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001');
+select ok((select count(*) from expected_categories)>0,'category fixture contains sales');
+select ok(not exists(select 1 from expected_categories e where (public.sales_analytics_series('00000000-0000-4000-a000-000000000001',e.business_date,e.business_date,1,null,e.category)->'units'->>0)::bigint<>e.units),'a category series reconciles to captured categories');
+select ok(not exists(select 1 from expected e where (public.sales_analytics_series('00000000-0000-4000-a000-000000000001',e.business_date,e.business_date,1)->'units'->>0)::bigint<>(select coalesce(sum(units),0) from expected_lines l where l.business_date=e.business_date) + (select coalesce(sum(i.quantity),0) from public.bills b join public.bill_items i on i.bill_id=b.id where b.outlet_id='00000000-0000-4000-a000-000000000001' and b.status='settled' and i.kind='item' and i.menu_item_id is null and b.business_date=e.business_date)),'the all-dishes series counts every dish');
+select ok(not exists(select 1 from (select c->>'name' as name,(c->>'units')::bigint as units from jsonb_array_elements(public.sales_analytics('00000000-0000-4000-a000-000000000001','2026-01-01','2026-01-07','items',2)->'categories') c) c where c.units<>(select coalesce(sum(units),0) from expected_categories e where e.category=c.name and e.business_date between '2026-01-01' and '2026-01-07')),'category totals reconcile');
+select throws_ok($q$select public.sales_analytics_series('00000000-0000-4000-a000-000000000001','2026-01-01','2026-01-07',2,'not-a-dish')$q$,'22023',null,'an unknown dish key is refused');
+select throws_ok($q$select public.sales_analytics_series('00000000-0000-4000-a000-000000000001','2026-01-01','2026-01-07',2,'snapshot:x','Shawarmas')$q$,'22023',null,'a dish and a category together are refused');
+select throws_ok($q$select public.sales_analytics_series('00000000-0000-4000-a000-000000000001','2026-01-01','2026-06-01',2)$q$,'22023',null,'an unbounded series is refused');
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002');
+select throws_ok($q$select public.sales_analytics_series('00000000-0000-4000-a000-000000000002','2026-01-01','2026-01-07',2)$q$,'42501',null,'a crafted foreign-outlet series is refused');
+select pg_temp.impersonate('10000000-0000-4000-a000-00000000000a');
+select throws_ok($q$select public.sales_analytics_series('00000000-0000-4000-a000-000000000001','2026-01-01','2026-01-07',2)$q$,'42501',null,'a biller series is refused');
+
+reset role;
+update public.profiles set is_active = false where id = '10000000-0000-4000-a000-000000000001';
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001');
+select throws_ok($q$select public.sales_analytics('00000000-0000-4000-a000-000000000001','2026-01-01','2026-01-07','sales',1)$q$,'42501',null,'a deactivated owner is refused while the assignment lingers');
 select * from finish();
 rollback;

@@ -4,6 +4,8 @@ import { Money } from '@/components/ui/money'
 import { compactChange } from './analytics-utils'
 
 export function ChangeChip({ current, previous }: { current: number; previous: number }) {
+  // Nothing either side is a plain dash, not a dash beside a dash.
+  if (!current && !previous) return <span className="text-xs text-content-muted">—</span>
   return (
     <Chip
       icon={
