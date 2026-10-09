@@ -19,7 +19,7 @@ it must not read as paying for a good review.
   and a review discount percentage (whole, 1–50, five by default). The owner sets it for
   any outlet and a Franchise Admin for the outlets they manage — the same reach as
   Orders and Loyalty — on a new **Google review** section of the outlet's page.
-- **`public_menu` carries it**: `review` is `{url, percent}` while the outlet asks
+- **`public_menu` carries it**: `review` is `{url, percent, popup}` while the outlet asks
   and null while it does not. Its privilege and every other field are unchanged.
 - The brand site's Worker reads `review` and draws the popup and its docked
   banner; with null, or from a reader that predates this, there is none.

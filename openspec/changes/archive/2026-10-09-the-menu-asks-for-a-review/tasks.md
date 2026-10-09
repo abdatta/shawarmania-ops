@@ -25,5 +25,5 @@
 
 - [x] 4.1 Deploy the brand site's Worker that accepts `review` (shawarmania `npm run worker:deploy`).
 - [x] 4.2 Push this change; the Deploy workflow migrates production. Not so close to 00:00 UTC (05:30 IST) that the gate's auth e2e step runs across it: the two-till table test still fails on a run that crosses UTC midnight.
-- [ ] 4.3 Open `shawarmania.in/menu/kalyani-cafe/` and confirm the popup, then change the percentage on the outlet page and see it on the menu within a minute.
-- [ ] 4.4 For the popup switch: deploy the Worker that accepts `popup`, then push; switch Kalyani's popup off on the outlet page and see the menu open straight to the banner within a minute.
+- [x] 4.3 Open `shawarmania.in/menu/kalyani-cafe/` and confirm the popup, then change the percentage on the outlet page and see it on the menu within a minute.
+- [x] 4.4 For the popup switch: deploy the Worker that accepts `popup`, then push; switch Kalyani's popup off on the outlet page and see the menu open straight to the banner within a minute.

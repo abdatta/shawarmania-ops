@@ -26,11 +26,12 @@ new, and treats a missing key — an ops that predates this change — as off.
 
 ## D3. The words are a thank-you, not a price [owner, 2026-10-07]
 
-The owner asked that the popup not look like paying for reviews. The site's copy
-asks how the meal was, says feedback helps the cafe improve, asks for an *honest*
-review, says "good or bad, we read every one", and names the percentage as "our
-thank-you". It never asks for stars or a positive review. This repo holds only
-the number; the wording is the site's (`worker/src/menu-page.ts`).
+The owner asked that the popup not look like paying for reviews; a longer,
+thank-you worded version was tried and then cut back, at the owner's request, to
+a few words: "Love Shawarmania?", "Review us / get 5% off", "Leave a Google
+review", "Then show it at the counter", and a banner reading "Leave a review. Get
+5% off!". It never asks for stars or a positive review. This repo holds only the
+number; the wording is the site's (`worker/src/menu-page.ts`).
 
 The ops side says it plainly [owner, 2026-10-07]: **Review popup on the menu** and
 **Review discount**. Warm wording belongs only where customers read it.

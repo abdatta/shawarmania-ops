@@ -6,8 +6,9 @@ The outlet's live menu as a customer reads it on `shawarmania.in`: a public
 address derived from the outlet's name and kept through a rename, read through one
 service-role function that puts optional highlights first, retains ordinary
 categories and items in the counter's saved order, flags unavailable items, omits
-removed ones, and answers a closed outlet,
-an empty menu and an invented address alike.
+removed ones, answers a closed outlet,
+an empty menu and an invented address alike, and carries the outlet's Google
+review ask: its link, review discount and whether the menu opens with a popup.
 
 ## Requirements
 
@@ -64,7 +65,9 @@ name, description, price in integer paise, veg flag and whether it is available
 — and nothing else:
 no ids, no other outlet fields, no discounts. A removed item SHALL be absent; an
 unavailable item SHALL be present and flagged, because the customer should see
-what is off today rather than wonder where it went.
+what is off today rather than wonder where it went. Beside the sections it SHALL
+carry `review`: the outlet's review link, review discount percentage and whether
+to open with the popup while the outlet asks for a Google review, and null while it does not.
 
 It SHALL answer null — one answer for all three — for an address no outlet holds,
 a closed outlet, and an outlet with nothing on its menu, so nothing can be learned
@@ -72,7 +75,7 @@ about which outlets exist.
 
 #### Scenario: A customer scans a table's code
 - **WHEN** the Worker asks for a trading outlet's address
-- **THEN** it receives nonempty highlights first when configured, then that outlet's ordinary active categories and items in the counter's saved order, each item with exactly name, description, price, veg flag and availability
+- **THEN** it receives nonempty highlights first when configured, then that outlet's ordinary active categories and items in the counter's saved order, each item with exactly name, description, price, veg flag and availability, and the outlet's review ask or null
 
 #### Scenario: The kitchen ran out
 - **WHEN** an item is marked unavailable
@@ -107,3 +110,34 @@ The public reader SHALL prepend a nonempty outlet highlights selection as an ord
 #### Scenario: A title matches another category
 - **WHEN** a highlights title equals an ordinary category name
 - **THEN** the website renders both sections with distinct anchors and functional navigation
+
+### Requirement: An outlet may ask for a Google review on its public menu
+
+Each outlet SHALL hold a Google review ask: whether its public menu asks, the
+`https://` link where its Google listing takes a review, and a review discount
+percentage, a whole number from 1 to 50, five by default, and whether the menu
+opens with a popup or shows only its bottom banner, the popup by default. Every
+outlet SHALL start with the ask off. The database SHALL refuse an ask that is on with no link, a link
+that is not `https://` or that contains whitespace, a quote or an angle bracket,
+and a percentage outside 1–50, whatever the caller.
+
+The owner SHALL set any outlet's ask and a Franchise Admin the asks of the outlets
+they manage, through one function that writes these settings and no other column
+of the outlet; nobody else SHALL. The percentage SHALL change no bill: the counter
+gives it with the ordinary bill discount.
+
+#### Scenario: A manager raises the review discount
+- **WHEN** Kalyani's manager saves the Google review section at eight percent
+- **THEN** the public menu names eight percent within its cache minute, with no website deploy
+
+#### Scenario: The quieter version
+- **WHEN** a manager switches the popup off
+- **THEN** the public menu carries `popup: false` and the menu shows only the banner
+
+#### Scenario: An ask with nowhere to go
+- **WHEN** a request turns the ask on with no review link
+- **THEN** the database refuses it
+
+#### Scenario: Another outlet's manager
+- **WHEN** Kanchrapara's manager calls the write for Kalyani
+- **THEN** it is refused
