@@ -257,6 +257,10 @@ already does, and the last live Super Admin assignment stays unremovable — so
 the worst it permits is an owner giving themselves a narrower hat than the one
 they already wear.
 
+## What a kitchen tablet still shows that it need not *(#70)*
+
+Three cases the owner judged rare enough to accept rather than filter the kitchen to its business day (2026-10-08): an unpaid order left open overnight stays on the kitchen board until it is paid and prepared or cancelled; a counter that was offline overnight and delivers yesterday's unpaid orders in the morning puts them on the kitchen board as new; and an order taken on a till that is not in use today stays on every board until that till comes back, because only it can finish the order. Only an unacknowledged cancellation expires with its day.
+
 ## Deliberately deferred from v1
 
 ### Bills are record-only, except that a customer can now be shown one
@@ -916,7 +920,7 @@ what this section is for.
 ## Not planned
 
 - Customer-facing ordering or loyalty
-- Table management or KOT — this is a counter format, not a dine-in restaurant
+- Table management or printed KOT — this is a counter format, not a dine-in restaurant. The kitchen reads orders on a kitchen tablet instead (#70); it takes no action on them beyond ACK — preparation stays the counter's tick — and there are no special requests or item notes.
 - Supplier and purchase-order workflows
 - Multi-currency or multi-language (₹ and English only; revisit if franchises want Bengali)
 - Native mobile apps — the PWA is the delivery mechanism

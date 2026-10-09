@@ -1,10 +1,12 @@
 ## ADDED Requirements
 
-### Requirement: The kitchen screen shows the rail's unprepared orders, oldest first
+### Requirement: The kitchen screen shows the rail's unprepared orders, oldest first by default
 
 A tablet of kind `kitchen` holding a live kitchen shift SHALL show every order at its
-outlet that is open, or paid and not prepared, and has at least one item line
-visible under the tablet's filter, ordered by `ordered_at` ascending. An order SHALL
+outlet that is not yet prepared — open or paid, with no Prepared tick — and has at least one item line
+visible under the tablet's filter, ordered by `ordered_at` ascending unless the tablet
+is set to newest first. The sort SHALL be saved on the tablet's own record beside its
+filter and changeable from the same sheet, oldest first being the default. An order SHALL
 leave the screen when it is marked prepared, by the counter or by the day change,
 without any action in the kitchen. A direct sale with no order SHALL NOT appear. The
 screen SHALL NOT be filtered by business date.
@@ -18,6 +20,11 @@ a packaging line, or the customer's name or phone.
 
 The waiting time SHALL take the warning tone from ten minutes and the danger tone
 from twenty.
+
+The board SHALL NOT scroll by itself. While a card awaiting ACK is out of sight, a
+floating pointer SHALL say so, naming the order when there is one and counting them
+when there are several, in the colour of the most urgent of them, with an arrow
+towards it, and a tap SHALL bring that card into view.
 
 #### Scenario: An order is taken at the counter
 
@@ -39,6 +46,16 @@ from twenty.
 - **WHEN** the counter rings a direct sale with no order
 - **THEN** nothing appears on the kitchen screen
 
+#### Scenario: A new order lands below the screen
+
+- **WHEN** the board holds more cards than fit and a new order arrives below the visible ones
+- **THEN** a pointer reads *↓ New #N*, and tapping it scrolls that card into view
+
+#### Scenario: The kitchen prefers the newest on top
+
+- **WHEN** the kitchen chooses *Newest first* in the filter sheet and saves
+- **THEN** the board lists the newest order first, and still does after a reload
+
 ### Requirement: A kitchen tablet chooses which categories it shows
 
 A kitchen tablet SHALL hold a filter mode — *only these categories* or *everything
@@ -49,8 +66,8 @@ appear on a tablet in *everything except* mode and SHALL NOT appear on one in *o
 mode until chosen. A category's rename SHALL NOT change the filter. Moving the
 tablet to another outlet SHALL clear its list.
 
-The screen SHALL always state the filter in force. Packaging lines SHALL never be
-shown, whatever the filter.
+The screen SHALL always state the filter in force, as the label of the control that
+changes it. Packaging lines SHALL never be shown, whatever the filter.
 
 #### Scenario: Two kitchens split the menu
 
@@ -75,14 +92,17 @@ this tablet last acknowledged), **Cancelled** (it was cancelled, or lost every
 visible line after this tablet acknowledged it, and this tablet has not acknowledged
 the cancellation), or quiet.
 
-A New, Edited or Cancelled card SHALL shake on arrival and then glow — in the
-primary, warning or danger tone respectively — and SHALL carry an **ACK** control in
-that same tone. An Edited card SHALL mark lines added, strike lines removed and show
-changed quantities old → new since the last acknowledgement. An edit that changes
+A New, Edited or Cancelled card SHALL shake on arrival and then name its state in
+three ways, never by colour alone: its order number in the state's colour, a ribbon
+reading *NEW*, *EDITED* or *CANCELLED*, and an **ACK** control filled in that colour
+with its own icon. The colours are the primary tone, the kitchen's edit amber and the
+kitchen's cancel red, each a contrast-validated pair in both themes. An Edited card
+SHALL mark lines added, strike lines removed and show changed quantities old → new
+since the last acknowledgement, the added and changed lines in the edit colour. An edit that changes
 none of this tablet's visible lines SHALL leave its card quiet. An edit to a card
 not yet acknowledged SHALL leave it New with its current contents.
 
-ACK SHALL clear the card's glow and control; on an Edited card it SHALL also clear
+ACK SHALL clear the card's state colours, ribbon and control; on an Edited card it SHALL also clear
 the marks and struck lines; on a Cancelled card it SHALL remove the card. A Cancelled
 card SHALL also disappear when the business day it was cancelled on ends.
 
@@ -91,17 +111,19 @@ acknowledged, SHALL be refused if the order has changed since the version the
 kitchen showed, and SHALL be idempotent. Each kitchen tablet's acknowledgements SHALL
 be independent of every other's.
 
-Under reduced motion the shake SHALL become a border pulse.
+While an alert is still owed a ring or one is sounding, its ACK SHALL show how many
+rings remain and SHALL move; once they are spent it SHALL stand still. Under reduced
+motion the shake and the moving ACK SHALL fade and return instead of moving.
 
 #### Scenario: A new order arrives
 
 - **WHEN** an order with a visible line is saved at the counter
-- **THEN** its card shakes, glows in the primary tone and carries ACK
+- **THEN** its card shakes, takes the primary tone with a *NEW* ribbon and carries ACK
 
 #### Scenario: An item is added after ACK
 
 - **WHEN** the kitchen has acknowledged an order and the counter adds a Fries line to it
-- **THEN** the card shakes, glows in the warning tone, marks Fries as added and carries an ACK in that tone
+- **THEN** the card shakes, takes the edit colour with an *EDITED* ribbon, marks Fries as added and carries an ACK in that colour
 
 #### Scenario: An edit for the other kitchen
 
@@ -138,7 +160,7 @@ alert, and the sound SHALL stop at once when no alert is owed a ring. A card who
 contents change while it is alerting SHALL be owed three rings again.
 
 Opening the screen, and the first read after a shift starts, SHALL ring nothing; the
-cards it finds alerting SHALL glow silently. Only changes observed while the screen
+cards it finds alerting SHALL show their alert silently. Only changes observed while the screen
 is open SHALL ring, including those observed on reconnecting after a gap.
 
 #### Scenario: Three orders at once
@@ -159,7 +181,7 @@ is open SHALL ring, including those observed on reconnecting after a gap.
 #### Scenario: Nobody answers
 
 - **WHEN** a new order's three rings finish with no ACK
-- **THEN** the screen is silent and the card still glows with its ACK
+- **THEN** the screen is silent, and the card still shows its alert with its ACK, standing still
 
 ### Requirement: The kitchen screen says when it may be out of date or silent
 
@@ -201,4 +223,9 @@ written to real data.
 #### Scenario: Two demo tabs
 
 - **WHEN** a demo user saves an order in the counter tab
-- **THEN** the kitchen tab shows it shaking, glowing and ringing
+- **THEN** the kitchen tab shows it shaking and ringing
+
+#### Scenario: Start again in one demo tab
+
+- **WHEN** a demo user presses Start again in either tab
+- **THEN** both tabs start again from the same demo data

@@ -120,6 +120,16 @@ live shift. After this change:
   | the freshness nudge | select on its outlet's `kitchen_pulses` row (D5) |
   | its own device row, shift, request and heartbeat | the policies that already serve the counter's shift-request screen, which run without a live shift |
 
+**The person holding a shift has reach too, on their own phone.** Two helpers
+grant it: `app_billing_outlet()` (the outlet whose billing a person may act on)
+and `app_may_look_up_customer()` (customer lookup while holding the counter),
+both of which accept *any* live shift whose `person_id` is the caller. A Biller
+holding only a kitchen shift must not gain customer lookup or billing reach from
+it, so both narrow to counter shifts in the same edit. `app_counter_shift()` and
+`app_counter_shift_operator()` narrow with `app_counter_shift_outlet()`. Found
+while reading the live local database on 2026-10-08; the enumeration below is
+what confirms there are no others.
+
 **The implementation must enumerate every policy and `security definer` function
 whose body calls `app_counter_shift_outlet()`, `billing_device_context()` or
 `app_device_ok()`**, record the list in the PR, and add a hand-crafted kitchen-shift
@@ -138,8 +148,12 @@ a kitchen does not (`AGENTS.md`, Data protection).
 Instead, `public.kitchen_board()` — `security definer`, callable only with a live
 kitchen shift, scoped to that shift's outlet — returns exactly:
 
-- for each order on the rail (`status = 'open' or (status = 'paid' and prepared_at
-  is null)`) that has at least one item line visible under this tablet's filter, and
+- for each order on the rail that is **not yet prepared** (`status in ('open',
+  'paid') and prepared_at is null`) — an unpaid order the counter has ticked
+  Prepared is done as far as the kitchen goes, and the owner confirmed the kitchen
+  drops it (2026-10-08); the first draft of this query kept it, and the two-tablet
+  end-to-end spec caught it — that has at least one item line visible under this
+  tablet's filter, and
 - for each order cancelled during this kitchen shift's business date that had a
   visible line and has no `cancel` acknowledgement from this tablet:
 
@@ -190,13 +204,16 @@ test shows contention); select on `orders` (D4).
 
 `counter_devices.kitchen_filter_mode text not null default 'exclude' check (in
 ('include','exclude'))` and `counter_devices.kitchen_category_ids uuid[] not null
-default '{}'`. The default — exclude nothing — shows everything.
+default '{}'`. The default — exclude nothing — shows everything. Beside them,
+`counter_devices.kitchen_sort text not null default 'oldest_first' check (in
+('oldest_first','newest_first'))`.
 
-`set_kitchen_filter(p_mode, p_category_ids)` is callable by a tablet holding a live
+`set_kitchen_filter(p_mode, p_category_ids, p_sort)` is callable by a tablet holding a live
 kitchen shift, writes only its own row, refuses any id that is not a category of the
 tablet's current outlet, and records who changed it and when. An outlet transfer of
 the tablet clears the list, since the ids belong to the old outlet. A category later
-deactivated is ignored by the board and dropped from the header's summary.
+deactivated is ignored by the board and dropped from the Filter button's label.
+`p_sort` may be omitted, leaving the sort as it was.
 
 The owner chose the tablet as the place to set this (no setting on the owner's
 page) and left the storage to judgement. **Browser storage was rejected**: it is
@@ -205,9 +222,26 @@ failure is silent — the tablet falls back to showing everything, and the wrong
 kitchen cooks something before anybody notices. On the device row it survives all
 of that, survives a switch to counter and back, and the Tablets list can show it.
 
-The screen's header always reads the filter in force — *Only Pasta, Burgers* or
-*Everything except Pasta, Burgers* or *Everything* — so an empty screen is never
-mistaken for a quiet one.
+The filter in force — *Only Pasta, Burgers* or *Everything except Pasta, Burgers*
+or *Everything* — is always on screen, so an empty screen is never mistaken for a
+quiet one. **It is the Filter button's own label**, not a line under the tablet's
+name: a summary in one corner and the control that changes it in the other left a
+cook to guess where to tap (owner, 2026-10-09).
+
+**The sort lives beside it.** The board lists oldest first, the order cooks work
+in; a kitchen that prefers the newest on top chooses *Newest first* in the same
+sheet, saved in `counter_devices.kitchen_sort` through the same
+`set_kitchen_filter()`, so the other way round needs no release. The header does
+not say which way the board is sorted: the board shows it (owner).
+
+*Newest first as the only order* was rejected: the ticket pushed out of sight would
+then be the oldest, the one waiting longest and the one that rings no more. Instead
+the board **never scrolls itself** (a card moving under a cook's hand is worse than
+one out of view) and a floating pointer names a card awaiting ACK that is out of
+sight (*↓ New #112*, or *↓ 3 waiting for ACK*), in the most urgent one's colour, and
+scrolls to it when tapped. A card counts as seen only when nearly all of it, its ACK
+included, is on screen. *Alerting cards jumping to the front* was rejected too: they
+would jump back after their ACK.
 
 ### D7. Acknowledgements are rows, and the server snapshots what was acknowledged
 
@@ -268,9 +302,18 @@ through) and changed quantity (old → new).
 
 ### D9. Sound: one speaker, three rings, a priority, and no ring on load
 
-Tunes are synthesised with the Web Audio API — no audio files. New order: a rising
-two-note chime. Edit: a single, different tone. Cancel: a falling, lower pattern,
-distinct from both (owner agreed to a third tune). One *ring* is one play of a tune.
+Tunes are synthesised with the Web Audio API — no audio files. The owner chose
+them by ear on 2026-10-09 from a page of candidates, for being loud and hard to
+miss in a busy kitchen: New order is *Sparkle*, a quick run up four bright plucked
+notes with a short echo, high and happy. Edit is *Hi-lo*, two hard beeps swapping
+twice, mid-pitched. Cancel is *Falling buzz*, three buzzy notes stepping down, the
+lowest (owner agreed to a third tune). One *ring* is one play of a tune.
+
+Rejected on the way: the first build's soft two-note chime for new and single held
+tone for edit (a soft sound is missed in a busy kitchen); cartoonish cancels such as
+a sad trombone or a deflating slide; and five packs that re-voiced the three chosen
+tunes on one shared instrument so they would sound like a set. The owner kept the
+originals: how differently they sound is part of telling them apart.
 
 The queue:
 
@@ -282,7 +325,7 @@ The queue:
   total and all three cards shake together.
 - **ACK** removes that card's alert. If no alert is owed a ring, the current sound
   is cut and the queue stops.
-- After its three rings an un-ACKed alert is silent but keeps its glow and button.
+- After its three rings an un-ACKed alert is silent but keeps its colours and button.
 - A card whose content changes while its alert is still owed rings has its count
   reset to three.
 
@@ -300,39 +343,76 @@ running the screen shows the same unmissable floating alert as a sync failure �
 
 ### D10. The card and the screen
 
-Oldest first, in columns that fill left to right on a landscape tablet:
+Oldest first unless the kitchen chose newest first (D6), in columns that fill left
+to right on a landscape tablet. Each order
+is a **ticket**: a card with a torn top edge, as if torn off the counter's pad.
 
 ```
-┌ Kitchen 1 · Everything except Pasta, Burgers ─────── Asha · ● live · 13:42 ┐
-│ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐       │
-│ │ #12 TABLE 4  │ │ #13 TAKEAWAY │ │ #14 DINE-IN  │ │ #15 TAKEAWAY │       │
-│ │        14 m  │ │         9 m  │ │         3 m  │ │         0 m  │       │
-│ │ 2 Chicken    │ │ 1 Paneer     │ │ 3 Classic    │ │ 1 Double     │       │
-│ │   Shawarma   │ │   Shawarma   │ │   Shawarma   │ │   Shawarma   │       │
-│ │ 1 Fries      │ │ ~1~ 2 Fries  │ │ +1 item for  │ │              │       │
-│ │              │ │ + 1 Lassi    │ │ another      │ │              │       │
-│ │              │ │              │ │ kitchen      │ │              │       │
-│ │              │ │ [ ACK edit ] │ │              │ │ [   ACK   ]  │       │
-│ └──────────────┘ └── warning ───┘ └──────────────┘ └── primary ───┘       │
-└───────────────────────────────────────────────────────────────── ⚙ filter ┘
+┌ Kitchen 1 · Asha · 13:42 ──────────── [⚙ Everything except Pasta, Burgers] ┐
+│ ╭╮╭╮╭╮╭╮╭╮╭╮╭╮╭╮   ╭╮╭╮╭╮╭╮╭╮╭╮╭╮╭╮   ╭╮╭╮╭╮╭╮╭╮╭╮╭╮╭╮                    │
+│ │ #12      (14m)│  │ #13      ( 9m)│  │ #14      ( 3m)│                    │
+│ │ TABLE 4       │  │ TAKEAWAY ◀EDITED│ │ DINE-IN  ◀ NEW│                    │
+│ │ - - - - - - - │  │ - - - - - - - │  │ - - - - - - - │                    │
+│ │ [2] Chicken   │  │ [2] Fries 1→2 │  │ [3] Classic   │                    │
+│ │     Shawarma  │  │ [1] Lassi ADDED│ │     Shawarma  │                    │
+│ │ ✓ Acked 12 m  │  │ [1] ~Nachos~  │  │ +1 item for   │                    │
+│ │   ago         │  │[✎ ACK edit ●○○]│ │ another kitchen│                   │
+│ │               │  │               │  │[✓ ACK    ●●○] │                    │
+│ └───────────────┘  └───────────────┘  └───────────────┘                    │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- The order number is the largest text on the card; the service tag follows it as
-  on the counter's pipeline card (#60).
-- Quantities are large and lead each line.
-- The waiting time counts from `ordered_at`, turning to the warning tone at 10
-  minutes and the danger tone at 20 (constants; the owner may tune them later). It
-  reads in days for an order that has sat overnight.
-- Tones are existing semantic tokens — `--primary` for New, `--warning` for Edited,
-  `--danger` for Cancelled — and each ACK button is filled in its card's tone, so an
-  edit ACK is visibly a different thing from a new-order ACK (owner's request). No
-  new colour pair enters without the contrast validator passing in both themes. The
-  owner dropped a *NEW* text label: the glow is enough.
-- **Shake** is a short horizontal oscillation; under reduced motion it becomes a
-  border pulse. The glow persists until ACK.
-- **The filter** opens from the corner control as a sheet: a two-way choice, *Only
-  these* / *Everything except these*, over the outlet's active categories as a
-  checklist, and Save.
+- The order number is the largest thing on the card, in the brand's display face,
+  coloured by the card's state. The service tag sits beneath it as a bordered chip.
+- **The wait is a ring** round the minutes, filling towards 20 minutes; it takes the
+  warning tone at 10 and the danger tone at 20 (constants; the owner may tune them
+  later), and reads in hours and days for an order that has sat overnight.
+- Quantities lead each line, large, in a tile.
+- **An alerting card names its state three ways, never by colour alone**: the
+  number's colour, a ribbon at the right edge (*NEW*, *EDITED*, *CANCELLED*), and an
+  ACK filled in that colour with its own icon — a tick, a pencil, a cross. Fills:
+  `--primary` for New; the kitchen's own `--kitchen-edit` (the bright amber in both
+  themes) for Edited and `--kitchen-cancel` (the brand's flame red in both themes)
+  for Cancelled, each with its own ink and gated by the contrast validator. The
+  themed `--warning` and `--danger` were the wrong shapes for a fill: on light the
+  deep amber sits beside the ember as nearly the same colour, and on dark the soft
+  red reads pink.
+- **Inside an edit, whatever the cook must act on is the same amber tile**: an added
+  dish carries an *ADDED* badge, and a changed quantity a badge reading *1 → 2*. A
+  removed dish keeps its old quantity in a dashed tile and is struck through.
+- **A cancellation is stamped**, faintly, in the middle of everything between the
+  tear line and the ACK — where a hand would stamp a paper ticket. The card is as
+  tall as its row, so on a short ticket the stamp lands on the dishes and on a tall
+  one in the space beneath them; it is translucent so the dishes stay readable.
+- **The ACK counts its rings.** Three dots on it are the rings still owed (the one
+  sounding counts), and the button wiggles in bursts for as long as any remain.
+  Once they are spent it stands still and waits for the ACK in silence; what was on
+  the board when the screen opened has no rings, so its dots are spent from the
+  start.
+- An acknowledged card shows *Acked N ago* where its ACK was.
+- **Shake** is a short horizontal oscillation of the whole card when it starts
+  alerting; under reduced motion it, and the ringing ACK, fade and return instead.
+
+Rejected on the way here, in front of the owner on screenshots (2026-10-09):
+
+- *A solid header band in the state colour* — legible from across the kitchen, but
+  too bright to sit in front of all day.
+- *A coloured rail and a soft glow* round alerting cards — the glow was disliked;
+  only its timer ring survived.
+- *A dashed ink outline for Edited, with "was N" in small grey text* — the first
+  build. It read as dated, and the changed quantity was easy to miss.
+- *For a changed quantity*: the old tile struck through with an arrow to the new one
+  (pushes the names out of line), the old number crossed in the corner of the new
+  tile (too small to read at a glance), and *WAS 1̶* in a badge. *1 → 2* won.
+- *The stamp above the dishes* (never covers a word, but no ticket is stamped
+  that way) and *on the dish list alone* (lands off-centre on a tall card).
+
+The rest of the screen:
+
+- **The filter** opens from the header's Filter button, labelled with the filter in
+  force, as a sheet: the order (*Oldest first* / *Newest first*), then a two-way
+  choice, *Only these* / *Everything except*, over the outlet's active
+  categories as a checklist, and Save.
 - The screen holds a Screen Wake Lock while visible and re-acquires it on return to
   the foreground; where the API is unavailable, `docs/LIMITATIONS.md` says so.
 - The header carries the shift holder's name, as the counter's does.
@@ -378,9 +458,10 @@ keeps the device heartbeat.
 
 ### D14. The gate and demo mode
 
-The kitchen surface is registered in `src/gates/registry.ts`, `hidden` until the
-change's phase gate passes and `live` after; the Type field in the Edit dialog is
-absent while it is hidden.
+The kitchen surface is registered in `src/gates/registry.ts` as the part
+`kitchen-tablets`: `demo` while it was built, so the demo could walk it, and
+promoted to `live` once sections 1–9 of the tasks passed (10.1), which is how it
+ships. The Type field in the Edit dialog is absent while the part is hidden.
 
 Demo mode adds a **Kitchen tablet** entry beside the Biller in the walkthrough,
 mounting the real `KitchenShell` behind a synthetic device session at
@@ -430,7 +511,8 @@ nothing real is shared between tablets except through the server.
   ringing screen nobody can silence rings over a busy kitchen.
 - **One ACK style for every alert.** The owner wanted an edit's ACK to look
   different from a new order's, so it is a different colour.
-- **A NEW text label.** The owner judged the glow enough.
+- **A NEW text label** was first dropped, the owner judging the glow enough; the
+  ticket card that replaced the glow (D10) names every state on a ribbon instead.
 - **Cancelled orders vanish on their own.** The owner required an ACK so a cook does
   not finish a cancelled order.
 - **ACKs kept only in browser memory.** A reload would drop un-ACKed cancellations.
@@ -456,5 +538,5 @@ nothing real is shared between tablets except through the server.
   must keep the screen on; `docs/OPERATIONS.md` says so.
 - **Two kitchens configured so an item falls in neither.** With one tablet on *Only*
   and the other on *Everything except* the same list, nothing can; two *Only* lists
-  can. The header makes each tablet's filter readable at a glance, and
+  can. The Filter button makes each tablet's filter readable at a glance, and
   `docs/OPERATIONS.md` recommends the *Only* / *Everything except* pairing.

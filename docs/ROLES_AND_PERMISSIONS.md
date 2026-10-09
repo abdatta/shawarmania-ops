@@ -511,6 +511,12 @@ The honest trade-off: **the tablet's session is the credential, so a lost tablet
 
 **A Biller assignment includes an Employee's attendance.** Holding `biller` at an outlet is enough to check in there, without a second assignment and without widening what a manager or the owner may do — `attendance_submit_attempt` accepts either role, and `supabase/tests/25_the_biller_turns_up_too.sql` asserts it.
 
+### Kitchen tablet — the kitchen shift's reach *(#70)*
+
+A tablet's **kind** is `counter` or `kitchen`, chosen by the admin issuing its setup code and changed from the Tablets list by a Super Admin or the outlet's Franchise Admin. A change ends any live shift on the tablet and cancels a pending request; becoming a kitchen is refused by the database while the tablet holds unsent work or orders it took that are still unfinished.
+
+A **kitchen shift** opens through the counter's handshake and is held by the same people. Its reach is exactly: its outlet's kitchen board (`kitchen_board()`), its outlet's menu categories, its own filter (`set_kitchen_filter()`), its own acknowledgements (`kitchen_acknowledge()`), its outlet's `kitchen_pulses` row, and the tablet's own device, request, shift and heartbeat rows. The shared helpers every device policy and billing command reaches through — `app_counter_shift[_outlet|_operator]()`, `billing_device_context()` — accept **counter** shifts only, so a kitchen shift reads no order row, bill, customer, expense or drawer figure and issues no billing command. The person-side helpers narrow too: a Biller holding only a kitchen shift gains no customer lookup (`app_may_look_up_customer()`) and no billing reach (`app_billing_outlet()`) on their own phone. A kitchen shift never holds a day open, and Finish Day neither waits for nor ends it. Each refusal is a hand-crafted request in `supabase/tests/81_the_kitchen_sees_its_orders.sql`.
+
 ## Attendance and location
 
 Employees check in from their own phones. The browser's Geolocation API supplies coordinates; the app computes the distance to the outlet's stored position.

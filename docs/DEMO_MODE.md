@@ -375,6 +375,10 @@ Finish on the owner console. The alert count has changed, because it was always 
 
 **Afterwards:** press **Start again** so the next walkthrough begins where this one did.
 
+### The kitchen, rung from the counter *(#70)*
+
+**Kitchen** sits beside the four roles in the switcher while the `kitchen-tablets` part is not hidden. It is the real kitchen board on a kitchen shift already open. Open **Biller** in one browser tab and **Kitchen** in another: an order saved at the counter appears in the kitchen within a second, shaking and ringing, because the demo mirrors its orders between same-origin tabs for exactly this scene. ACK it, edit it at the counter, and watch it come back *EDITED* with the added dish marked; cancel one and watch it turn red until **ACK cancel**. **Start again** in either tab starts both again, so the counter and the kitchen stay one demo. The mirror is demo-only; real tablets meet at the server and nowhere else.
+
 ## Menu ordering and highlights review (#68)
 
 In the Admin or Owner demo, open Menu. On a dish's actions, use Move up/down

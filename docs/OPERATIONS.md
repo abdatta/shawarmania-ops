@@ -701,6 +701,16 @@ handover moves an outlet from one of two records to the other, and there is now
 only one. A new outlet therefore has no parallel run to complete — it opens on
 the live records directly, which is what steps 8 to 12 above describe.
 
+## Kitchen tablets *(#70)*
+
+**Setting one up.** On the outlet's page, **Tablets → Set up**, name it, choose *Use this tablet for:* **Kitchen**, and type the code on the tablet as for any counter. It opens on the kitchen's shift-start screen; somebody who may hold a counter shift starts one from their phone.
+
+**Two kitchens.** Pair them as *Only these* on one and *Everything except* — the same list — on the other, so every dish lands somewhere and a category added later lands on the second. Two *Only* lists can leave a category on neither; each tablet's header says what it shows, which is how to spot it.
+
+**Turning a counter into a kitchen** (Tablets → Edit → *Use this tablet for*). Refused, naming the orders, while it holds unsent work or orders it took that are still unfinished — only it can finish them, so finish, pay or cancel them there first. Any live shift on it ends with the change.
+
+**Sound and screen.** After a reload the browser holds sound back until the screen is touched; the tablet says so and one tap restores it. Where the browser cannot keep the display awake, set the tablet's own display to stay on while charging. A kitchen tablet must stay online: it shows *Out of sync* whenever it cannot trust what it shows.
+
 ## Counting the drawer *(the live nightly job — #11)*
 
 **Under a minute, from a phone, standing at the counter.** The drawer opens on a

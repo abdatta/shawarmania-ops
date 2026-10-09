@@ -111,6 +111,10 @@ requested bills or orders under their own outlet rules, then returns only each
 event id and the label effective at its timestamp. The old outlet recorded in
 the identity interval is display evidence, never an alternate route to rows.
 
+### A kitchen reads orders without their customers *(#70)*
+
+An order row carries the customer's name and phone, and Row-Level Security filters rows, not columns, so any select grant to a kitchen shift would hand a hand-crafted request both. A kitchen shift therefore holds **no** select on `orders`, `order_items`, `order_discounts`, `bills` or `bill_items`; it reads one `security definer` function, `kitchen_board()`, which returns dishes, quantities, numbers and times and nothing about the customer or the money. Its live nudge is a one-row-per-outlet pulse table for the same reason.
+
 ## Personal data we hold
 
 | Data | Whose | Why | Rules |

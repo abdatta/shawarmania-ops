@@ -526,6 +526,16 @@ operator — comes from the bill, one join away. Outlet-scoped: the owner and th
 outlet's Franchise Admins read it; a counter learns a balance only through the
 lookup. Isolation-tested, and classified in `01_schema_coverage.sql`.
 
+## The kitchen *(#70)*
+
+**`counter_devices.kind`** is `counter` or `kitchen`, copied from **`counter_device_setup_codes.kind`** when the code is redeemed. **`counter_shift_requests.kind`** and **`counter_shifts.kind`** copy the device's kind; confirmation refuses a request whose tablet changed kind since. `counter_shifts.ended_reason` gains `device_kind_changed`. A kitchen's filter is on its own row: **`kitchen_filter_mode`** (`include` | `exclude`, default `exclude`) and **`kitchen_category_ids`** (default empty — everything), with who changed it and when, and **`kitchen_sort`** (`oldest_first` | `newest_first`, default `oldest_first`), saved through the same `set_kitchen_filter()`. An outlet transfer clears the list and keeps the sort.
+
+**`kitchen_board()`** is the only way a kitchen reads orders. It returns, for its shift's outlet, every order not yet prepared (`status in ('open','paid') and prepared_at is null`) and every order cancelled during the shift's business day, that has a line visible under the filter or was acknowledged here with one — each with its number, service, table, times, status, visible lines (name, quantity, menu item), the count of its other lines, and this tablet's latest acknowledgement. No customer column and no amount. An order's **version** is its `changed_at`, or its `created_at` before any revision.
+
+**`kitchen_acknowledgements`** — `id` (client UUID), `outlet_id`, `device_id`, `shift_id`, `person_id`, `order_id`, `kind` (`new` | `edit` | `cancel`), `order_version`, `lines` (the visible lines at that version, snapshotted by the server), `acked_at` (`clock_timestamp()`). Append-only by trigger; written only through `kitchen_acknowledge()`, which refuses a version that is no longer current. Readable by the acknowledging tablet during its kitchen shift and by the outlet's managers.
+
+**`kitchen_pulses`** — one row per outlet, `bumped_at`, bumped by a trigger on every `orders` insert or update and published to Realtime. It carries no order data: a kitchen holds no select on `orders`, so this is its nudge to re-read the board.
+
 ## The customer's receipt link
 
 **`bill_public_links`** — `bill_id` (primary key, references `bills`), `token`

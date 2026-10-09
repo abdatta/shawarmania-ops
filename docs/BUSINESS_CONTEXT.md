@@ -106,6 +106,8 @@ This is the workflow the billing screen must not fight:
 
 1. A customer orders at the counter, usually 1–3 items. The counter records an
    editable order and calls its small daily order number while the kitchen cooks.
+   Where the outlet has a kitchen tablet, the order appears there the moment it
+   is saved, ringing until a cook acknowledges it (#70).
 2. When food is handed over, the whole order is paid and becomes one immutable
    bill. Pay-now creates the same bill shape when order and payment happen
    together, without allocating an order number. **Speed here is the product.**

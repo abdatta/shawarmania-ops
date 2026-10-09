@@ -14,10 +14,11 @@
 > each order's number, service, lines and age and never a customer's name or phone,
 > a price, a bill, a payment or an expense, proved by a hand-crafted request, and
 > can issue no billing command; the kitchen screen shows the counter rail's
-> unprepared orders oldest first, filtered by a category include or exclude list
+> unprepared orders oldest first (or newest first, if the kitchen chooses),
+> filtered by a category include or exclude list
 > chosen on the tablet and saved on it, with a line saying how many items on an
 > order belong elsewhere; a new order, an edit and a cancellation each shake and
-> glow their card in their own colour and ring their own tune three times, one
+> colour their card in their own colour and ring their own tune three times, one
 > sound at a time, until **ACK** is pressed on that card; a cancelled card stays
 > until it is ACKed or its business day ends; an order ticked Prepared at the
 > counter leaves without an ACK; losing sync, or sound being blocked, is shown by a
@@ -79,8 +80,8 @@ until somebody acknowledges it.
 ### The kitchen screen
 
 - **It shows what the counter rail shows, minus what is done**: every order that is
-  open or paid and not yet prepared, **oldest first**, in a grid for a landscape
-  tablet. An order leaves when the counter ticks **Prepared**, or when the day
+  open or paid and not yet prepared, **oldest first** by default, in a grid for a
+  landscape tablet. An order leaves when the counter ticks **Prepared**, or when the day
   change finishes it (#69). Pay-now sales are not orders and do not appear, exactly
   as on the rail.
 - **Each card shows** the order number large, its service — *Takeaway*, *Dine-in*
@@ -92,9 +93,11 @@ until somebody acknowledges it.
   these categories*, over the outlet's menu categories. *Everything except* is what
   makes a new category appear on that kitchen without anybody remembering to add it.
   The filter is saved on the tablet's own record, so it survives a reload, a
-  reinstall and a cleared browser, and the Tablets list shows it. The screen's
-  header always states the filter in force, so an empty screen is never mistaken
-  for a quiet one.
+  reinstall and a cleared browser, and the Tablets list shows it. The Filter
+  button is labelled with the filter in force, so an empty screen is never mistaken
+  for a quiet one. The same sheet can turn the board to newest first, saved the same
+  way. A card awaiting ACK that is scrolled out of sight is pointed at by a floating
+  pill that scrolls to it.
 
 ### Alerts and ACK
 
@@ -102,14 +105,14 @@ until somebody acknowledges it.
 
   | | Card | Sound |
   |---|---|---|
-  | **New order** | shakes, then glows in the brand colour | the new-order tune, three times |
-  | **Edited** | shakes, then glows in the warning colour; added items marked, removed items struck through, changed quantities shown old → new | the edit tune, three times |
-  | **Cancelled** | turns to the danger colour and reads *Cancelled* | the cancel tune, three times |
+  | **New order** | shakes, then wears the brand colour | the new-order tune, three times |
+  | **Edited** | shakes, then turns amber; added items marked, removed items struck through, changed quantities shown old → new | the edit tune, three times |
+  | **Cancelled** | turns red and is stamped *Cancelled* | the cancel tune, three times |
 
-- **ACK** on a card silences its alert, clears its glow and hides the button. On an
+- **ACK** on a card silences its alert, clears its colours and hides the button. On an
   edited card it also drops the struck-through lines and the marks. On a cancelled
   card it removes the card. If nobody presses ACK, the sound stops after three rings
-  and the card keeps glowing with its button until somebody does.
+  and the card keeps its colours and button until somebody does.
 - **One sound at a time.** Alerts that arrive together share their rings — three
   orders landing at once is three rings, not nine — and the most urgent kind plays
   first: cancel, then new, then edit. An ACK stops the ringing as soon as nothing
@@ -119,7 +122,7 @@ until somebody acknowledges it.
   all of this kitchen's items reads as a cancellation here; one that adds this
   kitchen's first item reads as a new order here.
 - **Opening the screen does not ring** for orders already there; they show their
-  glow and ACK silently. Only what arrives while the screen is open rings.
+  alert and ACK silently. Only what arrives while the screen is open rings.
 - **A cancelled card that nobody ACKed disappears when its business day ends.**
 - **ACKs are kept on the server**, per kitchen tablet, so a reload never loses a
   cancelled card, two kitchens acknowledge independently, and the owner can later

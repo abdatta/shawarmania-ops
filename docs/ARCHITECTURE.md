@@ -274,6 +274,14 @@ customer or bill contents. A phone reads on open and on an explicit **Re-read**;
 it has no subscription, poll or timer, so every figure stays visibly tied to the
 same stated moment rather than changing piecemeal.
 
+**The kitchen tablet** *(#70)* follows the counter's contract with a narrower
+read. It calls `kitchen_board()` on load, on every bump of its outlet's
+`kitchen_pulses` row, every twenty seconds while visible and on foreground; the
+pulse is a nudge, never the data, because a kitchen shift may not select
+`orders`. It says it is stale — a floating alert — when offline, when the channel
+has been down ten seconds, or when the last read is older than forty-five. It
+holds no outbox and caches nothing for a restart: a kitchen is online by design.
+
 **The database runs two scheduled jobs, and neither is load-bearing for
 correctness.** `bill-receipt-recovery` retries queued receipt wakeups, and
 `day-change-finishes-paid-orders` (#69) marks a paid order nobody ticked as
