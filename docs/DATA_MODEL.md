@@ -402,7 +402,7 @@ land minutes after payment and move the answer.
 `counter` (a Prepared tick) or `day_change`, and is null exactly when
 `prepared_at` is, by check constraint. A paid order is *eventually* served — not
 necessarily when the day is closed, but by the time the shop has shut — so
-`public.finish_paid_orders_at_day_change()`, scheduled by `pg_cron` every minute,
+`public.finish_paid_orders_at_day_change()`, scheduled by `pg_cron` every ten minutes,
 marks every order that is `paid` with a null `prepared_at` as prepared **at the
 cutover ending its payment's business day**:
 `app_business_day_end(bills.payment_business_date, outlets.business_day_cutover)`,

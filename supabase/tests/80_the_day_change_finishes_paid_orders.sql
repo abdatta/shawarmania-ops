@@ -170,8 +170,13 @@ select is(public.app_next_cutover(timestamptz '2026-09-18 01:46:00+05:30', time 
   'and from after midnight, the same cutover');
 select is((select count(*) from cron.job
     where jobname = 'day-change-finishes-paid-orders'
-      and schedule = '* * * * *'),
-  1::bigint, 'the day change runs every minute');
+      and schedule = '*/10 * * * *'),
+  1::bigint, 'the day change runs every ten minutes: its stamp is the cutover, whenever it runs');
+select is((select count(*) from cron.job
+    where jobname = 'cron-run-history-keeps-a-week'
+      and schedule = '30 23 * * *'
+      and command like '%delete from cron.job_run_details%7 days%'),
+  1::bigint, 'and the run history of every job keeps a week, purged daily at 05:00 IST');
 select hasnt_function('public', 'backfill_prepared_history',
   'the laptop repair is retired');
 select is((select count(*) from public.orders

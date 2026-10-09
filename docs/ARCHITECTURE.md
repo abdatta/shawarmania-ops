@@ -282,13 +282,16 @@ pulse is a nudge, never the data, because a kitchen shift may not select
 has been down ten seconds, or when the last read is older than forty-five. It
 holds no outbox and caches nothing for a restart: a kitchen is online by design.
 
-**The database runs two scheduled jobs, and neither is load-bearing for
-correctness.** `bill-receipt-recovery` retries queued receipt wakeups, and
-`day-change-finishes-paid-orders` (#69) marks a paid order nobody ticked as
-prepared at the cutover ending its payment's day. Both run every minute under
-`pg_cron`, and both write only what stored facts already determine: a missed run
-delays an SMS or leaves an order on the rail a little longer, and the next run
-writes exactly what the missed one would have.
+**The database runs three scheduled jobs under `pg_cron`, and none is
+load-bearing for correctness.** `bill-receipt-recovery` retries queued receipt
+wakeups every minute. `day-change-finishes-paid-orders` (#69) marks a paid order
+nobody ticked as prepared at the cutover ending its payment's day, every ten
+minutes. `cron-run-history-keeps-a-week` deletes `pg_cron`'s own run history
+older than a week, daily at 05:00 IST, because `pg_cron` keeps a row per run of
+every job forever and on the Free Plan's 0.5 GB that is a slow leak. The first two
+write only what stored facts already determine: a missed run delays an SMS or
+leaves an order on the rail a little longer, and the next run writes exactly what
+the missed one would have. None of them makes a request or sends data out.
 
 ## How permissions are evaluated
 

@@ -67,7 +67,7 @@ the order lingers on the rail — which is exactly today's behaviour. This keeps
 repo's standing preference that nothing load-bearing depends on a job having run
 (`counter_shifts.expires_at` is stored so that "is this shift live?" needs no job).
 
-### D2. A scheduled function, every minute
+### D2. A scheduled function, every minute — then every ten
 
 `public.finish_paid_orders_at_day_change(p_now timestamptz default now())` is
 `security definer`, performs the update in D1 for every outlet, returns the count it
@@ -90,6 +90,17 @@ The sweep writes **no `billing_commands` receipt**: it is not a counter command,
 no tablet, shift or envelope, and a receipt would be a fabricated one. Consequently it
 does not invalidate a tablet's end-of-day confirmation, which staleness is defined by
 accepted commands; that is correct, since nothing a tablet sent has changed.
+
+**Revised after a trading day in production (owner, 2026-10-09).** The job cost
+nothing metered — no request, egress or Realtime message, 17 ms a run — but
+`pg_cron` keeps a `cron.job_run_details` row for every run of every job forever,
+about 0.25 MB a day per every-minute job, against the Free Plan's 0.5 GB. So
+`20261011000000_scheduled_jobs_stay_small.sql` reschedules the day change to every
+ten minutes — the stamp is the cutover whatever minute the sweep runs, so only how
+long an unticked order lingers changes, to at most ten minutes past 04:00 — and adds
+`cron-run-history-keeps-a-week`, which deletes run history older than seven days
+for every job daily at 05:00 IST. Production's `postgres` role, which owns the jobs,
+is not a superuser but holds DELETE on `cron.job_run_details` (checked 2026-10-09).
 
 ### D3. The order records who finished it
 

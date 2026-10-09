@@ -1398,7 +1398,7 @@ counter.
 
 **A paid order is still on the rail the morning after** → it should not be
 *(#69)*. The day change marks every paid order nobody ticked Prepared as prepared
-at the cutover ending its payment's business day, within a minute of that
+at the cutover ending its payment's business day, within ten minutes of that
 cutover. If one survives, the job has stopped: check
 `select status, start_time from cron.job_run_details where jobid = (select jobid
 from cron.job where jobname = 'day-change-finishes-paid-orders') order by
@@ -1407,6 +1407,12 @@ the stamp is computed from stored dates, so when the job resumes it writes the
 same rows it would have written on time. An **unpaid** order is never finished
 this way: money is still to be collected, so it stays on the rail, and Finish Day
 still refuses over it.
+
+**`pg_cron` keeps a week of run history.** Every scheduled job writes a row per
+run to `cron.job_run_details`; `cron-run-history-keeps-a-week` deletes rows older
+than seven days each morning at 05:00 IST. A week is enough to answer "did it run
+last night?". If the database grows unexpectedly, check that job is still
+scheduled before anything else.
 
 **How often did the counter forget the Prepared tick?** Every order the day
 change finished says so. Counting started at #69's deploy:
