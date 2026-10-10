@@ -11,6 +11,22 @@ export interface SyncWorkflowDispatch {
   inputs: Record<string, string>
 }
 
+export type SyncRequestMode = 'sync' | 'reconnect'
+
+/**
+ * The action a request names, or null for one this function does not offer.
+ *
+ * Absent means `sync`, which every existing caller relies on. Anything else is
+ * refused rather than read as a sync: the Delivery page once sent `accept`, and
+ * quietly running a read in its place hid for two months that accepting a
+ * disputed week did nothing (an-accepted-week-is-written).
+ */
+export function readSyncMode(value: unknown): SyncRequestMode | null {
+  if (value === undefined || value === null || value === 'sync') return 'sync'
+  if (value === 'reconnect') return 'reconnect'
+  return null
+}
+
 export function reconnectWorkflowDispatch(
   rung: 'capture_only' | 'full_login',
   swiggyReconnect: boolean,

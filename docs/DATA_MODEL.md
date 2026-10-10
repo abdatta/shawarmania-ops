@@ -1126,6 +1126,22 @@ so a hand-crafted request and a missing form field are refused by one rule. The
 owner reads across outlets; an assigned Franchise Admin reads only their
 outlet's daily aggregate, while Biller and Employee read none.
 
+**`aggregator_cycle_reconciliations`** — one row per platform payout week per
+outlet and channel (`unique (outlet_id, channel, operator_cycle_ref)`):
+`cycle_start`, `cycle_end`, `computed_paise`, `stated_payout_paise`, `outcome`
+(`reconciled | disputed`), `bank_status`, and, on a disputed week the owner has
+accepted, `accepted_at`, `accepted_by` and the two figures accepted
+(`accepted_computed_paise`, `accepted_stated_payout_paise`), present together or
+not at all. **An acceptance holds only for those figures**: the next read at the
+same figures settles the week and records the gap as an
+`unexplained_settlement_difference` in `aggregator_cycle_deductions`, attributed
+to the account that accepted; a read at different figures, or one that now
+reconciles, clears the acceptance and withdraws that difference. Only
+`accept_aggregator_week` (owner-only) records an acceptance; only the ingest
+writes anything else. **A week that ended before the outlet's `synced_from` is
+never recorded against that outlet** — it belongs to the outlet that traded it
+(an-accepted-week-is-written). Read by the active owner only.
+
 These figures were always on their own table rather than on the notebook's day
 row, because that row could not exist without an opening balance and a drawer
 count, yet a day nobody counted must still show what an aggregator stated. That

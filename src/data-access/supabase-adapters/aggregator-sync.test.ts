@@ -2,7 +2,10 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { Database } from '../database.types'
-import { createSupabaseAggregatorSyncAdapter } from './aggregator-sync'
+import {
+  createSupabaseAggregatorSyncAdapter,
+  createSupabaseSwiggySyncAdapter,
+} from './aggregator-sync'
 
 /**
  * The real adapter against a stubbed client, testing the seam and nothing else:
@@ -192,6 +195,7 @@ function clientForTables(
     adapter: createSupabaseAggregatorSyncAdapter(client as unknown as SupabaseClient<Database>),
     queries,
     invoke,
+    rpc: client.rpc,
   }
 }
 
@@ -254,19 +258,54 @@ describe('owner actions reach their functions with their exact present-day bodie
     })
   })
 
-  it('accepting a difference names its cycle bounds', async () => {
-    const { adapter, invoke } = clientForTables({})
+  it('accepting records the acceptance for that week, then starts the read that honours it', async () => {
+    const { adapter, invoke, rpc } = clientForTables({})
     await adapter.acceptDifference('o-1', '2026-08-17', '2026-08-23')
 
-    expect(invoke).toHaveBeenCalledWith('request-aggregator-sync', {
-      body: {
-        outlet_id: 'o-1',
-        channel: 'zomato',
-        mode: 'accept',
-        cycle_start: '2026-08-17',
-        cycle_end: '2026-08-23',
-      },
+    expect(rpc).toHaveBeenCalledWith('accept_aggregator_week', {
+      p_outlet_id: 'o-1',
+      p_channel: 'zomato',
+      p_cycle_start: '2026-08-17',
+      p_cycle_end: '2026-08-23',
     })
+    // An ordinary read, which the function knows. It once sent `mode: 'accept'`,
+    // which the function read as a sync, so nothing was ever accepted.
+    expect(invoke).toHaveBeenCalledTimes(1)
+    expect(invoke).toHaveBeenCalledWith('request-aggregator-sync', {
+      body: { outlet_id: 'o-1', channel: 'zomato', mode: 'sync' },
+    })
+  })
+
+  it('accepts on the Swiggy channel for the Swiggy adapter', async () => {
+    const { client, invoke } = clientForTables({})
+    const swiggy = createSupabaseSwiggySyncAdapter(client)
+    await swiggy.acceptDifference('o-1', '2026-10-01', '2026-10-03')
+
+    expect((client as unknown as { rpc: ReturnType<typeof vi.fn> }).rpc).toHaveBeenCalledWith(
+      'accept_aggregator_week',
+      {
+        p_outlet_id: 'o-1',
+        p_channel: 'swiggy',
+        p_cycle_start: '2026-10-01',
+        p_cycle_end: '2026-10-03',
+      },
+    )
+    expect(invoke).toHaveBeenCalledWith('request-aggregator-sync', {
+      body: { outlet_id: 'o-1', channel: 'swiggy', mode: 'sync' },
+    })
+  })
+
+  it('starts no read when the acceptance is refused', async () => {
+    const { adapter, invoke, rpc } = clientForTables({})
+    rpc.mockImplementationOnce(() => ({
+      then: (resolve: (value: unknown) => void) =>
+        resolve({ data: null, error: { message: 'Only the owner can accept a delivery week' } }),
+    }))
+
+    await expect(adapter.acceptDifference('o-1', '2026-08-17', '2026-08-23')).rejects.toThrow(
+      'accept_aggregator_week did not go through',
+    )
+    expect(invoke).not.toHaveBeenCalled()
   })
 
   it('hands the one-time password to the otp function once, for the zomato channel', async () => {

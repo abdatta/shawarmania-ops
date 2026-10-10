@@ -560,16 +560,21 @@ export function createSupabaseAggregatorSyncAdapter(
     },
 
     async acceptDifference(outletId, from, to) {
-      await call(
-        {
-          outlet_id: outletId,
-          channel,
-          mode: 'accept',
-          cycle_start: from,
-          cycle_end: to,
-        },
-        'request-aggregator-sync',
-      )
+      // The acceptance is recorded in the database first: who, when, and the
+      // figures the owner saw. It writes nothing else, because the week's
+      // per-order figures exist only in a fresh read, so one is started at once,
+      // exactly as Re-check does, and that read (and every later one) honours it.
+      // This once sent `mode: 'accept'` to the function, which read it as an
+      // ordinary sync, so the button never accepted anything
+      // (an-accepted-week-is-written).
+      const { error } = await client.rpc('accept_aggregator_week', {
+        p_outlet_id: outletId,
+        p_channel: channel,
+        p_cycle_start: from,
+        p_cycle_end: to,
+      })
+      if (error) throw new Error('accept_aggregator_week did not go through')
+      await call({ outlet_id: outletId, channel, mode: 'sync' }, 'request-aggregator-sync')
     },
 
     async markNotDuplicate(outletId, eventId) {

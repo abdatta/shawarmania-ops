@@ -350,6 +350,27 @@ describe('the Zomato sync surface', () => {
     ).toBeInTheDocument()
   }, 15_000)
 
+  it('accepting a disputed week resolves it, rather than reading the week again', async () => {
+    /*
+     * The button that never worked (an-accepted-week-is-written): pressing it
+     * started an ordinary read, which disputed the week again, so the card
+     * stayed exactly as it was however often the owner pressed. Recording the
+     * gap must end the question on this screen.
+     */
+    const user = userEvent.setup()
+    await renderSurface(OUTLET_KANCHRAPARA_ID)
+
+    await user.click(await screen.findByRole('button', { name: /accept the difference/i }))
+    const dialog = await screen.findByRole('dialog', { name: /accept the difference/i })
+    await user.click(within(dialog).getByRole('button', { name: /record it as unexplained/i }))
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: /accept the difference/i }),
+      ).not.toBeInTheDocument(),
+    )
+  }, 15_000)
+
   it('asks for the code by a name that says which outlet it belongs to', async () => {
     const user = userEvent.setup()
     await renderSurface(OUTLET_KANCHRAPARA_ID)

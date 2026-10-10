@@ -350,6 +350,9 @@ export type Database = {
       aggregator_cycle_reconciliations: {
         Row: {
           accepted_at: string | null
+          accepted_by: string | null
+          accepted_computed_paise: number | null
+          accepted_stated_payout_paise: number | null
           bank_status: string | null
           channel: string
           computed_paise: number
@@ -365,6 +368,9 @@ export type Database = {
         }
         Insert: {
           accepted_at?: string | null
+          accepted_by?: string | null
+          accepted_computed_paise?: number | null
+          accepted_stated_payout_paise?: number | null
           bank_status?: string | null
           channel: string
           computed_paise: number
@@ -380,6 +386,9 @@ export type Database = {
         }
         Update: {
           accepted_at?: string | null
+          accepted_by?: string | null
+          accepted_computed_paise?: number | null
+          accepted_stated_payout_paise?: number | null
           bank_status?: string | null
           channel?: string
           computed_paise?: number
@@ -394,6 +403,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "aggregator_cycle_reconciliations_accepted_by_fkey"
+            columns: ["accepted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "aggregator_cycle_reconciliations_outlet_id_fkey"
             columns: ["outlet_id"]
@@ -4192,6 +4208,15 @@ export type Database = {
       }
     }
     Functions: {
+      accept_aggregator_week: {
+        Args: {
+          p_channel: string
+          p_cycle_end: string
+          p_cycle_start: string
+          p_outlet_id: string
+        }
+        Returns: string
+      }
       account_actor_may_replace_set: {
         Args: { p_actor_id: string; p_desired: Json; p_profile_id: string }
         Returns: boolean

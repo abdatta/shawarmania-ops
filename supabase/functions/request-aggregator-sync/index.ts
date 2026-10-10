@@ -3,7 +3,11 @@ import { json, preflight, readJson, str } from '../_shared/http.ts'
 import { probeChannel } from '../_shared/aggregator-probe.ts'
 import { enabledRestaurantMappings } from '../_shared/restaurant-mappings.ts'
 import { decideRung } from '../_shared/reconnect-ladder.ts'
-import { reconnectWorkflowDispatch, syncWorkflowDispatch } from '../_shared/sync-dispatch.ts'
+import {
+  readSyncMode,
+  reconnectWorkflowDispatch,
+  syncWorkflowDispatch,
+} from '../_shared/sync-dispatch.ts'
 
 /**
  * "Read now", and "Reconnect", from the owner's phone.
@@ -88,7 +92,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const outletId = str(body['outlet_id'])
   const channel = str(body['channel']) ?? 'zomato'
-  const mode: Mode = body['mode'] === 'reconnect' ? 'reconnect' : 'sync'
+  const requestedMode = readSyncMode(body['mode'])
+  if (requestedMode === null) return json({ error: 'unknown_mode' }, 400)
+  const mode: Mode = requestedMode
   const rehearse = body['rehearse'] === true
 
   if (channel !== 'zomato' && channel !== 'hyperpure' && channel !== 'swiggy') {

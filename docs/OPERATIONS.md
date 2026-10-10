@@ -870,6 +870,31 @@ before. If nothing is wrong at all, the screen says you are still signed in and
 starts nothing. The manual upload above stays valid in every state for the day
 even the fallback path is wanted.
 
+### Moving a delivery feed to another outlet
+
+Done once, 2026-10-10, when Kalyani's Zomato and Swiggy listings were pointed at
+Kalyani Cafe so their sessions kept refreshing and their charges stayed visible.
+In one transaction: re-point the channel's `outlet_channel_restaurants` row to
+the new outlet, delete the old outlet's `outlet_channel_sync` row, insert the new
+outlet's with the first business date it should own (the insert guard refuses a
+past date, so disable `outlet_channel_sync_guarded` around it, as the Kalyani
+Swiggy switch-on did), and move any day rows and disputed weeks dated on or after
+that date. Then, immediately, change the sync repository's mapping variables —
+`AGGREGATOR_SYNC_OUTLET_MAP` for Zomato, `SWIGGY_MAPPINGS` for Swiggy — or the
+next read is refused as "maps to another outlet". Prove it with one ordinary read
+of each channel. Sessions belong to the channel, not the outlet, so nothing needs
+signing in again.
+
+The readers re-read recent weeks on every run. Weeks that ended before the new
+outlet's start date are not recorded against it (an-accepted-week-is-written);
+before that fix they were, as duplicate settled weeks of the new outlet.
+
+**Accept the difference** on a disputed week records the owner's acceptance and
+starts a read at once; that read writes the platform's own per-order figures,
+settles the week and records the gap against the owner. The acceptance lapses if
+a later read finds different figures, and the week is reconciled or disputed
+afresh. Until 2026-10-10 the button only started a read and accepted nothing.
+
 ## Reading the run history *(#48)*
 
 **Super Admin → Delivery** is one entry for both restaurant channels. The badge

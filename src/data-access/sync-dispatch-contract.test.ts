@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  readSyncMode,
   reconnectWorkflowDispatch,
   syncWorkflowDispatch,
 } from '../../supabase/functions/_shared/sync-dispatch'
@@ -50,5 +51,21 @@ describe('the owner reader-dispatch contract', () => {
         rehearse: 'false',
       },
     })
+  })
+})
+
+describe('the actions a sync request may name', () => {
+  it('reads an absent mode as a sync, as every existing caller relies on', () => {
+    expect(readSyncMode(undefined)).toBe('sync')
+    expect(readSyncMode('sync')).toBe('sync')
+    expect(readSyncMode('reconnect')).toBe('reconnect')
+  })
+
+  it('refuses anything else rather than running a read in its place', () => {
+    // `accept` is what the Delivery page used to send; reading it as a sync is
+    // how a dead Accept button went unnoticed.
+    expect(readSyncMode('accept')).toBeNull()
+    expect(readSyncMode('SYNC')).toBeNull()
+    expect(readSyncMode(1)).toBeNull()
   })
 })

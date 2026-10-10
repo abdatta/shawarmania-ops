@@ -492,6 +492,7 @@ Three habits follow, and they generalise past attendance:
 - **Cover the empty and unknown variant of every command over the real transport**, not only the happy one with every field populated.
 - **Assert refusals by error code, never by "it rejected".** A bare rejection cannot tell a policy refusing from an app incapable of asking.
 - **A command test that never leaves the process proves the object, not the request.**
+- **A server that reads an unknown action as a known one hides a dead button.** **Accept the difference** sent `mode: 'accept'` to `request-aggregator-sync`, which read anything but `reconnect` as a sync; the demo adapter accepted correctly, the component tests drove the demo, and the write contract's own pgTAP fed it `accepted_by` directly, so every suite was green while the button never accepted a week, from August to 2026-10-10. An Edge Function refuses a mode it does not offer, and an action's adapter test asserts the exact call the live adapter makes (an-accepted-week-is-written; `85_an_accepted_week_is_written.sql`).
 
 ## Fixtures
 
