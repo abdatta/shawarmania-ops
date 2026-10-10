@@ -29,6 +29,7 @@ import type { Database, Json } from '../database.types'
 
 type BoardJson = {
   readAt: string
+  filterChangedAt: string | null
   outletId: string
   businessDate: string
   shiftId: string
@@ -74,6 +75,7 @@ export function parseKitchenBoard(value: Json): KitchenBoard {
   const board = value as unknown as BoardJson
   return {
     readAt: board.readAt,
+    filterChangedAt: board.filterChangedAt ?? null,
     outletId: board.outletId,
     businessDate: board.businessDate,
     shiftId: board.shiftId,

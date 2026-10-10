@@ -5314,6 +5314,10 @@ export type Database = {
         Returns: Json
       }
       kitchen_board: { Args: never; Returns: Json }
+      kitchen_filter_lines: {
+        Args: { p_category_ids: string[]; p_lines: Json; p_mode: string }
+        Returns: Json
+      }
       kitchen_line_visible: {
         Args: { p_category: string; p_category_ids: string[]; p_mode: string }
         Returns: boolean

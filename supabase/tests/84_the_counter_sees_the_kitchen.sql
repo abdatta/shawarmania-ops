@@ -267,6 +267,26 @@ select is(pg_temp.ack(:'O1', 'new'), 'accepted', 'Kitchen 2 presses ACK on O1');
 select pg_temp.impersonate(:'COUNTER');
 select is(pg_temp.answers(:'O1'), '["seen", "seen"]', 'O1: every kitchen has seen it');
 
+-- Filtering acknowledged food changes the view, never the answer for food
+-- already seen. Widening onto food not yet acknowledged still asks for ACK.
+select pg_temp.impersonate(:'K1');
+select is(public.set_kitchen_filter('include', array[]::uuid[]), 'ok', 'kitchen 1 hides everything');
+select pg_temp.impersonate(:'COUNTER');
+select is(pg_temp.answers(:'O1'), '[null, "seen"]', 'hiding answered dishes asks nothing');
+select pg_temp.impersonate(:'K1');
+select is(public.set_kitchen_filter('include', array[:'SHAWARMA_CAT'::uuid]), 'ok', 'show shawarmas again');
+select pg_temp.impersonate(:'COUNTER');
+select is(pg_temp.answers(:'O1'), '["seen", "seen"]', 'the answer returns without a new ACK');
+select pg_temp.impersonate(:'K1');
+select is(public.set_kitchen_filter('exclude', array[]::uuid[]), 'ok', 'take over burgers too');
+select pg_temp.impersonate(:'COUNTER');
+select is(pg_temp.answers(:'O1'), '["waiting", "seen"]', 'newly shown food waits for ACK');
+select pg_temp.impersonate(:'K1');
+select is(pg_temp.ack(:'O1', 'edit'), 'accepted', 'kitchen 1 answers for both dishes');
+select is(public.set_kitchen_filter('include', array[:'SHAWARMA_CAT'::uuid]), 'ok', 'hide the answered burger');
+select pg_temp.impersonate(:'COUNTER');
+select is(pg_temp.answers(:'O1'), '["seen", "seen"]', 'partial narrowing stays seen');
+
 -- An edit re-arms only the kitchen whose dishes it changed.
 select is(pg_temp.revise_order(:'O1', 2, 2), 'accepted', 'the counter adds a burger to O1');
 select is(pg_temp.answers(:'O1'), '["seen", "waiting"]',
@@ -282,7 +302,13 @@ select is(pg_temp.revise_order(:'O1', 2, 0), 'accepted', 'the counter takes O1''
 select is(pg_temp.answers(:'O1'), '["seen", "waiting"]',
   'Kitchen 2 still has a cancellation to acknowledge');
 select pg_temp.impersonate(:'K2');
+select is((select jsonb_array_length(o -> 'lines') from jsonb_array_elements(public.kitchen_board() -> 'orders') o
+            where o ->> 'id' = :'O1'), 0,
+  'counter removal keeps a board card with no visible lines until cancel ACK');
 select is(pg_temp.ack(:'O1', 'cancel'), 'accepted', 'Kitchen 2 acknowledges it');
+select is((select count(*) from jsonb_array_elements(public.kitchen_board() -> 'orders') o
+            where o ->> 'id' = :'O1'), 0::bigint,
+  'cancel ACK clears the removed-food card');
 select pg_temp.impersonate(:'COUNTER');
 select is(pg_temp.answers(:'O1'), '["seen", null]', 'and no longer carries O1');
 

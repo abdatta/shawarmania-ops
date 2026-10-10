@@ -7,6 +7,7 @@ import {
   KITCHEN_REREAD_MS,
   KITCHEN_STALE_AFTER_MS,
   kitchenCardState,
+  kitchenAlertShouldRing,
   type KitchenCardState,
 } from '@/domain'
 
@@ -65,6 +66,7 @@ export function useKitchenBoard(options: {
   const [shakes, setShakes] = useState<Record<string, number>>({})
   const [rings, setRings] = useState<Record<string, RingState>>({})
   const seen = useRef<Map<string, Seen> | null>(null)
+  const previousBoardReadAt = useRef<string | null>(null)
   const ringer = useRef<Ringer | null>(null)
   const reading = useRef(false)
   const [mountedAt] = useState(() => now())
@@ -88,6 +90,7 @@ export function useKitchenBoard(options: {
     const previous = seen.current
     const current = new Map<string, Seen>()
     const raised: { key: string; kind: 'new' | 'edit' | 'cancel' }[] = []
+    const silent = new Set<string>()
     const alerting = new Set<string>()
     for (const order of next.orders) {
       const state = kitchenCardState(order)
@@ -96,23 +99,31 @@ export function useKitchenBoard(options: {
       const kind = acknowledgementFor(state)
       if (!kind) continue
       alerting.add(order.id)
-      if (previous === null) continue
-      const before = previous.get(order.id)
+      const before = previous?.get(order.id)
       if (
         !before ||
         before.state !== state ||
         before.version !== entry.version ||
         before.linesKey !== entry.linesKey
       ) {
-        raised.push({ key: order.id, kind })
+        if (
+          kitchenAlertShouldRing(previousBoardReadAt.current, next.filterChangedAt, order.version)
+        ) {
+          raised.push({ key: order.id, kind })
+        } else {
+          silent.add(order.id)
+          ringer.current?.settle(order.id)
+        }
       }
     }
     seen.current = current
+    previousBoardReadAt.current = next.readAt
     ringer.current?.keepOnly(alerting)
-    if (raised.length > 0) {
+    if (raised.length > 0 || silent.size > 0) {
       ringer.current?.raiseAll(raised)
       setShakes((held) => {
         const copy = { ...held }
+        for (const key of silent) copy[key] = 0
         for (const alert of raised) copy[alert.key] = (copy[alert.key] ?? 0) + 1
         return copy
       })

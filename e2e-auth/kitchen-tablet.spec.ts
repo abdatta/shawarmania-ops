@@ -101,6 +101,22 @@ test('a counter rings a kitchen, ACK quiets it, Prepared clears it, and losing s
   const counter = await openTill(browser, request, TILL_ONE)
 
   try {
+    const only = async (category: 'Shawarma' | 'Burgers') => {
+      await kitchen.page.getByRole('button', { name: /^Filter: / }).click()
+      const dialog = kitchen.page.getByRole('dialog')
+      await dialog.getByRole('radio', { name: 'Only these' }).click()
+      for (const choice of ['Shawarma', 'Burgers']) {
+        await dialog
+          .getByRole('checkbox', { name: new RegExp(choice, 'i') })
+          .setChecked(choice === category)
+      }
+      await dialog.getByRole('button', { name: 'Save' }).click()
+      await expect(kitchen.page.getByTestId('kitchen-filter-summary')).toHaveText(
+        `Only ${category}`,
+      )
+    }
+    await only('Shawarma')
+
     // An order taken at the counter arrives in the kitchen, new and alerting,
     // with no customer anywhere on the kitchen's screen.
     const id = await saveOrder(counter.page, 'Kitchen Sees This')
@@ -126,6 +142,19 @@ test('a counter rings a kitchen, ACK quiets it, Prepared clears it, and losing s
       'data-state',
       'quiet',
     )
+
+    // The owner's sequence: a saved filter changes only the view. Hide the
+    // shawarma, then show it again, without a cancellation or another ACK.
+    await only('Shawarma')
+    await expect(card).toHaveAttribute('data-state', 'quiet')
+    await only('Burgers')
+    await expect(card).toHaveCount(0)
+    await expect(bell).toHaveCount(0)
+    await only('Shawarma')
+    await expect(card).toHaveAttribute('data-state', 'quiet')
+    await expect(card.locator('..')).not.toHaveClass(/kitchen-shake/)
+    await expect(card.getByRole('button')).toHaveCount(0)
+    await expect(bell).toHaveAccessibleName(`${TILL_TWO.label} has pressed ACK`)
 
     // Prepared at the counter takes it off the kitchen, with no ACK.
     await railSettled(counter.page)

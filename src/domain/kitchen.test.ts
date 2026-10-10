@@ -5,6 +5,7 @@ import {
   formatKitchenWait,
   kitchenBell,
   kitchenCardState,
+  kitchenAlertShouldRing,
   kitchenWaitTone,
   sameLines,
   type KitchenCardFacts,
@@ -20,6 +21,31 @@ const fries = (quantity: number): KitchenLineFacts => ({
   menuItemId: 'fries',
   itemName: 'Fries',
   quantity,
+})
+
+describe('kitchenAlertShouldRing', () => {
+  const previous = '2026-10-10T10:00:00Z'
+  const filter = '2026-10-10T10:00:01Z'
+  it.each([
+    [null, null, filter, false, 'first read'],
+    [previous, null, previous, true, 'no filter save ever'],
+    [previous, previous, previous, true, 'filter time equals previous read'],
+    [previous, filter, previous, false, 'old food newly shown'],
+    [previous, filter, filter, false, 'order time equals filter time'],
+    [previous, filter, '2026-10-10T10:00:02Z', true, 'counter write after filter'],
+    [filter, previous, previous, true, 'category move without filter save'],
+    [null, filter, filter, false, 'first read with saved filter'],
+    [
+      previous,
+      '2026-10-10T10:00:00.000001Z',
+      previous,
+      false,
+      'filter save one microsecond after read',
+    ],
+    [previous, filter, '2026-10-10T10:00:01.000001Z', true, 'write one microsecond after save'],
+  ])('%s / %s / %s: %s (%s)', (readAt, changedAt, version, expected, _description) => {
+    expect(kitchenAlertShouldRing(readAt, changedAt, version)).toBe(expected)
+  })
 })
 
 function card(overrides: Partial<KitchenCardFacts>): KitchenCardFacts {

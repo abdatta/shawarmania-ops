@@ -33,12 +33,18 @@ interface StoredAck extends KitchenAcknowledgement {
 /** The demo kitchen's own state, shared across role switches like the counter's. */
 export interface DemoKitchen {
   filter: { mode: KitchenFilterMode; categoryIds: string[] }
+  filterChangedAt: string | null
   sort: KitchenSort
   acks: StoredAck[]
 }
 
 export function createDemoKitchen(): DemoKitchen {
-  return { filter: { mode: 'exclude', categoryIds: [] }, sort: 'oldest_first', acks: [] }
+  return {
+    filter: { mode: 'exclude', categoryIds: [] },
+    filterChangedAt: null,
+    sort: 'oldest_first',
+    acks: [],
+  }
 }
 
 function version(order: Tables<'orders'>): string {
@@ -84,7 +90,15 @@ export function createMockKitchenAdapter(
     for (const ack of kitchen.acks) {
       if (ack.orderId === orderId && (!latest || ack.ackedAt >= latest.ackedAt)) latest = ack
     }
-    return latest
+    if (!latest) return null
+    return {
+      ...latest,
+      lines: latest.lines.filter((line) => {
+        const categoryId =
+          store.menuItems.find((item) => item.id === line.menuItemId)?.category_id ?? null
+        return visible(categoryId, kitchen.filter)
+      }),
+    }
   }
 
   function board(): KitchenBoard {
@@ -124,11 +138,16 @@ export function createMockKitchenAdapter(
       .filter(
         (order) =>
           (order.lines.length > 0 || (order.latestAck?.lines.length ?? 0) > 0) &&
-          !(order.latestAck?.kind === 'cancel' && order.latestAck.orderVersion === order.version),
+          !(
+            order.latestAck?.kind === 'cancel' &&
+            order.latestAck.orderVersion === order.version &&
+            (order.status === 'cancelled' || order.lines.length === 0)
+          ),
       )
       .sort((a, b) => a.orderedAt.localeCompare(b.orderedAt) || a.id.localeCompare(b.id))
     return {
       readAt: now().toISOString(),
+      filterChangedAt: kitchen.filterChangedAt,
       outletId: DEMO_OUTLET_ID,
       businessDate: store.today,
       shiftId: DEMO_KITCHEN_SHIFT_ID,
@@ -152,6 +171,7 @@ export function createMockKitchenAdapter(
       kitchen.acks.length,
       kitchen.filter.mode,
       kitchen.filter.categoryIds.join(','),
+      kitchen.filterChangedAt,
     ].join('#')
   }
 
@@ -214,6 +234,7 @@ export function createMockKitchenAdapter(
 
     async setFilter(mode, categoryIds, sort) {
       kitchen.filter = { mode, categoryIds: [...new Set(categoryIds)] }
+      kitchen.filterChangedAt = now().toISOString()
       kitchen.sort = sort
     },
 

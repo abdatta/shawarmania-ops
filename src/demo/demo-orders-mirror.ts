@@ -33,7 +33,7 @@ type Message =
       epoch: number
       orders: DemoStore['orders']
       orderItems: DemoStore['orderItems']
-      kitchen?: Pick<DemoKitchen, 'acks' | 'filter'>
+      kitchen?: Pick<DemoKitchen, 'acks' | 'filter'> & { filterChangedAt?: string | null }
     }
 
 function signature(store: DemoStore, kitchen: DemoKitchen): string {
@@ -42,6 +42,7 @@ function signature(store: DemoStore, kitchen: DemoKitchen): string {
     store.orderItems.length,
     kitchen.acks.length,
     kitchen.filter,
+    kitchen.filterChangedAt,
   ])
 }
 
@@ -70,7 +71,11 @@ export function mirrorDemoOrders(
       epoch,
       orders: store.orders,
       orderItems: store.orderItems,
-      kitchen: { acks: kitchen.acks, filter: kitchen.filter },
+      kitchen: {
+        acks: kitchen.acks,
+        filter: kitchen.filter,
+        filterChangedAt: kitchen.filterChangedAt,
+      },
     } satisfies Message)
 
   channel.onmessage = (event: MessageEvent<Message>) => {
@@ -92,6 +97,7 @@ export function mirrorDemoOrders(
     if (message.kitchen) {
       kitchen.acks.splice(0, kitchen.acks.length, ...message.kitchen.acks)
       kitchen.filter = message.kitchen.filter
+      kitchen.filterChangedAt = message.kitchen.filterChangedAt ?? null
     }
     // Adopted, not authored: remembering it stops this tab echoing it back.
     last = signature(store, kitchen)

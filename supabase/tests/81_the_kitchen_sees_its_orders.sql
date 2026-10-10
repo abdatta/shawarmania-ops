@@ -351,23 +351,56 @@ select is(pg_temp.card('e7000000-0000-4000-a000-000000000001') ->> 'acknowledged
 select is(pg_temp.card('e7000000-0000-4000-a000-000000000001') -> 'latestAck' -> 'lines' -> 0 ->> 'itemName',
   'Classic Chicken Shawarma', 'and the server snapshotted what was acknowledged');
 
--- A filter change that leaves O1 with nothing here: it reads as a cancellation
--- until acknowledged, because this kitchen had acknowledged it with a line.
+-- A filter is a view: hiding acknowledged food asks nothing, and showing it
+-- again compares with the same snapshot through today's filter.
 select is(public.set_kitchen_filter('include', array[:'SALADS_CAT'::uuid]), 'ok',
   'the kitchen now shows only salads');
-select is(jsonb_array_length(pg_temp.card('e7000000-0000-4000-a000-000000000001') -> 'lines'), 0,
-  'O1 has nothing left here');
-select ok(pg_temp.card('e7000000-0000-4000-a000-000000000001') is not null,
-  'but stays on the board until the cook acknowledges losing it');
+select is(pg_temp.card('e7000000-0000-4000-a000-000000000001'), null::jsonb,
+  'O1 leaves immediately with nothing to acknowledge');
+select is(public.set_kitchen_filter('exclude', array[:'BURGERS_CAT'::uuid]), 'ok', 'back to the shawarma kitchen');
+select is(pg_temp.card('e7000000-0000-4000-a000-000000000001') -> 'latestAck' -> 'lines',
+  pg_temp.card('e7000000-0000-4000-a000-000000000001') -> 'lines',
+  'O1 comes back quiet, with its acknowledged shawarmas');
+select ok(pg_temp.board() ->> 'filterChangedAt' is not null,
+  'the board carries the server time the filter changed');
+
+select is(public.set_kitchen_filter('exclude', array[]::uuid[]), 'ok', 'show everything');
+select is(jsonb_array_length(pg_temp.card('e7000000-0000-4000-a000-000000000001') -> 'latestAck' -> 'lines'), 1,
+  'widening keeps only the shawarmas previously acknowledged');
+select is(jsonb_array_length(pg_temp.card('e7000000-0000-4000-a000-000000000001') -> 'lines'), 2,
+  'the burger is newly on show and needs an edit ACK');
+select is(pg_temp.card('e7000000-0000-4000-a000-000000000002') ->> 'acknowledged', 'false',
+  'the burger-only order is new to this kitchen');
+select is(public.kitchen_acknowledge(gen_random_uuid(),
+    'e7000000-0000-4000-a000-000000000001', 'edit',
+    pg_temp.version('e7000000-0000-4000-a000-000000000001')) ->> 'status',
+  'accepted', 'acknowledge both dishes');
+select is(public.set_kitchen_filter('exclude', array[:'BURGERS_CAT'::uuid]), 'ok', 'hide burgers again');
+select is(pg_temp.card('e7000000-0000-4000-a000-000000000001') -> 'latestAck' -> 'lines',
+  pg_temp.card('e7000000-0000-4000-a000-000000000001') -> 'lines',
+  'hiding part of an answered order stays quiet without struck dishes');
+
+-- A cancel ACK written by #70 for a filter change must not hide visible food.
+select pg_temp.version('e7000000-0000-4000-a000-000000000001')::text as legacy_version \gset
+select is(public.set_kitchen_filter('include', array[:'SALADS_CAT'::uuid]), 'ok', 'hide O1');
 select is(public.kitchen_acknowledge(gen_random_uuid(),
     'e7000000-0000-4000-a000-000000000001', 'cancel',
-    pg_temp.version('e7000000-0000-4000-a000-000000000001')) ->> 'status',
-  'accepted', 'the cook acknowledges it');
-select is(pg_temp.card('e7000000-0000-4000-a000-000000000001'), null::jsonb, 'and it leaves');
-select is(public.set_kitchen_filter('exclude', array[:'BURGERS_CAT'::uuid]), 'ok', 'back to the shawarma kitchen');
+    :'legacy_version'::timestamptz) ->> 'status',
+  'accepted', 'the old filter-change cancel ACK');
+select is(public.set_kitchen_filter('exclude', array[:'BURGERS_CAT'::uuid]), 'ok', 'show shawarmas');
+select ok(pg_temp.card('e7000000-0000-4000-a000-000000000001') is not null,
+  'an open order with visible food returns despite an old cancel ACK');
 select pg_temp.unimpersonate();
 
 -- A cancellation stays until acknowledged.
+select pg_temp.impersonate(:'COUNTER');
+select is(pg_temp.take_order('e7000000-0000-4000-a000-000000000004', 0, 1), 'accepted',
+  'O4 is a burger hidden by this kitchen');
+select is(pg_temp.cancel_order('e7000000-0000-4000-a000-000000000004'), 'accepted',
+  'the counter cancels the hidden order');
+select pg_temp.impersonate(:'KITCHEN');
+select is(pg_temp.card('e7000000-0000-4000-a000-000000000004'), null::jsonb,
+  'a hidden order cancelled at the counter stays off the board');
 select pg_temp.impersonate(:'COUNTER');
 select is(pg_temp.cancel_order('e7000000-0000-4000-a000-000000000003'), 'accepted',
   'the counter cancels O3');

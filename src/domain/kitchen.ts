@@ -54,6 +54,27 @@ export function acknowledgementFor(state: KitchenCardState): 'new' | 'edit' | 'c
   }
 }
 
+/** A filter save widens silently; later counter writes still ring in the same read. */
+function kitchenTimestampMicros(value: string): bigint {
+  // Postgres timestamps retain microseconds; Date.parse alone loses a counter
+  // write immediately after Save within the same millisecond.
+  const fraction = /\.(\d+)/.exec(value)?.[1] ?? ''
+  return BigInt(Date.parse(value)) * 1000n + BigInt(fraction.padEnd(6, '0').slice(3, 6))
+}
+
+export function kitchenAlertShouldRing(
+  previousReadAt: string | null,
+  filterChangedAt: string | null,
+  orderVersion: string,
+): boolean {
+  if (previousReadAt === null) return false
+  if (filterChangedAt === null) return true
+  return !(
+    kitchenTimestampMicros(filterChangedAt) > kitchenTimestampMicros(previousReadAt) &&
+    kitchenTimestampMicros(orderVersion) <= kitchenTimestampMicros(filterChangedAt)
+  )
+}
+
 function lineKey(line: KitchenLineFacts): string {
   return line.menuItemId ?? `name:${line.itemName}`
 }

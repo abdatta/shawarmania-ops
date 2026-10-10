@@ -2132,6 +2132,8 @@ export interface KitchenOrder {
 
 export interface KitchenBoard {
   readAt: string
+  /** Server time of this tablet's last filter save; widening then alerts silently. */
+  filterChangedAt: string | null
   outletId: string
   businessDate: string
   shiftId: string

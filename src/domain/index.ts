@@ -220,6 +220,7 @@ export {
   KITCHEN_WAIT_DANGER_MINUTES,
   KITCHEN_WAIT_WARNING_MINUTES,
   kitchenBell,
+  kitchenAlertShouldRing,
   kitchenCardState,
   kitchenWaitTone,
   sameLines,
