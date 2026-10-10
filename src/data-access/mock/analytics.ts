@@ -83,6 +83,7 @@ export function createMockAnalyticsAdapter(
           discounts: 0,
           orders: 0,
           previousUnits: 0,
+          periodUnits: [],
           active: true,
           available: item.is_available,
           highlighted: store.menuHighlights.get(outletId)?.itemIds.includes(item.id) ?? false,
@@ -90,6 +91,7 @@ export function createMockAnalyticsAdapter(
       }
       const periods = options?.periods ?? 2
       const { span, start } = window(from, to, periods)
+      for (const item of items.values()) item.periodUnits = Array<number>(periods).fill(0)
       const priorStart = shiftDate(from, -span)
       for (let date = start; date <= to; date = shiftDate(date, 1))
         result.days.push({ date, revenue: 0, orders: 0, units: 0, discounts: 0 })
@@ -97,7 +99,14 @@ export function createMockAnalyticsAdapter(
       const categoryRow = (name: string) => {
         let row = result.categories.find((c) => c.name === name)
         if (!row) {
-          row = { name, revenue: 0, units: 0, previousRevenue: 0, previousUnits: 0 }
+          row = {
+            name,
+            revenue: 0,
+            units: 0,
+            previousRevenue: 0,
+            previousUnits: 0,
+            periodUnits: Array<number>(periods).fill(0),
+          }
           result.categories.push(row)
         }
         return row
@@ -139,11 +148,17 @@ export function createMockAnalyticsAdapter(
             discounts: 0,
             orders: 0,
             previousUnits: 0,
+            periodUnits: Array<number>(periods).fill(0),
             active: false,
             available: false,
             highlighted: false,
           }
           day.units += line.quantity
+          // Window 0 is the current one, as the server numbers them.
+          const windowIndex = Math.floor((periodDays(bill.business_date, to) - 1) / span)
+          row.periodUnits[windowIndex]! += line.quantity
+          categoryRow(line.category_name ?? 'Uncategorised').periodUnits[windowIndex]! +=
+            line.quantity
           if (bill.business_date >= from) {
             row.units += line.quantity
             row.revenue += line.line_total_paise - line.discount_paise

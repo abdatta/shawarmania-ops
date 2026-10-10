@@ -65,7 +65,8 @@ function OutletAnalytics({
       : { kind: 'all' }
   const periods = Math.max(1, Math.min(4, Number(params.get('periods')) || 2))
   const [loaded, setLoaded] = useState<{ key: string; data: AnalyticsSnapshot } | null>(null)
-  const readPeriods = kind === 'items' ? 2 : Math.floor(periods)
+  // Items always reads its previous period, for each dish's change with Compare off.
+  const readPeriods = Math.max(kind === 'items' ? 2 : 1, Math.floor(periods))
   const readKey = `${outletId}:${from}:${to}:${kind}:${readPeriods}`
   const data = loaded?.key === readKey ? loaded.data : null
   const [error, setError] = useState(false)

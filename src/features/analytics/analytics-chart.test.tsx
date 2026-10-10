@@ -196,6 +196,35 @@ describe('interactive sales figures', () => {
       expect(hours.getByRole('status')).toHaveTextContent(`12:00${hourlyValue}`)
     },
   )
+  it('four periods read as a direction and against the usual, not against the last one', () => {
+    const days = [100_000, 110_000, 120_000, 130_000].map((revenue, index) => ({
+      date: `2026-10-0${index + 1}`,
+      revenue,
+      orders: 1,
+      units: 1,
+      discounts: 0,
+    }))
+    inRouter(
+      <SalesPanel
+        data={{ days, items: [], categories: [], delivery: [], hours: [] }}
+        from="2026-10-04"
+        to="2026-10-04"
+        grain="day"
+        metric="revenue"
+        periods={4}
+      />,
+    )
+    const card = within(screen.getByTestId('sales-trend-card'))
+    // A steady climb of ₹100 a day on an average of ₹1,150 is about 9% a day.
+    expect(card.getByText('9%').closest('span')).toHaveTextContent('9%/ day')
+    expect(card.getByText('▲ usual')).toBeVisible()
+    expect(screen.getByTestId('sales-trend-usual')).toHaveTextContent('Usually ₹1K–₹1.2K a day')
+    expect(card.queryByText('+8%')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Table' }))
+    expect(screen.getByRole('columnheader', { name: 'vs usual' })).toBeVisible()
+    // ₹1,300 against an earlier average of ₹1,100.
+    expect(screen.getByRole('row', { name: /^4 Oct .*▲ 18%$/ })).toBeVisible()
+  })
   it('solid four-period columns include earlier trading hours and preserve zero-sale gaps', () => {
     inRouter(
       <SalesPanel

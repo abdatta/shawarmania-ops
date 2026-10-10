@@ -110,10 +110,13 @@ for (const theme of ['light', 'dark']) {
     ).toBeVisible()
     await card.getByRole('button', { name: 'Chart', exact: true }).click()
 
-    // Four periods and revenue: the chart reads its series again, the lists don't move.
+    // Four periods: the headline reads a direction and the usual range, not the last period.
     await page.getByRole('button', { name: 'Compare periods: 2 periods' }).click()
     await page.getByRole('button', { name: '4 periods', exact: true }).click()
     await expect(page.getByTestId('items-trend').getByTestId('chart-series')).toHaveCount(4)
+    await expect(page.getByTestId('items-trend-usual')).toContainText(/^Usually .+ a week$/)
+    await expect(card.getByText(/^[▲≈▼] usual$/)).toBeVisible()
+    await expect(rankings.getByTestId('period-bars').first()).toBeVisible()
     await chooseMeasure(page, 'Revenue')
     await expect(card.getByRole('heading', { name: 'Dish revenue' })).toBeVisible()
     await expect(page.getByTestId('items-trend-value')).toContainText('₹')
@@ -138,7 +141,15 @@ for (const theme of ['light', 'dark']) {
 
     // Categories carry their own change and chart the same way.
     const categories = page.getByTestId('category-row')
-    expect(await categories.count()).toBeGreaterThan(5)
+    // Changing the period count reads the snapshot again; wait for its rows.
+    await expect.poll(() => categories.count()).toBeGreaterThan(5)
+    // Category bars stand in one vertical line whatever each row's chip and number.
+    const lefts = await categories.evaluateAll((rows) =>
+      rows.map((row) =>
+        Math.round(row.querySelector('[data-testid="period-bars"]')!.getBoundingClientRect().left),
+      ),
+    )
+    expect(new Set(lefts).size).toBe(1)
     await expect(page.getByText('Uncategorised', { exact: true })).toHaveCount(0)
     const category = (await categories.first().getAttribute('aria-label'))!.replace(/^Chart /, '')
     await categories.first().click()
@@ -162,6 +173,33 @@ for (const theme of ['light', 'dark']) {
       .evaluateAll((rows) => rows.map((row) => Number(row.getAttribute('data-units'))))
     expect(worst[0]).toBe(0)
     expect(worst).toEqual([...worst].sort((a, b) => a - b))
+    // Comparing four periods, each row shows a bar per period and where they head;
+    // Rising and Slow mean that direction, not beating the last period.
+    const slopes = async () =>
+      rankings.getByTestId('dish-row').evaluateAll((elements) =>
+        elements.map((el) => {
+          const values = [...el.querySelectorAll('[data-testid="period-bars"] [data-value]')].map(
+            (bar) => Number(bar.getAttribute('data-value')),
+          )
+          const mean = values.reduce((sum, v) => sum + v, 0) / values.length
+          const middle = (values.length - 1) / 2
+          return {
+            bars: values.length,
+            slope: values.reduce((sum, v, x) => sum + (x - middle) * (v - mean), 0),
+          }
+        }),
+      )
+    for (const tab of ['Rising', 'Slow']) {
+      await page.getByRole('button', { name: tab, exact: true }).click()
+      const rows = await slopes()
+      expect(rows.length).toBeGreaterThan(0)
+      expect(rows.every((row) => row.bars === 4)).toBe(true)
+      expect(rows.every((row) => (tab === 'Rising' ? row.slope > 0 : row.slope < 0))).toBe(true)
+    }
+    // Back to two periods, the rows compare with the previous one again.
+    await page.getByRole('button', { name: 'Compare periods: 4 periods' }).click()
+    await page.getByRole('button', { name: '2 periods', exact: true }).click()
+    await expect(rankings.getByTestId('period-bars')).toHaveCount(0)
     for (const tab of ['Rising', 'Slow']) {
       await page.getByRole('button', { name: tab, exact: true }).click()
       const rows = await rankings.getByTestId('dish-row').evaluateAll((elements) =>

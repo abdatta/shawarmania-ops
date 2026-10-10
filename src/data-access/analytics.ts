@@ -34,17 +34,22 @@ export interface AnalyticsAdapter {
 export function analyticsSnapshot(value: unknown): AnalyticsSnapshot {
   if (!value || typeof value !== 'object') throw new Error('Invalid analytics response')
   const record = value as Record<string, unknown>
-  const fields = {
+  const fields: Record<
+    string,
+    { strings: string[]; numbers: string[]; booleans: string[]; counts?: string[] }
+  > = {
     categories: {
       strings: ['name'],
       numbers: ['revenue', 'units', 'previousRevenue', 'previousUnits'],
       booleans: [],
+      counts: ['periodUnits'],
     },
     days: { strings: ['date'], numbers: ['revenue', 'orders', 'units', 'discounts'], booleans: [] },
     items: {
       strings: ['key', 'name', 'category'],
       numbers: ['units', 'revenue', 'discounts', 'orders', 'previousUnits'],
       booleans: ['active', 'available', 'highlighted'],
+      counts: ['periodUnits'],
     },
     delivery: { strings: ['date', 'channel'], numbers: ['revenue'], booleans: ['provisional'] },
     hours: { strings: [], numbers: ['period', 'hour', 'orders', 'revenue'], booleans: [] },
@@ -56,6 +61,12 @@ export function analyticsSnapshot(value: unknown): AnalyticsSnapshot {
       if (
         !row ||
         typeof row !== 'object' ||
+        (spec.counts ?? []).some(
+          (k) =>
+            !Array.isArray(row[k]) ||
+            row[k].length > 4 ||
+            row[k].some((n: unknown) => !Number.isSafeInteger(n) || (n as number) < 0),
+        ) ||
         spec.strings.some((k) => typeof row[k] !== 'string') ||
         spec.booleans.some((k) => typeof row[k] !== 'boolean') ||
         spec.numbers.some((k) => !Number.isSafeInteger(row[k]) || row[k] < 0)

@@ -51,3 +51,16 @@ Customers moves from Setup to Analytics, after Items and Sales, for owner and ma
 - Item units per day are pre-aggregated rather than a correlated subquery per day over every line.
 - A dish's name is its current menu name where the dish still exists, else its latest captured name.
 - The mature demo history is built with indexed lookups (about 0.1 s instead of about 0.6 s on every demo load and reset), runs to yesterday so the default 7-day range is not a false collapse, and captures every line's category as the counter does. Its delivery imports still stop four days back, leaving the rehearsed delivery days alone.
+
+## Three or four periods read as a trend (owner, 2026-10-09)
+
+A change against the last period contradicts a comparison of four. With one earlier period nothing changes: the chip is `+15%`. With two or three:
+
+- **Direction.** A least-squares line through the period totals, oldest first, its slope taken as a share of their average: `↗ 9% / mo`, `↘ 12% / mo`, or `→ steady`. It calls a direction only when the line moves at least 3% a period **and** its whole rise or fall exceeds the residual standard deviation about it, so one odd week among four reads as flat. Flat carries no number, since one would argue with the arrow; it first showed the arrow alone, which looked out of place beside the others, so it reads `steady` in the unit's small muted style and every chip is about one size. The owner dropped the words Rising/Falling/Holding steady because the arrow says it; the unit is set small and muted with spaces (`9% / mo`) because `%/mo` read cramped. The unit is `day`, `wk`, `mo` (28–31 days) or the range's own length (`14d`).
+- **Usual.** The earlier periods' average give or take their sample standard deviation, never narrower than 5% of the average: `Usually ₹5.9L–₹6.5L a month` under the headline, and `▲ usual`, `≈ usual` or `▼ usual` beside the direction.
+- **Rows.** Each dish and category shows a bar per period, each from zero and scaled to that row's best period (the units bar already compares rows; a shared scale would flatten small dishes), in the chart legend's colours with the current period right, and its direction chip. Rising and Slow then mean heading up or down, fastest first, rather than beating the last period. The snapshot carries `periodUnits` per dish and category, at most four integers each, so Items reads every compared period (at least two).
+- **Table.** Its last column becomes `vs usual`: the bucket against the earlier periods' same bucket, `▲ 14%`, `≈` or `▼ 13%`.
+
+Falling chips, and the `vs last period` chips when down, use the danger tone, as the approved sketch did.
+
+Rejected: words beside the arrow (long), a bare `9%` with the unit stated once above the list (the number then means a different thing at two periods and at four), a steadiness word in place of the usual range (the range is in rupees and checkable against the chart).

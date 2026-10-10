@@ -249,6 +249,14 @@ describe('analytics periods and bounded aggregates', () => {
         current: { units: sum(series.units.slice(30)), revenue: sum(series.revenue.slice(30)) },
       }
     }
+    // Every dish and category carries its units in every compared window, current first.
+    const four = await adapter.read(DEMO_OUTLET_ID, from, to, { view: 'items', periods: 4 })
+    for (const row of [...four.items, ...four.categories]) {
+      expect(row.periodUnits).toHaveLength(4)
+      expect(row.periodUnits[0]).toBe(row.units)
+      expect(row.periodUnits[1]).toBe(row.previousUnits)
+    }
+    expect(four.items.some((i) => i.periodUnits[3]! > 0)).toBe(true)
     const all = await windows({ kind: 'all' })
     expect(all.current.units).toBe(snapshot.items.reduce((sum, i) => sum + i.units, 0))
     for (const item of snapshot.items.filter((i) => i.units).slice(0, 5)) {

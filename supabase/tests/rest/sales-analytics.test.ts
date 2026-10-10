@@ -110,6 +110,13 @@ describe('analytics HTTP authority and bounded projection', () => {
       view: 'items',
       periods: 2,
     })
+    const four = await adapter.read(outlet, '2026-01-01', '2026-01-30', {
+      view: 'items',
+      periods: 4,
+    })
+    expect(
+      four.items.every((i) => i.periodUnits.length === 4 && i.periodUnits[0] === i.units),
+    ).toBe(true)
     const dish = items.items[0]!
     const one = await adapter.series(outlet, '2026-01-01', '2026-01-30', 2, {
       kind: 'item',

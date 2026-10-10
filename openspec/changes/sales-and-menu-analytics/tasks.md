@@ -46,3 +46,6 @@ Tasks 1–13 record the earlier verified iterations. The owner's latest scope in
 - [x] 26. Items: group by Hour as well as Day and Week, from 24 order-hour totals per window carried in the same series read; Day stays the default.
 - [x] 27. Charts show the focus ring only when reached by keyboard, not after a tap or click.
 - [x] 28. Move Customers from Setup to Analytics for owner and manager, keeping its address; record customer analytics in the backlog (`customer-analytics`).
+
+- [x] 29. With three or four compared periods, read the trend headline, dish and category rows and the table as a direction (fitted rate per period, flat within the periods' wobble), the usual range and the current period against it; per-period bars on rows from `periodUnits`; Rising and Slow by direction.
+- [x] 30. Flat trend chips read `→ steady` in the unit's style, so chips are one size; Items wears a ranked-bars icon instead of Menu's utensils (the name stays, since it covers drinks); Analytics sits between Attendance and Setup, Setup rightmost.

@@ -267,7 +267,7 @@ describe('gate registry', () => {
     )
     expect(
       tree.map((node) => (node.kind === 'group' ? node.group.label : node.surface.nav?.label)),
-    ).toEqual(['Overview', 'Finances', 'Attendance', 'Setup', 'Analytics'])
+    ).toEqual(['Overview', 'Finances', 'Attendance', 'Analytics', 'Setup'])
 
     const finances = tree.find((node) => node.kind === 'group' && node.group.id === 'finances')
     const setup = tree.find((node) => node.kind === 'group' && node.group.id === 'setup')

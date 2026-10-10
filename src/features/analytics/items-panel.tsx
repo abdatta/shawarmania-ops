@@ -10,12 +10,13 @@ import { Money } from '@/components/ui/money'
 import { Explain } from '@/components/ui/why'
 import { useAdapters } from '@/data-access'
 import type {
+  AnalyticsItem,
   AnalyticsSeries,
   AnalyticsSnapshot,
   AnalyticsSubject,
 } from '@/domain/sales-analytics-types'
-import { totalDays } from '@/domain/sales-analytics'
-import { ChangeChip, MiniBar } from './analytics-widgets'
+import { periodDays, periodDirection, periodUnit, totalDays } from '@/domain/sales-analytics'
+import { ChangeChip, MiniBar, PeriodBars, TrendChip } from './analytics-widgets'
 import { download } from './analytics-utils'
 import { AnalyticsScrollList } from './analytics-scroll-list'
 import { metricText } from './analytics-chart'
@@ -57,21 +58,45 @@ export function ItemsPanel({
   const [view, setView] = useState('all')
   const trendRef = useRef<HTMLDivElement>(null)
   const orders = totalDays(data.days.filter((d) => d.date >= from)).orders
+  // Against two or three earlier periods a row shows where it is heading, and
+  // Rising and Slow mean that direction rather than beating the last period.
+  const trend = periods >= 3
+  const unit = periodUnit(periodDays(from, to))
+  const oldestFirst = (values: number[]) => [...values].slice(0, periods).reverse()
+  const direction = new Map(
+    data.items.map((i) => [i.key, periodDirection(oldestFirst(i.periodUnits))]),
+  )
+  const growth = (i: AnalyticsItem) =>
+    trend ? (direction.get(i.key)!.rate ?? 0) : i.units / i.previousUnits
   const byUnits = [...data.items].sort((a, b) => b.units - a.units || a.name.localeCompare(b.name))
   const max = Math.max(1, ...data.items.map((i) => i.units))
   const items = byUnits.filter(
     (i) =>
       i.name.toLowerCase().includes(search.toLowerCase()) &&
       (view === 'all' || i.active) &&
-      (view !== 'rising' || (i.previousUnits > 0 && i.units > i.previousUnits)) &&
-      (view !== 'slow' || (i.previousUnits > 0 && i.units < i.previousUnits)),
+      (view !== 'rising' ||
+        (trend
+          ? direction.get(i.key)!.direction === 'up'
+          : i.previousUnits > 0 && i.units > i.previousUnits)) &&
+      (view !== 'slow' ||
+        (trend
+          ? direction.get(i.key)!.direction === 'down'
+          : i.previousUnits > 0 && i.units < i.previousUnits)),
   )
   if (view === 'worst') items.sort((a, b) => a.units - b.units || a.name.localeCompare(b.name))
   if (view === 'rising' || view === 'slow')
     items.sort(
       (a, b) =>
-        (view === 'rising' ? -1 : 1) * (a.units / a.previousUnits - b.units / b.previousUnits) ||
-        a.name.localeCompare(b.name),
+        (view === 'rising' ? -1 : 1) * (growth(a) - growth(b)) || a.name.localeCompare(b.name),
+    )
+  const change = (current: number, previous: number, values: number[], label: string) =>
+    trend ? (
+      <span className="inline-flex items-center gap-1.5">
+        <PeriodBars values={oldestFirst(values)} label={label} />
+        <TrendChip values={oldestFirst(values)} unit={unit} />
+      </span>
+    ) : (
+      <ChangeChip current={current} previous={previous} />
     )
   const categories = [...data.categories].sort(
     (a, b) => b.units - a.units || a.name.localeCompare(b.name),
@@ -111,12 +136,14 @@ export function ItemsPanel({
             className="min-h-11 text-xs text-content-muted"
             explanation={
               <p>
-                Units sold in {orders} synced, settled counter orders, against the previous equal
-                period. All is ordered most sold first; Worst is least sold first, including zero
-                sellers. Rising and Slow show active dishes with growth or decline against a nonzero
-                prior period, ordered by percentage change. Tap a dish to chart it. Zero sales do
-                not prove a dish was stocked throughout; check stock, launch dates and another
-                comparable period before removal.
+                Units sold in {orders} synced, settled counter orders. Against one earlier period
+                each dish shows its change; against two or three, a bar per period (oldest left,
+                each from zero) and the direction they are heading, per period, or steady when the
+                movement is within the periods' usual wobble. All is ordered most sold first; Worst
+                is least sold first, including zero sellers. Rising and Slow show active dishes
+                heading up or down, fastest first. Tap a dish to chart it. Zero sales do not prove a
+                dish was stocked throughout; check stock, launch dates and another comparable period
+                before removal.
               </p>
             }
           >
@@ -180,7 +207,7 @@ export function ItemsPanel({
                   <MiniBar value={i.units} max={max} />
                 </span>
                 <span className="flex flex-wrap items-center gap-1">
-                  <ChangeChip current={i.units} previous={i.previousUnits} />
+                  {change(i.units, i.previousUnits, i.periodUnits, 'Units by period')}
                   {!i.active ? (
                     <Chip>Retired</Chip>
                   ) : !i.available ? (
@@ -214,34 +241,55 @@ export function ItemsPanel({
             Units · captured
           </Explain>
         </div>
-        <ul className="divide-y divide-border" aria-label="Category rankings">
+        {/*
+         * One grid shared by every row (each row a subgrid): the chip and the
+         * number columns take the widest one shown, so the period bars stand
+         * in one vertical line whatever each row's figures are.
+         */}
+        <ul
+          className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] gap-x-2"
+          aria-label="Category rankings"
+        >
           {categories.map((c) => (
-            <li key={c.name}>
+            <li
+              key={c.name}
+              className="col-span-full grid grid-cols-subgrid border-t border-border first:border-t-0"
+            >
               <button
                 type="button"
                 data-testid="category-row"
                 aria-pressed={chosen === `category:${c.name}`}
                 aria-label={`Chart ${c.name}`}
                 onClick={() => chart({ kind: 'category', name: c.name })}
-                className={`w-full rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-surface-raised ${chosen === `category:${c.name}` ? 'bg-surface-raised ring-1 ring-primary' : ''}`}
+                className={`col-span-full grid grid-cols-subgrid items-center gap-y-1.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-surface-raised ${chosen === `category:${c.name}` ? 'bg-surface-raised ring-1 ring-primary' : ''}`}
               >
-                <span className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 break-words text-sm font-medium">{c.name}</span>
-                  <span className="flex shrink-0 items-center gap-2">
+                <span className="min-w-0 break-words text-sm font-medium">{c.name}</span>
+                <span className="justify-self-end">
+                  {trend ? (
+                    <TrendChip values={oldestFirst(c.periodUnits)} unit={unit} />
+                  ) : (
                     <ChangeChip current={c.units} previous={c.previousUnits} />
-                    <span className="w-10 text-right text-sm font-bold tabular-nums">
-                      {c.units}
-                    </span>
-                  </span>
+                  )}
                 </span>
-                <span className="mt-1.5 block">
+                <span className="flex">
+                  {trend && (
+                    <PeriodBars values={oldestFirst(c.periodUnits)} label="Units by period" />
+                  )}
+                </span>
+                <span
+                  className="text-right text-sm font-bold tabular-nums"
+                  data-testid="category-units"
+                >
+                  {c.units}
+                </span>
+                <span className="col-span-full">
                   <MiniBar value={c.units} max={categoryMax} />
                 </span>
               </button>
             </li>
           ))}
           {!categories.length && (
-            <li className="py-3 text-sm text-content-muted">No sales to chart.</li>
+            <li className="col-span-full py-3 text-sm text-content-muted">No sales to chart.</li>
           )}
         </ul>
       </Card>
@@ -399,16 +447,14 @@ function ItemTrend({
   })
   const hours = metric === 'units' ? series.hourUnits : series.hourRevenue
   const hourly = grain === 'hour'
-  const [current, previous] = trend.periods.map((p) =>
-    metric === 'units' ? p.total.units : p.total.revenue,
-  )
+  const totals = trend.periods.map((p) => (metric === 'units' ? p.total.units : p.total.revenue))
   return (
     <TrendCard
       id="items-trend"
       title={metric === 'units' ? 'Units sold' : 'Dish revenue'}
       metric={metric}
-      value={current ?? null}
-      previous={previous}
+      totals={totals}
+      days={periodDays(from, to)}
       caption={
         hourly
           ? 'Counter bills by Kolkata order hour, totals across the range'

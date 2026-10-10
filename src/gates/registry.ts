@@ -16,6 +16,7 @@ import {
   Wallet,
   ReceiptText,
   ChartNoAxesCombined,
+  ChartBarDecreasing,
   ChartLine,
 } from 'lucide-react'
 
@@ -104,8 +105,9 @@ export interface NavGroup {
  */
 export const NAV_GROUPS: Record<NavGroupId, NavGroup> = {
   finances: { id: 'finances', label: 'Finances', icon: IndianRupee, order: 3 },
-  setup: { id: 'setup', label: 'Setup', icon: Settings2, order: 5 },
-  analytics: { id: 'analytics', label: 'Analytics', icon: ChartNoAxesCombined, order: 8 },
+  // Analytics sits after Attendance and Setup stays rightmost [owner, 2026-10-09].
+  analytics: { id: 'analytics', label: 'Analytics', icon: ChartNoAxesCombined, order: 5 },
+  setup: { id: 'setup', label: 'Setup', icon: Settings2, order: 7 },
 }
 
 /**
@@ -399,7 +401,7 @@ const defs = {
   'owner-item-analytics': {
     role: 'super_admin',
     path: 'analytics/items',
-    nav: { label: 'Items', icon: UtensilsCrossed, order: 1, group: 'analytics' },
+    nav: { label: 'Items', icon: ChartBarDecreasing, order: 1, group: 'analytics' },
     state: 'live',
   },
   'owner-sales-analytics': {
@@ -567,7 +569,7 @@ const defs = {
   'admin-item-analytics': {
     role: 'franchise_admin',
     path: 'analytics/items',
-    nav: { label: 'Items', icon: UtensilsCrossed, order: 1, group: 'analytics' },
+    nav: { label: 'Items', icon: ChartBarDecreasing, order: 1, group: 'analytics' },
     state: 'live',
   },
   'admin-sales-analytics': {

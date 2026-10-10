@@ -32,6 +32,13 @@ Items SHALL lead with a trend of dish Units or Dish revenue, grouped by Hour, Da
 - **WHEN** the owner taps a dish in Slow and compares four 30-day periods
 - **THEN** the card charts that dish's units in each period with actual date labels, its headline equals the dish's units in the list, and a reload keeps the dish and the periods
 
+### Requirement: Several periods read as a trend
+With three or four compared periods, the trend headline, every dish and category row, and the table SHALL describe all of them rather than the change against the last one: a direction arrow with its fitted rate per period (`↗ 9% / mo`), `→ steady` when the movement is within the periods' own variation, the usual range of the earlier periods and the current period's place against it (`▲ usual`, `≈ usual`, `▼ usual`). Rows SHALL show one bar per period from zero, and Rising and Slow SHALL mean that direction. With two periods the change against the previous one SHALL remain.
+
+#### Scenario: One odd week among four
+- **WHEN** a dish sold 100, 160, 90 and 150 in four weeks
+- **THEN** it shows `→ steady` without a number, four bars of exactly those heights, and appears in neither Rising nor Slow
+
 ### Requirement: One trend as a chart or a table
 On both pages the trend SHALL be one card with a Chart / Table switch kept in the address. The table SHALL hold every figure the chart draws: every bucket of every compared period, exact to the paisa, with the change against the previous period and a CSV export. Sales SHALL NOT show a separate Days list or a weekday-average card.
 

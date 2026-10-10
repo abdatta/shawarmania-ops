@@ -6,9 +6,10 @@
 --
 --   * a window is 1-92 days, and the current window plus up to three equal,
 --     adjacent earlier ones is all one call may cover (p_periods 1-4);
---   * `items` returns dish and category totals (current and previous window)
---     and collapses its days into one summary row per window -- no daily,
---     hourly or delivery rows;
+--   * `items` returns dish and category totals for the current and previous
+--     window, their units in every window asked for (at most four numbers
+--     each), and one summary row per window -- no daily, hourly or delivery
+--     rows;
 --   * `sales` returns days, delivery days and period-by-hour totals (at most
 --     24 x p_periods rows) and never reads `bill_items`;
 --   * no identity, customer field or raw ticket leaves the function.
@@ -99,6 +100,20 @@ begin
       from lines
      group by 1, menu_item_id
   ),
+  -- Units per window, window 0 the current one, for each dish and each
+  -- captured category: the rows' direction across every compared period.
+  item_periods as (
+    select coalesce(menu_item_id::text, 'snapshot:' || item_name) as key,
+           (p_to - business_date) / v_span as period,
+           sum(quantity) as units
+      from lines group by 1, 2
+  ),
+  category_periods as (
+    select coalesce(category_name, 'Uncategorised') as name,
+           (p_to - business_date) / v_span as period,
+           sum(quantity) as units
+      from lines group by 1, 2
+  ),
   -- Every dish sold in range, plus every active dish that sold nothing.
   items as (
     select coalesce(s.key, m.id::text) as key,
@@ -152,7 +167,12 @@ begin
     'categories', case when p_view = 'sales' then '[]'::jsonb else coalesce((
       select jsonb_agg(jsonb_build_object('name', name, 'revenue', revenue, 'units', units,
                                           'previousRevenue', previous_revenue,
-                                          'previousUnits', previous_units)
+                                          'previousUnits', previous_units,
+                                          'periodUnits', (
+                                            select jsonb_agg(coalesce(u.units, 0) order by w)
+                                              from generate_series(0, p_periods - 1) w
+                                              left join category_periods u
+                                                on u.name = c.name and u.period = w))
                        order by revenue desc, name)
         from (select coalesce(category_name, 'Uncategorised') as name,
                      coalesce(sum(line_total_paise - discount_paise)
@@ -166,7 +186,6 @@ begin
                                                       and business_date >= p_from - v_span), 0)
                        as previous_units
                 from lines
-               where business_date >= p_from - v_span
                group by 1) c), '[]'::jsonb) end,
     'delivery', case when p_view = 'items' then '[]'::jsonb else coalesce((
       select jsonb_agg(jsonb_build_object('date', business_date, 'channel', channel,
@@ -186,7 +205,12 @@ begin
                                           'units', units, 'revenue', revenue,
                                           'discounts', discounts, 'orders', orders,
                                           'previousUnits', previous_units, 'active', active,
-                                          'available', available, 'highlighted', highlighted)
+                                          'available', available, 'highlighted', highlighted,
+                                          'periodUnits', (
+                                            select jsonb_agg(coalesce(u.units, 0) order by w)
+                                              from generate_series(0, p_periods - 1) w
+                                              left join item_periods u
+                                                on u.key = items.key and u.period = w))
                        order by units desc, key)
         from items), '[]'::jsonb) end,
     -- Kolkata clock hour of the order, per window: period 0 is the current one.

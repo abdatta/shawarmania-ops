@@ -65,9 +65,7 @@ export function SalesPanel({
   }))
   const hourlyTitle =
     metric === 'aov' ? 'Average bill by hour' : `Hourly average ${labels[metric].toLowerCase()}`
-  const [selected, previous] = trend.periods.map((p) =>
-    salesValue(p.total.revenue, p.total.orders, metric),
-  )
+  const totals = trend.periods.map((p) => salesValue(p.total.revenue, p.total.orders, metric))
   const provisional = data.delivery.filter(
     (d) => d.date >= from && d.date <= to && d.provisional,
   ).length
@@ -77,8 +75,8 @@ export function SalesPanel({
         id="sales-trend"
         title={labels[metric]}
         metric={metric}
-        value={selected ?? null}
-        previous={previous}
+        totals={totals}
+        days={span}
         caption={
           grain === 'hour'
             ? 'Counter bills by Kolkata clock hour, totals across the range'
