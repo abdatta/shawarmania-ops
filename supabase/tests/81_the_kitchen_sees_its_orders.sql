@@ -264,8 +264,12 @@ select pg_temp.unimpersonate();
 select pg_temp.impersonate(:'COUNTER');
 select throws_ok($$select public.kitchen_board()$$, '42501', null,
   'a counter shift cannot read the kitchen board');
-select is((select count(*) from public.kitchen_pulses), 0::bigint,
-  'nor the kitchen pulse');
+-- Since #72 the counter reads its own outlet's pulse -- the nudge that a
+-- kitchen's ACK may have changed its bells -- and nothing of the board.
+select is((select count(*) from public.kitchen_pulses), 1::bigint,
+  'it reads only its own outlet''s kitchen pulse (#72)');
+select is((select count(*) from public.kitchen_pulses where outlet_id <> :'KAL'), 0::bigint,
+  'and no other outlet''s');
 select pg_temp.unimpersonate();
 
 -- ---------------------------------------------------------------------------

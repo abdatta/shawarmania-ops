@@ -4758,6 +4758,7 @@ export type Database = {
         }
         Returns: Json
       }
+      counter_kitchen_marks: { Args: never; Returns: Json }
       counter_operations_snapshot: {
         Args: { p_outlet_ids: string[] }
         Returns: {
@@ -5320,6 +5321,10 @@ export type Database = {
       kitchen_order_version: {
         Args: { p_order: Database["public"]["Tables"]["orders"]["Row"] }
         Returns: string
+      }
+      kitchen_same_lines: {
+        Args: { p_left: Json; p_right: Json }
+        Returns: boolean
       }
       kitchen_visible_lines: {
         Args: { p_category_ids: string[]; p_mode: string; p_order_id: string }
