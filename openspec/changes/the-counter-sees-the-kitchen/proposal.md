@@ -123,6 +123,10 @@ counter's bell. The owner asked for the fix to land here (design D7).
 - **No bell off the counter.** A manager's views of open orders are unchanged.
 - **No sound on the counter.** The bell is silent; the kitchen rings.
 - **No new colour**, no new card row, no taller card.
+- **No alert for a dish no kitchen shows** (owner, 2026-10-10). With one kitchen
+  tablet across two kitchens at launch, it would be red all day and teach billers to
+  silence it. Designed and deferred until every kitchen has a screen; the design and
+  the reasons are in design D7.
 
 ## Docs To Update Before Archive
 

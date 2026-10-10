@@ -281,9 +281,36 @@ kitchen did not ask for it.
   carry it (2026-10-10); this one already restates #70's rule for the counter, so the
   two must change together.
 
-**Not addressed.** A filter change can leave a dish that no kitchen on shift shows. Its
-order then carries no bell, as for any order no kitchen shows (D1), and the Filter
-sheet does not warn. Raised with the owner, not decided.
+**Deferred: an alert for dishes no kitchen shows** (owner, 2026-10-10). A filter
+change can leave a category that no kitchen on shift shows; its dishes then carry no
+bell, as for any dish no kitchen shows (D1), and nothing warns. Worked through with
+the owner and deliberately not built:
+
+- *What was designed.* Each category marked *kitchen* (the default) or *counter*,
+  set from the counter tablet behind a confirmation and recording who set it; a red
+  **No kitchen: Desserts** in the counter's header pill while a kitchen category is
+  shown by no kitchen on shift; a red dish tile and a still, crossed-out bell on the
+  affected cards; and the pill, tappable whenever the outlet has a kitchen tablet,
+  opening a *Who makes what* sheet — a row per category naming its kitchens,
+  *Counter*, or a red *Nobody*. Rejected within it: keeping the bell swinging for an
+  uncovered dish (no kitchen can ever stop it, so it trains billers to ignore the
+  bell, and the swinging bell would mean two things); marking items rather than
+  categories (too heavy in the screen and the build for a list of under ten items —
+  a part-made category such as Desserts stays a kitchen category, and its ready
+  items are ACKed like the rest); the setting on the owner's Menu screen.
+- *Why not now.* The outlet launches with **one kitchen tablet across two kitchens**:
+  one kitchen on the screen, the other told by the counter as before. "No screen
+  shows Burgers" is then correct, not a fault, so the alert would be red all day,
+  billers would mark the manual kitchen's categories *counter* to quiet it, and those
+  marks would hide real gaps once the second kitchen gets its tablet — worse than no
+  alert. Meanwhile the bell already draws the line the billers need: a dish with no
+  bell is not on any kitchen screen, and the counter calls it out.
+- *When to return.* Once every kitchen has a screen and they have run with them long
+  enough to show whether a filter actually leaves food unmade. Design it then, for
+  that setup; it may want a third state (*called out by the counter*) rather than
+  *counter*. The same review should decide whether a kitchen tablet away for repair
+  should keep the header reading *Kitchen offline* (one idea: count only kitchen
+  tablets in touch within the last day).
 
 ## RLS, money and offline, called out
 
