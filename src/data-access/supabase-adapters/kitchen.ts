@@ -10,8 +10,10 @@ import {
   type KitchenFilterMode,
   type KitchenSort,
   type KitchenLine,
+  type KitchenMarks,
   type KitchenOrder,
 } from '../adapters'
+import type { KitchenAnswer } from '@/domain'
 import type { Database, Json } from '../database.types'
 
 /**
@@ -124,6 +126,23 @@ export function createSupabaseKitchenAdapter(client: SupabaseClient<Database>): 
         .order('name')
       if (error) throw error
       return (data ?? []).map((row) => ({ id: row.id, name: row.name, isActive: row.is_active }))
+    },
+
+    async readCounterMarks(): Promise<KitchenMarks> {
+      const { data, error } = await client.rpc('counter_kitchen_marks')
+      if (error) throw error
+      const marks = data as unknown as {
+        kitchens: { id: string; label: string }[] | null
+        orders: { orderId: string; marks: (KitchenAnswer | null)[] }[] | null
+        kitchenTablets: number | null
+      }
+      return {
+        kitchens: marks.kitchens ?? [],
+        orders: Object.fromEntries(
+          (marks.orders ?? []).map((order) => [order.orderId, order.marks]),
+        ),
+        kitchenTablets: marks.kitchenTablets ?? 0,
+      }
     },
 
     async setFilter(mode, categoryIds, sort): Promise<void> {

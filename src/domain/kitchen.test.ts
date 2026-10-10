@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest'
 import {
   diffKitchenLines,
   formatKitchenWait,
+  kitchenBell,
   kitchenCardState,
   kitchenWaitTone,
+  sameLines,
   type KitchenCardFacts,
   type KitchenLineFacts,
 } from './kitchen'
@@ -133,5 +135,67 @@ describe('waiting time', () => {
     expect(formatKitchenWait(orderedAt, at(14))).toBe('14 m')
     expect(formatKitchenWait(orderedAt, at(130))).toBe('2 h')
     expect(formatKitchenWait(orderedAt, at(2 * 24 * 60 + 5))).toBe('2 d')
+  })
+})
+
+describe('sameLines, the pairs the database pins too (#72)', () => {
+  // supabase/tests/84_the_counter_sees_the_kitchen.sql asserts the same pairs
+  // against kitchen_same_lines(), so the counter's answer and the kitchen's
+  // card cannot disagree about what "the same dishes" means.
+  const line = (menuItemId: string | null, itemName: string, quantity: number) => ({
+    menuItemId,
+    itemName,
+    quantity,
+  })
+  it('agrees with kitchen_same_lines on every pinned pair', () => {
+    expect(sameLines([line('a', 'A', 2)], [line('a', 'A', 1), line('a', 'A', 1)])).toBe(true)
+    expect(sameLines([line('a', 'A', 2)], [line('a', 'A', 3)])).toBe(false)
+    expect(sameLines([line('a', 'A', 1)], [line('a', 'A', 1), line('b', 'B', 1)])).toBe(false)
+    expect(sameLines([line(null, 'Off menu', 1)], [line(null, 'Off menu', 1)])).toBe(true)
+    expect(sameLines([], [])).toBe(true)
+  })
+})
+
+describe("kitchenBell, the counter card's bell (#72)", () => {
+  const one = [{ label: 'Kitchen 1' }]
+  const two = [{ label: 'Kitchen 1' }, { label: 'Kitchen 2' }]
+
+  it('is absent when no kitchen on shift carries the order', () => {
+    expect(kitchenBell([], [])).toBeNull()
+    expect(kitchenBell([null, null], two)).toBeNull()
+  })
+
+  it('rings for one kitchen still to press ACK, with its one dot', () => {
+    expect(kitchenBell(['waiting'], one)).toEqual({
+      ringing: true,
+      dots: ['waiting'],
+      label: 'Kitchen 1 has not pressed ACK yet',
+    })
+  })
+
+  it('is still once that kitchen has pressed ACK', () => {
+    expect(kitchenBell(['seen'], one)).toMatchObject({ ringing: false, dots: null })
+  })
+
+  it('shows a dot per kitchen, in kitchen order, while any of them waits', () => {
+    const bell = kitchenBell(['seen', 'waiting'], two)
+    expect(bell).toMatchObject({ ringing: true, dots: ['seen', 'waiting'] })
+    expect(bell?.label).toBe('Kitchen 1 has pressed ACK. Kitchen 2 has not pressed ACK yet')
+  })
+
+  it('keeps an empty place for a kitchen on shift that does not carry the order', () => {
+    const three = [...two, { label: 'Kitchen 3' }]
+    expect(kitchenBell(['waiting', null, 'seen'], three)?.dots).toEqual(['waiting', null, 'seen'])
+  })
+
+  it("keeps every kitchen's place when only one of them carries the order", () => {
+    expect(kitchenBell([null, 'waiting'], two)).toMatchObject({
+      ringing: true,
+      dots: [null, 'waiting'],
+    })
+  })
+
+  it('hides the dots once every kitchen has pressed ACK', () => {
+    expect(kitchenBell(['seen', 'seen'], two)).toMatchObject({ ringing: false, dots: null })
   })
 })

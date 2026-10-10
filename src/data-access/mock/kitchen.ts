@@ -4,9 +4,11 @@ import type {
   KitchenBoard,
   KitchenFilterMode,
   KitchenLine,
+  KitchenMarks,
   KitchenOrder,
   KitchenSort,
 } from '../adapters'
+import { kitchenCardState, type KitchenAnswer } from '@/domain'
 import type { Tables } from '../database.types'
 import { DEMO_OUTLET_ID, type DemoStore } from './store'
 
@@ -20,6 +22,8 @@ import { DEMO_OUTLET_ID, type DemoStore } from './store'
 
 export const DEMO_KITCHEN_DEVICE_ID = 'dddddddd-0000-4000-a000-0000000000c1'
 export const DEMO_KITCHEN_SHIFT_ID = 'dddddddd-0000-4000-a000-0000000000c2'
+/** The demo kitchen tablet's name, as its own screen and the counter's bell call it. */
+export const DEMO_KITCHEN_LABEL = 'Kitchen 1'
 
 interface StoredAck extends KitchenAcknowledgement {
   id: string
@@ -135,11 +139,57 @@ export function createMockKitchenAdapter(
     }
   }
 
-  /** What the demo board would answer, as a comparable string. */
+  /**
+   * What the demo board, or the counter's bell, would answer, as a comparable
+   * string: the orders, and the kitchen's acknowledgements and filter, which a
+   * kitchen tab's ACK changes through the demo mirror (#72).
+   */
   function signature(): string {
-    return store.orders
-      .map((o) => `${o.id}:${o.status}:${o.changed_at ?? ''}:${o.prepared_at ?? ''}`)
-      .join('|')
+    return [
+      store.orders
+        .map((o) => `${o.id}:${o.status}:${o.changed_at ?? ''}:${o.prepared_at ?? ''}`)
+        .join('|'),
+      kitchen.acks.length,
+      kitchen.filter.mode,
+      kitchen.filter.categoryIds.join(','),
+    ].join('#')
+  }
+
+  /**
+   * The counter's read (#72), by the same rules as `counter_kitchen_marks()`:
+   * the demo kitchen is always on shift, carries an order exactly when its board
+   * would, and has answered it when its card there is quiet — or when the
+   * counter has ticked it Prepared, because then the food is made.
+   */
+  function counterMarks(): KitchenMarks {
+    const cards = new Map(board().orders.map((order) => [order.id, order]))
+    const orders: Record<string, (KitchenAnswer | null)[]> = {}
+    for (const order of store.orders) {
+      if (order.outlet_id !== DEMO_OUTLET_ID) continue
+      const onRail =
+        order.status === 'open' || (order.status === 'paid' && order.prepared_at === null)
+      if (!onRail) continue
+      let answer: KitchenAnswer | null = null
+      if (order.prepared_at !== null) {
+        // The board leaves out a prepared order, so ask the lines directly.
+        const { shown } = lineSplit(order)
+        const ack = latestAck(order.id)
+        const carried =
+          shown.length > 0 ||
+          ((ack?.lines.length ?? 0) > 0 &&
+            !(ack?.kind === 'cancel' && ack.orderVersion === version(order)))
+        answer = carried ? 'seen' : null
+      } else {
+        const card = cards.get(order.id)
+        if (card) answer = kitchenCardState(card) === 'quiet' ? 'seen' : 'waiting'
+      }
+      if (answer) orders[order.id] = [answer]
+    }
+    return {
+      kitchens: [{ id: DEMO_KITCHEN_DEVICE_ID, label: DEMO_KITCHEN_LABEL }],
+      orders,
+      kitchenTablets: 1,
+    }
   }
 
   return {
@@ -156,6 +206,10 @@ export function createMockKitchenAdapter(
           name: category.name,
           isActive: category.is_active,
         }))
+    },
+
+    async readCounterMarks() {
+      return counterMarks()
     },
 
     async setFilter(mode, categoryIds, sort) {

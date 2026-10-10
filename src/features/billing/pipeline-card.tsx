@@ -1,4 +1,11 @@
-import { MoreVertical, ShoppingBag, UserRound, UserRoundPlus, UtensilsCrossed } from 'lucide-react'
+import {
+  Bell,
+  MoreVertical,
+  ShoppingBag,
+  UserRound,
+  UserRoundPlus,
+  UtensilsCrossed,
+} from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -9,7 +16,7 @@ import { Shimmer } from '@/components/ui/loading'
 import { useAnchoredPanel } from '@/components/ui/anchored-panel'
 import { Money } from '@/components/ui/money'
 import type { BillingOrder } from '@/data-access/adapters'
-import type { SharedTable } from '@/domain'
+import type { KitchenBell, SharedTable } from '@/domain'
 import {
   isAwaitingOrderNumber,
   serviceTypeLabel,
@@ -40,6 +47,11 @@ import { StateToggle } from './state-toggle'
  * The same component draws the docked-edit variant: `showItems=false` drops the
  * item list the composer beside it is already editing, exactly as the old
  * receipt-shaped card did.
+ *
+ * It is drawn as the kitchen's ticket (#72): a torn top edge, the number in the
+ * display face, the dish counts in small tiles — at exactly the height the card
+ * had before, and in the colours it had. Where kitchens are on shift, the space
+ * beside the dishes, under the customer button, holds the kitchen's bell.
  */
 export function PipelineCard({
   order,
@@ -50,6 +62,7 @@ export function PipelineCard({
   editDisabled = false,
   tenderLabel = null,
   sharedTable = null,
+  kitchen = null,
   onEdit,
   onSetCustomer,
   onMarkPrepared,
@@ -80,6 +93,12 @@ export function PipelineCard({
    * oldest first. Allowed, never refused (design D5), so the card says so.
    */
   sharedTable?: SharedTable | null
+  /**
+   * Whether the kitchens on shift have pressed ACK on this order (#72). Null
+   * when no kitchen on shift carries it — and then the card lays out exactly as
+   * it would with no kitchen at all.
+   */
+  kitchen?: KitchenBell | null
   onEdit?: (order: BillingOrder) => void
   /**
    * Opens the order in the composer with the customer dialog already up — the
@@ -264,14 +283,20 @@ export function PipelineCard({
           : `open-order-${order.orderNumber}`
       }
       data-paid={isPaid || undefined}
-      className="rounded-xl border border-border bg-surface-raised px-2 py-1.5"
+      /*
+        The border is transparent and the ticket layer draws the visible one, so
+        the card's box — and so its height — is what it was before the ticket.
+        An open menu lifts its card above the next one, which would otherwise
+        paint over a menu opening downwards.
+      */
+      className={cn('rail-ticket border border-transparent px-2 py-1.5', menuOpen && 'z-30')}
     >
       <div className="flex min-w-0 items-stretch gap-2">
         {/* The taller reference anchors the header. Customer and timing share
             its height rather than adding two extra rows to the ticket. */}
         <span
           data-testid={`order-reference-${order.id}`}
-          className="flex shrink-0 items-center text-xl font-black leading-6 text-primary"
+          className="flex shrink-0 items-center font-display text-[1.375rem] leading-6 text-primary"
         >
           {awaitingNumber ? (
             <>
@@ -407,17 +432,23 @@ export function PipelineCard({
       </div>
 
       {showItems && order.lines.length > 0 && (
-        <ul className="mt-0.5 space-y-0" aria-label={`Items for ${reference}`}>
-          {order.lines.map((line, index) => (
-            <li
-              key={`${line.menuItemId}-${index}`}
-              className="flex items-start gap-1.5 text-sm leading-5"
-            >
-              <span className="min-w-6 shrink-0 font-black text-content">{line.quantity}×</span>
-              <span className="min-w-0 flex-1 font-bold text-content">{line.itemName}</span>
-            </li>
-          ))}
-        </ul>
+        <div className="mt-0.5 flex items-start gap-1.5">
+          <ul className="min-w-0 flex-1 space-y-0" aria-label={`Items for ${reference}`}>
+            {order.lines.map((line, index) => (
+              <li
+                key={`${line.menuItemId}-${index}`}
+                className="flex items-start gap-1.5 text-sm leading-5"
+              >
+                {/* The kitchen ticket's count tile, inside the line's own height. */}
+                <span className="mt-px grid h-[15px] min-w-[18px] shrink-0 place-items-center rounded-[5px] bg-surface px-1 text-[11px] font-black leading-none text-content tabular-nums">
+                  {line.quantity}
+                </span>
+                <span className="min-w-0 flex-1 font-bold text-content">{line.itemName}</span>
+              </li>
+            ))}
+          </ul>
+          {kitchen && <KitchenBellMark bell={kitchen} />}
+        </div>
       )}
 
       <div className="mt-1 flex items-stretch justify-between gap-1.5">
@@ -531,6 +562,74 @@ export function PipelineCard({
         }}
       />
     </article>
+  )
+}
+
+/**
+ * The kitchen's bell (#72), in the column under the customer button and above
+ * the ⋮ button, never wider than either.
+ *
+ * Filled, in the primary tone and swinging while any kitchen carrying the order
+ * has not pressed ACK; gone, its place kept, once every one has.
+ * The owner chose a bell so the biller is moved to remind the cooks, and the
+ * cooks learn to press ACK sooner. While it swings, a dot per kitchen on shift
+ * sits under it, one kitchen included — always in that kitchen's place, so
+ * a biller can learn which is which — orange for waiting, grey for done, empty
+ * for a kitchen that does not carry this order. The dots are absolutely placed:
+ * when they go, nothing moves.
+ */
+function KitchenBellMark({ bell }: { bell: KitchenBell }) {
+  return (
+    <span
+      role="img"
+      aria-label={bell.label}
+      data-testid="kitchen-bell"
+      data-ringing={bell.ringing || undefined}
+      /*
+        The column reaches from the customer button's bottom edge to the ⋮
+        button's top edge — the negative margins give back the gaps above and
+        below the dish list — and centres the bell and its dots between them.
+        Its minimum height is the bell, the dots and a little air above and
+        below, so a one-dish card grows by a few pixels to make room [owner,
+        2026-10-09]; a card with more dishes is already tall enough.
+      */
+      className="-mb-1 -mt-0.5 flex min-h-[29px] w-9 shrink-0 flex-col items-center justify-center gap-[3px] self-stretch"
+    >
+      {/*
+        Once every kitchen has answered there is nothing to show: no grey bell
+        on every quiet card [owner, 2026-10-09]. The column keeps its size, so
+        the card does not move when the bell goes; "nobody is watching" is said
+        once, as Kitchen offline in the counter's header.
+      */}
+      {bell.ringing ? (
+        <Bell
+          aria-hidden
+          size={15}
+          strokeWidth={2.25}
+          className="kitchen-bell fill-current text-primary"
+        />
+      ) : (
+        <span aria-hidden className="h-[15px]" />
+      )}
+      {/* The dots' row is always there, empty when still, so the bell never moves. */}
+      {bell.dots ? (
+        <span aria-hidden data-testid="kitchen-bell-dots" className="flex h-[5px] gap-[3px]">
+          {bell.dots.map((answer, place) => (
+            <i
+              key={place}
+              data-answer={answer ?? 'none'}
+              className={cn(
+                'size-[5px] rounded-full',
+                answer === 'waiting' && 'bg-primary',
+                answer === 'seen' && 'bg-content-muted',
+              )}
+            />
+          ))}
+        </span>
+      ) : (
+        <span aria-hidden className="h-[5px]" />
+      )}
+    </span>
   )
 }
 

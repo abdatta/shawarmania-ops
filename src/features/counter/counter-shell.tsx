@@ -7,14 +7,16 @@ import { useAdapters } from '@/data-access'
 import type { ExpenseRecord } from '@/data-access/adapters'
 import { resolveBusinessDate } from '@/domain'
 import { BillingCounter } from '@/features/billing/billing-counter'
-import { SyncIndicator } from '@/features/billing/counter-status'
+import { KitchenMarksProvider } from '@/features/billing/kitchen-marks'
 import { ExpenseList } from '@/features/expenses/expense-list'
 import { getSurface, isRenderable } from '@/gates/registry'
+import { cn } from '@/lib/cn'
 import { useCounterDevice } from '@/session/counter-context'
 import type { CounterShift } from '@/session/counter-session'
 import { counterResumeStopAt, hasMaterialClockSkew } from '@/outbox'
 
 import { ShiftRequestScreen } from './shift-request-screen'
+import { CounterStatus } from './counter-status-pill'
 import { FinishDaySheet } from './finish-day-sheet'
 
 /**
@@ -94,83 +96,83 @@ export function CounterShell({
   }
 
   return (
-    <div className="min-h-dvh bg-canvas p-4 text-content">
-      <div className="mx-auto max-w-[100rem] space-y-4">
-        {resume && (
-          <div
-            role="status"
-            data-testid="offline-resume-status"
-            className="rounded-xl border-2 border-warning bg-surface p-3 text-sm text-content"
-          >
-            <p className="font-bold">
-              Offline · last successful read{' '}
-              {new Date(resume.lastSuccessfulReadAt).toLocaleString()}
-            </p>
-            <p className="mt-1 text-content-muted">
-              Menu, the outlet pipeline and Bills this shift are remembered as of that read. This
-              tablet cannot check removal while offline. Opening, handing over or leaving a shift
-              needs the connection and the operator&rsquo;s own phone.
-            </p>
-            {hasMaterialClockSkew(resume) && (
-              <p className="mt-1 font-semibold text-warning">
-                Clock warning: server observed {new Date(resume.serverObservedAt).toLocaleString()};
-                this device recorded {new Date(resume.deviceObservedAt).toLocaleString()}. Neither
-                clock was changed.
-              </p>
-            )}
-            {boundaryReached && (
-              <p className="mt-1 font-semibold text-danger">
-                New work has stopped. Reconnect this tablet, then the operator must use their own
-                phone to open the next shift. Unsent and needs-attention work remains here.
-              </p>
-            )}
-          </div>
-        )}
-        <header className="flex flex-wrap items-baseline justify-between gap-2">
-          <h1 className="text-lg font-semibold">{device.device.label}</h1>
-          <div className="flex items-center gap-3">
-            <SyncIndicator />
-            <p className="text-sm text-content-muted">
-              Open since {new Date(shift.openedAt).toLocaleTimeString()}. Ended from the operator's
-              own phone, or at this outlet's cutover.
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                if (!resume) setHandingOver(true)
-              }}
-              disabled={Boolean(resume)}
-              title={
-                resume ? 'Reconnect; handover also needs the incoming operator’s phone.' : undefined
-              }
-              className={buttonVariants({ variant: 'secondary', size: 'phone' })}
+    <KitchenMarksProvider>
+      <div className="min-h-dvh bg-canvas p-4 text-content">
+        <div className="mx-auto max-w-[100rem] space-y-4">
+          {resume && (
+            <div
+              role="status"
+              data-testid="offline-resume-status"
+              className="rounded-xl border-2 border-warning bg-surface p-3 text-sm text-content"
             >
-              Hand over
-            </button>
-            <button
-              type="button"
-              onClick={() => setFinishOpen(true)}
-              className={buttonVariants({ variant: 'primary', size: 'phone' })}
-            >
-              Finish day
-            </button>
-          </div>
-        </header>
+              <p className="font-bold">
+                Offline · last successful read{' '}
+                {new Date(resume.lastSuccessfulReadAt).toLocaleString()}
+              </p>
+              <p className="mt-1 text-content-muted">
+                Menu, the outlet pipeline and Bills this shift are remembered as of that read. This
+                tablet cannot check removal while offline. Opening, handing over or leaving a shift
+                needs the connection and the operator&rsquo;s own phone.
+              </p>
+              {hasMaterialClockSkew(resume) && (
+                <p className="mt-1 font-semibold text-warning">
+                  Clock warning: server observed{' '}
+                  {new Date(resume.serverObservedAt).toLocaleString()}; this device recorded{' '}
+                  {new Date(resume.deviceObservedAt).toLocaleString()}. Neither clock was changed.
+                </p>
+              )}
+              {boundaryReached && (
+                <p className="mt-1 font-semibold text-danger">
+                  New work has stopped. Reconnect this tablet, then the operator must use their own
+                  phone to open the next shift. Unsent and needs-attention work remains here.
+                </p>
+              )}
+            </div>
+          )}
+          <header className="flex flex-wrap items-center justify-between gap-2">
+            <h1 className="text-lg font-semibold">{device.device.label}</h1>
+            <div className="flex items-center gap-3">
+              <CounterStatus openedAt={shift.openedAt} />
+              <button
+                type="button"
+                onClick={() => {
+                  if (!resume) setHandingOver(true)
+                }}
+                disabled={Boolean(resume)}
+                title={
+                  resume
+                    ? 'Reconnect; handover also needs the incoming operator’s phone.'
+                    : undefined
+                }
+                className={cn(buttonVariants({ variant: 'secondary', size: 'phone' }), 'h-10')}
+              >
+                Hand over
+              </button>
+              <button
+                type="button"
+                onClick={() => setFinishOpen(true)}
+                className={cn(buttonVariants({ variant: 'primary', size: 'phone' }), 'h-10')}
+              >
+                Finish day
+              </button>
+            </div>
+          </header>
 
-        <BillingPanel />
-        <CounterExpenses shift={shift} />
-        <FinishDaySheet
-          open={finishOpen}
-          shiftId={shift.id}
-          offline={Boolean(resume)}
-          onClose={() => setFinishOpen(false)}
-          onFinished={() => {
-            setFinishOpen(false)
-            onShiftChanged()
-          }}
-        />
+          <BillingPanel />
+          <CounterExpenses shift={shift} />
+          <FinishDaySheet
+            open={finishOpen}
+            shiftId={shift.id}
+            offline={Boolean(resume)}
+            onClose={() => setFinishOpen(false)}
+            onFinished={() => {
+              setFinishOpen(false)
+              onShiftChanged()
+            }}
+          />
+        </div>
       </div>
-    </div>
+    </KitchenMarksProvider>
   )
 }
 

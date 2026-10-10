@@ -1,3 +1,4 @@
+import type { DemoKitchen } from '@/data-access/mock/kitchen'
 import type { DemoStore } from '@/data-access/mock/store'
 
 /**
@@ -8,8 +9,10 @@ import type { DemoStore } from '@/data-access/mock/store'
  * the counter ringing the kitchen, so the demo — and only the demo — copies its
  * orders and their lines across same-origin tabs with a `BroadcastChannel`.
  *
- * Deliberately small: last writer wins, orders and lines only, and a tab that
- * opens asks the others for what they hold. Real tablets share nothing but the
+ * Deliberately small: last writer wins, orders and lines only — plus the demo
+ * kitchen's acknowledgements and filter, so a kitchen tab's ACK stops the bell
+ * in a counter tab (#72) — and a tab that opens asks the others for what they
+ * hold. Real tablets share nothing but the
  * server; this is a demo convenience and is never imported outside `src/demo`.
  *
  * **Start again starts every tab again.** A reset is announced with an epoch —
@@ -30,12 +33,15 @@ type Message =
       epoch: number
       orders: DemoStore['orders']
       orderItems: DemoStore['orderItems']
+      kitchen?: Pick<DemoKitchen, 'acks' | 'filter'>
     }
 
-function signature(store: DemoStore): string {
+function signature(store: DemoStore, kitchen: DemoKitchen): string {
   return JSON.stringify([
     store.orders.map((o) => [o.id, o.status, o.changed_at, o.prepared_at, o.cancelled_at]),
     store.orderItems.length,
+    kitchen.acks.length,
+    kitchen.filter,
   ])
 }
 
@@ -49,13 +55,14 @@ export function announceDemoReset(epoch: number): void {
 
 export function mirrorDemoOrders(
   store: DemoStore,
+  kitchen: DemoKitchen,
   startedAt: number,
   onReset: (epoch: number) => void,
 ): () => void {
   if (typeof BroadcastChannel === 'undefined') return () => undefined
   const channel = new BroadcastChannel(CHANNEL)
   let epoch = startedAt
-  let last = signature(store)
+  let last = signature(store, kitchen)
 
   const send = () =>
     channel.postMessage({
@@ -63,6 +70,7 @@ export function mirrorDemoOrders(
       epoch,
       orders: store.orders,
       orderItems: store.orderItems,
+      kitchen: { acks: kitchen.acks, filter: kitchen.filter },
     } satisfies Message)
 
   channel.onmessage = (event: MessageEvent<Message>) => {
@@ -80,12 +88,17 @@ export function mirrorDemoOrders(
     epoch = message.epoch
     store.orders.splice(0, store.orders.length, ...message.orders)
     store.orderItems.splice(0, store.orderItems.length, ...message.orderItems)
+    // A tab still on an older build sends no kitchen; keep this tab's.
+    if (message.kitchen) {
+      kitchen.acks.splice(0, kitchen.acks.length, ...message.kitchen.acks)
+      kitchen.filter = message.kitchen.filter
+    }
     // Adopted, not authored: remembering it stops this tab echoing it back.
-    last = signature(store)
+    last = signature(store, kitchen)
   }
 
   const timer = window.setInterval(() => {
-    const next = signature(store)
+    const next = signature(store, kitchen)
     if (next === last) return
     last = next
     send()

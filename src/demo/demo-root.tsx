@@ -122,7 +122,7 @@ export function DemoRoot() {
   // server and nowhere else.
   const epoch = started.epoch
   useEffect(
-    () => mirrorDemoOrders(data.store, epoch, resetFromAnotherTab),
+    () => mirrorDemoOrders(data.store, data.kitchen, epoch, resetFromAnotherTab),
     [data, epoch, resetFromAnotherTab],
   )
 

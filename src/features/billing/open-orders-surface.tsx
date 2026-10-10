@@ -11,7 +11,7 @@ import {
   type PaymentAllocation,
   type OutletMenu,
 } from '@/data-access/adapters'
-import { isAwaitingOrderNumber, sharedTables, UNSENT_ORDER_REFERENCE } from '@/domain'
+import { isAwaitingOrderNumber, kitchenBell, sharedTables, UNSENT_ORDER_REFERENCE } from '@/domain'
 import { SessionContext } from '@/session/context'
 import { CounterDeviceContext } from '@/session/counter-context'
 
@@ -22,6 +22,7 @@ import { OrderCheckoutDialog, type CheckoutOrderRevision } from './order-checkou
 import { RailScrollChip, useRailClipping } from './rail-scroll-chip'
 import { useCounterState } from './use-counter-state'
 import { OfflineFillHint } from './offline-fill-hint'
+import { useKitchenMarks } from './kitchen-marks-state'
 
 /**
  * The outlet's unfinished work as **one list**, newest order first.
@@ -113,6 +114,15 @@ export function OpenOrdersSurface({
 
   const outletId = counterDevice?.device.outletId ?? session?.outletId ?? null
 
+  /*
+    Which kitchens on shift have pressed ACK on which order (#72), for the bell
+    on each card. Shared with the counter's header, which says when the kitchen
+    is offline; absent off the counter, where no bell is drawn.
+  */
+  const kitchenMarks = useKitchenMarks()
+  const marks = kitchenMarks?.marks ?? null
+  const refreshMarks = kitchenMarks?.refresh
+
   const load = useCallback(async () => {
     await Promise.resolve()
     if (!outletId || !shift) {
@@ -121,6 +131,8 @@ export function OpenOrdersSurface({
     }
     const nextOrders = await billing.listOpenOrders(outletId)
     setOrders(nextOrders)
+    // An order write reloads the rail; its bells come with it.
+    void refreshMarks?.()
     // Tender facts ride along so a take-back can name what it returns.
     try {
       const history = await billing.listShiftHistory(shift.id)
@@ -133,7 +145,7 @@ export function OpenOrdersSurface({
     } catch {
       setTenders(new Map())
     }
-  }, [billing, counterDevice?.device.outletId, session?.outletId, shift])
+  }, [billing, counterDevice?.device.outletId, session?.outletId, shift, refreshMarks])
 
   useEffect(() => {
     void Promise.resolve()
@@ -331,6 +343,7 @@ export function OpenOrdersSurface({
                   {...(onSetOrderCustomer ? { onSetCustomer: onSetOrderCustomer } : {})}
                   tenderLabel={order.billId ? (tenders.get(order.billId) ?? null) : null}
                   sharedTable={shared.get(order.id) ?? null}
+                  kitchen={marks ? kitchenBell(marks.orders[order.id] ?? [], marks.kitchens) : null}
                   onMarkPrepared={(target) =>
                     void act(() => billing.markOrderPrepared(target.id, true))
                   }

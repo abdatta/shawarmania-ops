@@ -158,3 +158,49 @@ export function formatKitchenWait(orderedAt: string, now: Date): string {
 export const KITCHEN_STALE_AFTER_MS = 45_000
 /** How often the screen re-reads while visible, whatever the live channel says. */
 export const KITCHEN_REREAD_MS = 20_000
+
+/**
+ * A kitchen's answer about one order, as the counter reads it (#72): still to
+ * press ACK on what it shows now, or done.
+ */
+export type KitchenAnswer = 'waiting' | 'seen'
+
+/** One counter card's bell, or none. */
+export interface KitchenBell {
+  /** Swinging, orange: some kitchen carrying the order has not pressed ACK. */
+  ringing: boolean
+  /**
+   * One place per kitchen on shift, in label order, while the bell rings — one
+   * kitchen included; `null` is an empty place. Null otherwise: the dots hide
+   * once every kitchen has answered.
+   */
+  dots: readonly (KitchenAnswer | null)[] | null
+  /** What a screen reader hears in place of the bell. */
+  label: string
+}
+
+/**
+ * The bell for one order from its answers, which run in the same order as the
+ * kitchens on shift. No bell when no kitchen on shift carries the order.
+ */
+export function kitchenBell(
+  answers: readonly (KitchenAnswer | null)[],
+  kitchens: readonly { label: string }[],
+): KitchenBell | null {
+  const carrying = answers.flatMap((answer, place) =>
+    answer === null ? [] : [{ answer, label: kitchens[place]?.label ?? 'The kitchen' }],
+  )
+  if (carrying.length === 0) return null
+  const ringing = carrying.some((kitchen) => kitchen.answer === 'waiting')
+  return {
+    ringing,
+    dots: ringing ? answers : null,
+    label: carrying
+      .map((kitchen) =>
+        kitchen.answer === 'waiting'
+          ? `${kitchen.label} has not pressed ACK yet`
+          : `${kitchen.label} has pressed ACK`,
+      )
+      .join('. '),
+  }
+}

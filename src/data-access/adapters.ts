@@ -1,5 +1,6 @@
 import type {
   BillingCommandResult,
+  KitchenAnswer,
   LineKind,
   MonthDayInput,
   MonthReading,
@@ -2149,6 +2150,22 @@ export interface KitchenCategory {
   isActive: boolean
 }
 
+/**
+ * What the counter knows of its kitchens (#72): the kitchen tablets on shift at
+ * its outlet, in label order, and per open order each one's answer in that same
+ * order — `null` where that kitchen does not carry the order. Orders no kitchen
+ * carries are absent. Nothing about dishes, times or people.
+ */
+export interface KitchenMarks {
+  kitchens: { id: string; label: string }[]
+  orders: Record<string, (KitchenAnswer | null)[]>
+  /**
+   * Kitchen tablets set up at the outlet, on shift or not: with some set up and
+   * none on shift, the counter says the kitchen is offline.
+   */
+  kitchenTablets: number
+}
+
 /** Why an acknowledgement did not land. `stale`: the order changed; re-read. */
 export type KitchenAcknowledgeOutcome = 'accepted' | 'stale'
 
@@ -2161,6 +2178,12 @@ export interface KitchenAdapter {
   readBoard(): Promise<KitchenBoard>
   listCategories(): Promise<KitchenCategory[]>
   /** Saves the filter and the sort together, as the one sheet on the tablet does. */
+  /**
+   * The counter's read of its kitchens' answers (#72). Needs a live **counter**
+   * shift; a kitchen shift is refused. Paired with `subscribe`, whose pulse also
+   * fires on an ACK, a filter change and a kitchen shift starting or ending.
+   */
+  readCounterMarks(): Promise<KitchenMarks>
   setFilter(
     mode: KitchenFilterMode,
     categoryIds: readonly string[],

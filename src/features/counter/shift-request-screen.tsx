@@ -193,7 +193,8 @@ export function ShiftRequestScreen({
               <p>
                 {onGiveUp
                   ? `Type the username of the person taking over. The ${job} stays open under its ` +
-                    'current operator until they approve it on their own phone.'
+                    'current operator until they approve it on their own phone. Otherwise a ' +
+                    "shift ends from the operator's own phone, or at this outlet's cutover."
                   : `Nobody is on this ${job}. Type the username of the person taking it, then ` +
                     'have them approve it on their own phone.'}
               </p>

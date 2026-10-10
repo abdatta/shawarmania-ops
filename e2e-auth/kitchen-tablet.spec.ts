@@ -19,7 +19,8 @@ import {
 /**
  * #70 the-kitchen-sees-its-orders, end to end on the local stack: a counter
  * tablet and a kitchen tablet, each in its own browser context, meeting only at
- * the server. The seed's spare till is turned into a kitchen for the run and
+ * the server. #72 adds the counter's side: the bell on its card swings until the
+ * kitchen presses ACK, and stops when it does. The seed's spare till is turned into a kitchen for the run and
  * put back afterwards — as a billing till, whatever happened in between.
  */
 
@@ -109,9 +110,17 @@ test('a counter rings a kitchen, ACK quiets it, Prepared clears it, and losing s
     await expect(card).toContainText('Classic Chicken Shawarma')
     await expect(kitchen.page.getByText('Kitchen Sees This')).toHaveCount(0)
 
+    // #72: the counter's card carries the kitchen's bell, swinging until the
+    // kitchen answers.
+    const bell = orderCard(counter.page, id).getByTestId('kitchen-bell')
+    await expect(bell).toHaveAttribute('data-ringing', 'true', { timeout: 30_000 })
+
     // ACK quiets it, and the acknowledgement is the server's.
     await card.getByRole('button', { name: /^ACK order / }).click()
     await expect(card).toHaveAttribute('data-state', 'quiet')
+    // The counter hears it through the kitchen pulse, with no reload.
+    await expect(bell).not.toHaveAttribute('data-ringing', { timeout: 30_000 })
+    await expect(bell).toHaveAccessibleName(`${TILL_TWO.label} has pressed ACK`)
     await kitchen.page.reload()
     await expect(kitchen.page.locator(`[data-order-id="${id}"]`)).toHaveAttribute(
       'data-state',

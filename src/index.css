@@ -272,3 +272,66 @@
     repeat-x;
   mask: radial-gradient(circle 7px at 50% 0, transparent 98%, black) 50% 0 / 22px 100% repeat-x;
 }
+
+/*
+ * A billing rail card as a ticket (#72): the kitchen's torn top edge at the
+ * rail's scale, a bite every 13px and 4px deep, inside the card's own 6px top
+ * padding so nothing moves.
+ *
+ * The edge is cut from a layer *behind* the card, not from the card: the card's
+ * ⋮ menu is its descendant, and a mask on the card would cut the menu off with
+ * it. The card gives that layer a stacking context to sit in, which is why an
+ * open menu lifts its card above its neighbours (see the card).
+ */
+@utility rail-ticket {
+  position: relative;
+  isolation: isolate;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border: 1px solid var(--color-border);
+    border-radius: 0.25rem 0.25rem 0.75rem 0.75rem;
+    background: var(--color-surface-raised);
+    -webkit-mask: radial-gradient(circle 4px at 50% 0, transparent 98%, black) 50% 0 / 13px 100%
+      repeat-x;
+    mask: radial-gradient(circle 4px at 50% 0, transparent 98%, black) 50% 0 / 13px 100% repeat-x;
+  }
+}
+
+/*
+ * The counter's kitchen bell while a kitchen has not pressed ACK (#72): it
+ * swings in bursts, as a bell does when rung, and stands still between them so
+ * the rail is not a blur. Under reduced motion it fades and returns instead.
+ * It stops the moment every kitchen has answered -- that stillness is the
+ * signal the biller is waiting for.
+ */
+@keyframes kitchen-bell {
+  0%,
+  50%,
+  100% {
+    transform: rotate(0);
+  }
+  8%,
+  24% {
+    transform: rotate(-16deg);
+  }
+  16%,
+  32% {
+    transform: rotate(16deg);
+  }
+  40% {
+    transform: rotate(-6deg);
+  }
+}
+
+@utility kitchen-bell {
+  transform-origin: 50% 12%;
+  animation: kitchen-bell 1600ms ease-in-out infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: kitchen-pulse 1600ms ease-in-out infinite;
+  }
+}

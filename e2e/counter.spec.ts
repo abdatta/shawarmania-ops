@@ -1778,3 +1778,31 @@ test.describe('manager billing history', () => {
     await expect(page.getByRole('button', { name: /Correct|Discard/ })).toHaveCount(0)
   })
 })
+
+test.describe('the rail as tickets, with the kitchen bell (#72)', () => {
+  test('a one-dish card keeps the height it had before the ticket, and rings until the kitchen answers', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('demo/biller')
+    const card = page.getByTestId('open-order-105')
+    await expect(card).toBeVisible()
+
+    // 98.25px was the one-dish card measured on 2026-10-09, before the ticket
+    // look. The ticket adds nothing; the bell's room adds about 6px on a
+    // one-dish card, and the owner allowed no more than a few.
+    const box = await card.boundingBox()
+    expect(box?.height).toBeLessThanOrEqual(98.25 + 7)
+
+    // The demo kitchen is on shift and has not pressed ACK on #105, which the
+    // counter has not prepared; #104 is prepared, so its bell is still.
+    await expect(card.getByTestId('kitchen-bell')).toHaveAttribute('data-ringing', 'true')
+    await expect(card.getByRole('img', { name: 'Kitchen 1 has not pressed ACK yet' })).toBeVisible()
+    // One kitchen, one dot, while it swings; none once the bell is still.
+    await expect(card.getByTestId('kitchen-bell-dots').locator('i')).toHaveCount(1)
+    await expect(page.getByTestId('open-order-104').getByTestId('kitchen-bell-dots')).toHaveCount(0)
+    await expect(
+      page.getByTestId('open-order-104').getByTestId('kitchen-bell'),
+    ).not.toHaveAttribute('data-ringing')
+  })
+})

@@ -1,6 +1,10 @@
 import { useMemo, useState, type ReactNode } from 'react'
 
-import { DEMO_KITCHEN_DEVICE_ID, DEMO_KITCHEN_SHIFT_ID } from '@/data-access/mock/kitchen'
+import {
+  DEMO_KITCHEN_DEVICE_ID,
+  DEMO_KITCHEN_LABEL,
+  DEMO_KITCHEN_SHIFT_ID,
+} from '@/data-access/mock/kitchen'
 import { DEMO_OUTLET_ID } from '@/data-access/mock/store'
 import { DEMO_BILLER_ID } from '@/data-access/mock/fixtures/billing'
 import { KitchenBoardScreen } from '@/features/kitchen/kitchen-board-screen'
@@ -26,7 +30,7 @@ export function DemoKitchen({ banner, today }: { banner: ReactNode; today: strin
       device: {
         deviceId: DEMO_KITCHEN_DEVICE_ID,
         outletId: DEMO_OUTLET_ID,
-        label: 'Kitchen 1',
+        label: DEMO_KITCHEN_LABEL,
         kind: 'kitchen',
       },
       shift: {
