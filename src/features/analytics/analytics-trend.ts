@@ -19,7 +19,7 @@ export const ITEM_GRAINS: [string, string][] = [
   ['week', 'Week'],
 ]
 export const ITEM_METRICS: [string, string][] = [
-  ['units', 'Units'],
+  ['units', 'Items'],
   ['revenue', 'Revenue'],
 ]
 

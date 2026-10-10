@@ -73,7 +73,10 @@ export function ItemsPanel({
   const periodValues = (row: AnalyticsItem | AnalyticsCategory) =>
     byRevenue ? row.periodRevenue : row.periodUnits
   const shown = (n: number) => metricText(n, metric)
-  const barsLabel = byRevenue ? 'Dish revenue by period' : 'Units by period'
+  const barsLabel = byRevenue ? 'Dish revenue by period' : 'Items by period'
+  const total = data.items.reduce((sum, row) => sum + value(row), 0)
+  const share = (row: AnalyticsItem | AnalyticsCategory) =>
+    total ? `${Math.round((value(row) / total) * 100)}% of ${byRevenue ? 'revenue' : 'items'}` : '—'
   const direction = new Map(
     data.items.map((i) => [i.key, periodDirection(oldestFirst(periodValues(i)))]),
   )
@@ -147,19 +150,23 @@ export function ItemsPanel({
             className="min-h-11 text-xs text-content-muted"
             explanation={
               <p>
-                {byRevenue ? 'Dish revenue (line totals less line discounts)' : 'Units sold'} in{' '}
-                {orders} synced, settled counter orders. Against one earlier period each dish shows
-                its change; against two or three, a bar per period (oldest left, each from zero) and
-                the direction they are heading, per period, or steady when the movement is within
-                the periods' usual wobble. All is ordered most sold first; Worst is least sold
-                first, including zero sellers. Rising and Slow show active dishes heading up or
-                down, fastest first. Tap a dish to chart it. Zero sales do not prove a dish was
-                stocked throughout; check stock, launch dates and another comparable period before
-                removal.
+                {byRevenue ? 'Dish revenue (line totals less line discounts)' : 'Items sold'} from
+                synced, settled counter bills. Shares use all{' '}
+                {byRevenue ? 'dish revenue' : 'items sold'} in this outlet and range, including
+                captured retired sales. Search, filters and the chart subject do not change the
+                total. Against one earlier period each dish shows its change; against two or three,
+                a bar per period (oldest left, each from zero) and the direction they are heading,
+                per period, or steady when the movement is within the periods' usual wobble. All is
+                ordered most sold first; Worst is least sold first, including zero sellers. Rising
+                and Slow show active dishes heading up or down, fastest first. Tap a dish to chart
+                it. Zero sales do not prove a dish was stocked throughout; check stock, launch dates
+                and another comparable period before removal.
               </p>
             }
           >
-            {orders} counter orders
+            <span data-testid="items-total" data-value={total}>
+              {shown(total)} {byRevenue ? 'dish revenue' : 'items sold'}
+            </span>
           </Explain>
         </div>
         <div className="relative mb-2">
@@ -231,8 +238,8 @@ export function ItemsPanel({
                   ) : i.highlighted ? (
                     <Chip icon={Flame}>Highlighted</Chip>
                   ) : null}
-                  <span className="ml-auto text-xs text-content-muted">
-                    {orders ? `${Math.round((i.orders / orders) * 100)}% of orders` : '—'}
+                  <span data-testid="dish-share" className="ml-auto text-xs text-content-muted">
+                    {share(i)}
                   </span>
                 </span>
               </button>
@@ -248,14 +255,14 @@ export function ItemsPanel({
             className="min-h-11 text-xs text-content-muted"
             explanation={
               <p>
-                {byRevenue ? 'Dish revenue' : 'Units sold'}, grouped by the category captured on the
+                {byRevenue ? 'Dish revenue' : 'Items sold'}, grouped by the category captured on the
                 bill, against the previous equal period. Older bills without a category snapshot are
                 Uncategorised; today’s category is not used to rewrite history. Tap a category to
-                chart it.
+                chart it. Shares use the same full outlet and range total as Dishes.
               </p>
             }
           >
-            {byRevenue ? 'Revenue' : 'Units'} · captured
+            {byRevenue ? 'Revenue' : 'Items'} · captured
           </Explain>
         </div>
         {/*
@@ -275,6 +282,7 @@ export function ItemsPanel({
               <button
                 type="button"
                 data-testid="category-row"
+                data-value={value(c)}
                 aria-pressed={chosen === `category:${c.name}`}
                 aria-label={`Chart ${c.name}`}
                 onClick={() => chart({ kind: 'category', name: c.name })}
@@ -306,6 +314,12 @@ export function ItemsPanel({
                 <span className="col-span-full">
                   <MiniBar value={value(c)} max={categoryMax} />
                 </span>
+                <span
+                  data-testid="category-share"
+                  className="col-span-full text-right text-xs text-content-muted"
+                >
+                  {share(c)}
+                </span>
               </button>
             </li>
           ))}
@@ -325,14 +339,21 @@ export function ItemsPanel({
             variant="secondary"
             onClick={() =>
               download('item-performance', [
-                ['Dish', 'Category', 'Units', 'Previous units', 'Line revenue (paise)', 'Orders'],
+                [
+                  'Dish',
+                  'Category',
+                  'Items',
+                  'Previous items',
+                  'Line revenue (paise)',
+                  byRevenue ? 'Share of revenue' : 'Share of items',
+                ],
                 ...items.map((i) => [
                   i.name,
                   i.category,
                   i.units,
                   i.previousUnits,
                   i.revenue,
-                  i.orders,
+                  share(i),
                 ]),
               ])
             }
@@ -343,7 +364,13 @@ export function ItemsPanel({
             <table className="w-full text-left text-xs">
               <thead>
                 <tr>
-                  {['Dish', 'Units', 'Previous', 'Dish revenue'].map((h) => (
+                  {[
+                    'Dish',
+                    'Items',
+                    'Previous items',
+                    'Dish revenue',
+                    byRevenue ? 'Share of revenue' : 'Share of items',
+                  ].map((h) => (
                     <th key={h} scope="col" className="p-2">
                       {h}
                     </th>
@@ -361,6 +388,7 @@ export function ItemsPanel({
                     <td className="whitespace-nowrap p-2">
                       <Money paise={i.revenue} />
                     </td>
+                    <td className="whitespace-nowrap p-2">{share(i)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -428,7 +456,15 @@ function ItemTrend({
       : subject.kind === 'category'
         ? subject.name
         : 'All dishes'
-  const picker = <SubjectPicker data={data} name={name} subject={subject} onSubject={onSubject} />
+  const picker = (
+    <SubjectPicker
+      data={data}
+      name={name}
+      metric={metric}
+      subject={subject}
+      onSubject={onSubject}
+    />
+  )
   if (failed === key && !series)
     return (
       <Card>
@@ -477,7 +513,7 @@ function ItemTrend({
   return (
     <TrendCard
       id="items-trend"
-      title={metric === 'units' ? 'Units sold' : 'Dish revenue'}
+      title={metric === 'units' ? 'Items sold' : 'Dish revenue'}
       metric={metric}
       totals={totals}
       days={periodDays(from, to)}
@@ -494,7 +530,7 @@ function ItemTrend({
       rowHeader={hourly ? 'Hour' : grain === 'day' ? 'Day' : 'Week'}
       newestFirst={!hourly}
       exportName={`item-trend-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
-      exportUnit={metric === 'units' ? 'units' : 'dish revenue (paise)'}
+      exportUnit={metric === 'units' ? 'items' : 'dish revenue (paise)'}
     />
   )
 }
@@ -502,11 +538,13 @@ function ItemTrend({
 function SubjectPicker({
   data,
   name,
+  metric,
   subject,
   onSubject,
 }: {
   data: AnalyticsSnapshot
   name: string
+  metric: ItemMetric
   subject: AnalyticsSubject
   onSubject: (subject: AnalyticsSubject) => void
 }) {
@@ -529,9 +567,13 @@ function SubjectPicker({
       {detail && <span className="shrink-0 text-xs tabular-nums text-content-muted">{detail}</span>}
     </button>
   )
-  const categories = data.categories.filter((c) => match(c.name))
+  const value = (row: AnalyticsItem | AnalyticsCategory) =>
+    metric === 'revenue' ? row.revenue : row.units
+  const categories = [...data.categories]
+    .sort((a, b) => value(b) - value(a) || a.name.localeCompare(b.name))
+    .filter((c) => match(c.name))
   const dishes = [...data.items]
-    .sort((a, b) => b.units - a.units || a.name.localeCompare(b.name))
+    .sort((a, b) => value(b) - value(a) || a.name.localeCompare(b.name))
     .filter((i) => match(i.name))
   return (
     <>
@@ -564,7 +606,7 @@ function SubjectPicker({
                 Categories
               </p>
               {categories.map((c) =>
-                option(c.name, { kind: 'category', name: c.name }, metricText(c.units, 'units')),
+                option(c.name, { kind: 'category', name: c.name }, metricText(value(c), metric)),
               )}
             </section>
           )}
@@ -574,7 +616,7 @@ function SubjectPicker({
                 Dishes
               </p>
               {dishes.map((i) =>
-                option(i.name, { kind: 'item', key: i.key }, metricText(i.units, 'units')),
+                option(i.name, { kind: 'item', key: i.key }, metricText(value(i), metric)),
               )}
             </section>
           )}

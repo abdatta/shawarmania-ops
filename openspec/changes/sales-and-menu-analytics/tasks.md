@@ -51,3 +51,11 @@ Tasks 1–13 record the earlier verified iterations. The owner's latest scope in
 - [x] 30. Flat trend chips read `→ steady` in the unit's style, so chips are one size; Items wears a ranked-bars icon instead of Menu's utensils (the name stays, since it covers drinks); Analytics sits between Attendance and Setup, Setup rightmost.
 
 - [x] 31. Items' Dishes and Categories follow the measure (revenue shown, ranked, compared and filtered), via `20261013000000_items_follow_their_measure.sql`; hour charts and their tables trim to the trading hours; 1d groups by Hour and 7d/30d by Day on both pages.
+
+## Inclusive dates and measure shares (2026-10-10)
+
+- [x] 32. Specify today-inclusive presets/defaults, linked-first date editing and selected-measure dish/category shares in this existing change.
+- [x] 33. Implement shared inclusive ranges, next-period navigation, valid fallback and per-sheet draft linking; preserve cutover resolution, explicit links and manual grouping.
+- [x] 34. Rename user-facing Units to Items, replace order shares/header/export with selected-measure totals/shares, add category shares and reshape loading reserves.
+- [x] 35. Update SCREENS/TESTING; prove cutoff boundaries, preset lengths, both edit directions/unlocking/cancel/reset, stable share denominators and zero totals. Run format before all applicable repository gates and inspect phone/tablet in both themes.
+- [x] 36. PHASE GATE (roadmap #71): Items and Sales live/demo contracts remain intact; inclusive presets and date edits, captured metric shares, bounded reads, empty states and theme/viewport behavior verified with an evidence report. Do not archive, commit or push.

@@ -20,18 +20,32 @@ export function AnalyticsRange({
   const [open, setOpen] = useState(false)
   const [draftFrom, setDraftFrom] = useState(from)
   const [draftTo, setDraftTo] = useState(to)
+  const [anchor, setAnchor] = useState<'from' | 'to' | 'custom' | null>(null)
+  const [span, setSpan] = useState(7)
   const valid = validAnalyticsDate(from) && validAnalyticsDate(to) && to >= from
   const draftValid =
     validAnalyticsDate(draftFrom) &&
     validAnalyticsDate(draftTo) &&
     draftTo >= draftFrom &&
+    !!today &&
+    draftTo <= today &&
     periodDays(draftFrom, draftTo) <= 92
+  function editDate(field: 'from' | 'to', date: string) {
+    if (date === (field === 'from' ? draftFrom : draftTo)) return
+    if (field === 'from') setDraftFrom(date)
+    else setDraftTo(date)
+    if (anchor === null || anchor === field) {
+      setAnchor(field)
+      if (field === 'from') setDraftTo(shiftDate(date, span - 1))
+      else setDraftFrom(shiftDate(date, 1 - span))
+    } else setAnchor('custom')
+  }
   return (
     <>
       <PeriodBar
         label="period"
         testIdPrefix="analytics"
-        canStepForward={!!today && valid && shiftDate(to, periodDays(from, to)) < today}
+        canStepForward={!!today && valid && shiftDate(to, periodDays(from, to)) <= today}
         onStep={(by) => {
           if (valid) {
             const step = by * periodDays(from, to)
@@ -46,8 +60,11 @@ export function AnalyticsRange({
           aria-label="Choose dates"
           disabled={!today}
           onClick={() => {
-            setDraftFrom(validAnalyticsDate(from) ? from : shiftDate(today!, -7))
-            setDraftTo(validAnalyticsDate(to) ? to : shiftDate(today!, -1))
+            const useRange = valid && periodDays(from, to) <= 92 && to <= today!
+            setDraftFrom(useRange ? from : shiftDate(today!, -6))
+            setDraftTo(useRange ? to : today!)
+            setSpan(useRange ? periodDays(from, to) : 7)
+            setAnchor(null)
             setOpen(true)
           }}
         >
@@ -63,16 +80,16 @@ export function AnalyticsRange({
             key={n}
             size="phone"
             variant="ghost"
-            className={`flex-1 px-2 ${today && to === shiftDate(today, -1) && from === shiftDate(today, -n) ? 'bg-surface-raised text-accent-text' : 'text-content-muted'}`}
+            className={`flex-1 px-2 ${today && to === today && from === shiftDate(today, 1 - n) ? 'bg-surface-raised text-accent-text' : 'text-content-muted'}`}
             aria-label={`Last ${n} ${n === 1 ? 'day' : 'days'}`}
-            aria-pressed={!!today && to === shiftDate(today, -1) && from === shiftDate(today, -n)}
+            aria-pressed={!!today && to === today && from === shiftDate(today, 1 - n)}
             disabled={!today}
             onClick={() => {
               // A day reads best by hour, a week or a month by day [owner, 2026-10-10].
               if (today)
                 onChange({
-                  from: shiftDate(today, -n),
-                  to: shiftDate(today, -1),
+                  from: shiftDate(today, 1 - n),
+                  to: today,
                   grain: n === 1 ? 'hour' : 'day',
                 })
             }}
@@ -107,7 +124,7 @@ export function AnalyticsRange({
                 today={today ?? ''}
                 earliest="0001-01-01"
                 testIdPrefix="analytics-from"
-                onChange={setDraftFrom}
+                onChange={(date) => editDate('from', date)}
               />
             </div>
           </div>
@@ -119,14 +136,14 @@ export function AnalyticsRange({
                 today={today ?? ''}
                 earliest="0001-01-01"
                 testIdPrefix="analytics-to"
-                onChange={setDraftTo}
+                onChange={(date) => editDate('to', date)}
               />
             </div>
           </div>
           <p className="text-xs text-content-muted">1–92 days · Kolkata business dates</p>
           {!draftValid && (
             <p role="alert" className="text-sm text-danger">
-              Choose a valid range of 1–92 days.
+              Choose a valid range of 1–92 days ending on or before today.
             </p>
           )}
         </div>

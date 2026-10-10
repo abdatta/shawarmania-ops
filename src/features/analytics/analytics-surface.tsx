@@ -46,8 +46,8 @@ function OutletAnalytics({
   const { analytics, outlets } = useAdapters()
   const [params, setParams] = useSearchParams()
   const [today, setToday] = useState<string | null>(null)
-  const from = params.get('from') ?? (today ? shiftDate(today, -7) : '')
-  const to = params.get('to') ?? (today ? shiftDate(today, -1) : '')
+  const from = params.get('from') ?? (today ? shiftDate(today, -6) : '')
+  const to = params.get('to') ?? today ?? ''
   const grain =
     params.get('grain') === 'week' ? 'week' : params.get('grain') === 'hour' ? 'hour' : 'day'
   const metric =
@@ -148,8 +148,9 @@ function OutletAnalytics({
                 </p>
                 <p>
                   Dish revenue uses captured line prices and line discounts; it excludes bill-level
-                  discounts, tax, rounding and packaging. Order shares can total more than 100%
-                  because an order can contain several dishes.
+                  discounts, tax, rounding and packaging. Dish and category shares use all items
+                  sold or all dish revenue in the selected range, following the measure. Search and
+                  filters keep that same total; whole-percent rounding may not add to 100%.
                 </p>
                 <p>
                   Availability is today’s state. Check stock and launch dates before retiring a
@@ -232,9 +233,17 @@ function OutletAnalytics({
 function AnalyticsLoading({ kind }: { kind: 'items' | 'trends' }) {
   return (
     <LoadingRegion label="Loading analytics">
-      {/* The trend card, then the lists or the hourly card beneath it. */}
+      {/* Trend, fixed-height Dishes, then Categories with a share line per row. */}
       <Shimmer className="h-[24rem]" />
       <Shimmer className={`mt-3 ${kind === 'items' ? 'h-[32rem]' : 'h-72'}`} />
+      {kind === 'items' && (
+        <div className="mt-3 space-y-3 rounded-xl border border-border bg-surface p-4">
+          <Shimmer className="h-6 w-32" />
+          {Array.from({ length: 6 }, (_, index) => (
+            <Shimmer key={index} className="h-20" />
+          ))}
+        </div>
+      )}
     </LoadingRegion>
   )
 }

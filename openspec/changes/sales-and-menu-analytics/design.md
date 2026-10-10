@@ -1,5 +1,15 @@
 # Design
 
+## Inclusive dates and measure shares (owner, 2026-10-10)
+
+Both pages default to `[today - 6, today]`, with 1d/7d/30d selecting `[today - (n - 1), today]`. Today continues to resolve through the outlet's Asia/Kolkata cutover. Explicit URL dates stay authoritative; next-period navigation may end on today, and invalid deep-link recovery uses the inclusive seven-day fallback. The existing incomplete-period disclosure stays.
+
+Each opening of Dates takes the current valid range (or the fallback) and its inclusive span. The first edited endpoint becomes the anchor; repeated edits of it shift the opposite endpoint by that span. An explicit edit of the opposite endpoint unlocks both for the rest of that sheet visit. Apply commits once; cancel discards the draft; reopening starts fresh. If a shift crosses today or the supported calendar bounds, Apply stays disabled and the second endpoint can correct it. Do not silently clamp or shrink the chosen span. Manual dates preserve grouping.
+
+Replace user-facing quantity terminology with Items/Items sold, including accessibility text, explanations, tables and exports; internal `units` payload/URL keys stay compatible. Replace order-share labels and the Dishes order-count header with the selected measure's total. Dish and category share is `row value / sum(all snapshot item values)` for the current window. Use the unfiltered full snapshot, including captured retired sales and Uncategorised; the chart subject, list filters and search never alter the denominator. Zero totals show an em dash, zero rows with a positive total show 0%, and whole-percent rounding can keep totals from being exactly 100%. Revenue is captured line revenue less line discounts, excluding bill-level discount, tax, rounding, packaging and delivery; it is not the Sales revenue headline.
+
+The category layout gains a share row; reshape its loading reserve in the same change. Remove the order-count column from the Items export. No RLS, money arithmetic, database schema, offline semantics, feature gates or adapter contracts change. Shares derive from existing aggregate integers, without new reads. Rejected: retaining order penetration (a different question than the selected measure), changing denominators with filters (unstable shares), or renaming backend keys (unnecessary contract churn).
+
 ## Phone first
 
 Reuse the app's outlet chips, date bar, FormSheet choices, cards, change chips and bars. Items opens on its trend card (see Trend card), then a 320px internally scrolling Dishes card; All sorts best first, Worst reverses units, Rising/Slow require a nonzero preceding baseline. Full names wrap. Twelve rows render initially and more append inside the card. Search/filter/date/outlet changes reset the list. Every dish and category row is a button that charts it. Categories show units and change against the previous period. Two-dish comparison, Ideas and Browsing are absent.

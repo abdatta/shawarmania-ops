@@ -16,6 +16,8 @@ One database aggregate RPC per view/range/outlet/comparison count transfers no r
 
 ## Gate
 
+The owner's 2026-10-10 follow-up includes the current outlet business date in the default seven-day range and every preset. In Dates, editing one endpoint moves the other to preserve the current inclusive span until the opposite endpoint is explicitly edited. Items replaces quantity labels such as Units with Items, and dish/category shares follow the selected measure: share of all items sold or share of all dish revenue in the selected outlet/range. Search, filters and chart subject do not change those denominators. Update SCREENS and TESTING for this follow-up.
+
 Both pages work live and in demo; navigation and deep links work on phone/tablet in both themes. Settled snapshots reconcile, voids/packaging and missing delivery imports remain honest, AOV is weighted, empty periods and no-baseline changes are explicit. Managers cannot read another outlet through crafted requests. View-specific payloads, requested-period bounds, interactive chart details and no extra reads for metric/group changes are proved. All applicable repository gates pass.
 
 ## Pattern clarity

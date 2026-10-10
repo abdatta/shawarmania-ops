@@ -15,14 +15,14 @@ Analytics SHALL count settled bills only, preserve captured integer paise and ex
 - **THEN** retained settled snapshots determine historical sales and voids contribute nothing
 
 ### Requirement: Compact dish performance
-Items SHALL offer All/Worst/Rising/Slow in one Dishes card, full names, search, order share, prior change, a Categories list with units and change against the previous period, and expandable figures/export. All sorts descending units and Worst ascending including zeros. Rising/Slow require a nonzero preceding baseline. A fixed 320px internal region SHALL append batches without Show All or document growth, resetting on filter/search/date changes. Two-dish comparison, Ideas and Browsing SHALL be absent.
+Items SHALL offer All/Worst/Rising/Slow in one Dishes card, full names, search, selected-measure share, prior change, a Categories list with the selected measure, share and change against the previous period, and expandable figures/export. All sorts descending on the selected measure and Worst ascending including zeros. Rising/Slow require a nonzero preceding baseline. A fixed 320px internal region SHALL append batches without Show All or document growth, resetting on filter/search/date changes. Two-dish comparison, Ideas and Browsing SHALL be absent.
 
 #### Scenario: Owner explores all dishes on a phone
 - **WHEN** the owner scrolls the Dishes region and chooses Worst
 - **THEN** all dishes remain reachable within the same card height, least sold first including zero sellers
 
 ### Requirement: Item and category trends
-The measure SHALL govern the Dishes and Categories lists as well as the trend: with Revenue they show, rank, compare and filter on dish revenue. Items SHALL lead with a trend of dish Units or Dish revenue, grouped by Hour, Day (the default) or Week, for All dishes, one dish or one captured category, across one to four adjacent equal periods aligned by elapsed day. A picker and a tap on any dish or category row SHALL choose the subject, kept in the address. Dish figures SHALL be counter-only and say so.
+The measure SHALL govern the Dishes and Categories lists as well as the trend: with Revenue they show, rank, compare and filter on dish revenue. Items SHALL lead with a trend of Items sold or Dish revenue, grouped by Hour, Day (the default) or Week, for All dishes, one dish or one captured category, across one to four adjacent equal periods aligned by elapsed day. A picker and a tap on any dish or category row SHALL choose the subject, kept in the address. Dish figures SHALL be counter-only and say so.
 
 #### Scenario: One day by hour
 - **WHEN** the owner chooses 1d and groups Items by Hour
@@ -46,14 +46,31 @@ On both pages the trend SHALL be one card with a Chart / Table switch kept in th
 - **WHEN** the owner groups four 30-day periods by week and chooses Table
 - **THEN** the table has one row per week the chart plots, one column per period plus Change, and reloading keeps the table
 
-### Requirement: Completed dates and multiple comparisons
+### Requirement: Inclusive business dates and multiple comparisons
 Both pages SHALL offer 1d/7d/30d presets, default 7d, and custom ranges. Sales SHALL support one through four total adjacent inclusive equal-length windows, actual short date-range legends and hour/day/week grouping. Boundary groups SHALL include only selected days and align older periods by elapsed day.
+
+Default and preset ranges SHALL include the current business date resolved through the selected outlet's cutover, spanning exactly 1/7/30 inclusive dates. Explicit URL dates SHALL remain respected; next-period navigation SHALL permit a range ending today. On each opening of Dates, editing the first endpoint SHALL shift the opposite endpoint to preserve the inclusive range length, including repeated edits of that first endpoint. Explicitly editing the opposite endpoint SHALL release the link for the rest of that opening. Apply SHALL commit only valid ordered ranges of 1–92 days within supported dates through today; cancel SHALL discard draft edits. Manual dates SHALL preserve grouping.
 
 Comparison SHALL use a distinct compact icon pill and a total-period count, with Current only and 2/3/4-period choices labeled by actual ranges. Hour grouping SHALL use counter totals by Kolkata clock hour across each range, reusing the bounded period/hour payload. The 1d preset SHALL group by Hour and 7d and 30d by Day on both pages; dates chosen by hand SHALL keep the grouping. The bottom Hours graph SHALL use grouped columns, including preceding periods and accessible point inspection.
 
 #### Scenario: Four thirty-day windows
 - **WHEN** the owner chooses 30d and three preceding periods
 - **THEN** Sales compares four windows of exactly thirty days, labels actual ranges and preserves the choices on reload
+
+#### Scenario: Change a seven-day range into eight days
+- **WHEN** a range of October 4–10 has From changed to October 2, then To changed to October 9
+- **THEN** To first moves to October 8, then From stays October 2 and the applied range spans eight days
+
+#### Scenario: Before the outlet cutover
+- **WHEN** the Kolkata calendar date is October 10 but the outlet's cutover has not occurred
+- **THEN** 1d selects October 9 and 7d selects October 3–9
+
+### Requirement: Items terminology and selected-measure shares
+The Items page SHALL label sold quantities Items/Items sold rather than Units in controls, charts, explanations, accessibility text, tables and exports. Dishes SHALL show the selected measure's total rather than an order count. Each dish and captured category SHALL show its current-period share of all items sold when Items is selected, or of all dish revenue when Revenue is selected, using the same full outlet/range denominator. Search, filters and chart subject SHALL NOT change the denominator. Zero denominators SHALL show an em dash and zero sellers with a positive denominator SHALL show 0%. Revenue shares SHALL use captured line totals less line discounts, excluding delivery, packaging, bill-level discounts, tax and rounding. Order-share labels and the Items export's order-count column SHALL be absent.
+
+#### Scenario: Search with Revenue selected
+- **WHEN** a dish has 25 items and 13% of all dish revenue, and the owner selects Revenue and searches for it
+- **THEN** its share reads 13% of revenue and remains unchanged by the search; categories use the same denominator
 
 ### Requirement: Page-wide metrics and interactive charts
 Revenue/Orders/AOV SHALL govern every Sales chart, the trend table and its export. Revenue uses counter plus recorded delivery gross before commission; provisional imports are disclosed and missing imports remain unknown. Orders and weighted AOV SHALL use counter bills only. Hour graphs SHALL use counter-only Kolkata ordered hours. Pointer hover, tap/click and keyboard point inspection SHALL expose the actual day/range/hour and exact metric for each selected period. AOV without orders SHALL be a gap and em dash, never zero or infinity.

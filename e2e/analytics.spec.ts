@@ -25,6 +25,77 @@ async function chooseMeasure(page: Page, measure: string) {
 }
 
 for (const theme of ['light', 'dark']) {
+  test(`inclusive dates and first-endpoint linking on both pages in ${theme}`, async ({
+    page,
+  }, testInfo) => {
+    await page.clock.install({ time: new Date('2026-10-10T12:00:00+05:30') })
+    const { errors, backendRequests } = await openAnalytics(
+      page,
+      testInfo,
+      theme,
+      'demo/owner/analytics/items',
+    )
+    for (const route of ['items', 'sales']) {
+      if (route === 'sales') await page.getByRole('link', { name: 'Sales', exact: true }).click()
+      await expect(page.getByRole('button', { name: 'Last 7 days' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+      await expect(page.getByText('Incomplete period', { exact: true })).toBeVisible()
+      const from = page.getByTestId('analytics-from-day-picker')
+      const to = page.getByTestId('analytics-to-day-picker')
+      for (const [days, start] of [
+        [1, '2026-10-10'],
+        [30, '2026-09-11'],
+        [7, '2026-10-04'],
+      ] as const) {
+        await page
+          .getByRole('button', { name: `Last ${days} ${days === 1 ? 'day' : 'days'}`, exact: true })
+          .click()
+        await page.getByRole('button', { name: 'Choose dates' }).click()
+        await expect(from).toHaveValue(start)
+        await expect(to).toHaveValue('2026-10-10')
+        await page
+          .getByRole('dialog', { name: 'Dates', exact: true })
+          .getByRole('button', { name: 'Close' })
+          .click()
+      }
+      await page.getByRole('button', { name: 'Previous period' }).click()
+      await expect(page.getByRole('button', { name: 'Next period' })).toBeEnabled()
+      await page.getByRole('button', { name: 'Next period' }).click()
+      await expect(page.getByRole('button', { name: 'Next period' })).toBeDisabled()
+      await page.getByRole('button', { name: 'Choose dates' }).click()
+      await from.fill('2026-10-02')
+      await expect(to).toHaveValue('2026-10-08')
+      await to.fill('2026-10-09')
+      await expect(from).toHaveValue('2026-10-02')
+      await page.getByRole('button', { name: 'Apply dates' }).click()
+      await expect(page).toHaveURL(/from=2026-10-02&to=2026-10-09/)
+      await expect(page.getByRole('button', { name: 'Group by: Day' })).toBeVisible()
+      await page.reload()
+      await page.getByRole('button', { name: 'Choose dates' }).click()
+      await to.fill('2026-10-08')
+      await expect(from).toHaveValue('2026-10-01')
+      await from.fill('2026-10-02')
+      await expect(to).toHaveValue('2026-10-08')
+      await page.getByRole('button', { name: 'Apply dates' }).click()
+      await expect(page).toHaveURL(/from=2026-10-02&to=2026-10-08/)
+      await page.getByRole('button', { name: 'Last 7 days' }).click()
+      await page.getByRole('button', { name: 'Choose dates' }).click()
+      await from.fill('2026-10-10')
+      await expect(to).toHaveValue('2026-10-16')
+      await expect(page.getByRole('button', { name: 'Apply dates' })).toBeDisabled()
+      await to.fill('2026-10-10')
+      await page.getByRole('button', { name: 'Apply dates' }).click()
+      await expect(page.getByRole('button', { name: 'Group by: Day' })).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(
+        false,
+      )
+    }
+    expect(errors).toEqual([])
+    expect(backendRequests).toEqual([])
+  })
+
   test(`Items charts any dish or category against earlier periods in ${theme}`, async ({
     page,
   }, testInfo) => {
@@ -43,11 +114,33 @@ for (const theme of ['light', 'dark']) {
     await expect(page.getByTestId('dish-comparison')).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Compare', exact: true })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Group by: Day' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Measure: Units' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Measure: Items' })).toBeVisible()
 
     const card = page.getByTestId('items-trend-card')
     await expect(card.getByRole('button', { name: /^Charting All dishes/ })).toBeVisible()
-    await expect(card.getByRole('heading', { name: 'Units sold' })).toBeVisible()
+    await expect(card.getByRole('heading', { name: 'Items sold' })).toBeVisible()
+    const checkShares = async (metric: 'items' | 'revenue') => {
+      const total = Number(await page.getByTestId('items-total').getAttribute('data-value'))
+      for (const [rowId, shareId] of [
+        ['dish-row', 'dish-share'],
+        ['category-row', 'category-share'],
+      ]) {
+        const shares = await page.getByTestId(rowId!).evaluateAll(
+          (rows, shareId) =>
+            rows.map((row) => ({
+              value: Number(row.getAttribute('data-value')),
+              share: row.querySelector(`[data-testid="${shareId}"]`)!.textContent,
+            })),
+          shareId,
+        )
+        expect(shares.length).toBeGreaterThan(0)
+        for (const row of shares)
+          expect(row.share).toBe(
+            total ? `${Math.round((row.value / total) * 100)}% of ${metric}` : '—',
+          )
+      }
+    }
+    await checkShares('items')
     await expect(page.getByTestId('items-trend').getByTestId('chart-series')).toHaveCount(2)
     await expect(page.getByTestId('items-trend').getByTestId('chart-point')).toHaveCount(7)
     const chart = page.getByTestId('items-trend').getByRole('group')
@@ -128,6 +221,9 @@ for (const theme of ['light', 'dark']) {
     expect(revenues).toEqual([...revenues].sort((a, b) => b - a))
     await expect(page.getByTestId('category-units').first()).toContainText('₹')
     await expect(page.getByText('Revenue · captured')).toBeVisible()
+    await checkShares('revenue')
+    await page.getByRole('heading', { name: 'Categories', exact: true }).scrollIntoViewIfNeeded()
+    await page.screenshot({ path: testInfo.outputPath(`item-shares-${theme}.png`), fullPage: true })
 
     // One day opens by hour: the trading part of the day, every period.
     const itemPoints = page.getByTestId('items-trend').getByTestId('chart-point')
