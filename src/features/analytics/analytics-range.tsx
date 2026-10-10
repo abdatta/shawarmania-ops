@@ -15,7 +15,7 @@ export function AnalyticsRange({
   from: string
   to: string
   today: string | null
-  onChange: (next: { from: string; to: string }) => void
+  onChange: (next: { from: string; to: string; grain?: string }) => void
 }) {
   const [open, setOpen] = useState(false)
   const [draftFrom, setDraftFrom] = useState(from)
@@ -68,7 +68,13 @@ export function AnalyticsRange({
             aria-pressed={!!today && to === shiftDate(today, -1) && from === shiftDate(today, -n)}
             disabled={!today}
             onClick={() => {
-              if (today) onChange({ from: shiftDate(today, -n), to: shiftDate(today, -1) })
+              // A day reads best by hour, a week or a month by day [owner, 2026-10-10].
+              if (today)
+                onChange({
+                  from: shiftDate(today, -n),
+                  to: shiftDate(today, -1),
+                  grain: n === 1 ? 'hour' : 'day',
+                })
             }}
           >
             {n}d

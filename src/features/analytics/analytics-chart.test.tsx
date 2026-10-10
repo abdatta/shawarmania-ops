@@ -137,8 +137,8 @@ describe('interactive sales figures', () => {
     for (const id of ['sales-trend', 'sales-hours']) {
       const chart = within(screen.getByTestId(id))
       fireEvent.keyDown(chart.getByRole('group'), { key: 'Home' })
-      for (let i = 0; i < (id === 'sales-trend' ? 12 : 1); i++)
-        fireEvent.keyDown(chart.getByRole('group'), { key: 'ArrowRight' })
+      // Both hour charts start an hour before the first sale: 11:00, then 12:00.
+      fireEvent.keyDown(chart.getByRole('group'), { key: 'ArrowRight' })
       expect(chart.getByRole('status')).toHaveTextContent(
         `1–2 Oct · 12:00${id === 'sales-trend' ? '₹105' : '₹52.5'}`,
       )
@@ -155,7 +155,9 @@ describe('interactive sales figures', () => {
     expect(screen.queryByTestId('sales-trend')).toBeNull()
     const row = screen.getByRole('row', { name: /^12:00 ₹105 ₹77\.77 \+35%/ })
     expect(row).toBeVisible()
-    expect(within(screen.getByTestId('sales-trend-table')).getAllByRole('row')).toHaveLength(25)
+    // Only the trading hours, 11:00 to 13:00, under the header: the rest are
+    // zero in every period, so nothing is lost.
+    expect(within(screen.getByTestId('sales-trend-table')).getAllByRole('row')).toHaveLength(4)
   })
   it.each([
     ['revenue', 'Hourly average revenue', '₹7'],
@@ -225,6 +227,19 @@ describe('interactive sales figures', () => {
     // ₹1,300 against an earlier average of ₹1,100.
     expect(screen.getByRole('row', { name: /^4 Oct .*▲ 18%$/ })).toBeVisible()
   })
+  it('a day with no sales keeps every hour', () => {
+    inRouter(
+      <SalesPanel
+        data={{ days: [], items: [], categories: [], delivery: [], hours: [] }}
+        from="2026-10-08"
+        to="2026-10-08"
+        grain="hour"
+        metric="revenue"
+        periods={1}
+      />,
+    )
+    expect(within(screen.getByTestId('sales-trend')).getAllByTestId('chart-point')).toHaveLength(24)
+  })
   it('solid four-period columns include earlier trading hours and preserve zero-sale gaps', () => {
     inRouter(
       <SalesPanel
@@ -267,7 +282,8 @@ describe('interactive sales figures', () => {
     fireEvent.keyDown(chart, { key: 'ArrowLeft' })
     expect(within(plot).getByRole('status')).toHaveTextContent('11–17 Sept · 22:00₹200')
     expect(within(plot).getByLabelText('4: 11–17 Sept')).toBeVisible()
-    expect(within(screen.getByTestId('sales-trend')).getAllByTestId('chart-point')).toHaveLength(24)
+    // The trend's hours are trimmed the same way: 11:00 to 23:00.
+    expect(within(screen.getByTestId('sales-trend')).getAllByTestId('chart-point')).toHaveLength(13)
   })
   it('comparison has its own compact trigger and names the chosen ranges', () => {
     const changes: Record<string, string>[] = []

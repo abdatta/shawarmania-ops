@@ -10,7 +10,7 @@ import {
   type SalesMetric,
 } from '@/domain/sales-analytics'
 import { AnalyticsChart, type ChartSeries } from './analytics-chart'
-import { HOURS, hourTrend, periodTrend } from './analytics-trend'
+import { activeHours, HOURS, hourTrend, periodTrend } from './analytics-trend'
 import { TrendCard } from './analytics-trend-card'
 
 const labels = { revenue: 'Revenue', orders: 'Orders', aov: 'AOV' }
@@ -53,16 +53,9 @@ export function SalesPanel({
       value: metric === 'aov' || point.value === null ? point.value : point.value / span,
     })),
   }))
-  // Focus the pattern on trading hours across every comparison, preserving gaps.
-  const tradingHours = data.hours
-    .filter((h) => h.period < periods && h.orders > 0)
-    .map((h) => h.hour)
-  const firstHour = tradingHours.length ? Math.max(0, Math.min(...tradingHours) - 1) : 0
-  const lastHour = tradingHours.length ? Math.min(23, Math.max(...tradingHours) + 1) : 23
-  const hourlyPattern = hourlyAverages.map((series) => ({
-    ...series,
-    points: series.points.slice(firstHour, lastHour + 1),
-  }))
+  // Both hour charts show the trading part of the day across every comparison.
+  const hourlyPattern = activeHours(hourlyAverages, hours)
+  const hourTotals = activeHours(hourSeries, hours)
   const hourlyTitle =
     metric === 'aov' ? 'Average bill by hour' : `Hourly average ${labels[metric].toLowerCase()}`
   const totals = trend.periods.map((p) => salesValue(p.total.revenue, p.total.orders, metric))
@@ -84,8 +77,8 @@ export function SalesPanel({
               ? 'Counter + delivery'
               : 'Counter bills only'
         }
-        series={grain === 'hour' ? hourSeries : trend.series}
-        axis={grain === 'hour' ? hours : trend.axis}
+        series={grain === 'hour' ? hourTotals.series : trend.series}
+        axis={grain === 'hour' ? hourTotals.axis : trend.axis}
         rowHeader={grain === 'hour' ? 'Hour' : grain === 'day' ? 'Day' : 'Week'}
         newestFirst={grain !== 'hour'}
         exportName="sales-trends"
@@ -126,9 +119,9 @@ export function SalesPanel({
           id="sales-hours"
           variant="columns"
           title={hourlyTitle}
-          series={hourlyPattern}
+          series={hourlyPattern.series}
           metric={metric}
-          axis={hours.slice(firstHour, lastHour + 1)}
+          axis={hourlyPattern.axis}
         />
       </Card>
     </>

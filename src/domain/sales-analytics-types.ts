@@ -14,8 +14,11 @@ export interface AnalyticsItem {
   discounts: number
   orders: number
   previousUnits: number
+  previousRevenue: number
   /** Units in every compared window, current first. */
   periodUnits: number[]
+  /** Dish revenue in every compared window, current first. */
+  periodRevenue: number[]
   active: boolean
   available: boolean
   highlighted: boolean
@@ -28,6 +31,8 @@ export interface AnalyticsCategory {
   previousRevenue: number
   /** Units in every compared window, current first. */
   periodUnits: number[]
+  /** Dish revenue in every compared window, current first. */
+  periodRevenue: number[]
 }
 /** What the Items chart draws: every dish, one dish, or one captured category. */
 export type AnalyticsSubject =

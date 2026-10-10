@@ -123,3 +123,23 @@ export function seriesDays(series: AnalyticsSeries): AnalyticsDay[] {
     discounts: 0,
   }))
 }
+
+/**
+ * The trading part of a clock-hour chart: from one hour before the first hour
+ * any compared period sold anything to one hour after the last, keeping the
+ * quiet hours between. Read from the data, so a late night widens it; with
+ * nothing sold every hour stays. Trimmed hours are zero in every period, so
+ * totals are unchanged.
+ */
+export function activeHours(series: ChartSeries[], axis: string[]) {
+  const active = axis
+    .map((_, hour) => hour)
+    .filter((hour) => series.some((s) => (s.points[hour]?.value ?? 0) > 0))
+  if (!active.length) return { series, axis }
+  const first = Math.max(0, active[0]! - 1)
+  const last = Math.min(axis.length - 1, active.at(-1)! + 1)
+  return {
+    series: series.map((s) => ({ ...s, points: s.points.slice(first, last + 1) })),
+    axis: axis.slice(first, last + 1),
+  }
+}

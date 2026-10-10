@@ -120,13 +120,22 @@ for (const theme of ['light', 'dark']) {
     await chooseMeasure(page, 'Revenue')
     await expect(card.getByRole('heading', { name: 'Dish revenue' })).toBeVisible()
     await expect(page.getByTestId('items-trend-value')).toContainText('₹')
+    // The lists follow the measure: dish revenue, ranked, shown in rupees.
+    await expect(rankings.getByTestId('dish-row').first()).toContainText('₹')
+    const revenues = await rankings
+      .getByTestId('dish-row')
+      .evaluateAll((rows) => rows.map((row) => Number(row.getAttribute('data-value'))))
+    expect(revenues).toEqual([...revenues].sort((a, b) => b - a))
+    await expect(page.getByTestId('category-units').first()).toContainText('₹')
+    await expect(page.getByText('Revenue · captured')).toBeVisible()
 
-    // One day is a single dot by day; by hour it is the day's shape, every period.
+    // One day opens by hour: the trading part of the day, every period.
+    const itemPoints = page.getByTestId('items-trend').getByTestId('chart-point')
     await page.getByRole('button', { name: 'Last 1 day', exact: true }).click()
-    await expect(page.getByTestId('items-trend').getByTestId('chart-point')).toHaveCount(1)
-    await page.getByRole('button', { name: 'Group by: Day' }).click()
-    await page.getByRole('button', { name: 'Hour', exact: true }).click()
-    await expect(page.getByTestId('items-trend').getByTestId('chart-point')).toHaveCount(24)
+    await expect(page.getByRole('button', { name: 'Group by: Hour' })).toBeVisible()
+    await expect.poll(() => itemPoints.count()).toBeGreaterThan(2)
+    expect(await itemPoints.count()).toBeLessThan(24)
+    await expect(page.getByTestId('items-trend').getByText('00:00')).toHaveCount(0)
     await expect(page.getByTestId('items-trend').getByTestId('chart-series')).toHaveCount(4)
     await expect(card.getByText('Counter bills by Kolkata order hour')).toBeVisible()
     // A tap on the chart selects a point without drawing a focus box around it.
@@ -135,9 +144,14 @@ for (const theme of ['light', 'dark']) {
     await expect(page.getByTestId('items-trend').getByTestId('chart-details')).toBeVisible()
     expect(await hourChart.evaluate((el) => getComputedStyle(el).boxShadow)).toBe('none')
     expect(await hourChart.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('none')
+    // By day it is a single point; a week goes back to days on its own.
     await page.getByRole('button', { name: 'Group by: Hour' }).click()
     await page.getByRole('button', { name: 'Day', exact: true }).click()
+    await expect(itemPoints).toHaveCount(1)
+    await page.getByRole('button', { name: 'Group by: Day' }).click()
+    await page.getByRole('button', { name: 'Hour', exact: true }).click()
     await page.getByRole('button', { name: 'Last 7 days' }).click()
+    await expect(page.getByRole('button', { name: 'Group by: Day' })).toBeVisible()
 
     // Categories carry their own change and chart the same way.
     const categories = page.getByTestId('category-row')
@@ -170,7 +184,7 @@ for (const theme of ['light', 'dark']) {
     await page.getByRole('button', { name: 'Worst', exact: true }).click()
     const worst = await rankings
       .getByTestId('dish-row')
-      .evaluateAll((rows) => rows.map((row) => Number(row.getAttribute('data-units'))))
+      .evaluateAll((rows) => rows.map((row) => Number(row.getAttribute('data-value'))))
     expect(worst[0]).toBe(0)
     expect(worst).toEqual([...worst].sort((a, b) => a - b))
     // Comparing four periods, each row shows a bar per period and where they head;
@@ -204,8 +218,8 @@ for (const theme of ['light', 'dark']) {
       await page.getByRole('button', { name: tab, exact: true }).click()
       const rows = await rankings.getByTestId('dish-row').evaluateAll((elements) =>
         elements.map((el) => ({
-          units: Number(el.getAttribute('data-units')),
-          previous: Number(el.getAttribute('data-previous-units')),
+          units: Number(el.getAttribute('data-value')),
+          previous: Number(el.getAttribute('data-previous-value')),
         })),
       )
       expect(rows.length).toBeGreaterThan(0)
@@ -282,13 +296,21 @@ for (const theme of ['light', 'dark']) {
 
     await page.getByRole('button', { name: 'Group by: Week' }).click()
     await page.getByRole('button', { name: 'Hour', exact: true }).click()
-    await expect(table.locator('tbody tr')).toHaveCount(24)
+    // Only the trading hours: the night is zero in every period.
+    await expect(page.getByRole('button', { name: 'Group by: Hour' })).toBeVisible()
+    await expect(table.locator('tbody th').first()).toHaveText(/^\d{2}:00$/)
+    const tradingRows = await table.locator('tbody tr').count()
+    expect(tradingRows).toBeGreaterThan(5)
+    expect(tradingRows).toBeLessThan(24)
     const download = page.waitForEvent('download')
     await card.getByRole('button', { name: 'Export CSV' }).click()
     expect((await download).suggestedFilename()).toBe('sales-trends.csv')
     await card.getByRole('button', { name: 'Chart', exact: true }).click()
     await page.getByRole('button', { name: 'Last 1 day', exact: true }).click()
-    await expect(trend.getByTestId('chart-point')).toHaveCount(24)
+    await expect(page.getByRole('button', { name: 'Group by: Hour' })).toBeVisible()
+    const dayHours = await trend.getByTestId('chart-point').count()
+    expect(dayHours).toBeGreaterThan(5)
+    expect(dayHours).toBeLessThan(24)
 
     const hours = page.getByTestId('sales-hours')
     const soldHour = hours.locator('[data-testid="chart-column"]:not([height="0"])').first()

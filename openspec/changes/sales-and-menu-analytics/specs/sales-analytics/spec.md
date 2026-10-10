@@ -22,7 +22,7 @@ Items SHALL offer All/Worst/Rising/Slow in one Dishes card, full names, search, 
 - **THEN** all dishes remain reachable within the same card height, least sold first including zero sellers
 
 ### Requirement: Item and category trends
-Items SHALL lead with a trend of dish Units or Dish revenue, grouped by Hour, Day (the default) or Week, for All dishes, one dish or one captured category, across one to four adjacent equal periods aligned by elapsed day. A picker and a tap on any dish or category row SHALL choose the subject, kept in the address. Dish figures SHALL be counter-only and say so.
+The measure SHALL govern the Dishes and Categories lists as well as the trend: with Revenue they show, rank, compare and filter on dish revenue. Items SHALL lead with a trend of dish Units or Dish revenue, grouped by Hour, Day (the default) or Week, for All dishes, one dish or one captured category, across one to four adjacent equal periods aligned by elapsed day. A picker and a tap on any dish or category row SHALL choose the subject, kept in the address. Dish figures SHALL be counter-only and say so.
 
 #### Scenario: One day by hour
 - **WHEN** the owner chooses 1d and groups Items by Hour
@@ -49,7 +49,7 @@ On both pages the trend SHALL be one card with a Chart / Table switch kept in th
 ### Requirement: Completed dates and multiple comparisons
 Both pages SHALL offer 1d/7d/30d presets, default 7d, and custom ranges. Sales SHALL support one through four total adjacent inclusive equal-length windows, actual short date-range legends and hour/day/week grouping. Boundary groups SHALL include only selected days and align older periods by elapsed day.
 
-Comparison SHALL use a distinct compact icon pill and a total-period count, with Current only and 2/3/4-period choices labeled by actual ranges. Hour grouping SHALL use counter totals by Kolkata clock hour across each range, reusing the bounded period/hour payload. The bottom Hours graph SHALL use grouped columns, including preceding periods and accessible point inspection.
+Comparison SHALL use a distinct compact icon pill and a total-period count, with Current only and 2/3/4-period choices labeled by actual ranges. Hour grouping SHALL use counter totals by Kolkata clock hour across each range, reusing the bounded period/hour payload. The 1d preset SHALL group by Hour and 7d and 30d by Day on both pages; dates chosen by hand SHALL keep the grouping. The bottom Hours graph SHALL use grouped columns, including preceding periods and accessible point inspection.
 
 #### Scenario: Four thirty-day windows
 - **WHEN** the owner chooses 30d and three preceding periods
@@ -70,7 +70,7 @@ The hourly pattern card SHALL name the chosen measure and aggregation. Hourly Re
 - **THEN** the lower hourly card reports ₹52.50 or five orders per day at noon, main Hour totals report ₹105 or ten orders, and hourly AOV remains ₹10.50
 
 ### Requirement: Clear solid comparison columns
-Hourly columns SHALL use solid theme-aware colors with rounded corners and gaps, without hatch patterns. A numbered legend and matching inspection markers SHALL identify the stable left-to-right series order. The lower hourly chart SHALL focus on hours with counter orders across all compared periods, retaining one adjacent hour on each side and intervening zero-sale hours. Empty data SHALL retain the full 24-hour axis; main Hour totals/table SHALL retain all 24 hours. Pointer/touch/keyboard inspection and up to four comparisons SHALL remain available in both themes.
+Hourly columns SHALL use solid theme-aware colors with rounded corners and gaps, without hatch patterns. A numbered legend and matching inspection markers SHALL identify the stable left-to-right series order. The lower hourly chart SHALL focus on hours with counter orders across all compared periods, retaining one adjacent hour on each side and intervening zero-sale hours. Empty data SHALL retain the full 24-hour axis. The main Hour trend and its table SHALL trim to the same trading hours, since every trimmed hour is zero in every period. Pointer/touch/keyboard inspection and up to four comparisons SHALL remain available in both themes.
 
 #### Scenario: Four periods on a phone
 - **WHEN** the owner compares four periods with counter orders only between noon and 22:00

@@ -62,7 +62,16 @@ export function UsualChip({ position }: { position: UsualRange['position'] }) {
  * current period right, in the chart legend's colours. Scaled to this row's
  * best period, so its shape is exact; the units bar compares rows.
  */
-export function PeriodBars({ values, label }: { values: number[]; label: string }) {
+export function PeriodBars({
+  values,
+  label,
+  format = String,
+}: {
+  values: number[]
+  label: string
+  /** How each period's figure is read aloud and on long-press. */
+  format?: (value: number) => string
+}) {
   const max = Math.max(...values, 0)
   const colours = [
     'var(--primary)',
@@ -73,8 +82,8 @@ export function PeriodBars({ values, label }: { values: number[]; label: string 
   return (
     <span
       role="img"
-      aria-label={`${label}, oldest first: ${values.join(', ')}`}
-      title={values.join(' · ')}
+      aria-label={`${label}, oldest first: ${values.map(format).join(', ')}`}
+      title={values.map(format).join(' · ')}
       className="inline-flex h-5 shrink-0 items-end gap-0.5 border-b border-border"
       data-testid="period-bars"
     >

@@ -64,3 +64,11 @@ A change against the last period contradicts a comparison of four. With one earl
 Falling chips, and the `vs last period` chips when down, use the danger tone, as the approved sketch did.
 
 Rejected: words beside the arrow (long), a bare `9%` with the unit stated once above the list (the number then means a different thing at two periods and at four), a steadiness word in place of the usual range (the range is in rupees and checkable against the chart).
+
+## The lists follow the measure; hours trim; presets group (owner, 2026-10-10)
+
+After the first production release the owner found that choosing Revenue on Items changed only the chart: Dishes and Categories still showed and ranked units. They now follow the measure as everything on Sales does: with Revenue they show dish revenue in rupees and rank, bar, compare, chart per period and filter (Worst, Rising, Slow) on it; order share stays about orders. `sales_analytics` could not be edited in place once applied, so `20261013000000_items_follow_their_measure.sql` replaces it with the same signature, adding each dish's `previousRevenue` and every dish's and category's `periodRevenue` (at most four integers each).
+
+Hour charts show only the trading part of the day: from one hour before the first hour any compared period sold to one hour after the last, keeping quiet hours between, read from the data so a late night widens it; a day with no sales keeps all 24. The trend table trims the same way, which loses nothing because every trimmed hour is zero in every period. This supersedes the earlier rule that main Hour totals keep all 24 hours.
+
+The presets choose the grouping on both pages: 1d groups by Hour, 7d and 30d by Day. Choosing dates by hand leaves the grouping as it is.

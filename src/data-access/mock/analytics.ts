@@ -83,7 +83,9 @@ export function createMockAnalyticsAdapter(
           discounts: 0,
           orders: 0,
           previousUnits: 0,
+          previousRevenue: 0,
           periodUnits: [],
+          periodRevenue: [],
           active: true,
           available: item.is_available,
           highlighted: store.menuHighlights.get(outletId)?.itemIds.includes(item.id) ?? false,
@@ -91,7 +93,10 @@ export function createMockAnalyticsAdapter(
       }
       const periods = options?.periods ?? 2
       const { span, start } = window(from, to, periods)
-      for (const item of items.values()) item.periodUnits = Array<number>(periods).fill(0)
+      for (const item of items.values()) {
+        item.periodUnits = Array<number>(periods).fill(0)
+        item.periodRevenue = Array<number>(periods).fill(0)
+      }
       const priorStart = shiftDate(from, -span)
       for (let date = start; date <= to; date = shiftDate(date, 1))
         result.days.push({ date, revenue: 0, orders: 0, units: 0, discounts: 0 })
@@ -106,6 +111,7 @@ export function createMockAnalyticsAdapter(
             previousRevenue: 0,
             previousUnits: 0,
             periodUnits: Array<number>(periods).fill(0),
+            periodRevenue: Array<number>(periods).fill(0),
           }
           result.categories.push(row)
         }
@@ -148,7 +154,9 @@ export function createMockAnalyticsAdapter(
             discounts: 0,
             orders: 0,
             previousUnits: 0,
+            previousRevenue: 0,
             periodUnits: Array<number>(periods).fill(0),
+            periodRevenue: Array<number>(periods).fill(0),
             active: false,
             available: false,
             highlighted: false,
@@ -156,9 +164,12 @@ export function createMockAnalyticsAdapter(
           day.units += line.quantity
           // Window 0 is the current one, as the server numbers them.
           const windowIndex = Math.floor((periodDays(bill.business_date, to) - 1) / span)
+          const lineRevenue = line.line_total_paise - line.discount_paise
+          const lineCategory = categoryRow(line.category_name ?? 'Uncategorised')
           row.periodUnits[windowIndex]! += line.quantity
-          categoryRow(line.category_name ?? 'Uncategorised').periodUnits[windowIndex]! +=
-            line.quantity
+          row.periodRevenue[windowIndex]! += lineRevenue
+          lineCategory.periodUnits[windowIndex]! += line.quantity
+          lineCategory.periodRevenue[windowIndex]! += lineRevenue
           if (bill.business_date >= from) {
             row.units += line.quantity
             row.revenue += line.line_total_paise - line.discount_paise
@@ -170,6 +181,7 @@ export function createMockAnalyticsAdapter(
             if (!seen.has(key)) row.orders++
           } else if (bill.business_date >= priorStart) {
             row.previousUnits += line.quantity
+            row.previousRevenue += line.line_total_paise - line.discount_paise
             const mix = categoryRow(line.category_name ?? 'Uncategorised')
             mix.previousRevenue += line.line_total_paise - line.discount_paise
             mix.previousUnits += line.quantity

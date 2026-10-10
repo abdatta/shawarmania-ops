@@ -103,6 +103,7 @@ test('a failed analytics read remains retryable when grouping changes', async ({
   // Re-selecting the same range also retries; it must not hide the error and
   // leave a loading placeholder waiting for a date change that never happened.
   await page.getByRole('button', { name: 'Last 7 days' }).click()
-  await expect(page.getByRole('button', { name: 'Group by: Week' })).toBeVisible()
+  // A week preset groups by day, whatever was chosen before.
+  await expect(page.getByRole('button', { name: 'Group by: Day' })).toBeVisible()
   await expect(page.getByTestId('sales-trend-card')).toBeVisible()
 })

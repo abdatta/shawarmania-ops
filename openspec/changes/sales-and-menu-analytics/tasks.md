@@ -49,3 +49,5 @@ Tasks 1–13 record the earlier verified iterations. The owner's latest scope in
 
 - [x] 29. With three or four compared periods, read the trend headline, dish and category rows and the table as a direction (fitted rate per period, flat within the periods' wobble), the usual range and the current period against it; per-period bars on rows from `periodUnits`; Rising and Slow by direction.
 - [x] 30. Flat trend chips read `→ steady` in the unit's style, so chips are one size; Items wears a ranked-bars icon instead of Menu's utensils (the name stays, since it covers drinks); Analytics sits between Attendance and Setup, Setup rightmost.
+
+- [x] 31. Items' Dishes and Categories follow the measure (revenue shown, ranked, compared and filtered), via `20261013000000_items_follow_their_measure.sql`; hour charts and their tables trim to the trading hours; 1d groups by Hour and 7d/30d by Day on both pages.

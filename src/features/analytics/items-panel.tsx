@@ -10,6 +10,7 @@ import { Money } from '@/components/ui/money'
 import { Explain } from '@/components/ui/why'
 import { useAdapters } from '@/data-access'
 import type {
+  AnalyticsCategory,
   AnalyticsItem,
   AnalyticsSeries,
   AnalyticsSnapshot,
@@ -20,7 +21,7 @@ import { ChangeChip, MiniBar, PeriodBars, TrendChip } from './analytics-widgets'
 import { download } from './analytics-utils'
 import { AnalyticsScrollList } from './analytics-scroll-list'
 import { metricText } from './analytics-chart'
-import { HOURS, hourTrend, periodTrend, seriesDays } from './analytics-trend'
+import { activeHours, HOURS, hourTrend, periodTrend, seriesDays } from './analytics-trend'
 import { TrendCard } from './analytics-trend-card'
 
 type ItemMetric = 'units' | 'revenue'
@@ -63,27 +64,37 @@ export function ItemsPanel({
   const trend = periods >= 3
   const unit = periodUnit(periodDays(from, to))
   const oldestFirst = (values: number[]) => [...values].slice(0, periods).reverse()
+  // The lists follow the page's measure, as everything on Sales does: with
+  // Revenue chosen they show, rank, compare and filter on dish revenue.
+  const byRevenue = metric === 'revenue'
+  const value = (row: AnalyticsItem | AnalyticsCategory) => (byRevenue ? row.revenue : row.units)
+  const previousValue = (row: AnalyticsItem | AnalyticsCategory) =>
+    byRevenue ? row.previousRevenue : row.previousUnits
+  const periodValues = (row: AnalyticsItem | AnalyticsCategory) =>
+    byRevenue ? row.periodRevenue : row.periodUnits
+  const shown = (n: number) => metricText(n, metric)
+  const barsLabel = byRevenue ? 'Dish revenue by period' : 'Units by period'
   const direction = new Map(
-    data.items.map((i) => [i.key, periodDirection(oldestFirst(i.periodUnits))]),
+    data.items.map((i) => [i.key, periodDirection(oldestFirst(periodValues(i)))]),
   )
   const growth = (i: AnalyticsItem) =>
-    trend ? (direction.get(i.key)!.rate ?? 0) : i.units / i.previousUnits
-  const byUnits = [...data.items].sort((a, b) => b.units - a.units || a.name.localeCompare(b.name))
-  const max = Math.max(1, ...data.items.map((i) => i.units))
-  const items = byUnits.filter(
+    trend ? (direction.get(i.key)!.rate ?? 0) : value(i) / previousValue(i)
+  const ranked = [...data.items].sort((a, b) => value(b) - value(a) || a.name.localeCompare(b.name))
+  const max = Math.max(1, ...data.items.map(value))
+  const items = ranked.filter(
     (i) =>
       i.name.toLowerCase().includes(search.toLowerCase()) &&
       (view === 'all' || i.active) &&
       (view !== 'rising' ||
         (trend
           ? direction.get(i.key)!.direction === 'up'
-          : i.previousUnits > 0 && i.units > i.previousUnits)) &&
+          : previousValue(i) > 0 && value(i) > previousValue(i))) &&
       (view !== 'slow' ||
         (trend
           ? direction.get(i.key)!.direction === 'down'
-          : i.previousUnits > 0 && i.units < i.previousUnits)),
+          : previousValue(i) > 0 && value(i) < previousValue(i))),
   )
-  if (view === 'worst') items.sort((a, b) => a.units - b.units || a.name.localeCompare(b.name))
+  if (view === 'worst') items.sort((a, b) => value(a) - value(b) || a.name.localeCompare(b.name))
   if (view === 'rising' || view === 'slow')
     items.sort(
       (a, b) =>
@@ -92,16 +103,16 @@ export function ItemsPanel({
   const change = (current: number, previous: number, values: number[], label: string) =>
     trend ? (
       <span className="inline-flex items-center gap-1.5">
-        <PeriodBars values={oldestFirst(values)} label={label} />
+        <PeriodBars values={oldestFirst(values)} label={label} format={shown} />
         <TrendChip values={oldestFirst(values)} unit={unit} />
       </span>
     ) : (
       <ChangeChip current={current} previous={previous} />
     )
   const categories = [...data.categories].sort(
-    (a, b) => b.units - a.units || a.name.localeCompare(b.name),
+    (a, b) => value(b) - value(a) || a.name.localeCompare(b.name),
   )
-  const categoryMax = Math.max(1, ...categories.map((c) => c.units))
+  const categoryMax = Math.max(1, ...categories.map(value))
   const chosen = subjectKey(subject)
   const chart = (next: AnalyticsSubject) => {
     onSubject(next)
@@ -136,14 +147,15 @@ export function ItemsPanel({
             className="min-h-11 text-xs text-content-muted"
             explanation={
               <p>
-                Units sold in {orders} synced, settled counter orders. Against one earlier period
-                each dish shows its change; against two or three, a bar per period (oldest left,
-                each from zero) and the direction they are heading, per period, or steady when the
-                movement is within the periods' usual wobble. All is ordered most sold first; Worst
-                is least sold first, including zero sellers. Rising and Slow show active dishes
-                heading up or down, fastest first. Tap a dish to chart it. Zero sales do not prove a
-                dish was stocked throughout; check stock, launch dates and another comparable period
-                before removal.
+                {byRevenue ? 'Dish revenue (line totals less line discounts)' : 'Units sold'} in{' '}
+                {orders} synced, settled counter orders. Against one earlier period each dish shows
+                its change; against two or three, a bar per period (oldest left, each from zero) and
+                the direction they are heading, per period, or steady when the movement is within
+                the periods' usual wobble. All is ordered most sold first; Worst is least sold
+                first, including zero sellers. Rising and Slow show active dishes heading up or
+                down, fastest first. Tap a dish to chart it. Zero sales do not prove a dish was
+                stocked throughout; check stock, launch dates and another comparable period before
+                removal.
               </p>
             }
           >
@@ -194,6 +206,8 @@ export function ItemsPanel({
                 data-testid="dish-row"
                 data-units={i.units}
                 data-previous-units={i.previousUnits}
+                data-value={value(i)}
+                data-previous-value={previousValue(i)}
                 aria-pressed={chosen === `item:${i.key}`}
                 aria-label={`Chart ${i.name}`}
                 onClick={() => chart({ kind: 'item', key: i.key })}
@@ -201,13 +215,15 @@ export function ItemsPanel({
               >
                 <span className="flex items-start justify-between gap-3">
                   <span className="min-w-0 break-words text-sm font-semibold">{i.name}</span>
-                  <span className="shrink-0 text-base font-bold tabular-nums">{i.units}</span>
+                  <span className="shrink-0 text-base font-bold tabular-nums">
+                    {shown(value(i))}
+                  </span>
                 </span>
                 <span className="my-2 block">
-                  <MiniBar value={i.units} max={max} />
+                  <MiniBar value={value(i)} max={max} />
                 </span>
                 <span className="flex flex-wrap items-center gap-1">
-                  {change(i.units, i.previousUnits, i.periodUnits, 'Units by period')}
+                  {change(value(i), previousValue(i), periodValues(i), barsLabel)}
                   {!i.active ? (
                     <Chip>Retired</Chip>
                   ) : !i.available ? (
@@ -232,13 +248,14 @@ export function ItemsPanel({
             className="min-h-11 text-xs text-content-muted"
             explanation={
               <p>
-                Units sold, grouped by the category captured on the bill, against the previous equal
-                period. Older bills without a category snapshot are Uncategorised; today’s category
-                is not used to rewrite history. Tap a category to chart it.
+                {byRevenue ? 'Dish revenue' : 'Units sold'}, grouped by the category captured on the
+                bill, against the previous equal period. Older bills without a category snapshot are
+                Uncategorised; today’s category is not used to rewrite history. Tap a category to
+                chart it.
               </p>
             }
           >
-            Units · captured
+            {byRevenue ? 'Revenue' : 'Units'} · captured
           </Explain>
         </div>
         {/*
@@ -266,24 +283,28 @@ export function ItemsPanel({
                 <span className="min-w-0 break-words text-sm font-medium">{c.name}</span>
                 <span className="justify-self-end">
                   {trend ? (
-                    <TrendChip values={oldestFirst(c.periodUnits)} unit={unit} />
+                    <TrendChip values={oldestFirst(periodValues(c))} unit={unit} />
                   ) : (
-                    <ChangeChip current={c.units} previous={c.previousUnits} />
+                    <ChangeChip current={value(c)} previous={previousValue(c)} />
                   )}
                 </span>
                 <span className="flex">
                   {trend && (
-                    <PeriodBars values={oldestFirst(c.periodUnits)} label="Units by period" />
+                    <PeriodBars
+                      values={oldestFirst(periodValues(c))}
+                      label={barsLabel}
+                      format={shown}
+                    />
                   )}
                 </span>
                 <span
                   className="text-right text-sm font-bold tabular-nums"
                   data-testid="category-units"
                 >
-                  {c.units}
+                  {shown(value(c))}
                 </span>
                 <span className="col-span-full">
-                  <MiniBar value={c.units} max={categoryMax} />
+                  <MiniBar value={value(c)} max={categoryMax} />
                 </span>
               </button>
             </li>
@@ -447,6 +468,11 @@ function ItemTrend({
   })
   const hours = metric === 'units' ? series.hourUnits : series.hourRevenue
   const hourly = grain === 'hour'
+  // The trading part of the day across every compared period.
+  const hourView = activeHours(
+    hourTrend(trend.periods, (period, hour) => hours[period * 24 + hour] ?? 0),
+    HOURS,
+  )
   const totals = trend.periods.map((p) => (metric === 'units' ? p.total.units : p.total.revenue))
   return (
     <TrendCard
@@ -463,12 +489,8 @@ function ItemTrend({
             : 'Line totals less line discounts · counter only'
       }
       subject={picker}
-      series={
-        hourly
-          ? hourTrend(trend.periods, (period, hour) => hours[period * 24 + hour] ?? 0)
-          : trend.series
-      }
-      axis={hourly ? HOURS : trend.axis}
+      series={hourly ? hourView.series : trend.series}
+      axis={hourly ? hourView.axis : trend.axis}
       rowHeader={hourly ? 'Hour' : grain === 'day' ? 'Day' : 'Week'}
       newestFirst={!hourly}
       exportName={`item-trend-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
