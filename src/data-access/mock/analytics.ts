@@ -25,11 +25,23 @@ export function createMockAnalyticsAdapter(
         dayIndex.set(date, dayIndex.size)
       const units = Array<number>(dayIndex.size).fill(0)
       const revenue = Array<number>(dayIndex.size).fill(0)
+      const hourUnits = Array<number>(periods * 24).fill(0)
+      const hourRevenue = Array<number>(periods * 24).fill(0)
+      const span = periodDays(from, to)
+      const hourFormat = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        hourCycle: 'h23',
+      })
       const billDay = new Map<string, number>()
+      const billHour = new Map<string, number>()
       for (const bill of store.bills) {
         const day = dayIndex.get(bill.business_date)
-        if (bill.outlet_id === outletId && bill.status === 'settled' && day !== undefined)
-          billDay.set(bill.id, day)
+        if (bill.outlet_id !== outletId || bill.status !== 'settled' || day === undefined) continue
+        billDay.set(bill.id, day)
+        // Window 0 is the current one, as the server numbers them.
+        const period = Math.floor((periodDays(bill.business_date, to) - 1) / span)
+        billHour.set(bill.id, period * 24 + Number(hourFormat.format(new Date(bill.ordered_at))))
       }
       for (const line of store.billItems) {
         const day = billDay.get(line.bill_id)
@@ -43,8 +55,11 @@ export function createMockAnalyticsAdapter(
           continue
         units[day]! += line.quantity
         revenue[day]! += line.line_total_paise - line.discount_paise
+        const slot = billHour.get(line.bill_id)!
+        hourUnits[slot]! += line.quantity
+        hourRevenue[slot]! += line.line_total_paise - line.discount_paise
       }
-      return { from: start, units, revenue }
+      return { from: start, units, revenue, hourUnits, hourRevenue }
     },
     async read(outletId, from, to, options) {
       authorise(outletId)

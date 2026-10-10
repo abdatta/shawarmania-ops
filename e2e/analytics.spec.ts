@@ -54,6 +54,8 @@ for (const theme of ['light', 'dark']) {
     await chart.focus()
     await chart.press('End')
     await expect(page.getByTestId('items-trend').getByTestId('chart-details')).toBeVisible()
+    // Reached by keyboard, it does show the app's focus ring.
+    expect(await chart.evaluate((el) => getComputedStyle(el).boxShadow)).not.toBe('none')
 
     // Rankings: a fixed card that pages more dishes in as it scrolls.
     const rankings = page.getByRole('region', { name: 'Dish rankings' })
@@ -115,6 +117,24 @@ for (const theme of ['light', 'dark']) {
     await chooseMeasure(page, 'Revenue')
     await expect(card.getByRole('heading', { name: 'Dish revenue' })).toBeVisible()
     await expect(page.getByTestId('items-trend-value')).toContainText('₹')
+
+    // One day is a single dot by day; by hour it is the day's shape, every period.
+    await page.getByRole('button', { name: 'Last 1 day', exact: true }).click()
+    await expect(page.getByTestId('items-trend').getByTestId('chart-point')).toHaveCount(1)
+    await page.getByRole('button', { name: 'Group by: Day' }).click()
+    await page.getByRole('button', { name: 'Hour', exact: true }).click()
+    await expect(page.getByTestId('items-trend').getByTestId('chart-point')).toHaveCount(24)
+    await expect(page.getByTestId('items-trend').getByTestId('chart-series')).toHaveCount(4)
+    await expect(card.getByText('Counter bills by Kolkata order hour')).toBeVisible()
+    // A tap on the chart selects a point without drawing a focus box around it.
+    const hourChart = page.getByTestId('items-trend').getByRole('group')
+    await hourChart.click({ position: { x: 200, y: 80 } })
+    await expect(page.getByTestId('items-trend').getByTestId('chart-details')).toBeVisible()
+    expect(await hourChart.evaluate((el) => getComputedStyle(el).boxShadow)).toBe('none')
+    expect(await hourChart.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('none')
+    await page.getByRole('button', { name: 'Group by: Hour' }).click()
+    await page.getByRole('button', { name: 'Day', exact: true }).click()
+    await page.getByRole('button', { name: 'Last 7 days' }).click()
 
     // Categories carry their own change and chart the same way.
     const categories = page.getByTestId('category-row')

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { periodTrend, seriesDays } from './analytics-trend'
+import { hourTrend, periodTrend, seriesDays } from './analytics-trend'
 
 describe('a period trend', () => {
   const series = seriesDays({
@@ -7,6 +7,8 @@ describe('a period trend', () => {
     // 26 Sept–2 Oct, then 3–9 Oct: one dish's units, one value per day.
     units: [1, 2, 0, 4, 5, 6, 7, 10, 0, 0, 3, 0, 0, 1],
     revenue: [100, 200, 0, 400, 500, 600, 700, 1000, 0, 0, 300, 0, 0, 100],
+    hourUnits: Array(48).fill(0),
+    hourRevenue: Array(48).fill(0),
   })
 
   it('aligns the earlier window by elapsed day and labels its actual dates', () => {
@@ -26,6 +28,20 @@ describe('a period trend', () => {
       ['3–9 Oct', 14],
       ['26 Sept–2 Oct', 25],
     ])
+  })
+
+  it('draws 24 Kolkata clock hours per window, labelled with that window', () => {
+    const { periods } = periodTrend({
+      days: series,
+      from: '2026-10-03',
+      to: '2026-10-09',
+      periods: 2,
+      grain: 'day',
+      value: (d) => d.units,
+    })
+    const hours = hourTrend(periods, (period, hour) => period * 100 + hour)
+    expect(hours.map((s) => s.points.length)).toEqual([24, 24])
+    expect(hours[1]!.points[13]).toEqual({ label: '26 Sept–2 Oct · 13:00', value: 113 })
   })
 
   it('groups Monday weeks with partial boundary weeks of selected dates only', () => {

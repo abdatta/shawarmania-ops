@@ -19,7 +19,7 @@ import { ChangeChip, MiniBar } from './analytics-widgets'
 import { download } from './analytics-utils'
 import { AnalyticsScrollList } from './analytics-scroll-list'
 import { metricText } from './analytics-chart'
-import { periodTrend, seriesDays } from './analytics-trend'
+import { HOURS, hourTrend, periodTrend, seriesDays } from './analytics-trend'
 import { TrendCard } from './analytics-trend-card'
 
 type ItemMetric = 'units' | 'revenue'
@@ -47,7 +47,7 @@ export function ItemsPanel({
   outletId: string
   from: string
   to: string
-  grain: 'day' | 'week'
+  grain: 'hour' | 'day' | 'week'
   metric: ItemMetric
   periods: number
   subject: AnalyticsSubject
@@ -323,7 +323,7 @@ function ItemTrend({
   outletId: string
   from: string
   to: string
-  grain: 'day' | 'week'
+  grain: 'hour' | 'day' | 'week'
   metric: ItemMetric
   periods: number
   subject: AnalyticsSubject
@@ -394,9 +394,11 @@ function ItemTrend({
     from,
     to,
     periods,
-    grain,
+    grain: grain === 'hour' ? 'day' : grain,
     value: (b) => (metric === 'units' ? b.units : b.revenue),
   })
+  const hours = metric === 'units' ? series.hourUnits : series.hourRevenue
+  const hourly = grain === 'hour'
   const [current, previous] = trend.periods.map((p) =>
     metric === 'units' ? p.total.units : p.total.revenue,
   )
@@ -408,15 +410,21 @@ function ItemTrend({
       value={current ?? null}
       previous={previous}
       caption={
-        metric === 'units'
-          ? 'Counter bills · delivery has no dish detail'
-          : 'Line totals less line discounts · counter only'
+        hourly
+          ? 'Counter bills by Kolkata order hour, totals across the range'
+          : metric === 'units'
+            ? 'Counter bills · delivery has no dish detail'
+            : 'Line totals less line discounts · counter only'
       }
       subject={picker}
-      series={trend.series}
-      axis={trend.axis}
-      rowHeader={grain === 'day' ? 'Day' : 'Week'}
-      newestFirst
+      series={
+        hourly
+          ? hourTrend(trend.periods, (period, hour) => hours[period * 24 + hour] ?? 0)
+          : trend.series
+      }
+      axis={hourly ? HOURS : trend.axis}
+      rowHeader={hourly ? 'Hour' : grain === 'day' ? 'Day' : 'Week'}
+      newestFirst={!hourly}
       exportName={`item-trend-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
       exportUnit={metric === 'units' ? 'units' : 'dish revenue (paise)'}
     />

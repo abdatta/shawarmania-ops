@@ -232,6 +232,14 @@ describe('analytics periods and bounded aggregates', () => {
       const series = await adapter.series(DEMO_OUTLET_ID, from, to, 2, subject)
       expect(series.from).toBe(shiftDate(from, -30))
       expect(series.units).toHaveLength(60)
+      // Each window's clock hours add up to its days; the current window comes first.
+      expect(series.hourUnits).toHaveLength(48)
+      expect(series.hourUnits.slice(0, 24).reduce((t, n) => t + n, 0)).toBe(
+        series.units.slice(30).reduce((t, n) => t + n, 0),
+      )
+      expect(series.hourRevenue.slice(24).reduce((t, n) => t + n, 0)).toBe(
+        series.revenue.slice(0, 30).reduce((t, n) => t + n, 0),
+      )
       const sum = (rows: number[]) => rows.reduce((total, n) => total + n, 0)
       return {
         previous: {
@@ -270,18 +278,26 @@ describe('analytics periods and bounded aggregates', () => {
   })
   it('fails closed on malformed aggregates and makes CSV names inert', () => {
     expect(() => analyticsSnapshot({ days: [] })).toThrow()
-    expect(analyticsSeries({ from: '2026-10-01', units: [1, 0], revenue: [100, 0] })).toEqual({
-      from: '2026-10-01',
-      units: [1, 0],
-      revenue: [100, 0],
-    })
+    const hours = { hourUnits: Array(24).fill(0), hourRevenue: Array(24).fill(0) }
+    expect(
+      analyticsSeries({ from: '2026-10-01', units: [1, 0], revenue: [100, 0], ...hours }),
+    ).toEqual({ from: '2026-10-01', units: [1, 0], revenue: [100, 0], ...hours })
     for (const bad of [
       null,
-      { from: '2026-02-31', units: [], revenue: [] },
-      { from: '2026-10-01', units: [1], revenue: [] },
-      { from: '2026-10-01', units: [-1], revenue: [0] },
-      { from: '2026-10-01', units: [1.5], revenue: [0] },
-      { from: '2026-10-01', units: Array(369).fill(0), revenue: Array(369).fill(0) },
+      { from: '2026-02-31', units: [], revenue: [], ...hours },
+      { from: '2026-10-01', units: [1], revenue: [], ...hours },
+      { from: '2026-10-01', units: [-1], revenue: [0], ...hours },
+      { from: '2026-10-01', units: [1.5], revenue: [0], ...hours },
+      { from: '2026-10-01', units: Array(369).fill(0), revenue: Array(369).fill(0), ...hours },
+      { from: '2026-10-01', units: [1], revenue: [1] },
+      { from: '2026-10-01', units: [1], revenue: [1], hourUnits: [1], hourRevenue: [1] },
+      {
+        from: '2026-10-01',
+        units: [1],
+        revenue: [1],
+        hourUnits: Array(120).fill(0),
+        hourRevenue: Array(120).fill(0),
+      },
     ])
       expect(() => analyticsSeries(bad)).toThrow()
     expect(csvCell('=HYPERLINK("bad")')).toBe('"\'=HYPERLINK(""bad"")"')

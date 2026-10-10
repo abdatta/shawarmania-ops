@@ -22,7 +22,11 @@ Items SHALL offer All/Worst/Rising/Slow in one Dishes card, full names, search, 
 - **THEN** all dishes remain reachable within the same card height, least sold first including zero sellers
 
 ### Requirement: Item and category trends
-Items SHALL lead with a trend of dish Units or Dish revenue, grouped by Day or Week, for All dishes, one dish or one captured category, across one to four adjacent equal periods aligned by elapsed day. A picker and a tap on any dish or category row SHALL choose the subject, kept in the address. Dish figures SHALL be counter-only and say so.
+Items SHALL lead with a trend of dish Units or Dish revenue, grouped by Hour, Day (the default) or Week, for All dishes, one dish or one captured category, across one to four adjacent equal periods aligned by elapsed day. A picker and a tap on any dish or category row SHALL choose the subject, kept in the address. Dish figures SHALL be counter-only and say so.
+
+#### Scenario: One day by hour
+- **WHEN** the owner chooses 1d and groups Items by Hour
+- **THEN** the chart shows the 24 Kolkata order hours of that day and of each compared day, without another read
 
 #### Scenario: Owner charts a declining dish
 - **WHEN** the owner taps a dish in Slow and compares four 30-day periods

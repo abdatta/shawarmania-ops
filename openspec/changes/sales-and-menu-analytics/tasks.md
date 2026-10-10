@@ -42,3 +42,7 @@ Tasks 1–13 record the earlier verified iterations. The owner's latest scope in
 - [x] 23. Items: remove two-dish comparison; add the item/category trend card (Units/Revenue, Day/Week, one to four periods) backed by `sales_analytics_series`, tappable dish and category rows, category change against the previous period.
 - [x] 24. Sales: merge the trend chart and Days list into one Chart / Table card that drops no figure; remove the weekday-average card and the separate table/export.
 - [x] 25. Verify with pgTAP, HTTP, unit and demo/live browser tests in both themes on phone and tablet, and update SCREENS, DATA_MODEL, SECURITY_AND_PRIVACY, OPERATIONS, TESTING and DEMO_MODE.
+
+- [x] 26. Items: group by Hour as well as Day and Week, from 24 order-hour totals per window carried in the same series read; Day stays the default.
+- [x] 27. Charts show the focus ring only when reached by keyboard, not after a tap or click.
+- [x] 28. Move Customers from Setup to Analytics for owner and manager, keeping its address; record customer analytics in the backlog (`customer-analytics`).

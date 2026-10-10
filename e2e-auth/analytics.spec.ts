@@ -36,8 +36,15 @@ for (const [username, segment] of [
       if (series) {
         // The Items chart: every dish, two windows of seven days, two arrays.
         const chart = await (await series).json()
-        expect(Object.keys(chart).sort()).toEqual(['from', 'revenue', 'units'])
+        expect(Object.keys(chart).sort()).toEqual([
+          'from',
+          'hourRevenue',
+          'hourUnits',
+          'revenue',
+          'units',
+        ])
         expect(chart.units).toHaveLength(14)
+        expect(chart.hourUnits).toHaveLength(48)
         await expect(page.getByTestId('items-trend-card')).toBeVisible()
       }
       await expect(

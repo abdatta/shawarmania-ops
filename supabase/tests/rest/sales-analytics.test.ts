@@ -105,6 +105,7 @@ describe('analytics HTTP authority and bounded projection', () => {
     expect(all.from).toBe('2025-10-03')
     expect(all.units).toHaveLength(120)
     expect(all.revenue).toHaveLength(120)
+    expect(all.hourUnits).toHaveLength(96)
     const items = await adapter.read(outlet, '2026-01-01', '2026-01-30', {
       view: 'items',
       periods: 2,
@@ -120,6 +121,13 @@ describe('analytics HTTP authority and bounded projection', () => {
       name: 'Uncategorised',
     })
     expect(category.units).toHaveLength(60)
+    expect(Object.keys(all).sort()).toEqual([
+      'from',
+      'hourRevenue',
+      'hourUnits',
+      'revenue',
+      'units',
+    ])
     expect(JSON.stringify(all)).not.toMatch(/customer|bill_id|ordered_at|item_name/)
     await expect(
       adapter.series(foreign, '2026-01-01', '2026-01-07', 2, { kind: 'all' }),

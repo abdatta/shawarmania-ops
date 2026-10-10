@@ -49,11 +49,7 @@ function OutletAnalytics({
   const from = params.get('from') ?? (today ? shiftDate(today, -7) : '')
   const to = params.get('to') ?? (today ? shiftDate(today, -1) : '')
   const grain =
-    params.get('grain') === 'week'
-      ? 'week'
-      : params.get('grain') === 'hour' && kind === 'trends'
-        ? 'hour'
-        : 'day'
+    params.get('grain') === 'week' ? 'week' : params.get('grain') === 'hour' ? 'hour' : 'day'
   const metric =
     params.get('metric') === 'orders'
       ? 'orders'
@@ -207,7 +203,7 @@ function OutletAnalytics({
           outletId={outletId!}
           from={from}
           to={to}
-          grain={grain === 'week' ? 'week' : 'day'}
+          grain={grain}
           metric={itemMetric}
           periods={Math.floor(periods)}
           subject={subject}

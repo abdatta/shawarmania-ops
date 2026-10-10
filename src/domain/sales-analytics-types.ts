@@ -28,11 +28,16 @@ export interface AnalyticsCategory {
 /** What the Items chart draws: every dish, one dish, or one captured category. */
 export type AnalyticsSubject =
   { kind: 'all' } | { kind: 'item'; key: string } | { kind: 'category'; name: string }
-/** Daily dish units and dish revenue from `from`, one value per day of every window. */
+/**
+ * Daily dish units and dish revenue from `from`, one value per day of every
+ * window; and Kolkata clock-hour totals, 24 per window, current window first.
+ */
 export interface AnalyticsSeries {
   from: string
   units: number[]
   revenue: number[]
+  hourUnits: number[]
+  hourRevenue: number[]
 }
 export interface AnalyticsSnapshot {
   categories: AnalyticsCategory[]

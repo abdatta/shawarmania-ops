@@ -32,15 +32,17 @@ Owner/outlet-manager authority comes from current assignments, with foreign-outl
 
 Both pages lead with one shared trend card: the measure's current-period total, its change against the previous period, and a Chart / Table switch kept in the address (`show=table`), so a reload or a change of charted subject keeps it. The table holds every figure the chart draws: one row per day, week or hour of the current period (newest first for days and weeks), one column per compared period headed by its numbered legend badge and actual range, exact to the paisa, a Change column for current against previous, and the CSV export. The separate Days list, the bottom Table & export and the weekday-average card are removed; the hourly-average card stays.
 
-Items charts `Units` or `Dish revenue` (line total less line discount, counter only). Its subject is All dishes, one dish or one captured category, chosen from a picker above the card title or by tapping a row, and kept in the address (`dish=<key>` or `category=<name>`). Week grouping and earlier-period alignment are the same code as Sales (`periodTrend`).
+Items charts `Units` or `Dish revenue` (line total less line discount, counter only), by Hour, Day or Week; Day stays the default. Hour is the bill's Kolkata order time, totalled across each window, as Sales groups its hours: without it a one-day range is a single dot. Its subject is All dishes, one dish or one captured category, chosen from a picker above the card title or by tapping a row, and kept in the address (`dish=<key>` or `category=<name>`). Week grouping and earlier-period alignment are the same code as Sales (`periodTrend`).
 
-The subject's series is a separate read, `sales_analytics_series`, returning `{from, units[], revenue[]}` for every day of every window. It is read when a subject is charted, after the snapshot, and kept for the life of the page, so going back to a dish already charted costs nothing. Measure, grouping and Chart/Table never read. Sending every dish's daily series in the snapshot was rejected: about a hundred dishes times up to 184 days on every view, almost all of it never looked at.
+The subject's series is a separate read, `sales_analytics_series`, returning `{from, units[], revenue[]}` for every day of every window and `hourUnits[]`, `hourRevenue[]` with 24 clock hours per window, current window first (at most 96 each), so switching to Hour reads nothing. It is read when a subject is charted, after the snapshot, and kept for the life of the page, so going back to a dish already charted costs nothing. Measure, grouping and Chart/Table never read. Sending every dish's daily series in the snapshot was rejected: about a hundred dishes times up to 184 days on every view, almost all of it never looked at.
+
+A chart is focusable so the arrow keys inspect it; it shows the app's focus ring only when reached by keyboard, never after a tap or click, which already shows its point and figures.
 
 Rupee figures in cards read whole from ₹100 and with two paise digits below it (`₹10.50`, never `₹10.5`); the table keeps exact paise. Count axes put their half-way line on a whole number.
 
-## Not in this change: Customers under Analytics
+## Customers under Analytics (owner, 2026-10-09)
 
-The owner asked whether Customers belongs under Analytics rather than Setup, since it reads regulars, frequency and spend rather than setting anything up. Customers sits beside Team by an owner decision of 2026-09-18 ("the two lists of people the owner curates"). The move is a one-line registry change (group and order of `owner-customers` and `admin-customers`; the path stays) and is left to the owner's answer rather than folded in here.
+Customers moves from Setup to Analytics, after Items and Sales, for owner and manager alike: it reads who the regulars are, how often they come and what they spend, and sets nothing up; gold is set at the counter as well. It had sat beside Team since 2026-09-18 as the other list of people the owner curates. Only the navigation group moves; the address stays `customers`, so every link still works. Customer analytics to come is recorded in the backlog as `customer-analytics`, not built here.
 
 ## Review corrections (2026-10-09)
 

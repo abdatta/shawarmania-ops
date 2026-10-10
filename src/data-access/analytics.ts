@@ -66,10 +66,10 @@ export function analyticsSnapshot(value: unknown): AnalyticsSnapshot {
   return value as AnalyticsSnapshot
 }
 
-/** The same fail-closed rule for a chart series: a valid date and two equal arrays. */
+/** The same fail-closed rule for a chart series: a valid date, equal day and hour arrays. */
 export function analyticsSeries(value: unknown): AnalyticsSeries {
   if (!value || typeof value !== 'object') throw new Error('Invalid analytics response')
-  const { from, units, revenue } = value as Record<string, unknown>
+  const { from, units, revenue, hourUnits, hourRevenue } = value as Record<string, unknown>
   const counts = (rows: unknown): rows is number[] =>
     Array.isArray(rows) && rows.every((n) => Number.isSafeInteger(n) && (n as number) >= 0)
   if (
@@ -78,8 +78,13 @@ export function analyticsSeries(value: unknown): AnalyticsSeries {
     !counts(units) ||
     !counts(revenue) ||
     units.length !== revenue.length ||
-    units.length > 4 * 92
+    units.length > 4 * 92 ||
+    !counts(hourUnits) ||
+    !counts(hourRevenue) ||
+    hourUnits.length !== hourRevenue.length ||
+    hourUnits.length % 24 !== 0 ||
+    hourUnits.length > 4 * 24
   )
     throw new Error('Invalid analytics response')
-  return { from, units, revenue }
+  return { from, units, revenue, hourUnits, hourRevenue }
 }

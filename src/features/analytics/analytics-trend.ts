@@ -12,8 +12,9 @@ export const SALES_METRICS: [string, string][] = [
   ['orders', 'Orders'],
   ['aov', 'AOV'],
 ]
-/** Items reads dishes by day, so it groups by day or week and measures dishes, not bills. */
+/** Items measures dishes, not bills; its hours are the bill's order time, as on Sales. */
 export const ITEM_GRAINS: [string, string][] = [
+  ['hour', 'Hour'],
   ['day', 'Day'],
   ['week', 'Week'],
 ]
@@ -94,6 +95,22 @@ export function periodTrend({
     axis,
     periods: windows.map(({ first, last, label, total }) => ({ first, last, label, total })),
   }
+}
+
+export const HOURS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, '0')}:00`)
+
+/** One series per window over the 24 Kolkata clock hours, labelled with its dates. */
+export function hourTrend(
+  periods: TrendPeriod[],
+  value: (period: number, hour: number) => number | null,
+): ChartSeries[] {
+  return periods.map((p, period) => ({
+    label: p.label,
+    points: HOURS.map((label, hour) => ({
+      label: `${p.label} · ${label}`,
+      value: value(period, hour),
+    })),
+  }))
 }
 
 /** A dish or category series as days, so it groups exactly as Sales does. */

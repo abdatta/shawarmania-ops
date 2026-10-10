@@ -10,7 +10,7 @@ import {
   type SalesMetric,
 } from '@/domain/sales-analytics'
 import { AnalyticsChart, type ChartSeries } from './analytics-chart'
-import { periodTrend } from './analytics-trend'
+import { HOURS, hourTrend, periodTrend } from './analytics-trend'
 import { TrendCard } from './analytics-trend-card'
 
 const labels = { revenue: 'Revenue', orders: 'Orders', aov: 'AOV' }
@@ -41,17 +41,11 @@ export function SalesPanel({
     grain: grain === 'hour' ? 'day' : grain,
     value: (b) => salesValue(b.revenue, b.orders, metric),
   })
-  const hours = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, '0')}:00`)
-  const hourSeries: ChartSeries[] = trend.periods.map((p, period) => ({
-    label: p.label,
-    points: hours.map((label, hour) => {
-      const row = data.hours.find((h) => h.period === period && h.hour === hour)
-      return {
-        label: `${p.label} · ${label}`,
-        value: salesValue(row?.revenue ?? 0, row?.orders ?? 0, metric),
-      }
-    }),
-  }))
+  const hours = HOURS
+  const hourSeries = hourTrend(trend.periods, (period, hour) => {
+    const row = data.hours.find((h) => h.period === period && h.hour === hour)
+    return salesValue(row?.revenue ?? 0, row?.orders ?? 0, metric)
+  })
   const hourlyAverages: ChartSeries[] = hourSeries.map((series) => ({
     ...series,
     points: series.points.map((point) => ({

@@ -1,4 +1,4 @@
-import { useState, type PointerEvent } from 'react'
+import { useRef, useState, type PointerEvent } from 'react'
 import type { SalesMetric } from '@/domain/sales-analytics'
 
 /** Sales measures, plus dish units for the Items chart. */
@@ -82,6 +82,10 @@ export function AnalyticsChart({
   variant?: 'line' | 'columns'
 }) {
   const [selected, setSelected] = useState<number | null>(null)
+  // Chrome rings an SVG focused by a tap as well as by Tab. Only the keyboard
+  // needs the ring: a tap already shows its point and its figures.
+  const [ring, setRing] = useState(false)
+  const pointer = useRef(false)
   const length = Math.max(1, axis.length)
   const peak = Math.max(1, ...series.flatMap((s) => s.points.map((p) => p.value ?? 0)))
   // A count's half-way gridline should be a whole number too.
@@ -136,11 +140,20 @@ export function AnalyticsChart({
     <div data-testid={id}>
       <svg
         viewBox="0 0 360 190"
-        className="mt-3 block aspect-[360/190] max-h-72 w-full touch-pan-y text-content-muted"
+        className={`mt-3 block aspect-[360/190] max-h-72 w-full touch-pan-y rounded-lg text-content-muted outline-none ${ring ? 'focus-ring' : ''}`}
         role="group"
         aria-label={`${title} chart; tap or use arrow keys for values`}
         tabIndex={0}
-        onPointerDown={choose}
+        onPointerDown={(e) => {
+          pointer.current = true
+          setRing(false)
+          choose(e)
+        }}
+        onFocus={() => setRing(!pointer.current)}
+        onBlur={() => {
+          pointer.current = false
+          setRing(false)
+        }}
         onPointerMove={(e) => {
           if (e.pointerType === 'mouse') choose(e)
         }}

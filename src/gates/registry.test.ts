@@ -271,6 +271,7 @@ describe('gate registry', () => {
 
     const finances = tree.find((node) => node.kind === 'group' && node.group.id === 'finances')
     const setup = tree.find((node) => node.kind === 'group' && node.group.id === 'setup')
+    const analytics = tree.find((node) => node.kind === 'group' && node.group.id === 'analytics')
     expect(finances?.kind === 'group' && finances.children.map((c) => c.nav?.label)).toEqual([
       'Billing',
       'Drawer',
@@ -280,10 +281,14 @@ describe('gate registry', () => {
     expect(setup?.kind === 'group' && setup.children.map((c) => c.nav?.label)).toEqual([
       'Outlets',
       'Team',
-      // a-gold-member-is-a-label (#57): directly after Team.
-      'Customers',
       'Delivery',
       'Menu',
+    ])
+    // Customers reads regulars and spend, so it is analytics [owner, 2026-10-09].
+    expect(analytics?.kind === 'group' && analytics.children.map((c) => c.nav?.label)).toEqual([
+      'Items',
+      'Sales',
+      'Customers',
     ])
   })
 

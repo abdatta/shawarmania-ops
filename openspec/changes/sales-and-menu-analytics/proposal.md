@@ -40,4 +40,6 @@ After using both pages the owner asked for:
 - **Sales shows one trend, two ways.** The Revenue chart and the Days list showed the same figures twice. They become one card with a Chart / Table switch, and neither view drops data: the table holds every bucket of every compared period, with the change.
 - **The weekday-average card is dropped.** It averaged each weekday's revenue within each period. On the default 7-day range every weekday occurs once, so it only re-ordered the daily chart; its one use (Saturdays against Tuesdays over 30 days or more) did not justify a card the owner could not read.
 
-Rejected along the way: sending a series per dish inside the Items snapshot (about a hundred dishes times every day of two windows, on every page view) in favour of reading one subject's series only when it is charted; and moving Customers into Analytics inside this change, which stays the owner's call (see design).
+Rejected along the way: sending a series per dish inside the Items snapshot (about a hundred dishes times every day of two windows, on every page view) in favour of reading one subject's series only when it is charted.
+
+A second pass the same day added an **Hour** grouping to Items (a one-day range was a single dot), took the focus box off a tapped chart, **moved Customers under Analytics** at the owner's word, and recorded customer analytics as a backlog item rather than building it.

@@ -205,8 +205,11 @@ const defs = {
    * The business's customers, and who among them is a gold member
    * (a-gold-member-is-a-label).
    *
-   * **Directly after Team** [owner, 2026-09-18]: the two lists of people the
-   * owner curates, side by side.
+   * **Under Analytics, after Items and Sales** [owner, 2026-10-09]: it reads
+   * who the regulars are, how often they come and what they spend, and sets
+   * nothing up. It sat directly after Team from 2026-09-18 as the other list of
+   * people the owner curates; gold is now set at the counter too, so that was
+   * no longer the page's job. The path is unchanged, so every link still works.
    *
    * The owner's reads every outlet; `admin-customers` below is the same surface
    * for a manager, over their own outlets. No counter has anything like it. A
@@ -221,7 +224,7 @@ const defs = {
   'owner-customers': {
     role: 'super_admin',
     path: 'customers',
-    nav: { label: 'Customers', icon: Contact, order: 3, group: 'setup' },
+    nav: { label: 'Customers', icon: Contact, order: 3, group: 'analytics' },
     state: 'live',
   },
   /**
@@ -550,7 +553,7 @@ const defs = {
   'admin-customers': {
     role: 'franchise_admin',
     path: 'customers',
-    nav: { label: 'Customers', icon: Contact, order: 3, group: 'setup' },
+    nav: { label: 'Customers', icon: Contact, order: 3, group: 'analytics' },
     state: 'live',
   },
   'admin-team': {

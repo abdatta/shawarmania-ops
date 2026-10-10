@@ -15,7 +15,8 @@
 --
 -- `sales_analytics_series` is the Items page's chart: one subject (every dish,
 -- one dish or one captured category) as two arrays of daily units and dish
--- revenue, oldest day first. Read only when the owner picks that subject, so
+-- revenue, oldest day first, and two of clock-hour totals per window (24 per
+-- window, current window first). Read only when the owner picks that subject, so
 -- the page never downloads a line per dish per day.
 --
 -- Revenue is grouped by `business_date` (the order's day, docs/GLOSSARY.md),
@@ -256,10 +257,12 @@ begin
   v_span := p_to - p_from + 1;
   v_first := p_from - (p_periods - 1) * v_span;
 
-  with per_day as (
+  with lines as materialized (
     select b.business_date,
-           sum(i.quantity) as units,
-           sum(i.line_total_paise - i.discount_paise) as revenue
+           (p_to - b.business_date) / v_span as period,
+           extract(hour from b.ordered_at at time zone 'Asia/Kolkata')::int as hour,
+           i.quantity,
+           i.line_total_paise - i.discount_paise as revenue
       from public.bills b
       join public.bill_items i on i.bill_id = b.id
      where b.outlet_id = p_outlet_id
@@ -269,15 +272,34 @@ begin
        and (v_item is null or i.menu_item_id = v_item)
        and (v_snapshot is null or (i.menu_item_id is null and i.item_name = v_snapshot))
        and (p_category is null or coalesce(i.category_name, 'Uncategorised') = p_category)
-     group by b.business_date
+  ),
+  per_day as (
+    select business_date, sum(quantity) as units, sum(revenue) as revenue
+      from lines group by business_date
+  ),
+  per_hour as (
+    select period, hour, sum(quantity) as units, sum(revenue) as revenue
+      from lines group by period, hour
+  ),
+  -- Every Kolkata clock hour of every window, current window first: the bill's
+  -- order time, totalled across the window's days, as Sales groups its hours.
+  hours as (
+    select p.period, h.hour, coalesce(x.units, 0) as units, coalesce(x.revenue, 0) as revenue
+      from generate_series(0, p_periods - 1) p(period)
+     cross join generate_series(0, 23) h(hour)
+      left join per_hour x on x.period = p.period and x.hour = h.hour
   )
   select jsonb_build_object(
            'from', v_first,
-           'units', jsonb_agg(coalesce(p.units, 0) order by d),
-           'revenue', jsonb_agg(coalesce(p.revenue, 0) order by d))
-    into v_result
-    from generate_series(v_first::timestamp, p_to::timestamp, interval '1 day') d
-    left join per_day p on p.business_date = d::date;
+           'units', (select jsonb_agg(coalesce(p.units, 0) order by d)
+                       from generate_series(v_first::timestamp, p_to::timestamp, interval '1 day') d
+                       left join per_day p on p.business_date = d::date),
+           'revenue', (select jsonb_agg(coalesce(p.revenue, 0) order by d)
+                         from generate_series(v_first::timestamp, p_to::timestamp, interval '1 day') d
+                         left join per_day p on p.business_date = d::date),
+           'hourUnits', (select jsonb_agg(units order by period, hour) from hours),
+           'hourRevenue', (select jsonb_agg(revenue order by period, hour) from hours))
+    into v_result;
 
   return v_result;
 end;

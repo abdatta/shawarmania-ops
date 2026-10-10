@@ -244,7 +244,7 @@ gold-only setting is shown in both places as one value. Turn **Gold members** of
 and every gold line disappears from the page, the Customers surface and the
 counter; turn it back on and press **Cancel**. **Kanchrapara** starts all off.
 
-**Then Customers, from Setup** (#57; one outlet at a time since #62). It opens on
+**Then Customers, from Analytics** (#57; one outlet at a time since #62). It opens on
 Kalyani, with the outlet chips above, and on **Regulars** — everybody seen there in
 the last thirty days, most visits first — and the top of it is *Moumta Ghosh*, the
 most frequent customer and not gold: the owner's obvious candidate. Open her card
