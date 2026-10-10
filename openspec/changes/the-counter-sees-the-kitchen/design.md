@@ -47,7 +47,8 @@ returns:
   - `"waiting"` — its card there is *new*, *edited* or *cancelled*.
 - A kitchen's card carries an order exactly when `kitchen_board()` would: a line
   visible under its filter, or an acknowledgement with lines and no `cancel`
-  acknowledgement at the current version. Its card is *quiet* exactly when
+  acknowledgement at the current version — both sides read through the filter in
+  force now, as amended by D7. Its card is *quiet* exactly when
   `kitchenCardState` would say so: it has a `new` acknowledgement, its visible lines
   are not empty, and its latest acknowledgement's lines equal its visible lines **by
   dish totals** (`menu_item_id`, else the item name). A new SQL function,
@@ -191,6 +192,99 @@ same row with only the sentence shortened; the buttons as quiet text; and foldin
 the search box into the header row, which saves height the owner had not asked for
 — the concern was the width the sentence wasted.
 
+### D7. A kitchen's filter is a view, not an event (added 2026-10-10)
+
+**What the owner reported.** A kitchen showing only Shawarmas changed its filter to
+Burgers. An order it had acknowledged turned red, read CANCELLED and rang; the cook
+pressed ACK. Changed back to Shawarmas, the order — still open, its shawarmas
+untouched — was gone from that kitchen, and stayed gone until the counter edited it
+or ticked it Prepared. Reproduced on the local stack the same day against #70's
+`kitchen_board()`, with two further cases the owner had not met.
+
+**Why.** #70 compares a card's lines with the lines this tablet last acknowledged,
+and each side is taken under the filter in force *when it was taken*: the snapshot
+under the filter at ACK, the visible lines under today's. A filter change therefore
+reads as something that happened to the order:
+
+| The kitchen, with nobody touching the order… | #70 |
+|---|---|
+| hides every dish of an order it acknowledged | **Cancelled**, rings; once ACKed, the `cancel` at the current version keeps the order off the board for good |
+| hides some dishes of an order it acknowledged | **Edited**, rings, the hidden dishes struck through as removed |
+| shows dishes it did not show when it acknowledged | **Edited**, rings, the new dishes marked as added |
+| shows orders it never acknowledged | **New**, rings |
+
+`counter_kitchen_marks()` restates the rule (D1), so each row also swings the
+counter's bell, and the hidden order's bell loses that kitchen.
+
+**The rule.** A filter change changes what this tablet *shows*; nothing happened to
+the order.
+
+- **The acknowledged lines are read through today's filter.** A card is compared
+  with the lines this tablet last acknowledged **that its filter shows now**, each
+  judged by its dish's current category exactly as an order line is
+  (`kitchen_line_visible`, joined through `menu_items` on the snapshot's
+  `menuItemId`; a line without one is judged as an order line without one is). The
+  snapshot itself is untouched and stays append-only. `kitchen_board()` returns
+  `latestAck.lines` already narrowed, so `kitchenCardState`, the diff and the struck
+  lines need no change; `counter_kitchen_marks()` narrows the same way.
+- **Narrowing asks nothing.** A dish that leaves the filter leaves the comparison
+  with it: it is not struck through, and an order with nothing on show here, before
+  or after, leaves the board without a Cancelled card. *Cancelled* for lost dishes
+  now means only what the counter did — the order lost every dish this kitchen shows
+  and had acknowledged.
+- **Widening asks for an ACK and does not ring** (owner, 2026-10-10). Dishes this
+  tablet never acknowledged are new to this kitchen even when they are old to the
+  order: an order it never acknowledged reads New, extra dishes on one it did are
+  marked as added on an Edited card. A kitchen widens its filter mostly to take over
+  from another — a tablet dead, a cook gone home — and a dish it shows but never
+  acknowledged must keep the counter's bell swinging. The cook who pressed Save is
+  looking at the board, so the cards glow and carry ACK, as on opening the screen,
+  without shaking or ringing.
+- **A `cancel` acknowledgement keeps an order off the board only while there is
+  nothing here to show**: the order is cancelled, or nothing of it is on show here.
+  An open order with a dish on show is on the board whatever was acknowledged before.
+  So the acknowledgements #70 wrote for filter changes are harmless once this ships:
+  such an order comes back, Edited against an empty snapshot, silently on the first
+  read after the release. No data repair.
+
+**Which reads ring.** The silence belongs to the person who pressed Save, not to every
+change in what the board shows. The board returns `filterChangedAt`
+(`counter_devices.kitchen_filter_changed_at`, already written by
+`set_kitchen_filter()`). A card that starts alerting on a read rings as before
+**unless** the filter changed since the previous read (`filterChangedAt` later than
+the previous board's `readAt`) **and** the order has not changed since the filter did
+(its `version` no later than `filterChangedAt`); then it glows silently. An order
+saved or edited at the counter in the moment after Save is newer than the filter and
+rings. Both times are the server's; the tablet's clock plays no part.
+
+A dish moved to another category on the Menu screen changes what a kitchen shows
+without anybody at the kitchen choosing it. Narrowing that way is silent, as any
+narrowing is — there is nothing to act on. Widening that way **rings**, because the
+kitchen did not ask for it.
+
+**Considered and rejected:**
+
+- *A pure view — widened dishes appear quiet.* The counter's bell would report as
+  answered food nobody in this kitchen has acknowledged: a false all-clear, worse
+  than the false alarm it replaces. The owner chose the silent ACK (2026-10-10).
+- *Ringing for widened dishes, as #70 did.* The person who pressed Save is already
+  looking at them.
+- *Snapshotting every line of an order at ACK, not only the shown ones.* It fixes
+  narrowing too, but makes widened dishes read as already acknowledged — the pure
+  view above — and changes what a stored acknowledgement means.
+- *Dropping the Cancelled alert for lost dishes.* It is the only thing that tells a
+  cook to stop making a dish the counter removed. It stays, for events on the order
+  (owner, 2026-10-10).
+- *Fixing the kitchen screen alone.* The counter's bell reads the server's rule, not
+  the screen's.
+- *A change folder of its own.* The owner asked for the last open kitchen change to
+  carry it (2026-10-10); this one already restates #70's rule for the counter, so the
+  two must change together.
+
+**Not addressed.** A filter change can leave a dish that no kitchen on shift shows. Its
+order then carries no bell, as for any order no kitchen shows (D1), and the Filter
+sheet does not warn. Raised with the owner, not decided.
+
 ## RLS, money and offline, called out
 
 - **RLS:** one widened policy, `kitchen_pulses_select`, now admitting a live counter
@@ -198,7 +292,9 @@ the search box into the header row, which saves height the owner had not asked f
   nothing. One new `security definer` function, refusing anything but a live counter
   shift and returning only D1's shape — pinned by a pgTAP case on the JSON keys and
   hand-crafted refusals for a kitchen shift, a person's session, and a counter at the
-  other outlet. No new table.
+  other outlet. No new table. D7 changes the rule inside `kitchen_board()` and
+  `counter_kitchen_marks()`, not who may call them; the board gains one field,
+  `filterChangedAt`, the calling tablet's own, and still no customer or amount.
 - **Money:** none.
 - **Offline:** the bell needs the network. An offline counter keeps the last marks
   it read; an order not yet sent has no server row and so no bell — the kitchen

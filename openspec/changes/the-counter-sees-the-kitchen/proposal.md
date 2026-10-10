@@ -16,8 +16,11 @@
 > more about the kitchen than which of its tablets has pressed ACK; the rail's
 > cards take the kitchen ticket's torn top edge, its number face and its dish-count
 > tiles at today's height — a one-dish card carrying the bell a few pixels taller,
-> so the bell has room — and in today's colours; and the demo's counter
-> tab shows its kitchen tab's ACKs.
+> so the bell has room — and in today's colours; the demo's counter
+> tab shows its kitchen tab's ACKs; and a kitchen changing its filter rings nothing
+> and makes no order Edited or Cancelled, on its own screen or on the counter's
+> bell — what it stops showing leaves quietly and returns quietly, and what it newly
+> shows but never acknowledged waits silently for ACK.
 
 ## Why
 
@@ -88,6 +91,29 @@ card grows and no new colour appears.
 - In demo mode a kitchen tab's ACK stops the bell in a counter tab, as orders
   already travel between the two.
 
+### A kitchen's filter is a view (added 2026-10-10)
+
+Cooks reported that changing a kitchen's filter rang an order they had acknowledged
+as *Cancelled*, and that once they pressed ACK the order never came back when they
+changed the filter back, though nobody had touched it. Reproduced, along with two
+quieter cases: hiding part of an order, or showing more of one, rang it as *Edited*.
+The bell above restates the kitchen's rule, so every one of these also swung the
+counter's bell. The owner asked for the fix to land here (design D7).
+
+- **Changing the filter never makes an order Edited or Cancelled.** What a kitchen
+  acknowledged is compared through the filter it has now, so dishes it stops showing
+  leave the comparison quietly, and an order with nothing left on show leaves the
+  board with nothing to ACK — and comes back, quiet, when the filter shows it again.
+- **Cancelled stays an alarm for what happens to the order**: cancelled at the
+  counter, or every dish this kitchen shows removed there.
+- **Showing more asks for an ACK, silently.** Orders and dishes the kitchen never
+  acknowledged read New or Edited and wait for ACK, so the counter's bell keeps
+  swinging for food nobody here has seen — a kitchen taking over another's dishes is
+  the case — but nothing shakes or rings: the cook who saved the filter is looking.
+  An order the counter saves at the same moment still rings.
+- **The counter's bell follows**: a kitchen changing its filter never sets it
+  swinging for dishes that kitchen has answered for.
+
 ## Non-goals
 
 - **Nothing for cancellations.** A cancelled order leaves the rail at once; whether
@@ -104,7 +130,11 @@ card grows and no new colour appears.
   dots and the ticket look; the counter header's status pill and *Kitchen offline*.
 - [`docs/ROLES_AND_PERMISSIONS.md`](../../../docs/ROLES_AND_PERMISSIONS.md) — a
   counter shift reads which kitchen tablets have acknowledged its outlet's orders.
-- [`docs/DATA_MODEL.md`](../../../docs/DATA_MODEL.md) — `counter_kitchen_marks()`.
+- [`docs/DATA_MODEL.md`](../../../docs/DATA_MODEL.md) — `counter_kitchen_marks()`;
+  `kitchen_board()` reading acknowledged lines through today's filter, and its
+  `filterChangedAt`.
+- [`docs/SCREENS.md`](../../../docs/SCREENS.md), the kitchen screen — changing the
+  filter rings nothing; what it brings into view waits silently for ACK.
 - [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md) — the counter listens to
   the kitchen pulse, and what bumps it.
 - [`docs/DEMO_MODE.md`](../../../docs/DEMO_MODE.md) — the demo mirror carries the

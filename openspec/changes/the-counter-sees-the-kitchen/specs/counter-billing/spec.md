@@ -10,7 +10,9 @@ primary tone and swinging while any such kitchen's card for the order is new,
 edited or cancelled, and SHALL NOT be drawn once every such kitchen's card is
 quiet, its space kept so that nothing on the card moves. A kitchen's card SHALL be judged by the kitchen
 screen's own rules: quiet when the dishes it last acknowledged equal, dish by dish,
-the dishes it shows now. An order the counter has ticked Prepared SHALL count as answered by
+the dishes it shows now, the acknowledged dishes read through its filter in force now,
+so that a kitchen changing its filter never sets the bell swinging for dishes it has
+answered for. An order the counter has ticked Prepared SHALL count as answered by
 every kitchen whose filter shows one of its dishes.
 
 While the bell is swinging, it SHALL show one dot per live kitchen, one kitchen
@@ -47,6 +49,16 @@ ending SHALL reach the counter within seconds, by the same nudge kitchens receiv
 
 - **WHEN** two kitchens are live, both have acknowledged an order, and the counter adds a dish only the second kitchen shows
 - **THEN** the bell swings with two dots, the first grey and the second orange
+
+#### Scenario: A kitchen hides dishes it has answered for
+
+- **WHEN** a kitchen that pressed ACK on an order changes its filter to hide some or all of its dishes
+- **THEN** the counter's bell stays still for that kitchen: grey, or an empty place, never orange
+
+#### Scenario: A kitchen takes over dishes it has not answered for
+
+- **WHEN** a kitchen changes its filter to show a dish of an order that it never pressed ACK on
+- **THEN** the bell swings with that kitchen's dot orange until it presses ACK
 
 #### Scenario: Prepared at the counter
 
