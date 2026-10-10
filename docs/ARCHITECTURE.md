@@ -282,6 +282,14 @@ pulse is a nudge, never the data, because a kitchen shift may not select
 has been down ten seconds, or when the last read is older than forty-five. It
 holds no outbox and caches nothing for a restart: a kitchen is online by design.
 
+**The counter hears the kitchen** *(#72)* through the same pulse. Its rail reads
+`counter_kitchen_marks()` — which kitchen on shift is still to press ACK on which
+open order — with every rail load and again on each bump of its outlet's
+`kitchen_pulses` row, and on that bump re-reads the marks alone, not the rail or
+the menu. So the pulse is bumped not only by order writes but by a kitchen's ACK,
+a kitchen's filter change, and a kitchen shift starting or ending. A kitchen shift
+lapsing at the cutover bumps nothing; the counter learns at its next read.
+
 **The database runs three scheduled jobs under `pg_cron`, and none is
 load-bearing for correctness.** `bill-receipt-recovery` retries queued receipt
 wakeups every minute. `day-change-finishes-paid-orders` (#69) marks a paid order
