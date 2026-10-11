@@ -34,6 +34,12 @@ The migration's `do` block ran against production inside a transaction that was 
 | `npm run test:e2e:auth` | 39 passed |
 | `npm run db:types` + diff | regenerated output identical to the committed file |
 
-## Not yet run
+## Release in the owner's chosen window
 
-Task 11 (release in the owner's window, then the production check and the owner's one Accept) and the PHASE GATE, which depends on it.
+The owner explicitly approved releasing this fix together with the Analytics follow-up now. [Deploy 38101389058](https://github.com/abdatta/shawarmania-ops/actions/runs/38101389058) completed successfully at 2026-10-11 01:29 UTC on `f084c6b2720b7f789403000c9e24fe45c29e06fc`, after a fast-forward-only main update. All verification, production migration, Edge Function deployment and Pages jobs passed. The production migration reported removing five pre-boundary weeks and zero accepted differences. A fresh public fetch confirms the published application build `f084c6b`.
+
+The combined source was also checked locally after rebasing: 2,436 unit/component tests, 3,438 pgTAP checks, all six RLS phases and 39 auth/billing browser tests passed, with generated types unchanged. See the [Analytics release evidence](../sales-and-menu-analytics/incomplete-intervals-verification.md) for the exact combined CI results and browser retry qualification.
+
+## Production acceptance still pending
+
+The release portion of task 11 is complete. The per-outlet production check and the owner's one Accept remain pending, as does the PHASE GATE that depends on them. Publication does not assert that the owner accepted the disputed week or that its resulting read settled the days.
