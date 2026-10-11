@@ -69,6 +69,7 @@ This alphabetical list maps every capability required now. For planned work, rea
 - [`expense-categories`](expense-categories/spec.md) — business-wide expense-category suggestions grown from use, with historical category text preserved and deliberate owner-led rewrites.
 - [`global-customer-identity`](global-customer-identity/spec.md) — one business-wide normalized-phone customer record with exact billing lookup, no enumeration, separate owner access, and no widened transaction access.
 - [`identity-and-access`](identity-and-access/spec.md) — admin-provisioned four-role accounts, username or private-email sign-in, assignment-derived authority, and immediate deactivation.
+- [`kitchen-display`](kitchen-display/spec.md) — the kitchen tablet's board of unprepared orders, its saved category filter, new, edited and cancelled alerts that ring until acknowledged, and an alert that cannot be missed when it may be out of date or silent.
 - [`ledger-statement`](ledger-statement/spec.md) — a trading day derived on every read and never stored: revenue by channel, the drawer ordered by instant, no editable field, and an unconfirmed balance that says so.
 - [`menu-management`](menu-management/spec.md) — outlet menus with role-bounded availability and deliberate non-retroactive price changes.
 - [`multi-device-billing-coordination`](multi-device-billing-coordination/spec.md) — several counter tablets at one outlet coordinated only by the server, with per-tablet order ownership, acceptance-ordered bill numbers, and a date that needs every tablet to confirm it.
