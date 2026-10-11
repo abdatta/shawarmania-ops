@@ -6,6 +6,24 @@ export type ChartMetric = SalesMetric | 'units'
 export interface ChartPoint {
   label: string
   value: number | null
+  /** Selected instants, independent of the recorded value and its display label. */
+  interval?: { start: string; end: string }
+  state?: 'completed' | 'ongoing' | 'future'
+}
+export function pointStatus(point: ChartPoint | undefined) {
+  return point?.state === 'ongoing'
+    ? ' · so far'
+    : point?.state === 'future'
+      ? ' · not started'
+      : ''
+}
+function plotted(point: ChartPoint | undefined): point is ChartPoint & { value: number } {
+  return (
+    !!point &&
+    point.value !== null &&
+    point.state !== 'future' &&
+    !(point.state === 'ongoing' && point.value === 0)
+  )
 }
 export interface ChartSeries {
   label: string
@@ -204,7 +222,7 @@ export function AnalyticsChart({
             {!columns &&
               s.points.map((p, i) => {
                 const next = s.points[i + 1]
-                return p.value !== null && next?.value !== null && next?.value !== undefined ? (
+                return plotted(p) && plotted(next) ? (
                   <line
                     key={`line-${i}`}
                     x1={x(i)}
@@ -218,20 +236,21 @@ export function AnalyticsChart({
                 ) : null
               })}
             {s.points.map((p, i) =>
-              p.value !== null ? (
+              plotted(p) ? (
                 columns ? (
                   <rect
                     key={i}
                     data-testid={period === 0 ? 'chart-column' : undefined}
                     x={x(i) - groupWidth / 2 + period * (barWidth + barGap)}
-                    y={y(p.value)}
+                    y={y(p.value!)}
                     width={barWidth}
-                    height={146 - y(p.value)}
+                    height={146 - y(p.value!)}
                     rx={Math.min(2, barWidth / 2)}
                     fill={strokes[period]}
                   >
                     <title>
                       {s.label}: {p.label}, {metricText(p.value, metric)}
+                      {pointStatus(p)}
                     </title>
                   </rect>
                 ) : (
@@ -239,12 +258,15 @@ export function AnalyticsChart({
                     key={i}
                     data-testid={period === 0 ? 'chart-point' : undefined}
                     cx={x(i)}
-                    cy={y(p.value)}
-                    r={length < 8 || index === i ? 3.5 : 1.5}
-                    fill={strokes[period]}
+                    cy={y(p.value!)}
+                    r={p.state === 'ongoing' ? 3 : 3.5}
+                    fill={p.state === 'ongoing' ? 'var(--surface)' : strokes[period]}
+                    stroke={p.state === 'ongoing' ? strokes[period] : undefined}
+                    strokeWidth={p.state === 'ongoing' ? 1 : undefined}
                   >
                     <title>
                       {s.label}: {p.label}, {metricText(p.value, metric)}
+                      {pointStatus(p)}
                     </title>
                   </circle>
                 )
@@ -327,6 +349,7 @@ export function AnalyticsChart({
               </p>
               <p className={`font-bold tabular-nums ${columns ? 'pl-[1.375rem]' : ''}`}>
                 {metricText(s.points[index]?.value ?? null, metric)}
+                <span className="font-normal">{pointStatus(s.points[index])}</span>
               </p>
             </div>
           ))}

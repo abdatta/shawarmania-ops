@@ -25,6 +25,78 @@ async function chooseMeasure(page: Page, measure: string) {
 }
 
 for (const theme of ['light', 'dark']) {
+  test(`demo current intervals show hollow and zero open endings in ${theme}`, async ({
+    page,
+  }, testInfo) => {
+    await page.clock.install({ time: new Date('2026-10-10T18:30:00+05:30') })
+    const { errors, backendRequests } = await openAnalytics(
+      page,
+      testInfo,
+      theme,
+      'demo/owner/analytics/items',
+    )
+    for (const route of ['items', 'sales']) {
+      if (route === 'sales') {
+        await page.clock.setSystemTime(new Date('2026-10-10T18:30:00+05:30'))
+        await page.reload()
+        await page.getByRole('link', { name: 'Sales', exact: true }).click()
+      }
+      await page.getByRole('button', { name: 'Last 1 day', exact: true }).click()
+      await expect(page.getByText('Incomplete period', { exact: true })).toBeVisible()
+      const plot = page.getByTestId(`${route}-trend`)
+      await expect.poll(() => plot.getByTestId('chart-point').count()).toBeGreaterThan(0)
+      const hanging = await plot
+        .getByTestId('chart-series')
+        .first()
+        .evaluate((group) => {
+          const points = [...group.querySelectorAll('circle')]
+          const last = points.at(-1)!
+          return {
+            y: Number(last.getAttribute('cy')),
+            fill: last.getAttribute('fill'),
+            x: Number(last.getAttribute('cx')),
+            end: Number([...group.querySelectorAll('line')].at(-1)?.getAttribute('x2')),
+          }
+        })
+      expect(hanging.y).toBeLessThan(146)
+      expect(hanging.fill).toBe('var(--surface)')
+      expect(hanging.end).toBe(hanging.x)
+      // No hover/selection has occurred: every eligible point is already visible,
+      // and the hollow outline has exactly the filled dot's outer radius.
+      await expect(plot.getByTestId('chart-details')).toHaveCount(0)
+      const endpoint = plot.getByTestId('chart-point').last()
+      await expect(endpoint).toHaveAttribute('r', '3')
+      await expect(endpoint).toHaveAttribute('stroke-width', '1')
+      await expect(endpoint.locator('title')).toContainText('18:00')
+      await expect(endpoint.locator('title')).toContainText('so far')
+      await page.clock.fastForward(30 * 60_000)
+      // The same shared bills now precede the new ongoing hour (19h), which is
+      // zero: 18h is filled, and 19h has neither a dot nor an incoming segment.
+      await expect(endpoint).toHaveAttribute('fill', 'var(--primary)')
+      await expect(endpoint).toHaveAttribute('r', '3.5')
+      await expect(endpoint.locator('title')).not.toContainText('so far')
+      const titles = await plot.getByTestId('chart-point').locator('title').allTextContents()
+      expect(titles.some((label) => label.includes('19:00'))).toBe(false)
+      await plot.getByRole('group').press('End')
+      await expect(plot.getByTestId('chart-details')).toContainText('not started')
+      await page
+        .getByTestId(`${route}-trend-card`)
+        .screenshot({ path: testInfo.outputPath(`hanging-${route}-${theme}.png`) })
+      await page.getByRole('button', { name: 'Table', exact: true }).click()
+      await expect(page.getByTestId(`${route}-trend-table`)).toContainText('so far')
+      await page.getByRole('button', { name: 'Chart', exact: true }).click()
+      await page.getByRole('button', { name: 'Previous period', exact: true }).click()
+      await expect(page.getByText('Incomplete period', { exact: true })).toHaveCount(0)
+      await plot.getByRole('group').press('End')
+      await expect(plot.getByTestId('chart-details')).not.toContainText('so far')
+      expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(
+        false,
+      )
+    }
+    expect(errors).toEqual([])
+    expect(backendRequests).toEqual([])
+  })
+
   test(`inclusive dates and first-endpoint linking on both pages in ${theme}`, async ({
     page,
   }, testInfo) => {
@@ -36,7 +108,10 @@ for (const theme of ['light', 'dark']) {
       'demo/owner/analytics/items',
     )
     for (const route of ['items', 'sales']) {
-      if (route === 'sales') await page.getByRole('link', { name: 'Sales', exact: true }).click()
+      if (route === 'sales') {
+        await page.clock.setSystemTime(new Date('2026-10-10T18:30:00+05:30'))
+        await page.getByRole('link', { name: 'Sales', exact: true }).click()
+      }
       await expect(page.getByRole('button', { name: 'Last 7 days' })).toHaveAttribute(
         'aria-pressed',
         'true',
@@ -99,6 +174,7 @@ for (const theme of ['light', 'dark']) {
   test(`Items charts any dish or category against earlier periods in ${theme}`, async ({
     page,
   }, testInfo) => {
+    await page.clock.install({ time: new Date('2026-10-10T18:30:00+05:30') })
     const { errors, backendRequests } = await openAnalytics(
       page,
       testInfo,
@@ -225,13 +301,15 @@ for (const theme of ['light', 'dark']) {
     await page.getByRole('heading', { name: 'Categories', exact: true }).scrollIntoViewIfNeeded()
     await page.screenshot({ path: testInfo.outputPath(`item-shares-${theme}.png`), fullPage: true })
 
-    // One day opens by hour: the trading part of the day, every period.
+    // One day opens by hour, keeping unfinished hours through the business-day cutoff.
     const itemPoints = page.getByTestId('items-trend').getByTestId('chart-point')
     await page.getByRole('button', { name: 'Last 1 day', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Group by: Hour' })).toBeVisible()
     await expect.poll(() => itemPoints.count()).toBeGreaterThan(2)
     expect(await itemPoints.count()).toBeLessThan(24)
-    await expect(page.getByTestId('items-trend').getByText('00:00')).toHaveCount(0)
+    await expect(page.getByTestId('items-trend').locator('svg text').last()).toHaveText('03:00')
+    const currentHours = await itemPoints.locator('title').allTextContents()
+    expect(currentHours.some((label) => label.includes('00:00'))).toBe(false)
     await expect(page.getByTestId('items-trend').getByTestId('chart-series')).toHaveCount(4)
     await expect(card.getByText('Counter bills by Kolkata order hour')).toBeVisible()
     // A tap on the chart selects a point without drawing a focus box around it.
@@ -335,6 +413,7 @@ for (const theme of ['light', 'dark']) {
   })
 
   test(`Sales reads one trend as a chart or a table in ${theme}`, async ({ page }, testInfo) => {
+    await page.clock.install({ time: new Date('2026-10-10T18:30:00+05:30') })
     const { errors, backendRequests } = await openAnalytics(
       page,
       testInfo,

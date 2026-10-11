@@ -6,6 +6,7 @@ import { Card, CardTitle } from '@/components/ui/card'
 import {
   AnalyticsChart,
   metricText,
+  pointStatus,
   SeriesNumber,
   type ChartMetric,
   type ChartSeries,
@@ -200,6 +201,7 @@ export function TrendCard({
                         className={`whitespace-nowrap p-2 text-right ${period ? 'text-content-muted' : 'font-bold'}`}
                       >
                         {metricText(cell(period, index), metric, false, true)}
+                        {pointStatus(s.points[index])}
                       </td>
                     ))}
                     {series.length > 1 && (

@@ -21,7 +21,14 @@ import { ChangeChip, MiniBar, PeriodBars, TrendChip } from './analytics-widgets'
 import { download } from './analytics-utils'
 import { AnalyticsScrollList } from './analytics-scroll-list'
 import { metricText } from './analytics-chart'
-import { activeHours, HOURS, hourTrend, periodTrend, seriesDays } from './analytics-trend'
+import {
+  trendView,
+  type TrendClock,
+  HOURS,
+  hourTrend,
+  periodTrend,
+  seriesDays,
+} from './analytics-trend'
 import { TrendCard } from './analytics-trend-card'
 
 type ItemMetric = 'units' | 'revenue'
@@ -39,6 +46,7 @@ export function ItemsPanel({
   outletId,
   from,
   to,
+  clock,
   grain,
   metric,
   periods,
@@ -49,6 +57,7 @@ export function ItemsPanel({
   outletId: string
   from: string
   to: string
+  clock?: TrendClock | undefined
   grain: 'hour' | 'day' | 'week'
   metric: ItemMetric
   periods: number
@@ -129,6 +138,7 @@ export function ItemsPanel({
           outletId={outletId}
           from={from}
           to={to}
+          clock={clock}
           grain={grain}
           metric={metric}
           periods={periods}
@@ -410,6 +420,7 @@ function ItemTrend({
   outletId,
   from,
   to,
+  clock,
   grain,
   metric,
   periods,
@@ -420,6 +431,7 @@ function ItemTrend({
   outletId: string
   from: string
   to: string
+  clock?: TrendClock | undefined
   grain: 'hour' | 'day' | 'week'
   metric: ItemMetric
   periods: number
@@ -501,13 +513,20 @@ function ItemTrend({
     periods,
     grain: grain === 'hour' ? 'day' : grain,
     value: (b) => (metric === 'units' ? b.units : b.revenue),
+    cutover: clock?.cutover,
   })
   const hours = metric === 'units' ? series.hourUnits : series.hourRevenue
   const hourly = grain === 'hour'
   // The trading part of the day across every compared period.
-  const hourView = activeHours(
-    hourTrend(trend.periods, (period, hour) => hours[period * 24 + hour] ?? 0),
-    HOURS,
+  const view = trendView(
+    hourly
+      ? hourTrend(trend.periods, (period, hour) => hours[period * 24 + hour] ?? 0, clock?.cutover)
+      : trend.series,
+    hourly ? HOURS : trend.axis,
+    from,
+    to,
+    grain,
+    clock,
   )
   const totals = trend.periods.map((p) => (metric === 'units' ? p.total.units : p.total.revenue))
   return (
@@ -525,8 +544,8 @@ function ItemTrend({
             : 'Line totals less line discounts · counter only'
       }
       subject={picker}
-      series={hourly ? hourView.series : trend.series}
-      axis={hourly ? hourView.axis : trend.axis}
+      series={view.series}
+      axis={view.axis}
       rowHeader={hourly ? 'Hour' : grain === 'day' ? 'Day' : 'Week'}
       newestFirst={!hourly}
       exportName={`item-trend-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}

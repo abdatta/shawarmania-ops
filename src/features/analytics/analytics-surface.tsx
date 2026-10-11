@@ -17,6 +17,7 @@ import { ItemsPanel } from './items-panel'
 import { AnalyticsControls } from './analytics-controls'
 import { ITEM_GRAINS, ITEM_METRICS, SALES_GRAINS, SALES_METRICS } from './analytics-trend'
 import { SalesPanel } from './sales-panel'
+import { useAnalyticsClock } from './use-analytics-clock'
 
 export function AnalyticsSurface({ kind }: { kind: 'items' | 'trends' }) {
   const { outletId, selector } = useOutletScope()
@@ -45,7 +46,11 @@ function OutletAnalytics({
 }) {
   const { analytics, outlets } = useAdapters()
   const [params, setParams] = useSearchParams()
-  const [today, setToday] = useState<string | null>(null)
+  const [cutover, setCutover] = useState<string | null>(null)
+  const now = useAnalyticsClock(cutover)
+  const today = cutover ? resolveBusinessDate(new Date(now), cutover) : null
+  const ready = today !== null
+  const clock = cutover ? { now, cutover } : undefined
   const from = params.get('from') ?? (today ? shiftDate(today, -6) : '')
   const to = params.get('to') ?? today ?? ''
   const grain =
@@ -79,7 +84,7 @@ function OutletAnalytics({
       void outlets
         .getOutlet(outletId)
         .then((o) => {
-          if (alive && o) setToday(resolveBusinessDate(new Date(), o.business_day_cutover))
+          if (alive && o) setCutover(o.business_day_cutover)
           else if (alive) setError(true)
         })
         .catch(() => {
@@ -91,7 +96,7 @@ function OutletAnalytics({
   }, [outletId, outlets, retry])
   useEffect(() => {
     let alive = true
-    if (!outletId || !valid || !today) return
+    if (!outletId || !valid || !ready) return
     void analytics
       .read(outletId, from, to, {
         view: kind === 'items' ? 'items' : 'sales',
@@ -109,7 +114,7 @@ function OutletAnalytics({
     return () => {
       alive = false
     }
-  }, [analytics, outletId, from, to, valid, today, retry, readKey, kind, readPeriods])
+  }, [analytics, outletId, from, to, valid, ready, retry, readKey, kind, readPeriods])
   function change(values: Record<string, string>) {
     if ('from' in values || 'to' in values) {
       setError(false)
@@ -205,6 +210,7 @@ function OutletAnalytics({
           outletId={outletId!}
           from={from}
           to={to}
+          clock={clock}
           grain={grain}
           metric={itemMetric}
           periods={Math.floor(periods)}
@@ -221,6 +227,7 @@ function OutletAnalytics({
           data={data}
           from={from}
           to={to}
+          clock={clock}
           grain={grain}
           metric={metric}
           periods={Math.floor(periods)}

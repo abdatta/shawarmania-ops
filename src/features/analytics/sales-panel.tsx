@@ -10,7 +10,14 @@ import {
   type SalesMetric,
 } from '@/domain/sales-analytics'
 import { AnalyticsChart, type ChartSeries } from './analytics-chart'
-import { activeHours, HOURS, hourTrend, periodTrend } from './analytics-trend'
+import {
+  activeHours,
+  trendView,
+  HOURS,
+  hourTrend,
+  periodTrend,
+  type TrendClock,
+} from './analytics-trend'
 import { TrendCard } from './analytics-trend-card'
 
 const labels = { revenue: 'Revenue', orders: 'Orders', aov: 'AOV' }
@@ -19,6 +26,7 @@ export function SalesPanel({
   data,
   from,
   to,
+  clock,
   grain,
   metric,
   periods,
@@ -26,6 +34,7 @@ export function SalesPanel({
   data: AnalyticsSnapshot
   from: string
   to: string
+  clock?: TrendClock | undefined
   grain: 'hour' | 'day' | 'week'
   metric: SalesMetric
   periods: number
@@ -40,12 +49,17 @@ export function SalesPanel({
     periods,
     grain: grain === 'hour' ? 'day' : grain,
     value: (b) => salesValue(b.revenue, b.orders, metric),
+    cutover: clock?.cutover,
   })
   const hours = HOURS
-  const hourSeries = hourTrend(trend.periods, (period, hour) => {
-    const row = data.hours.find((h) => h.period === period && h.hour === hour)
-    return salesValue(row?.revenue ?? 0, row?.orders ?? 0, metric)
-  })
+  const hourSeries = hourTrend(
+    trend.periods,
+    (period, hour) => {
+      const row = data.hours.find((h) => h.period === period && h.hour === hour)
+      return salesValue(row?.revenue ?? 0, row?.orders ?? 0, metric)
+    },
+    clock?.cutover,
+  )
   const hourlyAverages: ChartSeries[] = hourSeries.map((series) => ({
     ...series,
     points: series.points.map((point) => ({
@@ -55,7 +69,14 @@ export function SalesPanel({
   }))
   // Both hour charts show the trading part of the day across every comparison.
   const hourlyPattern = activeHours(hourlyAverages, hours)
-  const hourTotals = activeHours(hourSeries, hours)
+  const view = trendView(
+    grain === 'hour' ? hourSeries : trend.series,
+    grain === 'hour' ? hours : trend.axis,
+    from,
+    to,
+    grain,
+    clock,
+  )
   const hourlyTitle =
     metric === 'aov' ? 'Average bill by hour' : `Hourly average ${labels[metric].toLowerCase()}`
   const totals = trend.periods.map((p) => salesValue(p.total.revenue, p.total.orders, metric))
@@ -77,8 +98,8 @@ export function SalesPanel({
               ? 'Counter + delivery'
               : 'Counter bills only'
         }
-        series={grain === 'hour' ? hourTotals.series : trend.series}
-        axis={grain === 'hour' ? hourTotals.axis : trend.axis}
+        series={view.series}
+        axis={view.axis}
         rowHeader={grain === 'hour' ? 'Hour' : grain === 'day' ? 'Day' : 'Week'}
         newestFirst={grain !== 'hour'}
         exportName="sales-trends"

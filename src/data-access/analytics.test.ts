@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   bucketDays,
   csvCell,
@@ -15,6 +15,90 @@ import { analyticsRevenueDays, validAnalyticsDate } from '@/domain/sales-analyti
 import { DEMO_OUTLET_ID, DEMO_SECOND_OUTLET_ID } from '@/data-access/mock/store'
 
 describe('analytics periods and bounded aggregates', () => {
+  it('the shared partial-day demo shows both nonzero and zero ongoing hours without changing bills', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-10T18:30:00+05:30'))
+    try {
+      const fixture = createDemoData({ matureHistory: true })
+      const adapter = createMockAdapters('super_admin', fixture).analytics
+      for (const outlet of [DEMO_OUTLET_ID, DEMO_SECOND_OUTLET_ID]) {
+        const before = await adapter.series(outlet, fixture.store.today, fixture.store.today, 2, {
+          kind: 'all',
+        })
+        expect(before.hourUnits[18]).toBeGreaterThan(0)
+        expect(before.hourUnits[19]).toBe(0)
+        expect(before.hourRevenue[18]).toBeGreaterThan(0)
+        const bills = fixture.store.bills.filter(
+          (b) =>
+            b.outlet_id === outlet &&
+            b.business_date === fixture.store.today &&
+            b.status === 'settled',
+        )
+        expect(bills.every((b) => Date.parse(b.ordered_at) <= Date.now())).toBe(true)
+        vi.setSystemTime(new Date('2026-10-10T19:00:00+05:30'))
+        const after = await adapter.series(outlet, fixture.store.today, fixture.store.today, 2, {
+          kind: 'all',
+        })
+        expect(after).toEqual(before)
+        vi.setSystemTime(new Date('2026-10-10T18:30:00+05:30'))
+      }
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+  it('today is a partial shared demo day and every aggregate reconciles at both outlets', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-10T18:00:00+05:30'))
+    try {
+      const fixture = createDemoData({ matureHistory: true })
+      const adapter = createMockAdapters('super_admin', fixture).analytics
+      const today = fixture.store.today
+      for (const outlet of [DEMO_OUTLET_ID, DEMO_SECOND_OUTLET_ID]) {
+        const bills = fixture.store.bills.filter(
+          (b) => b.outlet_id === outlet && b.business_date === today && b.status === 'settled',
+        )
+        expect(bills.length).toBeGreaterThan(0)
+        expect(bills.length).toBeLessThan(12)
+        expect(bills.every((b) => Date.parse(b.ordered_at) <= Date.now())).toBe(true)
+        const ids = new Set(bills.map((b) => b.id))
+        const lines = fixture.store.billItems.filter((l) => ids.has(l.bill_id) && l.kind === 'item')
+        const units = lines.reduce((sum, l) => sum + l.quantity, 0)
+        const revenue = lines.reduce((sum, l) => sum + l.line_total_paise - l.discount_paise, 0)
+        const sales = await adapter.read(outlet, today, today, { view: 'sales', periods: 2 })
+        const items = await adapter.read(outlet, today, today, { view: 'items', periods: 2 })
+        const series = await adapter.series(outlet, today, today, 2, { kind: 'all' })
+        const hourUnits = series.hourUnits.slice(0, 24)
+        expect(hourUnits.reduce((sum, n) => sum + n, 0)).toBe(units)
+        expect(hourUnits.slice(18).every((n) => n === 0)).toBe(true)
+        expect(series.units.at(-1)).toBe(units)
+        expect(series.revenue.at(-1)).toBe(revenue)
+        expect(series.hourRevenue.slice(0, 24).reduce((sum, n) => sum + n, 0)).toBe(revenue)
+        expect(items.items.reduce((sum, i) => sum + i.units, 0)).toBe(units)
+        expect(items.categories.reduce((sum, c) => sum + c.units, 0)).toBe(units)
+        expect(items.items.reduce((sum, i) => sum + i.revenue, 0)).toBe(revenue)
+        expect(items.categories.reduce((sum, c) => sum + c.revenue, 0)).toBe(revenue)
+        expect(sales.days.find((d) => d.date === today)?.revenue).toBe(
+          bills.reduce((sum, b) => sum + b.total_paise, 0),
+        )
+        expect(
+          sales.hours.filter((h) => h.period === 0).reduce((sum, h) => sum + h.orders, 0),
+        ).toBe(bills.length)
+        expect(
+          sales.hours.filter((h) => h.period === 0).reduce((sum, h) => sum + h.revenue, 0),
+        ).toBe(sales.days.find((d) => d.date === today)?.revenue)
+        for (const category of items.categories) {
+          const categorySeries = await adapter.series(outlet, today, today, 2, {
+            kind: 'category',
+            name: category.name,
+          })
+          expect(categorySeries.units.at(-1)).toBe(category.units)
+          expect(categorySeries.revenue.at(-1)).toBe(category.revenue)
+        }
+      }
+    } finally {
+      vi.useRealTimers()
+    }
+  })
   it('mature walkthrough history supports every preset and reconciles with shared bills', async () => {
     const started = performance.now()
     const fixture = createDemoData({ matureHistory: true })

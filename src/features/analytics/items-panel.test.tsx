@@ -10,8 +10,8 @@ const { series } = vi.hoisted(() => ({
     from: '2026-10-09',
     units: [20, 40],
     revenue: [8000, 10000],
-    hourUnits: [],
-    hourRevenue: [],
+    hourUnits: [] as number[],
+    hourRevenue: [] as number[],
   })),
 }))
 vi.mock('@/data-access', () => ({ useAdapters: () => ({ analytics: { series } }) }))
@@ -103,6 +103,51 @@ async function setup(metric: 'units' | 'revenue', snapshot = data) {
 }
 
 describe('Items quantities and shares', () => {
+  it("hangs today's hourly item line without changing totals or export numbers", async () => {
+    const hourUnits = Array<number>(48).fill(0)
+    const hourRevenue = Array<number>(48).fill(0)
+    hourUnits[12] = 10
+    hourUnits[14] = 30
+    hourUnits[40] = 20
+    hourRevenue[12] = 2500
+    hourRevenue[14] = 7500
+    hourRevenue[40] = 8000
+    series.mockResolvedValueOnce({
+      from: '2026-10-09',
+      units: [20, 40],
+      revenue: [8000, 10000],
+      hourUnits,
+      hourRevenue,
+    })
+    const { rerender, props } = await setup('units')
+    rerender(
+      <MemoryRouter>
+        <ItemsPanel
+          {...props}
+          grain="hour"
+          clock={{ now: Date.parse('2026-10-10T15:30:00+05:30'), cutover: '04:00:00' }}
+        />
+      </MemoryRouter>,
+    )
+    await act(async () => {})
+    const plot = screen.getByTestId('items-trend')
+    const groups = plot.querySelectorAll('[data-testid="chart-series"]')
+    expect(groups[0]!.querySelectorAll('circle')).toHaveLength(4)
+    expect(groups[1]!.querySelectorAll('circle')).toHaveLength(17)
+    expect(screen.getByTestId('items-trend-value')).toHaveTextContent('40')
+    fireEvent.keyDown(within(plot).getByRole('group'), { key: 'End' })
+    expect(within(plot).getByRole('status')).toHaveTextContent('03:000 · not started')
+    fireEvent.click(screen.getByRole('button', { name: /^Table$/ }))
+    expect(screen.getByRole('row', { name: /15:00/ })).toHaveTextContent('0 · so far')
+    fireEvent.click(
+      within(screen.getByTestId('items-trend-card')).getByRole('button', {
+        name: /^Export CSV$/,
+      }),
+    )
+    const rows = vi.mocked(download).mock.calls.at(-1)![1]
+    expect(rows.at(-1)).toEqual(['03:00', 0, 0])
+    expect(series).toHaveBeenCalledTimes(1)
+  })
   it.each([
     ['units', '25% of items', '40 items sold'],
     ['revenue', '90% of revenue', '₹100 dish revenue'],

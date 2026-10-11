@@ -14,6 +14,16 @@ Both pages offer compact 1d/7d/30d controls, defaulting to 7d, and custom dates.
 
 One database aggregate RPC per view/range/outlet/comparison count transfers no raw bills or lines. Items requests two period summaries and dish/category aggregates, without daily, delivery or hourly rows. Sales requests daily and delivery summaries, without dish/category rows; hourly aggregates are bounded to 24 × selected period count. Changing metric or grouping reuses the snapshot. Demo history remains bounded and internally consistent over more than three months.
 
+## Incomplete intervals and visible points (owner review, 2026-10-10)
+
+The line distinguishes completed intervals from those still developing, using the outlet's Kolkata clock and business-day cutover. Completed hours, days and selected week buckets stay plotted with filled dots, including genuine zeros. An ongoing interval with nonzero data stays connected and has a hollow dot. An ongoing interval with zero data, or a future interval, has no dot and no connection: the line ends at the previous plotted point. Missing values remain gaps rather than fabricated zeros.
+
+Filled and hollow dots remain visible without hover, at the same outer size; hovering or tapping inspects values rather than making points appear. Earlier comparison periods retain their completed points. For a one-day Hour view, midnight follows 23:00 within a trading day that ends after midnight; the visible range includes the ongoing interval and unfinished tail, so the open ending is visible. Day/Week views apply the same rule to the selected bucket containing the ongoing business day. Multi-day clock-hour patterns remain aggregates rather than pretending to be a single ongoing hour.
+
+The reviewed production snapshot illustrates the distinction: at 02:45 Kolkata on October 11, under a 04:00 cutoff, business October 10's 00:00 and 01:00 hours are completed zeros and stay connected; 02:00 is ongoing with zero and 03:00 is future, so neither has a current-series point. A separate, explicitly labeled style example shows a nonzero ongoing hour with a hollow dot. These local aggregate previews are review evidence, not demo fixtures or a production connection.
+
+Demo must visibly exercise both nonzero and zero ongoing intervals using one consistent shared scenario. Totals, hour/day series, categories and every dependent surface reconcile to the same captured bills; no chart-only sales are invented. Inspection and tables qualify an ongoing value as **so far** and identify future intervals as **not started**; CSV and totals preserve the underlying exact figures. This presentation adds no analytics reads.
+
 ## Gate
 
 The owner's 2026-10-10 follow-up includes the current outlet business date in the default seven-day range and every preset. In Dates, editing one endpoint moves the other to preserve the current inclusive span until the opposite endpoint is explicitly edited. Items replaces quantity labels such as Units with Items, and dish/category shares follow the selected measure: share of all items sold or share of all dish revenue in the selected outlet/range. Search, filters and chart subject do not change those denominators. Update SCREENS and TESTING for this follow-up.
@@ -28,11 +38,11 @@ Solid rounded hourly comparison columns replace hatch patterns, with numbered da
 
 ## Non-goals
 
-Outlet comparison, automated menu changes, recommendations, menu engagement tracking, GA/account creation, customer analytics, profit without recipe costs, inferred delivery order/item data, production publication and automatic archive. The initial unpublished website collector is removed; the website checkout returns to its original state. Tracking and experiment advice are deferred into the behavior backlog.
+Outlet comparison, automated menu changes, recommendations, menu engagement tracking, GA/account creation, customer analytics, profit without recipe costs, inferred delivery order/item data, automatic archive. The initial unpublished website collector is removed; the website checkout returns to its original state. Tracking and experiment advice are deferred into the behavior backlog.
 
 ## Durable documentation
 
-Update SCREENS, DATA_MODEL, SECURITY_AND_PRIVACY, OPERATIONS, TESTING and DEMO_MODE. No website deployment or production schema write is part of this implementation.
+Update SCREENS, DATA_MODEL, SECURITY_AND_PRIVACY, OPERATIONS, TESTING and DEMO_MODE. The owner has approved release of the completed analytics follow-up through the existing gated app deployment, with a fast-forward-only main merge. This follow-up adds no migration or website deployment.
 
 ## Owner review, 2026-10-09
 

@@ -1,5 +1,35 @@
 # Design
 
+## Incomplete intervals and visible points (owner review, 2026-10-10)
+
+This section supersedes the initial trailing-zero draft and its tests. The production-data preview was reviewed with three refinements: elapsed zero hours are complete, a nonzero ongoing point may be hollow, and dots must remain visible without hover. The owner has approved implementation and deployment. Prototype build/visual checks are separate from application verification, which is recorded in the follow-up evidence report.
+
+### Clock-based interval state
+
+Pass the selected outlet's cutover and a shared injectable current instant into the presentation layer, alongside the already-resolved business date. Keep stored business dates authoritative. Use the domain's Kolkata business-day helpers to map each selected interval to its included start/end instants; classify completed when its end is at or before now, ongoing when start <= now < end, and future when its start is after now. Do not infer state from a run of zeros. Recompute at hour/cutover boundaries and on foreground return, without adding an analytics RPC for presentation changes; preserve the existing data-refresh policy and freshness disclosures.
+
+For one-day Hour trends, map before-cutover clock hours to the next calendar date. Order the axis by the outlet's trading day rather than 00–23, consistently across current and compared days. Support non-midnight and fractional-hour cutovers: an existing clock-hour aggregate that straddles cutover covers both included pieces and remains unfinished until its last included piece closes; do not split its values or invent per-instant sales from an aggregate. Define and test its labels and chronological placement explicitly during implementation. Day buckets end at their business-day cutoff; Week buckets use only the selected dates, and a partial selected week ends at the cutoff following its final included business date. A bucket containing the ongoing business date is unfinished even though earlier days contributed sales. Historical comparison buckets use their own dates and remain completed.
+
+Multi-day Hour trends and lower clock-hour pattern columns combine repeated hours across dates. They remain aggregate patterns, with their existing totals and inspection; do not assign a single clock interval's hollow/open state to them. The incomplete selected-period disclosure still qualifies their current totals. AOV without orders remains null and an em dash regardless of interval state.
+
+### Rendering and exact values
+
+Carry explicit completed/ongoing/future presentation metadata separately from the numeric value. Completed non-null points are filled and connected, including zero. Ongoing nonzero points are connected and hollow. Ongoing zero/null and future points render no dot and no segment into or out of the point. The line ends at the previous plotted point, which may itself be a completed zero; do not search backward for the last nonzero sale. Completed null remains a gap. An all-zero series can still have completed zero points; an ongoing day with no sales has no invented point for today.
+
+Render every eligible dot without hover on hourly, daily and weekly lines, for all compared series, using the existing short-series dot's outer size (3.5 SVG units). A hollow dot has the same outer bounds: inset the centered outline by half its width, with a surface-colored center masking the line underneath. Use semantic tokens in both themes. Hover, touch and keyboard still expose exact details and keyboard focus, without changing point eligibility or size.
+
+Preserve recorded integers/nulls in totals, tables and CSV. Ongoing inspection/table values say **so far**, whether zero or nonzero; future cells/details say **not started** without describing zero as a completed result. State does not change the denominator, comparison arithmetic, or exported numeric values. A completion-state column in CSV is unnecessary for this follow-up.
+
+### Axes, demo and verification
+
+Retain the existing leading active-hour trim across compared series. For a current one-day view, retain the ongoing hour and unfinished business-day tail instead of trimming them away after the final sale. Keep completed zeros and earlier comparison points in that span; the table uses the same visible span. Historical windows and multi-day hour patterns retain their existing trim. This supersedes the later trading-hour trim description for current one-day windows. If a component's layout changes, reshape its shimmer in the same implementation.
+
+Use a deterministic injected clock in tests and review fixtures. The frozen production capture uses its captured instant rather than the computer's later time; its 23:30 hollow-dot demonstration is explicitly a style example, not a historical report. Production aggregates remain ignored and outside the browser's live adapter and demo store. No real bills, identities, credentials or dumps enter tracked files.
+
+Demo must include a visible nonzero ongoing point and an observable zero ongoing case, backed by shared demo bills and their genuine timestamps/business dates. First inspect the existing partial-day scenario; change it only as needed, then update every affected bill line, total, category, hourly/daily series, drawer/ledger/delivery relationship and dependent fixture expectation. Never patch just the chart series. Freeze the clock for deterministic demonstrations, keep mature history complete, and verify both outlets across cutoff and midnight boundaries. Demo stays isolated from real data.
+
+Rejected: hiding all trailing zeros (erases completed quiet hours), marking every point in today's business date unfinished (ignores elapsed intervals), larger hollow markers (changes visual weight), hover-only dots (loses the production affordance), extrapolated tails (invented sales), replacing stored zero with null (changes meaning), and importing production aggregates into demo (breaks the shared scenario). No database schema, RLS, money arithmetic, offline or feature-gate change is required; metadata stays presentation-only and the typed adapter boundary remains intact.
+
 ## Inclusive dates and measure shares (owner, 2026-10-10)
 
 Both pages default to `[today - 6, today]`, with 1d/7d/30d selecting `[today - (n - 1), today]`. Today continues to resolve through the outlet's Asia/Kolkata cutover. Explicit URL dates stay authoritative; next-period navigation may end on today, and invalid deep-link recovery uses the inclusive seven-day fallback. The existing incomplete-period disclosure stays.
@@ -79,6 +109,6 @@ Rejected: words beside the arrow (long), a bare `9%` with the unit stated once a
 
 After the first production release the owner found that choosing Revenue on Items changed only the chart: Dishes and Categories still showed and ranked units. They now follow the measure as everything on Sales does: with Revenue they show dish revenue in rupees and rank, bar, compare, chart per period and filter (Worst, Rising, Slow) on it; order share stays about orders. `sales_analytics` could not be edited in place once applied, so `20261013000000_items_follow_their_measure.sql` replaces it with the same signature, adding each dish's `previousRevenue` and every dish's and category's `periodRevenue` (at most four integers each).
 
-Hour charts show only the trading part of the day: from one hour before the first hour any compared period sold to one hour after the last, keeping quiet hours between, read from the data so a late night widens it; a day with no sales keeps all 24. The trend table trims the same way, which loses nothing because every trimmed hour is zero in every period. This supersedes the earlier rule that main Hour totals keep all 24 hours.
+Historical Hour charts and multi-day hour patterns show only the trading part of the day: from one hour before the first hour any compared period sold to one hour after the last, keeping quiet hours between; a day with no sales keeps all 24. Current one-day Hour trends retain the ongoing interval and unfinished tail as specified above. Their trend table uses the same span. This supersedes the earlier rule that main Hour totals keep all 24 hours.
 
 The presets choose the grouping on both pages: 1d groups by Hour, 7d and 30d by Day. Choosing dates by hand leaves the grouping as it is.

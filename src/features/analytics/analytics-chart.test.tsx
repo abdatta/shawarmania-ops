@@ -12,6 +12,142 @@ const inRouter = (ui: ReactElement) => render(<MemoryRouter>{ui}</MemoryRouter>)
 import type { AnalyticsSnapshot } from '@/data-access/analytics'
 
 describe('interactive sales figures', () => {
+  it.each(['units', 'revenue', 'orders', 'aov'] as const)(
+    'never draws an ongoing zero or null %s point and retains completed zero connections',
+    (metric) => {
+      render(
+        <AnalyticsChart
+          id="zero"
+          title="Zero interval"
+          metric={metric}
+          axis={['12', '13', '14', '15']}
+          series={[
+            {
+              label: 'Today',
+              points: [
+                { label: '12', value: 10, state: 'completed' },
+                { label: '13', value: 0, state: 'completed' },
+                { label: '14', value: metric === 'aov' ? null : 0, state: 'ongoing' },
+                { label: '15', value: 0, state: 'future' },
+              ],
+            },
+          ]}
+        />,
+      )
+      const plot = screen.getByTestId('zero')
+      expect(within(plot).getAllByTestId('chart-point')).toHaveLength(2)
+      const group = within(plot).getByTestId('chart-series')
+      expect(group.querySelectorAll('line')).toHaveLength(1)
+      expect(group.querySelectorAll('circle')[1]).toHaveAttribute('cy', '146')
+      fireEvent.keyDown(within(plot).getByRole('group'), { key: 'End' })
+      expect(within(plot).getAllByTestId('chart-point')).toHaveLength(2)
+      expect(within(plot).getByRole('status')).toHaveTextContent('not started')
+    },
+  )
+  it('renders clock-based markers without hovering and leaves ongoing zero intervals empty', () => {
+    render(
+      <AnalyticsChart
+        id="intervals"
+        title="Items"
+        metric="units"
+        axis={Array.from({ length: 9 }, (_, i) => `${i}`)}
+        series={[
+          {
+            label: 'Today',
+            points: Array.from({ length: 9 }, (_, i) => ({
+              label: `${i}`,
+              value: i === 6 ? 2 : 0,
+              state: (i < 6 ? 'completed' : i === 6 ? 'ongoing' : 'future') as
+                'completed' | 'ongoing' | 'future',
+            })),
+          },
+        ]}
+      />,
+    )
+    const plot = screen.getByTestId('intervals')
+    const dots = within(plot).getAllByTestId('chart-point')
+    expect(dots).toHaveLength(7)
+    expect(dots[0]).toHaveAttribute('r', '3.5')
+    expect(dots[0]).toHaveAttribute('fill', 'var(--primary)')
+    expect(dots[6]).toHaveAttribute('r', '3')
+    expect(dots[6]).toHaveAttribute('fill', 'var(--surface)')
+    expect(dots[6]).toHaveAttribute('stroke-width', '1')
+    expect(within(plot).queryByRole('status')).toBeNull()
+    fireEvent.keyDown(within(plot).getByRole('group'), { key: 'End' })
+    expect(within(plot).getAllByTestId('chart-point')).toHaveLength(7)
+    expect(dots[6]).toHaveAttribute('r', '3')
+    expect(within(plot).getByRole('status')).toHaveTextContent('not started')
+  })
+  it('leaves today zero open in a daily range but still plots completed and comparison zeros', () => {
+    inRouter(
+      <SalesPanel
+        data={{
+          days: [
+            { date: '2026-10-07', revenue: 10000, orders: 1, units: 1, discounts: 0 },
+            { date: '2026-10-08', revenue: 0, orders: 0, units: 0, discounts: 0 },
+            { date: '2026-10-09', revenue: 20000, orders: 2, units: 2, discounts: 0 },
+            { date: '2026-10-10', revenue: 0, orders: 0, units: 0, discounts: 0 },
+          ],
+          items: [],
+          categories: [],
+          delivery: [],
+          hours: [],
+        }}
+        from="2026-10-09"
+        to="2026-10-10"
+        clock={{ now: Date.parse('2026-10-10T15:30:00+05:30'), cutover: '04:00:00' }}
+        grain="day"
+        metric="revenue"
+        periods={2}
+      />,
+    )
+    const plot = screen.getByTestId('sales-trend')
+    const groups = plot.querySelectorAll('[data-testid="chart-series"]')
+    expect(groups[0]!.querySelectorAll('circle')).toHaveLength(1)
+    expect(groups[0]!.querySelectorAll('line')).toHaveLength(0)
+    expect(groups[1]!.querySelectorAll('circle')).toHaveLength(2)
+    expect(groups[1]!.querySelectorAll('line')).toHaveLength(1)
+    fireEvent.keyDown(within(plot).getByRole('group'), { key: 'End' })
+    expect(within(plot).getByRole('status')).toHaveTextContent('10 Oct₹0 · so far')
+  })
+  it('leaves only unfinished zero hours empty while retaining completed zeros and exact values', () => {
+    inRouter(
+      <SalesPanel
+        data={{
+          days: [{ date: '2026-10-10', revenue: 30000, orders: 3, units: 3, discounts: 0 }],
+          items: [],
+          categories: [],
+          delivery: [],
+          hours: [
+            { period: 0, hour: 12, revenue: 10000, orders: 1 },
+            { period: 0, hour: 14, revenue: 20000, orders: 2 },
+            { period: 1, hour: 16, revenue: 50000, orders: 5 },
+          ],
+        }}
+        from="2026-10-10"
+        to="2026-10-10"
+        clock={{ now: Date.parse('2026-10-10T15:30:00+05:30'), cutover: '04:00:00' }}
+        grain="hour"
+        metric="revenue"
+        periods={2}
+      />,
+    )
+    const plot = screen.getByTestId('sales-trend')
+    const groups = plot.querySelectorAll('[data-testid="chart-series"]')
+    // 11h through next-calendar 03h remain; completed current points stop at 14h.
+    expect(groups[0]!.querySelectorAll('circle')).toHaveLength(4)
+    expect(groups[0]!.querySelectorAll('line')).toHaveLength(3)
+    expect(groups[1]!.querySelectorAll('circle')).toHaveLength(17)
+    const dots = groups[0]!.querySelectorAll('circle')
+    expect(dots[2]!.querySelector('title')).toHaveTextContent('13:00, ₹0')
+    expect(dots[3]!.getAttribute('fill')).toBe('var(--primary)')
+    fireEvent.keyDown(within(plot).getByRole('group'), { key: 'End' })
+    expect(within(plot).getByRole('status')).toHaveTextContent('03:00₹0 · not started')
+    expect(screen.getByTestId('sales-trend-value')).toHaveTextContent('₹300')
+    fireEvent.click(screen.getByRole('button', { name: /^Table$/ }))
+    expect(screen.getByRole('row', { name: /15:00/ })).toHaveTextContent('₹0 · so far')
+    expect(screen.getByRole('row', { name: /03:00/ })).toHaveTextContent('₹0 · not started')
+  })
   it('a single-day trend has one date tick and remains inspectable', () => {
     render(
       <AnalyticsChart

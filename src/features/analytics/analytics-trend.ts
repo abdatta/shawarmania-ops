@@ -1,6 +1,7 @@
 import type { AnalyticsDay, AnalyticsSeries } from '@/domain/sales-analytics-types'
 import { bucketDays, periodDays, shiftDate, totalDays } from '@/domain/sales-analytics'
 import { rangeLabel, type ChartSeries } from './analytics-chart'
+import { businessDayEnd, instantOnBusinessDay, resolveBusinessDate } from '@/domain/datetime'
 
 export const SALES_GRAINS: [string, string][] = [
   ['hour', 'Hour'],
@@ -23,6 +24,54 @@ export const ITEM_METRICS: [string, string][] = [
   ['revenue', 'Revenue'],
 ]
 
+export interface TrendClock {
+  now: number
+  cutover: string
+}
+
+/** Clock-based presentation metadata; numeric values never change. */
+export function trendView(
+  series: ChartSeries[],
+  axis: string[],
+  from: string,
+  to: string,
+  grain: 'hour' | 'day' | 'week',
+  clock?: TrendClock,
+): { series: ChartSeries[]; axis: string[] } {
+  const classified: ChartSeries[] = series.map((s) => ({
+    ...s,
+    points: s.points.map((point) => {
+      if (!clock || !point.interval || (grain === 'hour' && from !== to)) return point
+      const start = Date.parse(point.interval.start),
+        end = Date.parse(point.interval.end)
+      const state = end <= clock.now ? 'completed' : start <= clock.now ? 'ongoing' : 'future'
+      return { ...point, state }
+    }),
+  }))
+  if (grain !== 'hour') return { series: classified, axis }
+  if (!clock || from !== to) return activeHours(classified, axis)
+  const [hours, minutes, seconds = '0'] = clock.cutover.split(':')
+  // Put a fractional cutoff's two-part clock-hour aggregate last: it includes
+  // the next calendar morning's final segment and completes at business-day end.
+  const firstHour =
+    Math.ceil((Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds)) / 3600) % 24
+  const order = Array.from({ length: 24 }, (_, i) => (firstHour + i) % 24)
+  const ordered = classified.map((s) => ({ ...s, points: order.map((hour) => s.points[hour]!) }))
+  const orderedAxis = order.map((hour) => axis[hour]!)
+  if (to !== resolveBusinessDate(new Date(clock.now), clock.cutover))
+    return activeHours(ordered, orderedAxis)
+  const firstActive = order.findIndex((_, i) => ordered.some((s) => (s.points[i]?.value ?? 0) > 0))
+  const firstUnfinished = ordered[0]?.points.findIndex((p) => p.state !== 'completed') ?? -1
+  const first =
+    firstActive < 0
+      ? 0
+      : Math.min(Math.max(0, firstActive - 1), firstUnfinished < 0 ? 23 : firstUnfinished)
+  return {
+    series: ordered.map((s) => ({ ...s, points: s.points.slice(first) })),
+    axis: orderedAxis.slice(first),
+  }
+}
+
 export interface TrendPeriod {
   first: string
   last: string
@@ -42,6 +91,7 @@ export function periodTrend({
   periods,
   grain,
   value,
+  cutover,
 }: {
   days: AnalyticsDay[]
   from: string
@@ -49,6 +99,7 @@ export function periodTrend({
   periods: number
   grain: 'day' | 'week'
   value: (bucket: AnalyticsDay) => number | null
+  cutover?: string | undefined
 }): { series: ChartSeries[]; axis: string[]; periods: TrendPeriod[] } {
   const span = periodDays(from, to)
   const current = days.filter((d) => d.date >= from && d.date <= to)
@@ -86,6 +137,14 @@ export function periodTrend({
       return {
         label: rangeLabel(shiftDate(first, -period * span), shiftDate(last, -period * span)),
         value: value(bucket),
+        ...(cutover
+          ? {
+              interval: {
+                start: instantOnBusinessDay(shiftDate(first, -period * span), cutover, cutover),
+                end: businessDayEnd(shiftDate(last, -period * span), cutover),
+              },
+            }
+          : {}),
       }
     }),
   }))
@@ -103,13 +162,29 @@ export const HOURS = Array.from({ length: 24 }, (_, hour) => `${String(hour).pad
 export function hourTrend(
   periods: TrendPeriod[],
   value: (period: number, hour: number) => number | null,
+  cutover?: string,
 ): ChartSeries[] {
   return periods.map((p, period) => ({
     label: p.label,
-    points: HOURS.map((label, hour) => ({
-      label: `${p.label} · ${label}`,
-      value: value(period, hour),
-    })),
+    points: HOURS.map((label, hour) => {
+      const split =
+        !!cutover && Number(cutover.slice(0, 2)) === hour && /[1-9]/.test(cutover.slice(3))
+      const start = cutover ? instantOnBusinessDay(p.first, split ? cutover : label, cutover) : ''
+      return {
+        label: `${p.label} · ${label}${split && p.first === p.last ? ' · cutoff hour (two parts)' : ''}`,
+        value: value(period, hour),
+        ...(cutover && p.first === p.last
+          ? {
+              interval: {
+                start,
+                end: split
+                  ? businessDayEnd(p.first, cutover)
+                  : new Date(Date.parse(start) + 3_600_000).toISOString(),
+              },
+            }
+          : {}),
+      }
+    }),
   }))
 }
 

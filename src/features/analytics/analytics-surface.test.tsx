@@ -69,3 +69,28 @@ it('uses the selected outlet cutover rather than a global four-hour assumption',
   await act(async () => {})
   expect(read).toHaveBeenLastCalledWith('outlet', '2026-10-03', '2026-10-09', expect.any(Object))
 })
+
+it('updates the presentation clock without rereading an explicitly selected snapshot', async () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2026-10-10T18:59:30+05:30'))
+  const view = render(
+    <MemoryRouter initialEntries={['/?from=2026-10-10&to=2026-10-10']}>
+      <AnalyticsSurface kind="items" />
+    </MemoryRouter>,
+  )
+  await act(async () => {})
+  expect(read).toHaveBeenCalledTimes(1)
+  expect(outlets.getOutlet).toHaveBeenCalledTimes(1)
+  await act(async () => {
+    vi.advanceTimersByTime(30_000)
+  })
+  expect(read).toHaveBeenCalledTimes(1)
+  vi.setSystemTime(new Date('2026-10-11T04:00:00+05:30'))
+  await act(async () => {
+    window.dispatchEvent(new Event('focus'))
+  })
+  expect(screen.queryByText('Incomplete period')).toBeNull()
+  expect(read).toHaveBeenCalledTimes(1)
+  expect(outlets.getOutlet).toHaveBeenCalledTimes(1)
+  view.unmount()
+})
