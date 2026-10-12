@@ -92,7 +92,7 @@ begin
   end if;
   return new;
 end;
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.counter_kitchen_marks()
  RETURNS jsonb
@@ -138,7 +138,7 @@ begin
   select count(*) into tablets from public.counter_devices where outlet_id=outlet and kind='kitchen' and removed_at is null and session_proven_at is not null;
   return jsonb_build_object('kitchens',kitchens,'orders',orders,'kitchenTablets',tablets);
 end;
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.create_billing_order(p_command_id uuid DEFAULT NULL::uuid, p_schema_version integer DEFAULT NULL::integer, p_payload_hash text DEFAULT NULL::text, p_created_at timestamp with time zone DEFAULT NULL::timestamp with time zone, p_shift_id uuid DEFAULT NULL::uuid, p_payload jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
@@ -279,7 +279,7 @@ begin
     'orderId',v_order,'orderNumber',v_number,'delayed',(v_context ->> 'delayed')::boolean);
   return public.billing_finish_command(p_command_id, v_result, v_date);
 end;
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.kitchen_acknowledge(p_id uuid, p_order_id uuid, p_kind text, p_order_version timestamp with time zone)
  RETURNS jsonb
@@ -335,7 +335,7 @@ begin
                                   v_device.kitchen_category_ids)));
   return jsonb_build_object('status', 'accepted');
 end;
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.kitchen_board()
  RETURNS jsonb
@@ -378,7 +378,7 @@ begin
     'filterChangedAt',d.kitchen_filter_changed_at,'filterMode',d.kitchen_filter_mode,
     'categoryIds',to_jsonb(d.kitchen_category_ids),'sort',d.kitchen_sort,'orders',cards);
 end;
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.kitchen_same_lines(p_left jsonb, p_right jsonb)
  RETURNS boolean
@@ -394,7 +394,7 @@ AS $function$
       coalesce(l->>'note','') note,sum((l->>'quantity')::integer) quantity
       from jsonb_array_elements(coalesce(p_right,'[]'::jsonb)) l group by 1,2) b using(dish,note)
     where a.quantity is distinct from b.quantity)
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.kitchen_visible_lines(p_order_id uuid, p_mode text, p_category_ids uuid[])
  RETURNS jsonb
@@ -407,7 +407,7 @@ AS $function$
   from public.order_items i left join public.menu_items m on m.id=i.menu_item_id
   where i.order_id=p_order_id and i.kind='item'
     and public.kitchen_line_visible(m.category_id,p_mode,p_category_ids)
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.pay_billing_now(p_command_id uuid DEFAULT NULL::uuid, p_schema_version integer DEFAULT NULL::integer, p_payload_hash text DEFAULT NULL::text, p_created_at timestamp with time zone DEFAULT NULL::timestamp with time zone, p_shift_id uuid DEFAULT NULL::uuid, p_payload jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
@@ -517,7 +517,7 @@ begin
     'billNumber',v_number,'delayed',(v_context->>'delayed')::boolean);
   return public.billing_finish_command(p_command_id,v_result,v_date,v_payment_date);
 end;
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.prepare_billing_order(p_command_id uuid DEFAULT NULL::uuid, p_schema_version integer DEFAULT NULL::integer, p_payload_hash text DEFAULT NULL::text, p_created_at timestamp with time zone DEFAULT NULL::timestamp with time zone, p_shift_id uuid DEFAULT NULL::uuid, p_payload jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
@@ -599,7 +599,7 @@ begin
     'orderStatus',v_new_status,'prepared',v_prepared,
     'delayed',(v_context->>'delayed')::boolean),v_order.business_date);
 end;
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.revise_billing_order(p_command_id uuid DEFAULT NULL::uuid, p_schema_version integer DEFAULT NULL::integer, p_payload_hash text DEFAULT NULL::text, p_created_at timestamp with time zone DEFAULT NULL::timestamp with time zone, p_shift_id uuid DEFAULT NULL::uuid, p_payload jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
@@ -751,4 +751,4 @@ begin
     'orderNumber',v_order.order_number,'delayed',(v_context->>'delayed')::boolean);
   return public.billing_finish_command(p_command_id,v_result,v_order.business_date);
 end;
-$function$
+$function$;

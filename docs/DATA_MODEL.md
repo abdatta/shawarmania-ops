@@ -1346,3 +1346,11 @@ Every check below is enforced by the schema and covered by the suites in `supaba
 `sales_analytics_series(uuid, date, date, integer, text, text)` is the Items chart: for every dish, one dish (its menu id, or `snapshot:<name>` for a line sold without one, exactly as `sales_analytics` keys it) or one captured category, it returns `{from, units[], revenue[]}`, one value per day of every window, oldest first, at most 368 of each, and `hourUnits[]`, `hourRevenue[]`: 24 Kolkata order-hour totals per window, current window first, at most 96 of each. It is read only when that subject is charted.
 
 No raw tickets, line records, identities or engagement data are returned by either. Settled bill totals and explicit business dates are authoritative; dish lines exclude packaging and bill-level discounts. No tracking table or ingestion RPC is introduced.
+## Retained rollback compatibility
+
+The retired dish workflow leaves `orders.label`, `order_items.note`,
+`order_line_preparations` and append-only `kitchen_readies` in the database for
+history and delivery of previously queued commands. The restored counter and
+kitchen do not consume these fields or use Ready to determine preparation.
+The additive dish-command receipt type and RPC remain accepted during the
+transition; bill identities, money and recorded whole-order preparation survive.
