@@ -150,12 +150,10 @@ describe('waiting time', () => {
   const orderedAt = '2026-10-08T08:00:00.000Z'
   const at = (minutes: number) => new Date(Date.parse(orderedAt) + minutes * 60_000)
 
-  it('turns warning at ten minutes, danger at twenty and critical at forty', () => {
+  it('turns warning at ten minutes and danger at twenty', () => {
     expect(kitchenWaitTone(orderedAt, at(9))).toBe('normal')
     expect(kitchenWaitTone(orderedAt, at(10))).toBe('warning')
     expect(kitchenWaitTone(orderedAt, at(20))).toBe('danger')
-    expect(kitchenWaitTone(orderedAt, at(39))).toBe('danger')
-    expect(kitchenWaitTone(orderedAt, at(40))).toBe('critical')
   })
 
   it('reads in minutes, then hours, then days for an order left overnight', () => {

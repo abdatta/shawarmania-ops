@@ -414,8 +414,3 @@ When a new surface is added:
 ## Sales and menu analytics
 
 Analytics shares the mature demo history: 185 days of counter bills up to yesterday plus the original recent fixture, about 8,800 bills and 19,000 lines across both outlets, built in roughly 0.1 s. The history is paid by UPI so no drawer, count or cash scenario moves, and its delivery imports stop four days back so the rehearsed delivery days (revised, disputed, missing) are unchanged. Every demo bill line captures its category, as the counter does. The history preserves billing snapshots, varied dish growth and decline, active zero sellers, closed Mondays and hour variation. Items and Sales use the same aggregate contract and series as live, with the same bounds; demo Analytics sends no backend requests and invents no browsing or tracking data.
-
-
-### Shared dish workflow
-
-The counter and kitchen use the same dish controls and layout in demo and live mode. Demo sidecar records simulate labels, notes, handover and append-only Ready/Undo while schema-typed fixture rows remain valid. Counter and kitchen tabs share the existing channel: counter snapshots own labels/notes/handover; kitchens own ACK/Ready/Undo. Ready identities merge and Undo remains monotonic. Demo cue comparisons remain available only in demo; live uses the approved pulse. No demo action writes real data.

@@ -237,13 +237,7 @@ async function payCard(page: Page, cards: Locator) {
  * bills, so a rerun's rail holds only its own work.
  */
 async function serveCard(card: Locator) {
-  const ticks = card.getByRole('button', { name: /^Tick / })
-  await expect(ticks.first()).toBeVisible({ timeout: OFFLINE_READ_MS })
-  const dishes = await ticks.evaluateAll((buttons) =>
-    buttons.map((button) => button.getAttribute('aria-label')!),
-  )
-  for (const dish of dishes)
-    await card.getByRole('button', { name: dish, exact: true }).first().click()
+  await card.getByRole('button', { name: 'Prepared', exact: true, pressed: false }).click()
   await expect(card).toHaveCount(0, { timeout: OFFLINE_READ_MS })
 }
 

@@ -18,17 +18,14 @@ import { OpenOrdersSurface } from './open-orders-surface'
  * away; here that is true by construction, because nothing above it moves.
  */
 export function CounterActivity({
-  twoColumns = false,
   refreshKey,
   savedOrderKey = 0,
   editingOrderId = null,
   onEditOrder,
   onSetOrderCustomer,
   onActivityChanged,
-  onOrdersRead,
   checkoutSettings,
 }: {
-  twoColumns?: boolean
   refreshKey: number
   /** Bumped only when an order is saved on this tablet. */
   savedOrderKey?: number
@@ -36,13 +33,11 @@ export function CounterActivity({
   onEditOrder?: (order: BillingOrder) => void
   onSetOrderCustomer?: (order: BillingOrder) => void
   onActivityChanged?: () => void
-  onOrdersRead?: (orders: BillingOrder[]) => void
   checkoutSettings?: Pick<OutletMenu, 'service' | 'loyalty'>
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <OpenOrdersSurface
-        twoColumns={twoColumns}
         embedded
         refreshKey={refreshKey}
         savedOrderKey={savedOrderKey}
@@ -50,7 +45,6 @@ export function CounterActivity({
         {...(onEditOrder ? { onEditOrder } : {})}
         {...(onSetOrderCustomer ? { onSetOrderCustomer } : {})}
         {...(onActivityChanged ? { onActivityChanged } : {})}
-        {...(onOrdersRead ? { onOrdersRead } : {})}
         {...(checkoutSettings ? { checkoutSettings } : {})}
       />
     </div>

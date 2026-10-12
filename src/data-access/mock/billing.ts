@@ -1,4 +1,3 @@
-import { readyQuantity, workflowLines } from './dish-workflow'
 import {
   AWAITING_ORDER_NUMBER,
   isAwaitingOrderNumber,
@@ -423,14 +422,6 @@ export function createMockBillingAdapter(
   function orderView(row: Tables<'orders'>): BillingOrder {
     return {
       id: row.id,
-      ...(store.dishWorkflow
-        ? {
-            label:
-              row.status === 'cancelled' || (row.status === 'paid' && preparedAtOf(row))
-                ? null
-                : (store.dishWorkflow.labels[row.id] ?? null),
-          }
-        : {}),
       outletId: row.outlet_id,
       deviceId: row.device_id,
       orderNumber: row.order_number,
@@ -452,10 +443,7 @@ export function createMockBillingAdapter(
       customerTier: row.customer_tier,
       serviceType: row.service_type,
       tableNumber: row.table_number,
-      lines: workflowLines(
-        store,
-        store.orderItems.filter((line) => line.order_id === row.id).map(lineView),
-      ),
+      lines: store.orderItems.filter((line) => line.order_id === row.id).map(lineView),
       discounts: (store.orderDiscounts.get(row.id) ?? []).map((discount) => ({ ...discount })),
       roundingPaise: row.rounding_paise,
       totalPaise: row.total_paise,
@@ -648,10 +636,7 @@ export function createMockBillingAdapter(
    * names the same lines.
    */
   function identifiedLines(lines: readonly BillLineDraft[]): BillLineDraft[] {
-    return lines.map((line) => ({
-      ...line,
-      orderLineId: line.orderLineId ?? line.workflowLineId ?? crypto.randomUUID(),
-    }))
+    return lines.map((line) => ({ ...line, orderLineId: line.orderLineId ?? crypto.randomUUID() }))
   }
 
   function replaceOrderLines(
@@ -659,27 +644,10 @@ export function createMockBillingAdapter(
     lines: BillLineDraft[],
     discounts: readonly BillDiscountDraft[] = [],
   ) {
-    const oldLines = store.orderItems.filter((line) => line.order_id === orderId)
-    if (store.dishWorkflow) {
-      for (const line of lines) {
-        const id = line.orderLineId ?? line.workflowLineId
-        if (!id) continue
-        const old = oldLines.find((item) => item.id === id)
-        const locked =
-          (store.dishWorkflow.preparations[id] ?? 0) > 0 ||
-          (old && readyQuantity(store, id, old.quantity) > 0)
-        if (!locked) store.dishWorkflow.notes[id] = line.note?.trim() || null
-      }
-      for (const old of oldLines)
-        if (!lines.some((line) => (line.orderLineId ?? line.workflowLineId) === old.id)) {
-          delete store.dishWorkflow.notes[old.id]
-          delete store.dishWorkflow.preparations[old.id]
-        }
-    }
     store.orderItems = store.orderItems.filter((line) => line.order_id !== orderId)
     lines.forEach((line) => {
       store.orderItems.push({
-        note: line.note?.trim() || null,
+        note: null,
         // Positional identities collided: drop the first line, add another, and
         // the new one took the identity the survivor already held.
         id: line.orderLineId ?? crypto.randomUUID(),
@@ -944,7 +912,7 @@ export function createMockBillingAdapter(
     store.orderNumbers.set(counterKey, orderNumber)
     const orderedAt = new Date(acceptedPaymentTimes.get(input.clientId) ?? Date.now()).toISOString()
     const row: Tables<'orders'> = {
-      label: input.label?.trim() || null,
+      label: null,
       id: input.clientId,
       outlet_id: input.outletId,
       device_id: shift.device_id,
@@ -988,7 +956,6 @@ export function createMockBillingAdapter(
       table_shared: false,
     }
     store.orders.push(row)
-    if (store.dishWorkflow) store.dishWorkflow.labels[row.id] = input.label?.trim() || null
     replaceOrderLines(row.id, input.lines, input.discounts ?? [])
     markSharedTable(row)
   }
@@ -998,8 +965,6 @@ export function createMockBillingAdapter(
     if (!row || row.status !== 'open') return
     const actor = store.shifts.find((candidate) => candidate.id === record.shiftId)
     const totals = totalsOf(record.input.lines, record.input.discounts ?? [])
-    if (store.dishWorkflow && 'label' in record.input)
-      store.dishWorkflow.labels[row.id] = record.input.label?.trim() || null
     row.changed_at = new Date().toISOString()
     row.changed_by = actor?.person_id ?? row.created_by
     row.changed_shift_id = actor?.id ?? row.created_shift_id
@@ -1026,18 +991,6 @@ export function createMockBillingAdapter(
     row.service_type = service.serviceType
     row.table_number = service.tableNumber
     replaceOrderLines(row.id, record.input.lines, record.input.discounts ?? [])
-    if (
-      store.dishWorkflow &&
-      record.input.lines.some(
-        (line) =>
-          line.kind !== 'packaging' &&
-          (store.dishWorkflow!.preparations[line.orderLineId ?? line.workflowLineId ?? ''] ?? 0) <
-            line.quantity,
-      )
-    ) {
-      row.prepared_at = null
-      row.prepared_source = null
-    }
     markSharedTable(row)
   }
 
@@ -1046,7 +999,6 @@ export function createMockBillingAdapter(
     if (!row || row.status !== 'open') return
     const actor = store.shifts.find((candidate) => candidate.id === record.shiftId)
     row.status = 'cancelled'
-    if (store.dishWorkflow) store.dishWorkflow.labels[row.id] = null
     row.cancel_reason = record.reason
     row.cancelled_at = new Date().toISOString()
     row.cancelled_by = actor?.person_id ?? row.created_by
@@ -1061,27 +1013,11 @@ export function createMockBillingAdapter(
    * delivery would push a deadline the tablet had already drawn minutes into
    * the future the moment the queue drained.
    */
-  function applySetOrderPreparation(
-    orderId: string,
-    prepared: boolean,
-    atMs: number,
-    preserveDishFacts = false,
-  ) {
+  function applySetOrderPreparation(orderId: string, prepared: boolean, atMs: number) {
     const row = store.orders.find((candidate) => candidate.id === orderId)
     if (!row || (row.status !== 'open' && !(row.status === 'paid' && prepared))) return
     row.prepared_at = prepared ? new Date(atMs).toISOString() : null
     row.prepared_source = prepared ? 'counter' : null
-    if (store.dishWorkflow) {
-      for (const line of store.orderItems.filter(
-        (item) => item.order_id === row.id && item.kind === 'item',
-      )) {
-        if (!preserveDishFacts) {
-          if (prepared) store.dishWorkflow.preparations[line.id] = line.quantity
-          else delete store.dishWorkflow.preparations[line.id]
-        }
-      }
-      if (prepared && row.status === 'paid') store.dishWorkflow.labels[row.id] = null
-    }
     // Settling the upfront payer: money is already held against this order,
     // and preparation was the last thing its bill waited for.
     if (prepared && row.status === 'paid') {
@@ -1190,7 +1126,6 @@ export function createMockBillingAdapter(
     const shift = store.shifts.find((candidate) => candidate.id === payment.shiftId)
     if (!shift) throw new Error(`Queued payment ${payment.billId} has no shift to attribute to.`)
     row.status = 'paid'
-    if (store.dishWorkflow && row.prepared_at) store.dishWorkflow.labels[row.id] = null
     row.paid_at = payment.paidAt
     row.paid_by = shift.person_id
     row.paid_shift_id = shift.id
@@ -1248,7 +1183,6 @@ export function createMockBillingAdapter(
     if (!row || row.status !== 'paid') return
     const actor = store.shifts.find((candidate) => candidate.id === shiftId)
     row.status = 'cancelled'
-    if (store.dishWorkflow) store.dishWorkflow.labels[row.id] = null
     row.bill_id = null
     row.paid_at = null
     row.paid_by = null
@@ -1302,7 +1236,6 @@ export function createMockBillingAdapter(
             creatorId: creatorShift?.person_id ?? '',
             creatorName: actorName(creatorShift?.person_id ?? null) ?? 'Counter operator',
             deviceLabel: null,
-            label: input.label?.trim() || null,
             customerName: input.customerName?.trim() || null,
             customerPhone: input.customerPhone?.trim() || null,
             customerTier: input.customerTier ?? null,
@@ -1325,7 +1258,6 @@ export function createMockBillingAdapter(
           if (!current || !record) break
           overlaid.set(record.orderId, {
             ...current,
-            label: record.input.label ?? current.label ?? null,
             customerName: record.input.customerName?.trim() || null,
             customerPhone: record.input.customerPhone?.trim() || null,
             customerTier: record.input.customerTier ?? null,
@@ -1420,9 +1352,7 @@ export function createMockBillingAdapter(
     // Newest first, which is what the live adapter's `.order('ordered_at',
     // { ascending: false })` returns. They disagreed until #55, and a demo that
     // hands back a different order from the server teaches the wrong rail.
-    return [...overlaid.values()]
-      .map((order) => ({ ...order, lines: workflowLines(store, order.lines) }))
-      .sort((a, b) => b.orderedAt.localeCompare(a.orderedAt))
+    return [...overlaid.values()].sort((a, b) => b.orderedAt.localeCompare(a.orderedAt))
   }
 
   /**
@@ -1591,7 +1521,7 @@ export function createMockBillingAdapter(
     }
   }
 
-  const adapter: BillingAdapter = {
+  return {
     advanceDemoPaymentClock(milliseconds) {
       paymentClockOffsetMs += Math.max(0, milliseconds)
       emit()
@@ -1842,7 +1772,6 @@ export function createMockBillingAdapter(
         creatorId: shift.person_id,
         creatorName: actorName(shift.person_id) ?? 'Counter operator',
         deviceLabel: null,
-        label: input.label?.trim() || null,
         customerName: input.customerName?.trim() || null,
         customerPhone: input.customerPhone?.trim() || null,
         customerTier: input.customerTier ?? null,
@@ -1908,7 +1837,6 @@ export function createMockBillingAdapter(
       })
       return {
         ...projected,
-        label: input.label?.trim() || null,
         customerName: input.customerName?.trim() || null,
         customerPhone: input.customerPhone?.trim() || null,
         customerTier: input.customerTier ?? null,
@@ -1924,47 +1852,6 @@ export function createMockBillingAdapter(
       // Whole-outlet scope, like the live adapters have always served: another
       // tablet's pipeline work is this counter's work too.
       return projectedOrders(outletId).filter(inPipeline)
-    },
-
-    async markOrderLinesPrepared(id, orderId, changes) {
-      const shift = requireOpenShift()
-      const workflow = store.dishWorkflow
-      if (!workflow) throw new Error('Dish review is not enabled.')
-      const projected = projectedOrders(shift.outlet_id).find((order) => order.id === orderId)
-      if (!projected || projected.deviceId !== shift.device_id)
-        throw new BillingActionError(
-          'not_this_tablet',
-          'Only the owning tablet can tick this dish.',
-        )
-      if (projected.status === 'cancelled' || (projected.status === 'paid' && projected.preparedAt))
-        throw new BillingActionError('order_cancelled', 'That ticket is finished.')
-      if (workflow.commands.includes(id)) return projected
-      // This review-only command uses the demo queue and the same acceptance projection.
-      for (const change of changes) {
-        const line = projected.lines.find(
-          (line) => line.orderLineId === change.id && line.kind !== 'packaging',
-        )
-        if (!line) continue
-        if (change.prepared) workflow.preparations[change.id] = line.quantity
-        else delete workflow.preparations[change.id]
-      }
-      workflow.commands.push(id)
-      const prepared = projected.lines
-        .filter((line) => line.kind !== 'packaging')
-        .every((line) => (workflow.preparations[line.orderLineId ?? ''] ?? 0) >= line.quantity)
-      const preparedAtMs = Date.now()
-      pendingPreparations.set(id, { orderId, prepared })
-      accept({
-        commandId: id,
-        type: 'set_order_preparation',
-        acceptedAtMs: preparedAtMs,
-        apply: () => applySetOrderPreparation(orderId, prepared, preparedAtMs, true),
-      })
-      return {
-        ...projected,
-        preparedAt: prepared ? new Date(preparedAtMs).toISOString() : null,
-        lines: workflowLines(store, projected.lines),
-      }
     },
 
     async markOrderPrepared(orderId, prepared) {
@@ -2421,7 +2308,6 @@ export function createMockBillingAdapter(
       if (row.status !== 'open')
         throw new BillingActionError('order_closed', `Order ${row.order_number} is no longer open.`)
       row.status = 'cancelled'
-      if (store.dishWorkflow) store.dishWorkflow.labels[row.id] = null
       row.cancel_reason = requireReason(reason)
       row.cancelled_at = new Date().toISOString()
       row.cancelled_by = context.userId
@@ -2523,5 +2409,4 @@ export function createMockBillingAdapter(
         }))
     },
   }
-  return adapter
 }

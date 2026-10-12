@@ -208,11 +208,7 @@ export function flyCapturedCardToDestination(
  * the rail; replaying FLIP for those siblings was the second, disjoint motion
  * seen after an Order action. Mount `rootRef` on the common pipeline ancestor.
  */
-export function useFlip(
-  rootRef: RefObject<HTMLElement | null>,
-  deps: readonly unknown[],
-  fadeDepartures = false,
-): void {
+export function useFlip(rootRef: RefObject<HTMLElement | null>, deps: readonly unknown[]): void {
   const firstSnapshots = useRef<Map<string, FlipSnapshot> | null>(null)
   const running = useRef(new Map<string, RunningMotion>())
 
@@ -258,37 +254,6 @@ export function useFlip(
       const destination = current.get(id)
       if (!destination) {
         if (from.container) activeContainers.add(from.container)
-        if (fadeDepartures && from.container && typeof from.clone.animate === 'function') {
-          stop(id)
-          const parent = from.container
-          const bounds = parent.getBoundingClientRect()
-          const ghost = from.clone
-          ghost.setAttribute('aria-hidden', 'true')
-          ghost.setAttribute('data-departing-ticket', '')
-          ghost.inert = true
-          Object.assign(ghost.style, {
-            position: 'absolute',
-            left: `${from.rect.left - bounds.left}px`,
-            top: `${from.rect.top - bounds.top + parent.scrollTop}px`,
-            width: `${from.rect.width}px`,
-            height: `${from.rect.height}px`,
-            pointerEvents: 'none',
-            zIndex: '20',
-          })
-          parent.appendChild(ghost)
-          const animation = ghost.animate([{ opacity: 1 }, { opacity: 0 }], {
-            duration: FLIP_DURATION_MS,
-            easing: 'ease-out',
-          })
-          const motion = { animation, cleanup: () => ghost.remove() }
-          running.current.set(id, motion)
-          void animation.finished
-            .finally(() => {
-              motion.cleanup()
-              if (running.current.get(id) === motion) running.current.delete(id)
-            })
-            .catch(() => undefined)
-        }
         continue
       }
       const destinationContainer = destination.closest<HTMLElement>('ul')

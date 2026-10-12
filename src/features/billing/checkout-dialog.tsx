@@ -9,10 +9,7 @@ import { PaymentDialog } from './payment-dialog'
 import { PointsDialog } from './points-dialog'
 
 type CheckoutDialogProps = ComponentProps<typeof PaymentDialog> &
-  Pick<
-    ComponentProps<typeof CustomerDialog>,
-    'lookup' | 'suggest' | 'grantGold' | 'goldMonths' | 'suggestedName'
-  > & {
+  Pick<ComponentProps<typeof CustomerDialog>, 'lookup' | 'suggest' | 'grantGold' | 'goldMonths'> & {
     customer: CustomerSelection | null
     collectCustomerDetails?: boolean
     onChooseCustomer: (customer: CustomerSelection) => void
@@ -37,7 +34,6 @@ function OpenCheckoutDialog({
   suggest,
   grantGold,
   goldMonths,
-  suggestedName,
   points,
   ...payment
 }: CheckoutDialogProps) {
@@ -50,7 +46,6 @@ function OpenCheckoutDialog({
       <CustomerDialog
         open
         purpose="payment"
-        {...(suggestedName ? { suggestedName } : {})}
         selection={customer}
         lookup={lookup}
         suggest={suggest}

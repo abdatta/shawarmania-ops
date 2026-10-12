@@ -1,19 +1,18 @@
-import { useState } from 'react'
-import { OrderAgeRing } from '@/components/ui/order-age-ring'
-import { ArrowRight, Check, ChevronDown, ChevronUp, Pencil, X, type LucideIcon } from 'lucide-react'
+import { ArrowRight, Check, Pencil, X, type LucideIcon } from 'lucide-react'
 
 import { cn } from '@/lib/cn'
 import type { KitchenOrder } from '@/data-access/adapters'
 import {
   diffKitchenLines,
   formatKitchenWait,
+  KITCHEN_WAIT_DANGER_MINUTES,
+  kitchenWaitTone,
   serviceTypeLabel,
   tableLabel,
   type KitchenCardState,
 } from '@/domain'
 
 import { RINGS_PER_ALERT, type RingState } from './ringer'
-import { type ReadyPhase } from './use-kitchen-ready'
 
 /**
  * One order, as a cook reads it from across a kitchen (#70, design D10).
@@ -78,6 +77,65 @@ function serviceTag(order: KitchenOrder): string | null {
   return null
 }
 
+/** The wait, in a ring that fills towards the danger mark. */
+function WaitRing({
+  order,
+  now,
+  state,
+}: {
+  order: KitchenOrder
+  now: Date
+  state: KitchenCardState
+}) {
+  const tone = kitchenWaitTone(order.orderedAt, now)
+  const minutes = Math.max(0, (now.getTime() - Date.parse(order.orderedAt)) / 60_000)
+  const filled = Math.max(0.02, Math.min(1, minutes / KITCHEN_WAIT_DANGER_MINUTES))
+  const radius = 21
+  const around = 2 * Math.PI * radius
+  return (
+    <div className="relative size-14 shrink-0">
+      <svg aria-hidden viewBox="0 0 56 56" className="size-14 -rotate-90">
+        <circle
+          cx="28"
+          cy="28"
+          r={radius}
+          fill="none"
+          strokeWidth="5"
+          className="stroke-surface-raised"
+        />
+        <circle
+          cx="28"
+          cy="28"
+          r={radius}
+          fill="none"
+          strokeWidth="5"
+          strokeLinecap="round"
+          strokeDasharray={around}
+          strokeDashoffset={around * (1 - filled)}
+          className={cn(
+            tone === 'danger'
+              ? 'stroke-danger'
+              : tone === 'warning'
+                ? 'stroke-warning'
+                : state === 'quiet'
+                  ? 'stroke-content-muted'
+                  : LOOK[state].ring,
+          )}
+        />
+      </svg>
+      <span
+        data-testid="kitchen-wait"
+        className={cn(
+          'absolute inset-0 grid place-items-center text-sm font-black tabular-nums',
+          tone === 'danger' && 'text-danger',
+        )}
+      >
+        {formatKitchenWait(order.orderedAt, now).replace(' ', '')}
+      </span>
+    </div>
+  )
+}
+
 export function KitchenCard({
   order,
   state,
@@ -85,8 +143,6 @@ export function KitchenCard({
   rings,
   now,
   disabled,
-  onReady,
-  readyPhase,
   onAcknowledge,
 }: {
   order: KitchenOrder
@@ -99,18 +155,9 @@ export function KitchenCard({
   rings: RingState
   now: Date
   disabled: boolean
-  onReady?: () => void
-  readyPhase?: ReadyPhase
   onAcknowledge: () => void
 }) {
-  const done = Boolean(order.readyId)
-  const saving = readyPhase === 'saving'
-  const departing = readyPhase === 'leaving' || readyPhase === 'gap'
-  const [expanded, setExpanded] = useState(false)
-  const collapsed = done && !expanded
-  const dimmed = done || Boolean(readyPhase)
-  const checked = done || saving
-  const alerting = !done && state !== 'quiet'
+  const alerting = state !== 'quiet'
   const look = alerting ? LOOK[state] : null
   const tag = serviceTag(order)
   const ringing = rings.left > 0 || rings.sounding
@@ -123,268 +170,151 @@ export function KitchenCard({
         : diffKitchenLines(order.lines, order.lines)
 
   return (
-    <div
-      className={cn(
-        'relative drop-shadow-md',
-        !readyPhase && alerting && shake > 0 && 'kitchen-shake',
-        readyPhase === 'leaving' && 'kitchen-ready-exit',
-        readyPhase === 'gap' && 'invisible pointer-events-none',
-      )}
-      aria-hidden={readyPhase === 'gap' || undefined}
-    >
+    <div className={cn('drop-shadow-md', alerting && shake > 0 && 'kitchen-shake')}>
       <article
-        data-testid={
-          done
-            ? `kitchen-done-${order.orderNumber}-${order.ticketNumber ?? 1}`
-            : `kitchen-card-${order.orderNumber}`
-        }
+        data-testid={`kitchen-card-${order.orderNumber}`}
         data-order-id={order.id}
         data-state={state}
-        data-ready-phase={readyPhase}
-        data-done={done || undefined}
-        data-collapsed={collapsed || undefined}
-        aria-label={`Order ${order.orderNumber}${done ? ', done' : alerting ? `, ${state}` : ''}`}
-        onClick={done && !departing ? () => setExpanded((value) => !value) : undefined}
-        className={cn(
-          'kitchen-ticket flex flex-col overflow-hidden rounded-t-sm rounded-b-2xl transition-colors duration-150',
-          done && 'cursor-pointer',
-          dimmed ? 'bg-surface-raised text-content-muted' : 'bg-surface text-content',
-        )}
+        aria-label={`Order ${order.orderNumber}${alerting ? `, ${state}` : ''}`}
+        className="kitchen-ticket flex h-full flex-col overflow-hidden rounded-t-sm rounded-b-2xl bg-surface text-content"
       >
-        <header
-          className={cn('flex items-start justify-between gap-2 px-4 pt-6', collapsed && 'pb-4')}
-        >
-          <span className={cn('font-display text-5xl leading-none', !dimmed && look?.number)}>
+        <header className="flex items-start justify-between gap-2 px-4 pt-6">
+          <span className={cn('font-display text-5xl leading-none', look?.number)}>
             #{order.orderNumber}
-            {(order.ticketNumber ?? 1) > 1 && (
-              <span className="text-3xl"> · {order.ticketNumber}</span>
-            )}
           </span>
-          {onReady && state !== 'cancelled' ? (
-            <div className="flex shrink-0 items-center gap-1">
-              {done ? (
-                <button
-                  type="button"
-                  aria-label={`${expanded ? 'Collapse' : 'Expand'} done order ${order.orderNumber}`}
-                  aria-expanded={expanded}
-                  disabled={departing}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    setExpanded(!expanded)
-                  }}
-                  className="grid size-14 cursor-pointer place-items-center rounded-full hover:bg-surface focus-visible:focus-ring"
-                >
-                  {expanded ? (
-                    <ChevronUp aria-hidden size={24} />
-                  ) : (
-                    <ChevronDown aria-hidden size={24} />
-                  )}
-                </button>
-              ) : (
-                <OrderAgeRing
-                  orderedAt={order.orderedAt}
-                  now={now}
-                  normalRing={look?.ring ?? 'stroke-content-muted'}
-                />
-              )}
-              <button
-                type="button"
-                disabled={disabled || saving || readyPhase === 'leaving' || readyPhase === 'gap'}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onReady()
-                }}
-                aria-label={`Ready order ${order.orderNumber}`}
-                aria-pressed={checked}
-                title={done ? 'Undo Done' : 'Mark done'}
-                className="relative grid size-14 shrink-0 cursor-pointer place-items-center rounded-full transition-[transform,box-shadow] hover:shadow-sm active:scale-95 focus-visible:focus-ring disabled:opacity-50"
-              >
-                <svg aria-hidden viewBox="0 0 56 56" className="size-14 -rotate-90">
-                  <circle
-                    cx="28"
-                    cy="28"
-                    r={21}
-                    strokeWidth={5}
-                    className={cn(
-                      'transition-[fill,stroke] duration-150',
-                      checked
-                        ? 'stroke-success fill-success'
-                        : 'stroke-content-muted fill-surface-raised',
-                    )}
-                  />
-                </svg>
-                <span
-                  aria-hidden
-                  className={cn(
-                    'pointer-events-none absolute inset-0 grid place-items-center',
-                    checked ? 'text-on-success' : 'text-content-muted',
-                  )}
-                >
-                  <Check size={24} strokeWidth={3} />
-                </span>
-              </button>
-            </div>
-          ) : (
-            <OrderAgeRing
-              orderedAt={order.orderedAt}
-              now={now}
-              normalRing={look?.ring ?? 'stroke-content-muted'}
-            />
-          )}
+          <WaitRing order={order} now={now} state={state} />
         </header>
 
-        {!collapsed && (
-          <>
-            <div
+        <div className="flex min-h-8 items-center gap-2 pl-4 pt-1">
+          {tag && (
+            <span className="rounded-md border-[1.5px] border-border px-2 py-0.5 text-sm font-extrabold tracking-wide">
+              {tag}
+            </span>
+          )}
+          {look && (
+            <span
               className={cn(
-                'flex min-h-8 items-center gap-2 pl-4 pt-1',
-                dimmed && 'text-content-muted',
+                'ml-auto py-1 pl-5 pr-3 text-sm font-black uppercase tracking-widest',
+                '[clip-path:polygon(10px_0,100%_0,100%_100%,10px_100%,0_50%)]',
+                look.fill,
               )}
             >
-              {tag && (
-                <span className="rounded-md border-[1.5px] border-border px-2 py-0.5 text-sm font-extrabold tracking-wide">
-                  {tag}
-                </span>
-              )}
-              {look && (
-                <span
-                  className={cn(
-                    'ml-auto py-1 pl-5 pr-3 text-sm font-black uppercase tracking-widest',
-                    '[clip-path:polygon(10px_0,100%_0,100%_100%,10px_100%,0_50%)]',
-                    look.fill,
-                  )}
-                >
-                  {look.word}
-                </span>
-              )}
-            </div>
+              {look.word}
+            </span>
+          )}
+        </div>
 
-            <hr className="mx-3 mt-3 border-0 border-t-2 border-dashed border-border" />
+        <hr className="mx-3 mt-3 border-0 border-t-2 border-dashed border-border" />
 
-            <div className={cn('relative flex flex-1 flex-col', dimmed && 'text-content-muted')}>
-              <div className="px-4 pt-3">
-                <ul className="grid gap-2.5">
-                  {rows.map((row) => {
-                    const amber = row.change === 'added' || row.change === 'changed'
-                    return (
-                      <li
-                        key={row.key}
-                        data-change={row.change}
-                        className={cn(
-                          'flex items-center gap-3 text-xl font-semibold leading-snug',
-                          row.change === 'removed' && 'text-content-muted line-through',
-                          state === 'cancelled' && 'line-through decoration-danger',
-                        )}
+        <div className="relative flex flex-1 flex-col">
+          <div className="px-4 pt-3">
+            <ul className="grid gap-2.5">
+              {rows.map((row) => {
+                const amber = row.change === 'added' || row.change === 'changed'
+                return (
+                  <li
+                    key={row.key}
+                    data-change={row.change}
+                    className={cn(
+                      'flex items-center gap-3 text-xl font-semibold leading-snug',
+                      row.change === 'removed' && 'text-content-muted line-through',
+                      state === 'cancelled' && 'line-through decoration-danger',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'grid h-11 min-w-11 shrink-0 place-items-center rounded-xl px-1 text-2xl font-black tabular-nums',
+                        amber
+                          ? AMBER_TILE
+                          : row.change === 'removed'
+                            ? 'border-2 border-dashed border-border text-content-muted'
+                            : 'bg-surface-raised',
+                      )}
+                    >
+                      {row.change === 'removed' ? row.previousQuantity : row.quantity}
+                    </span>
+                    <span className="min-w-0 flex-1">{row.itemName}</span>
+                    {row.change === 'added' && (
+                      <span className={cn(AMBER_BADGE, 'text-xs')}>ADDED</span>
+                    )}
+                    {row.change === 'changed' && (
+                      <span
+                        className={cn(AMBER_BADGE, 'text-base')}
+                        aria-label={`was ${row.previousQuantity}, now ${row.quantity}`}
                       >
-                        <span
-                          className={cn(
-                            'grid h-11 min-w-11 shrink-0 place-items-center rounded-xl px-1 text-2xl font-black tabular-nums',
-                            amber
-                              ? AMBER_TILE
-                              : row.change === 'removed'
-                                ? 'border-2 border-dashed border-border text-content-muted'
-                                : 'bg-surface-raised',
-                          )}
-                        >
-                          {row.change === 'removed' ? row.previousQuantity : row.quantity}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          {row.itemName}
-                          {row.note && (
-                            <span
-                              className={cn(
-                                'block text-base font-bold',
-                                dimmed ? 'text-content-muted' : 'text-accent-text',
-                              )}
-                            >
-                              {row.note}
-                            </span>
-                          )}
-                        </span>
-                        {row.change === 'added' && (
-                          <span className={cn(AMBER_BADGE, 'text-xs')}>ADDED</span>
-                        )}
-                        {row.change === 'changed' && (
-                          <span
-                            className={cn(AMBER_BADGE, 'text-base')}
-                            aria-label={`was ${row.previousQuantity}, now ${row.quantity}`}
-                          >
-                            {row.previousQuantity}
-                            <ArrowRight aria-hidden size={15} strokeWidth={3} />
-                            {row.quantity}
-                          </span>
-                        )}
-                      </li>
-                    )
-                  })}
-                </ul>
-              </div>
+                        {row.previousQuantity}
+                        <ArrowRight aria-hidden size={15} strokeWidth={3} />
+                        {row.quantity}
+                      </span>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
 
-              {order.otherItemCount > 0 && (
-                <p className="px-4 pt-2 text-sm text-content-muted">
-                  +{order.otherItemCount} {order.otherItemCount === 1 ? 'item' : 'items'} for
-                  another kitchen
-                </p>
-              )}
+          {order.otherItemCount > 0 && (
+            <p className="px-4 pt-2 text-sm text-content-muted">
+              +{order.otherItemCount} {order.otherItemCount === 1 ? 'item' : 'items'} for another
+              kitchen
+            </p>
+          )}
 
-              {/* Stamped where a hand would stamp a paper ticket: the middle of
+          {/* Stamped where a hand would stamp a paper ticket: the middle of
               everything between the tear line and the ACK. The card is as tall
               as its row, so on a short ticket it lands on the dishes and on a
               tall one in the space beneath them. */}
-              {state === 'cancelled' && (
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0 grid place-items-center"
-                >
-                  <span className="-rotate-[8deg] rounded-xl border-4 border-kitchen-cancel/35 px-3 font-display text-3xl tracking-widest text-kitchen-cancel/35">
-                    CANCELLED
-                  </span>
-                </div>
-              )}
+          {state === 'cancelled' && (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 grid place-items-center"
+            >
+              <span className="-rotate-[8deg] rounded-xl border-4 border-kitchen-cancel/35 px-3 font-display text-3xl tracking-widest text-kitchen-cancel/35">
+                CANCELLED
+              </span>
             </div>
+          )}
+        </div>
 
-            <footer className={cn('px-4 pb-4 pt-4', dimmed && 'grayscale')}>
-              {look ? (
-                <button
-                  type="button"
-                  onClick={onAcknowledge}
-                  disabled={disabled || Boolean(readyPhase)}
-                  data-ringing={ringing || undefined}
-                  // Several cards say ACK at once; a screen reader hears which order.
-                  aria-label={`${look.ack} order ${order.orderNumber}`}
-                  className={cn(
-                    'flex min-h-15 w-full items-center gap-2.5 rounded-2xl px-5 text-xl font-black disabled:opacity-50',
-                    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-content',
-                    look.fill,
-                    ringing && !disabled && !readyPhase && 'kitchen-ringing',
-                  )}
-                >
-                  <look.icon aria-hidden size={22} strokeWidth={3} />
-                  {look.ack}
-                  <span aria-hidden data-testid="kitchen-rings" className="ml-auto flex gap-1.5">
-                    {Array.from({ length: RINGS_PER_ALERT }, (_, index) => (
-                      <i
-                        key={index}
-                        className={cn(
-                          'size-2.5 rounded-full bg-current',
-                          index >= dotsLit && 'opacity-30',
-                        )}
-                      />
-                    ))}
-                  </span>
-                </button>
-              ) : (
-                !done &&
-                order.latestAck && (
-                  <p className="flex items-center gap-2 text-sm font-bold text-content-muted">
-                    <Check aria-hidden size={16} strokeWidth={3} />
-                    Acked {formatKitchenWait(order.latestAck.ackedAt, now)} ago
-                  </p>
-                )
+        <footer className="px-4 pb-4 pt-4">
+          {look ? (
+            <button
+              type="button"
+              onClick={onAcknowledge}
+              disabled={disabled}
+              data-ringing={ringing || undefined}
+              // Several cards say ACK at once; a screen reader hears which order.
+              aria-label={`${look.ack} order ${order.orderNumber}`}
+              className={cn(
+                'flex min-h-15 w-full items-center gap-2.5 rounded-2xl px-5 text-xl font-black disabled:opacity-50',
+                'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-content',
+                look.fill,
+                ringing && !disabled && 'kitchen-ringing',
               )}
-            </footer>
-          </>
-        )}
+            >
+              <look.icon aria-hidden size={22} strokeWidth={3} />
+              {look.ack}
+              <span aria-hidden data-testid="kitchen-rings" className="ml-auto flex gap-1.5">
+                {Array.from({ length: RINGS_PER_ALERT }, (_, index) => (
+                  <i
+                    key={index}
+                    className={cn(
+                      'size-2.5 rounded-full bg-current',
+                      index >= dotsLit && 'opacity-30',
+                    )}
+                  />
+                ))}
+              </span>
+            </button>
+          ) : (
+            order.latestAck && (
+              <p className="flex items-center gap-2 text-sm font-bold text-content-muted">
+                <Check aria-hidden size={16} strokeWidth={3} />
+                Acked {formatKitchenWait(order.latestAck.ackedAt, now)} ago
+              </p>
+            )
+          )}
+        </footer>
       </article>
     </div>
   )

@@ -74,9 +74,7 @@ function refusedOrderNumber(result: unknown): number | null {
 }
 
 type OrderReadRow = Tables<'orders'> & {
-  order_items: (Tables<'order_items'> & {
-    order_line_preparations?: { quantity: number } | { quantity: number }[] | null
-  })[]
+  order_items: Tables<'order_items'>[]
   order_discounts: Tables<'order_discounts'>[]
   creator: { full_name: string } | { full_name: string }[] | null
   canceller: { full_name: string } | { full_name: string }[] | null
@@ -136,54 +134,6 @@ type EffectivePaymentRow = {
   revision: number
 }
 
-function allDishesTicked(lines: readonly BillLineDraft[]): boolean {
-  return lines
-    .filter((line) => line.kind !== 'packaging')
-    .every((line) => (line.preparedQuantity ?? 0) >= line.quantity)
-}
-
-function reviseDishLines(
-  previous: readonly BillLineDraft[],
-  next: BillLineDraft[],
-): BillLineDraft[] {
-  return next.map((line) => {
-    const old = previous.find((candidate) => candidate.orderLineId === line.orderLineId)
-    return {
-      ...line,
-      preparedQuantity: old?.preparedQuantity ?? 0,
-      readyQuantity: old?.readyQuantity ?? 0,
-      note:
-        old && ((old.preparedQuantity ?? 0) > 0 || (old.readyQuantity ?? 0) > 0)
-          ? (old.note ?? null)
-          : (line.note ?? null),
-    }
-  })
-}
-
-export function applyDishTicks(
-  order: BillingOrder,
-  changes: readonly { id: string; prepared: boolean }[],
-  at: string,
-): BillingOrder {
-  const lines = order.lines.map((line) => {
-    const change = changes.find((change) => change.id === line.orderLineId)
-    return change && line.kind !== 'packaging'
-      ? { ...line, preparedQuantity: change.prepared ? line.quantity : 0 }
-      : line
-  })
-  const preparedAt = allDishesTicked(lines)
-    ? (order.preparedAt ?? at)
-    : order.status === 'open'
-      ? null
-      : order.preparedAt
-  return {
-    ...order,
-    lines,
-    preparedAt,
-    label: order.status === 'paid' && preparedAt ? null : (order.label ?? null),
-  }
-}
-
 function joined<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? (value[0] ?? null) : value
 }
@@ -224,16 +174,7 @@ function orderLineView(row: Tables<'order_items'>): BillLineDraft {
  * the bill shown before delivery matches the one shown after.
  */
 function asBillLines(lines: readonly BillLineDraft[]): BillLineDraft[] {
-  return lines.map(
-    ({
-      orderLineId: _orderLineId,
-      workflowLineId: _workflowLineId,
-      note: _note,
-      preparedQuantity: _preparedQuantity,
-      readyQuantity: _readyQuantity,
-      ...line
-    }) => line,
-  )
+  return lines.map(({ orderLineId: _orderLineId, ...line }) => line)
 }
 
 /**
@@ -254,7 +195,6 @@ function lineDrafts(lines: readonly BillingLineSnapshot[]): BillLineDraft[] {
     categoryName: line.categoryName,
     // Absent on a command queued before #60, which knew only items.
     kind: line.kind ?? 'item',
-    note: line.note ?? null,
   }))
 }
 
@@ -267,7 +207,6 @@ function orderView(row: OrderReadRow, historicalDeviceLabel: string | null): Bil
     businessDate: row.business_date,
     orderedAt: row.ordered_at,
     preparedAt: row.prepared_at,
-    label: row.label ?? null,
     status: row.status,
     creatorId: row.created_by,
     creatorName: joined(row.creator)?.full_name ?? 'Counter operator',
@@ -279,11 +218,7 @@ function orderView(row: OrderReadRow, historicalDeviceLabel: string | null): Bil
     customerTier: row.customer_tier,
     serviceType: row.service_type,
     tableNumber: row.table_number,
-    lines: row.order_items.map((item) => ({
-      ...orderLineView(item),
-      note: item.note ?? null,
-      preparedQuantity: joined(item.order_line_preparations ?? null)?.quantity ?? 0,
-    })),
+    lines: row.order_items.map(orderLineView),
     discounts: (row.order_discounts ?? []).map((discount) => ({
       source: discount.source,
       basis: discount.basis,
@@ -473,7 +408,7 @@ function discountTotalPaise(
 /** Each line as the command carries it, its kind included (#60). */
 function lineSnapshots(lines: readonly BillLineDraft[]): BillingLineSnapshot[] {
   return lines.map((line) => ({
-    id: line.orderLineId ?? line.workflowLineId ?? newUuid(),
+    id: line.orderLineId ?? newUuid(),
     menuItemId: line.menuItemId || null,
     itemName: line.itemName,
     unitPricePaise: line.unitPricePaise,
@@ -483,7 +418,6 @@ function lineSnapshots(lines: readonly BillLineDraft[]): BillingLineSnapshot[] {
     discountPercentBp: line.discountPercentBp ?? null,
     categoryName: line.categoryName ?? null,
     kind: line.kind ?? 'item',
-    ...(line.kind !== 'packaging' ? { note: line.note?.trim() || null } : {}),
   }))
 }
 
@@ -530,7 +464,6 @@ function orderPayload(
     | 'customerPhone'
     | 'serviceType'
     | 'tableNumber'
-    | 'label'
   >,
 ): OrderContentPayload {
   const { lines } = input
@@ -538,7 +471,6 @@ function orderPayload(
   const totals = billTotals(lines, { discountPaise: discountTotalPaise(lines, discounts) })
   return {
     orderId,
-    ...(input.label !== undefined ? { label: input.label?.trim() || null } : {}),
     businessDate,
     customerId: input.customerId ?? null,
     customerName: input.customerName?.trim() || null,
@@ -599,7 +531,6 @@ function envelopeOrderId(command: BillingCommand): string | null {
     case 'manager_cancel_order':
     case 'pay_order':
     case 'set_order_preparation':
-    case 'prepare_order_lines':
     case 'void_order_payment':
     case 'cancel_paid_order':
       return command.payload.orderId
@@ -846,7 +777,6 @@ export function createSupabaseBillingAdapter(
             businessDate: payload.businessDate,
             orderedAt: envelope.command.createdAt,
             preparedAt: null,
-            label: payload.label ?? null,
             status: 'open',
             creatorId: counterSession?.shift?.personId ?? '',
             creatorName: 'Counter operator',
@@ -891,11 +821,7 @@ export function createSupabaseBillingAdapter(
                 serviceType: payload.serviceType,
                 tableNumber: payload.tableNumber,
               }),
-              ...(payload.label !== undefined ? { label: payload.label } : {}),
-              lines: reviseDishLines(current.lines, lineDrafts(payload.lines)),
-              preparedAt: allDishesTicked(reviseDishLines(current.lines, lineDrafts(payload.lines)))
-                ? current.preparedAt
-                : null,
+              lines: lineDrafts(payload.lines),
               discounts: (payload.discounts ?? []).map((discount) => ({ ...discount })),
               roundingPaise: payload.roundingPaise ?? 0,
               totalPaise: payload.totalPaise,
@@ -904,28 +830,13 @@ export function createSupabaseBillingAdapter(
           break
         }
         case 'set_order_preparation': {
-          const payload = envelope.command.payload
           const current = overlaid.get(envelope.command.payload.orderId)
           if (current) {
             overlaid.set(envelope.command.payload.orderId, {
               ...current,
               preparedAt: envelope.command.payload.prepared ? envelope.command.createdAt : null,
-              lines: current.lines.map((line) => ({
-                ...line,
-                preparedQuantity:
-                  line.kind === 'packaging' ? 0 : payload.prepared ? line.quantity : 0,
-              })),
             })
           }
-          break
-        }
-        case 'prepare_order_lines': {
-          const current = overlaid.get(envelope.command.payload.orderId)
-          if (current)
-            overlaid.set(
-              current.id,
-              applyDishTicks(current, envelope.command.payload.lines, envelope.command.createdAt),
-            )
           break
         }
         case 'pay_order': {
@@ -1029,7 +940,7 @@ export function createSupabaseBillingAdapter(
     let query = client
       .from('orders')
       .select(
-        '*, order_items(*, order_line_preparations(quantity)), order_discounts(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name)',
+        '*, order_items(*), order_discounts(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name)',
       )
       .eq('outlet_id', outletId)
       .order('ordered_at', { ascending: false })
@@ -1075,7 +986,7 @@ export function createSupabaseBillingAdapter(
     const { data, error } = await client
       .from('orders')
       .select(
-        '*, order_items(*, order_line_preparations(quantity)), order_discounts(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name)',
+        '*, order_items(*), order_discounts(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name)',
       )
       .eq('id', orderId)
       .maybeSingle()
@@ -1292,7 +1203,7 @@ export function createSupabaseBillingAdapter(
           customerTier: knownTier(command.payload.customerPhone),
           serviceType: command.payload.serviceType ?? null,
           tableNumber: command.payload.tableNumber ?? null,
-          lines: asBillLines(lineDrafts(command.payload.lines)),
+          lines: lineDrafts(command.payload.lines),
           totalPaise: command.payload.totalPaise,
           voidKind: null,
           voidReason: null,
@@ -1764,7 +1675,7 @@ export function createSupabaseBillingAdapter(
         customerPhone: draft.customerPhone?.trim() || null,
         customerTier: draft.customerTier ?? knownTier(draft.customerPhone),
         ...serviceFacts(draft),
-        lines: asBillLines(draft.lines),
+        lines: [...draft.lines],
         totalPaise: totals.totalPaise,
         voidKind: null,
         voidReason: null,
@@ -1855,7 +1766,6 @@ export function createSupabaseBillingAdapter(
         businessDate: input.businessDate,
         orderedAt: command.createdAt,
         preparedAt: null,
-        label: input.label?.trim() || null,
         status: 'open',
         creatorId: shift.personId,
         creatorName: 'Counter operator',
@@ -1905,12 +1815,7 @@ export function createSupabaseBillingAdapter(
       const revised = {
         ...existing,
         ...input,
-        lines: reviseDishLines(existing.lines, lineDrafts(command.payload.lines)),
-        preparedAt: allDishesTicked(
-          reviseDishLines(existing.lines, lineDrafts(command.payload.lines)),
-        )
-          ? existing.preparedAt
-          : null,
+        lines: lineDrafts(command.payload.lines),
         discounts: [...(input.discounts ?? [])],
         roundingPaise: revisedTotals.roundingPaise,
         totalPaise: revisedTotals.totalPaise,
@@ -2039,32 +1944,6 @@ export function createSupabaseBillingAdapter(
       return cancelled
     },
 
-    async markOrderLinesPrepared(id, orderId, lines): Promise<BillingOrder> {
-      const { session, shift } = requireTablet()
-      const existing = await projectOrder(orderId)
-      if (!existing)
-        throw new BillingActionError('not_found', 'That order is no longer on the pipeline.')
-      requireOwnOrder(existing, session.device.deviceId)
-      if (
-        existing.status === 'cancelled' ||
-        (existing.status === 'paid' &&
-          (existing.preparedAt !== null || lines.some((line) => !line.prepared)))
-      )
-        throw new BillingActionError('not_open', 'That ticket cannot go back to preparing.')
-      const command = await createBillingCommand({
-        commandId: id,
-        tabletId: session.device.deviceId,
-        shiftId: shift.id,
-        type: 'prepare_order_lines',
-        createdAt: new Date().toISOString(),
-        payload: { orderId, lines },
-      })
-      await accept(command, existing.outletId, existing.businessDate, orderId)
-      const updated = applyDishTicks(existing, lines, command.createdAt)
-      orderCache.set(orderId, updated)
-      return updated
-    },
-
     async markOrderPrepared(orderId, prepared): Promise<BillingOrder> {
       const { session, shift } = requireTablet()
       const existing = await projectOrder(orderId)
@@ -2105,10 +1984,6 @@ export function createSupabaseBillingAdapter(
       const updated: BillingOrder = {
         ...existing,
         preparedAt: prepared ? command.createdAt : null,
-        lines: existing.lines.map((line) => ({
-          ...line,
-          preparedQuantity: line.kind === 'packaging' ? 0 : prepared ? line.quantity : 0,
-        })),
       }
       orderCache.set(orderId, updated)
       return updated

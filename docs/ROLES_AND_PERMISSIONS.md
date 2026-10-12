@@ -589,8 +589,3 @@ Every attendance row stores the captured coordinates, the GPS accuracy, the comp
 - **Self-assignment and the last owner** are the two rules a row policy cannot state, so they live in triggers on `assignments`: `assignments_self_grant_guard` refuses a self-granted `super_admin` from anybody and any self-grant from a non-owner; `assignments_guard` refuses ending the last live `super_admin` row, and freezes an assignment's identity so moving somebody is ending one and granting another.
 - Edge Functions verify the caller's JWT for identity, then re-derive authority from that person's live assignments. Being an Edge Function is not authorisation.
 - Every outlet-scoped table gets read and write policies in the migration that creates it, plus a case in the isolation test suite. See [Testing](TESTING.md).
-
-
-### Dish workflow boundary
-
-Only the owning counter tablet may issue prepare_order_lines under a counter shift. It selects its outlet's order_line_preparations; kitchens receive handover only through kitchen_board. Kitchen Ready/Undo require a live kitchen shift and captured lines belonging to its outlet/order/filter. Kitchen history is append-only and readable only by that device under its kitchen shift and the outlet's managers. Franchise Admins read both record tables only at their assigned outlets; the owner reads across them. Every client role is denied direct insert/update/delete.

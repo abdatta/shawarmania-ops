@@ -298,7 +298,7 @@ select is(pg_temp.board()::text ~ '9876501234|Asha Kitchen|Paise|paise', false,
 select is((select count(*) from jsonb_object_keys(pg_temp.card('e7000000-0000-4000-a000-000000000001')) k
             where k not in ('id', 'orderNumber', 'serviceType', 'tableNumber', 'orderedAt',
                             'version', 'status', 'cancelledAt', 'lines', 'otherItemCount',
-                            'acknowledged', 'latestAck', 'ticketNumber')),
+                            'acknowledged', 'latestAck')),
   0::bigint, 'a card carries exactly the kitchen''s fields');
 
 select is(public.set_kitchen_filter('include', array[:'BURGERS_CAT'::uuid]), 'ok',

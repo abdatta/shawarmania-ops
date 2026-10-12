@@ -13,7 +13,6 @@ import {
 } from '@/data-access/adapters'
 import { isAwaitingOrderNumber, kitchenBell, sharedTables, UNSENT_ORDER_REFERENCE } from '@/domain'
 import { SessionContext } from '@/session/context'
-import { useRefreshQueue } from '@/lib/use-refresh-queue'
 import { CounterDeviceContext } from '@/session/counter-context'
 
 import { CancelOrderDialog } from './cancel-order-dialog'
@@ -24,8 +23,6 @@ import { RailScrollChip, useRailClipping } from './rail-scroll-chip'
 import { useCounterState } from './use-counter-state'
 import { OfflineFillHint } from './offline-fill-hint'
 import { useKitchenMarks } from './kitchen-marks-state'
-import { useMasonryRail } from './use-masonry-rail'
-import { useDemoReadyCue } from './demo-counter-review'
 
 /**
  * The outlet's unfinished work as **one list**, newest order first.
@@ -78,18 +75,15 @@ function methodLabelOf(bill: BillingBill): string | null {
 }
 
 export function OpenOrdersSurface({
-  twoColumns = false,
   embedded = false,
   refreshKey = 0,
   savedOrderKey = 0,
   onActivityChanged,
-  onOrdersRead,
   editingOrderId = null,
   onEditOrder,
   onSetOrderCustomer,
   checkoutSettings,
 }: {
-  twoColumns?: boolean
   embedded?: boolean
   refreshKey?: number
   /**
@@ -100,16 +94,13 @@ export function OpenOrdersSurface({
    */
   savedOrderKey?: number
   onActivityChanged?: () => void
-  onOrdersRead?: (orders: BillingOrder[]) => void
   editingOrderId?: string | null
   onEditOrder?: (order: BillingOrder) => void
   onSetOrderCustomer?: (order: BillingOrder) => void
   checkoutSettings?: Pick<OutletMenu, 'service' | 'loyalty'>
 } = {}) {
   const { billing } = useAdapters()
-  const demoReadyCue = useDemoReadyCue()
   const session = useContext(SessionContext)
-  const readyCue = session?.mode === 'demo' ? demoReadyCue : 'pulse-dot'
   const counterDevice = useContext(CounterDeviceContext)
   const { shift } = useCounterState()
   const [orders, setOrders] = useState<BillingOrder[] | null>(null)
@@ -120,8 +111,6 @@ export function OpenOrdersSurface({
   // asked for no inserted info bars.
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const ticking = useRef(new Set<string>())
-  const [tickingOrders, setTickingOrders] = useState(new Set<string>())
 
   const outletId = counterDevice?.device.outletId ?? session?.outletId ?? null
 
@@ -134,38 +123,29 @@ export function OpenOrdersSurface({
   const marks = kitchenMarks?.marks ?? null
   const refreshMarks = kitchenMarks?.refresh
 
-  const read = useCallback(
-    async (isCurrent: () => boolean) => {
-      await Promise.resolve()
-      if (!outletId || !shift) {
-        setTenders(new Map())
-        return setOrders([])
+  const load = useCallback(async () => {
+    await Promise.resolve()
+    if (!outletId || !shift) {
+      setTenders(new Map())
+      return setOrders([])
+    }
+    const nextOrders = await billing.listOpenOrders(outletId)
+    setOrders(nextOrders)
+    // An order write reloads the rail; its bells come with it.
+    void refreshMarks?.()
+    // Tender facts ride along so a take-back can name what it returns.
+    try {
+      const history = await billing.listShiftHistory(shift.id)
+      const nextTenders = new Map<string, string>()
+      for (const bill of history.bills) {
+        const label = methodLabelOf(bill)
+        if (label) nextTenders.set(bill.id, label)
       }
-      const nextOrders = await billing.listOpenOrders(outletId)
-      if (!isCurrent()) return
-      setOrders(nextOrders)
-      onOrdersRead?.(nextOrders)
-      // An order write reloads the rail; its bells come with it.
-      void refreshMarks?.()
-      // Tender facts ride along so a take-back can name what it returns.
-      try {
-        if (!nextOrders.some((order) => order.billId)) return setTenders(new Map())
-        const history = await billing.listShiftHistory(shift.id)
-        if (!isCurrent()) return
-        const nextTenders = new Map<string, string>()
-        for (const bill of history.bills) {
-          const label = methodLabelOf(bill)
-          if (label) nextTenders.set(bill.id, label)
-        }
-        setTenders(nextTenders)
-      } catch {
-        if (isCurrent()) setTenders(new Map())
-      }
-    },
-    [billing, outletId, shift, refreshMarks, onOrdersRead],
-  )
-  const queue = useRefreshQueue(read)
-  const load = queue.refresh
+      setTenders(nextTenders)
+    } catch {
+      setTenders(new Map())
+    }
+  }, [billing, counterDevice?.device.outletId, session?.outletId, shift, refreshMarks])
 
   useEffect(() => {
     void Promise.resolve()
@@ -173,66 +153,14 @@ export function OpenOrdersSurface({
       .catch(() => setError('Could not load the pipeline.'))
   }, [load, refreshKey])
 
-  useEffect(() => {
-    if (!twoColumns) return
-    const timer = setInterval(() => {
-      if (document.visibilityState === 'visible')
-        void load().catch(() => setError('Could not refresh the pipeline.'))
-    }, 10_000)
-    return () => clearInterval(timer)
-  }, [twoColumns, load])
-
-  const tickLine = async (orderId: string, lineId: string, prepared: boolean) => {
-    // Serialize this order's local projections; other tickets remain usable.
-    if (ticking.current.has(orderId) || busy) return
-    ticking.current.add(orderId)
-    setTickingOrders(new Set(ticking.current))
-    setError(null)
-    try {
-      const updated = await billing.markOrderLinesPrepared!(crypto.randomUUID(), orderId, [
-        { id: lineId, prepared },
-      ])
-      queue.invalidate()
-      setOrders((held) =>
-        (held ?? [])
-          .map((order) => (order.id === orderId ? updated : order))
-          .filter(
-            (order) =>
-              order.status === 'open' || (order.status === 'paid' && order.preparedAt === null),
-          ),
-      )
-      onActivityChanged?.()
-      void load().catch(() => setError('Could not refresh the pipeline.'))
-    } catch (cause) {
-      setError(
-        cause instanceof DataActionError ? cause.message : 'That action could not be completed.',
-      )
-    } finally {
-      ticking.current.delete(orderId)
-      setTickingOrders(new Set(ticking.current))
-    }
-  }
-
   const act = async (operation: () => Promise<unknown>) => {
     setBusy(true)
     setError(null)
     try {
       const result = await operation()
-      queue.invalidate()
-      if (result && typeof result === 'object' && 'preparedAt' in result) {
-        const updated = result as BillingOrder
-        setOrders((held) =>
-          (held ?? [])
-            .map((order) => (order.id === updated.id ? updated : order))
-            .filter(
-              (order) =>
-                order.status === 'open' || (order.status === 'paid' && order.preparedAt === null),
-            ),
-        )
-      }
       setPaying(null)
       setCancelling(null)
-      void load().catch(() => setError('Could not refresh the pipeline.'))
+      await load()
       onActivityChanged?.()
       return result
     } catch (cause) {
@@ -251,33 +179,15 @@ export function OpenOrdersSurface({
     // ticket before the refresh removes it, so the visual identity survives
     // the cross-column handoff instead of leaving a separate amount badge.
     const source = document.querySelector<HTMLElement>(`[data-flip-id="${paying.id}"]`)
-    const flight = source && !twoColumns ? captureCardFlight(source) : null
+    const flight = source ? captureCardFlight(source) : null
     void act(async () => {
-      let updated = paying
       if (revision) {
         // Each command is durable before the next is accepted. If recording
         // tender fails, keep the revised order so retry pays that same ticket.
         const revised = await billing.reviseOrder(paying.id, revision)
         setPaying(revised)
-        updated = revised
       }
-      const bill = await billing.payOrder(paying.id, payments)
-      queue.invalidate()
-      const paid: BillingOrder = {
-        ...updated,
-        status: 'paid',
-        paidAt: bill?.paidAt ?? new Date().toISOString(),
-        billId: bill?.id ?? null,
-      }
-      setOrders((held) =>
-        (held ?? [])
-          .map((order) => (order.id === paid.id ? paid : order))
-          .filter(
-            (order) =>
-              order.status === 'open' || (order.status === 'paid' && order.preparedAt === null),
-          ),
-      )
-      return bill
+      return billing.payOrder(paying.id, payments)
     }).then((bill) => {
       if (!bill || typeof bill !== 'object' || !('id' in bill)) return
       if (!flight) return
@@ -302,7 +212,7 @@ export function OpenOrdersSurface({
   // is shared even when the other order is filtered out of view.
   const shared = sharedTables(orders ?? [])
   const listed = (orders ?? [])
-    .filter((order) => (twoColumns || order.id !== editingOrderId) && order.status !== 'cancelled')
+    .filter((order) => order.id !== editingOrderId && order.status !== 'cancelled')
     /*
       Sorted here rather than taken on trust from the adapter. Newest-first is
       this surface's promise, and the two adapters did not agree about it: the
@@ -319,9 +229,9 @@ export function OpenOrdersSurface({
   // The settlement flight is the only motion left. With no sections to move
   // between, the hook measures no movement when a fact is merely recorded.
   const flipRootRef = useRef<HTMLElement | null>(null)
+  useFlip(flipRootRef, [orders])
+
   const scrollerRef = useRef<HTMLUListElement | null>(null)
-  useMasonryRail(scrollerRef, twoColumns, orders)
-  useFlip(flipRootRef, [orders], twoColumns)
   const clipping = useRailClipping(scrollerRef, [listed.length, orders])
   const scrollRailTo = (edge: 'top' | 'bottom') => {
     const scroller = scrollerRef.current
@@ -354,23 +264,11 @@ export function OpenOrdersSurface({
       since the customer button (36px) set the header's height.
     */
     return (
-      <LoadingRegion label="the pipeline" className={twoColumns ? 'flex gap-2' : 'space-y-1'}>
-        {twoColumns ? (
-          [0, 1].map((column) => (
-            <div key={column} className="flex-1 space-y-2">
-              {[0, 1, 2].map((row) => (
-                <Shimmer key={row} className={column === row ? 'h-32' : 'h-24'} />
-              ))}
-            </div>
-          ))
-        ) : (
-          <>
-            <OfflineFillHint />
-            <Shimmer className="h-[98px]" />
-            <Shimmer className="h-[98px]" />
-            <Shimmer className="h-[98px]" />
-          </>
-        )}
+      <LoadingRegion label="the pipeline" className="space-y-1">
+        <OfflineFillHint />
+        <Shimmer className="h-[98px]" />
+        <Shimmer className="h-[98px]" />
+        <Shimmer className="h-[98px]" />
       </LoadingRegion>
     )
   }
@@ -408,7 +306,6 @@ export function OpenOrdersSurface({
           <RailScrollChip
             edge="top"
             count={clipping.above}
-            readyOrder={clipping.readyAbove}
             onActivate={() => scrollRailTo('top')}
           />
           <ul
@@ -420,25 +317,13 @@ export function OpenOrdersSurface({
               `offsetTop` is measured against this list rather than against
               whatever happens to be positioned above it.
             */
-            className={`relative min-h-0 flex-1 ${twoColumns ? 'pipeline-masonry ready-cue-clock' : 'space-y-1'} scroll-smooth motion-reduce:scroll-auto ${
+            className={`relative min-h-0 flex-1 space-y-1 scroll-smooth motion-reduce:scroll-auto ${
               embedded ? 'no-scrollbar overflow-y-auto' : ''
             }`}
           >
             {listed.map((order) => (
               <li
                 key={order.id}
-                className={twoColumns && order.id === editingOrderId ? 'invisible' : undefined}
-                data-ready-order={
-                  twoColumns &&
-                  order.lines.some(
-                    (line) =>
-                      (marks?.readyQuantities?.[order.id]?.[line.orderLineId ?? ''] ??
-                        line.readyQuantity ??
-                        0) > (line.preparedQuantity ?? 0),
-                  )
-                    ? order.orderNumber
-                    : undefined
-                }
                 /*
                   How a card hidden below the fold tells the chip it is prepared
                   food still waiting for money, without the chip holding a second
@@ -451,26 +336,14 @@ export function OpenOrdersSurface({
               >
                 <PipelineCard
                   order={order}
-                  {...(twoColumns
-                    ? {
-                        dishTicks: true,
-                        readyCue,
-                        readyQuantities: marks?.readyQuantities?.[order.id] ?? {},
-                        onTickLine: (lineId: string, prepared: boolean) =>
-                          void tickLine(order.id, lineId, prepared),
-                      }
-                    : {})}
                   currentBillerId={shift?.billerProfileId ?? null}
                   currentDeviceId={counterDevice?.device.deviceId ?? null}
-                  busy={busy || tickingOrders.has(order.id)}
+                  busy={busy}
                   {...(onEditOrder ? { onEdit: onEditOrder } : {})}
                   {...(onSetOrderCustomer ? { onSetCustomer: onSetOrderCustomer } : {})}
                   tenderLabel={order.billId ? (tenders.get(order.billId) ?? null) : null}
                   sharedTable={shared.get(order.id) ?? null}
                   kitchen={marks ? kitchenBell(marks.orders[order.id] ?? [], marks.kitchens) : null}
-                  kitchenAnswers={marks?.orders[order.id] ?? []}
-                  kitchenStates={marks?.dishStates?.[order.id] ?? []}
-                  kitchenLabels={marks?.kitchens.map((kitchen) => kitchen.label) ?? []}
                   onMarkPrepared={(target) =>
                     void act(() => billing.markOrderPrepared(target.id, true))
                   }
@@ -498,7 +371,6 @@ export function OpenOrdersSurface({
           <RailScrollChip
             edge="bottom"
             count={clipping.below}
-            readyOrder={clipping.readyBelow}
             marked={clipping.moneyWaitingBelow}
             onActivate={() => scrollRailTo('bottom')}
           />

@@ -1,8 +1,5 @@
-import { ReadyDish, type ReadyCue } from './ready-dish'
 import {
   Bell,
-  Check,
-  CheckCheck,
   MoreVertical,
   ShoppingBag,
   UserRound,
@@ -18,9 +15,8 @@ import { Modal } from '@/components/ui/modal'
 import { Shimmer } from '@/components/ui/loading'
 import { useAnchoredPanel } from '@/components/ui/anchored-panel'
 import { Money } from '@/components/ui/money'
-import { OrderAgeRing } from '@/components/ui/order-age-ring'
 import type { BillingOrder } from '@/data-access/adapters'
-import type { KitchenAnswer, KitchenBell, KitchenDishState, SharedTable } from '@/domain'
+import type { KitchenBell, SharedTable } from '@/domain'
 import {
   isAwaitingOrderNumber,
   serviceTypeLabel,
@@ -59,10 +55,6 @@ import { StateToggle } from './state-toggle'
  */
 export function PipelineCard({
   order,
-  dishTicks = false,
-  readyCue = 'pulse-dot',
-  readyQuantities = {},
-  onTickLine,
   currentBillerId = null,
   currentDeviceId = null,
   showItems = true,
@@ -71,9 +63,6 @@ export function PipelineCard({
   tenderLabel = null,
   sharedTable = null,
   kitchen = null,
-  kitchenAnswers = [],
-  kitchenStates,
-  kitchenLabels = [],
   onEdit,
   onSetCustomer,
   onMarkPrepared,
@@ -84,10 +73,6 @@ export function PipelineCard({
   onCancelAfterPaid,
 }: {
   order: BillingOrder
-  dishTicks?: boolean
-  readyCue?: ReadyCue
-  readyQuantities?: Record<string, number>
-  onTickLine?: (lineId: string, prepared: boolean) => void
   /** Omitted creator chip when this is the person holding the tablet. */
   currentBillerId?: string | null
   /**
@@ -114,9 +99,6 @@ export function PipelineCard({
    * it would with no kitchen at all.
    */
   kitchen?: KitchenBell | null
-  kitchenAnswers?: readonly (KitchenAnswer | null)[]
-  kitchenStates?: readonly (KitchenDishState | null)[]
-  kitchenLabels?: readonly string[]
   onEdit?: (order: BillingOrder) => void
   /**
    * Opens the order in the composer with the customer dialog already up — the
@@ -190,12 +172,8 @@ export function PipelineCard({
   const [nowMs, setNowMs] = useState<number | null>(null)
   useEffect(() => {
     const frame = requestAnimationFrame(() => setNowMs(Date.now()))
-    const timer = dishTicks ? setInterval(() => setNowMs(Date.now()), 5_000) : null
-    return () => {
-      cancelAnimationFrame(frame)
-      if (timer) clearInterval(timer)
-    }
-  }, [order.paidAt, order.preparedAt, dishTicks])
+    return () => cancelAnimationFrame(frame)
+  }, [order.paidAt, order.preparedAt])
   const editDeadlineMs = ticketEditDeadlineMs({
     paidAt: order.paidAt,
     preparedAt: order.preparedAt,
@@ -262,16 +240,6 @@ export function PipelineCard({
     disabled?: boolean
     act: () => void
   }> = []
-  if (dishTicks && (hasCustomer || canSetCustomer)) {
-    kebabRows.push({
-      label: 'Customer',
-      act: () => {
-        setMenuOpen(false)
-        if (hasCustomer) setCustomerOpen(true)
-        else onSetCustomer?.(order)
-      },
-    })
-  }
   if (order.status === 'open') {
     if (onEdit) {
       // Line editing locks once an order is paid; it also stands down while
@@ -315,7 +283,6 @@ export function PipelineCard({
           : `open-order-${order.orderNumber}`
       }
       data-paid={isPaid || undefined}
-      data-dish-workflow={dishTicks || undefined}
       /*
         The border is transparent and the ticket layer draws the visible one, so
         the card's box — and so its height — is what it was before the ticket.
@@ -329,11 +296,8 @@ export function PipelineCard({
             its height rather than adding two extra rows to the ticket. */}
         <span
           data-testid={`order-reference-${order.id}`}
-          className="relative flex shrink-0 items-center font-display text-[1.375rem] leading-6 text-primary"
+          className="flex shrink-0 items-center font-display text-[1.375rem] leading-6 text-primary"
         >
-          {dishTicks && member && (
-            <MemberMark className="pointer-events-none absolute -left-1 -top-1.5 z-10 rounded-full border border-border bg-surface p-0.5" />
-          )}
           {awaitingNumber ? (
             <>
               {/*
@@ -348,12 +312,7 @@ export function PipelineCard({
             `#${order.orderNumber}`
           )}
         </span>
-        {dishTicks && order.label && (
-          <span className="min-w-0 flex-1 self-center text-sm font-black leading-tight text-content">
-            {order.label}
-          </span>
-        )}
-        {!dishTicks && order.serviceType && (
+        {order.serviceType && (
           <PlaceTag
             testId={`order-service-${order.id}`}
             icon={order.serviceType === 'dine_in' ? UtensilsCrossed : ShoppingBag}
@@ -383,11 +342,7 @@ export function PipelineCard({
           No age either: the list is already newest first, so a card's place
           says what its age did [owner, 2026-10-05].
         */}
-        <div
-          className={
-            dishTicks && order.label ? 'min-w-0 self-center' : 'min-w-0 flex-1 self-center'
-          }
-        >
+        <div className="min-w-0 flex-1 self-center">
           <div
             data-testid={`order-metadata-${order.id}`}
             className="flex min-w-0 items-center gap-x-1.5 text-xs leading-4 text-content-muted"
@@ -442,116 +397,57 @@ export function PipelineCard({
             )}
             <Money paise={totalPaise} display className="font-black text-content" />
           </span>
-          {dishTicks ? (
-            <OrderAgeRing
-              orderedAt={order.orderedAt}
-              now={new Date(nowMs ?? Date.parse(order.orderedAt))}
-              compact
-            />
-          ) : (
-            (hasCustomer || canSetCustomer) && (
-              <Button
-                variant="secondary"
-                size="phone"
-                className="relative h-9 w-9 px-0"
-                data-testid={`order-customer-${order.id}`}
-                aria-label={
-                  hasCustomer
-                    ? `Customer for ${reference}${member ? ', gold member' : ''}`
-                    : `Add a customer to ${reference}`
-                }
-                disabled={busy}
-                onClick={() => (hasCustomer ? setCustomerOpen(true) : onSetCustomer?.(order))}
-              >
-                {hasCustomer ? (
-                  <UserRound aria-hidden className="text-primary" size={17} />
-                ) : (
-                  <UserRoundPlus aria-hidden className="text-content-muted" size={17} />
-                )}
-                {/*
+          {(hasCustomer || canSetCustomer) && (
+            <Button
+              variant="secondary"
+              size="phone"
+              className="relative h-9 w-9 px-0"
+              data-testid={`order-customer-${order.id}`}
+              aria-label={
+                hasCustomer
+                  ? `Customer for ${reference}${member ? ', gold member' : ''}`
+                  : `Add a customer to ${reference}`
+              }
+              disabled={busy}
+              onClick={() => (hasCustomer ? setCustomerOpen(true) : onSetCustomer?.(order))}
+            >
+              {hasCustomer ? (
+                <UserRound aria-hidden className="text-primary" size={17} />
+              ) : (
+                <UserRoundPlus aria-hidden className="text-content-muted" size={17} />
+              )}
+              {/*
                 The star rides on the customer it belongs to, not beside the
                 order's number [owner, 2026-10-05]. Read from the order's own
                 snapshot, never the live membership: the kitchen acts on "was a
                 member when they ordered", and a revocation tonight must not
                 change a card already being made.
               */}
-                {member && (
-                  <MemberMark className="pointer-events-none absolute -right-1.5 -top-1.5 rounded-full border border-border bg-surface p-0.5" />
-                )}
-              </Button>
-            )
+              {member && (
+                <MemberMark className="pointer-events-none absolute -right-1.5 -top-1.5 rounded-full border border-border bg-surface p-0.5" />
+              )}
+            </Button>
           )}
         </div>
       </div>
 
       {showItems && order.lines.length > 0 && (
-        <div className="mt-1 flex items-stretch gap-1.5">
-          <ul
-            className={cn('min-w-0 flex-1', dishTicks ? 'space-y-1.5' : 'space-y-0')}
-            aria-label={`Items for ${reference}`}
-          >
-            {dishTicks ? (
-              order.lines.map((line, index) =>
-                line.kind === 'packaging' ? (
-                  <li key={index} className="text-xs text-content-muted">
-                    {line.quantity} {line.itemName}
-                  </li>
-                ) : (
-                  <ReadyDish
-                    cue={readyCue}
-                    key={line.orderLineId ?? index}
-                    line={line}
-                    readyQuantity={
-                      readyQuantities[line.orderLineId ?? ''] ?? line.readyQuantity ?? 0
-                    }
-                    interactive={!foreignTill && !busy && onTickLine !== undefined}
-                    onTick={() =>
-                      onTickLine?.(line.orderLineId!, (line.preparedQuantity ?? 0) < line.quantity)
-                    }
-                  />
-                ),
-              )
-            ) : (
-              <>
-                {order.lines.map((line, index) => (
-                  <li
-                    key={`${line.menuItemId}-${index}`}
-                    className="flex items-start gap-1.5 text-sm leading-5"
-                  >
-                    {/* The kitchen ticket's count tile, inside the line's own height. */}
-                    <span className="mt-px grid h-[15px] min-w-[18px] shrink-0 place-items-center rounded-[5px] bg-surface px-1 text-[11px] font-black leading-none text-content tabular-nums">
-                      {line.quantity}
-                    </span>
-                    <span className="min-w-0 flex-1 font-bold text-content">{line.itemName}</span>
-                  </li>
-                ))}
-              </>
-            )}
+        <div className="mt-0.5 flex items-start gap-1.5">
+          <ul className="min-w-0 flex-1 space-y-0" aria-label={`Items for ${reference}`}>
+            {order.lines.map((line, index) => (
+              <li
+                key={`${line.menuItemId}-${index}`}
+                className="flex items-start gap-1.5 text-sm leading-5"
+              >
+                {/* The kitchen ticket's count tile, inside the line's own height. */}
+                <span className="mt-px grid h-[15px] min-w-[18px] shrink-0 place-items-center rounded-[5px] bg-surface px-1 text-[11px] font-black leading-none text-content tabular-nums">
+                  {line.quantity}
+                </span>
+                <span className="min-w-0 flex-1 font-bold text-content">{line.itemName}</span>
+              </li>
+            ))}
           </ul>
-          <div
-            className="flex w-9 shrink-0 flex-col items-center justify-center"
-            data-testid="kitchen-bell-slot"
-          >
-            {dishTicks ? (
-              <DishKitchenStatus
-                labels={kitchenLabels}
-                states={
-                  kitchenStates ??
-                  kitchenAnswers.map((answer) =>
-                    answer === null
-                      ? null
-                      : prepared
-                        ? 'handed_over'
-                        : answer === 'seen'
-                          ? 'acknowledged'
-                          : 'sent',
-                  )
-                }
-              />
-            ) : (
-              kitchen && <KitchenBellMark bell={kitchen} />
-            )}
-          </div>
+          {kitchen && <KitchenBellMark bell={kitchen} />}
         </div>
       )}
 
@@ -561,27 +457,15 @@ export function PipelineCard({
           every state. This is the whole point of #55 and no state may reorder,
           resize, rename or withhold either of them.
         */}
-        {dishTicks ? (
-          order.serviceType && (
-            <div className="flex min-w-0 flex-1 items-center justify-center">
-              <PlaceTag
-                testId={`order-service-${order.id}`}
-                icon={order.serviceType === 'dine_in' ? UtensilsCrossed : ShoppingBag}
-                label={table !== null ? tableLabel(table) : serviceTypeLabel(order.serviceType)}
-              />
-            </div>
-          )
-        ) : (
-          <StateToggle
-            label="Prepared"
-            tone="primary"
-            checked={prepared}
-            interactive={!dishTicks && !foreignTill}
-            disabled={busy}
-            testId={`prepared-toggle-${order.id}`}
-            onActivate={() => (prepared ? onUnprepare(order) : onMarkPrepared(order))}
-          />
-        )}
+        <StateToggle
+          label="Prepared"
+          tone="primary"
+          checked={prepared}
+          interactive={!foreignTill}
+          disabled={busy}
+          testId={`prepared-toggle-${order.id}`}
+          onActivate={() => (prepared ? onUnprepare(order) : onMarkPrepared(order))}
+        />
         <StateToggle
           label="Paid"
           tone="success"
@@ -694,48 +578,6 @@ export function PipelineCard({
  * for a kitchen that does not carry this order. The dots are absolutely placed:
  * when they go, nothing moves.
  */
-function DishKitchenStatus({
-  states,
-  labels,
-}: {
-  states: readonly (KitchenDishState | null)[]
-  labels: readonly string[]
-}) {
-  return (
-    <div className="flex flex-col items-center gap-1">
-      {states.map((state, index) =>
-        state === null ? null : (
-          <span
-            key={index}
-            role={state === 'handed_over' ? undefined : 'img'}
-            aria-hidden={state === 'handed_over' || undefined}
-            aria-label={
-              state === 'handed_over'
-                ? undefined
-                : `${labels[index] ?? `Kitchen ${index + 1}`}: ${state === 'ready' ? 'food ready to collect' : state}`
-            }
-            data-testid={state === 'ready' ? 'kitchen-pickup-bell' : 'kitchen-status-slot'}
-            data-kitchen={index + 1}
-            data-kitchen-state={state}
-            className={cn(
-              'grid h-5 w-9 place-items-center',
-              state === 'sent' ? 'text-content-muted' : 'text-primary',
-            )}
-          >
-            {state === 'ready' ? (
-              <Bell aria-hidden size={18} fill="currentColor" className="kitchen-bell" />
-            ) : state === 'acknowledged' ? (
-              <CheckCheck aria-hidden size={18} strokeWidth={2.25} />
-            ) : state === 'sent' ? (
-              <Check aria-hidden size={18} strokeWidth={2.25} />
-            ) : null}
-          </span>
-        ),
-      )}
-    </div>
-  )
-}
-
 function KitchenBellMark({ bell }: { bell: KitchenBell }) {
   return (
     <span
@@ -751,7 +593,7 @@ function KitchenBellMark({ bell }: { bell: KitchenBell }) {
         below, so a one-dish card grows by a few pixels to make room [owner,
         2026-10-09]; a card with more dishes is already tall enough.
       */
-      className="flex min-h-[29px] w-9 shrink-0 flex-col items-center justify-center gap-[3px] self-stretch"
+      className="-mb-1 -mt-0.5 flex min-h-[29px] w-9 shrink-0 flex-col items-center justify-center gap-[3px] self-stretch"
     >
       {/*
         Once every kitchen has answered there is nothing to show: no grey bell

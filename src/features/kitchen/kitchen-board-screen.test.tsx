@@ -98,7 +98,7 @@ describe('the kitchen board', () => {
     await waitFor(() => expect(ack).toHaveAttribute('data-ringing', 'true'))
     expect(ack.className).toContain('kitchen-ringing')
     for (const card of first) {
-      const silent = within(card).queryByRole('button', { name: /^ACK/ })
+      const silent = within(card).queryByRole('button')
       if (silent) expect(silent).not.toHaveAttribute('data-ringing')
     }
 
@@ -106,14 +106,7 @@ describe('the kitchen board', () => {
     await waitFor(() =>
       expect(screen.getByTestId('kitchen-card-900')).toHaveAttribute('data-state', 'quiet'),
     )
-    expect(
-      within(screen.getByTestId('kitchen-card-900')).queryByRole('button', { name: /^ACK/ }),
-    ).toBeNull()
-    expect(
-      within(screen.getByTestId('kitchen-card-900')).getByRole('button', {
-        name: 'Ready order 900',
-      }),
-    ).toBeEnabled()
+    expect(within(screen.getByTestId('kitchen-card-900')).queryByRole('button')).toBeNull()
   })
 
   it('states its filter, and a saved filter changes what it shows', async () => {

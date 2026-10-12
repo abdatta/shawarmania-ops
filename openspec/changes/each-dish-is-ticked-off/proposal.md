@@ -2,20 +2,21 @@
 
 > **Model**: Opus · **Wave**: F · **Depends on**: **#72**, #70, #69 · **Gate**: the
 > owner approved the counter's new layout, the label, the dish ticks, the notes and
-> the Ready checkbox cue from demo screenshots before any of it was built live; the
+> the Ready shake from demo screenshots before any of it was built live; the
 > counter is the menu and a two-column order rail, with the composer laid over the
-> rail's left half and Bills this shift and Expenses in side-by-side panels below; an order taken
-> with only a label shows that label as its card's headline on the counter and identifies the kitchen ticket by order number, offers it as the name when a new number is entered at payment, and keeps
+> rail's left half and Bills this shift and Expenses in tabs below; an order taken
+> with only a label shows that label as its card's headline on the counter and the
+> kitchen, offers it as the name when a new number is entered at payment, and keeps
 > it nowhere once the order leaves the rail; a dish carries a short note from the
 > composer that only the kitchen showing that dish sees, and the counter's card;
 > every dish on a rail card is ticked off on its own and the order's **Prepared**
 > follows the dishes, unticking itself when an edit adds food; a kitchen marks its
-> part of a ticket **Ready**, the card collapses until counter handover, and those dishes show a Ready cue on
+> part of a ticket **Ready**, the card leaves its board, and those dishes shake on
 > the counter, silently, until ticked; food added after Ready reaches the kitchen
 > as a new ticket, and food removed or cancelled after Ready reaches it not at all;
 > a ticked or Ready dish takes no more and its note is fixed; each outlet's dish
 > records are isolated, proved by a hand-crafted request; and the four-role demo
-> walkthrough still walks, with a kitchen tab's Ready showing a cue on a counter tab's dish.
+> walkthrough still walks, with a kitchen tab's Ready shaking a counter tab's dish.
 
 ## Why
 
@@ -49,29 +50,25 @@ and is short of room. The owner wants that room for the rail.
 
 - **Two columns, not three**: the menu, and the order rail at about twice its
   width, its cards flowing in **two columns** — the same single list, newest
-  first, packing each next ticket into the shorter column without row-height gaps.
+  first, in reading order.
 - **Composing lays the composer over the rail's left half** — a new order or an
   edit. The rail does not squeeze; the cards underneath are simply covered until
   the order is saved, paid or abandoned.
-- **Bills this shift and Expenses sit side by side below the workspace**, reached by
+- **Bills this shift and Expenses become two tabs below the workspace**, reached by
   scrolling down as Expenses is today. Taking a payment back or opening a receipt
-  works there as it does now. Expenses align below the menu and Bills below the
-  two-column orders rail at the same widths. Narrow screens scroll both rows
-  sideways together without a tab switch. The records row fills another usable
-  viewport; at the bottom only Bills and Expenses remain, with long lists scrolling
-  within those panels and no blank scroll space below them.
-- **Cash and UPI remain in the Bills panel only**. The header pill describes
-  counter status and SHALL NOT include a money total. A short downward scroll
-  reveals the payment split; search keeps its full menu-column width.
+  works there as it does now.
+- **The Cash and UPI tiles are kept exactly as they look today**, and move. Two
+  placements are built for the owner to choose between in the demo: at the top of
+  the Bills tab with a one-line total in the header, or as a compact strip above
+  the rail.
 
 ### The order label
 
 - **A label field at the top of the composer**, one tap and a few letters,
   optional, never asking for a number.
 - **The label is the card's headline** on the counter, beside the order number,
-  with a compact age ring replacing the customer control. The kitchen uses the order number without the label.
-- The counter age stays in total minutes, including beyond an hour, with a darker
-  red from forty minutes. A gold star overlaps the order number without moving it.
+  replacing the small customer pin; and it is shown on the **kitchen's card**
+  under the number, so the kitchen can call it out.
 - **At payment**, entering a number whose customer has a saved name uses that
   name. A new number, or one with no name, **suggests the label** as the name,
   editable.
@@ -83,7 +80,7 @@ and is short of room. The owner wants that room for the rail.
 
 ### Notes on a dish
 
-- **A pencil at the right of the row, beside a compact quantity pill,** on each line in the composer opens a small sheet:
+- **An ⓘ button beside − and +** on each line in the composer opens a small sheet:
   a short text box (about 60 characters) under a row of quick chips — *No sauce*,
   *Extra spicy* and the like at first, then the notes this tablet uses most.
 - **On a line of two or more, the sheet asks *All* or *Only 1***, so "two
@@ -94,31 +91,28 @@ and is short of room. The owner wants that room for the rail.
 
 ### Each dish is ticked off at the counter
 
-- **Every dish on a rail card is tapped to tick it off** — its text turns orange
-  and its separate checkbox fills and shows a check. The quantity stays visible. A mis-tap
-  is tapped again.
-- **Prepared follows the item ticks without a separate control**. Its footer space carries service/table information beside Paid, or one wide Paid when service is absent. Payment is unchanged; an order
+- **Every dish on a rail card is tapped to tick it off** — its quantity tile
+  fills and shows a check. A mis-tap is tapped again.
+- **Prepared becomes a statement**: it ticks itself when every dish is ticked, and
+  unticks itself when an edit adds food that isn't. Payment is unchanged; an order
   leaves the rail when it is paid and every dish is ticked, as today.
 - Packaging is not a dish and is never ticked.
 
 ### Ready from the kitchen
 
-- **The kitchen's card gains Done** beside the timer. A thick gray circle with a
-  gray check and pale interior becomes filled green on click. Both states have
-  the same diameter as the timer. Ready reaches the
-  counter immediately; the ticket collapses to a gray header with an expand arrow
-  in place of the timer. Clicking anywhere expands or collapses it. It remains undoable until its items are
-  handed over at the counter, which starts the soft held-slot departure. Unticking
-  restores the Done ticket. The kitchen uses responsive free-flowing columns.
-- **On the counter, those dishes show a Ready checkbox cue** — silently: the counter
-  faces customers and makes no sound. Ready keeps the normal text and an orange checkbox outline, with no row outline, and a localized cue until the biller ticks
-  them when the food is handed over. The demo compares a soft halo, a breathing dot and a steady dot. Animated cues pulse together; reduced motion keeps them steady.
-- **The pointer names it** — *↓ Ready #42* — while a ready order is scrolled out
-  of sight. The dish's checkbox cue carries readiness without a per-card count.
-- **Each kitchen has one stable indicator slot:** single tick when sent, orange
-  double tick when acknowledged, bell when it has Ready food, and empty once its
-  food is ticked at the counter. One kitchen changing never replaces another's mark.
-- Two kitchens: each marks its own dishes ready; only those show a Ready cue.
+- **The kitchen's card gains Ready** beside ACK. Ready means *my part of this
+  ticket is done*; it also answers for ACK, so a cook who skips ACK still taps
+  once. The card leaves the kitchen's board, with a few seconds to **Undo**.
+- **On the counter, those dishes light up and shake** — silently: the counter
+  faces customers and makes no sound. A short shake when Ready arrives, then a
+  border that stays and a small shake every half minute, until the biller ticks
+  them when the food is handed over. Under reduced motion they fade and return
+  instead of moving.
+- **The card says it too**: a small *2 ready* mark, and a pointer — *↓ Ready #42*
+  — while a ready order is scrolled out of sight.
+- **The bell is unchanged**: it still says only whether a kitchen has pressed ACK.
+  Ready and the ticks are a separate answer, on the dishes themselves.
+- Two kitchens: each marks its own dishes ready; only those shake.
 
 ### What the kitchen has made never comes back to it
 
@@ -135,16 +129,13 @@ and is short of room. The owner wants that room for the rail.
 
 ### Demo
 
-- The demo's counter and kitchen tabs walk all of it: a kitchen tab's Ready signals readiness on
-  the counter tab's dishes, a note travels with the dish; the label stays on the counter.
-- The owner approved this demo on 11 October 2026, with the final request to
-  remove the header total. Phase 1 is complete; the remaining database and live
-  work continues in a separate chat. [Handoff](handoff.md) records the exact
-  starting point and implementation boundaries.
+- The demo's counter and kitchen tabs walk all of it: a kitchen tab's Ready shakes
+  the counter tab's dishes, a label and a note travel from one to the other.
 
 ## Non-goals
 
 - **No sound on the counter**, for Ready or anything else.
+- **No new bell state.** The bell keeps answering only "has the kitchen seen it".
 - **No priced modifiers.** "Extra cheese +₹20" changes money and is its own change;
   a note never carries an amount.
 - **No note on the whole order**, and no note on a packaging line.
@@ -162,13 +153,14 @@ and is short of room. The owner wants that room for the rail.
 ### Modified
 
 - `counter-billing` — the two-column workspace with the composer over the rail;
-  Bills and Expenses panels; the label, notes and locked dishes in the composer; dish
-  ticks, service footer and age ring on the card; the Ready checkbox cue; the counter's
+  Bills and Expenses tabs; the label, notes and locked dishes in the composer; dish
+  ticks and the Prepared statement on the card; the Ready shake; the counter's
   kitchen read gaining readiness.
-- `kitchen-display` — the card showing notes, food still owed and collapsed Done receipts;
+- `kitchen-display` — the card showing the label, notes and only food still owed;
   Ready with Undo; tickets after Ready.
 - `order-lifecycle` — the label's lifetime; a dish's note; dish-level preparation
-  and readiness, with the order's Prepared derived from its dishes; the kitchen's read gaining notes and readiness without the label.
+  and readiness, with the order's Prepared derived from its dishes; the kitchen's
+  read gaining label, notes and readiness.
 
 ## Impact
 
@@ -185,8 +177,8 @@ and is short of room. The owner wants that room for the rail.
 ## Docs To Update Before Archive
 
 - [`docs/SCREENS.md`](../../../docs/SCREENS.md) — the counter's two-column
-  workspace, the composer over the rail, Bills and Expenses panels, the label, notes,
-  dish ticks and the Ready checkbox cue; the kitchen card's notes, Done receipts and
+  workspace, the composer over the rail, Bills and Expenses tabs, the label, notes,
+  dish ticks and the Ready shake; the kitchen card's label, notes, Ready and
   tickets after Ready.
 - [`docs/DATA_MODEL.md`](../../../docs/DATA_MODEL.md) — `orders.label` and its
   clearing, `order_items.note`, the dish tick and Ready records, the order's
@@ -199,7 +191,7 @@ and is short of room. The owner wants that room for the rail.
   label may hold a name: never logged, never exported, cleared when the order
   leaves the rail.
 - [`docs/DESIGN_SYSTEM.md`](../../../docs/DESIGN_SYSTEM.md) — the Ready highlight
-  and Ready cues, in both themes and under reduced motion.
+  and shake, in both themes and under reduced motion.
 - [`docs/DEMO_MODE.md`](../../../docs/DEMO_MODE.md) — the two-tab walkthrough's
   Ready, label and note.
 - [`docs/GLOSSARY.md`](../../../docs/GLOSSARY.md) — *label*, *note*, *Ready*,

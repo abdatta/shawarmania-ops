@@ -113,7 +113,6 @@ interface LookedUp {
 
 export function CustomerDialog(props: {
   open: boolean
-  suggestedName?: string
   purpose?: 'order' | 'payment'
   /** The current decision, so reopening the row shows what it already says. */
   selection: CustomerSelection | null
@@ -154,7 +153,6 @@ export function CustomerDialog(props: {
 }
 
 function OpenCustomerDialog({
-  suggestedName = '',
   purpose = 'order',
   selection,
   lookup,
@@ -164,7 +162,6 @@ function OpenCustomerDialog({
   onClose,
   onChoose,
 }: {
-  suggestedName?: string
   purpose?: 'order' | 'payment'
   selection: CustomerSelection | null
   lookup: (phone: string) => Promise<CustomerIdentity | null>
@@ -183,9 +180,7 @@ function OpenCustomerDialog({
   const [digits, setDigits] = useState(() =>
     selection?.kind === 'identified' ? selection.phone.slice(-PHONE_DIGITS) : '',
   )
-  const [name, setName] = useState(() =>
-    selection?.kind === 'identified' ? selection.name : suggestedName,
-  )
+  const [name, setName] = useState(() => (selection?.kind === 'identified' ? selection.name : ''))
   const [lookedUp, setLookedUp] = useState<LookedUp | null>(null)
   const [suggested, setSuggested] = useState<{
     phone: string

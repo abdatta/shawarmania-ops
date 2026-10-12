@@ -494,39 +494,6 @@ describe('the live tablet acceptance boundary', () => {
     database.close()
   })
 
-  it('keeps dish ticks, labels and notes across an offline reopen and queues their dependencies', async () => {
-    const billing = createSupabaseBillingAdapter(offlineClient(), session)
-    const created = await billing.saveOrder({
-      ...orderInput,
-      label: 'Red shirt',
-      lines: [{ ...draft.lines[0]!, note: 'No sauce' }],
-    })
-    const lineId = created.lines[0]!.orderLineId!
-    await billing.markOrderLinesPrepared!(crypto.randomUUID(), created.id, [
-      { id: lineId, prepared: true },
-    ])
-    const reopened = createSupabaseBillingAdapter(offlineClient(), session)
-    await expect(reopened.listOpenOrders(session.device.outletId)).resolves.toMatchObject([
-      {
-        id: created.id,
-        label: 'Red shirt',
-        preparedAt: expect.any(String),
-        lines: [{ orderLineId: lineId, note: 'No sauce', preparedQuantity: 1 }],
-      },
-    ])
-    await reopened.markOrderLinesPrepared!(crypto.randomUUID(), created.id, [
-      { id: lineId, prepared: false },
-    ])
-    await expect(reopened.listOpenOrders(session.device.outletId)).resolves.toMatchObject([
-      { id: created.id, preparedAt: null, lines: [{ preparedQuantity: 0 }] },
-    ])
-    const database = new BillingDeliveryDatabase()
-    const rows = await database.envelopes.toArray()
-    expect(rows.filter((row) => row.type === 'prepare_order_lines')).toHaveLength(2)
-    expect(await database.dependencies.count()).toBeGreaterThanOrEqual(2)
-    database.close()
-  })
-
   it('queues a saved order with its bill discount, its table and its bags', async () => {
     const billing = createSupabaseBillingAdapter(offlineClient(), session)
     const tenPercent = {

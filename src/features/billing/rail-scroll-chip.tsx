@@ -18,8 +18,6 @@ import { ArrowDown, ArrowUp, IndianRupee } from 'lucide-react'
  * that visible and this is what says it instead, in fewer pixels.
  */
 export interface RailClipping {
-  readyAbove?: string | undefined
-  readyBelow?: string | undefined
   above: number
   below: number
   /** Any order hidden **below** is prepared and still waiting for money. */
@@ -51,8 +49,6 @@ export function useRailClipping(
     if (!scroller) return setClipping(NOTHING_CLIPPED)
     const viewTop = scroller.scrollTop
     const viewBottom = viewTop + scroller.clientHeight
-    let readyAbove: string | undefined
-    let readyBelow: string | undefined
     let above = 0
     let below = 0
     let moneyWaitingBelow = false
@@ -60,23 +56,18 @@ export function useRailClipping(
       const item = child as HTMLElement
       const top = item.offsetTop
       const bottom = top + item.offsetHeight
-      if (bottom <= viewTop) {
-        above += 1
-        readyAbove ??= item.dataset.readyOrder
-      } else if (top >= viewBottom) {
+      if (bottom <= viewTop) above += 1
+      else if (top >= viewBottom) {
         below += 1
-        readyBelow ??= item.dataset.readyOrder
         if (item.dataset.awaitingMoney === 'true') moneyWaitingBelow = true
       }
     }
     setClipping((current) =>
-      current.readyAbove === readyAbove &&
-      current.readyBelow === readyBelow &&
       current.above === above &&
       current.below === below &&
       current.moneyWaitingBelow === moneyWaitingBelow
         ? current
-        : { above, below, moneyWaitingBelow, readyAbove, readyBelow },
+        : { above, below, moneyWaitingBelow },
     )
   }, [scrollerRef])
 
@@ -113,12 +104,10 @@ export function useRailClipping(
 export function RailScrollChip({
   edge,
   count,
-  readyOrder,
   marked = false,
   onActivate,
 }: {
   edge: 'top' | 'bottom'
-  readyOrder?: string | undefined
   count: number
   /** Prepared work is waiting for money down there. */
   marked?: boolean
@@ -136,17 +125,13 @@ export function RailScrollChip({
       data-testid={`rail-scroll-${edge}`}
       /* Named by its destination, not by the direction glyph. */
       aria-label={
-        readyOrder
-          ? `${destination}, Ready #${readyOrder}`
-          : marked
-            ? `${destination}, including prepared work waiting for money`
-            : destination
+        marked ? `${destination}, including prepared work waiting for money` : destination
       }
       onClick={onActivate}
       className={`absolute ${edge === 'top' ? 'top-1' : 'bottom-1'} left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs font-bold text-content shadow-lg focus-visible:focus-ring`}
     >
       <Arrow aria-hidden size={13} />
-      {readyOrder ? <span className="text-dish-ready">Ready #{readyOrder}</span> : `${count} more`}
+      {count} more
       {marked && (
         /*
           The one thing the deleted divider said that nothing else on the new

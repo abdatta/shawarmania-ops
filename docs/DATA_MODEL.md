@@ -278,7 +278,7 @@ Menu is per-outlet from day one. Two outlets may share item names and differ on 
 tablet, creator and counter shift, `ordered_at`, explicit `business_date`,
 customer-form snapshot and `customer_tier`, integer-paise totals, `status`
 (`open` | `paid` | `cancelled`), and separate revision, cancellation and payment
-attribution. `label` is nullable, trimmed to 1–24 characters, and cleared by the order guard on cancellation or when paid and prepared. It is absent from bills.
+attribution.
 
 **How it was served** *(#60)*: `service_type` (`dine_in` | `takeaway`, null for
 neither), `table_number` (1 to 999, only on dine-in), and `table_shared`. The
@@ -299,7 +299,7 @@ touches the permanent bill-number counter.
 
 **`order_items`** — `id`, `order_id`, `menu_item_id`, captured `item_name` and
 `unit_price_paise`, `quantity`, `line_total_paise`. Existing lines retain their
-snapshot through later menu changes. `note` is nullable, trimmed to 1–60 characters and allowed only on item lines. A ticked or Ready line keeps its note on revision; bills never copy it.
+snapshot through later menu changes.
 
 `kind` (`item` | `packaging`, default `item`) *(#60)*. A packaging line is named
 *Packaging*, has no `menu_item_id` and no category — so no menu discount can reach
@@ -530,7 +530,7 @@ lookup. Isolation-tested, and classified in `01_schema_coverage.sql`.
 
 **`counter_devices.kind`** is `counter` or `kitchen`, copied from **`counter_device_setup_codes.kind`** when the code is redeemed. **`counter_shift_requests.kind`** and **`counter_shifts.kind`** copy the device's kind; confirmation refuses a request whose tablet changed kind since. `counter_shifts.ended_reason` gains `device_kind_changed`. A kitchen's filter is on its own row: **`kitchen_filter_mode`** (`include` | `exclude`, default `exclude`) and **`kitchen_category_ids`** (default empty — everything), with who changed it and when, and **`kitchen_sort`** (`oldest_first` | `newest_first`, default `oldest_first`), saved through the same `set_kitchen_filter()`. An outlet transfer clears the list and keeps the sort.
 
-**`kitchen_board()`** is a live kitchen shift's only order read. It returns narrow cooking tickets with owed quantities, notes and ticket numbers, plus distinct Done receipts for captured food not yet handed over. Judgement compares owed food with acknowledgements made after this tablet's latest unreversed Ready, through its current filter. Counter ticks silently leave both sides of that comparison. A receipt's id is its Ready id and sourceOrderId remains the command target. No label, customer or amount leaves the function.
+**`kitchen_board()`** is the only way a kitchen reads orders. It returns, for its shift's outlet, every order not yet prepared (`status in ('open','paid') and prepared_at is null`) and every order cancelled during the shift's business day, that has a line visible under the filter or has an acknowledged line visible through that same filter — each with its number, service, table, times, status, visible lines (name, quantity, menu item), the count of its other lines, and this tablet's latest acknowledgement. No customer column and no amount. An order's **version** is its `changed_at`, or its `created_at` before any revision. The board also returns **`filterChangedAt`**, the server's `kitchen_filter_changed_at`, so the kitchen can distinguish a filter save from a later counter write. **`kitchen_filter_lines(jsonb, text, uuid[])`** narrows acknowledged snapshots through the filter in force now using each dish's current category, exactly as current order lines are judged; a line without a menu item has no category. The stored snapshot is unchanged. A current-version cancel ACK hides a card only while the order is cancelled or has no visible food here.
 
 **`kitchen_acknowledgements`** — `id` (client UUID), `outlet_id`, `device_id`, `shift_id`, `person_id`, `order_id`, `kind` (`new` | `edit` | `cancel`), `order_version`, `lines` (the visible lines at that version, snapshotted by the server), `acked_at` (`clock_timestamp()`). Append-only by trigger; written only through `kitchen_acknowledge()`, which refuses a version that is no longer current. Readable by the acknowledging tablet during its kitchen shift and by the outlet's managers.
 
@@ -1346,12 +1346,3 @@ Every check below is enforced by the schema and covered by the suites in `supaba
 `sales_analytics_series(uuid, date, date, integer, text, text)` is the Items chart: for every dish, one dish (its menu id, or `snapshot:<name>` for a line sold without one, exactly as `sales_analytics` keys it) or one captured category, it returns `{from, units[], revenue[]}`, one value per day of every window, oldest first, at most 368 of each, and `hourUnits[]`, `hourRevenue[]`: 24 Kolkata order-hour totals per window, current window first, at most 96 of each. It is read only when that subject is charted.
 
 No raw tickets, line records, identities or engagement data are returned by either. Settled bill totals and explicit business dates are authoritative; dish lines exclude packaging and bill-level discounts. No tracking table or ingestion RPC is introduced.
-
-
-### Dish handover and kitchen Ready
-
-**`order_line_preparations`** stores order_item_id, outlet_id, order_id, captured quantity, prepared_at, shift_id and person_id. A line is ticked while its captured quantity covers today's quantity. The owning tablet writes only through the idempotent prepare_order_lines envelope; old whole-order commands tick/untick all item lines. Removed lines cascade their ticks. All item ticks derive counter preparation; an unticked line clears it on an open order. Day-change stamps create no dish ticks and an earlier delayed tick may supersede them.
-
-**`kitchen_readies`** stores client id, outlet/device/shift/person/order identities, captured line quantities, timestamp and optional undoes. History is append-only; Undo appends a row. Ready quantities sum unreversed captures and cap at today's line quantity. Ready and revisions serialize on the order. A stale quantity is accepted; remaining extra food forms a later ticket. Receipts consume counter handover in timestamp/id order.
-
-Both tables enforce outlet RLS and deny direct client writes. A counter reads its outlet's preparations; a kitchen reads its own Readies and learns handover through the board; managers read only their assigned outlets and the owner may read across them. counter_kitchen_marks returns line-id Ready quantities and independent kitchen dish states, with no dish-to-kitchen mapping, person or time.

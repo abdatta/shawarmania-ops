@@ -1,4 +1,3 @@
-import { seedDishWorkflow } from './dish-workflow'
 import type { AppRole, AttendanceAdapter, DataAdapters } from '../adapters'
 import { createMockAnalyticsAdapter } from './analytics'
 import { assignedOutlets, outletsForRole } from '../adapters'
@@ -73,7 +72,6 @@ export interface DemoData {
 
 export function createDemoData(options: { matureHistory?: boolean } = {}): DemoData {
   const store = createDemoStore({ billingLifecycle: true, ...options })
-  seedDishWorkflow(store)
   return {
     accounts: createDemoAccounts(),
     store,

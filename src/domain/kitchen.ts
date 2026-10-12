@@ -13,7 +13,6 @@ export interface KitchenCardFacts {
 }
 
 export interface KitchenLineFacts {
-  note?: string | null
   menuItemId: string | null
   itemName: string
   quantity: number
@@ -77,7 +76,7 @@ export function kitchenAlertShouldRing(
 }
 
 function lineKey(line: KitchenLineFacts): string {
-  return `${line.menuItemId ?? `name:${line.itemName}`}${line.note ? `|note:${line.note}` : ''}`
+  return line.menuItemId ?? `name:${line.itemName}`
 }
 
 /** Quantities by dish, so two lines of one dish compare as one. */
@@ -106,7 +105,6 @@ export function sameLines(a: readonly KitchenLineFacts[], b: readonly KitchenLin
 export type KitchenLineChange = 'same' | 'added' | 'removed' | 'changed'
 
 export interface KitchenLineDiff {
-  note?: string | null
   key: string
   itemName: string
   quantity: number
@@ -136,7 +134,6 @@ export function diffKitchenLines(
     const was = before.get(key)?.quantity ?? null
     rows.push({
       key,
-      ...(line.note ? { note: line.note } : {}),
       itemName: line.itemName,
       quantity,
       previousQuantity: was === quantity ? null : was,
@@ -159,13 +156,11 @@ export function diffKitchenLines(
 /** Minutes after which a waiting order reads warning, then danger. Owner may tune. */
 export const KITCHEN_WAIT_WARNING_MINUTES = 10
 export const KITCHEN_WAIT_DANGER_MINUTES = 20
-export const KITCHEN_WAIT_CRITICAL_MINUTES = 40
 
-export type KitchenWaitTone = 'normal' | 'warning' | 'danger' | 'critical'
+export type KitchenWaitTone = 'normal' | 'warning' | 'danger'
 
 export function kitchenWaitTone(orderedAt: string, now: Date): KitchenWaitTone {
   const minutes = (now.getTime() - Date.parse(orderedAt)) / 60_000
-  if (minutes >= KITCHEN_WAIT_CRITICAL_MINUTES) return 'critical'
   if (minutes >= KITCHEN_WAIT_DANGER_MINUTES) return 'danger'
   if (minutes >= KITCHEN_WAIT_WARNING_MINUTES) return 'warning'
   return 'normal'
@@ -190,8 +185,6 @@ export const KITCHEN_REREAD_MS = 20_000
  * press ACK on what it shows now, or done.
  */
 export type KitchenAnswer = 'waiting' | 'seen'
-/** One kitchen's counter indicator, judged only on the food it carries. */
-export type KitchenDishState = 'sent' | 'acknowledged' | 'ready' | 'handed_over'
 
 /** One counter card's bell, or none. */
 export interface KitchenBell {

@@ -76,14 +76,12 @@ commands.
 
 An outlet's unfinished orders SHALL be readable by a live kitchen shift at that
 outlet only through the kitchen board, which SHALL return for each order its
-identity, order number, service, table, ordered time, last-changed time,
+identity, order number, label, service, table, ordered time, last-changed time,
 status and cancelled time, its item lines visible under the tablet's filter (name,
 quantity, owed quantity, note and menu item), the count of its other item lines,
 this tablet's ticket number for the order, and that tablet's own acknowledgements
-and Readies. Its read SHALL support separate cooking tickets for newly owed food
-and distinct Done receipts containing captured food not yet handed over. It SHALL
-return no packaging line, no amount of any kind, and no
-customer name, phone, identity, tier, or order label. A kitchen shift SHALL hold no select
+and Readies. It SHALL return no packaging line, no amount of any kind, and no
+customer name, phone, identity or tier. A kitchen shift SHALL hold no select
 privilege on orders, order lines, dish ticks, order discounts, bills or bill lines.
 
 Every order write, dish tick and Ready SHALL notify its outlet's kitchens and
@@ -99,10 +97,10 @@ counters that something changed, without carrying order data.
 - **WHEN** the kitchen board is read for an order with a discount and a packaging line
 - **THEN** the response carries neither the discount, any amount, nor the packaging line
 
-#### Scenario: The board omits the label and customer
+#### Scenario: The board carries the label, not the customer
 
 - **WHEN** the kitchen board is read for an order labelled *Rahul* whose customer is saved as *Rahul Das* with a phone
-- **THEN** the response carries the order number, without its label, customer's name or phone
+- **THEN** the response carries *Rahul* and neither the customer's name nor the phone
 
 #### Scenario: Another outlet's board
 
@@ -134,7 +132,7 @@ label SHALL NOT be copied to a bill, a receipt or any report.
 #### Scenario: Kept while cooking
 
 - **WHEN** a labelled order is paid upfront and its dishes are not yet ticked
-- **THEN** it keeps its label on the counter only
+- **THEN** it keeps its label, on the counter and in the kitchen
 
 #### Scenario: A blank label
 

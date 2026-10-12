@@ -3,7 +3,6 @@ import { useCallback, useContext, useEffect, useMemo, useState, type ReactNode }
 import { useAdapters } from '@/data-access'
 import type { KitchenMarks } from '@/data-access/adapters'
 import { CounterDeviceContext } from '@/session/counter-context'
-import { useRefreshQueue } from '@/lib/use-refresh-queue'
 
 import { KitchenMarksContext } from './kitchen-marks-state'
 import { useCounterState } from './use-counter-state'
@@ -26,22 +25,16 @@ export function KitchenMarksProvider({ children }: { children: ReactNode }) {
   const { shift } = useCounterState()
   const [marks, setMarks] = useState<KitchenMarks | null>(null)
   const outletId = counterDevice?.device.outletId ?? null
-  const onCounter = counterDevice != null && shift !== null
-  const shiftId = shift?.id
+  const onCounter = counterDevice !== null && shift !== null
 
-  const read = useCallback(
-    async (isCurrent: () => boolean) => {
-      if (!onCounter || !outletId || !shiftId) return setMarks(null)
-      try {
-        const next = await kitchen.readCounterMarks()
-        if (isCurrent()) setMarks(next)
-      } catch {
-        // Keep what was last read.
-      }
-    },
-    [kitchen, onCounter, outletId, shiftId],
-  )
-  const { refresh } = useRefreshQueue(read)
+  const refresh = useCallback(async () => {
+    if (!onCounter) return setMarks(null)
+    try {
+      setMarks(await kitchen.readCounterMarks())
+    } catch {
+      // Keep what was last read.
+    }
+  }, [kitchen, onCounter])
 
   useEffect(() => {
     void Promise.resolve().then(refresh)
@@ -49,21 +42,7 @@ export function KitchenMarksProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!outletId || !onCounter) return
-    const unsubscribe = kitchen.subscribe(outletId, () => void refresh())
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void refresh()
-    }, 5000)
-    const foreground = () => {
-      if (document.visibilityState === 'visible') void refresh()
-    }
-    document.addEventListener('visibilitychange', foreground)
-    window.addEventListener('online', foreground)
-    return () => {
-      unsubscribe()
-      clearInterval(timer)
-      document.removeEventListener('visibilitychange', foreground)
-      window.removeEventListener('online', foreground)
-    }
+    return kitchen.subscribe(outletId, () => void refresh())
   }, [kitchen, outletId, onCounter, refresh])
 
   const value = useMemo(() => ({ marks, refresh }), [marks, refresh])

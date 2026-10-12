@@ -1,6 +1,3 @@
-import { useContext } from 'react'
-import { SessionContext } from '@/session/context'
-import { DemoCounterReview } from '@/features/billing/demo-counter-review'
 import { useCallback, useEffect, useState } from 'react'
 
 import { buttonVariants } from '@/components/ui/button-variants'
@@ -45,7 +42,6 @@ export function CounterShell({
   onShiftChanged: () => void
 }) {
   const device = useCounterDevice()
-  const demo = useContext(SessionContext)?.mode === 'demo'
   const { counter } = useAdapters()
   /**
    * The outgoing operator has stepped away and somebody else is taking the
@@ -64,8 +60,6 @@ export function CounterShell({
   const [handingOver, setHandingOver] = useState(false)
   const [finishOpen, setFinishOpen] = useState(false)
   const [boundaryReached, setBoundaryReached] = useState(false)
-  const [railWidth, setRailWidth] = useState<number>()
-  const [horizontalScroll, setHorizontalScroll] = useState(0)
   const resume = device.offlineResume
 
   /**
@@ -103,8 +97,8 @@ export function CounterShell({
 
   return (
     <KitchenMarksProvider>
-      <div className={'min-h-dvh overflow-clip bg-canvas p-4 text-content'}>
-        <div className={'mx-auto flex max-w-[100rem] flex-col gap-4'}>
+      <div className="min-h-dvh bg-canvas p-4 text-content">
+        <div className="mx-auto max-w-[100rem] space-y-4">
           {resume && (
             <div
               role="status"
@@ -137,7 +131,7 @@ export function CounterShell({
           )}
           <header className="flex flex-wrap items-center justify-between gap-2">
             <h1 className="text-lg font-semibold">{device.device.label}</h1>
-            <div className={cn('flex items-center gap-3', demo && 'flex-wrap')}>
+            <div className="flex items-center gap-3">
               <CounterStatus openedAt={shift.openedAt} />
               <button
                 type="button"
@@ -164,20 +158,8 @@ export function CounterShell({
             </div>
           </header>
 
-          <BillingPanel
-            onRailWidthChange={setRailWidth}
-            scrollLeft={horizontalScroll}
-            onHorizontalScroll={setHorizontalScroll}
-          />
-          <DemoCounterReview
-            showReview={demo}
-            expenses={<CounterExpenses shift={shift} />}
-            railWidth={railWidth}
-            scrollLeft={horizontalScroll}
-            onHorizontalScroll={setHorizontalScroll}
-            asOf={resume?.lastSuccessfulReadAt}
-          />
-
+          <BillingPanel />
+          <CounterExpenses shift={shift} />
           <FinishDaySheet
             open={finishOpen}
             shiftId={shift.id}
@@ -201,25 +183,12 @@ export function CounterShell({
  * branch is the only real context that mounts the till; personal Biller sessions
  * stay on their staff phone shell.
  */
-function BillingPanel({
-  onRailWidthChange,
-  scrollLeft,
-  onHorizontalScroll,
-}: {
-  onRailWidthChange?: ((width: number) => void) | undefined
-  scrollLeft?: number | undefined
-  onHorizontalScroll?: ((left: number) => void) | undefined
-}) {
+function BillingPanel() {
   const device = useCounterDevice()
   if (isRenderable(getSurface('counter-billing').state, 'real')) {
     return (
       <div className="h-[calc(100dvh-8rem)] min-h-[36rem]">
-        <BillingCounter
-          outletId={device.device.outletId}
-          onRailWidthChange={onRailWidthChange}
-          scrollLeft={scrollLeft}
-          onHorizontalScroll={onHorizontalScroll}
-        />
+        <BillingCounter outletId={device.device.outletId} />
       </div>
     )
   }

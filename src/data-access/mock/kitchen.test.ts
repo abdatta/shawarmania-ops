@@ -18,18 +18,17 @@ function setup() {
 }
 
 describe('the demo counter reads its kitchen', () => {
-  it('names both demo kitchens on shift', async () => {
+  it('names the demo kitchen as the one kitchen on shift', async () => {
     const { kitchen } = setup()
     expect((await kitchen.readCounterMarks()).kitchens).toEqual([
       { id: DEMO_KITCHEN_DEVICE_ID, label: DEMO_KITCHEN_LABEL },
-      { id: DEMO_KITCHEN_DEVICE_ID + '-2', label: 'Kitchen 2' },
     ])
   })
 
   it('waits on an order the kitchen has not acknowledged, and is answered once it has', async () => {
     const { kitchen, byNumber } = setup()
     const open = byNumber(105)
-    expect((await kitchen.readCounterMarks()).orders[open.id]).toEqual(['waiting', null])
+    expect((await kitchen.readCounterMarks()).orders[open.id]).toEqual(['waiting'])
 
     const card = (await kitchen.readBoard()).orders.find((order) => order.id === open.id)!
     await kitchen.acknowledge({
@@ -38,7 +37,7 @@ describe('the demo counter reads its kitchen', () => {
       kind: 'new',
       orderVersion: card.version,
     })
-    expect((await kitchen.readCounterMarks()).orders[open.id]).toEqual(['seen', null])
+    expect((await kitchen.readCounterMarks()).orders[open.id]).toEqual(['seen'])
   })
 
   it('waits again after an edit changes what the kitchen shows', async () => {
@@ -54,14 +53,14 @@ describe('the demo counter reads its kitchen', () => {
     const line = data.store.orderItems.find((item) => item.order_id === open.id)!
     line.quantity += 1
     open.changed_at = new Date(Date.now() + 1000).toISOString()
-    expect((await kitchen.readCounterMarks()).orders[open.id]).toEqual(['waiting', null])
+    expect((await kitchen.readCounterMarks()).orders[open.id]).toEqual(['waiting'])
   })
 
   it('counts a prepared order as answered: the food is made', async () => {
     const { kitchen, byNumber } = setup()
     const prepared = byNumber(104)
     expect(prepared.prepared_at).not.toBeNull()
-    expect((await kitchen.readCounterMarks()).orders[prepared.id]).toEqual(['seen', null])
+    expect((await kitchen.readCounterMarks()).orders[prepared.id]).toEqual(['seen'])
   })
 
   it('has no answer for an order the kitchen does not carry', async () => {
@@ -116,7 +115,7 @@ describe('a demo kitchen filter is a view', () => {
     expect((await kitchen.readCounterMarks()).orders[open.id]).toBeUndefined()
     await kitchen.setFilter('include', [shawarma.category_id], 'oldest_first')
     expect(kitchenCardState((await card())!)).toBe('quiet')
-    expect((await kitchen.readCounterMarks()).orders[open.id]).toEqual(['seen', null])
+    expect((await kitchen.readCounterMarks()).orders[open.id]).toEqual(['seen'])
     expect((await kitchen.readBoard()).filterChangedAt).not.toBeNull()
   })
 
@@ -145,7 +144,7 @@ describe('a demo kitchen filter is a view', () => {
     const unseen = (await kitchen.readBoard()).orders.find((order) => order.id === burgerOrder.id)!
     expect(unseen.acknowledged).toBe(false)
     expect(kitchenCardState(unseen)).toBe('new')
-    expect((await kitchen.readCounterMarks()).orders[open.id]).toEqual(['waiting', null])
+    expect((await kitchen.readCounterMarks()).orders[open.id]).toEqual(['waiting'])
   })
 
   it('hides a cancelled order when neither side shows any food', async () => {
