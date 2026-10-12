@@ -49,3 +49,46 @@ it('invalidates an old response when its reader is replaced', async () => {
   expect(commit).not.toHaveBeenCalled()
   hook.unmount()
 })
+
+it('releases each caller after its own read even when more refreshes keep arriving', async () => {
+  const releases: (() => void)[] = []
+  const read = vi.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        releases.push(resolve)
+      }),
+  )
+  const hook = renderHook(() => useRefreshQueue(read))
+  let firstDone = false
+  const first = hook.result.current.refresh().then(() => {
+    firstDone = true
+  })
+  await act(async () => {
+    await Promise.resolve()
+  })
+  const second = hook.result.current.refresh()
+  await act(async () => {
+    releases[0]!()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+  expect(firstDone).toBe(true)
+  expect(read).toHaveBeenCalledTimes(2)
+  let secondDone = false
+  const secondFinished = second.then(() => {
+    secondDone = true
+  })
+  const third = hook.result.current.refresh()
+  await act(async () => {
+    releases[1]!()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+  expect(secondDone).toBe(true)
+  expect(read).toHaveBeenCalledTimes(3)
+  await act(async () => {
+    releases[2]!()
+    await Promise.all([first, secondFinished, third])
+  })
+  hook.unmount()
+})

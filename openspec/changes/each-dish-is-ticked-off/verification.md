@@ -86,3 +86,20 @@ Typecheck, formatting, lint (0 errors, 19 existing warnings), Edge typecheck and
 assertions across 86 files. The owner then requested critical local checks only
 and full CI verification before publication; broader local unit, REST and browser
 runs were stopped. The release remains gated by the full Deploy verification suite.
+
+Deploy run 38241509726 passed unit, demo browser, database and REST checks but
+failed one auth-browser offline billing case (37 passed, two not run), so it
+published nothing. That failure exposed refresh callers waiting for every future
+poll and payment still awaiting background reconciliation. Both could also block
+on a slow online connection. Callers now resolve after their own read batch and
+accepted payments release the rail immediately.
+
+The two additional queue/mixed-action regressions were proved red against that
+commit (two failed), then restored with the correction. The previously failing
+auth-browser case passed locally after a fresh database reset: one test, including
+offline table, bags and waiver orders settling exactly once. The mixed-action
+case exercises five quick dish ticks, payment and the final dish while subsequent
+pipeline reads never resolve.
+All seven focused queue/latency tests, TypeScript and ESLint on the changed
+application/test files passed before the corrective push. Full release gates
+remain delegated to CI.

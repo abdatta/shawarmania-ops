@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { expect, it, vi } from 'vitest'
@@ -14,6 +14,7 @@ import { KitchenMarksProvider } from '@/features/billing/kitchen-marks'
 import { useKitchenMarks } from '@/features/billing/kitchen-marks-state'
 import { useKitchenBoard } from '@/features/kitchen/use-kitchen-board'
 import { renderHook } from '@testing-library/react'
+import { ALL_OFF_LOYALTY_SETTINGS, ALL_OFF_SERVICE_SETTINGS } from '@/domain'
 
 it('releases an accepted dish tick while unrelated history is still loading', async () => {
   const base = createMockAdapters('biller')
@@ -115,6 +116,125 @@ it('releases an accepted dish tick while unrelated history is still loading', as
   release()
   expect(await screen.findByRole('button', { name: 'Tick 1 Synthetic dish two' })).toBeEnabled()
   expect(await screen.findByRole('button', { name: 'Untick 1 Synthetic dish one' })).toBeEnabled()
+})
+
+it('accepts five rapid ticks, payment, and the last tick while a pipeline read is stalled', async () => {
+  const base = createMockAdapters('biller')
+  const persona = personaFixtures.biller
+  let held: BillingOrder = {
+    id: 'mixed',
+    outletId: persona.assignments[0]!.outletId!,
+    deviceId: persona.profile.id,
+    orderNumber: 1,
+    businessDate: '2026-10-12',
+    orderedAt: new Date().toISOString(),
+    preparedAt: null,
+    status: 'open',
+    creatorId: persona.profile.id,
+    creatorName: 'Synthetic operator',
+    deviceLabel: null,
+    customerName: null,
+    customerPhone: null,
+    discounts: [],
+    roundingPaise: 0,
+    lines: Array.from({ length: 6 }, (_, index) => ({
+      orderLineId: `line-${index}`,
+      menuItemId: `item-${index}`,
+      itemName: `Synthetic dish ${index}`,
+      quantity: 1,
+      unitPricePaise: 10000,
+    })),
+    totalPaise: 60000,
+    cancelReason: null,
+    cancelledAt: null,
+    cancelledByName: null,
+    paidAt: null,
+    billId: null,
+  }
+  const shift = base.billing.getCounterState().shift!
+  const bill = (await base.billing.listShiftHistory(shift.id)).bills[0]!
+  const tick = vi.fn(
+    async (_id: string, _order: string, lines: { id: string; prepared: boolean }[]) => {
+      held = {
+        ...held,
+        lines: held.lines.map((line) =>
+          lines.some((target) => target.id === line.orderLineId)
+            ? { ...line, preparedQuantity: 1 }
+            : line,
+        ),
+      }
+      if (held.lines.every((line) => line.preparedQuantity === 1))
+        held = { ...held, preparedAt: new Date().toISOString() }
+      return held
+    },
+  )
+  const pay = vi.fn(async () => ({
+    ...bill,
+    id: 'synthetic-paid-bill',
+    paidAt: new Date().toISOString(),
+  }))
+  const listOpenOrders = vi
+    .fn()
+    .mockImplementationOnce(async () => [held])
+    .mockImplementation(() => new Promise(() => {}))
+  render(
+    <MemoryRouter>
+      <SessionContext.Provider
+        value={{
+          mode: 'demo',
+          userId: persona.profile.id,
+          assignments: persona.assignments,
+          ...deriveSessionScope(persona.assignments),
+          displayName: 'Synthetic operator',
+          persona,
+        }}
+      >
+        <AdaptersContext.Provider
+          value={{
+            ...base,
+            billing: {
+              ...base.billing,
+              listOpenOrders,
+              markOrderLinesPrepared: tick,
+              payOrder: pay,
+            },
+          }}
+        >
+          <OpenOrdersSurface
+            embedded
+            twoColumns
+            checkoutSettings={{
+              service: { ...ALL_OFF_SERVICE_SETTINGS, collectCustomerDetails: false },
+              loyalty: ALL_OFF_LOYALTY_SETTINGS,
+            }}
+          />
+        </AdaptersContext.Provider>
+      </SessionContext.Provider>
+    </MemoryRouter>,
+  )
+  for (let index = 0; index < 5; index++) {
+    await userEvent.click(
+      await screen.findByRole('button', { name: `Tick 1 Synthetic dish ${index}` }),
+    )
+    await waitFor(() => expect(tick).toHaveBeenCalledTimes(index + 1))
+  }
+  await userEvent.click(screen.getByTestId('paid-toggle-mixed'))
+  const payment = await screen.findByRole('dialog', { name: 'Record payment' })
+  await userEvent.click(within(payment).getByRole('button', { name: /^Cash$/ }))
+  await userEvent.click(within(payment).getByRole('button', { name: /^Paid$/ }))
+  await waitFor(() => expect(pay).toHaveBeenCalledTimes(1))
+  expect(await screen.findByRole('button', { name: 'Tick 1 Synthetic dish 5' })).toBeEnabled()
+  expect(screen.getByTestId('paid-toggle-mixed')).toHaveAttribute('aria-pressed', 'true')
+  // The local adapter projection used by the last tick includes the accepted payment.
+  held = {
+    ...held,
+    status: 'paid',
+    paidAt: new Date().toISOString(),
+    billId: 'synthetic-paid-bill',
+  }
+  await userEvent.click(screen.getByRole('button', { name: 'Tick 1 Synthetic dish 5' }))
+  await waitFor(() => expect(tick).toHaveBeenCalledTimes(6))
+  await waitFor(() => expect(screen.queryByTestId('paid-toggle-mixed')).toBeNull())
 })
 
 it('queues a fresh counter Ready read behind an older response', async () => {

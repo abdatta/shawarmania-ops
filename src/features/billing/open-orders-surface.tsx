@@ -218,9 +218,21 @@ export function OpenOrdersSurface({
     setError(null)
     try {
       const result = await operation()
+      queue.invalidate()
+      if (result && typeof result === 'object' && 'preparedAt' in result) {
+        const updated = result as BillingOrder
+        setOrders((held) =>
+          (held ?? [])
+            .map((order) => (order.id === updated.id ? updated : order))
+            .filter(
+              (order) =>
+                order.status === 'open' || (order.status === 'paid' && order.preparedAt === null),
+            ),
+        )
+      }
       setPaying(null)
       setCancelling(null)
-      await load()
+      void load().catch(() => setError('Could not refresh the pipeline.'))
       onActivityChanged?.()
       return result
     } catch (cause) {
@@ -241,13 +253,31 @@ export function OpenOrdersSurface({
     const source = document.querySelector<HTMLElement>(`[data-flip-id="${paying.id}"]`)
     const flight = source && !twoColumns ? captureCardFlight(source) : null
     void act(async () => {
+      let updated = paying
       if (revision) {
         // Each command is durable before the next is accepted. If recording
         // tender fails, keep the revised order so retry pays that same ticket.
         const revised = await billing.reviseOrder(paying.id, revision)
         setPaying(revised)
+        updated = revised
       }
-      return billing.payOrder(paying.id, payments)
+      const bill = await billing.payOrder(paying.id, payments)
+      queue.invalidate()
+      const paid: BillingOrder = {
+        ...updated,
+        status: 'paid',
+        paidAt: bill?.paidAt ?? new Date().toISOString(),
+        billId: bill?.id ?? null,
+      }
+      setOrders((held) =>
+        (held ?? [])
+          .map((order) => (order.id === paid.id ? paid : order))
+          .filter(
+            (order) =>
+              order.status === 'open' || (order.status === 'paid' && order.preparedAt === null),
+          ),
+      )
+      return bill
     }).then((bill) => {
       if (!bill || typeof bill !== 'object' || !('id' in bill)) return
       if (!flight) return
