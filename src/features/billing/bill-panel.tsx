@@ -1,4 +1,5 @@
-import { Minus, Pencil, Plus } from 'lucide-react'
+import { dishLocked } from '@/domain/dish-workflow'
+import { LockKeyhole, Minus, Pencil, Plus } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -29,6 +30,8 @@ import { cn } from '@/lib/cn'
  */
 export function BillPanel({
   lines,
+  labelField,
+  onNote,
   onChangeQuantity,
   packagingFlat = false,
   editingOrderReference,
@@ -37,6 +40,8 @@ export function BillPanel({
   addDiscount,
 }: {
   lines: BillLineDraft[]
+  labelField?: ReactNode
+  onNote?: (line: BillLineDraft) => void
   /** Keyed by `lineKey`, so the packaging line is changed like any other. */
   onChangeQuantity: (lineKey: string, delta: number) => void
   /**
@@ -86,6 +91,7 @@ export function BillPanel({
         {editing ? `Editing ${editingOrderReference}` : 'Current bill'}
       </h2>
 
+      {labelField}
       {/* No drawn scrollbar, as every scrolling column on the counter. */}
       <div
         className="no-scrollbar min-h-20 flex-1 overflow-y-auto px-3 md:min-h-0"
@@ -99,6 +105,11 @@ export function BillPanel({
           <ul className="divide-y divide-border">
             {lines.map((line, index) => {
               const key = lineKey(line)
+              const testKey = isPackagingLine(line)
+                ? key
+                : lines.findIndex((candidate) => candidate.menuItemId === line.menuItemId) === index
+                  ? line.menuItemId
+                  : key
               const packaging = isPackagingLine(line)
               const totalPaise = lineTotalPaise(line.unitPricePaise, line.quantity)
               // The gold waiver: the packaging line's whole amount as its own
@@ -107,7 +118,7 @@ export function BillPanel({
               return (
                 <li
                   key={`${key}-${index}`}
-                  data-testid={`bill-line-${key}`}
+                  data-testid={`bill-line-${testKey}`}
                   data-waived={waived || undefined}
                   className="flex items-center gap-2 py-2"
                 >
@@ -117,6 +128,15 @@ export function BillPanel({
                     <p className="text-sm font-semibold leading-tight text-content">
                       {line.itemName}
                     </p>
+                    {line.note && (
+                      <p className="text-xs font-semibold text-accent-text">{line.note}</p>
+                    )}
+                    {onNote && dishLocked(line) && (
+                      <p className="flex items-center gap-1 text-xs text-content-muted">
+                        <LockKeyhole aria-hidden size={12} />
+                        Locked
+                      </p>
+                    )}
                     <Money paise={line.unitPricePaise} className="text-xs text-content-muted" />
                   </div>
 
@@ -129,11 +149,22 @@ export function BillPanel({
                     */
                     <span aria-hidden className="w-28 shrink-0" />
                   ) : (
-                    <div className="flex shrink-0 items-center gap-1">
+                    <div
+                      className={cn(
+                        'flex shrink-0 items-center',
+                        onNote
+                          ? 'gap-0 overflow-hidden rounded-full border border-border bg-surface'
+                          : 'gap-1',
+                      )}
+                    >
                       <Button
                         variant="secondary"
                         size="phone"
-                        className="w-10 px-0"
+                        className={cn(
+                          onNote
+                            ? 'h-10 w-8 rounded-none border-0 bg-transparent px-0 shadow-none hover:bg-surface-raised'
+                            : 'w-10 px-0',
+                        )}
                         aria-label={`One fewer ${line.itemName}`}
                         // Bags count down to one and no further: packaging is
                         // never removed at the counter [owner, 2026-09-27].
@@ -144,7 +175,7 @@ export function BillPanel({
                       </Button>
                       <span
                         data-numeric=""
-                        data-testid={`bill-quantity-${key}`}
+                        data-testid={`bill-quantity-${testKey}`}
                         className="w-6 text-center text-sm font-bold"
                       >
                         {line.quantity}
@@ -152,7 +183,11 @@ export function BillPanel({
                       <Button
                         variant="secondary"
                         size="phone"
-                        className="w-10 px-0"
+                        className={cn(
+                          onNote
+                            ? 'h-10 w-8 rounded-none border-0 bg-transparent px-0 shadow-none hover:bg-surface-raised'
+                            : 'w-10 px-0',
+                        )}
                         aria-label={`One more ${line.itemName}`}
                         onClick={() => onChangeQuantity(key, 1)}
                       >
@@ -172,8 +207,23 @@ export function BillPanel({
                   ) : (
                     <Money
                       paise={totalPaise}
-                      className="w-20 shrink-0 text-right text-sm font-semibold"
+                      className={cn(
+                        'shrink-0 text-right text-sm font-semibold',
+                        onNote ? 'min-w-12' : 'w-20',
+                      )}
                     />
+                  )}
+                  {onNote && !packaging && (
+                    <Button
+                      variant="secondary"
+                      size="phone"
+                      className="h-10 w-8 shrink-0 border-transparent bg-transparent px-0 shadow-none hover:border-border"
+                      aria-label={`Note for ${line.itemName}`}
+                      disabled={dishLocked(line)}
+                      onClick={() => onNote(line)}
+                    >
+                      <Pencil aria-hidden size={15} />
+                    </Button>
                   )}
                 </li>
               )

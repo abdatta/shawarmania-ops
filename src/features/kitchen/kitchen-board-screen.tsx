@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, SlidersHorizontal, VolumeX, WifiOff } from 'lucide-react'
 
-import { LoadingList } from '@/components/ui/loading'
+import { LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { useAdapters } from '@/data-access'
 import type { KitchenCategory } from '@/data-access/adapters'
 import { formatTime } from '@/domain'
@@ -10,11 +10,13 @@ import { useCounterDevice } from '@/session/counter-context'
 
 import { KitchenCard } from './kitchen-card'
 import { KitchenFilterSheet } from './kitchen-filter-sheet'
-import type { TunePlayer } from './ringer'
+import { SILENT, type TunePlayer } from './ringer'
 import { audioBlocked, unlockAudio } from './tunes'
 import { useKitchenBoard, type KitchenCardView } from './use-kitchen-board'
 import { useOffscreenCards, type Offscreen } from './use-offscreen-cards'
 import { useWakeLock } from './use-wake-lock'
+import { retainReadySlots, useKitchenReady } from './use-kitchen-ready'
+import { useKitchenMasonry } from './use-kitchen-masonry'
 
 /**
  * The kitchen tablet's whole screen once a kitchen shift is open (#70).
@@ -30,10 +32,11 @@ import { useWakeLock } from './use-wake-lock'
 export function KitchenBoardScreen({ player }: { player?: TunePlayer }) {
   const device = useCounterDevice()
   const { kitchen } = useAdapters()
-  const { board, cards, stale, clock, read, acknowledge } = useKitchenBoard({
+  const { board, cards, stale, clock, read, acknowledge, silence } = useKitchenBoard({
     outletId: device.device.outletId,
     ...(player ? { player } : {}),
   })
+  const [station, setStation] = useState(1)
   const [filterOpen, setFilterOpen] = useState(false)
   const [categories, setCategories] = useState<KitchenCategory[]>([])
   const [muted, setMuted] = useState(() => audioBlocked())
@@ -71,16 +74,31 @@ export function KitchenBoardScreen({ player }: { player?: TunePlayer }) {
   const now = new Date(clock)
 
   // Cards arrive oldest first; the tablet's own setting may turn them round.
-  const ordered = useMemo(
+  const baseOrdered = useMemo(
     () => (board?.sort === 'newest_first' ? [...cards].reverse() : cards),
     [board?.sort, cards],
   )
+  const ready = useKitchenReady(kitchen, read, baseOrdered)
+  // Hold a departing Done ticket in its original slot through the fade and gap.
+  const ordered = retainReadySlots(
+    baseOrdered.filter(
+      (card) => ![...ready.pending.values()].some((held) => held.id === card.order.readyId),
+    ),
+    ready.pending,
+  )
   const grid = useRef<HTMLDivElement>(null)
+  useKitchenMasonry(
+    grid,
+    `${Boolean(board)}:${ordered.map((card) => `${card.order.id}:${card.shake}`).join(',')}`,
+  )
   const offscreen = useOffscreenCards(
     grid,
     ordered.map((card) => `${card.order.id}:${card.shake}`).join(','),
   )
-  const waiting = ordered.filter((card) => card.state !== 'quiet' && offscreen[card.order.id])
+  const waiting = ordered.filter(
+    (card) =>
+      !ready.pending.has(card.order.id) && card.state !== 'quiet' && offscreen[card.order.id],
+  )
 
   return (
     <div
@@ -116,24 +134,88 @@ export function KitchenBoardScreen({ player }: { player?: TunePlayer }) {
         </button>
       </header>
 
+      {kitchen.setDemoStation && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-2">
+          <label className="flex items-center gap-2 text-sm font-bold">
+            Demo kitchen
+            <select
+              aria-label="Demo kitchen"
+              value={station}
+              onChange={(event) => {
+                const next = Number(event.target.value)
+                ready.reset()
+                kitchen.setDemoStation?.(next)
+                setStation(next)
+                void read()
+              }}
+              className="min-h-11 rounded-lg border border-border bg-surface px-3 text-content"
+            >
+              <option value={1}>Kitchen 1 · Shawarma and sides</option>
+              <option value={2}>Kitchen 2 · Main course</option>
+            </select>
+          </label>
+          <span className="text-xs text-content-muted">
+            Done tickets stay until counter handover. Expand a ticket to undo Done.
+          </span>
+        </div>
+      )}
+      {ready.error && (
+        <p role="alert" className="px-4 py-2 font-bold text-danger">
+          {ready.error}
+        </p>
+      )}
       <main className={cn('flex-1 p-4', stale && 'opacity-60')}>
         {!board ? (
-          <LoadingList label="Loading the kitchen board" rows={4} blockHeight="h-48" />
-        ) : cards.length === 0 ? (
+          <LoadingRegion
+            label="Loading the kitchen board"
+            className="grid items-start grid-cols-[repeat(auto-fill,minmax(min(100%,22rem),1fr))] gap-4"
+          >
+            {[1, 2, 3, 4].map((key) => (
+              <div key={key} className="space-y-4 rounded-2xl border border-border p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <Shimmer className="h-12 w-24" />
+                  <div className="flex items-center gap-2">
+                    <Shimmer className="size-14 rounded-full" />
+                    {kitchen.ready && <Shimmer className="size-14 rounded-full" />}
+                  </div>
+                </div>
+                <Shimmer className="h-6 w-24" />
+                <Shimmer className="h-14" />
+                <Shimmer className="h-14" />
+                <Shimmer className="h-15" />
+              </div>
+            ))}
+          </LoadingRegion>
+        ) : ordered.length === 0 ? (
           <p className="mt-16 text-center text-2xl text-content-muted">
             No orders for this kitchen right now.
           </p>
         ) : (
-          <div ref={grid} className="grid grid-cols-[repeat(auto-fill,minmax(22rem,1fr))] gap-4">
-            {ordered.map((card) => (
+          <div ref={grid} data-testid="kitchen-masonry" className="relative">
+            {ordered.map((card, position) => (
               <KitchenCard
                 key={`${card.order.id}:${card.shake}`}
                 order={card.order}
                 state={card.state}
                 shake={card.shake}
-                rings={card.rings}
+                rings={ready.pending.has(card.order.id) ? SILENT : card.rings}
                 now={now}
                 disabled={stale}
+                {...(ready.pending.has(card.order.id)
+                  ? { readyPhase: ready.pending.get(card.order.id)!.phase }
+                  : {})}
+                {...(kitchen.ready
+                  ? {
+                      onReady: () => {
+                        silence(card.order.id)
+                        ready.toggle(
+                          card,
+                          position,
+                          ordered.map((slot) => slot.order.id),
+                        )
+                      },
+                    }
+                  : {})}
                 onAcknowledge={() => void acknowledge(card.order)}
               />
             ))}

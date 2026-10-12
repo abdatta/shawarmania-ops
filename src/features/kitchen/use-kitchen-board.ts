@@ -214,5 +214,6 @@ export function useKitchenBoard(options: {
     [board, shakes, rings],
   )
 
-  return { board, cards, stale, online, live, lastReadAt, clock, read, acknowledge }
+  const silence = useCallback((orderId: string) => ringer.current?.settle(orderId), [])
+  return { board, cards, stale, online, live, lastReadAt, clock, read, acknowledge, silence }
 }

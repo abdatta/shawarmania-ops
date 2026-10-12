@@ -122,8 +122,15 @@ export function DemoRoot() {
   // server and nowhere else.
   const epoch = started.epoch
   useEffect(
-    () => mirrorDemoOrders(data.store, data.kitchen, epoch, resetFromAnotherTab),
-    [data, epoch, resetFromAnotherTab],
+    () =>
+      mirrorDemoOrders(
+        data.store,
+        data.kitchen,
+        epoch,
+        resetFromAnotherTab,
+        kitchen ? 'kitchen' : 'counter',
+      ),
+    [data, epoch, resetFromAnotherTab, kitchen],
   )
 
   // The tablet's own address, with nothing after it.

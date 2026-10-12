@@ -1,3 +1,7 @@
+import { useKitchenMarks } from './kitchen-marks-state'
+import { addDish, dishLocked, noteDish } from '@/domain/dish-workflow'
+import { lineKey } from '@/domain'
+import { DishNoteSheet } from './dish-note-sheet'
 import { KeyRound } from 'lucide-react'
 import {
   useCallback,
@@ -61,6 +65,7 @@ import {
 import { useOnForeground } from '@/features/attention/attention'
 import { getPartState, isRenderable } from '@/gates/registry'
 import { newUuid } from '@/lib/uuid'
+import { cn } from '@/lib/cn'
 import { declareUnsavedWork } from '@/pwa/occupancy'
 import { SessionContext } from '@/session/context'
 import { CounterDeviceContext } from '@/session/counter-context'
@@ -111,6 +116,7 @@ import { useCounterState } from './use-counter-state'
  */
 
 interface Restorable {
+  label?: string
   /** The item lines. Packaging is held apart, below, and derived back in. */
   lines: BillLineDraft[]
   /**
@@ -273,9 +279,24 @@ function readCounterColumnWidths(): CounterColumnWidths {
   }
 }
 
-export function BillingCounter({ outletId: counterOutletId }: { outletId?: string } = {}) {
+export function BillingCounter({
+  outletId: counterOutletId,
+  onRailWidthChange,
+  scrollLeft,
+  onHorizontalScroll,
+}: {
+  outletId?: string
+  onRailWidthChange?: ((width: number) => void) | undefined
+  scrollLeft?: number | undefined
+  onHorizontalScroll?: ((left: number) => void) | undefined
+} = {}) {
   const session = useContext(SessionContext)
   const counterDevice = useContext(CounterDeviceContext)
+  const demo = session?.mode === 'demo'
+  const kitchenMarks = useKitchenMarks()?.marks
+  const [label, setLabel] = useState('')
+  const [noteLine, setNoteLine] = useState<BillLineDraft | null>(null)
+  const [railLabels, setRailLabels] = useState<string[]>([])
   const resume = counterDevice?.offlineResume
   const { billing, counter, customers, menu: menuAdapter, outlets } = useAdapters()
   const { shift } = useCounterState()
@@ -355,6 +376,14 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   const hasMenu = useRef(false)
   const workspaceRef = useRef<HTMLDivElement>(null)
   const resize = useRef<{ column: CounterColumn; startX: number; startWidth: number } | null>(null)
+
+  useEffect(() => {
+    if (demo) onRailWidthChange?.(columnWidths.bill + columnWidths.activity)
+  }, [demo, columnWidths.bill, columnWidths.activity, onRailWidthChange])
+  useEffect(() => {
+    if (demo && scrollLeft !== undefined && workspaceRef.current)
+      workspaceRef.current.scrollLeft = scrollLeft
+  }, [demo, scrollLeft])
 
   const resizeColumn = useCallback((column: CounterColumn, requestedWidth: number) => {
     setColumnWidths((current) => {
@@ -516,7 +545,11 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   )
 
   const quantities = useMemo(
-    () => new Map(lines.map((line) => [line.menuItemId, line.quantity])),
+    () =>
+      lines.reduce(
+        (map, line) => map.set(line.menuItemId, (map.get(line.menuItemId) ?? 0) + line.quantity),
+        new Map<string, number>(),
+      ),
     [lines],
   )
 
@@ -549,13 +582,21 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
    * This is what the panel draws, what the totals add up and what every save
    * and settle carries. The item lines alone are only ever the menu's business.
    */
-  const billLines = useMemo<BillLineDraft[]>(
-    () =>
-      packaging === null
-        ? lines
-        : [...lines, packagingLine(packaging, packagingWaived(serviceSettings, knownTier))],
-    [lines, packaging, serviceSettings, knownTier],
-  )
+  const billLines = useMemo<BillLineDraft[]>(() => {
+    const items =
+      demo && editingOrder
+        ? lines.map((line) => ({
+            ...line,
+            readyQuantity:
+              kitchenMarks?.readyQuantities?.[editingOrder.id]?.[line.orderLineId ?? ''] ??
+              line.readyQuantity ??
+              0,
+          }))
+        : lines
+    return packaging === null
+      ? items
+      : [...items, packagingLine(packaging, packagingWaived(serviceSettings, knownTier))]
+  }, [demo, editingOrder, kitchenMarks, lines, packaging, serviceSettings, knownTier])
 
   /**
    * What each bill-level discount comes to, against this order as it stands.
@@ -686,6 +727,37 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         )
       }
       setLines((current) => {
+        if (demo) {
+          const captured = menuLineDiscount(
+            { categoryId: item.category_id, unitPricePaise: item.price_paise, quantity: 1 },
+            discountRules,
+          )
+          return addDish(
+            current.map((line) =>
+              editingOrder
+                ? {
+                    ...line,
+                    readyQuantity:
+                      kitchenMarks?.readyQuantities?.[editingOrder.id]?.[line.orderLineId ?? ''] ??
+                      line.readyQuantity ??
+                      0,
+                  }
+                : line,
+            ),
+            {
+              workflowLineId: newUuid(),
+              menuItemId: item.id,
+              itemName: item.name,
+              unitPricePaise: item.price_paise,
+              quantity: 1,
+              ...captured,
+              categoryName: categoryNameById.get(item.category_id) ?? null,
+            },
+          ).map((line) => {
+            const old = current.find((candidate) => lineKey(candidate) === lineKey(line))
+            return old && old.quantity !== line.quantity ? withQuantity(old, line.quantity) : line
+          })
+        }
         const existing = current.find((line) => line.menuItemId === item.id)
         if (existing) {
           return current.map((line) =>
@@ -710,7 +782,16 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         ]
       })
     },
-    [settling, discountRules, categoryNameById, lines.length, editingOrder, serviceSettings],
+    [
+      demo,
+      kitchenMarks,
+      settling,
+      discountRules,
+      categoryNameById,
+      lines.length,
+      editingOrder,
+      serviceSettings,
+    ],
   )
 
   /**
@@ -720,6 +801,8 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
    */
   const resetBillContext = useCallback(() => {
     setBillDiscountRules([])
+    setLabel('')
+    setNoteLine(null)
     setCustomer(null)
     setPointsRequested(0)
     setHeldPoints(0)
@@ -752,7 +835,33 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         return
       }
       const next = lines.flatMap((line) => {
-        if (line.menuItemId !== key) return [line]
+        if (lineKey(line) !== key) return [line]
+        if (
+          demo &&
+          delta > 0 &&
+          dishLocked(billLines.find((item) => lineKey(item) === key) ?? line)
+        ) {
+          const item = menu
+            ?.flatMap((category) => category.items)
+            .find((item) => item.id === line.menuItemId)
+          if (!item) return [line]
+          const discount = menuLineDiscount(
+            { categoryId: item.category_id, unitPricePaise: item.price_paise, quantity: 1 },
+            discountRules,
+          )
+          return [
+            line,
+            {
+              workflowLineId: newUuid(),
+              menuItemId: item.id,
+              itemName: item.name,
+              unitPricePaise: item.price_paise,
+              quantity: 1,
+              ...discount,
+              categoryName: categoryNameById.get(item.category_id) ?? null,
+            },
+          ]
+        }
         const quantity = line.quantity + delta
         // Below one there is no line: taking the last one off is how a line is
         // removed, so there is no separate delete to hunt for.
@@ -776,7 +885,17 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
       */
       if (next.length === 0 && editingOrder === null) resetBillContext()
     },
-    [editingOrder, lines, resetBillContext, settling],
+    [
+      demo,
+      billLines,
+      menu,
+      discountRules,
+      categoryNameById,
+      editingOrder,
+      lines,
+      resetBillContext,
+      settling,
+    ],
   )
 
   function clearPanel() {
@@ -791,6 +910,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
 
   function putDraftOnPanel(draft: Restorable) {
     setLines(structuredClone(draft.lines))
+    setLabel(draft.label ?? '')
     setCustomer(draft.customer)
     setPaymentPreset(structuredClone(draft.payments))
     setServiceType(draft.serviceType)
@@ -818,6 +938,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   function beginOrderEdit(order: BillingOrder) {
     if (settling || editingOrder) return
     suspendedDraft.current = {
+      label,
       lines,
       discounts: billDiscounts,
       customer,
@@ -830,6 +951,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     const saved = splitPackaging(order.lines)
     setEditingOrder(order)
     putDraftOnPanel({
+      label: order.label ?? '',
       lines: saved.items,
       discounts: order.discounts,
       customer: customerFromOrder(order),
@@ -874,6 +996,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     setError(null)
     try {
       await billing.saveOrder({
+        ...(demo ? { label: label.trim() || null } : {}),
         clientId: newUuid(),
         outletId,
         shiftId: shift.id,
@@ -910,6 +1033,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   async function reviseEditedOrder(order: BillingOrder) {
     try {
       await billing.reviseOrder(order.id, {
+        ...(demo ? { label: label.trim() || null } : {}),
         lines: billLines,
         discounts: billDiscounts,
         customerId: null,
@@ -1043,6 +1167,31 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     />
   ) : null
 
+  useEffect(() => {
+    if (!demo || !shift || !counterOutletId) return
+    let active = true
+    const read = () => {
+      void billing
+        .listOpenOrders(counterOutletId)
+        .then((orders) => {
+          if (active)
+            setRailLabels(
+              orders
+                .filter((order) => order.id !== editingOrder?.id && order.label)
+                .map((order) => order.label!.trim().toLocaleLowerCase()),
+            )
+        })
+        .catch(() => undefined)
+    }
+    const first = setTimeout(read, 0)
+    const timer = setInterval(read, 1000)
+    return () => {
+      active = false
+      clearTimeout(first)
+      clearInterval(timer)
+    }
+  }, [demo, shift, billing, counterOutletId, editingOrder?.id])
+
   if (!shift) {
     return (
       <div className="flex h-full items-center justify-center" data-testid="no-shift">
@@ -1095,9 +1244,15 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     <div
       data-testid="counter-workspace"
       ref={workspaceRef}
-      className="grid h-full min-h-0 grid-cols-[minmax(22rem,1fr)_var(--counter-bill-width)_var(--counter-activity-width)] gap-3 overflow-x-auto overflow-y-hidden"
+      onScroll={demo ? (event) => onHorizontalScroll?.(event.currentTarget.scrollLeft) : undefined}
+      className={
+        demo
+          ? 'grid h-full min-h-0 grid-cols-[minmax(22rem,1fr)_var(--counter-rail-width)] gap-3 overflow-x-auto overflow-y-hidden'
+          : 'grid h-full min-h-0 grid-cols-[minmax(22rem,1fr)_var(--counter-bill-width)_var(--counter-activity-width)] gap-3 overflow-x-auto overflow-y-hidden'
+      }
       style={
         {
+          '--counter-rail-width': `${columnWidths.bill + columnWidths.activity}px`,
           '--counter-bill-width': `${columnWidths.bill}px`,
           '--counter-activity-width': `${columnWidths.activity}px`,
         } as CSSProperties
@@ -1110,7 +1265,12 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         touch. The workspace's sideways scroll keeps its bar, the one sign on a
         desktop that a column sits off to the right.
       */}
-      <div className="no-scrollbar @container min-h-0 overflow-y-auto">
+      <div
+        className={cn(
+          'no-scrollbar @container min-h-0 overflow-y-auto',
+          demo && '[contain:layout_paint]',
+        )}
+      >
         {resume && (
           <p className="mb-2 text-xs font-semibold text-content-muted" data-testid="menu-as-of">
             Menu as of {new Date(resume.lastSuccessfulReadAt).toLocaleString()}
@@ -1149,7 +1309,13 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
             {[6, 3].map((tiles, section) => (
               <div key={section}>
                 <Shimmer className="mb-1.5 h-4 w-24" />
-                <div className="grid grid-cols-2 gap-2 @md:grid-cols-3 @2xl:grid-cols-4">
+                <div
+                  className={
+                    demo
+                      ? 'grid grid-cols-2 gap-2 @xl:grid-cols-3 @3xl:grid-cols-4'
+                      : 'grid grid-cols-2 gap-2 @md:grid-cols-3 @2xl:grid-cols-4'
+                  }
+                >
                   {Array.from({ length: tiles }, (_, tile) => (
                     <Shimmer key={tile} className="h-20" />
                   ))}
@@ -1158,13 +1324,21 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
             ))}
           </LoadingRegion>
         ) : (
-          <MenuGrid menu={menu} quantities={quantities} onAdd={addItem} />
+          <MenuGrid menu={menu} quantities={quantities} onAdd={addItem} dishReview={demo} />
         )}
       </div>
 
-      <div className="relative flex min-h-0 flex-col gap-2" data-testid="bill-column">
+      <div
+        className={
+          demo
+            ? `relative col-start-2 row-start-1 z-10 flex min-h-0 w-[calc((100%-0.75rem)/2)] flex-col gap-2 bg-surface shadow-xl ${lines.length > 0 || editingOrder ? '' : 'invisible pointer-events-none'}`
+            : 'relative flex min-h-0 flex-col gap-2'
+        }
+        data-testid="bill-column"
+      >
         <div
           role="separator"
+          hidden={demo}
           aria-label="Resize current bill column"
           aria-orientation="vertical"
           aria-valuemin={counterColumnMinWidth()}
@@ -1192,6 +1366,31 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
           <>
             <BillPanel
               lines={billLines}
+              {...(demo
+                ? {
+                    labelField: (
+                      <div className="border-b border-border px-3 py-2">
+                        <label htmlFor="order-label" className="sr-only">
+                          Order label · optional
+                        </label>
+                        <input
+                          id="order-label"
+                          value={label}
+                          maxLength={24}
+                          onChange={(event) => setLabel(event.target.value)}
+                          placeholder="Order Label"
+                          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-content focus-visible:focus-ring"
+                        />
+                        {label.trim() && railLabels.includes(label.trim().toLocaleLowerCase()) && (
+                          <p role="status" className="mt-1 text-xs text-warning">
+                            Another order is labelled {label.trim()}.
+                          </p>
+                        )}
+                      </div>
+                    ),
+                    onNote: (line: BillLineDraft) => setNoteLine(line),
+                  }
+                : {})}
               onChangeQuantity={changeQuantity}
               packagingFlat={serviceSettings.packagingMode === 'per_order'}
               discountRows={
@@ -1333,7 +1532,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
               }}
             />
           </>
-        ) : (
+        ) : demo ? null : (
           <MyShiftSurface
             embedded
             {...(resume ? { asOf: resume.lastSuccessfulReadAt } : {})}
@@ -1343,10 +1542,16 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         )}
       </div>
 
-      <div className="relative min-h-0 [&>aside]:h-full">
+      <div
+        className={
+          demo
+            ? 'relative col-start-2 row-start-1 flex min-h-0 flex-col [&>aside]:min-h-0 [&>aside]:flex-1'
+            : 'relative min-h-0 [&>aside]:h-full'
+        }
+      >
         <div
           role="separator"
-          aria-label="Resize activity column"
+          aria-label={demo ? 'Resize order rail' : 'Resize activity column'}
           aria-orientation="vertical"
           aria-valuemin={counterColumnMinWidth()}
           aria-valuenow={columnWidths.activity}
@@ -1363,6 +1568,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
           className="absolute -left-2.5 top-0 z-20 h-full w-5 cursor-col-resize touch-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
         />
         <CounterActivityRail
+          twoColumns={demo}
           checkoutSettings={{ service: serviceSettings, loyalty: loyaltySettings }}
           {...(resume ? { asOf: resume.lastSuccessfulReadAt } : {})}
           refreshKey={pipelineRefresh}
@@ -1386,7 +1592,56 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         />
       </div>
 
+      {demo && noteLine && (
+        <DishNoteSheet
+          key={lineKey(noteLine)}
+          line={noteLine}
+          onClose={() => setNoteLine(null)}
+          onSave={(note, onlyOne) => {
+            const item = menu
+              ?.flatMap((category) => category.items)
+              .find((item) => item.id === noteLine.menuItemId)
+            if (!item) return
+            const captured = menuLineDiscount(
+              { categoryId: item.category_id, unitPricePaise: item.price_paise, quantity: 1 },
+              discountRules,
+            )
+            const fresh = {
+              workflowLineId: newUuid(),
+              menuItemId: item.id,
+              itemName: item.name,
+              unitPricePaise: item.price_paise,
+              quantity: 1,
+              ...captured,
+              categoryName: categoryNameById.get(item.category_id) ?? null,
+            }
+            setLines((current) =>
+              noteDish<BillLineDraft>(
+                current.map((line) => ({
+                  ...line,
+                  readyQuantity:
+                    billLines.find((candidate) => lineKey(candidate) === lineKey(line))
+                      ?.readyQuantity ??
+                    line.readyQuantity ??
+                    0,
+                })),
+                lineKey(noteLine),
+                note,
+                onlyOne,
+                fresh,
+              ).map((line) => {
+                const old = current.find((candidate) => lineKey(candidate) === lineKey(line))
+                return old && old.quantity !== line.quantity
+                  ? withQuantity({ ...line, quantity: old.quantity }, line.quantity)
+                  : line
+              }),
+            )
+            setNoteLine(null)
+          }}
+        />
+      )}
       <CustomerDialog
+        suggestedName={demo ? label : ''}
         open={customerDialogOpen}
         selection={customer}
         lookup={lookupCustomer}
@@ -1454,6 +1709,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
       )}
 
       <CheckoutDialog
+        suggestedName={demo ? label : ''}
         open={paymentDialogOpen}
         collectCustomerDetails={serviceSettings.collectCustomerDetails ?? true}
         customer={customer}

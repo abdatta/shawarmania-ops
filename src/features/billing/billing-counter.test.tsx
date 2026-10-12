@@ -25,6 +25,7 @@ import { layOutAnchoredMenu } from '@/test/anchored-layout'
 import { ALL_OFF_SERVICE_SETTINGS, type OutletServiceSettings } from '@/domain'
 
 import { BillingCounter } from './billing-counter'
+import { DemoCounterReview } from './demo-counter-review'
 
 /**
  * The counter, from the biller's side. Everything here is about the two things
@@ -72,6 +73,7 @@ function renderCounter(
         <SessionContext.Provider value={billerSession}>
           <AdaptersContext.Provider value={adapters}>
             <BillingCounter />
+            <DemoCounterReview expenses={<p>Counter expenses</p>} />
           </AdaptersContext.Provider>
         </SessionContext.Provider>
       </MemoryRouter>,
@@ -161,8 +163,8 @@ describe('BillingCounter', () => {
     await person.click(within(card).getByRole('button', { name: /More actions/ }))
     await person.click(screen.getByRole('menuitem', { name: /Edit/ }))
     await person.click(screen.getByRole('button', { name: 'One more Classic Chicken Shawarma' }))
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
-    await person.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+    await person.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(revise).toHaveBeenCalledTimes(1))
     expect(revise.mock.calls[0]![1]).toMatchObject({ customerPhone: '', customerName: '' })
     card = await within(rail).findByTestId(/^open-order-local-/)
@@ -213,7 +215,7 @@ describe('BillingCounter', () => {
     await person.click(within(card).getByRole('button', { name: /More actions/ }))
     await person.click(screen.getByRole('menuitem', { name: /Edit/ }))
     expect(screen.queryByTestId('customer-row')).toBeNull()
-    await person.click(screen.getByRole('button', { name: 'Save changes' }))
+    await person.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(revise).toHaveBeenCalledTimes(1))
     card = await within(rail).findByTestId(/^open-order-local-/)
     // A dropped connection must not hold payment behind a second settings read.
@@ -331,7 +333,7 @@ describe('BillingCounter', () => {
     expect(revise).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps independently resized counter columns in this browser and never shrinks the menu below a column', async () => {
+  it('resizes the rail with one visible divider and retains the tablet widths', async () => {
     const person = user()
     renderCounter()
 
@@ -342,16 +344,16 @@ describe('BillingCounter', () => {
     expect(workspace.style.getPropertyValue('--counter-bill-width')).toBe('352px')
     expect(workspace.style.getPropertyValue('--counter-activity-width')).toBe('352px')
 
-    billResize.focus()
-    await person.keyboard('{ArrowLeft}')
-    expect(workspace.style.getPropertyValue('--counter-bill-width')).toBe('368px')
+    expect(billResize).not.toBeVisible()
+    expect(activityResize).toHaveAccessibleName('Resize order rail')
+    expect(workspace.style.getPropertyValue('--counter-bill-width')).toBe('352px')
     expect(workspace.style.getPropertyValue('--counter-activity-width')).toBe('352px')
 
     activityResize.focus()
     await person.keyboard('{ArrowLeft}')
     expect(workspace.style.getPropertyValue('--counter-activity-width')).toBe('368px')
     expect(JSON.parse(localStorage.getItem('shawarmania.counter-column-widths')!)).toEqual({
-      bill: 368,
+      bill: 352,
       activity: 368,
     })
     expect(billResize).toHaveAttribute('aria-valuemin', '352')
@@ -626,7 +628,7 @@ describe('BillingCounter', () => {
     ])
   })
 
-  it('keeps the pipeline in the rail and the money in the middle column', async () => {
+  it('keeps the pipeline in the rail and the money in the Bills panel below', async () => {
     const person = user()
     renderCounter()
 
@@ -644,7 +646,9 @@ describe('BillingCounter', () => {
     expect(screen.getByTestId('shift-total-cash')).toHaveTextContent('Cash')
     expect(screen.getByTestId('shift-total-upi')).toHaveTextContent('UPI')
 
-    const disclosure = screen.getByTestId('bill-column').querySelector('details')
+    const disclosure = screen
+      .getByRole('region', { name: 'Bills this shift' })
+      .querySelector('details')
     expect(disclosure).not.toBeNull()
     const summary = disclosure?.querySelector('summary')
     expect(summary).not.toBeNull()
@@ -710,8 +714,10 @@ describe('BillingCounter', () => {
     )
     expect(within(preparing).queryByRole('button', { name: 'Un-pay' })).not.toBeInTheDocument()
     expect(within(preparing).queryByText('PAID')).not.toBeInTheDocument()
-    // And Prepared is untouched in place and wording by the payment landing.
-    expect(within(preparing).getByRole('button', { name: 'Prepared' })).toHaveAttribute(
+    // Payment does not alter the per-item handover state.
+    expect(within(preparing).queryByRole('button', { name: 'Prepared' })).not.toBeInTheDocument()
+    expect(within(preparing).queryByTestId(/^prepared-toggle-/)).not.toBeInTheDocument()
+    expect(within(preparing).getByRole('button', { name: /^Tick/ })).toHaveAttribute(
       'aria-pressed',
       'false',
     )
@@ -735,7 +741,7 @@ describe('BillingCounter', () => {
     layout.mockRestore()
   })
 
-  it('opens the composer over the bills column on the first tap and gives way again', async () => {
+  it('opens the composer over half the rail while the Bills panel stays below', async () => {
     const person = user()
     renderCounter()
 
@@ -762,7 +768,9 @@ describe('BillingCounter', () => {
     expect(screen.queryByTestId('settled-confirmation')).not.toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'Bills this shift' })).toBeInTheDocument()
     await waitFor(() => {
-      expect(screen.getByTestId('bill-column').querySelector('details')).not.toBeNull()
+      expect(
+        screen.getByRole('region', { name: 'Bills this shift' }).querySelector('details'),
+      ).not.toBeNull()
     })
   })
 
@@ -921,13 +929,14 @@ describe('BillingCounter', () => {
     const clientId = (saveOrder.mock.calls[0]![0] as { clientId: string }).clientId
     const saved = await within(rail).findByTestId(`open-order-local-${clientId}`)
     // The customer is behind the card's customer button, not printed on it.
-    expect(within(saved).getByRole('button', { name: /^Customer for / })).toBeInTheDocument()
+    expect(within(saved).queryByRole('button', { name: /^Customer for / })).not.toBeInTheDocument()
+    expect(within(saved).getByTestId('order-age')).toBeInTheDocument()
     expect(saved.querySelector('.animate-pulse')).toBeInTheDocument()
     expect(saved).not.toHaveTextContent(/#\d/)
     expect(within(saved).getByText('Classic Chicken Shawarma')).toBeInTheDocument()
     expect(within(saved).getByText('Mayonnaise Chicken Shawarma')).toBeInTheDocument()
-    // No age: the list is newest first already.
-    expect(saved).not.toHaveTextContent(/\bnow\b/)
+    // The compact ring now carries the order's age.
+    expect(within(saved).getByTestId('order-age')).toHaveTextContent(/^0$/)
     expect(within(saved).queryByText('Demo Biller')).not.toBeInTheDocument()
     expect(saved).toHaveTextContent('₹290')
 
@@ -1049,7 +1058,7 @@ describe('BillingCounter', () => {
     // A pattern rather than a literal: `scripts/check-no-hex.mjs` reads a hash
     // followed by three hex digits as a colour outside the brand layer.
     expect(pin).toHaveTextContent(/Order\s*#\s*104/)
-    expect(within(rail).queryByTestId('open-order-104')).not.toBeInTheDocument()
+    expect(within(rail).getByTestId('open-order-104').closest('li')).toHaveClass('invisible')
 
     // The footer moved rather than being copied. Two of it would mean two Save
     // changes buttons and two fields sharing one id.
@@ -1097,9 +1106,8 @@ describe('BillingCounter', () => {
     expect(screen.queryByTestId(`bill-line-${MENU_ITEM_MAYO_ID}`)).not.toBeInTheDocument()
 
     const updated = await within(rail).findByTestId('open-order-104')
-    await person.click(
-      await within(updated).findByRole('button', { name: /^Customer for Order .104$/ }),
-    )
+    await person.click(within(updated).getByRole('button', { name: /More actions/ }))
+    await person.click(within(updated).getByRole('menuitem', { name: 'Customer' }))
     const details = await screen.findByRole('dialog', { name: /^Customer for Order .104$/ })
     await waitFor(() => expect(details).toHaveTextContent('Updated customer'))
     await person.click(within(details).getByRole('button', { name: 'Done' }))
@@ -1125,7 +1133,8 @@ describe('BillingCounter', () => {
     // the customer dialog already up.
     async function openFromCard() {
       const card = await within(rail).findByTestId('open-order-104')
-      await person.click(within(card).getByRole('button', { name: /^Customer for Order .104/ }))
+      await person.click(within(card).getByRole('button', { name: /More actions/ }))
+      await person.click(within(card).getByRole('menuitem', { name: 'Customer' }))
       const details = await screen.findByRole('dialog', { name: /^Customer for Order .104/ })
       await person.click(within(details).getByRole('button', { name: 'Change customer' }))
       return screen.findByRole('dialog', { name: 'Customer' })

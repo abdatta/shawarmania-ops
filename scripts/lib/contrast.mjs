@@ -67,9 +67,22 @@ export const CHECKS = [
   { fg: '--success', bg: '--canvas', min: AA_TEXT, note: 'success text on the page' },
   { fg: '--success', bg: '--surface', min: AA_TEXT, note: 'success text on a card' },
   { fg: '--success', bg: '--surface-raised', min: AA_TEXT, note: 'success text in a callout' },
+  { fg: '--dish-ready', bg: '--surface', min: AA_TEXT, note: 'Ready dish mark on a card' },
+  {
+    fg: '--dish-ready',
+    bg: '--surface-raised',
+    min: AA_TEXT,
+    note: 'Ready border and mark on the rail',
+  },
   { fg: '--danger', bg: '--canvas', min: AA_TEXT, note: 'danger text on the page' },
   { fg: '--danger', bg: '--surface', min: AA_TEXT, note: 'danger text on a card' },
   { fg: '--danger', bg: '--surface-raised', min: AA_TEXT, note: 'danger text in a callout' },
+  ...['--canvas', '--surface', '--surface-raised'].map((background) => ({
+    fg: '--danger-critical',
+    bg: background,
+    min: AA_TEXT,
+    note: 'forty-minute order age',
+  })),
 
   { fg: '--on-primary', bg: '--primary', min: AA_TEXT, note: 'label on a primary button' },
   // The same solid series fill carries chart bars and a numbered legend badge.

@@ -11,6 +11,7 @@ import {
 
 import type { BillDraft, SaveOrderInput } from '../adapters'
 import { createMockBillingAdapter } from './billing'
+import { seedDishWorkflow } from './dish-workflow'
 import { DEMO_OPEN_SHIFT_ID } from './fixtures/billing'
 import { MENU_ITEM_CLASSIC_ID, MENU_ITEM_MAYO_ID } from './fixtures/menu'
 import { personaFixtures } from './fixtures/personas'
@@ -68,6 +69,28 @@ describe('mock billing adapter', () => {
   afterEach(() => {
     vi.useRealTimers()
     Reflect.deleteProperty(navigator, 'onLine')
+  })
+
+  it('projects a dish tick on an unsent order immediately and keeps it after delivery', async () => {
+    const store = createDemoStore()
+    seedDishWorkflow(store)
+    const adapter = createMockBillingAdapter(store)
+    const unsubscribe = adapter.subscribeCounter(() => {})
+    setOnline(false)
+    const id = crypto.randomUUID()
+    const saved = await adapter.saveOrder(orderDraft(store, id))
+    const lineId = saved.lines[0]!.orderLineId!
+    await adapter.markOrderLinesPrepared!(crypto.randomUUID(), id, [{ id: lineId, prepared: true }])
+    let read = (await adapter.listOpenOrders(DEMO_OUTLET_ID)).find((order) => order.id === id)!
+    expect(read.lines[0]!.preparedQuantity).toBe(1)
+    expect(read.preparedAt).not.toBeNull()
+    setOnline(true)
+    await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+    read = (await adapter.listOpenOrders(DEMO_OUTLET_ID)).find((order) => order.id === id)!
+    expect(read.lines[0]!.preparedQuantity).toBe(1)
+    expect(read.orderNumber).not.toBe(AWAITING_ORDER_NUMBER)
+    expect(store.orders.filter((order) => order.id === id)).toHaveLength(1)
+    unsubscribe()
   })
 
   it('starts with a shift open, so the counter is usable on arrival', () => {
@@ -830,6 +853,9 @@ describe('mock billing adapter', () => {
     })
 
     it("keeps an unprepared order's payment reversible however long ago it was taken", async () => {
+      // Exercise preparation, not the separately tested business-day cutover.
+      // A wall-clock run just before 04:00 IST otherwise crosses it in this hour.
+      vi.setSystemTime(new Date('2026-10-11T06:30:00.000Z'))
       const store = createDemoStore()
       const adapter = createMockBillingAdapter(store)
       const saved = await adapter.saveOrder(

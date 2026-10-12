@@ -32,6 +32,8 @@ async function setTheme(page: Page, theme: 'light' | 'dark') {
 async function identifyCustomer(page: Page, digits: string, name?: string) {
   await page.getByTestId('customer-row').click()
   const dialog = page.getByRole('dialog', { name: 'Customer' })
+  const removeDigit = dialog.getByRole('button', { name: 'Delete last digit', exact: true })
+  while (await removeDigit.isEnabled()) await removeDigit.click()
   for (const digit of digits) {
     await dialog.getByRole('button', { name: digit, exact: true }).click()
   }
@@ -91,13 +93,22 @@ function orderCard(page: Page, id: string) {
   return page.getByTestId('counter-activity-rail').locator(`[data-flip-id="${id}"]`)
 }
 
-/** The customer is one tap away on the card, not printed on it. */
+/** Customer details remain available through the order's actions. */
 async function expectCardCustomer(page: Page, card: Locator, name: string) {
-  await card.getByRole('button', { name: /^Customer for / }).click()
+  await card.getByRole('button', { name: /^More actions for / }).click()
+  await card.getByRole('menuitem', { name: 'Customer', exact: true }).click()
   const details = page.getByRole('dialog', { name: /^Customer for / })
   await expect(details).toContainText(name)
   await details.getByRole('button', { name: 'Done', exact: true }).click()
   await expect(details).toHaveCount(0)
+}
+
+async function tickAllDishes(card: Locator) {
+  const unticked = card.getByRole('button', { name: /^Tick / })
+  for (let left = await unticked.count(); left > 0; left--) {
+    await unticked.first().click()
+    await expect(unticked).toHaveCount(left - 1)
+  }
 }
 
 /** Kalyani, from the outlet fixture: where the demo's counter stands. */
@@ -214,7 +225,7 @@ test.describe('the counter', () => {
       await page
         .getByRole('button', { name: 'One more Classic Chicken Shawarma', exact: true })
         .click()
-      await page.getByRole('button', { name: 'Save changes', exact: true }).click()
+      await page.getByRole('button', { name: 'Save', exact: true }).click()
       await order.getByRole('button', { name: 'Paid', exact: true }).click()
       const question = page.getByRole('dialog', { name: 'Receipt and points' })
       await expect(question).toBeVisible()
@@ -336,7 +347,10 @@ test.describe('the counter', () => {
     await expect(page.getByRole('heading', { name: 'Bills this shift' })).toBeVisible()
     await expect(page.getByTestId('settled-confirmation')).toHaveCount(0)
     await expect(
-      page.getByTestId('bill-column').locator('details').filter({ hasText: '₹658' }),
+      page
+        .getByRole('region', { name: 'Bills this shift' })
+        .locator('details')
+        .filter({ hasText: '₹658' }),
     ).toBeVisible()
   })
 
@@ -464,7 +478,7 @@ test.describe('the counter', () => {
   test('saves and records a food-first order from the persistent rail', async ({ page }) => {
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
     await page.getByRole('button', { name: 'Mayonnaise Chicken Shawarma', exact: true }).click()
-    // Identified, so the card's customer button has someone to show.
+    // Identified, so the order's customer menu has someone to show.
     await identifyCustomer(page, '9000000888', 'Asha')
     /*
       The network goes before the order does, so everything below about the
@@ -489,22 +503,18 @@ test.describe('the counter', () => {
     // The shape of the number that is coming, never a stand-in for it.
     await expect(saved.locator('.animate-pulse')).toBeVisible()
     await expect(saved).not.toContainText(/#\d/)
-    // Neither the customer's name nor the order's age is printed on the card.
+    // A customer name without an order label stays in the details menu.
     await expect(saved).not.toContainText('Asha')
     await expect(saved.getByText('now', { exact: true })).toHaveCount(0)
-    await expect(saved.getByRole('button', { name: /^Customer for an unsent order/ })).toBeVisible()
+    await expect(saved.getByTestId('order-age')).toBeVisible()
     await expect(saved.getByText('Demo Biller', { exact: true })).toHaveCount(0)
     await expect(saved).toContainText('₹290')
 
-    // Preparation is recorded on the card where it already stands: the box
-    // ticks, the control keeps its word, and nothing moves.
-    await saved.getByRole('button', { name: 'Prepared', exact: true }).click()
+    // Every dish can be handed over offline without losing its separate quantity.
+    await tickAllDishes(saved)
     const preparedCard = rail.getByTestId('pipeline-list').getByTestId(/^open-order-local-/)
     await expect(preparedCard).toBeVisible()
-    await expect(
-      preparedCard.getByRole('button', { name: 'Prepared', exact: true }),
-    ).toHaveAttribute('aria-pressed', 'true')
-    // Prepared then Paid, in that order, at that size, whatever is recorded.
+    await expect(preparedCard.getByRole('button', { name: /^Untick / })).toHaveCount(2)
     await expect(preparedCard.getByRole('button', { name: 'Reprepare' })).toHaveCount(0)
     await expect(preparedCard.getByRole('button', { name: 'Paid', exact: true })).toHaveAttribute(
       'aria-pressed',
@@ -520,10 +530,7 @@ test.describe('the counter', () => {
     await expect(delivered).toContainText(/#\d/)
     await expect(delivered).toContainText('₹290')
     await expectCardCustomer(page, delivered, 'Asha')
-    await expect(delivered.getByRole('button', { name: 'Prepared', exact: true })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
+    await expect(delivered.getByRole('button', { name: /^Untick / })).toHaveCount(2)
     const paid = delivered.getByRole('button', { name: 'Paid', exact: true })
     await expect(paid).toHaveAttribute('aria-pressed', 'false')
 
@@ -567,8 +574,8 @@ test.describe('the counter', () => {
     // 105 is the seed whose preparation is not yet recorded.
     const order = list.getByTestId('open-order-105')
 
-    // Both of the order's answers sit on the face of the card, in fixed places.
-    await expect(order.getByRole('button', { name: 'Prepared', exact: true })).toHaveAttribute(
+    // Each dish and payment keep separate answers on the face of the card.
+    await expect(order.getByRole('button', { name: /^Tick / })).toHaveAttribute(
       'aria-pressed',
       'false',
     )
@@ -583,7 +590,7 @@ test.describe('the counter', () => {
     // Money first, food still owed: no bill exists, so nothing may land in
     // Bills this shift and no bar may be inserted. The ticked Paid box is the
     // whole acknowledgement — there is no separate badge.
-    const billColumn = page.getByTestId('bill-column')
+    const billColumn = page.getByRole('region', { name: 'Bills this shift' })
     await expect(billColumn.locator('details').first()).toBeVisible()
     const billsBefore = await billColumn.locator('details').count()
     await order.getByRole('button', { name: 'Paid', exact: true }).click()
@@ -611,12 +618,12 @@ test.describe('the counter', () => {
     ).toBe(slotBefore)
 
     // Preparation was the last thing the bill waited for.
-    await paidCard.getByRole('button', { name: 'Prepared', exact: true }).click()
+    await tickAllDishes(paidCard)
     await expect(rail.getByTestId('open-order-105')).toHaveCount(0)
     await expect(billColumn.locator('details')).toHaveCount(billsBefore + 1)
   })
 
-  test('draws one list whose two controls keep their word and their place', async ({ page }) => {
+  test('draws one list whose dish ticks and payment keep their places', async ({ page }) => {
     const rail = page.getByTestId('counter-activity-rail')
 
     // One list: no headings, no divider, no band.
@@ -628,12 +635,13 @@ test.describe('the counter', () => {
 
     // 104 is the seed whose preparation is recorded and whose money is not.
     const preparedCard = list.getByTestId('open-order-104')
-    const prepared = preparedCard.getByRole('button', { name: 'Prepared', exact: true })
-    // A recorded fact floods its control with its own colour and draws the mark
-    // in that control's own foreground token.
+    const prepared = preparedCard.getByRole('button', { name: /^Untick / })
+    // Only the checkbox fills; the quantity stays visible and the dish text turns orange.
     await expect(prepared).toHaveAttribute('aria-pressed', 'true')
-    await expect(prepared).toHaveClass(/bg-primary/)
-    await expect(prepared).toHaveClass(/text-on-primary/)
+    await expect(prepared.getByTestId('dish-checkbox')).toHaveClass(/bg-primary/)
+    await expect(prepared).toHaveClass(/text-primary/)
+    await expect(prepared.getByTestId('dish-quantity')).toHaveText('2')
+    await expect(preparedCard.getByRole('button', { name: 'Prepared', exact: true })).toHaveCount(0)
     // An unrecorded one is an ordinary secondary control with its box outlined.
     const paid = preparedCard.getByRole('button', { name: 'Paid', exact: true })
     await expect(paid).toHaveAttribute('aria-pressed', 'false')
@@ -649,7 +657,7 @@ test.describe('the counter', () => {
     )
     await prepared.click()
     await expect(
-      list.getByTestId('open-order-104').getByRole('button', { name: 'Prepared', exact: true }),
+      list.getByTestId('open-order-104').getByRole('button', { name: /^Tick / }),
     ).toHaveAttribute('aria-pressed', 'false')
     expect(
       await list
@@ -677,13 +685,14 @@ test.describe('the counter', () => {
     }
 
     const firstCard = orderCard(page, await save())
-    await firstCard.getByRole('button', { name: 'Prepared', exact: true }).click()
-    await expect(firstCard.getByRole('button', { name: 'Prepared', exact: true })).toHaveAttribute(
+    await tickAllDishes(firstCard)
+    await expect(firstCard.getByRole('button', { name: /^Untick / })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
 
-    for (let saved = 0; saved < 5; saved += 1) await save()
+    // Two independent columns fit more cards than the old single column.
+    for (let saved = 0; saved < 16; saved += 1) await save()
     // Every order delivered and numbered, so the rail is not redrawing cards
     // under the scrolls below.
     await expect(rail.getByTestId(/^open-order-local-/)).toHaveCount(0)
@@ -692,11 +701,12 @@ test.describe('the counter', () => {
     // below the fold along with everything older than it.
     const bottom = rail.getByRole('button', { name: /^Scroll to the oldest order/ })
     await expect(bottom).toBeVisible()
-    await expect(bottom).toHaveText(/\d+ more/)
+    await expect(bottom).toHaveAccessibleName(/\d+ hidden below/)
+    await expect(bottom).toHaveText(/Ready #\d+/)
     await expect(rail.getByRole('button', { name: /^Scroll to the newest order/ })).toHaveCount(0)
     // And it says that prepared food is waiting for money down there, which is
     // the one thing the deleted divider used to say.
-    await expect(bottom).toHaveAccessibleName(/including prepared work waiting for money/)
+    await expect(bottom.getByTestId('rail-scroll-money-marker')).toBeVisible()
 
     // Tapping goes the whole way, so the far end is reached in one move.
     await bottom.click()
@@ -782,12 +792,9 @@ test.describe('the counter', () => {
 
     // Demo mode defers the bill until preparation, exactly as #45 left it, so
     // the ticket is finished here and then read in Bills this shift.
-    await list
-      .getByTestId('open-order-105')
-      .getByRole('button', { name: 'Prepared', exact: true })
-      .click()
+    await tickAllDishes(list.getByTestId('open-order-105'))
     const settled = page
-      .getByTestId('bill-column')
+      .getByRole('region', { name: 'Bills this shift' })
       .locator('details')
       .filter({ hasText: 'Order 105' })
     await expect(settled).toBeVisible()
@@ -802,11 +809,11 @@ test.describe('the counter', () => {
     await skipCustomer(page)
 
     const rail = page.getByTestId('counter-activity-rail')
-    const order = rail.getByTestId('open-order-104')
+    const order = rail.getByTestId('open-order-105')
     // Uncommon actions live behind the touch-safe kebab.
-    await order.getByRole('button', { name: /^More actions for Order .104$/ }).click()
+    await order.getByRole('button', { name: /^More actions for Order .105$/ }).click()
     await order.getByRole('menuitem', { name: 'Edit' }).click()
-    await expect(page.getByRole('heading', { name: 'Editing order #104' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Editing order #105' })).toBeVisible()
 
     // The mode is spatial, not just labelled: the order leaves the list and its
     // card docks against the current-bill column, touching it, so the two read
@@ -814,7 +821,7 @@ test.describe('the counter', () => {
     // and a stylesheet change can undo it while every text assertion stays green.
     const pin = rail.getByTestId('editing-order-pin')
     await expect(pin).toContainText('Order')
-    await expect(order).toHaveCount(0)
+    await expect(order).toHaveCount(1)
 
     // The composer footer moved into the card rather than being duplicated: one
     // Save changes, one customer row, and no second total or item list.
@@ -842,7 +849,12 @@ test.describe('the counter', () => {
       const card = document.querySelector('[data-testid="editing-order-pin"]')!
       return card.getBoundingClientRect().left - panel.getBoundingClientRect().right
     })
-    expect(Math.round(join)).toBe(-1)
+    expect(join).toBeCloseTo(
+      await page.evaluate(
+        () => Number.parseFloat(getComputedStyle(document.documentElement).fontSize) * 0.75,
+      ),
+      0,
+    )
 
     const classicQuantity = page
       .getByRole('button', { name: 'One more Classic Chicken Shawarma' })
@@ -850,7 +862,7 @@ test.describe('the counter', () => {
     await expect(classicQuantity).toHaveText('2')
     // The saved order's own decision comes back onto the row: a name and no
     // number, which is every order rung before this change.
-    await expect(page.getByTestId('customer-row')).toContainText('Demo Customer · no number')
+    await expect(page.getByTestId('customer-row')).toContainText('Arjun Das')
 
     await page.getByRole('button', { name: 'Mayonnaise Chicken Shawarma', exact: true }).click()
     await identifyCustomer(page, '9000000222', 'Updated customer')
@@ -863,7 +875,7 @@ test.describe('the counter', () => {
     await expect(order.getByText('Mayonnaise Chicken Shawarma', { exact: true })).toBeVisible()
     await expectCardCustomer(page, order, 'Updated customer')
 
-    await order.getByRole('button', { name: /^More actions for Order .104$/ }).click()
+    await order.getByRole('button', { name: /^More actions for Order .105$/ }).click()
     await order.getByRole('menuitem', { name: 'Edit' }).click()
     await page.getByRole('button', { name: 'One more Classic Chicken Shawarma' }).click()
     await page.getByTestId('cancel-edit').click()
@@ -913,7 +925,7 @@ test.describe('the counter', () => {
     // The one split bill: both tenders readable once the composer gives the
     // money list back.
     const mixedBill = page
-      .getByTestId('bill-column')
+      .getByRole('region', { name: 'Bills this shift' })
       .locator('details')
       .filter({ hasText: 'UPI' })
       .filter({ hasText: 'Cash' })
@@ -943,7 +955,7 @@ test.describe('the counter', () => {
     page,
   }) => {
     // Money history lives in the middle column now; the rail is the pipeline.
-    const billsColumn = page.getByTestId('bill-column')
+    const billsColumn = page.getByRole('region', { name: 'Bills this shift' })
     await expect(billsColumn.getByRole('heading', { name: 'Bills this shift' })).toBeVisible()
     await expect(page.getByTestId('shift-total-cash')).toBeVisible()
     await expect(page.getByTestId('shift-total-upi')).toBeVisible()
@@ -978,81 +990,38 @@ test.describe('the counter', () => {
     await expect(page.getByTestId('counter-activity-rail')).toBeVisible()
   })
 
-  test('keeps all three columns while allowing the two right columns to resize', async ({
+  test('keeps two tracks, overlays the composer, and preserves rail resizing on narrow screens', async ({
     page,
   }) => {
+    await page.setViewportSize({ width: 1600, height: 900 })
     const rail = page.getByTestId('counter-activity-rail')
     const grid = page.getByTestId('counter-workspace')
-
-    // Open the composer so the middle column's own panel is measurable.
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
     const panel = page.getByTestId('bill-panel')
-    await expect(panel).toBeVisible()
-
-    // Default widths match; the menu takes the slack until a counter user changes either one.
-    const wide = { panel: (await panel.boundingBox())!, rail: (await rail.boundingBox())! }
-    expect(Math.round(wide.rail.width)).toBe(Math.round(wide.panel.width))
-    await expect(grid).toHaveJSProperty('scrollWidth', await grid.evaluate((el) => el.clientWidth))
-
-    // With slack in the menu column, each divider gives its own track more
-    // width — and the menu's own minimum survives rather than hiding tiles.
-    const menuColumn = grid.locator(':scope > div').first()
-    const menuMinimum = await page.evaluate(
-      () => Number.parseFloat(getComputedStyle(document.documentElement).fontSize) * 22,
+    const railWidth = (await rail.boundingBox())!.width
+    const rem = await page.evaluate(() =>
+      Number.parseFloat(getComputedStyle(document.documentElement).fontSize),
     )
-    const billResize = page.getByTestId('resize-current-bill-column')
-    await billResize.press('ArrowLeft')
-    const widenedBill = (await panel.boundingBox())!
-    expect(Math.round(widenedBill.width)).toBeGreaterThan(Math.round(wide.panel.width))
-
-    // The other divider is independently resizable, so the drag affordance
-    // does not strand a keyboard user and it cannot change the bill width.
-    const activityResize = page.getByTestId('resize-activity-column')
-    await activityResize.press('ArrowLeft')
-    const widenedRail = (await rail.boundingBox())!
-    expect(Math.round(widenedRail.width)).toBeGreaterThan(Math.round(wide.rail.width))
-    expect(Math.round((await menuColumn.boundingBox())!.width)).toBeGreaterThanOrEqual(menuMinimum)
-
-    // Narrow enough that three of them cannot fit: still three, the grown
-    // sizes persist on their own, and the workspace scrolls sideways rather
-    // than folding a column into a tab.
-    await page.setViewportSize({ width: 700, height: 900 })
-    await expect(rail).toBeVisible()
-    await expect(panel).toBeVisible()
-    expect(Math.round((await panel.boundingBox())!.width)).toBe(Math.round(widenedBill.width))
-    expect(await grid.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
-
-    // Sideways only. A counter whose page scrolls horizontally has lost its chrome.
+    expect((await panel.boundingBox())!.width * 2 + rem * 0.75).toBeCloseTo(railWidth, 0)
+    await expect(grid).toHaveJSProperty('scrollWidth', await grid.evaluate((el) => el.clientWidth))
+    await expect(page.getByTestId('resize-current-bill-column')).toBeHidden()
+    const resize = page.getByRole('separator', { name: 'Resize order rail' })
+    await resize.press('ArrowLeft')
+    const widened = (await rail.boundingBox())!.width
+    expect(widened).toBeCloseTo(railWidth + 16, 0)
     expect(
-      await page.evaluate(() => document.scrollingElement!.scrollWidth <= window.innerWidth),
-    ).toBe(true)
-
-    // And there is no second door to a column that never left. Since the demo
-    // mounts the enrolled shell, this is now true of the tablet's whole chrome
-    // rather than of two entries in a tab bar: it offers no navigation at all,
-    // because personal navigation on shared counter hardware would hand whoever
-    // is standing at it somebody else's screens.
+      (await grid.locator(':scope > div').first().boundingBox())!.width,
+    ).toBeGreaterThanOrEqual(rem * 22 - 1)
+    await page.setViewportSize({ width: 700, height: 900 })
+    await expect(panel).toBeVisible()
+    expect((await rail.boundingBox())!.width).toBeCloseTo(widened, 0)
+    expect(await grid.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
+    expect(await page.evaluate(() => document.scrollingElement!.scrollWidth <= innerWidth)).toBe(
+      true,
+    )
     await expect(page.getByRole('link', { name: 'Open orders' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'My shift' })).toHaveCount(0)
-    // The only navigation anywhere on this page belongs to the demo banner's
-    // role switcher, which is chrome *around* the tablet rather than part of it.
     await expect(page.getByRole('navigation')).toHaveCount(1)
-    await expect(page.getByTestId('demo-banner').getByRole('navigation')).toHaveCount(1)
-
-    // With the menu pinned at its minimum there is no slack left, so any
-    // further resize attempt — keyboard or pointer — is clamped back down to
-    // the shared minimum track instead of creating gratuitous overflow.
-    await billResize.press('ArrowLeft')
-    expect(Math.round((await panel.boundingBox())!.width)).toBe(Math.round(wide.panel.width))
-    const billResizeBox = (await billResize.boundingBox())!
-    await page.mouse.move(billResizeBox.x + billResizeBox.width / 2, billResizeBox.y + 80)
-    await page.mouse.down()
-    await page.mouse.move(billResizeBox.x - 80, billResizeBox.y + 80)
-    await page.mouse.up()
-    expect(Math.round((await panel.boundingBox())!.width)).toBe(Math.round(wide.panel.width))
-    await activityResize.press('ArrowLeft')
-    expect(Math.round((await rail.boundingBox())!.width)).toBe(Math.round(wide.rail.width))
-
     const savedWidths = await page.evaluate(
       () =>
         JSON.parse(localStorage.getItem('shawarmania.counter-column-widths')!) as {
@@ -1060,20 +1029,12 @@ test.describe('the counter', () => {
           activity: number
         },
     )
-
-    // The counter is shared hardware, so its browser — rather than a person or
-    // session — remembers the working layout after a reload.
     await page.reload()
     await expect(page.getByTestId('counter-workspace')).toHaveCSS(
-      '--counter-bill-width',
-      `${savedWidths.bill}px`,
-    )
-    await expect(page.getByTestId('counter-workspace')).toHaveCSS(
-      '--counter-activity-width',
-      `${savedWidths.activity}px`,
+      '--counter-rail-width',
+      `${savedWidths.bill + savedWidths.activity}px`,
     )
   })
-
   test('needs no device keyboard to enter a customer phone', async ({ page }) => {
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
     await page.getByTestId('customer-row').click()
@@ -1282,7 +1243,7 @@ test.describe('the counter from a physical keyboard', () => {
     // One bill for one press: a repeat that paid again would put a second
     // split bill directly beneath it.
     const bills = page
-      .getByTestId('bill-column')
+      .getByRole('region', { name: 'Bills this shift' })
       .locator('li')
       .filter({ hasText: /Bill \d+/ })
     await expect(bills.first()).toContainText('Mixed')
@@ -1354,7 +1315,9 @@ test.describe('the demo’s Kalyani, billing as the shop does', () => {
     await recordPaid(page)
     // Newest first, so the bill just rung heads the list; an earlier ₹270 bill
     // from the demo day sits further down.
-    await expect(page.getByTestId('bill-column').locator('details').first()).toContainText('₹270')
+    await expect(
+      page.getByRole('region', { name: 'Bills this shift' }).locator('details').first(),
+    ).toContainText('₹270')
   })
 })
 
@@ -1779,8 +1742,8 @@ test.describe('manager billing history', () => {
   })
 })
 
-test.describe('the rail as tickets, with the kitchen bell (#72)', () => {
-  test('a one-dish card keeps the height it had before the ticket, and rings until the kitchen answers', async ({
+test.describe('the rail as tickets, with independent kitchen states', () => {
+  test('a compact ticket has a sent tick until kitchen Ready, then a bell until handover', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 800 })
@@ -1788,21 +1751,27 @@ test.describe('the rail as tickets, with the kitchen bell (#72)', () => {
     const card = page.getByTestId('open-order-105')
     await expect(card).toBeVisible()
 
-    // 98.25px was the one-dish card measured on 2026-10-09, before the ticket
-    // look. The ticket adds nothing; the bell's room adds about 6px on a
-    // one-dish card, and the owner allowed no more than a few.
+    // The service footer and note fit without a tall kitchen-status column.
     const box = await card.boundingBox()
-    expect(box?.height).toBeLessThanOrEqual(98.25 + 7)
+    const rem = await page.evaluate(() =>
+      Number.parseFloat(getComputedStyle(document.documentElement).fontSize),
+    )
+    expect(box?.height).toBeLessThanOrEqual(rem * 9)
 
     // The demo kitchen is on shift and has not pressed ACK on #105, which the
     // counter has not prepared; #104 is prepared, so its bell is still.
-    await expect(card.getByTestId('kitchen-bell')).toHaveAttribute('data-ringing', 'true')
-    await expect(card.getByRole('img', { name: 'Kitchen 1 has not pressed ACK yet' })).toBeVisible()
-    // One kitchen, one dot, while it swings; none once the bell is still.
-    await expect(card.getByTestId('kitchen-bell-dots').locator('i')).toHaveCount(1)
-    await expect(page.getByTestId('open-order-104').getByTestId('kitchen-bell-dots')).toHaveCount(0)
+    await expect(card.getByRole('img', { name: 'Kitchen 1: sent' })).toBeVisible()
+    await expect(card.getByTestId('kitchen-pickup-bell')).toHaveCount(0)
     await expect(
-      page.getByTestId('open-order-104').getByTestId('kitchen-bell'),
-    ).not.toHaveAttribute('data-ringing')
+      page.getByTestId('open-order-104').getByRole('img', { name: /^Kitchen / }),
+    ).toHaveCount(0)
+    await expect(
+      page
+        .getByTestId('open-order-97')
+        .getByRole('img', { name: 'Kitchen 1: food ready to collect' }),
+    ).toBeVisible()
+    await expect(
+      page.getByTestId('open-order-97').getByRole('img', { name: 'Kitchen 2: sent' }),
+    ).toBeVisible()
   })
 })

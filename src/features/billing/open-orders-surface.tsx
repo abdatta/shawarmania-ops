@@ -23,6 +23,8 @@ import { RailScrollChip, useRailClipping } from './rail-scroll-chip'
 import { useCounterState } from './use-counter-state'
 import { OfflineFillHint } from './offline-fill-hint'
 import { useKitchenMarks } from './kitchen-marks-state'
+import { useMasonryRail } from './use-masonry-rail'
+import { useDemoReadyCue } from './demo-counter-review'
 
 /**
  * The outlet's unfinished work as **one list**, newest order first.
@@ -75,6 +77,7 @@ function methodLabelOf(bill: BillingBill): string | null {
 }
 
 export function OpenOrdersSurface({
+  twoColumns = false,
   embedded = false,
   refreshKey = 0,
   savedOrderKey = 0,
@@ -84,6 +87,7 @@ export function OpenOrdersSurface({
   onSetOrderCustomer,
   checkoutSettings,
 }: {
+  twoColumns?: boolean
   embedded?: boolean
   refreshKey?: number
   /**
@@ -100,6 +104,7 @@ export function OpenOrdersSurface({
   checkoutSettings?: Pick<OutletMenu, 'service' | 'loyalty'>
 } = {}) {
   const { billing } = useAdapters()
+  const readyCue = useDemoReadyCue()
   const session = useContext(SessionContext)
   const counterDevice = useContext(CounterDeviceContext)
   const { shift } = useCounterState()
@@ -153,6 +158,15 @@ export function OpenOrdersSurface({
       .catch(() => setError('Could not load the pipeline.'))
   }, [load, refreshKey])
 
+  useEffect(() => {
+    if (!twoColumns) return
+    const timer = setInterval(
+      () => void load().catch(() => setError('Could not refresh the pipeline.')),
+      1000,
+    )
+    return () => clearInterval(timer)
+  }, [twoColumns, load])
+
   const act = async (operation: () => Promise<unknown>) => {
     setBusy(true)
     setError(null)
@@ -179,7 +193,7 @@ export function OpenOrdersSurface({
     // ticket before the refresh removes it, so the visual identity survives
     // the cross-column handoff instead of leaving a separate amount badge.
     const source = document.querySelector<HTMLElement>(`[data-flip-id="${paying.id}"]`)
-    const flight = source ? captureCardFlight(source) : null
+    const flight = source && !twoColumns ? captureCardFlight(source) : null
     void act(async () => {
       if (revision) {
         // Each command is durable before the next is accepted. If recording
@@ -212,7 +226,7 @@ export function OpenOrdersSurface({
   // is shared even when the other order is filtered out of view.
   const shared = sharedTables(orders ?? [])
   const listed = (orders ?? [])
-    .filter((order) => order.id !== editingOrderId && order.status !== 'cancelled')
+    .filter((order) => (twoColumns || order.id !== editingOrderId) && order.status !== 'cancelled')
     /*
       Sorted here rather than taken on trust from the adapter. Newest-first is
       this surface's promise, and the two adapters did not agree about it: the
@@ -229,9 +243,9 @@ export function OpenOrdersSurface({
   // The settlement flight is the only motion left. With no sections to move
   // between, the hook measures no movement when a fact is merely recorded.
   const flipRootRef = useRef<HTMLElement | null>(null)
-  useFlip(flipRootRef, [orders])
-
   const scrollerRef = useRef<HTMLUListElement | null>(null)
+  useMasonryRail(scrollerRef, twoColumns, orders)
+  useFlip(flipRootRef, [orders], twoColumns)
   const clipping = useRailClipping(scrollerRef, [listed.length, orders])
   const scrollRailTo = (edge: 'top' | 'bottom') => {
     const scroller = scrollerRef.current
@@ -264,11 +278,23 @@ export function OpenOrdersSurface({
       since the customer button (36px) set the header's height.
     */
     return (
-      <LoadingRegion label="the pipeline" className="space-y-1">
-        <OfflineFillHint />
-        <Shimmer className="h-[98px]" />
-        <Shimmer className="h-[98px]" />
-        <Shimmer className="h-[98px]" />
+      <LoadingRegion label="the pipeline" className={twoColumns ? 'flex gap-2' : 'space-y-1'}>
+        {twoColumns ? (
+          [0, 1].map((column) => (
+            <div key={column} className="flex-1 space-y-2">
+              {[0, 1, 2].map((row) => (
+                <Shimmer key={row} className={column === row ? 'h-32' : 'h-24'} />
+              ))}
+            </div>
+          ))
+        ) : (
+          <>
+            <OfflineFillHint />
+            <Shimmer className="h-[98px]" />
+            <Shimmer className="h-[98px]" />
+            <Shimmer className="h-[98px]" />
+          </>
+        )}
       </LoadingRegion>
     )
   }
@@ -306,6 +332,7 @@ export function OpenOrdersSurface({
           <RailScrollChip
             edge="top"
             count={clipping.above}
+            readyOrder={clipping.readyAbove}
             onActivate={() => scrollRailTo('top')}
           />
           <ul
@@ -317,13 +344,25 @@ export function OpenOrdersSurface({
               `offsetTop` is measured against this list rather than against
               whatever happens to be positioned above it.
             */
-            className={`relative min-h-0 flex-1 space-y-1 scroll-smooth motion-reduce:scroll-auto ${
+            className={`relative min-h-0 flex-1 ${twoColumns ? 'pipeline-masonry ready-cue-clock' : 'space-y-1'} scroll-smooth motion-reduce:scroll-auto ${
               embedded ? 'no-scrollbar overflow-y-auto' : ''
             }`}
           >
             {listed.map((order) => (
               <li
                 key={order.id}
+                className={twoColumns && order.id === editingOrderId ? 'invisible' : undefined}
+                data-ready-order={
+                  twoColumns &&
+                  order.lines.some(
+                    (line) =>
+                      (marks?.readyQuantities?.[order.id]?.[line.orderLineId ?? ''] ??
+                        line.readyQuantity ??
+                        0) > (line.preparedQuantity ?? 0),
+                  )
+                    ? order.orderNumber
+                    : undefined
+                }
                 /*
                   How a card hidden below the fold tells the chip it is prepared
                   food still waiting for money, without the chip holding a second
@@ -336,6 +375,19 @@ export function OpenOrdersSurface({
               >
                 <PipelineCard
                   order={order}
+                  {...(twoColumns
+                    ? {
+                        dishTicks: true,
+                        readyCue,
+                        readyQuantities: marks?.readyQuantities?.[order.id] ?? {},
+                        onTickLine: (lineId: string, prepared: boolean) =>
+                          void act(() =>
+                            billing.markOrderLinesPrepared!(crypto.randomUUID(), order.id, [
+                              { id: lineId, prepared },
+                            ]),
+                          ),
+                      }
+                    : {})}
                   currentBillerId={shift?.billerProfileId ?? null}
                   currentDeviceId={counterDevice?.device.deviceId ?? null}
                   busy={busy}
@@ -344,6 +396,8 @@ export function OpenOrdersSurface({
                   tenderLabel={order.billId ? (tenders.get(order.billId) ?? null) : null}
                   sharedTable={shared.get(order.id) ?? null}
                   kitchen={marks ? kitchenBell(marks.orders[order.id] ?? [], marks.kitchens) : null}
+                  kitchenAnswers={marks?.orders[order.id] ?? []}
+                  kitchenStates={marks?.dishStates?.[order.id] ?? []}
                   onMarkPrepared={(target) =>
                     void act(() => billing.markOrderPrepared(target.id, true))
                   }
@@ -371,6 +425,7 @@ export function OpenOrdersSurface({
           <RailScrollChip
             edge="bottom"
             count={clipping.below}
+            readyOrder={clipping.readyBelow}
             marked={clipping.moneyWaitingBelow}
             onActivate={() => scrollRailTo('bottom')}
           />

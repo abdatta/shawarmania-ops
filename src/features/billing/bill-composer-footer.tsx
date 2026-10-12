@@ -108,13 +108,13 @@ export function BillComposerFooter({
       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
         <Button
           size="control"
-          className="w-full text-lg"
+          className="w-full whitespace-nowrap text-lg"
           disabled={!canPay}
           data-testid="save-order"
           onClick={onSaveOrder}
         >
           {editing ? <Check aria-hidden size={18} /> : <ListPlus aria-hidden size={18} />}
-          {editing ? 'Save changes' : 'Order'}
+          {editing ? 'Save' : 'Order'}
         </Button>
         {editing ? (
           <Button

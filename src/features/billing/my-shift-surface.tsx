@@ -87,15 +87,22 @@ export function MyShiftSurface({
       // The bills column's own silhouette: the totals pair over collapsed bill
       // rows — reshaped beside this column's new layout, per the standing
       // placeholder rule.
-      <LoadingRegion label="this shift" className="space-y-2" data-testid="bills-loading">
+      <LoadingRegion
+        label="this shift"
+        className={embedded ? 'flex min-h-0 flex-1 flex-col gap-2' : 'space-y-2'}
+        data-testid="bills-loading"
+      >
         <OfflineFillHint />
-        <div className="grid grid-cols-2 gap-2">
-          <Shimmer className="h-12" />
-          <Shimmer className="h-12" />
+        {embedded && <Shimmer className="h-4 w-28 shrink-0" />}
+        <div className="grid shrink-0 grid-cols-2 gap-2">
+          <Shimmer className={embedded ? 'h-20' : 'h-12'} />
+          <Shimmer className={embedded ? 'h-20' : 'h-12'} />
         </div>
-        {[1, 2, 3].map((key) => (
-          <Shimmer key={key} className="h-9" />
-        ))}
+        <div className={embedded ? 'min-h-0 flex-1 space-y-2 overflow-hidden' : 'space-y-2'}>
+          {Array.from({ length: embedded ? 8 : 3 }, (_, key) => (
+            <Shimmer key={key} className="h-9" />
+          ))}
+        </div>
       </LoadingRegion>
     )
 

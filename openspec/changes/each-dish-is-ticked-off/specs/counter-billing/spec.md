@@ -6,13 +6,21 @@
 - FROM: `### Requirement: A counter learns only which kitchens have answered`
 - TO: `### Requirement: A counter learns only which kitchens have answered and which dishes are ready`
 
+- FROM: `### Requirement: A pipeline card states both of its answers in two fixed controls`
+- TO: `### Requirement: A pipeline card states handover per item and payment in its footer`
+
+- FROM: `### Requirement: A rail card shows whether its kitchens have pressed ACK`
+- TO: `### Requirement: Each kitchen has its own sent, acknowledged, ready and handed-over indicator`
+
 ## MODIFIED Requirements
 
 ### Requirement: The counter is the menu and a two-column rail, with the composer laid over the rail
 
 The counter SHALL render two touch-safe columns at **every** width: the tappable
 menu, and the activity rail holding the preparation pipeline as a single list laid
-out in **two columns**, newest first in reading order. Each column SHALL scroll
+out in **two free-flowing columns**, processing the newest-first list into the
+shorter column at each step. A shorter ticket SHALL NOT leave blank space beneath
+it because its neighbour is taller. Each workspace column SHALL scroll
 internally and SHALL NOT move the composer's controls off screen.
 
 While an order is being composed or edited, the composer SHALL be laid over the
@@ -28,16 +36,26 @@ disclosure. The page itself SHALL NOT scroll horizontally — only the workspace
 Menu tiles SHALL be laid out against the width of their own column rather than the
 viewport's.
 
-Below the workspace, reached by scrolling the page down, SHALL be two tabs:
+Below the workspace, reached by scrolling the page down, SHALL be two panels:
 **Bills**, holding Bills this shift and everything it offers today, and
-**Expenses**, holding the counter's expenses. The tablet SHALL remember which tab
-was last chosen. This shift's per-method totals SHALL keep their current tiles,
-placed where the owner chose from the demo (recorded in this change's design).
+**Expenses**, holding the counter's expenses. Expenses SHALL sit on the left at
+the menu's width and Bills on the right at the two-column order rail's width,
+using the workspace's gap. Narrow screens SHALL scroll these panels sideways
+without stacking or narrowing them. Their horizontal scroll positions SHALL stay
+linked to the workspace, including after column resizing, without a tab switch.
+Their loading placeholders SHALL use the same panel layout.
+The records panels SHALL fill a second viewport, allowing for persistent chrome
+and outer padding. At the bottom of the page the workspace SHALL be above the
+screen and records SHALL fill its usable height without trailing blank scroll.
+This shift's per-method totals SHALL retain their existing tiles atop the Bills
+panel only. The header pill SHALL describe counter status without a monetary
+total. Search SHALL
+keep its full menu-column width.
 
 #### Scenario: Two columns of orders
 
 - **WHEN** a biller uses the counter at landscape-tablet width with six orders on the rail
-- **THEN** the rail shows them in two columns, newest at the top left, then top right, then down
+- **THEN** the rail shows them in two columns, newest at the top left, next at the top right, and subsequent tickets packed into the shorter column with only the standard gap
 
 #### Scenario: Composing covers half the rail
 
@@ -51,8 +69,13 @@ placed where the owner chose from the demo (recorded in this change's design).
 
 #### Scenario: Bills are below
 
-- **WHEN** the biller scrolls the counter down and chooses Bills
-- **THEN** Bills this shift is shown with its totals, and taking a payment back or opening a receipt works as before
+- **WHEN** the biller scrolls the counter down
+- **THEN** Bills this shift and Expenses are visible together with their existing actions, and taking a payment back or opening a receipt works as before
+
+#### Scenario: The header states status
+
+- **WHEN** the counter is scrolled to the top
+- **THEN** its header pill shows synchronization, shift time and applicable kitchen-offline status, without a money total; Cash/UPI totals remain in Bills below
 
 #### Scenario: The workspace is wider than the screen
 
@@ -90,10 +113,7 @@ item's tile SHALL show the total quantity of that item across its lines.
 ### Requirement: Pipeline orders remain editable until they are paid
 
 The pipeline SHALL list this outlet's unpaid orders, each with its reference,
-complete quantity-and-item lines and total. A card SHALL NOT print the
-customer's name or the order's age: the list is ordered newest first, and the
-customer is one control away (see *A pipeline card states both of its answers in
-two fixed controls*). Items SHALL
+complete quantity-and-item lines and total. A card SHALL show its temporary label and compact age ring. Customer entry remains in payment and composer edit. Items SHALL
 NOT be truncated or collapsed because these lists are preparation work. Any
 operator holding the owning tablet's live shift SHALL reopen and change lines,
 quantities, notes, label and customer form values until payment or cancellation,
@@ -107,154 +127,55 @@ or cancelled. Once an order is paid, revision SHALL close for it everywhere.
 #### Scenario: Staff scans work to prepare
 
 - **WHEN** a pipeline order contains several different items and has a customer name
-- **THEN** every item and quantity is readable without expansion, the total is prominent, the card labels its reference as Order # followed by the number, and the customer's name is not printed on the card but opens from its customer control
+- **THEN** every item and quantity is readable without expansion, the total is prominent, the card labels its reference as Order # followed by the number, and customer details remain in payment and edit, while the compact age ring shows waiting time
 
 #### Scenario: A locked line in the composer
 
 - **WHEN** an order with a ticked line is opened for edit
 - **THEN** that line shows as locked, its + adds a new line beside it, its note cannot be changed, and its − still lowers it
 
-### Requirement: A pipeline card states both of its answers in two fixed controls
+### Requirement: A pipeline card states handover per item and payment in its footer
 
-A pipeline card SHALL show its reference with the number part in the brand's
-bright primary colour, followed by one place tag — its table, or its order type
-when it has no table — drawn in a single style for both, with an icon and small
-capitals that do not read as an item line. When the order has a **label**, it
-SHALL be the card's headline beside the reference, in full. Then one meta line —
-creator when another operator took the order, till when another till did — the
-total prominent at the right, and complete untruncated item lines with bold
-quantity prefixes, each line's note beneath it. The card SHALL NOT print the
-customer's name or the order's age.
+A card SHALL show its orange order number, full label when present, total, and a
+compact age ring no larger than the previous customer control. The ring SHALL
+display centered total minutes, including ages above one hour, and use warning at
+10, red at 20, and darker contrast-validated red at 40 minutes. A gold member star SHALL overlap
+the order number without moving it. Table N, Dine-in or Takeaway SHALL be centered in its footer space beside
+Paid, leaving the label header uncluttered. Without service, Paid SHALL take the
+full available footer width. The aggregate Prepared control SHALL be omitted.
 
-Beside the total, a card SHALL carry one customer control whenever the order has
-a customer or one can be set from this tablet. With a customer, it SHALL open
-what the order recorded — name, phone and membership — and, while the order can
-be edited here, offer to change it. A gold member's star SHALL sit on that
-control rather than beside the reference, because it describes the customer. Without one, or when the biller changes it, it SHALL open the order in the
-composer with the customer dialog already open: the ordinary edit and its
-ordinary revision, with no new write. Because the customer is the whole of that
-edit, choosing in the dialog SHALL save it at once — Use attaches the customer,
-Skip saves the order with no customer, as Skip means everywhere else — and
-closing the dialog without choosing SHALL abandon the edit and leave the order
-unchanged [owner, 2026-10-05]. Per-line prices SHALL NOT appear on a pipeline card. A
-one-item card SHALL stand no taller than about 120px so at least six fit the rail
-at landscape tablet height without scrolling. Item names SHALL never truncate.
+Each item SHALL remain fully readable with quantity separate from its fixed-size
+checkbox and its note underneath. Tapping SHALL tick or untick that line. A tick
+SHALL color its text orange and fill the checkbox. Packaging SHALL have no tick.
+Another till's lines SHALL remain read-only statements.
 
-Each item line SHALL be ticked off on its own by a tap on the line, which SHALL
-fill its quantity tile and draw a check; a tap on a ticked line SHALL untick it.
-Packaging SHALL carry no tick. Ticking SHALL be available on this tablet's orders
-and drawn as a statement on another till's.
+Paid SHALL retain its existing tender and reasoned take-back flows, with a
+checked box only after money is recorded. A foreign till's payment SHALL be a
+statement without control chrome. Customer entry SHALL remain available through
+payment and the composer edit. Uncommon actions SHALL retain the touch-safe
+Edit/Cancel overflow and their existing safety rules.
 
-Beneath that, every card SHALL carry exactly two state controls, **Prepared**
-then **Paid**, in that order and at equal width, on every card in every state.
-Neither control SHALL be reordered, resized, renamed or withheld because of the
-order's state: the words **Prepared** and **Paid** SHALL be the only words those
-controls ever read, and the interface SHALL contain no Reprepare and no Un-pay.
+Each carrying kitchen SHALL retain a fixed indicator slot: a gray single tick
+for sent, orange double tick for ACK, orange bell for its Ready food awaiting
+handover, and no icon after all its food is ticked at the counter. Its state SHALL
+NOT replace another kitchen's slot. Unticking or Undo SHALL restore the relevant
+state; later food still owed SHALL restore sent/ACK after older Ready food is
+handed over. Ready item checkboxes SHALL retain their orange outline and pulse.
 
-Each control SHALL draw a checkbox stating whether that fact is recorded. An
-unrecorded fact SHALL draw an unchecked box in its own colour — preparation in the
-brand primary, payment in the success colour. A recorded fact SHALL fill its
-control with that colour and draw the checked box and its mark in that control's
-own foreground token, so the mark stays legible on the fill in both themes.
-Recorded and unrecorded SHALL differ in **shape** as well as colour. No separate
-paid badge SHALL be drawn, because the checked payment control already says it.
+#### Scenario: Service leaves room for the label
 
-**Prepared SHALL follow the dishes**: it SHALL be checked exactly when every item
-line is ticked, SHALL uncheck itself when an edit adds a line or quantity not
-ticked, and SHALL be drawn **without control chrome**, as a statement, on every
-card. Activating an unchecked payment control SHALL open the tender dialog, and
-the control SHALL become checked only once payment is recorded. Activating a
-checked payment control SHALL open the reasoned take-back confirmation.
+- **WHEN** a labelled Table 4 order appears beside an order without service
+- **THEN** Table 4 sits beside Paid in the first footer, and the second has one wide Paid control
 
-Where payment cannot be changed from this tablet — which in the pipeline means
-another till's order, since a payment on a card still in the list is always
-reversible — its control SHALL be drawn **without control chrome**, as a
-statement of what is true, and SHALL NOT be drawn as a dimmed or disabled
-control.
+#### Scenario: Ready is actionable
 
-All uncommon actions SHALL sit behind one overflow control presenting touch-safe
-labelled rows: Edit and Cancel on an unpaid card, and Cancel after paid on a paid
-card. Edit SHALL be unavailable once an order is paid.
+- **WHEN** kitchen Done arrives, then the counter ticks its last ready item
+- **THEN** the bell appears immediately alongside the item cues and clears after handover
 
-#### Scenario: Two cards in different states read the same way
+#### Scenario: Every item is handed over
 
-- **WHEN** a biller reads an unprepared card and a prepared card side by side
-- **THEN** both carry Prepared then Paid in the same places with the same words, and only the boxes and the fills differ
-
-#### Scenario: Ticking the last dish prepares the order
-
-- **WHEN** the operator ticks the last unticked dish of an order
-- **THEN** Prepared fills and shows a checked box, the payment control is untouched in place and wording, and no badge appears
-
-#### Scenario: An edit unprepares it
-
-- **WHEN** a prepared, unpaid order is edited to add a Fries
-- **THEN** Fries is unticked, Prepared is unchecked, and the ticked dishes stay ticked
-
-#### Scenario: Prepared cannot be tapped
-
-- **WHEN** the operator taps Prepared
-- **THEN** nothing is recorded; it states what the dishes say
-
-#### Scenario: The label is the headline
-
-- **WHEN** an order labelled *Red shirt* is on the rail
-- **THEN** its card reads *Red shirt* beside its number, without opening anything
-
-#### Scenario: Payment is recorded through the tender dialog
-
-- **WHEN** the operator activates an unchecked Paid control
-- **THEN** the tender dialog opens and the control becomes checked only after an exact allocation is recorded
-
-#### Scenario: A recorded payment is taken back from its own control
-
-- **WHEN** the operator activates a checked Paid control on a card in the list
-- **THEN** the reasoned take-back confirmation opens, naming the amount and tender, and no control has renamed itself to offer it
-
-#### Scenario: Every ticked payment in the list can be unticked
-
-- **WHEN** any card in the pipeline list shows a checked Paid control on this till's order
-- **THEN** activating it opens the take-back rather than refusing, because a card leaves the list as soon as its ticket is finished
-
-#### Scenario: What cannot be changed is not drawn as a broken control
-
-- **WHEN** a card belongs to another till
-- **THEN** its dishes and both controls are drawn as statements without control chrome rather than as dimmed controls, and the card names the till
-
-#### Scenario: State survives without colour
-
-- **WHEN** the two controls, or a ticked and an unticked dish, are compared without relying on hue
-- **THEN** checked and unchecked differ by shape
-
-#### Scenario: Rare actions keep their safety
-
-- **WHEN** the operator opens a card's overflow menu
-- **THEN** each action is a labelled row at least 40px tall, and cancellation still requires its reasoned confirmation
-
-#### Scenario: A paid order cannot be edited
-
-- **WHEN** the operator opens the overflow of a paid card
-- **THEN** Edit is absent or refused with guidance to take the payment back first, and the composer cannot load a paid order's lines for revision
-
-#### Scenario: The customer is one tap away
-
-- **WHEN** a biller taps the customer control on a card whose order has a customer
-- **THEN** the order's customer name, phone and membership open over the counter, and nothing about the order changes
-
-#### Scenario: A customer is added from the card
-
-- **WHEN** a biller taps the customer control on this tablet's open order that has no customer
-- **THEN** the order opens in the composer with the customer dialog open, and choosing Use saves the order with that customer at once, with no Save changes
-
-#### Scenario: Skip from the card removes the customer
-
-- **WHEN** a biller changes an order's customer from its card and chooses Skip
-- **THEN** the order is saved at once with no customer's number, and leaves edit mode
-
-#### Scenario: Closing the dialog from the card changes nothing
-
-- **WHEN** a biller opens the customer dialog from a card and closes it without choosing
-- **THEN** the edit is abandoned, the order is unchanged, and nothing is written
+- **WHEN** the last unticked item of an unpaid order is ticked
+- **THEN** preparation is recorded without displaying an aggregate Prepared button; Paid keeps its state
 
 ### Requirement: Only a finished ticket travels
 
@@ -262,7 +183,7 @@ A card SHALL NOT be animated from one place to another within the pipeline list,
 because recording preparation or payment does not move it. When an order becomes
 both prepared and paid, its card SHALL fade where it stands, within about 300ms,
 while the space it left collapses and its siblings settle without jumping; the
-shift's totals and the Bills tab SHALL update. The fade SHALL be driven by the
+shift's totals and the Bills panel SHALL update. The fade SHALL be driven by the
 same state change however it originated — local tap, another tablet, the day
 change or a manager's action — and SHALL coalesce rapid successive departures
 rather than queuing them. Under a reduced-motion preference the card SHALL simply
@@ -290,8 +211,9 @@ The counter SHALL learn a kitchen's answers only through a read that requires a
 live counter shift and returns, for its own outlet, the live kitchen tablets' ids
 and labels; per open order, each kitchen's answer as waiting, seen or not shown;
 and per item line of each order on the rail, the quantity a kitchen has marked
-Ready. It SHALL return no dish name, no acknowledgement or Ready time, no person,
-and not which kitchen marked a dish Ready. It SHALL refuse a kitchen shift, a
+Ready, plus each carrying kitchen's aggregate sent/ACK/Ready/handed-over state.
+It SHALL return no dish name, no acknowledgement or Ready time, no person,
+and no dish-to-kitchen mapping. It SHALL refuse a kitchen shift, a
 person's own session and anything without a live counter shift. A counter shift
 SHALL be able to read its own outlet's kitchen pulse and no other outlet's.
 
@@ -310,14 +232,107 @@ SHALL be able to read its own outlet's kitchen pulse and no other outlet's.
 - **WHEN** a kitchen marks Ready an order's two Chicken Shawarmas
 - **THEN** the counter's read carries that line's id with two, and nothing naming the kitchen or the time
 
+### Requirement: Each kitchen has its own sent, acknowledged, ready and handed-over indicator
+
+Each live kitchen carrying an order SHALL have one stable slot, ordered by kitchen
+label, midway between the age ring and overflow control. The slot SHALL show a
+neutral single tick when sent, orange double tick when the kitchen's current
+visible food is acknowledged, orange bell while that kitchen has Ready food
+awaiting counter handover, and no icon after all its food is handed over. The
+empty handed-over slot SHALL retain its dimensions. There SHALL be no ACK bell
+or kitchen-dot cluster. Accessible names SHALL identify the kitchen and state.
+
+Each kitchen SHALL change independently. An edit affecting its owed food SHALL
+restore sent until ACK; an edit only for another kitchen SHALL preserve its
+state. Filter changes SHALL compare acknowledgements through the current filter,
+preserving ACK for food already answered for. A kitchen not carrying the order
+SHALL have no visible icon. With no live kitchen shift there SHALL be no kitchen
+icons. ACK, Ready, Undo, filter and shift changes SHALL reach the counter within
+seconds. Later food still owed SHALL restore sent/ACK after earlier Ready food
+is handed over. Undo SHALL preserve counter handover.
+
+#### Scenario: Two independent kitchens
+
+- **WHEN** Kitchen 1 acknowledges then marks its food Done while Kitchen 2 has only received its food
+- **THEN** Kitchen 1's slot changes single tick to orange double tick to bell, while Kitchen 2's single tick stays in its own slot
+
+#### Scenario: Handover clears only its kitchen
+
+- **WHEN** the counter ticks all Kitchen 1 food while Kitchen 2 still has food owed
+- **THEN** Kitchen 1's icon clears without moving Kitchen 2's indicator
+
+#### Scenario: A filter hides acknowledged food
+
+- **WHEN** a kitchen hides some already-acknowledged food through its filter
+- **THEN** it remains acknowledged for visible food already answered for, or carries no icon when it shows none
+
+### Requirement: Editing a saved order is unmistakable, and it is one object
+
+Edit SHALL use the composer over the rail's left half and an accent-outlined
+editing pin in the uncovered right half, visually joined to the composer. The
+underlying ordinary card SHALL retain its masonry position beneath the overlay,
+without reflowing the rail. The rail itself SHALL NOT take the edit outline.
+The pin SHALL show the edited order's identity and one footer with total,
+customer action, Save and Cancel edit. The composer SHALL show the editable items
+without a duplicate footer. Save SHALL remain one unwrapped word. Ending edit
+SHALL remove the overlay and pin, revealing the rail, and restore any waiting
+new-order draft exactly. Reduced motion SHALL not change the final geometry.
+
+#### Scenario: The edit keeps the rail in place
+
+- **WHEN** an unpaid saved order is opened for editing
+- **THEN** the composer and editing pin appear as one accent-outlined object, while ordinary cards retain their underlying positions
+
+#### Scenario: One footer during edit
+
+- **WHEN** a saved order is being edited
+- **THEN** its total, customer action, Save and Cancel edit appear once in the editing pin, without another composer footer
+
+### Requirement: The right rail is the preparation pipeline
+
+The rail SHALL contain one newest-first list of this outlet's orders that are not
+both prepared and paid, packed into two independent columns. There SHALL be no
+state sections. Recording dish handover or payment SHALL not reorder a ticket.
+It SHALL name another operator or till when applicable. Paid food still owed
+SHALL remain; an order SHALL leave only when prepared and paid.
+
+The rail SHALL scroll as one, with directional controls only when orders are
+clipped. Each control SHALL announce the hidden count and scroll to that end;
+Ready orders SHALL be named with priority, and the bottom control SHALL retain
+its non-textual marker for hidden prepared-but-unpaid orders. Saving SHALL scroll
+to the newest end. Unticking an unfinished order SHALL clear its dish handover
+without moving the card.
+
+#### Scenario: Prepared food awaits payment
+
+- **WHEN** a prepared unpaid order is hidden below the rail
+- **THEN** the bottom scroll control retains its money marker
+
+#### Scenario: Ready food awaits pickup
+
+- **WHEN** kitchen Ready food is hidden outside the rail viewport
+- **THEN** the control in that direction names its ready order and scrolls to it on activation
+
+### Requirement: The rail's cards are tickets
+
+Cards SHALL retain the torn ticket edge and prominent display-face order number.
+Dish quantities SHALL remain visible separately from fixed checkboxes. A one-dish
+card SHALL remain compact at approximately nine rem or less, without stretching
+to a taller neighbour. Independent kitchen slots SHALL fit between the age ring
+and overflow control without enlarging the card or adding an ACK-dot cluster.
+
+#### Scenario: Compact independent cards
+
+- **WHEN** a short one-dish ticket sits beside a noted multi-dish ticket
+- **THEN** it keeps its own compact height, and the next card fills the space below it
+
 ## ADDED Requirements
 
 ### Requirement: An order carries a label from the composer to the card
 
 The composer SHALL offer a **label** field at its top: optional, free text of up to
-24 characters, needing no phone number, saved with the order and changeable while
-the order can be edited. The label SHALL be shown as the rail card's headline and
-on the kitchen's card. When the label matches another order's on the rail, the
+24 characters, with Order Label as its placeholder and a visually hidden caption, needing no phone number, saved with the order and changeable while
+the order can be edited. The label SHALL be shown as the rail card's headline and SHALL NOT be shown on the kitchen's card. When the label matches another order's on the rail, the
 composer SHALL say so quietly and SHALL save it anyway.
 
 At payment, when the number entered has no saved name, the customer dialog SHALL
@@ -329,7 +344,7 @@ from the order once it leaves the rail.
 #### Scenario: Taking an order in a rush
 
 - **WHEN** a biller types *Rahul* in the label field and saves the order with no customer
-- **THEN** the card reads *Rahul* beside its number, and the kitchen's card shows *Rahul*
+- **THEN** the card reads *Rahul* beside its number, and the kitchen identifies it by order number
 
 #### Scenario: A new number takes the label as its name
 
@@ -353,7 +368,7 @@ from the order once it leaves the rail.
 
 ### Requirement: A dish carries a note
 
-Each item line in the composer SHALL carry a note control beside its − and +,
+Each item line in the composer SHALL carry a rightmost pencil note control after its compact quantity pill and amount,
 opening a sheet with a text box of up to 60 characters and a row of quick notes —
 a fixed few at first, then the notes this tablet has used most. On a line of two
 or more the sheet SHALL ask **All** or **Only 1**; *Only 1* SHALL split one off into
@@ -376,28 +391,43 @@ receipt. A locked line's note SHALL NOT change. Packaging SHALL carry no note.
 - **WHEN** an order with a noted dish is paid
 - **THEN** its receipt lists the dish without the note
 
-### Requirement: A dish the kitchen marks Ready shakes on the counter until ticked
+### Requirement: A dish the kitchen marks Ready shows a checkbox cue until ticked
 
 When a kitchen marks dishes Ready, those dish lines on the counter's rail card
-SHALL take a highlighted border and shake briefly, then shake again about every 30
-seconds, until the counter ticks them. The card SHALL carry a mark saying how many
-of its dishes are ready and not ticked. While such a card is scrolled out of view,
+SHALL show a localized third checkbox state until the counter ticks them. The
+owner's chosen default SHALL be a pulsating orange light: it starts as a circular
+dot, expands into a uniform rounded-rectangle fill within the checkbox while
+fading, disappears, then restarts from a dot without visible shrinking or a fixed
+bright center. The Ready checkbox outline SHALL remain orange throughout,
+including while the light is invisible; waiting outlines SHALL remain gray. The demo SHALL retain a soft halo and a steady dot for comparison;
+animated cues SHALL share one pulse phase, including newly ready lines. Text SHALL
+remain still. Ready SHALL NOT add an
+outline around the row or change the unticked text colour. The orange Ready
+outline belongs only to the checkbox.
+Ticking SHALL
+colour the dish text orange and fill the checkbox with a contrasting check.
+Rows SHALL have space between them and vertically centered contents. The kitchen
+status slots SHALL be centered between the age ring and bottom action icon.
+Clickable dish rows SHALL show a hand cursor and subtle shadow on mouse hover,
+without adding that hover treatment on touchscreens.
+The dish checkbox SHALL be fixed at 15px, smaller than the former 17px Prepared checkbox, and SHALL remain
+separate from the visible quantity. The card SHALL NOT carry a ready-count label.
+While such a card is scrolled out of view,
 the rail's scroll pointer in its direction SHALL name it as ready. The counter
-SHALL make **no sound** for any of this. Under reduced motion, the shake SHALL be a
-fade and return. Ticking a ready dish SHALL stop its shaking at once.
+SHALL make **no sound** for any of this. Under reduced motion, the checkbox cue SHALL stay steady. Ticking a ready dish SHALL remove its cue at once.
 
-The bell SHALL be unaffected by Ready, except that a dish a kitchen has marked
-Ready or the counter has ticked SHALL count as answered by every kitchen.
+Each kitchen's bell SHALL appear only for its Ready food needing handover and
+clear when that food is ticked, while other kitchens' indicators retain their states.
 
 #### Scenario: The kitchen says it is ready
 
 - **WHEN** the kitchen marks Ready an order's two Chicken Shawarmas
-- **THEN** within seconds that line on the counter's card is bordered and shakes, the card reads *2 ready*, and no sound plays
+- **THEN** within seconds that line shows a pulsating Ready cue in its orange-outlined checkbox with stationary normal text, no row outline appears, its quantity stays visible, and no sound plays
 
 #### Scenario: Handed over
 
 - **WHEN** the biller taps that line after the food is handed over
-- **THEN** it is ticked, stops shaking, and the card's ready mark goes
+- **THEN** its text becomes orange and its checkbox is filled and ticked, its Ready cue disappears, and its quantity stays visible beside the check
 
 #### Scenario: Ready but out of sight
 
@@ -407,4 +437,11 @@ Ready or the counter has ticked SHALL count as answered by every kitchen.
 #### Scenario: The kitchen takes it back
 
 - **WHEN** the kitchen undoes its Ready
-- **THEN** the counter's dishes stop shaking and lose their border
+- **THEN** the counter's dishes lose their Ready cue and keep their normal unticked appearance
+
+### Requirement: The composer gives names room
+
+The quantity changer SHALL use one compact pill, and the note action SHALL be a
+pencil at the right of the item row. Save SHALL be a single unwrapped word.
+Demo orders SHALL mostly have service choices consistent with the demo settings,
+including dine-in/table and takeaway, with at most two legacy no-service examples.

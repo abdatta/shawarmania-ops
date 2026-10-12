@@ -9,7 +9,10 @@ import type { DemoStore } from '@/data-access/mock/store'
  * the counter ringing the kitchen, so the demo — and only the demo — copies its
  * orders and their lines across same-origin tabs with a `BroadcastChannel`.
  *
- * Deliberately small: last writer wins, orders and lines only — plus the demo
+ * Orders and dish ticks come from counter tabs; Ready and ACK come from kitchens.
+ * Ready snapshots merge by command ID, with Undo permanent within an epoch, so a
+ * delayed counter snapshot cannot resurrect or erase a kitchen's action.
+ * This includes the demo
  * kitchen's acknowledgements and filter, so a kitchen tab's ACK stops the bell
  * in a counter tab (#72) — and a tab that opens asks the others for what they
  * hold. Real tablets share nothing but the
@@ -31,15 +34,21 @@ type Message =
   | {
       type: 'orders'
       epoch: number
+      writer?: 'counter' | 'kitchen'
       orders: DemoStore['orders']
       orderItems: DemoStore['orderItems']
-      kitchen?: Pick<DemoKitchen, 'acks' | 'filter'> & { filterChangedAt?: string | null }
+      dishWorkflow?: DemoStore['dishWorkflow']
+      kitchen?: Pick<DemoKitchen, 'acks' | 'filter' | 'stationAcks'> & {
+        filterChangedAt?: string | null
+      }
     }
 
 function signature(store: DemoStore, kitchen: DemoKitchen): string {
   return JSON.stringify([
     store.orders.map((o) => [o.id, o.status, o.changed_at, o.prepared_at, o.cancelled_at]),
-    store.orderItems.length,
+    store.orderItems,
+    store.dishWorkflow,
+    kitchen.stationAcks,
     kitchen.acks.length,
     kitchen.filter,
     kitchen.filterChangedAt,
@@ -59,24 +68,33 @@ export function mirrorDemoOrders(
   kitchen: DemoKitchen,
   startedAt: number,
   onReset: (epoch: number) => void,
+  writer: 'counter' | 'kitchen' = 'counter',
 ): () => void {
   if (typeof BroadcastChannel === 'undefined') return () => undefined
   const channel = new BroadcastChannel(CHANNEL)
   let epoch = startedAt
   let last = signature(store, kitchen)
 
-  const send = () =>
+  const send = () => {
+    if (store.dishWorkflow) {
+      kitchen.stationAcks ??= {}
+      kitchen.stationAcks[kitchen.station ?? 1] = kitchen.acks
+    }
     channel.postMessage({
       type: 'orders',
       epoch,
+      writer,
       orders: store.orders,
       orderItems: store.orderItems,
+      ...(store.dishWorkflow ? { dishWorkflow: store.dishWorkflow } : {}),
       kitchen: {
         acks: kitchen.acks,
+        ...(kitchen.stationAcks ? { stationAcks: kitchen.stationAcks } : {}),
         filter: kitchen.filter,
         filterChangedAt: kitchen.filterChangedAt,
       },
     } satisfies Message)
+  }
 
   channel.onmessage = (event: MessageEvent<Message>) => {
     const message = event.data
@@ -89,13 +107,46 @@ export function mirrorDemoOrders(
       return
     }
     if (message.epoch < epoch) return
+    // Do not let an incoming frame hide an action authored since our last scan.
+    // Publish that action first; Ready/Undo merge monotonically at the other tab.
+    if (signature(store, kitchen) !== last) {
+      send()
+      last = signature(store, kitchen)
+    }
     // A tab that opened after the last reset joins the demo the others hold.
     epoch = message.epoch
-    store.orders.splice(0, store.orders.length, ...message.orders)
-    store.orderItems.splice(0, store.orderItems.length, ...message.orderItems)
+    if (message.writer !== 'kitchen') {
+      store.orders.splice(0, store.orders.length, ...message.orders)
+      store.orderItems.splice(0, store.orderItems.length, ...message.orderItems)
+    }
+    if (message.dishWorkflow) {
+      const readies = new Map((store.dishWorkflow?.readies ?? []).map((ready) => [ready.id, ready]))
+      for (const ready of message.dishWorkflow.readies) {
+        const held = readies.get(ready.id)
+        readies.set(ready.id, { ...ready, undone: ready.undone || held?.undone === true })
+      }
+      const facts =
+        message.writer === 'kitchen'
+          ? (store.dishWorkflow ?? message.dishWorkflow)
+          : message.dishWorkflow
+      store.dishWorkflow = {
+        ...facts,
+        readies: [...readies.values()].sort((a, b) => a.at.localeCompare(b.at)),
+      }
+    }
     // A tab still on an older build sends no kitchen; keep this tab's.
-    if (message.kitchen) {
-      kitchen.acks.splice(0, kitchen.acks.length, ...message.kitchen.acks)
+    if (message.kitchen && message.writer !== 'counter') {
+      if (!message.kitchen.stationAcks)
+        kitchen.acks.splice(0, kitchen.acks.length, ...message.kitchen.acks)
+      const stations = { ...kitchen.stationAcks }
+      for (const [station, acks] of Object.entries(message.kitchen.stationAcks ?? {})) {
+        const all = new Map((stations[Number(station)] ?? []).map((ack) => [ack.id, ack]))
+        for (const ack of acks) all.set(ack.id, ack)
+        stations[Number(station)] = [...all.values()]
+      }
+      kitchen.stationAcks = stations
+      if (message.kitchen.stationAcks)
+        kitchen.acks = kitchen.stationAcks[kitchen.station ?? 1] ?? []
       kitchen.filter = message.kitchen.filter
       kitchen.filterChangedAt = message.kitchen.filterChangedAt ?? null
     }

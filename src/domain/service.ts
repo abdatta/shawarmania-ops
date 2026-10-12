@@ -308,8 +308,12 @@ export function isWaivedPackaging(line: {
 export const PACKAGING_LINE_KEY = 'packaging'
 
 /** What a line's controls call it by: its menu item, or `packaging`. */
-export function lineKey(line: { kind?: LineKind | null | undefined; menuItemId: string }): string {
-  return isPackagingLine(line) ? PACKAGING_LINE_KEY : line.menuItemId
+export function lineKey(line: {
+  kind?: LineKind | null | undefined
+  menuItemId: string
+  workflowLineId?: string
+}): string {
+  return isPackagingLine(line) ? PACKAGING_LINE_KEY : (line.workflowLineId ?? line.menuItemId)
 }
 
 /** Whether a keyed table number is one a table can have: 1 to 999. */

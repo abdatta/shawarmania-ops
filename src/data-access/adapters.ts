@@ -1,6 +1,7 @@
 import type {
   BillingCommandResult,
   KitchenAnswer,
+  KitchenDishState,
   LineKind,
   MonthDayInput,
   MonthReading,
@@ -1321,6 +1322,11 @@ export interface CounterShift {
  * these two columns at all.
  */
 export interface BillLineDraft {
+  /** Phase-1 dish workflow, carried only by the demo until its live contract lands. */
+  workflowLineId?: string
+  note?: string | null
+  preparedQuantity?: number
+  readyQuantity?: number
   /** Existing order-item identity, retained when revising captured prices. */
   orderLineId?: Tables<'order_items'>['id']
   /**
@@ -1436,6 +1442,7 @@ export type BillStatus = Tables<'bills'>['status']
 
 /** A saved order as the counter and manager surfaces read it. */
 export interface BillingOrder extends ServiceFacts {
+  label?: string | null
   id: Tables<'orders'>['id']
   outletId: Tables<'orders'>['outlet_id']
   deviceId: Tables<'orders'>['device_id']
@@ -1505,6 +1512,7 @@ export interface BillingOrder extends ServiceFacts {
 export type BillVoidKind = NonNullable<Tables<'bills'>['void_kind']>
 
 export interface SaveOrderInput extends ServiceFacts {
+  label?: string | null
   clientId: string
   outletId: string
   shiftId: string
@@ -1782,6 +1790,7 @@ export interface BillingAdapter {
     input: Pick<
       SaveOrderInput,
       | 'lines'
+      | 'label'
       | 'discounts'
       | 'customerId'
       | 'customerName'
@@ -1807,6 +1816,12 @@ export interface BillingAdapter {
    * paid order is refused: the bills border is terminal in that direction.
    */
   markOrderPrepared(orderId: string, prepared: boolean): Promise<BillingOrder>
+  /** Demo contract for per-dish commands; phase 2 supplies the durable live path. */
+  markOrderLinesPrepared?(
+    id: string,
+    orderId: string,
+    lines: { id: string; prepared: boolean }[],
+  ): Promise<BillingOrder>
   /**
    * Take this tablet's own payment back within the grace window. A settled
    * bill is voided as `counter_unpay`; money held against a paid-but-unprepared
@@ -2090,6 +2105,7 @@ export type KitchenAlertKind = 'new' | 'edit' | 'cancel'
 
 /** One line as the kitchen sees it: a dish and how many. Never a price. */
 export interface KitchenLine {
+  note?: string | null
   id: string
   menuItemId: string | null
   itemName: string
@@ -2112,6 +2128,10 @@ export interface KitchenAcknowledgement {
  * and a kitchen shift holds no select on the tables that carry them.
  */
 export interface KitchenOrder {
+  /** Demo Done receipt: distinct ticket identity, original order for commands. */
+  sourceOrderId?: string
+  readyId?: string
+  ticketNumber?: number
   id: string
   orderNumber: number
   serviceType: ServiceType | null
@@ -2159,6 +2179,9 @@ export interface KitchenCategory {
  * carries are absent. Nothing about dishes, times or people.
  */
 export interface KitchenMarks {
+  readyQuantities?: Record<string, Record<string, number>>
+  /** Per kitchen, in the same stable order as `kitchens`; null means not carrying. */
+  dishStates?: Record<string, (KitchenDishState | null)[]>
   kitchens: { id: string; label: string }[]
   orders: Record<string, (KitchenAnswer | null)[]>
   /**
@@ -2177,6 +2200,14 @@ export type KitchenAcknowledgeOutcome = 'accepted' | 'stale'
  * the kitchen holds no outbox and caches nothing for a restart.
  */
 export interface KitchenAdapter {
+  ready?(input: {
+    id: string
+    orderId: string
+    lines: { id: string; quantity: number }[]
+  }): Promise<void>
+  undoReady?(id: string, readyId: string): Promise<void>
+  /** The review demo can walk both kitchen stations. */
+  setDemoStation?(station: number): void
   readBoard(): Promise<KitchenBoard>
   listCategories(): Promise<KitchenCategory[]>
   /** Saves the filter and the sort together, as the one sheet on the tablet does. */

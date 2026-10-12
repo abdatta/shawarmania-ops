@@ -80,6 +80,7 @@ import { personaFixtures } from './fixtures/personas'
 export const DEMO_BILL_NUMBER_BASE = 1000
 
 export interface DemoStore {
+  dishWorkflow?: import('./dish-workflow').DemoDishWorkflow
   /** Today's business date at the demo outlet, resolved through the cutover. */
   readonly today: string
   /** `daysAgo` business days back from today. 0 is today. */

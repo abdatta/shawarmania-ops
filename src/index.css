@@ -18,9 +18,11 @@
   --color-primary: var(--primary);
   --color-on-primary: var(--on-primary);
   --color-accent-text: var(--accent-text);
+  --color-dish-ready: var(--dish-ready);
   --color-success: var(--success);
   --color-on-success: var(--on-success);
   --color-danger: var(--danger);
+  --color-danger-critical: var(--danger-critical);
   --color-warning: var(--warning);
   --color-on-warning: var(--on-warning);
   --color-focus-ring: var(--focus-ring);
@@ -333,5 +335,100 @@
 
   @media (prefers-reduced-motion: reduce) {
     animation: kitchen-pulse 1600ms ease-in-out infinite;
+  }
+}
+
+/* Ready is a checkbox cue; item names and the counter stay still and silent. */
+.pipeline-masonry::before {
+  content: '';
+  display: block;
+  height: var(--pipeline-height, 0px);
+  pointer-events: none;
+}
+
+@property --ready-cue-opacity {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0.9;
+}
+@property --ready-cue-strength {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+@property --ready-cue-glow {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 1;
+}
+@keyframes ready-cue-breathe {
+  0% {
+    --ready-cue-opacity: 0.8;
+    --ready-cue-strength: 0;
+    --ready-cue-glow: 1;
+  }
+  50% {
+    --ready-cue-opacity: 1;
+    --ready-cue-strength: 0.8;
+    --ready-cue-glow: 0.45;
+  }
+  80% {
+    --ready-cue-strength: 1;
+    --ready-cue-glow: 0;
+  }
+  100% {
+    --ready-cue-opacity: 0.8;
+    --ready-cue-strength: 1;
+    --ready-cue-glow: 0;
+  }
+}
+.ready-cue-clock {
+  animation: ready-cue-breathe 2400ms ease-in-out infinite;
+}
+.ready-checkbox-pulse {
+  opacity: var(--ready-cue-opacity);
+}
+.ready-dot-pulse::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: calc((1 - var(--ready-cue-strength)) * 50%);
+  background: var(--primary);
+  opacity: var(--ready-cue-glow);
+  transform: scale(calc(0.32 + var(--ready-cue-strength) * 0.78));
+  filter: blur(calc(var(--ready-cue-strength) * 0.35px));
+}
+
+/* Counter handover retires a Done ticket after its held-slot exit. */
+@keyframes kitchen-ready-exit {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+}
+.kitchen-ready-exit {
+  animation: kitchen-ready-exit 320ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kitchen-ready-exit {
+    animation-name: dish-ready-fade-out;
+  }
+  .ready-cue-clock {
+    animation: none;
+    --ready-cue-opacity: 1;
+    --ready-cue-strength: 0;
+    --ready-cue-glow: 1;
+  }
+}
+@keyframes dish-ready-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }

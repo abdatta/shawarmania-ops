@@ -21,7 +21,10 @@ for (const theme of ['light', 'dark'] as const) {
     await page.addInitScript((value) => localStorage.setItem('shawarmania.theme', value), theme)
     await page.goto('demo/biller')
     const counterCard = page.getByTestId('open-order-105')
-    await expect(counterCard.getByTestId('kitchen-bell')).toHaveAttribute('data-ringing', 'true')
+    await expect(
+      counterCard.getByRole('img', { name: 'Kitchen 1: sent', exact: true }),
+    ).toBeVisible()
+    await expect(counterCard.getByTestId('kitchen-pickup-bell')).toHaveCount(0)
     const kitchen = await context.newPage()
     await kitchen.goto('demo/kitchen')
     await only(kitchen, 'Shawarmas')
@@ -33,28 +36,32 @@ for (const theme of ['light', 'dark'] as const) {
     )
     await card.getByRole('button', { name: 'ACK order 105' }).click()
     await expect(card).toHaveAttribute('data-state', 'quiet')
-    await expect(counterCard.getByTestId('kitchen-bell')).not.toHaveAttribute('data-ringing')
+    await expect(
+      counterCard.getByRole('img', { name: 'Kitchen 1: acknowledged', exact: true }),
+    ).toBeVisible()
 
     // Observe the whole sequence: a transient waiting answer must also fail.
     await page.evaluate(() => {
       const card = document.querySelector('[data-testid="open-order-105"]')!
       const violations: string[] = []
       const observer = new MutationObserver(() => {
-        if (card.querySelector('[data-ringing="true"]')) violations.push('counter bell rang')
+        if (card.querySelector('[aria-label="Kitchen 1: sent"]'))
+          violations.push('counter reported waiting')
       })
       observer.observe(card, { subtree: true, childList: true, attributes: true })
       Object.assign(window, { kitchenFilterViolations: violations })
     })
     await only(kitchen, 'Burgers')
     await expect(card).toHaveCount(0)
-    await expect(counterCard.getByTestId('kitchen-bell')).toHaveCount(0)
+    await expect(counterCard.getByRole('img', { name: /^Kitchen 1:/ })).toHaveCount(0)
     await only(kitchen, 'Shawarmas')
     await expect(card).toHaveAttribute('data-state', 'quiet')
     await expect(card.locator('..')).not.toHaveClass(/kitchen-shake/)
-    await expect(card.getByRole('button')).toHaveCount(0)
-    await expect(counterCard.getByTestId('kitchen-bell')).toHaveAccessibleName(
-      'Kitchen 1 has pressed ACK',
-    )
+    await expect(card.getByRole('button', { name: /^ACK/ })).toHaveCount(0)
+    await expect(card.getByRole('button', { name: 'Ready order 105' })).toBeVisible()
+    await expect(
+      counterCard.getByRole('img', { name: 'Kitchen 1: acknowledged', exact: true }),
+    ).toBeVisible()
     expect(
       await page.evaluate(
         () => (window as unknown as { kitchenFilterViolations: string[] }).kitchenFilterViolations,
