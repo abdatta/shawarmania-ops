@@ -7,6 +7,7 @@ import {
   busyTables,
   capturePackaging,
   initialServiceType,
+  lineKey,
   offeredServiceTypes,
   ordersOffered,
   packagingApplies,
@@ -32,6 +33,20 @@ const ALL_ON: OutletServiceSettings = {
   packagingPricePaise: 500,
   packagingFreeForGold: true,
 }
+
+it('keeps separately noted copies of one live dish distinct when their quantity is edited', () => {
+  const lines = [
+    { orderLineId: 'noted', menuItemId: 'shawarma', quantity: 2, note: 'No sauce' },
+    { orderLineId: 'plain', menuItemId: 'shawarma', quantity: 1, note: null },
+  ]
+  const selected = lineKey(lines[0]!)
+  const reduced = lines.map((line) =>
+    lineKey(line) === selected ? { ...line, quantity: line.quantity - 1 } : line,
+  )
+  expect(reduced.map((line) => line.quantity)).toEqual([1, 1])
+  expect(lineKey({ ...lines[0]!, workflowLineId: 'offline' })).toBe('offline')
+  expect(lineKey({ ...lines[0]!, kind: 'packaging' })).toBe('packaging')
+})
 
 describe('an outlet with nothing chosen', () => {
   it('is a combination the database accepts', () => {

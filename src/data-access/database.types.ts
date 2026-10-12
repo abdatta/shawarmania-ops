@@ -3172,6 +3172,85 @@ export type Database = {
           },
         ]
       }
+      kitchen_readies: {
+        Row: {
+          at: string
+          device_id: string
+          id: string
+          lines: Json
+          order_id: string
+          outlet_id: string
+          person_id: string
+          shift_id: string
+          undoes: string | null
+        }
+        Insert: {
+          at?: string
+          device_id: string
+          id: string
+          lines: Json
+          order_id: string
+          outlet_id: string
+          person_id: string
+          shift_id: string
+          undoes?: string | null
+        }
+        Update: {
+          at?: string
+          device_id?: string
+          id?: string
+          lines?: Json
+          order_id?: string
+          outlet_id?: string
+          person_id?: string
+          shift_id?: string
+          undoes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kitchen_readies_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "counter_devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kitchen_readies_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kitchen_readies_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kitchen_readies_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kitchen_readies_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "counter_shifts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kitchen_readies_undoes_fkey"
+            columns: ["undoes"]
+            isOneToOne: false
+            referencedRelation: "kitchen_readies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ledger_day_verifications: {
         Row: {
           business_date: string
@@ -3491,6 +3570,7 @@ export type Database = {
           kind: Database["public"]["Enums"]["line_kind"]
           line_total_paise: number
           menu_item_id: string | null
+          note: string | null
           order_id: string
           quantity: number
           unit_price_paise: number
@@ -3504,6 +3584,7 @@ export type Database = {
           kind?: Database["public"]["Enums"]["line_kind"]
           line_total_paise: number
           menu_item_id?: string | null
+          note?: string | null
           order_id: string
           quantity: number
           unit_price_paise: number
@@ -3517,6 +3598,7 @@ export type Database = {
           kind?: Database["public"]["Enums"]["line_kind"]
           line_total_paise?: number
           menu_item_id?: string | null
+          note?: string | null
           order_id?: string
           quantity?: number
           unit_price_paise?: number
@@ -3534,6 +3616,72 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_line_preparations: {
+        Row: {
+          order_id: string
+          order_item_id: string
+          outlet_id: string
+          person_id: string
+          prepared_at: string
+          quantity: number
+          shift_id: string
+        }
+        Insert: {
+          order_id: string
+          order_item_id: string
+          outlet_id: string
+          person_id: string
+          prepared_at: string
+          quantity: number
+          shift_id: string
+        }
+        Update: {
+          order_id?: string
+          order_item_id?: string
+          outlet_id?: string
+          person_id?: string
+          prepared_at?: string
+          quantity?: number
+          shift_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_line_preparations_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_line_preparations_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: true
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_line_preparations_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_line_preparations_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_line_preparations_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "counter_shifts"
             referencedColumns: ["id"]
           },
         ]
@@ -3586,6 +3734,7 @@ export type Database = {
           device_id: string
           discount_paise: number
           id: string
+          label: string | null
           order_number: number
           ordered_at: string
           outlet_id: string
@@ -3625,6 +3774,7 @@ export type Database = {
           device_id: string
           discount_paise?: number
           id: string
+          label?: string | null
           order_number: number
           ordered_at: string
           outlet_id: string
@@ -3664,6 +3814,7 @@ export type Database = {
           device_id?: string
           discount_paise?: number
           id?: string
+          label?: string | null
           order_number?: number
           ordered_at?: string
           outlet_id?: string
@@ -4649,6 +4800,7 @@ export type Database = {
         Args: { p_created_at: string; p_shift_id: string }
         Returns: Json
       }
+      billing_dish_payload_ok: { Args: { p: Json }; Returns: boolean }
       billing_edit_window_end: {
         Args: {
           p_paid_at: string
@@ -5106,7 +5258,13 @@ export type Database = {
         Args: { p_at: string; p_customer: string; p_outlet: string }
         Returns: Database["public"]["Enums"]["customer_tier"]
       }
+      derive_dish_preparation: {
+        Args: { p_at: string; p_order: string }
+        Returns: undefined
+      }
       discount_presets_valid: { Args: { p_presets: Json }; Returns: boolean }
+      dish_line_locked: { Args: { p_line: string }; Returns: boolean }
+      dish_ready_quantity: { Args: { p_line: string }; Returns: number }
       drawer_cash_expenses_by_day: {
         Args: { p_from: string; p_outlet_id: string; p_to: string }
         Returns: {
@@ -5339,6 +5497,7 @@ export type Database = {
         Returns: Json
       }
       kitchen_board: { Args: never; Returns: Json }
+      kitchen_done_lines: { Args: { p_ready: string }; Returns: Json }
       kitchen_filter_lines: {
         Args: { p_category_ids: string[]; p_lines: Json; p_mode: string }
         Returns: Json
@@ -5351,9 +5510,25 @@ export type Database = {
         Args: { p_order: Database["public"]["Tables"]["orders"]["Row"] }
         Returns: string
       }
+      kitchen_owed_lines: {
+        Args: { p_lines: Json; p_ready?: boolean }
+        Returns: Json
+      }
+      kitchen_ready: {
+        Args: { p_id: string; p_lines: Json; p_order_id: string }
+        Returns: Json
+      }
+      kitchen_ready_undo: {
+        Args: { p_id: string; p_ready_id: string }
+        Returns: Json
+      }
       kitchen_same_lines: {
         Args: { p_left: Json; p_right: Json }
         Returns: boolean
+      }
+      kitchen_ticket: {
+        Args: { p_device: string; p_order: string }
+        Returns: Json
       }
       kitchen_visible_lines: {
         Args: { p_category_ids: string[]; p_mode: string; p_order_id: string }
@@ -5464,6 +5639,17 @@ export type Database = {
         Returns: Json
       }
       prepare_billing_order: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
+      }
+      prepare_order_lines: {
         Args: {
           p_command_id?: string
           p_created_at?: string

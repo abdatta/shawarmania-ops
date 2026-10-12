@@ -24,8 +24,9 @@ import { createTunePlayer } from './tunes'
  * subscribed, or the last successful read is older than forty-five seconds.
  *
  * Alerts are decided here, by comparing each read with the one before: a card
- * that became new, edited or cancelled, or whose contents changed while it was
- * alerting, rings and shakes. **The first read rings nothing**: what is already
+ * that became new, edited or cancelled, or gained owed food or a changed dish
+ * instruction while alerting, rings and shakes. Handover and reductions leave
+ * existing alerts alone. **The first read rings nothing**: what is already
  * on the board when the screen opens glows silently.
  */
 
@@ -40,12 +41,16 @@ export interface KitchenCardView {
 
 interface Seen {
   state: KitchenCardState
-  version: string
-  linesKey: string
+  food: Map<string, number>
 }
 
-function linesKey(order: KitchenOrder): string {
-  return order.lines.map((line) => `${line.id}:${line.quantity}`).join(',')
+function visibleFood(order: KitchenOrder): Map<string, number> {
+  const food = new Map<string, number>()
+  for (const line of order.lines) {
+    const key = JSON.stringify([line.menuItemId ?? line.itemName, line.note ?? null])
+    food.set(key, (food.get(key) ?? 0) + line.quantity)
+  }
+  return food
 }
 
 export function useKitchenBoard(options: {
@@ -94,7 +99,7 @@ export function useKitchenBoard(options: {
     const alerting = new Set<string>()
     for (const order of next.orders) {
       const state = kitchenCardState(order)
-      const entry = { state, version: order.version, linesKey: linesKey(order) }
+      const entry = { state, food: visibleFood(order) }
       current.set(order.id, entry)
       const kind = acknowledgementFor(state)
       if (!kind) continue
@@ -103,8 +108,7 @@ export function useKitchenBoard(options: {
       if (
         !before ||
         before.state !== state ||
-        before.version !== entry.version ||
-        before.linesKey !== entry.linesKey
+        [...entry.food].some(([dish, quantity]) => quantity > (before.food.get(dish) ?? 0))
       ) {
         if (
           kitchenAlertShouldRing(previousBoardReadAt.current, next.filterChangedAt, order.version)

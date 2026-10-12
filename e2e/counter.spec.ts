@@ -185,12 +185,26 @@ test.describe('the counter', () => {
       await page.getByTestId('service-chip-takeaway').click()
       await expect(page.getByTestId('customer-row')).toHaveCount(0)
       await expect(page.getByTestId('save-order')).toBeEnabled()
-      await page.getByTestId('save-order').click()
       const rail = page.getByTestId('counter-activity-rail')
-      const queuedOrder = rail.getByTestId(/^open-order-local-/)
-      await expect(queuedOrder).toBeVisible()
-      const orderId = await queuedOrder.getAttribute('data-flip-id')
-      expect(orderId).not.toBeNull()
+      const existingIds = await rail
+        .locator('article')
+        .evaluateAll((cards) => cards.map((card) => card.getAttribute('data-flip-id')))
+      await page.getByTestId('save-order').click()
+      let orderId: string | null | undefined
+      await expect
+        .poll(async () => {
+          orderId = await rail
+            .locator('article')
+            .evaluateAll(
+              (cards, before) =>
+                cards
+                  .map((card) => card.getAttribute('data-flip-id'))
+                  .find((id) => !before.includes(id)),
+              existingIds,
+            )
+          return orderId
+        })
+        .toBeTruthy()
       const order = rail.locator(`[data-flip-id="${orderId}"]`)
       await order.getByRole('button', { name: 'Paid', exact: true }).click()
       const payment = page.getByRole('dialog', { name: 'Record payment' })

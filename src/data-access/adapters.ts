@@ -1816,7 +1816,7 @@ export interface BillingAdapter {
    * paid order is refused: the bills border is terminal in that direction.
    */
   markOrderPrepared(orderId: string, prepared: boolean): Promise<BillingOrder>
-  /** Demo contract for per-dish commands; phase 2 supplies the durable live path. */
+  /** Durable, idempotent handover commands on the owning counter tablet. */
   markOrderLinesPrepared?(
     id: string,
     orderId: string,
@@ -2128,7 +2128,7 @@ export interface KitchenAcknowledgement {
  * and a kitchen shift holds no select on the tables that carry them.
  */
 export interface KitchenOrder {
-  /** Demo Done receipt: distinct ticket identity, original order for commands. */
+  /** Done receipt: distinct ticket identity, original order for commands. */
   sourceOrderId?: string
   readyId?: string
   ticketNumber?: number

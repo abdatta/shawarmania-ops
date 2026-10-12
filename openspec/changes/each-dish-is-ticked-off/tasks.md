@@ -51,55 +51,55 @@ and merges only with the live half (design D10).
 
 ## 2. Database
 
-- [ ] 2.1 Migration (dated after the newest on main), label and notes:
+- [x] 2.1 Migration (dated after the newest on main), label and notes:
   `orders.label` (trimmed, 1–24 or null) with the trigger clearing it as the order
   leaves the rail and the paid-row guard admitting only that change;
   `order_items.note` (trimmed, 1–60 or null, item lines only); the create, revise and
   pay-now commands accept the optional keys, a blank label stored as none, an
   over-long one or a note on packaging refused as malformed, a note change on a
   locked line kept unchanged. Commands queued without the keys remain valid.
-- [ ] 2.2 Dish ticks: `order_line_preparations` with RLS (live counter shift at its
+- [x] 2.2 Dish ticks: `order_line_preparations` with RLS (live counter shift at its
   outlet, Franchise Admin, owner; no direct write); the `prepare_order_lines` command
   in the billing envelope, owning tablet only, deriving the order's preparation
   (design D6) and keeping #69's day-change supersession; `prepare_billing_order`
   ticking or unticking every item line; `revise_billing_order` clearing an open
   order's counter-set preparation when a line is left unticked.
-- [ ] 2.3 Ready: `kitchen_readies` with RLS (the writing kitchen shift's outlet,
+- [x] 2.3 Ready: `kitchen_readies` with RLS (the writing kitchen shift's outlet,
   Franchise Admin, owner; no direct write) and an append-only trigger;
   `kitchen_ready` and `kitchen_ready_undo` as design D5 describes, each bumping the
   outlet's pulse.
-- [ ] 2.4 Reads: `kitchen_board()` returns notes, owed quantities, Done receipts and the ticket number, and judges New, Edited and Cancelled on owed food since this
+- [x] 2.4 Reads: `kitchen_board()` returns notes, owed quantities, Done receipts and the ticket number, and judges New, Edited and Cancelled on owed food since this
   tablet's latest Ready not undone; `counter_kitchen_marks()` returns ready
   quantities per line and each carrying kitchen's independent sent/ACK/Ready/handover state.
-- [ ] 2.5 Regenerate `database.types.ts` and check its diff.
-- [ ] 2.6 pgTAP: the label's lifecycle on every finishing path (counter tick, payment
+- [x] 2.5 Regenerate `database.types.ts` and check its diff.
+- [x] 2.6 pgTAP: the label's lifecycle on every finishing path (counter tick, payment
   of a prepared order, day change, cancellation) and its absence from bills; notes
   and their refusals; dish ticks deriving and clearing preparation, a queued
   whole-order command, a tick after the day change; Ready, a stale Ready capping and
   leaving extra owed, Undo and its refusals; a ticket after Ready, silence after a
   removal or cancellation following Ready; two kitchens; the board omitting label and customer.
-- [ ] 2.7 **Isolation, `order_line_preparations`**: a counter shift, a kitchen shift
+- [x] 2.7 **Isolation, `order_line_preparations`**: a counter shift, a kitchen shift
   and a Franchise Admin of one outlet each hand-craft a select of the other outlet's
   dish ticks and receive nothing; every client role's direct insert, update and
   delete is refused.
-- [ ] 2.8 **Isolation, `kitchen_readies`**: a kitchen shift, a counter shift and a
+- [x] 2.8 **Isolation, `kitchen_readies`**: a kitchen shift, a counter shift and a
   Franchise Admin of one outlet each hand-craft a select of the other outlet's
   Readies and receive nothing; every client role's direct write is refused; a
   kitchen's Ready naming another outlet's order is refused.
 
 ## 3. Live
 
-- [ ] 3.1 The live adapter: label and notes on the order commands, the dish-tick
+- [x] 3.1 The live adapter: label and notes on the order commands, the dish-tick
   command in the outbox with its optimistic state, Ready and Undo on the kitchen,
   ready quantities from the counter's kitchen read.
-- [ ] 3.2 Unit tests: the composer's line key and locked lines, *Only 1*, owed
+- [x] 3.2 Unit tests: the composer's line key and locked lines, *Only 1*, owed
   quantities and ticket numbers, Prepared following the dishes, the label's
   name suggestion, the quick-note ranking.
-- [ ] 3.3 Component tests: the workspace's overlay leaves the rail's cards in
+- [x] 3.3 Component tests: the workspace's overlay leaves the rail's cards in
   place; a dish tick and untick; no aggregate Prepared control; a ready line has a checkbox cue,
   animated cues pulse together and stop on tick; reduced motion; no audio element on the counter;
   the kitchen card's Ready and Undo.
-- [ ] 3.4 Playwright, a counter and a kitchen context against the local stack: a
+- [x] 3.4 Playwright, a counter and a kitchen context against the local stack: a
   labelled order with a noted dish reaches the kitchen; Ready signals readiness on the counter's
   dish; ticking it stops it and finishes a paid order; food added after Ready
   arrives as *#N · 2*; food removed after Ready rings nothing; Undo restores the
@@ -107,14 +107,14 @@ and merges only with the live half (design D10).
 
 ## 4. Close
 
-- [ ] 4.1 Update `docs/SCREENS.md`, `docs/DATA_MODEL.md`, `docs/OFFLINE_AND_SYNC.md`,
+- [x] 4.1 Update `docs/SCREENS.md`, `docs/DATA_MODEL.md`, `docs/OFFLINE_AND_SYNC.md`,
   `docs/ROLES_AND_PERMISSIONS.md`, `docs/SECURITY_AND_PRIVACY.md`,
   `docs/DESIGN_SYSTEM.md`, `docs/DEMO_MODE.md`, `docs/GLOSSARY.md` and
   `docs/TESTING.md`.
-- [ ] 4.2 Run every gate CI runs, including contrast in both themes, the database and
+- [x] 4.2 Run every gate CI runs, including contrast in both themes, the database and
   RLS suites and both e2e suites; walk the live-built counter and kitchen in both
   themes with console and network clean.
-- [ ] 4.3 **PHASE GATE.** Roadmap #74's checkpoint — the owner approved the counter's
+- [x] 4.3 **PHASE GATE.** Roadmap #74's checkpoint — the owner approved the counter's
   new layout, the label, the dish ticks, the notes and the Ready checkbox cue from demo
   screenshots before any of it was built live; the counter is the menu and a
   two-column order rail, with the composer laid over the rail's left half and Bills

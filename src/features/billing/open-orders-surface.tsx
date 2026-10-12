@@ -104,8 +104,9 @@ export function OpenOrdersSurface({
   checkoutSettings?: Pick<OutletMenu, 'service' | 'loyalty'>
 } = {}) {
   const { billing } = useAdapters()
-  const readyCue = useDemoReadyCue()
+  const demoReadyCue = useDemoReadyCue()
   const session = useContext(SessionContext)
+  const readyCue = session?.mode === 'demo' ? demoReadyCue : 'pulse-dot'
   const counterDevice = useContext(CounterDeviceContext)
   const { shift } = useCounterState()
   const [orders, setOrders] = useState<BillingOrder[] | null>(null)
@@ -398,6 +399,7 @@ export function OpenOrdersSurface({
                   kitchen={marks ? kitchenBell(marks.orders[order.id] ?? [], marks.kitchens) : null}
                   kitchenAnswers={marks?.orders[order.id] ?? []}
                   kitchenStates={marks?.dishStates?.[order.id] ?? []}
+                  kitchenLabels={marks?.kitchens.map((kitchen) => kitchen.label) ?? []}
                   onMarkPrepared={(target) =>
                     void act(() => billing.markOrderPrepared(target.id, true))
                   }

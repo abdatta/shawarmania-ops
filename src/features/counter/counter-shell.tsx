@@ -103,8 +103,8 @@ export function CounterShell({
 
   return (
     <KitchenMarksProvider>
-      <div className={cn('min-h-dvh bg-canvas p-4 text-content', demo && 'overflow-clip')}>
-        <div className={cn('mx-auto max-w-[100rem]', demo ? 'flex flex-col gap-4' : 'space-y-4')}>
+      <div className={'min-h-dvh overflow-clip bg-canvas p-4 text-content'}>
+        <div className={'mx-auto flex max-w-[100rem] flex-col gap-4'}>
           {resume && (
             <div
               role="status"
@@ -165,21 +165,19 @@ export function CounterShell({
           </header>
 
           <BillingPanel
-            onRailWidthChange={demo ? setRailWidth : undefined}
-            scrollLeft={demo ? horizontalScroll : undefined}
-            onHorizontalScroll={demo ? setHorizontalScroll : undefined}
+            onRailWidthChange={setRailWidth}
+            scrollLeft={horizontalScroll}
+            onHorizontalScroll={setHorizontalScroll}
           />
-          {demo ? (
-            <DemoCounterReview
-              expenses={<CounterExpenses shift={shift} />}
-              railWidth={railWidth}
-              scrollLeft={horizontalScroll}
-              onHorizontalScroll={setHorizontalScroll}
-              asOf={resume?.lastSuccessfulReadAt}
-            />
-          ) : (
-            <CounterExpenses shift={shift} />
-          )}
+          <DemoCounterReview
+            showReview={demo}
+            expenses={<CounterExpenses shift={shift} />}
+            railWidth={railWidth}
+            scrollLeft={horizontalScroll}
+            onHorizontalScroll={setHorizontalScroll}
+            asOf={resume?.lastSuccessfulReadAt}
+          />
+
           <FinishDaySheet
             open={finishOpen}
             shiftId={shift.id}

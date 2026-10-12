@@ -119,6 +119,7 @@ export function seedDishWorkflow(store: DemoStore): void {
     selected.forEach((item, j) => {
       const lineId = `e7410000-0000-4000-a000-${String(i * 10 + j + 1).padStart(12, '0')}`
       store.orderItems.push({
+        note: null,
         id: lineId,
         order_id: id,
         menu_item_id: item.id,

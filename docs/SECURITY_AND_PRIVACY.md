@@ -521,3 +521,8 @@ Two things to revisit when the business grows: customer PII has no defined reten
 ## Sales and menu analytics
 
 Analytics reads aggregate business facts only. Both RPCs (`sales_analytics`, `sales_analytics_series`) check an active account and current owner/manager assignments before scanning anything, and refuse foreign-outlet, staff and anonymous requests, proved by crafted requests. No customer fields, raw bills/lines or public-menu telemetry are transferred. Per-view and per-window bounds constrain payloads. No new browser service-role use, cookies, tracking identities, ingestion endpoint or retention job is added.
+
+
+### Temporary order labels and dish notes
+
+An order label may describe a person. It exists only on the counter's active order and is cleared in the database on cancellation or paid preparation, including day change. It appears in no kitchen response, bill, receipt, export, report, diagnostic or analytics. A biller may explicitly confirm it as the name for a new phone at payment. Dish notes reach only the counter and kitchens showing that dish; they carry no money and are not copied to bills or receipts. Quick-note counts live on the tablet as a convenience, without customer or order identity.

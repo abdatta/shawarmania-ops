@@ -14,6 +14,8 @@ export default defineConfig({
     // The billing race probe mutates immutable money history and therefore runs
     // in its own second phase after the seed-sensitive isolation files.
     exclude: [
+      // Creates dedicated devices and immutable dish history after seed probes.
+      'supabase/tests/rest/dish-workflow.test.ts',
       'supabase/tests/rest/counter-handshake.test.ts',
       'supabase/tests/rest/zz-billing-command-races.test.ts',
       // Makes real drawer writes and cleans up after itself with the

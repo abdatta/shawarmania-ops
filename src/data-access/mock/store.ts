@@ -748,6 +748,7 @@ export function createDemoStore(
           : notLaterThanNow(instantAt(today, seed.preparedAtTime))
         : (sourceBill?.paid_at ?? null)
     orders.push({
+      label: null,
       id,
       outlet_id: DEMO_OUTLET_ID,
       device_id: DEMO_COUNTER_DEVICE_ID,
@@ -792,6 +793,7 @@ export function createDemoStore(
     })
     sourceLines.forEach((line, lineIndex) =>
       orderItems.push({
+        note: null,
         id: `${id}-${lineIndex}`,
         order_id: id,
         menu_item_id: line.menu_item_id,

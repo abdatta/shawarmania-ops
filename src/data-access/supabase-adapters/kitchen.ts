@@ -13,7 +13,7 @@ import {
   type KitchenMarks,
   type KitchenOrder,
 } from '../adapters'
-import type { KitchenAnswer } from '@/domain'
+import type { KitchenAnswer, KitchenDishState } from '@/domain'
 import type { Database, Json } from '../database.types'
 
 /**
@@ -40,9 +40,18 @@ type BoardJson = {
   orders: OrderJson[]
 }
 
-type LineJson = { id: string; menuItemId: string | null; itemName: string; quantity: number }
+type LineJson = {
+  id: string
+  menuItemId: string | null
+  itemName: string
+  quantity: number
+  note?: string | null
+}
 
 type OrderJson = {
+  sourceOrderId?: string
+  readyId?: string
+  ticketNumber?: number
   id: string
   orderNumber: number
   serviceType: KitchenOrder['serviceType']
@@ -68,6 +77,7 @@ function line(row: LineJson): KitchenLine {
     menuItemId: row.menuItemId,
     itemName: row.itemName,
     quantity: row.quantity,
+    note: row.note ?? null,
   }
 }
 
@@ -84,6 +94,9 @@ export function parseKitchenBoard(value: Json): KitchenBoard {
     sort: board.sort ?? 'oldest_first',
     orders: (board.orders ?? []).map((order) => ({
       id: order.id,
+      ...(order.sourceOrderId ? { sourceOrderId: order.sourceOrderId } : {}),
+      ...(order.readyId ? { readyId: order.readyId } : {}),
+      ticketNumber: order.ticketNumber ?? 1,
       orderNumber: order.orderNumber,
       serviceType: order.serviceType,
       tableNumber: order.tableNumber,
@@ -135,7 +148,14 @@ export function createSupabaseKitchenAdapter(client: SupabaseClient<Database>): 
       if (error) throw error
       const marks = data as unknown as {
         kitchens: { id: string; label: string }[] | null
-        orders: { orderId: string; marks: (KitchenAnswer | null)[] }[] | null
+        orders:
+          | {
+              orderId: string
+              marks: (KitchenAnswer | null)[]
+              readyQuantities?: Record<string, number>
+              dishStates?: (KitchenDishState | null)[]
+            }[]
+          | null
         kitchenTablets: number | null
       }
       return {
@@ -144,7 +164,42 @@ export function createSupabaseKitchenAdapter(client: SupabaseClient<Database>): 
           (marks.orders ?? []).map((order) => [order.orderId, order.marks]),
         ),
         kitchenTablets: marks.kitchenTablets ?? 0,
+        readyQuantities: Object.fromEntries(
+          (marks.orders ?? []).map((order) => [order.orderId, order.readyQuantities ?? {}]),
+        ),
+        dishStates: Object.fromEntries(
+          (marks.orders ?? []).map((order) => [order.orderId, order.dishStates ?? []]),
+        ),
       }
+    },
+
+    async ready(input): Promise<void> {
+      const { data, error } = await client.rpc('kitchen_ready', {
+        p_id: input.id,
+        p_order_id: input.orderId,
+        p_lines: input.lines,
+      })
+      if (error) throw error
+      const status = (data as { status?: string } | null)?.status
+      if (status !== 'accepted')
+        throw new DataActionError(
+          status ?? 'invalid',
+          'Could not mark this food Done. Refresh and try again.',
+        )
+    },
+
+    async undoReady(id, readyId): Promise<void> {
+      const { data, error } = await client.rpc('kitchen_ready_undo', {
+        p_id: id,
+        p_ready_id: readyId,
+      })
+      if (error) throw error
+      const status = (data as { status?: string } | null)?.status
+      if (status !== 'accepted')
+        throw new DataActionError(
+          status ?? 'invalid',
+          'Could not undo Done. Refresh and try again.',
+        )
     },
 
     async setFilter(mode, categoryIds, sort): Promise<void> {

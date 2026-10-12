@@ -247,7 +247,7 @@ select is((select array_agg(k order by k) from jsonb_object_keys(pg_temp.marks()
   array['kitchens', 'kitchenTablets', 'orders'], 'the read carries kitchens, orders and a count of kitchen tablets');
 select is((select array_agg(distinct k order by k)
              from jsonb_array_elements(pg_temp.marks() -> 'orders') o, jsonb_object_keys(o) k),
-  array['marks', 'orderId'], 'and per order only its id and its answers: no dish, time or person');
+  array['dishStates', 'marks', 'orderId', 'readyQuantities'], 'per order only identity, answers and readiness: no dish name, time or person');
 select is((select array_agg(distinct k order by k)
              from jsonb_array_elements(pg_temp.marks() -> 'kitchens') o, jsonb_object_keys(o) k),
   array['id', 'label'], 'and per kitchen only its id and label');

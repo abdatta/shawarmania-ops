@@ -282,11 +282,12 @@ describe('billing command canonical identity', () => {
       'manager_cancel_order',
       'confirm_end_of_day',
       'set_order_preparation',
+      'prepare_order_lines',
       'void_order_payment',
       'cancel_paid_order',
     ]
-    expect(types.map((type) => BILLING_COMMAND_RPC[type])).toHaveLength(12)
-    expect(new Set(types.map((type) => BILLING_COMMAND_RPC[type])).size).toBe(12)
+    expect(types.map((type) => BILLING_COMMAND_RPC[type])).toHaveLength(13)
+    expect(new Set(types.map((type) => BILLING_COMMAND_RPC[type])).size).toBe(13)
   })
 
   it('carries the preparation and unwind payloads through the canonical hash unchanged', async () => {

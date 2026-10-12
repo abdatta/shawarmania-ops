@@ -167,9 +167,9 @@ test('two tablets bill one outlet at once, own their own orders, and neither dra
       reader — which is a stronger claim than "disabled" was.
     */
     await expect(neighbourCard.getByRole('button', { name: 'Prepared' })).toHaveCount(0)
-    const neighbourFact = neighbourCard.getByText('Prepared', { exact: true })
+    await expect(neighbourCard.getByRole('button', { name: /^(Tick|Untick) / })).toHaveCount(0)
+    const neighbourFact = neighbourCard.getByRole('list', { name: /^Items for / })
     await expect(neighbourFact).toBeVisible()
-    await expect(neighbourFact).toHaveAttribute('data-fact', 'true')
     await expect(neighbourFact).not.toHaveAttribute('aria-pressed', /.*/)
 
     // And the same order is still fully actionable on the till that took it,
@@ -177,7 +177,7 @@ test('two tablets bill one outlet at once, own their own orders, and neither dra
     // down".
     const ownCard = orderCard(one.page, kitchenOwesThis)
     await expect(ownCard).toBeVisible({ timeout: 20_000 })
-    const ownControl = ownCard.getByRole('button', { name: 'Prepared' })
+    const ownControl = ownCard.getByRole('button', { name: /^Tick / }).first()
     await expect(ownControl).toBeEnabled()
     await expect(ownControl).toHaveAttribute('aria-pressed', 'false')
     // Its own card names no till: the order is this counter's own work.

@@ -39,6 +39,7 @@ export type BillingCommandType =
   | 'manager_cancel_order'
   | 'confirm_end_of_day'
   | 'set_order_preparation'
+  | 'prepare_order_lines'
   | 'void_order_payment'
   | 'cancel_paid_order'
 
@@ -65,6 +66,7 @@ export interface BillingPaymentAllocation {
  * snapshotted for the same reason `itemName` is.
  */
 export interface BillingLineSnapshot {
+  readonly note?: string | null
   readonly id: string
   readonly menuItemId: string | null
   readonly itemName: string
@@ -111,6 +113,7 @@ export interface BillingDiscountSnapshot {
 }
 
 export interface OrderContentPayload extends BillingServiceFacts {
+  readonly label?: string | null
   readonly orderId: string
   readonly businessDate: string
   readonly customerId: string | null
@@ -184,6 +187,11 @@ export interface SetOrderPreparationPayload {
   readonly prepared: boolean
 }
 
+export interface PrepareOrderLinesPayload {
+  readonly orderId: string
+  readonly lines: readonly { readonly id: string; readonly prepared: boolean }[]
+}
+
 /** One reasoned unwind of a counter payment, by the tablet that took it. */
 export interface UnwindOrderPaymentPayload {
   readonly orderId: string
@@ -202,6 +210,7 @@ export interface BillingCommandPayloads {
   readonly manager_cancel_order: CancelOrderPayload
   readonly confirm_end_of_day: ConfirmEndOfDayPayload
   readonly set_order_preparation: SetOrderPreparationPayload
+  readonly prepare_order_lines: PrepareOrderLinesPayload
   readonly void_order_payment: UnwindOrderPaymentPayload
   readonly cancel_paid_order: UnwindOrderPaymentPayload
 }
@@ -286,6 +295,7 @@ export const BILLING_COMMAND_RPC: Readonly<Record<BillingCommandType, string>> =
   manager_cancel_order: 'manager_cancel_billing_order',
   confirm_end_of_day: 'confirm_billing_end_of_day',
   set_order_preparation: 'prepare_billing_order',
+  prepare_order_lines: 'prepare_order_lines',
   void_order_payment: 'unpay_billing_order',
   cancel_paid_order: 'cancel_paid_billing_order',
 }

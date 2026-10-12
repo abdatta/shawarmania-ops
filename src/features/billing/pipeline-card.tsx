@@ -73,6 +73,7 @@ export function PipelineCard({
   kitchen = null,
   kitchenAnswers = [],
   kitchenStates,
+  kitchenLabels = [],
   onEdit,
   onSetCustomer,
   onMarkPrepared,
@@ -115,6 +116,7 @@ export function PipelineCard({
   kitchen?: KitchenBell | null
   kitchenAnswers?: readonly (KitchenAnswer | null)[]
   kitchenStates?: readonly (KitchenDishState | null)[]
+  kitchenLabels?: readonly string[]
   onEdit?: (order: BillingOrder) => void
   /**
    * Opens the order in the composer with the customer dialog already up — the
@@ -532,6 +534,7 @@ export function PipelineCard({
           >
             {dishTicks ? (
               <DishKitchenStatus
+                labels={kitchenLabels}
                 states={
                   kitchenStates ??
                   kitchenAnswers.map((answer) =>
@@ -691,7 +694,13 @@ export function PipelineCard({
  * for a kitchen that does not carry this order. The dots are absolutely placed:
  * when they go, nothing moves.
  */
-function DishKitchenStatus({ states }: { states: readonly (KitchenDishState | null)[] }) {
+function DishKitchenStatus({
+  states,
+  labels,
+}: {
+  states: readonly (KitchenDishState | null)[]
+  labels: readonly string[]
+}) {
   return (
     <div className="flex flex-col items-center gap-1">
       {states.map((state, index) =>
@@ -703,7 +712,7 @@ function DishKitchenStatus({ states }: { states: readonly (KitchenDishState | nu
             aria-label={
               state === 'handed_over'
                 ? undefined
-                : `Kitchen ${index + 1}: ${state === 'ready' ? 'food ready to collect' : state}`
+                : `${labels[index] ?? `Kitchen ${index + 1}`}: ${state === 'ready' ? 'food ready to collect' : state}`
             }
             data-testid={state === 'ready' ? 'kitchen-pickup-bell' : 'kitchen-status-slot'}
             data-kitchen={index + 1}

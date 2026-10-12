@@ -292,7 +292,7 @@ export function BillingCounter({
 } = {}) {
   const session = useContext(SessionContext)
   const counterDevice = useContext(CounterDeviceContext)
-  const demo = session?.mode === 'demo'
+  const dishWorkflow = true
   const kitchenMarks = useKitchenMarks()?.marks
   const [label, setLabel] = useState('')
   const [noteLine, setNoteLine] = useState<BillLineDraft | null>(null)
@@ -378,12 +378,12 @@ export function BillingCounter({
   const resize = useRef<{ column: CounterColumn; startX: number; startWidth: number } | null>(null)
 
   useEffect(() => {
-    if (demo) onRailWidthChange?.(columnWidths.bill + columnWidths.activity)
-  }, [demo, columnWidths.bill, columnWidths.activity, onRailWidthChange])
+    if (dishWorkflow) onRailWidthChange?.(columnWidths.bill + columnWidths.activity)
+  }, [dishWorkflow, columnWidths.bill, columnWidths.activity, onRailWidthChange])
   useEffect(() => {
-    if (demo && scrollLeft !== undefined && workspaceRef.current)
+    if (dishWorkflow && scrollLeft !== undefined && workspaceRef.current)
       workspaceRef.current.scrollLeft = scrollLeft
-  }, [demo, scrollLeft])
+  }, [dishWorkflow, scrollLeft])
 
   const resizeColumn = useCallback((column: CounterColumn, requestedWidth: number) => {
     setColumnWidths((current) => {
@@ -584,7 +584,7 @@ export function BillingCounter({
    */
   const billLines = useMemo<BillLineDraft[]>(() => {
     const items =
-      demo && editingOrder
+      dishWorkflow && editingOrder
         ? lines.map((line) => ({
             ...line,
             readyQuantity:
@@ -596,7 +596,7 @@ export function BillingCounter({
     return packaging === null
       ? items
       : [...items, packagingLine(packaging, packagingWaived(serviceSettings, knownTier))]
-  }, [demo, editingOrder, kitchenMarks, lines, packaging, serviceSettings, knownTier])
+  }, [dishWorkflow, editingOrder, kitchenMarks, lines, packaging, serviceSettings, knownTier])
 
   /**
    * What each bill-level discount comes to, against this order as it stands.
@@ -727,7 +727,7 @@ export function BillingCounter({
         )
       }
       setLines((current) => {
-        if (demo) {
+        if (dishWorkflow) {
           const captured = menuLineDiscount(
             { categoryId: item.category_id, unitPricePaise: item.price_paise, quantity: 1 },
             discountRules,
@@ -783,7 +783,7 @@ export function BillingCounter({
       })
     },
     [
-      demo,
+      dishWorkflow,
       kitchenMarks,
       settling,
       discountRules,
@@ -837,7 +837,7 @@ export function BillingCounter({
       const next = lines.flatMap((line) => {
         if (lineKey(line) !== key) return [line]
         if (
-          demo &&
+          dishWorkflow &&
           delta > 0 &&
           dishLocked(billLines.find((item) => lineKey(item) === key) ?? line)
         ) {
@@ -886,7 +886,7 @@ export function BillingCounter({
       if (next.length === 0 && editingOrder === null) resetBillContext()
     },
     [
-      demo,
+      dishWorkflow,
       billLines,
       menu,
       discountRules,
@@ -996,7 +996,7 @@ export function BillingCounter({
     setError(null)
     try {
       await billing.saveOrder({
-        ...(demo ? { label: label.trim() || null } : {}),
+        ...(dishWorkflow ? { label: label.trim() || null } : {}),
         clientId: newUuid(),
         outletId,
         shiftId: shift.id,
@@ -1033,7 +1033,7 @@ export function BillingCounter({
   async function reviseEditedOrder(order: BillingOrder) {
     try {
       await billing.reviseOrder(order.id, {
-        ...(demo ? { label: label.trim() || null } : {}),
+        ...(dishWorkflow ? { label: label.trim() || null } : {}),
         lines: billLines,
         discounts: billDiscounts,
         customerId: null,
@@ -1168,7 +1168,7 @@ export function BillingCounter({
   ) : null
 
   useEffect(() => {
-    if (!demo || !shift || !counterOutletId) return
+    if (!dishWorkflow || !shift || !counterOutletId) return
     let active = true
     const read = () => {
       void billing
@@ -1190,7 +1190,7 @@ export function BillingCounter({
       clearTimeout(first)
       clearInterval(timer)
     }
-  }, [demo, shift, billing, counterOutletId, editingOrder?.id])
+  }, [dishWorkflow, shift, billing, counterOutletId, editingOrder?.id])
 
   if (!shift) {
     return (
@@ -1244,9 +1244,11 @@ export function BillingCounter({
     <div
       data-testid="counter-workspace"
       ref={workspaceRef}
-      onScroll={demo ? (event) => onHorizontalScroll?.(event.currentTarget.scrollLeft) : undefined}
+      onScroll={
+        dishWorkflow ? (event) => onHorizontalScroll?.(event.currentTarget.scrollLeft) : undefined
+      }
       className={
-        demo
+        dishWorkflow
           ? 'grid h-full min-h-0 grid-cols-[minmax(22rem,1fr)_var(--counter-rail-width)] gap-3 overflow-x-auto overflow-y-hidden'
           : 'grid h-full min-h-0 grid-cols-[minmax(22rem,1fr)_var(--counter-bill-width)_var(--counter-activity-width)] gap-3 overflow-x-auto overflow-y-hidden'
       }
@@ -1268,7 +1270,7 @@ export function BillingCounter({
       <div
         className={cn(
           'no-scrollbar @container min-h-0 overflow-y-auto',
-          demo && '[contain:layout_paint]',
+          dishWorkflow && '[contain:layout_paint]',
         )}
       >
         {resume && (
@@ -1311,7 +1313,7 @@ export function BillingCounter({
                 <Shimmer className="mb-1.5 h-4 w-24" />
                 <div
                   className={
-                    demo
+                    dishWorkflow
                       ? 'grid grid-cols-2 gap-2 @xl:grid-cols-3 @3xl:grid-cols-4'
                       : 'grid grid-cols-2 gap-2 @md:grid-cols-3 @2xl:grid-cols-4'
                   }
@@ -1324,13 +1326,13 @@ export function BillingCounter({
             ))}
           </LoadingRegion>
         ) : (
-          <MenuGrid menu={menu} quantities={quantities} onAdd={addItem} dishReview={demo} />
+          <MenuGrid menu={menu} quantities={quantities} onAdd={addItem} dishReview={dishWorkflow} />
         )}
       </div>
 
       <div
         className={
-          demo
+          dishWorkflow
             ? `relative col-start-2 row-start-1 z-10 flex min-h-0 w-[calc((100%-0.75rem)/2)] flex-col gap-2 bg-surface shadow-xl ${lines.length > 0 || editingOrder ? '' : 'invisible pointer-events-none'}`
             : 'relative flex min-h-0 flex-col gap-2'
         }
@@ -1338,7 +1340,7 @@ export function BillingCounter({
       >
         <div
           role="separator"
-          hidden={demo}
+          hidden={dishWorkflow}
           aria-label="Resize current bill column"
           aria-orientation="vertical"
           aria-valuemin={counterColumnMinWidth()}
@@ -1366,7 +1368,7 @@ export function BillingCounter({
           <>
             <BillPanel
               lines={billLines}
-              {...(demo
+              {...(dishWorkflow
                 ? {
                     labelField: (
                       <div className="border-b border-border px-3 py-2">
@@ -1532,7 +1534,7 @@ export function BillingCounter({
               }}
             />
           </>
-        ) : demo ? null : (
+        ) : dishWorkflow ? null : (
           <MyShiftSurface
             embedded
             {...(resume ? { asOf: resume.lastSuccessfulReadAt } : {})}
@@ -1544,14 +1546,14 @@ export function BillingCounter({
 
       <div
         className={
-          demo
+          dishWorkflow
             ? 'relative col-start-2 row-start-1 flex min-h-0 flex-col [&>aside]:min-h-0 [&>aside]:flex-1'
             : 'relative min-h-0 [&>aside]:h-full'
         }
       >
         <div
           role="separator"
-          aria-label={demo ? 'Resize order rail' : 'Resize activity column'}
+          aria-label={dishWorkflow ? 'Resize order rail' : 'Resize activity column'}
           aria-orientation="vertical"
           aria-valuemin={counterColumnMinWidth()}
           aria-valuenow={columnWidths.activity}
@@ -1568,7 +1570,7 @@ export function BillingCounter({
           className="absolute -left-2.5 top-0 z-20 h-full w-5 cursor-col-resize touch-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
         />
         <CounterActivityRail
-          twoColumns={demo}
+          twoColumns={dishWorkflow}
           checkoutSettings={{ service: serviceSettings, loyalty: loyaltySettings }}
           {...(resume ? { asOf: resume.lastSuccessfulReadAt } : {})}
           refreshKey={pipelineRefresh}
@@ -1592,7 +1594,7 @@ export function BillingCounter({
         />
       </div>
 
-      {demo && noteLine && (
+      {dishWorkflow && noteLine && (
         <DishNoteSheet
           key={lineKey(noteLine)}
           line={noteLine}
@@ -1641,7 +1643,7 @@ export function BillingCounter({
         />
       )}
       <CustomerDialog
-        suggestedName={demo ? label : ''}
+        suggestedName={dishWorkflow ? label : ''}
         open={customerDialogOpen}
         selection={customer}
         lookup={lookupCustomer}
@@ -1709,7 +1711,7 @@ export function BillingCounter({
       )}
 
       <CheckoutDialog
-        suggestedName={demo ? label : ''}
+        suggestedName={dishWorkflow ? label : ''}
         open={paymentDialogOpen}
         collectCustomerDetails={serviceSettings.collectCustomerDetails ?? true}
         customer={customer}

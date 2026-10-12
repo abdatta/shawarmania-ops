@@ -41,12 +41,14 @@ export function DemoCounterReview({
   scrollLeft,
   onHorizontalScroll,
   asOf,
+  showReview = true,
 }: {
   expenses: ReactNode
   railWidth?: number | undefined
   scrollLeft?: number
   onHorizontalScroll?: (left: number) => void
   asOf?: string | undefined
+  showReview?: boolean
 }) {
   const cue = useDemoReadyCue()
   const [refresh, setRefresh] = useState(0)
@@ -78,21 +80,23 @@ export function DemoCounterReview({
   }, [])
   return (
     <section className="space-y-3" data-testid="demo-counter-review">
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <label className="flex items-center gap-2 text-sm text-content-muted">
-          Demo ready cue
-          <select
-            aria-label="Demo ready cue"
-            value={cue}
-            onChange={(event) => save('shawarmania-demo-ready-cue', event.target.value)}
-            className="min-h-11 rounded-lg border border-border bg-surface px-3 text-content"
-          >
-            <option value="halo">A · Soft halo</option>
-            <option value="pulse-dot">B · Breathing dot</option>
-            <option value="steady-dot">C · Steady dot</option>
-          </select>
-        </label>
-      </div>
+      {showReview && (
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <label className="flex items-center gap-2 text-sm text-content-muted">
+            Demo ready cue
+            <select
+              aria-label="Demo ready cue"
+              value={cue}
+              onChange={(event) => save('shawarmania-demo-ready-cue', event.target.value)}
+              className="min-h-11 rounded-lg border border-border bg-surface px-3 text-content"
+            >
+              <option value="halo">A · Soft halo</option>
+              <option value="pulse-dot">B · Breathing dot</option>
+              <option value="steady-dot">C · Steady dot</option>
+            </select>
+          </label>
+        </div>
+      )}
       <div
         ref={recordsRef}
         onScroll={(event) => onHorizontalScroll?.(event.currentTarget.scrollLeft)}

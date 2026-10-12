@@ -390,6 +390,7 @@ for (const theme of ['light', 'dark']) {
     await expect(rankings.getByTestId('period-bars')).toHaveCount(0)
     for (const tab of ['Rising', 'Slow']) {
       await page.getByRole('button', { name: tab, exact: true }).click()
+      await expect(rankings.getByTestId('dish-row').first()).toBeVisible()
       const rows = await rankings.getByTestId('dish-row').evaluateAll((elements) =>
         elements.map((el) => ({
           units: Number(el.getAttribute('data-value')),

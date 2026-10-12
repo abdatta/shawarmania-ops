@@ -374,20 +374,56 @@ for (const theme of ['light', 'dark'] as const) {
         }
       })
     const slotsBefore = await readSlots()
+    // Capture the short exit phases in the browser itself. Driver round trips
+    // can otherwise read a detached card after the 180ms gap has ended.
+    const masonry = kitchen.getByTestId('kitchen-masonry')
+    await masonry.evaluate((grid) => {
+      const proof: {
+        phase: string | null
+        visibility: string
+        index: number
+        neighbors: { id: string | null; top: number; left: number }[]
+      }[] = []
+      const observer = new MutationObserver(() => {
+        const card = grid.querySelector('[data-testid="kitchen-done-98-1"]')
+        if (!card) return
+        const slot = card.parentElement!
+        const phase = card.getAttribute('data-ready-phase')
+        proof.push({
+          phase,
+          visibility: getComputedStyle(slot).visibility,
+          index: Array.from(grid.children).indexOf(slot),
+          neighbors: Array.from(grid.children)
+            .filter((child) => child !== slot)
+            .map((child) => ({
+              id: child.querySelector('article')!.getAttribute('data-order-id'),
+              top: (child as HTMLElement).offsetTop,
+              left: (child as HTMLElement).offsetLeft,
+            })),
+        })
+        ;(grid as HTMLElement).dataset.exitProof = JSON.stringify(proof)
+        if (phase === 'gap') observer.disconnect()
+      })
+      observer.observe(grid, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ['data-ready-phase'],
+      })
+    })
     await readyDish.click()
-    await expect
-      .poll(() => middle.getAttribute('data-ready-phase'), { intervals: [20], timeout: 10_000 })
-      .toBe('leaving')
-    const slotsDuringExit = await readSlots()
+    await expect(middle).toHaveCount(0)
+    const proof = JSON.parse((await masonry.getAttribute('data-exit-proof'))!) as {
+      phase: string
+      visibility: string
+      index: number
+      neighbors: typeof slotsBefore.neighbors
+    }[]
+    const slotsDuringExit = proof.find((step) => step.phase === 'leaving')!
+    expect(slotsDuringExit).toBeDefined()
     expect(slotsDuringExit.index).toBe(slotsBefore.index)
     expect(slotsDuringExit.neighbors).toEqual(slotsBefore.neighbors)
-    await expect
-      .poll(() => middle.getAttribute('data-ready-phase'), { intervals: [20] })
-      .toBe('gap')
-    expect(await middle.evaluate((card) => getComputedStyle(card.parentElement!).visibility)).toBe(
-      'hidden',
-    )
-    await expect(middle).toHaveCount(0)
+    expect(proof.find((step) => step.phase === 'gap')?.visibility).toBe('hidden')
     for (const width of [1080, 1600, 390]) {
       await kitchen.setViewportSize({ width, height: 844 })
       await expect

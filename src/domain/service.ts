@@ -307,13 +307,16 @@ export function isWaivedPackaging(line: {
 /** The packaging line's key at the counter: there is at most one, and no menu item. */
 export const PACKAGING_LINE_KEY = 'packaging'
 
-/** What a line's controls call it by: its menu item, or `packaging`. */
+/** Controls retain a dish's identity across a live read or an offline projection. */
 export function lineKey(line: {
   kind?: LineKind | null | undefined
   menuItemId: string
   workflowLineId?: string
+  orderLineId?: string
 }): string {
-  return isPackagingLine(line) ? PACKAGING_LINE_KEY : (line.workflowLineId ?? line.menuItemId)
+  return isPackagingLine(line)
+    ? PACKAGING_LINE_KEY
+    : (line.workflowLineId ?? line.orderLineId ?? line.menuItemId)
 }
 
 /** Whether a keyed table number is one a table can have: 1 to 999. */

@@ -242,3 +242,8 @@ Analytics comparison series use semantic `--primary`, `--chart-previous`, `--cha
 ## What we deliberately do not import from the marketing site
 
 Flame gradients as surfaces, the animated marquee, scroll-driven motion, hero-scale type, and the paper-texture treatment. They are excellent at selling shawarma and actively harmful in a tool for counting money. The brand shows up here as colour, warmth, and the wordmark — not as atmosphere.
+
+
+### Counter dish handover and kitchen Done
+
+The counter uses a menu and two-column masonry rail, with an overlay composer on the left half and records below. Shimmers reserve both rail columns and the responsive kitchen columns. Dish checkboxes are fixed at 15px, separate from quantities, with 6px row spacing. Ready retains an orange outline and a shared 2.4s expanding/fading pulse; reduced motion keeps it steady. Ticked text and checkbox use semantic primary tokens. Each kitchen keeps an independent sent/ACK/Ready/empty slot. Kitchen Done circles match the timer diameter; receipts collapse in gray, with unlimited Undo. Handover exits hold the original slot for 320ms plus a 180ms gap. Critical wait tones begin at forty minutes and pass contrast in both themes.

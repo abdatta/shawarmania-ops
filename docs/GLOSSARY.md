@@ -350,3 +350,16 @@ CTA, fixed up to its `?`: here `https://shawarmania.in/bill?`.
 ### Brand token / semantic token
 
 Two layers of the theme. **Brand tokens** (`--brand-flame-orange`) hold Shawarmania's actual colours. **Semantic tokens** (`--color-primary`, `--color-surface`) describe roles. Components only ever read semantic tokens, so re-skinning for a franchise is a one-file change. See [Design System](DESIGN_SYSTEM.md).
+
+
+### Dish workflow
+
+**Order label** — optional temporary counter headline, cleared when the order leaves the rail; not a customer identity.
+
+**Dish note** — a short instruction on one item line, visible to its counter and carrying kitchen, without price or receipt copy.
+
+**Tick / handover** — the counter's record of a dish's captured quantity handed to the customer. All dishes ticked derives Prepared.
+
+**Ready / Done receipt** — the kitchen's captured food made, retained separately until counter handover, undoable while visible.
+
+**Owed food / later ticket** — current quantity less the greater of Ready and handover; food added after Ready starts a separate numbered ticket.

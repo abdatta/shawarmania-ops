@@ -378,3 +378,8 @@ many tablets are holding undelivered work and since when, and marks the expected
 figure as possibly understated. It does not refuse the count: the person is
 standing at the counter holding the cash, and a count that does not get recorded
 is worse than one recorded against an understated expectation.
+
+
+### Dish handover
+
+Labels and dish notes travel in the existing create/revise/pay-now envelopes. Missing optional keys on older queued commands remain valid. prepare_order_lines is a durable client-UUID command ordered in the same order chain as revisions and payment. Its optimistic ticks survive offline reopen; a removed line is accepted without a write. Preparation follows the projected dish quantities. Ready/Undo are online-only kitchen actions; failed writes preserve the previous state. Offline counters retain their last observed readiness and produce no sound.

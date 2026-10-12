@@ -679,6 +679,7 @@ export function createMockBillingAdapter(
     store.orderItems = store.orderItems.filter((line) => line.order_id !== orderId)
     lines.forEach((line) => {
       store.orderItems.push({
+        note: line.note?.trim() || null,
         // Positional identities collided: drop the first line, add another, and
         // the new one took the identity the survivor already held.
         id: line.orderLineId ?? crypto.randomUUID(),
@@ -943,6 +944,7 @@ export function createMockBillingAdapter(
     store.orderNumbers.set(counterKey, orderNumber)
     const orderedAt = new Date(acceptedPaymentTimes.get(input.clientId) ?? Date.now()).toISOString()
     const row: Tables<'orders'> = {
+      label: input.label?.trim() || null,
       id: input.clientId,
       outlet_id: input.outletId,
       device_id: shift.device_id,
