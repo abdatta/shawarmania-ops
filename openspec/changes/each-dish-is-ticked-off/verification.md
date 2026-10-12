@@ -103,3 +103,19 @@ pipeline reads never resolve.
 All seven focused queue/latency tests, TypeScript and ESLint on the changed
 application/test files passed before the corrective push. Full release gates
 remain delegated to CI.
+
+Corrective release `9e916642ba003309d050dea17995c031d385872c` was committed on
+`claude/counter-kitchen-workflow-8tmc58`, fast-forwarded into `main`, and pushed.
+[Deploy run 38243766340](https://github.com/abdatta/shawarmania-ops/actions/runs/38243766340)
+completed successfully: 2,469 unit/component tests, 342 demo browser tests,
+3,544 database assertions across 86 files, all REST/isolation phases, all 40
+auth-browser tests, generated-schema parity, lint, formatting, app and Edge
+typechecks, and contrast. Production migration, functions and Pages publication
+also succeeded.
+
+A fresh browser context with service workers blocked opened
+`https://ops.shawarmania.in/` after publication and confirmed HTTP 200, the sign-in
+route and **Build 9e91664**, with no page errors or HTTP 5xx responses. This confirms
+the served production bundle; existing tablets take it through the app's Update
+action or a reload. The production smoke check made no authenticated writes and
+does not measure operator tap-to-visible latency.

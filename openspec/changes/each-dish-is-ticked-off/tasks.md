@@ -4,7 +4,7 @@
 
 - [x] 5.1 Dish ticks and payment release the counter after durable local acceptance, without waiting for pipeline or bill-history reads; serialize each order's projection and keep other tickets usable.
 - [x] 5.2 Remove duplicate label polling, bound live fallbacks, and coalesce overlapping pipeline, bills, marks and kitchen reads with a trailing refresh.
-- [ ] 5.3 Prove delayed reads cannot block accepted ticks, erase new Ready state or swallow post-Done refreshes; run the required gates and verify the production release.
+- [x] 5.3 Prove delayed reads cannot block accepted ticks, erase new Ready state or swallow post-Done refreshes; run the required gates and verify the production release.
 
 ## 1. The owner sees it first
 
