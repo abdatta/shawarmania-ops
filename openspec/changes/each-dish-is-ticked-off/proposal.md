@@ -1,6 +1,6 @@
 # Proposal: Each Dish Is Ticked Off
 
-> **Model**: Opus · **Wave**: F · **Depends on**: **#72**, #70, #69 · **Gate**: the
+> **Model**: Opus · **Wave**: F · **Depends on**: **#75**, **#72**, #70, #69 · **Gate**: the
 > owner approved the counter's new layout, the label, the dish ticks, the notes and
 > the Ready shake from demo screenshots before any of it was built live; the
 > counter is the menu and a two-column order rail, with the composer laid over the
@@ -17,6 +17,14 @@
 > a ticked or Ready dish takes no more and its note is fixed; each outlet's dish
 > records are isolated, proved by a hand-crafted request; and the four-role demo
 > walkthrough still walks, with a kitchen tab's Ready shaking a counter tab's dish.
+
+> **Relaunch (2026-10-12).** This change went live on 12 October 2026 and was
+> rolled back the same evening (`rollback-each-dish-is-ticked-off`). The cause and
+> the measurements are in `a-release-can-be-switched-off` (#75) design, "Context".
+> It relaunches only after #75 is in production, as #75's first real user: behind
+> its own release switch, with every changed function as a new `_v2`, no
+> fixed-interval reads, and inside #75's request budget. Re-plan the design and
+> tasks against #75 before applying anything.
 
 ## Why
 
