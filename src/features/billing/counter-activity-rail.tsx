@@ -28,6 +28,7 @@ export function CounterActivityRail({
   onEditOrder,
   onSetOrderCustomer,
   onActivityChanged,
+  onOrdersRead,
   pin,
   asOf,
   checkoutSettings,
@@ -42,6 +43,7 @@ export function CounterActivityRail({
   onSetOrderCustomer: (order: BillingOrder) => void
   /** The pipeline already reloads itself; notify the bills column only. */
   onActivityChanged: () => void
+  onOrdersRead?: (orders: BillingOrder[]) => void
   /** The docked card, built by the composer that owns the draft it displays. */
   pin: ReactNode
   asOf?: string
@@ -106,6 +108,7 @@ export function CounterActivityRail({
           onEditOrder={onEditOrder}
           onSetOrderCustomer={onSetOrderCustomer}
           onActivityChanged={onActivityChanged}
+          {...(onOrdersRead ? { onOrdersRead } : {})}
           {...(checkoutSettings ? { checkoutSettings } : {})}
         />
       </div>

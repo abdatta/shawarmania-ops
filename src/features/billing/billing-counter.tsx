@@ -1167,30 +1167,16 @@ export function BillingCounter({
     />
   ) : null
 
-  useEffect(() => {
-    if (!dishWorkflow || !shift || !counterOutletId) return
-    let active = true
-    const read = () => {
-      void billing
-        .listOpenOrders(counterOutletId)
-        .then((orders) => {
-          if (active)
-            setRailLabels(
-              orders
-                .filter((order) => order.id !== editingOrder?.id && order.label)
-                .map((order) => order.label!.trim().toLocaleLowerCase()),
-            )
-        })
-        .catch(() => undefined)
-    }
-    const first = setTimeout(read, 0)
-    const timer = setInterval(read, 1000)
-    return () => {
-      active = false
-      clearTimeout(first)
-      clearInterval(timer)
-    }
-  }, [dishWorkflow, shift, billing, counterOutletId, editingOrder?.id])
+  const readRailLabels = useCallback(
+    (orders: BillingOrder[]) => {
+      setRailLabels(
+        orders
+          .filter((order) => order.id !== editingOrder?.id && order.label)
+          .map((order) => order.label!.trim().toLocaleLowerCase()),
+      )
+    },
+    [editingOrder?.id],
+  )
 
   if (!shift) {
     return (
@@ -1574,6 +1560,7 @@ export function BillingCounter({
           checkoutSettings={{ service: serviceSettings, loyalty: loyaltySettings }}
           {...(resume ? { asOf: resume.lastSuccessfulReadAt } : {})}
           refreshKey={pipelineRefresh}
+          onOrdersRead={readRailLabels}
           savedOrderKey={savedOrderKey}
           editingOrder={editingOrder}
           onEditOrder={beginOrderEdit}

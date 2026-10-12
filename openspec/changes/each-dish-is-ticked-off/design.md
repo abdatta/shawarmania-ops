@@ -328,6 +328,20 @@ demo commit. See [handoff.md](handoff.md) for the remaining work and contracts.
 
 ## Data Protection, RLS and Isolation
 
+### D11. Durable feedback precedes background reconciliation
+
+Dish ticks update the rail from the adapter's locally persisted result and release
+their order immediately after local acceptance. They do not await pipeline or
+shift-history reads. Pending projections serialize per order; other orders remain
+usable. Invalidating an older pipeline read prevents it restoring a pre-tick view.
+
+Live label validation reuses the rail's orders. Pipeline and bill fallbacks run
+every ten seconds while visible; kitchen marks have a five-second fallback plus
+Realtime and foreground nudges. Each reader runs one request at a time and retains
+one trailing read when another nudge arrives. Post-Done callers await that trailing
+read. Responses from a superseded outlet, shift or adapter cannot update the UI.
+No command, outbox, migration, policy or money contract changes.
+
 - `kitchen_readies`: RLS on; select for the writing kitchen shift's own outlet and
   managers of it (as `kitchen_acknowledgements`); no direct insert, update or
   delete for any client role; append-only trigger. Isolation test.

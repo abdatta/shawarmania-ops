@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useAdapters } from '@/data-access'
+import { useRefreshQueue } from '@/lib/use-refresh-queue'
 import type { KitchenBoard, KitchenOrder } from '@/data-access/adapters'
 import {
   acknowledgementFor,
@@ -73,7 +74,6 @@ export function useKitchenBoard(options: {
   const seen = useRef<Map<string, Seen> | null>(null)
   const previousBoardReadAt = useRef<string | null>(null)
   const ringer = useRef<Ringer | null>(null)
-  const reading = useRef(false)
   const [mountedAt] = useState(() => now())
   const [failed, setFailed] = useState(false)
 
@@ -135,21 +135,22 @@ export function useKitchenBoard(options: {
     setBoard(next)
   }, [])
 
-  const read = useCallback(async () => {
-    if (reading.current) return
-    reading.current = true
-    try {
-      const next = await kitchen.readBoard()
-      absorb(next)
-      setLastReadAt(now())
-      setFailed(false)
-    } catch {
-      setFailed(true)
-      // The staleness rule reports it; the last board stays on screen, dimmed.
-    } finally {
-      reading.current = false
-    }
-  }, [kitchen, absorb, now])
+  const readBoard = useCallback(
+    async (isCurrent: () => boolean) => {
+      try {
+        const next = await kitchen.readBoard()
+        if (!isCurrent()) return
+        absorb(next)
+        setLastReadAt(now())
+        setFailed(false)
+      } catch {
+        if (isCurrent()) setFailed(true)
+        // The staleness rule reports it; the last board stays on screen, dimmed.
+      }
+    },
+    [kitchen, absorb, now],
+  )
+  const { refresh: read } = useRefreshQueue(readBoard)
 
   useEffect(() => {
     const first = window.setTimeout(() => void read(), 0)

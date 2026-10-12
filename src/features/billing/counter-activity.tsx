@@ -25,6 +25,7 @@ export function CounterActivity({
   onEditOrder,
   onSetOrderCustomer,
   onActivityChanged,
+  onOrdersRead,
   checkoutSettings,
 }: {
   twoColumns?: boolean
@@ -35,6 +36,7 @@ export function CounterActivity({
   onEditOrder?: (order: BillingOrder) => void
   onSetOrderCustomer?: (order: BillingOrder) => void
   onActivityChanged?: () => void
+  onOrdersRead?: (orders: BillingOrder[]) => void
   checkoutSettings?: Pick<OutletMenu, 'service' | 'loyalty'>
 }) {
   return (
@@ -48,6 +50,7 @@ export function CounterActivity({
         {...(onEditOrder ? { onEditOrder } : {})}
         {...(onSetOrderCustomer ? { onSetOrderCustomer } : {})}
         {...(onActivityChanged ? { onActivityChanged } : {})}
+        {...(onOrdersRead ? { onOrdersRead } : {})}
         {...(checkoutSettings ? { checkoutSettings } : {})}
       />
     </div>

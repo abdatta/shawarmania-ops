@@ -21,6 +21,7 @@ import { PaymentTotalCards } from './payment-total-cards'
 import { UnpayDialog, CancelAfterPaidDialog } from './pipeline-card'
 import { useFlip } from './flip'
 import { useCounterState } from './use-counter-state'
+import { useRefreshQueue } from '@/lib/use-refresh-queue'
 import { OfflineFillHint } from './offline-fill-hint'
 
 export function MyShiftSurface({
@@ -48,19 +49,24 @@ export function MyShiftSurface({
   const billListRef = useRef<HTMLDivElement | null>(null)
   useFlip(billListRef, [history])
 
-  const load = useCallback(async () => {
-    await Promise.resolve()
-    if (!shift) {
-      setAttention([])
-      return setHistory({ bills: [], totals: [] })
-    }
-    const [nextHistory, nextAttention] = await Promise.all([
-      billing.listShiftHistory(shift.id),
-      billing.listAttention(),
-    ])
-    setHistory(nextHistory)
-    setAttention(nextAttention)
-  }, [billing, shift])
+  const read = useCallback(
+    async (isCurrent: () => boolean) => {
+      await Promise.resolve()
+      if (!shift) {
+        setAttention([])
+        return setHistory({ bills: [], totals: [] })
+      }
+      const [nextHistory, nextAttention] = await Promise.all([
+        billing.listShiftHistory(shift.id),
+        billing.listAttention(),
+      ])
+      if (!isCurrent()) return
+      setHistory(nextHistory)
+      setAttention(nextAttention)
+    },
+    [billing, shift],
+  )
+  const { refresh: load } = useRefreshQueue(read)
 
   useEffect(() => {
     void Promise.resolve()

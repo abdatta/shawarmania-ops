@@ -2,6 +2,9 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { MyShiftSurface } from './my-shift-surface'
 import type { CSSProperties, ReactNode } from 'react'
 import type { ReadyCue } from './ready-dish'
+import { useAdapters } from '@/data-access'
+import { CounterDeviceContext } from '@/session/counter-context'
+import { useContext } from 'react'
 
 const EVENT = 'shawarmania-demo-counter-layout'
 function subscribe(listener: () => void) {
@@ -51,6 +54,9 @@ export function DemoCounterReview({
   showReview?: boolean
 }) {
   const cue = useDemoReadyCue()
+  const { billing, counter } = useAdapters()
+  const device = useContext(CounterDeviceContext)
+  const outletId = device?.device.outletId
   const [refresh, setRefresh] = useState(0)
   const recordsRef = useRef<HTMLDivElement>(null)
   const [recordsHeight, setRecordsHeight] = useState<number | null>(null)
@@ -75,9 +81,23 @@ export function DemoCounterReview({
     if (scrollLeft !== undefined && recordsRef.current) recordsRef.current.scrollLeft = scrollLeft
   }, [scrollLeft])
   useEffect(() => {
-    const timer = setInterval(() => setRefresh((value) => value + 1), 1000)
-    return () => clearInterval(timer)
-  }, [])
+    const refresh = () => setRefresh((value) => value + 1)
+    const timer = setInterval(
+      () => {
+        if (document.visibilityState === 'visible') refresh()
+      },
+      showReview ? 1000 : 10_000,
+    )
+    const unsubscribe = billing.subscribeCounter(refresh)
+    const unsubscribeOutlet = outletId
+      ? counter.subscribeToOutletBilling(outletId, refresh)
+      : () => {}
+    return () => {
+      clearInterval(timer)
+      unsubscribe()
+      unsubscribeOutlet()
+    }
+  }, [billing, counter, outletId, showReview])
   return (
     <section className="space-y-3" data-testid="demo-counter-review">
       {showReview && (

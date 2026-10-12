@@ -63,3 +63,26 @@ The owner's demo approval remains recorded in design D10 and `handoff.md`.
 Counter billing and kitchen tablets already have live gates; this change wires
 their approved dish workflow into those surfaces and preserves the demo seam.
 Archiving and main-spec synchronization remain a separate requested operation.
+
+## Production latency repair — 12 October 2026
+
+Production investigation found ten accepted dish-tick commands and three Ready
+writes. Ready HTTP origin times were 226–584 ms, while counter status reads reached
+5.115 seconds and shift-history reads 5.167 seconds. Three one-second refresh
+loops duplicated order/history reads; each local tick also held every checkbox
+until the pipeline and history returned. Counter status responses could overwrite
+newer Ready state, and the kitchen dropped a post-write refresh during a read.
+
+The repair uses the locally persisted tick result immediately, serializes local
+projections per order, reuses rail orders for label checks, bounds live fallback
+reads, and coalesces refreshes with a retained trailing read. No database, money,
+command or outbox contract changed.
+
+The three new regression cases were proved red with the application fixes
+temporarily removed (3 failed), then green after restoration. The focused billing
+and kitchen suites passed 83 tests, and the queue/regression suites passed 5 tests.
+Typecheck, formatting, lint (0 errors, 19 existing warnings), Edge typecheck and
+88 contrast pairs passed. The already-running database suite completed 3,544
+assertions across 86 files. The owner then requested critical local checks only
+and full CI verification before publication; broader local unit, REST and browser
+runs were stopped. The release remains gated by the full Deploy verification suite.

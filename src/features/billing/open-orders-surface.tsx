@@ -13,6 +13,7 @@ import {
 } from '@/data-access/adapters'
 import { isAwaitingOrderNumber, kitchenBell, sharedTables, UNSENT_ORDER_REFERENCE } from '@/domain'
 import { SessionContext } from '@/session/context'
+import { useRefreshQueue } from '@/lib/use-refresh-queue'
 import { CounterDeviceContext } from '@/session/counter-context'
 
 import { CancelOrderDialog } from './cancel-order-dialog'
@@ -82,6 +83,7 @@ export function OpenOrdersSurface({
   refreshKey = 0,
   savedOrderKey = 0,
   onActivityChanged,
+  onOrdersRead,
   editingOrderId = null,
   onEditOrder,
   onSetOrderCustomer,
@@ -98,6 +100,7 @@ export function OpenOrdersSurface({
    */
   savedOrderKey?: number
   onActivityChanged?: () => void
+  onOrdersRead?: (orders: BillingOrder[]) => void
   editingOrderId?: string | null
   onEditOrder?: (order: BillingOrder) => void
   onSetOrderCustomer?: (order: BillingOrder) => void
@@ -117,6 +120,8 @@ export function OpenOrdersSurface({
   // asked for no inserted info bars.
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const ticking = useRef(new Set<string>())
+  const [tickingOrders, setTickingOrders] = useState(new Set<string>())
 
   const outletId = counterDevice?.device.outletId ?? session?.outletId ?? null
 
@@ -129,29 +134,38 @@ export function OpenOrdersSurface({
   const marks = kitchenMarks?.marks ?? null
   const refreshMarks = kitchenMarks?.refresh
 
-  const load = useCallback(async () => {
-    await Promise.resolve()
-    if (!outletId || !shift) {
-      setTenders(new Map())
-      return setOrders([])
-    }
-    const nextOrders = await billing.listOpenOrders(outletId)
-    setOrders(nextOrders)
-    // An order write reloads the rail; its bells come with it.
-    void refreshMarks?.()
-    // Tender facts ride along so a take-back can name what it returns.
-    try {
-      const history = await billing.listShiftHistory(shift.id)
-      const nextTenders = new Map<string, string>()
-      for (const bill of history.bills) {
-        const label = methodLabelOf(bill)
-        if (label) nextTenders.set(bill.id, label)
+  const read = useCallback(
+    async (isCurrent: () => boolean) => {
+      await Promise.resolve()
+      if (!outletId || !shift) {
+        setTenders(new Map())
+        return setOrders([])
       }
-      setTenders(nextTenders)
-    } catch {
-      setTenders(new Map())
-    }
-  }, [billing, counterDevice?.device.outletId, session?.outletId, shift, refreshMarks])
+      const nextOrders = await billing.listOpenOrders(outletId)
+      if (!isCurrent()) return
+      setOrders(nextOrders)
+      onOrdersRead?.(nextOrders)
+      // An order write reloads the rail; its bells come with it.
+      void refreshMarks?.()
+      // Tender facts ride along so a take-back can name what it returns.
+      try {
+        if (!nextOrders.some((order) => order.billId)) return setTenders(new Map())
+        const history = await billing.listShiftHistory(shift.id)
+        if (!isCurrent()) return
+        const nextTenders = new Map<string, string>()
+        for (const bill of history.bills) {
+          const label = methodLabelOf(bill)
+          if (label) nextTenders.set(bill.id, label)
+        }
+        setTenders(nextTenders)
+      } catch {
+        if (isCurrent()) setTenders(new Map())
+      }
+    },
+    [billing, outletId, shift, refreshMarks, onOrdersRead],
+  )
+  const queue = useRefreshQueue(read)
+  const load = queue.refresh
 
   useEffect(() => {
     void Promise.resolve()
@@ -161,12 +175,43 @@ export function OpenOrdersSurface({
 
   useEffect(() => {
     if (!twoColumns) return
-    const timer = setInterval(
-      () => void load().catch(() => setError('Could not refresh the pipeline.')),
-      1000,
-    )
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible')
+        void load().catch(() => setError('Could not refresh the pipeline.'))
+    }, 10_000)
     return () => clearInterval(timer)
   }, [twoColumns, load])
+
+  const tickLine = async (orderId: string, lineId: string, prepared: boolean) => {
+    // Serialize this order's local projections; other tickets remain usable.
+    if (ticking.current.has(orderId) || busy) return
+    ticking.current.add(orderId)
+    setTickingOrders(new Set(ticking.current))
+    setError(null)
+    try {
+      const updated = await billing.markOrderLinesPrepared!(crypto.randomUUID(), orderId, [
+        { id: lineId, prepared },
+      ])
+      queue.invalidate()
+      setOrders((held) =>
+        (held ?? [])
+          .map((order) => (order.id === orderId ? updated : order))
+          .filter(
+            (order) =>
+              order.status === 'open' || (order.status === 'paid' && order.preparedAt === null),
+          ),
+      )
+      onActivityChanged?.()
+      void load().catch(() => setError('Could not refresh the pipeline.'))
+    } catch (cause) {
+      setError(
+        cause instanceof DataActionError ? cause.message : 'That action could not be completed.',
+      )
+    } finally {
+      ticking.current.delete(orderId)
+      setTickingOrders(new Set(ticking.current))
+    }
+  }
 
   const act = async (operation: () => Promise<unknown>) => {
     setBusy(true)
@@ -382,16 +427,12 @@ export function OpenOrdersSurface({
                         readyCue,
                         readyQuantities: marks?.readyQuantities?.[order.id] ?? {},
                         onTickLine: (lineId: string, prepared: boolean) =>
-                          void act(() =>
-                            billing.markOrderLinesPrepared!(crypto.randomUUID(), order.id, [
-                              { id: lineId, prepared },
-                            ]),
-                          ),
+                          void tickLine(order.id, lineId, prepared),
                       }
                     : {})}
                   currentBillerId={shift?.billerProfileId ?? null}
                   currentDeviceId={counterDevice?.device.deviceId ?? null}
-                  busy={busy}
+                  busy={busy || tickingOrders.has(order.id)}
                   {...(onEditOrder ? { onEdit: onEditOrder } : {})}
                   {...(onSetOrderCustomer ? { onSetCustomer: onSetOrderCustomer } : {})}
                   tenderLabel={order.billId ? (tenders.get(order.billId) ?? null) : null}
