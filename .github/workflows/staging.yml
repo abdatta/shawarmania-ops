@@ -247,6 +247,17 @@ jobs:
 
       - run: npm ci
 
+      - name: Which Playwright
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # The suite's own cache (verify.yml): this job is the last one a push
+      # waits for, so the half-minute download matters most here.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 

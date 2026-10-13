@@ -66,21 +66,38 @@ Local development needs the Supabase CLI and Docker. `supabase start` brings the
 ## Continuous integration
 
 The verification suite is defined **once**, in `.github/workflows/verify.yml`,
-as a reusable workflow nothing triggers directly. It has three jobs, split by
-what each one needs — which is also the fastest way to guess why one is red:
+as a reusable workflow nothing triggers directly. Its jobs split on what each
+one needs — which is also the fastest way to guess why one is red — and the slow
+suites are spread across runners, because a push waits for the slowest job:
 
-| Job | Needs | Steps |
-|---|---|---|
-| `lint, types, unit tests` | nothing but the repo | lint → format check → typecheck → unit tests → contrast validator → production build |
-| `e2e browser tests` | a browser | Playwright, including the offline app-shell suite; uploads its report on failure |
-| `database + auth tests` | Docker and a database | fresh local Supabase stack, pgTAP, REST/RLS, the authenticated four-role Playwright suite, and generated-type drift |
+| Job | Runners | Needs | Steps |
+|---|---|---|---|
+| `lint, types, build` | 1 | nothing but the repo | lint → format check → typecheck → Edge Function typecheck → contrast validator → production build |
+| `unit tests (n/2)` | 2 | nothing but the repo | Vitest, half the files each |
+| `e2e browser tests (n/3)` | 3 | a browser | Playwright against the demo build, a third of the tests each, including the offline app-shell suite |
+| `e2e browser tests (gates on, n/3)` | 3 | a browser | the same with every change gate on; skipped when none is declared |
+| `database tests` | 1 | Docker and a database | fresh local Supabase stack, pgTAP, REST/RLS, generated-type drift |
+| `auth browser tests (n/4)` | 4 | Docker and a database | the authenticated four-role Playwright suite, split by file (`e2e-auth/shards.ts`), each runner on its own fresh stack |
+| `auth browser tests (gates on, n/4)` | 4 | Docker and a database | the same with every change gate on; skipped when none is declared |
 
-Two workflows call it, and that single definition is the point — **what a pull
+Each runner holds at most one browser suite, run serially, as one runner did
+before the split; every runner uploads its own Playwright report. The slow setup
+in each job runs side by side: the browser jobs build the app
+(`scripts/build-for-e2e.mjs`) while Chromium installs, and the auth jobs while the
+stack starts too, then serve that build with `E2E_PREBUILT=1`. Chromium comes from
+the Actions cache, keyed by the Playwright version. Eighteen jobs: a free account
+runs twenty at once. `scripts/check-verify.test.mjs` fails if a gate or a shard
+goes missing from the file.
+
+Three workflows call it, and that single definition is the point — **what a pull
 request is judged on and what a publish is gated on cannot drift apart**:
 
 - `.github/workflows/ci.yml` runs it on every pull request.
+- `.github/workflows/staging.yml` runs it on every push to `stage`, before
+  staging's database or site moves — see [Releases](RELEASES.md#staging).
 - `.github/workflows/deploy.yml` runs it on every push to `main`, as the gate
-  in front of the publish — see [Deployment](#deployment).
+  in front of the publish, unless a Staging run already verified that exact
+  commit — see [Deployment](#deployment).
 
 **Nothing runs it twice.** `ci.yml` deliberately does not trigger on a push to
 `main`, because the deploy workflow's gate is that run. One suite per commit,
@@ -88,44 +105,42 @@ and on `main` it is the one that decides whether the commit reaches a counter.
 
 ### Reading the checks on a commit
 
-A push to `main` produces five checks, and **they do not all appear at once**:
-
-```
-Deploy / gate / lint, types, unit tests
-Deploy / gate / e2e browser tests
-Deploy / gate / database + auth tests
-Deploy / build
-Deploy / deploy
-```
-
 **Read a check name right to left.** The last segment is the only part that
-says what that job did; the two before it say where it sits. `Deploy` is the
-workflow, which GitHub prepends to all five. `gate` is the stage — the job
-that has to pass before anything is built or published. On a pull request the
-same three read `CI / verify / …`, because there is no gate there, only the
-suite.
+says what that job did; the ones before it say where it sits:
 
-**Four of the five start together.** The three gate jobs and `build` have no
-dependencies, so they run at once; `build` finishes first, in about half a
-minute. Only `deploy` waits, on both the gate and the build, and GitHub creates
-a check when its job *starts* — so `deploy` cannot exist until the other four
-have finished. A commit showing four checks is still being decided; five means
-decided. There is no way to pre-declare it as pending.
+```
+Staging / gate / auth browser tests (2/4)
+Deploy / gate / database tests
+CI / verify / lint, types, build
+```
+
+`Staging`, `Deploy` or `CI` is the workflow, which GitHub prepends to every
+check. `gate` is the stage — the job that has to pass before anything is
+migrated, built for release or published. On a pull request the same jobs read
+`CI / verify / …`, because there is no gate there, only the suite. A failing
+shard says which share failed; its report is the artifact with the same number.
+
+**The gate jobs and `build` start together.** None depends on another. `build`
+finishes first, in about half a minute; the release jobs wait on both the gate
+and the build, and GitHub creates a check when its job *starts* — so the last
+checks cannot exist until the gate has finished. A commit still showing gate
+checks and no `deploy` is still being decided. There is no way to pre-declare
+a check as pending.
 
 **`build` does not wait for the tests, on purpose.** Nothing the suite produces
 feeds it, so sequencing them only delays the answer by the length of the suite.
 It also means `npm run auth:readiness` — the only check that probes the live
 identity backend, and the one most likely to fail for reasons that have nothing
-to do with the commit — reports in well under a minute rather than after five.
-The artifact it uploads on a commit that then fails the gate is inert: `deploy`
-needs both jobs, so nothing can publish it.
+to do with the commit — reports in well under a minute rather than after the
+suite. The artifact it uploads on a commit that then fails the gate is inert:
+`deploy` needs both jobs, so nothing can publish it.
 
-Add a step to `verify.yml` and both callers get it. Add one anywhere else and
+Add a step to `verify.yml` and every caller gets it. Add one anywhere else and
 only one of them does, which is the failure mode this structure exists to
 prevent. The list in [`AGENTS.md`](../AGENTS.md) mirrors `verify.yml`; keep the
 two in agreement in the same commit.
 
-Every checkout uses `fetch-depth: 0` because the build stamps the short commit SHA into the UI.
+Every checkout that builds uses `fetch-depth: 0` because the build stamps the short commit SHA into the UI.
 
 **A prose-only push produces no checks and no deployment, deliberately.** Both
 `Deploy` and `CI` skip a commit that cannot change what is built, served or

@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test'
 
+import backends from './e2e/support/backends.json' with { type: 'json' }
 import { GATE_STATE, skippedTags } from './e2e/support/change-gates'
 import { PORTS } from './ports'
 
@@ -74,7 +75,9 @@ export default defineConfig({
   webServer: {
     // --host is explicit: `vite preview` otherwise binds only to `localhost`,
     // which resolves to ::1 on Windows and leaves 127.0.0.1 unanswered.
-    command: `npm run build && npx vite preview --port ${PORT} --strictPort --host 127.0.0.1`,
+    // `E2E_PREBUILT=1`: CI built `dist/` for this suite already, while the
+    // browser installed (scripts/build-for-e2e.mjs), so check it is this suite's and serve it.
+    command: `${process.env['E2E_PREBUILT'] ? 'node scripts/build-for-e2e.mjs --check demo' : 'npm run build'} && npx vite preview --port ${PORT} --strictPort --host 127.0.0.1`,
     // Poll the base path, not the origin: under a sub-path the origin 404s.
     url: BASE_URL,
     reuseExistingServer: !process.env['CI'],
@@ -84,9 +87,11 @@ export default defineConfig({
       // Dummy Supabase config, so the demo-entry guard has a constructable
       // client to read its (seeded, fake) session through. Nothing in the
       // suite may actually reach this host — the origin tripwire in
-      // e2e/demo.spec.ts fails the run if anything tries.
-      VITE_SUPABASE_URL: process.env['VITE_SUPABASE_URL'] ?? 'https://demo-only.supabase.co',
-      VITE_SUPABASE_ANON_KEY: process.env['VITE_SUPABASE_ANON_KEY'] ?? 'demo-only-anon-key',
+      // e2e/demo.spec.ts fails the run if anything tries. Shared with
+      // `scripts/build-for-e2e.mjs`, which prebuilds this suite in CI.
+      VITE_SUPABASE_URL: process.env['VITE_SUPABASE_URL'] ?? backends.demo.VITE_SUPABASE_URL,
+      VITE_SUPABASE_ANON_KEY:
+        process.env['VITE_SUPABASE_ANON_KEY'] ?? backends.demo.VITE_SUPABASE_ANON_KEY,
     },
   },
 })

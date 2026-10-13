@@ -112,7 +112,7 @@ call sites with the same bug means the next one will have it too.
 Run `npm run typecheck` and the specific test files the change touches. That is
 the list.
 
-Skip the full suite. CI runs it across three parallel jobs, it gates the
+Skip the full suite. CI runs it across eighteen parallel jobs, it gates the
 migration and the publish, and a red gate leaves the build already on the counter
 untouched — so running it yourself in series buys a faster red, not a safer
 deploy.

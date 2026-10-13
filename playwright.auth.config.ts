@@ -1,6 +1,8 @@
 import { defineConfig, devices } from '@playwright/test'
 
+import backends from './e2e/support/backends.json' with { type: 'json' }
 import { GATE_STATE, skippedTags } from './e2e/support/change-gates'
+import { authShardFilter } from './e2e-auth/shards'
 import { PORTS } from './ports'
 
 /**
@@ -19,10 +21,10 @@ const PORT = PORTS.e2eAuth
 const BASE_PATH = process.env['BASE_PATH'] ?? '/shawarmania-ops/'
 const BASE_URL = `http://127.0.0.1:${PORT}${BASE_PATH}`
 
-// The Supabase CLI's well-known local demo anon key — public by design,
-// identical in every local stack, useless anywhere else.
-const LOCAL_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0'
+// The local stack, and the Supabase CLI's well-known local demo anon key —
+// public by design, identical in every local stack, useless anywhere else.
+// Shared with `scripts/build-for-e2e.mjs`, which prebuilds this suite in CI.
+const BACKEND = backends.auth
 
 export default defineConfig({
   testDir: './e2e-auth',
@@ -38,6 +40,8 @@ export default defineConfig({
   // out (a-release-can-be-switched-off, D10).
   globalSetup: './e2e-auth/change-gates.setup.ts',
   grepInvert: skippedTags(GATE_STATE),
+  // One runner's share in CI, each on its own fresh stack (e2e-auth/shards.ts).
+  ...authShardFilter(process.env['E2E_AUTH_SHARD']),
 
   use: {
     baseURL: BASE_URL,
@@ -47,7 +51,9 @@ export default defineConfig({
   projects: [{ name: 'desktop', use: { ...devices['Desktop Chrome'] } }],
 
   webServer: {
-    command: `npm run build && npx vite preview --port ${PORT} --strictPort --host 127.0.0.1`,
+    // `E2E_PREBUILT=1`: CI built `dist/` for this suite already, while the stack
+    // started (scripts/build-for-e2e.mjs), so check it is this suite's and serve it.
+    command: `${process.env['E2E_PREBUILT'] ? 'node scripts/build-for-e2e.mjs --check auth' : 'npm run build'} && npx vite preview --port ${PORT} --strictPort --host 127.0.0.1`,
     url: BASE_URL,
     /**
      * Never reused, even locally, because the separate port above does not
@@ -68,8 +74,9 @@ export default defineConfig({
     timeout: 180_000,
     env: {
       ...process.env,
-      VITE_SUPABASE_URL: process.env['VITE_SUPABASE_URL'] ?? 'http://127.0.0.1:54321',
-      VITE_SUPABASE_ANON_KEY: process.env['VITE_SUPABASE_ANON_KEY'] ?? LOCAL_ANON_KEY,
+      VITE_SUPABASE_URL: process.env['VITE_SUPABASE_URL'] ?? BACKEND.VITE_SUPABASE_URL,
+      VITE_SUPABASE_ANON_KEY:
+        process.env['VITE_SUPABASE_ANON_KEY'] ?? BACKEND.VITE_SUPABASE_ANON_KEY,
     },
   },
 })
