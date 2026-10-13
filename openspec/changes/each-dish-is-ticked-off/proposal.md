@@ -22,7 +22,8 @@
 > rolled back the same evening (`rollback-each-dish-is-ticked-off`). The cause and
 > the measurements are in `a-release-can-be-switched-off` (#75) design, "Context".
 > It relaunches only after #75 is in production, as #75's first real user: behind
-> its own release switch, with every changed function as a new `_v2`, no
+> its own change gates — the dish ticks a gate, Ready a change within it —
+> with every changed function as a new `_v2`, no
 > fixed-interval reads, and inside #75's request budget. Re-plan the design and
 > tasks against #75 before applying anything.
 

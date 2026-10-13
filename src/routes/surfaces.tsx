@@ -17,6 +17,7 @@ import { MenuSurface } from '@/features/menu/menu-surface'
 import { OutletPage, OutletsSurface } from '@/features/outlets/outlets-surface'
 import { RoleHome } from '@/features/overview/role-home'
 import { DeliverySyncSurface } from '@/features/aggregator-sync/delivery-sync-surface'
+import { ChangeGatePage, ChangeGatesSurface } from '@/features/change-gates/change-gates-surface'
 
 import { GatedSurface } from './gated-surface'
 import { NotFound } from './not-found'
@@ -70,6 +71,24 @@ export const roleSurfaceRoutes: RouteObject[] = [
     element: (
       <GatedSurface path="customers">
         <CustomersSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    path: 'change-gates',
+    element: (
+      <GatedSurface path="change-gates">
+        <ChangeGatesSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    // One change gate's own page, opened from a row of the list. Gated against
+    // the list's path, as an outlet's page is.
+    path: 'change-gates/:gateKey',
+    element: (
+      <GatedSurface path="change-gates">
+        <ChangeGatePage />
       </GatedSurface>
     ),
   },

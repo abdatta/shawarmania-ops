@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { BuildVersion } from '@/components/build-version'
 import { Navigate, useNavigate } from 'react-router'
 
 import { buttonVariants } from '@/components/ui/button-variants'
@@ -73,7 +74,8 @@ export function CounterSetup() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-1 items-center justify-center bg-canvas p-4 text-content">
+    <div className="relative flex min-h-dvh flex-1 items-center justify-center bg-canvas p-4 text-content">
+      <BuildVersion className="absolute inset-x-0 bottom-3 text-center" />
       <Card className="w-full max-w-md">
         <CardTitle>Set up this tablet</CardTitle>
         <CardBody>

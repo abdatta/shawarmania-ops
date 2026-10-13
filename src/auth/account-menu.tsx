@@ -1,12 +1,13 @@
-import { PlayCircle, UserRound } from 'lucide-react'
+import { PlayCircle, ToggleRight, UserRound } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 
 import { BuildVersion } from '@/components/build-version'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { useAdapters } from '@/data-access/adapters-context'
+import { getSurface, isRenderable } from '@/gates/registry'
 import { useSession } from '@/session/context'
-import { heldRoles, holdsRole, ROLE_LABELS } from '@/session/session'
+import { heldRoles, holdsRole, ROLE_LABELS, ROLE_SEGMENTS } from '@/session/session'
 
 /** Where the demo lives. Never a role path — see `DemoLink`. */
 const DEMO_PATH = '/demo'
@@ -98,7 +99,12 @@ export function AccountMenu({ onSignOut }: { onSignOut: () => void | Promise<voi
             .join(' · ') || 'No outlet'}
           {outletName ? ` · ${outletName}` : ''}
         </p>
-        {holdsRole(session, 'super_admin') && <DemoLink onOpen={() => setOpen(false)} />}
+        {holdsRole(session, 'super_admin') && (
+          <OwnerLinks
+            showChangeGates={isRenderable(getSurface('owner-change-gates').state, session.mode)}
+            onOpen={() => setOpen(false)}
+          />
+        )}
 
         <button
           type="button"
@@ -107,9 +113,48 @@ export function AccountMenu({ onSignOut }: { onSignOut: () => void | Promise<voi
         >
           Sign out
         </button>
-        <BuildVersion className="mt-3 border-t border-border pt-3 text-center" />
+        <BuildVersion
+          className="mt-3 border-t border-border pt-3 text-center"
+          testId="account-build-version"
+        />
       </div>
     </details>
+  )
+}
+
+/**
+ * The owner's two ways out of the business's own screens: the change gates, and
+ * the demo, under one rule.
+ */
+function OwnerLinks({ showChangeGates, onOpen }: { showChangeGates: boolean; onOpen: () => void }) {
+  return (
+    <div className="mt-3 space-y-2 border-t border-border pt-3">
+      {showChangeGates && <ChangeGatesLink onOpen={onOpen} />}
+      <DemoLink onOpen={onOpen} />
+    </div>
+  )
+}
+
+/**
+ * The change gates (a-release-can-be-switched-off, design D18).
+ *
+ * **Here, and not in the navigation, by the owner's choice** (2026-10-12): a
+ * change gate is on or off for the whole business, so it belongs with the things
+ * about the app rather than among the outlets or the everyday surfaces. This
+ * link is the page's only way in. The owner's alone, as the gates are: the
+ * database refuses every other caller's turn, and nobody else is shown the door.
+ */
+function ChangeGatesLink({ onOpen }: { onOpen: () => void }) {
+  return (
+    <Link
+      to={`/${ROLE_SEGMENTS.super_admin}/change-gates`}
+      onClick={onOpen}
+      data-testid="change-gates-link"
+      className={`${buttonVariants({ variant: 'secondary', size: 'phone' })} w-full`}
+    >
+      <ToggleRight aria-hidden size={16} />
+      Change gates
+    </Link>
   )
 }
 
@@ -136,7 +181,7 @@ export function AccountMenu({ onSignOut }: { onSignOut: () => void | Promise<voi
  */
 function DemoLink({ onOpen }: { onOpen: () => void }) {
   return (
-    <div className="mt-3 space-y-2 border-t border-border pt-3" data-testid="demo-entry">
+    <div className="space-y-2" data-testid="demo-entry">
       <Link
         to={DEMO_PATH}
         onClick={onOpen}

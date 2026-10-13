@@ -2767,8 +2767,106 @@ export interface ZomatoSettlement {
  */
 export type ChannelSettlement = ZomatoSettlement
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Change gates (a-release-can-be-switched-off).
+
+/** What a change gate is, in the owner's words, and which way it is now. */
+export interface ChangeGateSummary {
+  key: string
+  /** Two characters, capitals or digits, unique among live gates; the build code lists it. */
+  code: string
+  kind: 'change' | 'ops'
+  /** Owner-facing name, e.g. "Dish ticks". */
+  title: string
+  /** One sentence each, shown on the gate's page. */
+  onMeans: string
+  offMeans: string
+  /** The OpenSpec change folder that introduced it. Every gate has one. */
+  changeName: string
+  /** Its roadmap number when it has one; tooling and fixes do not. */
+  changeNumber: number | null
+  /** The gates this one is dependent on; empty when it stands alone. */
+  dependsOn: string[]
+  enabled: boolean
+  /** The last turn, or null for a gate nobody has turned since it was declared. */
+  changedAt: string | null
+  changedByName: string | null
+}
+
+/** One turn of a gate, as its history lists it. */
+export interface ChangeGateEvent {
+  key: string
+  enabled: boolean
+  at: string
+  byName: string | null
+  reason: string | null
+  /** `operator` when turned from the Supabase dashboard rather than the app. */
+  source: 'app' | 'operator'
+}
+
+/**
+ * One tablet's latest health report (design D13). A live reading, overwritten
+ * every minute, and generic: it says how the tablet is talking to the server,
+ * whichever changes it runs. Nothing in it can name a customer, an order or an
+ * amount.
+ */
+export interface DeviceHealthReading {
+  deviceId: string
+  label: string
+  kind: 'counter' | 'kitchen'
+  outletId: string
+  outletName: string
+  build: string
+  /** The gates this tablet's page loaded with on. */
+  bootedGates: string[]
+  /** The last minute's requests, failures and slowest request. */
+  requests: number
+  failed: number
+  slowestMs: number
+  reportedAt: string
+}
+
+export interface ChangeGatesOverview {
+  gates: ChangeGateSummary[]
+  tablets: DeviceHealthReading[]
+}
+
+export interface ChangeGatesAdapter {
+  /** Every live gate's own answer, for a device's store. Never the history. */
+  read(): Promise<Record<string, boolean>>
+  /** Calls back whenever any gate turns; returns the unsubscribe. */
+  subscribe(onChange: () => void): () => void
+  /** The owner's Change gates page: every live gate and every tablet's health. */
+  overview(): Promise<ChangeGatesOverview>
+  /** One gate's turns, newest first. */
+  history(key: string): Promise<ChangeGateEvent[]>
+  /**
+   * Owner only; the database refuses anybody else. Turning a gate on is refused
+   * while any gate it depends on is off; turning one off turns off every gate
+   * that depends on it, directly or through another.
+   */
+  turn(key: string, enabled: boolean, reason: string | null): Promise<void>
+  /**
+   * A tablet's health for the last minute (D13). The device and its outlet come
+   * from the tablet's own session; a person's session is refused.
+   */
+  reportHealth(report: DeviceHealthReport): Promise<void>
+}
+
+/** What a tablet reports about itself each minute. Counts only. */
+export interface DeviceHealthReport {
+  build: string
+  bootedGates: string[]
+  windowSeconds: number
+  requests: number
+  failed: number
+  slowestMs: number
+}
+
 /** The bag of domain adapters a session provider supplies to its tree. */
 export interface DataAdapters {
+  /** Change gates: the owner turns them, every device reads them. */
+  changeGates: ChangeGatesAdapter
   analytics: import('./analytics').AnalyticsAdapter
   overview: import('./overview').OverviewAdapter
   outlets: OutletsAdapter

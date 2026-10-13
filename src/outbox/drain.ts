@@ -2,6 +2,9 @@ import type { BillingCommand } from '../../shared/billing-command'
 import type { BillingCommandResult } from '@/domain'
 import { BillingDeliveryStore } from './store'
 
+// Never read a change gate anywhere in the outbox: a write queued while a gate
+// was on must still be delivered after it turns off (a-release-can-be-switched-
+// off, D7; pinned by outbox-ignores-change-gates.test.ts).
 export const BILLING_DRAIN_LOCK_NAME = 'shawarmania-billing-delivery-drain'
 export const MAX_BILLING_RETRY_MS = 60_000
 const DEFAULT_LEASE_MS = 5_000

@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useChangeGateRefresh } from '@/change-gates/use-change-gate-refresh'
 import { Navigate, useLocation, useParams } from 'react-router'
 
 import { AppAction } from '@/components/app-action'
@@ -52,6 +53,11 @@ export function RealRoot() {
       return null
     }
   }, [])
+
+  // Keeps this phone's change-gate answers current while somebody is signed in
+  // (a-release-can-be-switched-off, D6). Before sign-in every read would be
+  // refused, so none is made.
+  useChangeGateRefresh(state.status === 'ready' ? adapters?.changeGates : null)
 
   // Checked before the session, deliberately: `/nonsense` matches this branch
   // (a dynamic segment) but names no role, and the answer to it is "no such

@@ -327,6 +327,25 @@ const defs = {
     state: 'live',
   },
   /**
+   * Change gates: which changes every tablet runs, turned by the owner
+   * (a-release-can-be-switched-off). Not to be confused with this registry: a
+   * surface gate here decides whether a screen exists; a change gate decides
+   * which behaviour an existing screen runs.
+   *
+   * **No navigation entry, by the owner's choice** (2026-10-12): it is a
+   * business-wide setting, about the app rather than about an outlet, so its way
+   * in is the account menu beside View Demo, and the bar does not grow. The
+   * demo's copy is reached by its address, `/demo/owner/change-gates`.
+   *
+   * Live since this change's database section: the gates, their history and
+   * every tablet's health are real, and only the owner's token turns one.
+   */
+  'owner-change-gates': {
+    role: 'super_admin',
+    path: 'change-gates',
+    state: 'live',
+  },
+  /**
    * What the restaurant delivery channels' sync did, and what needs the owner
    * about it (#42, #47, #48).
    *

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 
+import { BuildVersion } from '@/components/build-version'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -159,7 +160,8 @@ export function ShiftRequestScreen({
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-canvas p-6 text-content">
+    <div className="relative flex min-h-dvh items-center justify-center bg-canvas p-6 text-content">
+      <BuildVersion className="absolute inset-x-0 bottom-3 text-center" />
       <Card className="w-full max-w-xl">
         {waiting ? (
           <>

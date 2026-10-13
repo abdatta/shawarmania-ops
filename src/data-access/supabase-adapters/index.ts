@@ -21,6 +21,7 @@ import { createSupabaseOverviewAdapter } from './overview'
 import { createSupabaseOutletsAdapter } from './outlets'
 import { createSupabaseCustomerDirectoryAdapter } from './customer-directory'
 import { createSupabaseInsightsAdapter } from './oversight'
+import { createSupabaseChangeGatesAdapter } from './change-gates'
 import type { CounterDeviceSession } from '@/session/counter-session'
 import { CounterResumeCoordinator } from '@/outbox'
 
@@ -48,6 +49,9 @@ export function createSupabaseAdapters(
       })
   }
   return {
+    // Every device reads the gates; only the owner's page turns them
+    // (a-release-can-be-switched-off).
+    changeGates: createSupabaseChangeGatesAdapter(client),
     analytics: createSupabaseAnalyticsAdapter(client),
     overview: createSupabaseOverviewAdapter(client),
     outlets: createSupabaseOutletsAdapter(client, resumeCoordinator, offlineResume),

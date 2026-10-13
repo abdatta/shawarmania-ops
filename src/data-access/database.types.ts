@@ -1970,6 +1970,130 @@ export type Database = {
           },
         ]
       }
+      change_gate_dependencies: {
+        Row: {
+          depends_on: string
+          gate_key: string
+        }
+        Insert: {
+          depends_on: string
+          gate_key: string
+        }
+        Update: {
+          depends_on?: string
+          gate_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "change_gate_dependencies_depends_on_fkey"
+            columns: ["depends_on"]
+            isOneToOne: false
+            referencedRelation: "change_gates"
+            referencedColumns: ["key"]
+          },
+          {
+            foreignKeyName: "change_gate_dependencies_gate_key_fkey"
+            columns: ["gate_key"]
+            isOneToOne: false
+            referencedRelation: "change_gates"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
+      change_gate_events: {
+        Row: {
+          at: string
+          changed_by: string | null
+          enabled: boolean
+          gate_key: string
+          id: string
+          reason: string | null
+          source: string
+        }
+        Insert: {
+          at?: string
+          changed_by?: string | null
+          enabled: boolean
+          gate_key: string
+          id?: string
+          reason?: string | null
+          source: string
+        }
+        Update: {
+          at?: string
+          changed_by?: string | null
+          enabled?: boolean
+          gate_key?: string
+          id?: string
+          reason?: string | null
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "change_gate_events_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      change_gates: {
+        Row: {
+          change_name: string
+          change_number: number | null
+          changed_at: string | null
+          changed_by: string | null
+          code: string
+          created_at: string
+          enabled: boolean
+          key: string
+          kind: string
+          off_means: string
+          on_means: string
+          retired_at: string | null
+          title: string
+        }
+        Insert: {
+          change_name: string
+          change_number?: number | null
+          changed_at?: string | null
+          changed_by?: string | null
+          code: string
+          created_at?: string
+          enabled?: boolean
+          key: string
+          kind: string
+          off_means: string
+          on_means: string
+          retired_at?: string | null
+          title: string
+        }
+        Update: {
+          change_name?: string
+          change_number?: number | null
+          changed_at?: string | null
+          changed_by?: string | null
+          code?: string
+          created_at?: string
+          enabled?: boolean
+          key?: string
+          kind?: string
+          off_means?: string
+          on_means?: string
+          retired_at?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "change_gates_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       counter_device_history: {
         Row: {
           device_id: string
@@ -2478,6 +2602,57 @@ export type Database = {
           phone?: string
         }
         Relationships: []
+      }
+      device_health: {
+        Row: {
+          booted_gates: string[]
+          build: string
+          device_id: string
+          failed: number
+          outlet_id: string
+          reported_at: string
+          requests: number
+          slowest_ms: number
+          window_seconds: number
+        }
+        Insert: {
+          booted_gates?: string[]
+          build: string
+          device_id: string
+          failed: number
+          outlet_id: string
+          reported_at?: string
+          requests: number
+          slowest_ms: number
+          window_seconds: number
+        }
+        Update: {
+          booted_gates?: string[]
+          build?: string
+          device_id?: string
+          failed?: number
+          outlet_id?: string
+          reported_at?: string
+          requests?: number
+          slowest_ms?: number
+          window_seconds?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_health_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: true
+            referencedRelation: "counter_devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "device_health_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       drawer_cash_out: {
         Row: {
@@ -4459,6 +4634,7 @@ export type Database = {
         Args: { cutover: string; d: string }
         Returns: string
       }
+      app_change_gate: { Args: { p_key: string }; Returns: boolean }
       app_counter_device: { Args: never; Returns: string }
       app_counter_device_concerns_me: {
         Args: { p_device: string }
@@ -4893,6 +5069,20 @@ export type Database = {
           p_shift_id?: string
         }
         Returns: Json
+      }
+      change_gate_apply: {
+        Args: {
+          p_by: string
+          p_enabled: boolean
+          p_key: string
+          p_reason: string
+          p_source: string
+        }
+        Returns: undefined
+      }
+      change_gate_force: {
+        Args: { p_enabled: boolean; p_key: string; p_reason: string }
+        Returns: undefined
       }
       claim_aggregator_code: {
         Args: { p_channel: string }
@@ -5855,6 +6045,17 @@ export type Database = {
             Returns: string
           }
         | { Args: { p_unsent: number }; Returns: string }
+      report_device_health: {
+        Args: {
+          p_booted_gates: string[]
+          p_build: string
+          p_failed: number
+          p_requests: number
+          p_slowest_ms: number
+          p_window_seconds: number
+        }
+        Returns: undefined
+      }
       request_counter_shift: {
         Args: {
           p_code_hash: string
@@ -5948,6 +6149,10 @@ export type Database = {
       }
       set_aggregator_login_identifier: {
         Args: { p_channel: string; p_identifier: string }
+        Returns: undefined
+      }
+      set_change_gate: {
+        Args: { p_enabled: boolean; p_key: string; p_reason: string }
         Returns: undefined
       }
       set_kitchen_filter: {

@@ -23,6 +23,9 @@ export default defineConfig({
       // Mutates counter telemetry and restores it with the service-role key.
       // Its dedicated phase also injects that key before Vitest collects it.
       'supabase/tests/rest/zz-counter-telemetry.test.ts',
+      // Turns a change gate and writes tablet health, then restores both with
+      // the service-role key: vitest.change-gates.config.ts.
+      'supabase/tests/rest/zz-change-gates.test.ts',
       // Writes drawer anchors and counts and removes them with the
       // service-role key, so it has its own phase:
       // vitest.ledger-timing.config.ts.

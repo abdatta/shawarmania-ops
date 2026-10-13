@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { BuildVersion } from '@/components/build-version'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
 import { LoadingList } from '@/components/ui/loading'
@@ -160,6 +161,9 @@ export function CounterShell({
 
           <BillingPanel />
           <CounterExpenses shift={shift} />
+          {/* Below Expenses, at the foot of the scroll: it takes no room from the
+              till above it. */}
+          <BuildVersion className="pb-2 text-center" />
           <FinishDaySheet
             open={finishOpen}
             shiftId={shift.id}

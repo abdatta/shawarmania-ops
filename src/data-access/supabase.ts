@@ -1,7 +1,10 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
+import { bootSnapshot } from '@/change-gates/snapshot'
+
 import type { Database } from './database.types'
 import { isDemoScopeActive } from './demo-scope'
+import { deviceRequestHealth, instrumentFetch } from './request-health'
 
 /**
  * The only module in the app permitted to import the Supabase client
@@ -45,7 +48,16 @@ export function getSupabaseClient(): SupabaseClient<Database> {
     )
   }
 
+  // Every request counted for the tablet's health report, but only when the
+  // `tablet-health` gate was on as this page loaded (a-release-can-be-switched-
+  // off, D13, D16): the counting wraps every request the app makes, so it is
+  // gated like any other new behaviour. Off, the client is exactly as it was.
+  const counted = bootSnapshot()['tablet-health']
+    ? instrumentFetch((input, init) => globalThis.fetch(input, init), deviceRequestHealth)
+    : undefined
+
   client = createClient<Database>(url, anonKey, {
+    ...(counted ? { global: { fetch: counted } } : {}),
     auth: {
       persistSession: true,
       autoRefreshToken: true,

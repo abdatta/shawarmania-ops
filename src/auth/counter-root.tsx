@@ -1,4 +1,6 @@
 import { useMemo } from 'react'
+import { useDeviceHealthReport } from '@/change-gates/use-device-health-report'
+import { useChangeGateRefresh } from '@/change-gates/use-change-gate-refresh'
 import { Navigate } from 'react-router'
 
 import { LoadingShell } from '@/components/ui/loading'
@@ -43,6 +45,11 @@ export function CounterRoot() {
       return null
     }
   }, [counterSession])
+
+  // This tablet's change-gate answers, kept current (a-release-can-be-switched-off, D6).
+  useChangeGateRefresh(counterSession ? adapters?.changeGates : null)
+  // Its health, each minute, while Tablet health is on (D13).
+  useDeviceHealthReport(counterSession ? adapters?.changeGates : null)
 
   if (state.status === 'loading') return <LoadingShell />
   if (state.status === 'unavailable') return <UnconfirmedSession onRetry={revalidate} />

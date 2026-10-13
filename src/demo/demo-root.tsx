@@ -4,8 +4,10 @@ import { useLocation, useParams } from 'react-router'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { enterDemoScope, exitDemoScope } from '@/data-access/demo-scope'
 import { createDemoData, createMockAdapters, personaFixtures } from '@/data-access/mock'
+import { forgetDemoGateTurns } from '@/data-access/mock/change-gates'
 import { trackAdapterWrites } from '@/data-access/track-adapter-writes'
 import { getPartState, isRenderable } from '@/gates/registry'
+import { ChangeGatesContext } from '@/change-gates/context'
 import { NotFound } from '@/routes/not-found'
 import { PhoneShell } from '@/shell/phone-shell'
 import { SessionContext } from '@/session/context'
@@ -79,17 +81,21 @@ export function DemoRoot() {
   const [started, setStarted] = useState({ count: 0, epoch: 0 })
   const resetCount = started.count
   const reset = useCallback(() => {
+    // A reset is the starting scenario, and that has every change gate on.
+    forgetDemoGateTurns()
     const epoch = Date.now()
     // Every other demo tab starts again with this one (#70): a counter and a
     // kitchen walked side by side must stay one demo.
     announceDemoReset(epoch)
     setStarted((held) => ({ count: held.count + 1, epoch }))
   }, [])
-  const resetFromAnotherTab = useCallback(
-    (epoch: number) =>
-      setStarted((held) => (epoch > held.epoch ? { count: held.count + 1, epoch } : held)),
-    [],
-  )
+  const resetFromAnotherTab = useCallback((epoch: number) => {
+    setStarted((held) => {
+      if (epoch <= held.epoch) return held
+      forgetDemoGateTurns()
+      return { count: held.count + 1, epoch }
+    })
+  }, [])
 
   /**
    * The demo's data, which **outlives a role switch**. Several mocks are built
@@ -117,6 +123,22 @@ export function DemoRoot() {
     [role, data],
   )
 
+  /**
+   * The demo's change gates (a-release-can-be-switched-off, D15): every one on
+   * until the walkthrough turns it off from the demo's Change gates page. A turn takes effect at once: the screens below restart under the new
+   * answers, as a real page would after its reload, and the demo's data stays,
+   * because a walkthrough comparing the two behaviours needs the same orders on
+   * both sides of the comparison.
+   */
+  const [gateTurns, setSwitchTurns] = useState(0)
+  useEffect(() => data.changeGates.subscribe(() => setSwitchTurns((count) => count + 1)), [data])
+  const gates = useMemo(
+    () => data.changeGates.snapshot(),
+    // gateTurns is the point of this dependency: a turn is a new snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data, gateTurns],
+  )
+
   // A counter in one tab rings a kitchen in another (#70): the demo's orders are
   // mirrored between same-origin demo tabs. Demo only; real tablets meet at the
   // server and nowhere else.
@@ -137,24 +159,25 @@ export function DemoRoot() {
         {/* Keyed so a reset remounts the surfaces too. New adapters alone
             would reload the data and leave a half-filled form open over it,
             which is not "the same place every walkthrough starts". */}
-        <AdaptersContext.Provider key={resetCount} value={adapters}>
-          {/*
+        <ChangeGatesContext.Provider value={gates}>
+          <AdaptersContext.Provider key={`${resetCount}-${gateTurns}`} value={adapters}>
+            {/*
             The Biller is a tablet, not a phone, and since this change it is the
             *enrolled* tablet's own shell rather than a role-shell imitation of
             one. The other three roles are people holding phones, which is what
             `PhoneShell` is for.
           */}
-          {kitchen ? (
-            atTabletRoot ? (
-              <DemoKitchen banner={<DemoBanner />} today={data.store.today} />
-            ) : (
-              <>
-                <DemoBanner />
-                <NotFound />
-              </>
-            )
-          ) : session.role === 'biller' ? (
-            /*
+            {kitchen ? (
+              atTabletRoot ? (
+                <DemoKitchen banner={<DemoBanner />} today={data.store.today} />
+              ) : (
+                <>
+                  <DemoBanner />
+                  <NotFound />
+                </>
+              )
+            ) : session.role === 'biller' ? (
+              /*
               A tablet has exactly one screen. Production mounts `/counter` as a
               leaf route, so `/counter/team` and `/counter/billing` are equally
               not pages there — the tablet's surfaces are panels within its shell,
@@ -162,21 +185,22 @@ export function DemoRoot() {
               page does not exist" a Biller has always met, and stops the demo
               offering a phone-shaped copy of a screen the tablet already holds.
             */
-            atTabletRoot ? (
-              /* The store's connectivity rather than the host's own, so taking
+              atTabletRoot ? (
+                /* The store's connectivity rather than the host's own, so taking
                  the counter offline survives a step onto a phone and back —
                  which is precisely the walkthrough this scene exists for. */
-              <DemoCounter banner={<DemoBanner />} connectivity={data.store.connectivity} />
+                <DemoCounter banner={<DemoBanner />} connectivity={data.store.connectivity} />
+              ) : (
+                <>
+                  <DemoBanner />
+                  <NotFound />
+                </>
+              )
             ) : (
-              <>
-                <DemoBanner />
-                <NotFound />
-              </>
-            )
-          ) : (
-            <PhoneShell banner={<DemoBanner />} />
-          )}
-        </AdaptersContext.Provider>
+              <PhoneShell banner={<DemoBanner />} />
+            )}
+          </AdaptersContext.Provider>
+        </ChangeGatesContext.Provider>
       </DemoResetContext.Provider>
     </SessionContext.Provider>
   )

@@ -23,6 +23,11 @@ import { createMockOverviewAdapter } from './overview'
 import { createMockLedgerStatementAdapter } from './ledger-statement'
 import { createMockMenuAdapter } from './menu'
 import { createMockOutletsAdapter } from './outlets'
+import {
+  createDemoChangeGates,
+  createMockChangeGatesAdapter,
+  type DemoChangeGates,
+} from './change-gates'
 import { personaFixtures } from './fixtures/personas'
 import { createDemoStore } from './store'
 
@@ -68,6 +73,12 @@ export interface DemoData {
   counter: DemoCounter
   /** The demo kitchen tablet's filter and acknowledgements (#70). */
   kitchen: DemoKitchen
+  /**
+   * The demo's change gates, every one on until the walkthrough turns it off
+   * (a-release-can-be-switched-off). Session-scoped so a gate turned as the
+   * owner stays turned at the counter.
+   */
+  changeGates: DemoChangeGates
 }
 
 export function createDemoData(options: { matureHistory?: boolean } = {}): DemoData {
@@ -81,6 +92,7 @@ export function createDemoData(options: { matureHistory?: boolean } = {}): DemoD
     customers: createDemoCustomers(store.today),
     counter: createDemoCounter(),
     kitchen: createDemoKitchen(),
+    changeGates: createDemoChangeGates(),
   }
 }
 
@@ -204,6 +216,7 @@ export function createMockAdapters(
     // persona's name stands in for the username the tablet types — demo mode has
     // no usernames, and a handshake with nobody to name is not a handshake.
     kitchen: createMockKitchenAdapter(store, data.kitchen),
+    changeGates: createMockChangeGatesAdapter(data.changeGates, role),
     counter: createMockCounterAdapter(
       data.counter,
       store,

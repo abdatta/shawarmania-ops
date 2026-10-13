@@ -1,3 +1,4 @@
+import { BuildVersion } from '@/components/build-version'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, SlidersHorizontal, VolumeX, WifiOff } from 'lucide-react'
 
@@ -140,6 +141,7 @@ export function KitchenBoardScreen({ player }: { player?: TunePlayer }) {
           </div>
         )}
       </main>
+      <BuildVersion className="px-4 pb-3 text-center" />
 
       {(stale || muted || waiting.length > 0) && (
         <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex flex-col items-center gap-3 px-4">
