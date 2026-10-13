@@ -1140,8 +1140,15 @@ generates a synthetic history sized to production's row counts (bills, order
 lines, payments, attendance days, per outlet), read from production as **counts
 only** and recorded in the script with their date. Names are generated, phone
 numbers come from a reserved fictional range, amounts are plausible integer paise.
-**No production row is ever copied into staging**, the menu included — the script
-generates a menu of the same shape (items, kitchens, categories).
+**No production row about a person is ever copied into staging.** The one set
+copied is a trading outlet's menu: *Cafe Staging* carries Kalyani Cafe's menu as
+production held it on 13 October — names, descriptions, prices, veg marks and what
+was switched off — at the owner's request after the first walkthrough, because
+*Test dish 37* made every screen read as a test. A menu is public business facts the
+storefront already shows. Staff and customer names are invented but realistic,
+expenses read like receipts, and about a third of past bills carry a customer, found
+by phone the way the counter finds one. The first version generated a menu of the
+same shape with placeholder names; it was rejected for exactly that reason.
 
 **Free-plan pausing.** A Free project pauses after a week without activity. Every
 push to `stage` migrates it, which normally keeps it awake; when it has paused,
@@ -1158,16 +1165,21 @@ production's — the same derive-the-ref-from-the-URL guard Deploy's `functions`
 uses, inverted.
 
 **How it is told apart.** A staging build is built with
-`VITE_APP_ENVIRONMENT=staging` and shows a permanent band — **Staging · not a real
-outlet** — on every surface, in every role, and its web manifest names the app
+`VITE_APP_ENVIRONMENT=staging` and shows a permanent blue ribbon reading
+**Staging** across the top-left corner of every surface, in every role — named
+*Staging · not a real outlet* to a screen reader, floating over the top bar and
+letting every tap through — and its web manifest names the app
 *Shawarmania Ops (staging)*, short name *Staging*, under its own icon: the same mark
 with the wrap and flame recoloured blue on the same black field, chosen by the owner
 on 2026-10-13 from mock-ups of new fields, flame colours, hazard tape and a blueprint
 line drawing. A whole new field colour read as a different app rather than a sibling;
 a blue flame alone was too small a change to see at launcher size. A tablet at an
-outlet that somehow opened the staging address could not mistake it for the counter. Production builds have no band and
+outlet that somehow opened the staging address could not mistake it for the counter. Production builds have no ribbon and
 no code path for one beyond the build-time constant. This is a build
-configuration, not a change gate: production never runs the band.
+configuration, not a change gate: production never runs the ribbon. The first
+version was a white band across the top of every screen, which took a row from every
+layout; the owner swapped it for the ribbon after using it (2026-10-13), sized so the
+whole strip stays inside the shortest top bar, the phone shell's 54px.
 
 **Who can get in.** The staging address is public, as production's is; the anon
 key in its bundle is staging's. Nobody can sign in without an account in staging's
@@ -1185,7 +1197,7 @@ bill rung on staging can never text a real phone number and a sync can never rea
 a real restaurant account.
 
 **How the owner runs the fake outlet.** The runbook in `docs/RELEASES.md`: on
-staging, the owner (phone) creates an outlet named *Test Cafe*, sets up laptop 1 as
+staging, the owner (phone) creates an outlet named *Cafe Staging*, sets up laptop 1 as
 its counter with a one-time code and opens a shift through the two-device
 handshake, signs in laptop 2 as its kitchen, and turns the gate under test on
 from staging's Change gates page. The laptops' screens are the tablets'; the owner
@@ -1203,15 +1215,15 @@ environment in CI) and never from the repo. `staging.yml` runs it after each
 publish; an agent runs it locally when asked to verify on staging.
 
 It works only at *Smoke tests*, an outlet the seed makes for it with its own
-Franchise Admin and Biller, never at *Test Cafe*: the manager sets up a counter and
+Franchise Admin and Biller, never at *Cafe Staging*: the manager sets up a counter and
 a kitchen tablet with setup codes, the two meet through one order, one
 acknowledgement and one payment, both shifts are left and both tablets removed, and
 any a crashed run left are removed first. Then the owner turns a change gate on and
-back off, restoring what it found, with the band visible on every screen. The owner
+back off, restoring what it found, with the ribbon visible on every screen. The owner
 asked for this on 2026-10-13, during the first fake-outlet walkthrough: a push could
 otherwise ring an order onto the owner's counter, press *Leave counter* on a shift
 the owner held through the same test Biller, or leave two permanent test tablets in
-Test Cafe's list. The gate turn is the one thing still shared, because gates are
+Cafe Staging's list. The gate turn is the one thing still shared, because gates are
 business-wide. Nothing at *Smoke tests* is pruned: a run leaves about one bill and a
 few small rows, around 20 kB, and staging held 39 MB of the Free plan's 500 MB when
 that was measured. Rejected: seeded tablets the suite signs in as by password (the
@@ -1286,7 +1298,7 @@ branch, so Promote, Staging reset, Republish and Hotfix cannot run until this ch
 on `main`. This change therefore reaches `main` by one last direct push, of the SHA
 staging verified, in the owner's window; the `main` ruleset goes on straight after, and
 every later change goes through Promote. Until then nothing can seed staging by hand, so
-the Staging workflow seeds a project that holds no Test Cafe itself, after migrating, and
+the Staging workflow seeds a project that holds no Cafe Staging itself, after migrating, and
 leaves a seeded one alone.
 
 **`main` is protected by a repository ruleset**: no direct pushes, no force pushes,
@@ -1432,7 +1444,7 @@ and add a test for the pair.
 | Staging is paused when a change is pushed | `staging.yml` says so in one sentence; the runbook says how to resume. |
 | A session pushes to `main` out of habit | The ruleset refuses it; the instructions change in the same commit that turns the ruleset on (D20). |
 | Promotion becomes a rubber stamp | The run lists every commit and change folder it carries; behaviour still ships off, so a careless promotion changes nothing until a gate is turned on. |
-| A staging account or URL reaches staff | Accounts are created only by the owner; the band says *not a real outlet* on every screen. |
+| A staging account or URL reaches staff | Accounts are created only by the owner; the ribbon says *Staging* on every screen. |
 
 ## Open questions
 

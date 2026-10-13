@@ -107,6 +107,13 @@
   --thirdparty-whatsapp-teal-green: #007d66;
 }
 
+/* Staging's blue: the middle stop of the staging icon's wrap, so the ribbon on
+   a staging build's screens matches the icon it was opened from
+   (a-release-can-be-switched-off, D19). Production never draws it. */
+:root {
+  --staging-blue: #1d4ed8;
+}
+
 /* ── Semantic layer: light — the counter default ───────────────────────── */
 :root,
 [data-theme='light'] {
@@ -182,6 +189,10 @@
   --kitchen-edit-text: var(--brand-amber-deep);
   --kitchen-cancel: var(--brand-flame-red);
   --on-kitchen-cancel: var(--brand-white);
+
+  /* The staging ribbon, the same in both themes. */
+  --staging-ribbon: var(--staging-blue);
+  --on-staging-ribbon: var(--brand-white);
 }
 
 /* ── Semantic layer: dark — for phones in the evening ──────────────────── */
@@ -233,4 +244,8 @@
   --kitchen-edit-text: var(--brand-amber);
   --kitchen-cancel: var(--brand-flame-red);
   --on-kitchen-cancel: var(--brand-white);
+
+  /* The staging ribbon, the same in both themes. */
+  --staging-ribbon: var(--staging-blue);
+  --on-staging-ribbon: var(--brand-white);
 }

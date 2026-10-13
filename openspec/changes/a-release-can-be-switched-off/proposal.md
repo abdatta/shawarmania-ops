@@ -198,12 +198,13 @@ Added by the owner on 2026-10-12, after the rest of this proposal (design D19, D
 - **A staging copy of the whole system**: a separate Supabase project, in a
   separate Supabase account, on the same plan and compute size as production, with
   its own address on Cloudflare Pages. It holds synthetic data only, generated at
-  production's scale so its reads cost what production's do, and never a
+  production's scale so its reads cost what production's do — with the trading
+  outlet's real menu, which is public, and invented people — and never a
   third-party secret, so a bill rung there texts nobody and no sync reaches a real
   restaurant account.
-- **The owner runs it as a fake outlet**: one laptop as *Test Cafe*'s counter, one
+- **The owner runs it as a fake outlet**: one laptop as *Cafe Staging*'s counter, one
   as its kitchen, their phone as the owner — and tries each change there before
-  production. Every screen carries a **Staging · not a real outlet** band.
+  production. Every screen carries a blue **Staging** ribbon in its top-left corner.
 - **Nobody else can see it.** Production's accounts do not exist there; only the
   owner creates staging accounts.
 - **Every push goes to a `stage` branch**, which runs the full suite and publishes
@@ -299,7 +300,7 @@ This change follows its own rule as far as it can:
 - **`tablet-health`** (*TH*) — On: tablets count their requests and report their health.
   Off: tablets send nothing new, exactly as today.
 - **No gate: staging, the `stage` branch and promotion.** They change how a
-  commit reaches production, not how any device behaves; the staging band exists
+  commit reaches production, not how any device behaves; the staging ribbon exists
   only in a staging build (design D19).
 - **No gate: the gate machinery, the Change gates page and the tooling.** The store,
   its read and the apply path are what gates stand on and cannot be gated by

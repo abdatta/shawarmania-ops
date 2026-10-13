@@ -38,4 +38,6 @@ export function withIconLinks(html: string, environment: AppEnvironment): string
   return html.replace(/href="\/icons\/(?=[^"/]+\.png")/g, `href="/${directory}/`)
 }
 
-export const STAGING_BAND_TEXT = 'Staging · not a real outlet'
+/** What the staging ribbon says, and what it says to a screen reader. */
+export const STAGING_RIBBON_TEXT = 'Staging'
+export const STAGING_LABEL = 'Staging · not a real outlet'

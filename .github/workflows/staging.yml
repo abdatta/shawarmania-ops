@@ -126,7 +126,7 @@ jobs:
       # A new staging project holds nothing for the smoke suite to sign in to, and
       # Staging reset cannot seed it yet: GitHub runs a hand-started workflow only
       # from the default branch, which `stage` is not. So every push seeds what
-      # staging is missing (Test Cafe, the smoke suite's outlet) and leaves what it
+      # staging is missing (Cafe Staging, the smoke suite's outlet) and leaves what it
       # holds alone. The test password lives in this environment as well as in
       # `staging-smoke`.
       - name: Seed whatever staging is missing
@@ -231,7 +231,7 @@ jobs:
 
   # Smoke tests' manager and biller, a counter and a kitchen they set up and
   # remove, one order, one payment, and the owner's change-gate turn, against
-  # what was published. Test Cafe is never touched.
+  # what was published. Cafe Staging is never touched.
   smoke:
     needs: publish
     runs-on: ubuntu-latest

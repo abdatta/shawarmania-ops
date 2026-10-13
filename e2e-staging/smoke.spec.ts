@@ -4,7 +4,7 @@ import { expect, test, type Browser, type BrowserContext, type Page } from '@pla
  * Staging's smoke suite (a-release-can-be-switched-off, design D19): what
  * Staging runs after every publish, and what an agent runs when asked to verify
  * on staging. It works only at *Smoke tests*, the outlet `scripts/seed-staging.mjs`
- * made for it, as that outlet's own manager and biller, so *Test Cafe* and its
+ * made for it, as that outlet's own manager and biller, so *Cafe Staging* and its
  * accounts stay the owner's: nothing the owner is trying on the fake outlet is
  * rung over, left or removed by a push.
  *
@@ -16,8 +16,8 @@ import { expect, test, type Browser, type BrowserContext, type Page } from '@pla
  * and any a crashed run left are removed first, so the outlet's Tablets list is
  * empty between runs. Then the owner turns the probe change gate on and back off
  * from the Change gates page, restoring whatever it found: gates are
- * business-wide, the one thing this run shares with the owner. The staging band
- * is checked on every screen.
+ * business-wide, the one thing this run shares with the owner. The staging
+ * ribbon is checked on every screen.
  *
  * Passwords come from the environment — `STAGING_TEST_PASSWORD` locally, the
  * `staging-smoke` GitHub environment in CI — and never from this repository.
@@ -31,7 +31,8 @@ function required(name: string): string {
 
 const PASSWORD = required('STAGING_TEST_PASSWORD')
 
-const BAND = 'Staging · not a real outlet'
+/** The ribbon every staging screen carries in its corner. */
+const RIBBON = 'staging-ribbon'
 
 /** The seed's *Smoke tests* outlet, and a suffix that names this run's tablets. */
 const SMOKE_OUTLET = '5a000000-0000-4000-a000-000000000002'
@@ -46,19 +47,19 @@ async function phone(
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
   const page = await context.newPage()
   await page.goto('sign-in')
-  await expect(page.getByText(BAND)).toBeVisible()
+  await expect(page.getByTestId(RIBBON)).toBeVisible()
   await page.getByLabel('Username or email', { exact: true }).fill(username)
   await page.getByLabel('Password').fill(PASSWORD)
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).not.toHaveURL(/\/sign-in$/)
-  await expect(page.getByText(BAND)).toBeVisible()
+  await expect(page.getByTestId(RIBBON)).toBeVisible()
   return { context, page }
 }
 
 /** The manager's phone on *Smoke tests*, once its tablets have been read. */
 async function smokeTablets(manager: Page) {
   await manager.goto(`admin/outlets/${SMOKE_OUTLET}`)
-  await expect(manager.getByText(BAND)).toBeVisible()
+  await expect(manager.getByTestId(RIBBON)).toBeVisible()
   await expect(manager.getByRole('button', { name: 'Re-read the tablets' })).toBeVisible({
     timeout: 30_000,
   })
@@ -101,13 +102,13 @@ async function setUpTablet(
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
   const page = await context.newPage()
   await page.goto('counter/setup')
-  await expect(page.getByText(BAND)).toBeVisible()
+  await expect(page.getByTestId(RIBBON)).toBeVisible()
   await page.getByLabel('Setup code').fill(code)
   await page.getByRole('button', { name: 'Set up', exact: true }).click()
   await expect(page).toHaveURL(use === 'Kitchen' ? /\/kitchen$/ : /\/counter$/, {
     timeout: 30_000,
   })
-  await expect(page.getByText(BAND)).toBeVisible()
+  await expect(page.getByTestId(RIBBON)).toBeVisible()
   return { context, page }
 }
 
@@ -218,7 +219,7 @@ test('a counter and a kitchen set up on staging trade end to end, and the owner 
   const owner = await phone(browser, 'staging.owner')
   try {
     await owner.page.goto('owner/change-gates/probe')
-    await expect(owner.page.getByText(BAND)).toBeVisible()
+    await expect(owner.page.getByTestId(RIBBON)).toBeVisible()
     const since = owner.page.getByTestId('gate-since')
     const wasOn = /^On/.test((await since.textContent()) ?? '')
     for (const turnOn of wasOn ? [false, true] : [true, false]) {

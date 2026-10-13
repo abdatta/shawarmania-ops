@@ -158,6 +158,12 @@ export const CHECKS = [
     note: 'label on a kitchen cancel fill',
   },
   { fg: '--kitchen-edit-text', bg: '--surface', min: AA_TEXT, note: 'kitchen edit text on a card' },
+  {
+    fg: '--on-staging-ribbon',
+    bg: '--staging-ribbon',
+    min: AA_TEXT,
+    note: 'Staging on the staging ribbon',
+  },
 
   // A pipeline card's two state controls (#55) are identified by the colour of
   // the box they carry while unchecked, drawn straight onto the raised card. So

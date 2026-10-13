@@ -83,7 +83,7 @@ describe('Staging', () => {
     expect(migrate.indexOf('supabase db push')).toBeLessThan(migrate.indexOf('seed-staging.mjs'))
   })
 
-  it('smokes only at its own outlet, never as Test Cafe’s accounts or tablets', () => {
+  it('smokes only at its own outlet, never as Cafe Staging’s accounts or tablets', () => {
     const smoke = readFileSync(resolve(process.cwd(), 'e2e-staging/smoke.spec.ts'), 'utf8')
     const seed = readFileSync(resolve(process.cwd(), 'supabase/staging/seed.sql'), 'utf8')
     expect(seed).toMatch(/'smoke-tests', 'Smoke tests'/)

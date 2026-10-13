@@ -7,7 +7,7 @@
  *   STAGING_TEST_PASSWORD=… node scripts/seed-staging.mjs --local   # rehearse on the local stack
  *   … node scripts/seed-staging.mjs --if-empty   # seed only what staging is missing
  *
- * Runs `supabase/staging/seed.sql` — *Test Cafe*, an account per role, a generated
+ * Runs `supabase/staging/seed.sql` — *Cafe Staging*, an account per role, a generated
  * menu and about three thousand bills rung through the counter's own command; and
  * *Smoke tests*, the smoke suite's own outlet — against the staging database,
  * after refusing anything that names production's project. The Staging workflow

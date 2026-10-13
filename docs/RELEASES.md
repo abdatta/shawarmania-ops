@@ -298,20 +298,23 @@ turned on.
 
 A separate Supabase project, in a separate Supabase account, on the same plan and
 compute size as production, published from the `stage` branch to
-`stage-ops.shawarmania.in`. Every screen carries the band **Staging · not a real
-outlet**, and the installed app is called *Shawarmania Ops (staging)*. Its data is
-synthetic and at production's scale; no production row is ever copied there; and
+`stage-ops.shawarmania.in`. Every screen carries a blue **Staging** ribbon in its
+top-left corner, and the installed app is called *Shawarmania Ops (staging)*, under
+a blue copy of the icon. Its data is synthetic and at production's scale. *Cafe
+Staging* carries Kalyani Cafe's real menu, copied from production on 13 October
+because a menu is public; nothing about a person is ever copied, so staff and
+customers are invented names; and
 it holds none of the third parties' secrets, so it can text no phone and reach no
 restaurant account ([Operations](OPERATIONS.md#never-configured-on-staging)).
 
 **How a commit gets there.** Every commit is pushed to `stage`. Staging runs the
-suite, migrates the staging project, seeds it if it holds no Test Cafe, deploys its
+suite, migrates the staging project, seeds it if it holds no Cafe Staging, deploys its
 Edge Functions, publishes a staging build, and runs the smoke suite against it. A Free project pauses after a
 week without a push; Staging then stops with one sentence saying to resume it from
 the staging account's dashboard.
 
 **Running the fake outlet.** On staging, from the owner's phone: create an outlet
-— or use *Test Cafe*, which the seed made — and on Outlets → the outlet → Tablets,
+— or use *Cafe Staging*, which the seed made — and on Outlets → the outlet → Tablets,
 issue a setup code; type it on laptop 1 at the staging address and it becomes the
 counter. Do the same for laptop 2 as a kitchen. Open each one's shift with the
 handshake: the laptop asks for a username and shows four digits, which the person
@@ -326,7 +329,7 @@ works only at *Smoke tests*, an outlet of its own, as that outlet's manager and
 biller: it sets up a counter and a kitchen tablet with setup codes, walks them
 through one order, one acknowledgement and one payment, leaves both shifts and
 removes both tablets, then has the owner turn a change gate on and back off,
-restoring what it found. The band is checked on every screen. *Test Cafe* and its
+restoring what it found. The ribbon is checked on every screen. *Cafe Staging* and its
 accounts are never touched, so a push cannot disturb the owner mid-walkthrough;
 the gate turn is the one thing shared, because gates are business-wide.
 
@@ -354,7 +357,7 @@ none starts, run Staging by hand on `stage` (Actions → Staging → Run workflo
 `main` is never rewritten.
 
 **Starting over.** Actions → Staging reset wipes staging's database, re-applies every
-migration on `stage`, and re-runs `scripts/seed-staging.mjs`: *Test Cafe*, a test
+migration on `stage`, and re-runs `scripts/seed-staging.mjs`: *Cafe Staging*, a test
 account for every role and about three thousand bills rung through the counter's
 own command, on a tablet then removed so its Tablets list starts empty; and *Smoke
 tests*, the smoke suite's outlet, with its own manager, biller and three dishes.

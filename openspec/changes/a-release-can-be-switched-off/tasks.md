@@ -571,13 +571,33 @@ staging must verify this change before 10 promotes it to production.
   build code and a Copy is gone. Tests read the code from the stamp's
   `data-build-code`; the demo suite checks the clipboard itself.
   *(Done 2026-10-13: unit 7 tests, demo e2e green with gates off and on.)*
-- [ ] 9.13 **The fake outlet, with the owner.** Laptop 1 as *Test Cafe*'s counter
+- [x] 9.12c Staging reads as a real outlet, and says so quietly (D19, the owner's
+  calls during 9.13): *Test Cafe* is *Cafe Staging*, with Kalyani Cafe's menu as
+  production held it on 13 October (65 items in 11 categories, read read-only and
+  written into the seed), invented but realistic staff and customer names, receipt-like
+  expenses, and a customer on about a third of past bills; the white band is a blue
+  corner ribbon reading *Staging*, inside the 54px top bar, letting taps through.
+  Staging is wiped and reseeded once for it, since the history is rung from the menu.
+  *(Done 2026-10-13: the full-scale seed in 47 s locally — 3,009 bills, 1,051 with a
+  customer, none of an item that is switched off; ribbon unit tests, contrast 6.7:1
+  in both themes, and the smoke suite green against a local staging build.)*
+- [x] 9.13 **The fake outlet, with the owner.** Laptop 1 as *Cafe Staging*'s counter
   (one-time code, shift handshake from the owner's phone), laptop 2 as its kitchen,
   the phone as owner. The owner turns `probe` on and off from staging's
   Change gates page and both laptops follow without a touch; then `tablet-health` on,
   and the page shows both laptops' readings. Ring orders through one simulated
   service. Read staging's request counts from its logs and compare with the budget
   (5.7). Record what was seen here.
+  *(Done by the owner, 14 October 01:35–05:16 IST, on the staging that still held
+  *Test Cafe*: their laptop as the counter in Brave ("Brave Counter"), their Android
+  phone as the kitchen in Chrome ("Chrome Android"), the owner and staff in other
+  browsers on the laptop. Seven orders rung, acknowledged and mostly paid; `probe` on
+  at 03:47 and off at 05:16, `tablet-health` on at 05:00. The owner: "it all looks
+  good." Tablet health's readings, read from staging's `device_health`: the counter
+  2 requests a minute and the kitchen 3, against the budget's 5 and 14 (5.7) and the
+  roughly 600 a minute #74's counter made; slowest request 5.8 s once on the counter
+  and 0.8 s on the kitchen — the counter's is one sample, worth watching when Tablet
+  health first runs in production. Recorded before staging was wiped for 9.12c.)*
 - [ ] 9.14 Promote rehearsal: Promote a SHA with no successful Staging run is
   refused; Promote with no SHA, while `stage`'s tip is docs-only, takes the newest
   verified commit beneath it and lists the tip as left behind; Promote of a SHA `main` is not an ancestor of is refused; a direct push to

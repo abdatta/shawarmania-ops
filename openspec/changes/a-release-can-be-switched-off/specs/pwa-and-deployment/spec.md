@@ -116,12 +116,14 @@ A staging environment SHALL exist as a Supabase project separate from production
 in a Supabase account that holds no production project, on the same plan and
 compute size as production, with its own frontend address. It SHALL hold synthetic
 data only, generated at production's row counts; no production row SHALL be copied
-into it. It SHALL hold no third-party secret — no aggregator credential, no SMS key,
+into it except a trading outlet's menu, which is public, and nothing about a person
+ever. It SHALL hold no third-party secret — no aggregator credential, no SMS key,
 no receipt Worker URL or secret — and every Edge Function and scheduled job that
 reaches outside the project SHALL do nothing or fail closed there. Only the owner
-SHALL create staging accounts. A staging build SHALL show a band reading **Staging ·
-not a real outlet** on every surface and in every role, and a production build SHALL
-not.
+SHALL create staging accounts. A staging build SHALL show a ribbon reading
+**Staging** across the top-left corner of every surface and in every role, named
+*Staging · not a real outlet* to assistive technology and letting every tap through,
+and a production build SHALL not.
 
 #### Scenario: A bill on staging texts nobody
 
@@ -131,7 +133,7 @@ not.
 #### Scenario: Staging cannot be mistaken for the counter
 
 - **WHEN** any role opens any surface of a staging build
-- **THEN** the staging band is visible, and a production build of the same commit
+- **THEN** the staging ribbon is visible, and a production build of the same commit
   shows none
 
 #### Scenario: Staging tooling refuses production
