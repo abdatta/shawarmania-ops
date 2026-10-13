@@ -337,6 +337,17 @@ Because history is linear, a promotion carries everything beneath its commit;
 because every behaviour change ships off, carrying a change staged but not yet tried
 is safe, and the summary lists it.
 
+**Squashing on stage.** Commits on `stage` that are not yet on `main` may be
+squashed and force-pushed: `git log origin/main..origin/stage` lists them, and
+`git push --force-with-lease origin HEAD:stage` replaces them without dropping
+anything someone else pushed meanwhile. Never rewrite below `main`'s tip: Staging's
+first job refuses a `stage` that no longer contains `main`, and Promote cannot
+fast-forward to it. A squash makes a new commit that no Staging run has verified
+yet. The force push starts Staging like any push, since GitHub reads the paths of
+the commits pushed rather than the net change, so promote once that run passes. If
+none starts, run Staging by hand on `stage` (Actions → Staging → Run workflow).
+`main` is never rewritten.
+
 **Starting over.** Actions → Staging reset wipes staging's database, re-applies every
 migration on `stage`, and re-runs `scripts/seed-staging.mjs`: *Test Cafe*, a test
 account for every role, a counter and a kitchen tablet, and about three thousand
@@ -350,7 +361,8 @@ gh api repos/abdatta/shawarmania-ops/environments/production-promote --jq '.prot
 ```
 
 The `main` ruleset must refuse direct pushes, force pushes and deletion, with the
-deploy key its only bypass; `stage`'s must refuse force pushes and deletion; and
+deploy key its only bypass; `stage`'s must refuse deletion, and allows force pushes
+so commits not yet promoted can be squashed; and
 `production-promote` and `production-hotfix` must each name the owner as required
 reviewer.
 

@@ -48,7 +48,7 @@ describe('Staging', () => {
   it('runs on a push to stage, the suite first, then staging’s release in Deploy’s order', () => {
     expect(yaml).toMatch(/^ {4}branches: \[stage\]\s*$/m)
     expect(needsOf(yaml, 'gate')).toEqual([])
-    expect(new Set(needsOf(yaml, 'migrate'))).toEqual(new Set(['awake', 'gate']))
+    expect(new Set(needsOf(yaml, 'migrate'))).toEqual(new Set(['awake', 'descends', 'gate']))
     expect(needsOf(yaml, 'functions')).toEqual(['migrate'])
     expect(new Set(needsOf(yaml, 'publish'))).toEqual(
       new Set(['gate', 'build', 'migrate', 'functions']),
@@ -74,6 +74,12 @@ describe('Staging', () => {
     const migrate = commandsOf(yaml, 'migrate')
     expect(migrate).toMatch(/node scripts\/seed-staging\.mjs --if-empty/)
     expect(migrate.indexOf('supabase db push')).toBeLessThan(migrate.indexOf('seed-staging.mjs'))
+  })
+
+  it('refuses a rewritten stage that no longer contains main, before staging moves', () => {
+    expect(commandsOf(yaml, 'descends')).toMatch(/git merge-base --is-ancestor origin\/main HEAD/)
+    expect(commandsOf(yaml, 'descends')).toMatch(/fetch-depth: 0/)
+    expect(needsOf(yaml, 'migrate')).toContain('descends')
   })
 
   it('says in one sentence when the staging project is paused', () => {

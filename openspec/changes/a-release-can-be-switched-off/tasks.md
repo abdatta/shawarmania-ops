@@ -489,7 +489,8 @@ staging must verify this change before 10 promotes it to production.
 - [ ] 9.10 Create `stage` from `main`'s tip and push it. **Owner:** create the deploy
   key and the `production-promote` environment (themselves as required reviewer);
   the `main` ruleset (no direct push, no force push, no deletion; the deploy key the
-  only bypass) and the `stage` ruleset (no force push, no deletion). Confirm each
+  only bypass) and the `stage` ruleset (no deletion; force pushes allowed, so the owner
+  can squash commits not yet promoted — D20, 2026-10-13). Confirm each
   with `gh api` read-only.
   *(Credential handoff completed 2026-10-13, with the owner's explicit approval
   for the access grants. All three repository variables and all six environment

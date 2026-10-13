@@ -69,13 +69,32 @@ jobs:
           fi
           echo "Staging project $ref is running."
 
+  # The owner may rewrite `stage` to squash commits not yet promoted (D20), but
+  # never below `main`: a promotion only fast-forwards, so `stage` must still
+  # contain `main`'s tip. Say so before staging moves.
+  descends:
+    name: stage contains main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require main to be an ancestor of this commit
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor origin/main HEAD; then
+            echo "This commit does not contain main's tip $(git rev-parse --short origin/main): a rewrite of stage may only squash commits above main. Rebase onto origin/main and push again." >&2
+            exit 1
+          fi
+
   gate:
     uses: ./.github/workflows/verify.yml
     permissions:
       contents: read
 
   migrate:
-    needs: [awake, gate]
+    needs: [awake, descends, gate]
     runs-on: ubuntu-latest
     environment:
       name: staging-database

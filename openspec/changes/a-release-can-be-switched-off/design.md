@@ -1275,15 +1275,24 @@ leaves a seeded one alone.
 no deletion. The one bypass actor is that deploy key. The owner is not a bypass
 actor: an owner who needs `main` moved approves a Promote or a Hotfix like anyone
 else, and turning the ruleset off is a repository setting, never a step in any
-runbook. `stage` gets its own ruleset: no force pushes, no deletion; anybody with
-write access may push to it.
+runbook. `stage` gets its own ruleset: no deletion; anybody with write access may
+push to it. Force pushes stay allowed, at the owner's request (2026-10-13): the
+owner keeps history short by squashing commits on `stage` before promoting them.
+Only commits above `main`'s tip may be rewritten, because a promotion only
+fast-forwards; Staging's first job refuses a `stage` that no longer contains
+`main`, and Promote refuses a commit `main` is not an ancestor of. A squash makes
+new commits, and Promote accepts only a commit Staging verified, so the new tip
+needs its own Staging run. The force push starts one like any push: GitHub reads
+the paths of the commits pushed, not the net change, so even a squash that leaves
+every file as it was runs Staging, and Promote waits for it. Rejected: accepting a commit
+whose tree matches one Staging verified. It saves that run, but production's build
+stamp would then name a commit staging never published.
 
 **Every commit goes to `stage`**, change folders and docs included, so `main` is
 always an ancestor of `stage` and promotion is always a fast-forward. Agents push
 `git push origin HEAD:stage` from whatever local branch they work on; the local
-`main` checkout's name does not change. A push to `stage` that is not a
-fast-forward is refused by the ruleset, which is the same rule `main` used to rely
-on agents to follow.
+`main` checkout's name does not change. A rewrite of `stage` that drops a commit
+already on `main` fails Staging's first job, and Promote refuses it too.
 
 **Deploy does not run the suite twice.** `deploy.yml`'s first job looks up a
 successful Staging run for the pushed SHA. When it finds one, the gate is
