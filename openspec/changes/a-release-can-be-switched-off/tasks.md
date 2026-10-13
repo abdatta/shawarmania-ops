@@ -389,7 +389,7 @@ staging must verify this change before 10 promotes it to production.
   out) and `supabase/tests/87_staging_reaches_no_third_party.sql` (5, including the
   control that the same wake-up does make a request once configured). The list is in
   OPERATIONS under *Never configured on staging*.)*
-- [ ] 9.5 `scripts/seed-staging.mjs`: a synthetic history at production's row
+- [x] 9.5 `scripts/seed-staging.mjs`: a synthetic history at production's row
   counts (read from production as **counts only**, recorded in the script with the
   date), a generated menu of production's shape, *Test Cafe*, and one test account
   per role. Phone numbers from a reserved fictional range; integer paise; no
@@ -405,9 +405,23 @@ staging must verify this change before 10 promotes it to production.
 - [x] 9.7 `staging-reset.yml`: manual; wipe, re-migrate to `stage`'s tip, re-seed;
   refuses production's ref. Confirm the CLI's remote reset works against the staging
   project and say which command was used.
-- [ ] 9.8 `e2e-staging/` and `npm run test:e2e:staging`: owner, Franchise Admin,
+- [x] 9.8 `e2e-staging/` and `npm run test:e2e:staging`: owner, Franchise Admin,
   counter and kitchen through one order, one payment and one change-gate turn on *Test
   Cafe*, the band visible on each; passwords from the environment only.
+  *(9.5 and 9.8 done 2026-10-13, rehearsed together on the local stack. The seed is
+  `supabase/staging/seed.sql`, one `do` block because `supabase db query` takes one
+  statement; `scripts/seed-staging.mjs` (7 tests: production refused however spelled, a
+  password of 12+ characters, placeholders filled as literals) writes the password into
+  it from the environment. Every sale goes through the counter's own commands as the
+  tablet — `create_billing_order`, `prepare_billing_order`, `pay_billing_order` — against
+  one ended shift a day. Rehearsal, 46 s: 3,009 orders and bills (production 3,094 and
+  3,009), 4,224 lines (4,454), 3,130 payments (3,140), 9,027 commands (9,782), 3,009
+  receipt links, 446 customers, 353 expenses, 246 attendance days, 132 dishes in 17
+  categories; totals equal payments to the paisa. Then `npm run test:e2e:staging`, against
+  a staging-mode build served locally on that seed, passed in 25 s: both handshakes, one
+  order rung, acknowledged and paid, the probe turned on and back off, the band on every
+  screen, both shifts left. A Franchise Admin holds the kitchen's shift, so neither person
+  holds two. Stack reset afterwards.)*
 - [x] 9.9 `promote.yml` (D20): SHA input defaulting to `stage`'s tip; the successful
   Staging run check and the ancestor check, each stopping with one sentence; the
   summary of commits and change folders; the push job in `production-promote` with

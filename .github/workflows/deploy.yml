@@ -72,6 +72,37 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # A commit Staging already verified is not verified twice
+  # (a-release-can-be-switched-off, D20). A Staging run that succeeded on this
+  # exact commit ran this same suite, migrated and published staging, and passed
+  # the smoke suite; a promotion then reaches production in a few minutes. Any
+  # other push — a Hotfix's, or one made before staging existed — finds none
+  # and runs the suite as always. A lookup that fails reads as none: the safe
+  # direction is the full suite.
+  staged:
+    name: staging verified it
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      verified: ${{ steps.lookup.outputs.verified }}
+    steps:
+      - name: Look for a successful Staging run on this commit
+        id: lookup
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          runs=$(gh api             "repos/${{ github.repository }}/actions/workflows/staging.yml/runs?head_sha=$SHA&status=success&per_page=1"             --jq '.total_count' 2>/dev/null || echo 0)
+          if [ "${runs:-0}" != "0" ]; then
+            echo "verified=true" >> "$GITHUB_OUTPUT"
+            echo "Staging verified $SHA: the suite is not run again." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "verified=false" >> "$GITHUB_OUTPUT"
+            echo "No Staging run on $SHA: running the full suite." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
   # The same suite `ci.yml` runs on a pull request, from the same file. A
   # publish cannot be gated on a weaker check set than a pull request,
   # because there is only one check set.
@@ -91,6 +122,8 @@ jobs:
   # "gate" says what this stage is doing in a deploy workflow; "verify" would
   # just repeat the file it calls.
   gate:
+    needs: staged
+    if: needs.staged.outputs.verified != 'true'
     uses: ./.github/workflows/verify.yml
     permissions:
       contents: read
@@ -170,8 +203,11 @@ jobs:
   # Manual workflow dispatch is a frontend rollback/republication, so it keeps
   # the forward-only production schema where it is instead of trying to make
   # an older commit reverse migration history.
+  # Runs after the suite passed, or after `staged` found Staging had passed it;
+  # never after a red or cancelled suite.
   migrate:
-    needs: gate
+    needs: [staged, gate]
+    if: ${{ !cancelled() && needs.staged.result == 'success' && (needs.gate.result == 'success' || needs.gate.result == 'skipped') }}
     runs-on: ubuntu-latest
     # Shared with Hotfix's migrate job: one migration run at a time.
     concurrency:
@@ -230,6 +266,7 @@ jobs:
   # that can deploy code.
   functions:
     needs: migrate
+    if: ${{ !cancelled() && needs.migrate.result == 'success' }}
     runs-on: ubuntu-latest
     environment:
       name: production-functions
@@ -292,6 +329,7 @@ jobs:
   # current Pages deployment live.
   deploy:
     needs: [gate, build, migrate, functions]
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.migrate.result == 'success' && needs.functions.result == 'success' && (needs.gate.result == 'success' || needs.gate.result == 'skipped') }}
     runs-on: ubuntu-latest
     # Shared with Republish and Hotfix: publications never overlap.
     concurrency:

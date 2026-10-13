@@ -1,0 +1,133 @@
+# Kept short for the same reason as `Deploy`.
+name: Promote
+
+# Moving a commit staging verified to production (a-release-can-be-switched-off,
+# D20). Actions → Promote → Run workflow, with the full SHA of a commit on
+# `stage`, or nothing for `stage`'s tip.
+#
+# `main` is only ever fast-forwarded to a SHA already on `stage`. Nothing is
+# merged, squashed or rebased on the way, so the commit production runs is
+# byte-for-byte the commit staging ran. Two checks first, each stopping with one
+# sentence: a Staging run succeeded on exactly that commit, and `main` is its
+# ancestor. The summary lists every commit it carries and its change folders, so
+# the owner reads what they are releasing; then GitHub holds the push until the
+# owner approves it in the `production-promote` environment.
+#
+# The push uses a deploy key held only in that environment, not `GITHUB_TOKEN`:
+# a push made with `GITHUB_TOKEN` starts no other workflow, so Deploy would never
+# run. Deploy then finds the Staging run and goes straight to migrate, functions,
+# publish. A promotion is the release, so it keeps the deploy-window rule: never
+# while the counter trades.
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full commit SHA on stage (empty for stage's tip)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: staging verified it
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: The commit to promote
+        id: sha
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          sha="${INPUT_SHA:-$(git rev-parse origin/stage)}"
+          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Give the full 40-character commit SHA, not \"$sha\"." >&2
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Require a successful Staging run on exactly this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          set -euo pipefail
+          runs=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/staging.yml/runs?head_sha=$SHA&status=success&per_page=1" \
+            --jq '.total_count')
+          if [ "$runs" = "0" ]; then
+            echo "No Staging run succeeded on $SHA: push it to stage and let Staging pass before promoting it." >&2
+            exit 1
+          fi
+
+      - name: Require that main can fast-forward to it
+        env:
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor "$SHA" origin/stage; then
+            echo "$SHA is not on stage: only a commit staging ran can be promoted." >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor origin/main "$SHA"; then
+            echo "main is not an ancestor of $SHA, so main cannot fast-forward to it." >&2
+            exit 1
+          fi
+
+      - name: What this releases
+        env:
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Promote \`$SHA\` to main"
+            echo
+            if [ "$(git rev-list --count origin/main.."$SHA")" = "0" ]; then
+              echo "main is already at this commit: nothing to release."
+            else
+              echo "| Commit | Subject | Change folders |"
+              echo "|---|---|---|"
+              git rev-list --reverse origin/main.."$SHA" | while read -r commit; do
+                folders=$(git show --name-only --format= "$commit" \
+                  | sed -nE 's#^openspec/changes/([^/]+)/.*#\1#p' \
+                  | grep -v '^archive$' | sort -u | paste -sd ' ' -)
+                printf '| `%s` | %s | %s |\n' "${commit:0:8}" \
+                  "$(git log -1 --format=%s "$commit" | sed 's/|/\\|/g')" "${folders:-—}"
+              done
+            fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # GitHub holds this job until the owner approves it in `production-promote`.
+  promote:
+    name: the owner promotes
+    needs: check
+    runs-on: ubuntu-latest
+    environment:
+      name: production-promote
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ssh-key: ${{ secrets.PROMOTE_DEPLOY_KEY }}
+
+      - name: Fast-forward main to the staged commit
+        env:
+          SHA: ${{ needs.check.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git push origin "$SHA:refs/heads/main"
+          echo "main is now $SHA; Deploy publishes it." | tee -a "$GITHUB_STEP_SUMMARY"

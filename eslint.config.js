@@ -186,7 +186,13 @@ export default tseslint.config(
   },
 
   {
-    files: ['**/*.{mjs,js}', 'vite.config.ts', 'playwright.config.ts', 'playwright.auth.config.ts'],
+    files: [
+      '**/*.{mjs,js}',
+      'vite.config.ts',
+      'playwright.config.ts',
+      'playwright.auth.config.ts',
+      'playwright.staging.config.ts',
+    ],
     languageOptions: { globals: globals.node },
   },
 )

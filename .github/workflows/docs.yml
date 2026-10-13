@@ -37,8 +37,10 @@ on:
       - '.claude/**'
       - '.agents/**'
       - '*.md'
+  # `stage` since D20: every commit goes there first, and a prose-only one must
+  # meet this tier there exactly as it did on `main`.
   push:
-    branches: [main]
+    branches: [main, stage]
     paths:
       - 'docs/**'
       - 'openspec/changes/**'

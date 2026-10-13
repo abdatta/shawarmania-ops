@@ -1,0 +1,234 @@
+# Kept short for the same reason as `Deploy`: GitHub prefixes every check with
+# the workflow name.
+name: Staging
+
+# A push to `stage` reaches staging, and only staging
+# (a-release-can-be-switched-off, D19, D20). The same suite Deploy runs, then
+# staging's migrations, its Edge Functions and a staging build published to
+# Cloudflare Pages, then the smoke suite against what was published. Safe at any
+# hour: no tablet at an outlet reads staging.
+#
+# Staging is a separate Supabase project in a separate Supabase account, so its
+# access token cannot reach production at all. Every job that touches a project
+# still derives the project reference from the URL it was given and refuses
+# production's, the same guard Deploy's `functions` job uses, inverted.
+#
+# A successful run on a commit is what Promote checks before it lets the owner
+# move `main` to that commit, and what lets Deploy skip running the suite again.
+#
+# The path filter is Deploy's: a prose-only push to `stage` meets `docs.yml`
+# instead (`scripts/check-workflow-path-tiers.test.mjs`).
+on:
+  push:
+    branches: [stage]
+    paths-ignore:
+      - 'docs/**'
+      - 'openspec/changes/**'
+      - 'openspec/specs/**'
+      - 'openspec/todos/**'
+      - '.claude/**'
+      - '.agents/**'
+      - '*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One staging run at a time, never cancelled mid-publish.
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+jobs:
+  # A Free project pauses after a week without activity, and a paused project
+  # fails `db push` obscurely. Say so in one sentence instead.
+  awake:
+    name: staging is awake
+    runs-on: ubuntu-latest
+    environment:
+      name: staging-functions
+    steps:
+      - name: Require a running staging project
+        env:
+          STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.STAGING_SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          ref=$(printf '%s' "${STAGING_SUPABASE_URL:-}" \
+            | sed -nE 's#^https://([a-z0-9]{20})\.supabase\.co/?$#\1#p')
+          test -n "$ref" || { echo "STAGING_SUPABASE_URL carries no project reference; refusing to guess a project." >&2; exit 1; }
+          if [ "$ref" = "iefcidjbfnmsiqithqbj" ]; then
+            echo "STAGING_SUPABASE_URL names production's project; refusing." >&2
+            exit 1
+          fi
+          status=$(curl -fsS -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$ref" | jq -r '.status')
+          if [ "$status" != "ACTIVE_HEALTHY" ]; then
+            echo "Staging's Supabase project is $status, not running: resume it from the staging account's dashboard, then run this workflow again." >&2
+            exit 1
+          fi
+          echo "Staging project $ref is running."
+
+  gate:
+    uses: ./.github/workflows/verify.yml
+    permissions:
+      contents: read
+
+  migrate:
+    needs: [awake, gate]
+    runs-on: ubuntu-latest
+    environment:
+      name: staging-database
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Refuse anything but the staging database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.STAGING_SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          test -n "${SUPABASE_DB_URL:-}" || { echo "STAGING_SUPABASE_DB_URL is not set." >&2; exit 1; }
+          case "$SUPABASE_DB_URL" in
+            *iefcidjbfnmsiqithqbj*) echo "STAGING_SUPABASE_DB_URL names production's project; refusing." >&2; exit 1 ;;
+          esac
+
+      - name: Apply forward staging migrations
+        env:
+          SUPABASE_DB_URL: ${{ secrets.STAGING_SUPABASE_DB_URL }}
+        run: npx supabase db push --db-url "$SUPABASE_DB_URL" --yes
+
+  functions:
+    needs: migrate
+    runs-on: ubuntu-latest
+    environment:
+      name: staging-functions
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Resolve the staging project
+        id: project
+        env:
+          STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+        run: |
+          set -euo pipefail
+          ref=$(printf '%s' "${STAGING_SUPABASE_URL:-}" \
+            | sed -nE 's#^https://([a-z0-9]{20})\.supabase\.co/?$#\1#p')
+          test -n "$ref" || { echo "STAGING_SUPABASE_URL carries no project reference; refusing to guess a project." >&2; exit 1; }
+          if [ "$ref" = "iefcidjbfnmsiqithqbj" ]; then
+            echo "STAGING_SUPABASE_URL names production's project; refusing." >&2
+            exit 1
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+      # Deployed with none of the third parties' secrets, ever: staging can
+      # text no phone and reach no restaurant account (docs/OPERATIONS.md,
+      # "Never configured on staging").
+      - name: Deploy every Edge Function to staging
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.STAGING_SUPABASE_ACCESS_TOKEN }}
+        run: npx supabase functions deploy --project-ref "${{ steps.project.outputs.ref }}" --use-api
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The build stamps the short commit SHA into the UI.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build for staging
+        env:
+          BASE_PATH: /
+          VITE_APP_ENVIRONMENT: staging
+          VITE_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.STAGING_SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          case "${VITE_SUPABASE_URL:-}" in
+            "") echo "STAGING_SUPABASE_URL is not set." >&2; exit 1 ;;
+            *iefcidjbfnmsiqithqbj*) echo "STAGING_SUPABASE_URL names production's project; refusing." >&2; exit 1 ;;
+          esac
+          npm run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: staging-build
+          path: dist
+          retention-days: 7
+
+  # Cloudflare Pages project `shawarmania-ops-staging`, whose production branch
+  # is `stage`; the token is scoped to that one project.
+  publish:
+    needs: [gate, build, migrate, functions]
+    runs-on: ubuntu-latest
+    environment:
+      name: staging-pages
+      url: https://stage-ops.shawarmania.in/
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: staging-build
+          path: dist
+
+      - name: Publish to staging
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.STAGING_CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=shawarmania-ops-staging --branch=stage
+
+  # The owner, a Franchise Admin, a counter and a kitchen on Test Cafe through
+  # one order, one payment and one change-gate turn, against what was published.
+  smoke:
+    needs: publish
+    runs-on: ubuntu-latest
+    environment:
+      name: staging-smoke
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Smoke the published staging build
+        env:
+          STAGING_BASE_URL: https://stage-ops.shawarmania.in/
+          STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+          STAGING_SUPABASE_ANON_KEY: ${{ vars.STAGING_SUPABASE_ANON_KEY }}
+          STAGING_TEST_PASSWORD: ${{ secrets.STAGING_TEST_PASSWORD }}
+        run: npm run test:e2e:staging
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-staging
+          path: playwright-report/
+          retention-days: 7

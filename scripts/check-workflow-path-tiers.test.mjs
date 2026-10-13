@@ -62,6 +62,7 @@ function readPathList(yaml, key) {
 const fullSuite = [
   ['ci.yml', 'paths-ignore'],
   ['deploy.yml', 'paths-ignore'],
+  ['staging.yml', 'paths-ignore'],
 ]
 
 describe('CI path tiers', () => {
@@ -111,10 +112,14 @@ describe('CI path tiers', () => {
     const docs = workflow('docs.yml')
     expect(docs, 'prose tier must run on pull requests').toMatch(/^\s*pull_request:\s*$/m)
     expect(docs, 'prose tier must run on a push to main').toMatch(/^\s*push:\s*$/m)
-    expect(docs).toMatch(/^\s*branches: \[main\]\s*$/m)
+    expect(docs, 'a prose-only push to main or stage meets the prose tier').toMatch(
+      /^\s*branches: \[main, stage\]\s*$/m,
+    )
 
     expect(workflow('ci.yml')).toMatch(/^\s*pull_request:\s*$/m)
     expect(workflow('deploy.yml')).toMatch(/^\s*push:\s*$/m)
+    // Any other push to `stage` meets the full suite in Staging (D20).
+    expect(workflow('staging.yml')).toMatch(/^\s*branches: \[stage\]\s*$/m)
   })
 
   // The carve-out the design turns on: this file is eslint-linted JavaScript

@@ -30,6 +30,7 @@
     "test:e2e:on": "node scripts/with-change-gates.mjs on playwright test",
     "test:e2e:auth": "playwright test --config playwright.auth.config.ts",
     "test:e2e:auth:on": "node scripts/with-change-gates.mjs on playwright test --config playwright.auth.config.ts",
+    "test:e2e:staging": "playwright test --config playwright.staging.config.ts",
     "test:db": "supabase test db",
     "test:rls": "vitest run --config vitest.realtime.config.ts && vitest run --config vitest.rls.config.ts && vitest run --config vitest.billing-races.config.ts && vitest run --config vitest.drawer-writes.config.ts && vitest run --config vitest.counter-telemetry.config.ts && vitest run --config vitest.change-gates.config.ts && vitest run --config vitest.ledger-timing.config.ts",
     "db:start": "supabase start",

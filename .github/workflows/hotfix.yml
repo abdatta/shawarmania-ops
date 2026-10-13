@@ -22,10 +22,14 @@ name: Hotfix
 #   4. Then Deploy's order: migrate, Edge Functions, publish. Each of those jobs
 #      keeps the environment it has in Deploy, because that is where its secret
 #      lives; none can start before the approval.
+#   5. Last, `main` fast-forwards to the fix with the deploy key Promote uses
+#      (D20), held in `production-hotfix` too, so GitHub asks the owner once more:
+#      the fix is live, move `main`. Deploy then runs on that push, finds no
+#      Staging run for the commit, runs the full suite and republishes it. The
+#      change folder records the reason, the approvals and that suite's result.
 #
-# Afterwards, push the same commit to `main` if it is not there already, so
-# Deploy runs the full suite on it and republishes it. The change folder records
-# the reason, the approval and that suite's result.
+# Once `stage` exists the fix must be on it, like every commit (D20); `stage` is
+# never rewritten to make a hotfix narrower.
 on:
   workflow_dispatch:
     inputs:
@@ -72,6 +76,10 @@ jobs:
           REASON: ${{ inputs.reason }}
         run: |
           set -euo pipefail
+          if git rev-parse --verify --quiet origin/stage >/dev/null             && ! git merge-base --is-ancestor "$SHA" origin/stage; then
+            echo "$SHA is not on stage. Push the fix to stage first; Hotfix does not wait for Staging." >&2
+            exit 1
+          fi
           if ! git merge-base --is-ancestor origin/main "$SHA"; then
             echo "main is not an ancestor of $SHA: publishing it would take back what main published." >&2
             echo "Build the fix on top of main and run Hotfix with that commit." >&2
@@ -256,3 +264,27 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # `main` follows the fix, so the next Deploy cannot publish anything older.
+  # The deploy key lives in `production-hotfix` beside Promote's environment, so
+  # this waits for the owner's approval like the jobs before it. A plain push:
+  # anything but a fast-forward is refused.
+  main:
+    name: main follows the fix
+    needs: deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: production-hotfix
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ssh-key: ${{ secrets.PROMOTE_DEPLOY_KEY }}
+
+      - name: Fast-forward main to the fix
+        env:
+          SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          git push origin "$SHA:refs/heads/main"
+          echo "main is now $SHA. Deploy runs the full suite on it and republishes it." | tee -a "$GITHUB_STEP_SUMMARY"

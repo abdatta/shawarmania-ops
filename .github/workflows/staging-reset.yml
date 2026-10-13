@@ -1,0 +1,61 @@
+# Kept short for the same reason as `Deploy`.
+name: Staging reset
+
+# Starting staging over (a-release-can-be-switched-off, D19). Staging's data is
+# disposable, and a change abandoned on `stage` leaves its migration behind on
+# staging, because migrations only go forward. Actions → Staging reset → Run
+# workflow wipes staging's database, re-applies every migration on `stage`'s
+# tip, and re-runs the synthetic seed.
+#
+# `--no-seed` is load-bearing: `supabase/seed.sql` is the local stack's seed, with
+# its shared local password, and must never reach a hosted project. Staging is
+# seeded by `scripts/seed-staging.mjs`, which writes only synthetic rows.
+#
+# Every step refuses production's project reference.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+jobs:
+  reset:
+    runs-on: ubuntu-latest
+    environment:
+      name: staging-database
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stage
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Refuse anything but the staging database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.STAGING_SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          test -n "${SUPABASE_DB_URL:-}" || { echo "STAGING_SUPABASE_DB_URL is not set." >&2; exit 1; }
+          case "$SUPABASE_DB_URL" in
+            *iefcidjbfnmsiqithqbj*) echo "STAGING_SUPABASE_DB_URL names production's project; refusing." >&2; exit 1 ;;
+          esac
+
+      - name: Wipe staging and re-apply every migration
+        env:
+          SUPABASE_DB_URL: ${{ secrets.STAGING_SUPABASE_DB_URL }}
+        run: npx supabase db reset --db-url "$SUPABASE_DB_URL" --no-seed --yes
+
+      - name: Seed staging with a synthetic history
+        env:
+          STAGING_SUPABASE_DB_URL: ${{ secrets.STAGING_SUPABASE_DB_URL }}
+          STAGING_TEST_PASSWORD: ${{ secrets.STAGING_TEST_PASSWORD }}
+        run: node scripts/seed-staging.mjs

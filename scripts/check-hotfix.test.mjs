@@ -70,8 +70,29 @@ describe('Hotfix', () => {
     expect(commandsOf(yaml, 'approve')).toMatch(/runs\/\$run\/cancel/)
   })
 
-  it('has no job beyond the six it is made of', () => {
-    expect(jobsOf(yaml)).toEqual(['check', 'build', 'approve', 'migrate', 'functions', 'deploy'])
+  it('moves main to the fix only after publishing, with the deploy key and the owner’s approval', () => {
+    expect(needsOf(yaml, 'main')).toEqual(['deploy'])
+    expect(environmentOf(yaml, 'main')).toBe('production-hotfix')
+    const main = commandsOf(yaml, 'main')
+    expect(main).toMatch(/ssh-key: \$\{\{ secrets\.PROMOTE_DEPLOY_KEY \}\}/)
+    expect(main).toMatch(/git push origin "\$SHA:refs\/heads\/main"/)
+    expect(main).not.toMatch(/--force|-f /)
+  })
+
+  it('requires the fix to be on stage once stage exists', () => {
+    expect(commandsOf(yaml, 'check')).toMatch(/git merge-base --is-ancestor "\$SHA" origin\/stage/)
+  })
+
+  it('has no job beyond the seven it is made of', () => {
+    expect(jobsOf(yaml)).toEqual([
+      'check',
+      'build',
+      'approve',
+      'migrate',
+      'functions',
+      'deploy',
+      'main',
+    ])
   })
 })
 
