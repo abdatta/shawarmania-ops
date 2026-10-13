@@ -27,6 +27,33 @@
 > fixed-interval reads, and inside #75's request budget. Re-plan the design and
 > tasks against #75 before applying anything.
 
+## Owner-approved Ready feedback (2026-10-12)
+
+Billers missed silent readiness while dealing with customers and crowds, so the
+owner reversed the original silent-counter decision after trying the sounds.
+This feedback supersedes the earlier silent Ready shake/border treatment in this
+change's proposal, design, tasks and deltas; Claude should reconcile those during
+the #75-aware re-plan and do the final implementation. The audition UI is not an
+approved layout or implementation and must not be carried forward.
+
+- **Sound:** use the **Handbell, option 3** from the audition — a quick alternating
+  bell sound, synthesised like the kitchen tablet's sounds. It rings **twice per
+  notification**, then stops; keep the whole burst around two to three seconds.
+- **Bell:** only that order's bell swings during its two rings, then stops moving
+  when the sound ends. No ongoing or periodically repeated ringing.
+- **Dish:** when the kitchen marks it Ready, fill the **whole item row** with the
+  theme's orange accent and invert the foreground for legibility in light and
+  dark. Keep the existing checkbox. Add a periodic shine, like the landing
+  page's 5% off footer banner, until the biller marks the dish Prepared.
+- **Prepared:** clear the orange fill and shine and return to the normal check
+  mark and colored text.
+- **No Ready button on the counter**, no replacement control and no layout from
+  the audition. Ready remains the kitchen's action; the counter keeps its checkbox.
+
+Only this behavior and the handbell choice are approved. The temporary preview
+code was discarded at the owner's request; final implementation is for Claude
+in a separate session, following #75.
+
 ## Why
 
 The kitchen tablet (#70) and the counter's bell (#72) are in daily use and
