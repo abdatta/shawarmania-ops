@@ -517,7 +517,11 @@ staging must verify this change before 10 promotes it to production.
   after migrating), because Staging reset cannot yet; and `STAGING_TEST_PASSWORD` must be
   in `staging-database` as well as `staging-smoke`, because the seed step and Staging
   reset run there. **Owner:** add it there.)*
-- [ ] 9.11 In **one commit**, pushed to `stage` just before the ruleset is turned
+  *(2026-10-13: `STAGING_TEST_PASSWORD` added to `staging-database` at the owner's request,
+  read from the user-only file and never displayed; the local copy now lives in the
+  gitignored `.env`. `stage` pushed at `8ad96b90` with the owner's approval; `main`
+  untouched at `92eaf70c`. Open: the `stage` ruleset, then the `main` ruleset after 10.2.)*
+- [x] 9.11 In **one commit**, pushed to `stage` just before the ruleset is turned
   on: `AGENTS.md` (push to `stage`, never `main`; promotion is the release and keeps
   the deploy-window rule; a push to `stage` is safe at any hour), every workflow in
   both agent trees that pushes or releases, `docs/OPERATIONS.md` and
@@ -526,12 +530,15 @@ staging must verify this change before 10 promotes it to production.
   *(Committed locally 2026-10-13 as its own commit, "Staging #75: Every commit goes to
   stage first": `AGENTS.md`, `CLAUDE.md`, the quickfix lane, and the Staging section,
   life-of-a-change rows and staging-beside-production table of `docs/RELEASES.md` and
-  `docs/OPERATIONS.md`; the script that wrote them is deleted in it. Ticked once it is
-  pushed to `stage`. The `main` ruleset follows 10.2, not this push — see 9.10's
+  `docs/OPERATIONS.md`; the script that wrote them is deleted in it. Pushed to `stage`
+  2026-10-13 as `8ad96b90`. The `main` ruleset follows 10.2, not this push — see 9.10's
   correction.)*
 - [ ] 9.12 Push this change to `stage`. Staging migrates, seeds the empty project
   (`--if-empty`), publishes, and the smoke suite passes. Run the paused-project message
   once by pausing staging deliberately, then resume it.
+  *(2026-10-13, Staging run `38457964697` on `8ad96b90`, green in 16m15s: the suite
+  11m, migrate and the first seed 2m, functions 29s, publish 32s, smoke 1m57s. Open: the
+  paused-project message.)*
 - [ ] 9.13 **The fake outlet, with the owner.** Laptop 1 as *Test Cafe*'s counter
   (one-time code, shift handshake from the owner's phone), laptop 2 as its kitchen,
   the phone as owner. The owner turns `probe` on and off from staging's
