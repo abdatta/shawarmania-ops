@@ -16,12 +16,22 @@
 | Environment | Purpose | Data |
 |---|---|---|
 | **Local** | Development | Supabase local stack, synthetic seed data |
-| **Staging** | Verification before release | Separate Supabase project, synthetic data only |
+| **Staging** | Verification before release, and the owner's fake outlet | Separate Supabase project in a separate account, synthetic data at production's scale, published from `stage` to `stage-ops.shawarmania.in` |
 | **Production** | The live counters | Separate Supabase project, real business data |
 
 **Production data is never copied into staging or local.** It contains customer and employee PII. When a production-shaped dataset is needed for debugging, generate a synthetic one at the same scale.
 
-**Production is provisioned and live** (2026-07-27), with the attendance and setup schema and screens deployed to it. Whatever is in it is real, and the first outlet created there is the business's own. Staging is still not provisioned; changes go from local to production, which is acceptable at this size and worth revisiting before the next franchise.
+**Production is provisioned and live** (2026-07-27), with the attendance and setup schema and screens deployed to it. Whatever is in it is real, and the first outlet created there is the business's own. **Staging is provisioned** (see [Releases](RELEASES.md#staging)): every commit is pushed to `stage`, verified and published there, and reaches production only when the owner approves a Promote. It is sized like production on purpose, because the freeze of 12 October was load on the smallest compute, and a faster database would have hidden it:
+
+| | Production | Staging |
+|---|---|---|
+| Supabase account | the owner's main account | a separate account, its own organization |
+| Plan and compute | Free, Nano | Free, Nano |
+| Region | ap-south-1 | ap-south-1 |
+| PostgreSQL | 17.6 | 17.11 |
+| Frontend | GitHub Pages, `ops.shawarmania.in` | Cloudflare Pages `shawarmania-ops-staging`, `stage-ops.shawarmania.in` |
+
+Read 2026-10-13 through the Management API and the dashboards. Re-check both whenever production's plan or compute changes; staging changes with it.
 
 ⚠️ **The Supabase account already contains a project that has nothing to do with this system.** It is not linked to this repo and must not be. `supabase link` against it, or pointing `.env` at it, would run this project's migrations into unrelated data. When staging and production are created, they are **new projects** — confirmed with the owner on 2026-07-26. If a command ever reports this repo as linked, that is a mistake to undo rather than a convenience to accept.
 
@@ -143,7 +153,8 @@ npm run build
 ```
 
 Hosting is **GitHub Pages**, published by `.github/workflows/deploy.yml` on
-every push to `main` that passes verification.
+every push to `main` that passes verification. Only Promote and Hotfix push to
+`main`, each with the owner's approval; `main`'s ruleset refuses anything else.
 Hostinger held the `shawarmania.in` DNS zone until the receipt page needed a
 Worker on the apex; see [The customer's receipt link](#the-customers-receipt-link-54)
 for the move to Cloudflare and its rollback. This app is unaffected either

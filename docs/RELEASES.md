@@ -87,7 +87,9 @@ saying why nothing can be stranded.
 | 2 | Demo approval | The owner approves the screens in the demo, which runs every gate on; the demo's Change gates page turns one off to compare. | the change's own STOP task |
 | 3 | Apply | The gate and its row (off) first. The off path is untouched; the on path is new code and new `_v2` database objects. Old tests are tagged, never rewritten. | `lint:migrations`, `lint:change-gates`, typecheck |
 | 4 | Verify | Both states, the round trip, the request budget. | `verify.yml` |
-| 5 | Deploy | It reaches production **off**. | `deploy.yml` |
+| 5 | Stage | A push to `stage`. The suite runs, then staging is migrated and published. Safe at any hour: no tablet at an outlet reads staging. | `staging.yml` |
+| 5a | Try on staging | The owner turns the gate on in staging's Change gates page and runs the fake outlet — a laptop as the counter, a laptop as the kitchen, their phone as owner. Trouble: fix, push to `stage` again. | the owner; `npm run test:e2e:staging` |
+| 5b | Promote | The owner approves a Promote of that exact commit; `main` fast-forwards to it and Deploy publishes it, **off**. Promotion is the release, so it happens in the owner's deploy window. | `promote.yml`, the `main` ruleset, `deploy.yml` |
 | 6 | Turn on | The owner, at a quiet hour, watching every tablet on the gate's page through the next service. | the `release` workflow |
 | 7 | Pull it once | Off and on again, at a quiet moment, watching the tablets follow both ways. | archive refuses without it |
 | 8 | Live with it | Real use. Trouble: off, fix behind the same gate, deploy, on again. | — |
@@ -291,6 +293,66 @@ turned on.
 | Migrations only add | `-- release: emergency <reason>` on the migration; `-- release-lint: allow <rule> — <reason>` on one statement |
 | The full suite before publishing | Republish (verified builds); Hotfix (the owner's approval) |
 | Retire by the date | move `retireBy`, with the reason, in a reviewed diff |
+
+## Staging
+
+A separate Supabase project, in a separate Supabase account, on the same plan and
+compute size as production, published from the `stage` branch to
+`stage-ops.shawarmania.in`. Every screen carries the band **Staging · not a real
+outlet**, and the installed app is called *Shawarmania Ops (staging)*. Its data is
+synthetic and at production's scale; no production row is ever copied there; and
+it holds none of the third parties' secrets, so it can text no phone and reach no
+restaurant account ([Operations](OPERATIONS.md#never-configured-on-staging)).
+
+**How a commit gets there.** Every commit is pushed to `stage`. Staging runs the
+suite, migrates the staging project, seeds it if it holds no Test Cafe, deploys its
+Edge Functions, publishes a staging build, and runs the smoke suite against it. A Free project pauses after a
+week without a push; Staging then stops with one sentence saying to resume it from
+the staging account's dashboard.
+
+**Running the fake outlet.** On staging, from the owner's phone: create an outlet
+— or use *Test Cafe*, which the seed made — and on Outlets → the outlet → Tablets,
+issue a setup code; type it on laptop 1 at the staging address and it becomes the
+counter. Do the same for laptop 2 as a kitchen. Open each one's shift with the
+handshake: the laptop asks for a username and shows four digits, which the person
+types on their own phone. Then turn the gate under test on from staging's Change
+gates page and ring orders, acknowledge them and take payments as staff would, for
+as long as it takes to trust it. With **Tablet health** on, the gate's page shows
+both laptops' requests a minute beside the budget's numbers.
+
+**How an agent verifies on staging.** Not by typing a password into a browser:
+`npm run test:e2e:staging`, with `STAGING_SUPABASE_URL`, `STAGING_SUPABASE_ANON_KEY`
+and `STAGING_TEST_PASSWORD` in the environment. It walks the owner, a manager, a
+counter and a kitchen through one order, one acknowledgement, one payment and one
+change-gate turn on *Test Cafe*, checking the band on each, and leaves both shifts
+at the end.
+
+**Promoting.** Actions → Promote → Run workflow, with the commit's full SHA, or
+nothing for `stage`'s tip. It refuses a commit no Staging run passed and one `main`
+cannot fast-forward to, then lists every commit it would carry with its change
+folders. GitHub holds the push until the owner approves it in the
+`production-promote` environment. Deploy then finds Staging's run for the commit,
+skips the suite, and migrates, deploys functions and publishes in a few minutes.
+Because history is linear, a promotion carries everything beneath its commit;
+because every behaviour change ships off, carrying a change staged but not yet tried
+is safe, and the summary lists it.
+
+**Starting over.** Actions → Staging reset wipes staging's database, re-applies every
+migration on `stage`, and re-runs `scripts/seed-staging.mjs`: *Test Cafe*, a test
+account for every role, a counter and a kitchen tablet, and about three thousand
+bills rung through the counter's own command.
+
+**Reading the protections.** No file can prove them, so read them:
+
+```bash
+gh api repos/abdatta/shawarmania-ops/rulesets
+gh api repos/abdatta/shawarmania-ops/environments/production-promote --jq '.protection_rules'
+```
+
+The `main` ruleset must refuse direct pushes, force pushes and deletion, with the
+deploy key its only bypass; `stage`'s must refuse force pushes and deletion; and
+`production-promote` and `production-hotfix` must each name the owner as required
+reviewer.
 
 ## Retiring a gate
 

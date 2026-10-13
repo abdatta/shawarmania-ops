@@ -79,7 +79,7 @@ On 12 October #74 reached the counters and froze them under a polling flood. Not
 - **Tests run both ways, and old tests are tagged, never rewritten.** A toggle point's unit tests use `describeChangeGate('<key>', …)`. A browser test whose assertion holds only with the gate on is tagged `@cg-on:<key>`; an existing test the change contradicts is tagged `@cg-off:<key>`, which is the only edit it may receive. CI runs both browser suites with every gate off and with every gate on.
 - **The counter stays cheap to run.** `e2e-auth/request-budget.spec.ts` counts an idle counter's and kitchen's requests and those of an ACK and a payment. A change that needs more raises the budget in its own diff, with the reason.
 - **A gate key is never reused**, and a retired one is tombstoned in `RETIRED_CHANGE_GATES`. A gate's two-character code is unique among live gates. `retireBy` is required: lint warns from the date and fails fourteen days after; at most five change gates that depend on nothing at once.
-- **The life of a change:** propose (with its Change gate section) → the owner approves the demo, which runs it on → apply (gate and migration row first, off path untouched) → verify, both states → deploy, which ships it **off** → the owner turns it on at a quiet hour and watches the tablets on the gate's page → pulls it once, off and on again → real use → archive, which refuses until the history shows that pull → a retirement change deletes the off path and tombstones the key → at least a week later, the contract migration.
+- **The life of a change:** propose (with its Change gate section) → the owner approves the demo, which runs it on → apply (gate and migration row first, off path untouched) → verify, both states → push to `stage`, where Staging verifies it and publishes the staging site → the owner tries it on the fake outlet → the owner approves a Promote, which deploys it to the counters **off** → the owner turns it on at a quiet hour and watches the tablets on the gate's page → pulls it once, off and on again → real use → archive, which refuses until the history shows that pull → a retirement change deletes the off path and tombstones the key → at least a week later, the contract migration.
 - **The ways out, in order.** (1) Turn the gate off on the Change gates page: seconds, nothing built. (2) **Republish** (Actions → Republish) a build Deploy once published, without re-running the suite: safe because migrations only add. (3) **Hotfix** (Actions → Hotfix): a short gate, the owner's approval in GitHub, then migrate, functions, publish — for the counter being down, not for an ordinary fix. (4) Fix forward through the normal path. In code, each rule has one loud exit, printed on every lint run: `No gate:` in the proposal; `-- release: emergency <reason>` on a migration the owner authorised; `-- release-lint: allow <rule> — <reason>` on one statement, with the owner's agreement recorded in the design; a moved `retireBy` with its reason.
 - **Whatever an agent forgets, CI holds.** Migrations only adding, a gate declared in code and migration and tested both ways, every new proposal answering how it is released, both states green, the request budget, retirement on time — all fail in CI for whichever agent wrote the change. The one rule no linter can check is that a behaviour change is actually behind its gate; that is on you, and on the owner reading the Change gate section.
 
@@ -151,13 +151,15 @@ Commands:
 - `/opsx:archive <name>` — merge spec deltas into `openspec/specs/` and date-stamp the folder into `archive/`.
 - `npm run roadmap:sync` — reconcile ROADMAP.md status cells from folder state. Never hand-stamp a status.
 
+**Every commit goes to `stage`, never to `main`.** Push with `git push origin HEAD:stage` from whatever local branch you are on. `main` is protected by a ruleset: only Promote and Hotfix move it, each with the owner's approval in GitHub, so a push to `main` is refused. **A push to `stage` reaches staging only** — Staging runs the whole suite, migrates the staging project and publishes `stage-ops.shawarmania.in` — so it is safe at any hour, including during service. **A promotion is the release**: it fast-forwards `main` to a commit staging verified, and Deploy publishes it to the counters. It keeps every rule a push to `main` had, the deploy window above all: never while the counter trades. See [Releases](docs/RELEASES.md#staging).
+
 **When a change archives, its spec delta merges into `openspec/specs/` and every affected `docs/` page updates in the same change.** This is what stops the wiki rotting; treat a docs update as part of the work, not follow-up.
 
 ## Verification
 
 **This list mirrors `.github/workflows/verify.yml`, and is meant to stay that way.** A gate that CI runs and this list omits is a gate nobody runs before pushing — which is exactly how `format:check` stayed red across two changes before anybody noticed. If you add a CI step, add it here in the same commit.
 
-`verify.yml` is the one definition of the suite, and nothing triggers it directly. Two workflows call it: `ci.yml` on every pull request, and `deploy.yml` on every push to `main`, where it gates the production migration and Pages publication (the production build runs alongside verification, and its artifact is inert unless both verification and migration are green). **So this list is also what gates a release** — a check added here and to `verify.yml` protects both paths, and a check added anywhere else protects only one. A push to `main` still deploys; it applies forward production migrations after verification and publishes only when both succeed. A red commit or migration leaves the current production build live. See [Operations](docs/OPERATIONS.md#a-push-to-main-publishes-once-the-suite-agrees).
+`verify.yml` is the one definition of the suite, and nothing triggers it directly. Three workflows call it: `ci.yml` on every pull request, `staging.yml` on every push to `stage`, and `deploy.yml` on every push to `main` — which only Promote and Hotfix make, and which skips the suite for a commit Staging already verified — where it gates the production migration and Pages publication (the production build runs alongside verification, and its artifact is inert unless both verification and migration are green). **So this list is also what gates a release** — a check added here and to `verify.yml` protects both paths, and a check added anywhere else protects only one. A push to `main` still deploys; it applies forward production migrations after verification and publishes only when both succeed. A red commit or migration leaves the current production build live. See [Operations](docs/OPERATIONS.md#a-push-to-main-publishes-once-the-suite-agrees).
 
 The suite runs five jobs. Three need nothing but the repo (the verify job also
 installs Deno 2.x for its typed Edge Function contract):
@@ -201,9 +203,10 @@ lane whose reasons live only in a skill file is a lane nobody trusts under
 pressure. `attendance-position-free-commands` is the change that prompted this,
 if you want a worked example.
 
-**Why pushing early is safe here.** `deploy.yml` declares `migrate: needs: gate`
-and `deploy: needs: [gate, build, migrate]`. A red gate publishes nothing and
-migrates nothing, and the build already on the counter stays live. CI is a hard
+**Why pushing early is safe here.** A push goes to `stage` and reaches staging
+only; production moves when the owner promotes. And `staging.yml`, like
+`deploy.yml`, declares `migrate: needs: [awake, gate]` and publishes only after
+both: a red gate publishes nothing and migrates nothing. CI is a hard
 gate, not an advisory one, so running the full suite locally buys a faster red
 rather than a safer deploy — and it runs three jobs in parallel, which beats
 running them yourself in series.

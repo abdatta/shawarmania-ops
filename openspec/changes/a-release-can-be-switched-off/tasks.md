@@ -523,12 +523,12 @@ staging must verify this change before 10 promotes it to production.
   both agent trees that pushes or releases, `docs/OPERATIONS.md` and
   `docs/RELEASES.md` (the life of a change with steps 5–5b, the fake-outlet runbook,
   Promote, the reset). `npm run lint:agents` green.
-  *(Prepared 2026-10-13: `stage-instructions.py` in this folder makes every edit —
-  `AGENTS.md`, `CLAUDE.md`, the quickfix lane, and the Staging section and life-of-a-change
-  rows of `docs/RELEASES.md` and `docs/OPERATIONS.md` — and was dry-run clean against this
-  commit, then reverted. Run it from the repository root, `npm run lint:agents` and
-  `npm run format:check`, commit, push to `stage`, then turn the `main` ruleset on. Delete
-  the script in that commit.)*
+  *(Committed locally 2026-10-13 as its own commit, "Staging #75: Every commit goes to
+  stage first": `AGENTS.md`, `CLAUDE.md`, the quickfix lane, and the Staging section,
+  life-of-a-change rows and staging-beside-production table of `docs/RELEASES.md` and
+  `docs/OPERATIONS.md`; the script that wrote them is deleted in it. Ticked once it is
+  pushed to `stage`. The `main` ruleset follows 10.2, not this push — see 9.10's
+  correction.)*
 - [ ] 9.12 Push this change to `stage`. Staging migrates, seeds the empty project
   (`--if-empty`), publishes, and the smoke suite passes. Run the paused-project message
   once by pausing staging deliberately, then resume it.

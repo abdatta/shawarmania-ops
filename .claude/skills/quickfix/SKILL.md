@@ -130,12 +130,15 @@ because the rule is what stops the recurrence.
 ## Phase 7 — Push, then watch the gate
 
 Commit in the repo's voice, describing what was wrong and why the fix is shaped
-as it is. Push only when the user has asked for it, and treat reaching
-production as the outward-facing act it is.
+as it is. Push only when the user has asked for it, and only to `stage`:
+`git push origin HEAD:stage`. A push to `main` is refused by its ruleset.
 
-Then `gh run watch <id> --exit-status`, and check the deployed build actually
-carries the commit (`build-version` on the shell reads `Build <sha>`). If CI goes
-red, fix forward: nothing published.
+Then `gh run watch <id> --exit-status` on the Staging run, and check the staging
+build carries the commit (`build-version` on `stage-ops.shawarmania.in` reads
+`Build <sha>`). If it goes red, fix forward: nothing published. The fix reaches
+the counters when the owner approves a Promote of that commit — tell them it is
+ready, and remember a promotion is the release: never while the counter trades.
+If the counter is down, the way out is Hotfix, not waiting for Promote.
 
 **Unless the fix was documentation only.** CI is tiered by path, so a commit
 confined to prose runs the `Prose` workflow, produces no `Deploy` run, and leaves

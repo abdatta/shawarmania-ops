@@ -8,6 +8,7 @@ Quick orientation:
 - **What do I work on?** Run `/next-change`. It derives the recommendation from the roadmap and change folders, live.
 - **How do I make a change?** `/opsx:propose` → `/opsx:apply` → `/opsx:archive`. No code change without a change folder. `/propose-apply-verify <name>` runs the first two plus an autonomous verification loop in one go.
 - **It's a bug, not a change?** Run `/quickfix`. Same rules, a fraction of the ceremony, and it hands itself back for anything touching migrations, policies, money, offline, the demo seam, or how the counter and kitchen behave at run time.
+- **Where does a commit go?** To `stage` (`git push origin HEAD:stage`), never `main`. Staging verifies it; the owner promotes it to the counters. See [`docs/RELEASES.md`](docs/RELEASES.md#staging).
 - **Where is the truth?** `docs/` for what the app is, `openspec/specs/` for what it must do, `openspec/changes/` for what's changing.
 
 Three rules worth loading before you touch anything: **outlet isolation is enforced in the database, not the UI**, **money is integer paise, never floats**, and **every change can be turned off** — a behaviour change ships behind a change gate, off, and migrations only add. The rest are in [`AGENTS.md`](AGENTS.md).
