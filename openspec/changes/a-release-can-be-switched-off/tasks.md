@@ -531,7 +531,10 @@ staging must verify this change before 10 promotes it to production.
   *(2026-10-13: `STAGING_TEST_PASSWORD` added to `staging-database` at the owner's request,
   read from the user-only file and never displayed; the local copy now lives in the
   gitignored `.env`. `stage` pushed at `8ad96b90` with the owner's approval; `main`
-  untouched at `92eaf70c`. Open: the `stage` ruleset, then the `main` ruleset after 10.2.)*
+  untouched at `92eaf70c`. The `stage` ruleset (id `25030428`) was created at the owner's
+  request the same day: deletion refused, force pushes allowed; `gh api
+  repos/abdatta/shawarmania-ops/rules/branches/stage` reads back `deletion` alone. Open:
+  the `main` ruleset, after 10.2.)*
 - [x] 9.11 In **one commit**, pushed to `stage` just before the ruleset is turned
   on: `AGENTS.md` (push to `stage`, never `main`; promotion is the release and keeps
   the deploy-window rule; a push to `stage` is safe at any hour), every workflow in
