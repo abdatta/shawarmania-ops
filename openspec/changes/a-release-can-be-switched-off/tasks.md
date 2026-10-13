@@ -561,7 +561,8 @@ staging must verify this change before 10 promotes it to production.
   service. Read staging's request counts from its logs and compare with the budget
   (5.7). Record what was seen here.
 - [ ] 9.14 Promote rehearsal: Promote a SHA with no successful Staging run is
-  refused; Promote of a SHA `main` is not an ancestor of is refused; a direct push to
+  refused; Promote with no SHA, while `stage`'s tip is docs-only, takes the newest
+  verified commit beneath it and lists the tip as left behind; Promote of a SHA `main` is not an ancestor of is refused; a direct push to
   `main` is refused by the ruleset. *Only after 10.2*: Promote runs from `main`, which
   does not hold it until then.
 

@@ -18,10 +18,17 @@ const workflow = (name) => readFileSync(resolve(process.cwd(), '.github/workflow
 describe('Promote', () => {
   const yaml = workflow('promote.yml')
 
-  it('is run by hand, defaulting to stage’s tip', () => {
+  it('is run by hand, defaulting to the newest commit on stage that Staging verified', () => {
     expect(yaml).toMatch(/^ {2}workflow_dispatch:\s*$/m)
     expect(yaml).not.toMatch(/^ {2}push:/m)
-    expect(commandsOf(yaml, 'check')).toMatch(/git rev-parse origin\/stage/)
+    const check = commandsOf(yaml, 'check')
+    expect(check).not.toMatch(/git rev-parse origin\/stage/)
+    expect(check).toMatch(/workflows\/staging\.yml\/runs\?status=success/)
+    expect(check).toMatch(/git rev-list origin\/main\.\.origin\/stage/)
+  })
+
+  it('lists what it leaves on stage, so a docs-only tip is seen waiting', () => {
+    expect(commandsOf(yaml, 'check')).toMatch(/git log --reverse .*"\$SHA"\.\.origin\/stage/)
   })
 
   it('requires a successful Staging run on exactly that commit, and a fast-forward', () => {

@@ -1315,6 +1315,15 @@ promotion carries everything beneath its SHA; because every behaviour change shi
 switched off, carrying a change that was staged but not yet tried is safe, and the
 summary lists it.
 
+**Promote's default is the newest verified commit, not the tip.** Every commit goes
+to `stage`, docs included, and a docs-only commit starts no Staging run, so `stage`'s
+tip is often a commit Promote must refuse. Given no SHA, Promote walks `stage` down
+from its tip to the first commit above `main` with a successful Staging run, and lists
+what it leaves behind; the docs wait for the next promotion, and production still runs
+exactly the commit staging ran. Rejected: accepting a docs-only commit on top of a
+verified one, which would put a build stamp on production naming a commit staging
+never published (decided by the owner, 2026-10-13).
+
 **Workflows after this change.**
 
 | Workflow | Trigger | Does |

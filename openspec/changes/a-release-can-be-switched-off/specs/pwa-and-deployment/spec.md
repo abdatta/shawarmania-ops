@@ -147,7 +147,8 @@ staging, deploy Edge Functions to staging, publish the staging build and run the
 staging smoke suite. `main` SHALL refuse direct pushes, force pushes and deletion
 from every actor except one deploy key, which only the Promote and Hotfix workflows
 hold, in environments whose required reviewer is the owner. A manually dispatched
-**Promote** workflow SHALL take a SHA, SHALL stop with one sentence unless a Staging
+**Promote** workflow SHALL take a SHA, or given none SHALL take the newest commit on
+`stage` above `main` with a successful Staging run, SHALL stop with one sentence unless a Staging
 run for exactly that SHA succeeded and `main` is its ancestor, SHALL list every
 commit and change folder it would carry, and after the owner approves SHALL
 fast-forward `main` to that SHA without creating a commit. Deploy SHALL skip the
@@ -158,6 +159,13 @@ verification suite for a SHA whose Staging run succeeded and run it for any othe
 - **WHEN** the owner approves a Promote of a SHA staging verified
 - **THEN** `main` points at that SHA, Deploy publishes it without re-running the
   suite, and the build stamp on production equals the one on staging
+
+#### Scenario: A docs-only tip waits for the next promotion
+
+- **WHEN** `stage`'s newest commit changes only documentation, so no Staging run
+  verified it, and the owner runs Promote without a SHA
+- **THEN** Promote takes the newest commit beneath it that Staging verified, and its
+  summary lists the docs-only commit as left on `stage`
 
 #### Scenario: An untried commit cannot be promoted
 

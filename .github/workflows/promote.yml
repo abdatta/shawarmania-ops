@@ -3,7 +3,10 @@ name: Promote
 
 # Moving a commit staging verified to production (a-release-can-be-switched-off,
 # D20). Actions → Promote → Run workflow, with the full SHA of a commit on
-# `stage`, or nothing for `stage`'s tip.
+# `stage`, or nothing for the newest commit on `stage` that Staging verified. A
+# docs-only commit starts no Staging run, so `stage`'s tip is often one; it
+# waits on `stage` and rides along with the next promotion rather than blocking
+# this one, and the summary lists what stays behind.
 #
 # `main` is only ever fast-forwarded to a SHA already on `stage`. Nothing is
 # merged, squashed or rebased on the way, so the commit production runs is
@@ -22,7 +25,7 @@ on:
   workflow_dispatch:
     inputs:
       sha:
-        description: Full commit SHA on stage (empty for stage's tip)
+        description: Full commit SHA on stage (empty for the newest one Staging verified)
         required: false
         type: string
 
@@ -50,10 +53,27 @@ jobs:
       - name: The commit to promote
         id: sha
         env:
+          GH_TOKEN: ${{ github.token }}
           INPUT_SHA: ${{ inputs.sha }}
         run: |
           set -euo pipefail
-          sha="${INPUT_SHA:-$(git rev-parse origin/stage)}"
+          sha="${INPUT_SHA:-}"
+          if [ -z "$sha" ]; then
+            verified=$(gh api \
+              "repos/${{ github.repository }}/actions/workflows/staging.yml/runs?status=success&per_page=100" \
+              --jq '.workflow_runs[].head_sha' | sort -u)
+            for commit in $(git rev-list origin/main..origin/stage); do
+              if grep -qx "$commit" <<< "$verified"; then
+                sha="$commit"
+                break
+              fi
+            done
+            if [ -z "$sha" ]; then
+              echo "No commit on stage above main has passed Staging yet: let Staging pass on one, or name a SHA." >&2
+              exit 1
+            fi
+            echo "The newest commit on stage that Staging verified is $sha."
+          fi
           if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
             echo "Give the full 40-character commit SHA, not \"$sha\"." >&2
             exit 1
@@ -108,6 +128,13 @@ jobs:
                 printf '| `%s` | %s | %s |\n' "${commit:0:8}" \
                   "$(git log -1 --format=%s "$commit" | sed 's/|/\\|/g')" "${folders:-—}"
               done
+            fi
+            behind=$(git rev-list --count "$SHA"..origin/stage)
+            if [ "$behind" != "0" ]; then
+              echo
+              echo "Left on stage for a later promotion ($behind):"
+              echo
+              git log --reverse --format='- `%h` %s' "$SHA"..origin/stage
             fi
           } | tee -a "$GITHUB_STEP_SUMMARY"
 

@@ -328,7 +328,9 @@ change-gate turn on *Test Cafe*, checking the band on each, and leaves both shif
 at the end.
 
 **Promoting.** Actions → Promote → Run workflow, with the commit's full SHA, or
-nothing for `stage`'s tip. It refuses a commit no Staging run passed and one `main`
+nothing for the newest commit on `stage` that Staging verified. A docs-only commit
+starts no Staging run, so it waits on `stage` and goes with the next promotion; the
+summary lists everything left behind. It refuses a commit no Staging run passed and one `main`
 cannot fast-forward to, then lists every commit it would carry with its change
 folders. GitHub holds the push until the owner approves it in the
 `production-promote` environment. Deploy then finds Staging's run for the commit,
