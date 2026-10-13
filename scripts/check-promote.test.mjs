@@ -70,6 +70,12 @@ describe('Staging', () => {
     expect(commandsOf(yaml, 'build')).toMatch(/VITE_APP_ENVIRONMENT: staging/)
   })
 
+  it('seeds a staging that holds no Test Cafe, after migrating and before publishing', () => {
+    const migrate = commandsOf(yaml, 'migrate')
+    expect(migrate).toMatch(/node scripts\/seed-staging\.mjs --if-empty/)
+    expect(migrate.indexOf('supabase db push')).toBeLessThan(migrate.indexOf('seed-staging.mjs'))
+  })
+
   it('says in one sentence when the staging project is paused', () => {
     expect(commandsOf(yaml, 'awake')).toMatch(/resume it from the staging account's dashboard/)
   })

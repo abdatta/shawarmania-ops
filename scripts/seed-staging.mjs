@@ -5,13 +5,14 @@
  *
  *   STAGING_SUPABASE_DB_URL=… STAGING_TEST_PASSWORD=… node scripts/seed-staging.mjs
  *   STAGING_TEST_PASSWORD=… node scripts/seed-staging.mjs --local   # rehearse on the local stack
+ *   … node scripts/seed-staging.mjs --if-empty   # seed only a staging that holds no Test Cafe
  *
  * Runs `supabase/staging/seed.sql` — *Test Cafe*, an account per role, a counter
  * and a kitchen tablet, a generated menu, and about three thousand bills rung
  * through the counter's own command — against the staging database, after
- * refusing anything that names production's project. The Staging reset workflow
- * runs it after wiping staging; the owner may run it once after creating the
- * project.
+ * refusing anything that names production's project. The Staging workflow runs
+ * it with `--if-empty` on every push, which seeds a new project once and leaves a
+ * seeded one alone; the Staging reset workflow runs it after wiping staging.
  *
  * The test accounts' password comes from the environment, never from this
  * repository. It reaches the database inside the statement, written to a
@@ -56,16 +57,17 @@ export function seedTarget({ url, local, password, days = DEFAULT_DAYS, bills = 
 const literal = (value) => `'${String(value).replace(/'/g, "''")}'`
 
 /**
- * The seed with the password and counts written into its three `{{…}}` places:
- * the password as a quoted literal, the counts as integers. `supabase db query`
- * runs one statement and keeps no session between runs, so the values travel in
- * the statement itself rather than as session settings.
+ * The seed with its four `{{…}}` places filled: the password as a quoted literal,
+ * the counts as integers, and whether a seeded staging is left alone rather than
+ * refused. `supabase db query` runs one statement and keeps no session between
+ * runs, so the values travel in the statement itself rather than as settings.
  */
-export function seedScript({ password, days, bills }, seedSql) {
+export function seedScript({ password, days, bills, ifEmpty = false }, seedSql) {
   const values = {
     '{{seed.password}}': literal(password),
     '{{seed.days}}': String(Math.trunc(days)),
     '{{seed.bills}}': String(Math.trunc(bills)),
+    '{{seed.if_empty}}': ifEmpty ? 'true' : 'false',
   }
   let script = seedSql
   for (const [placeholder, value] of Object.entries(values)) {
@@ -85,7 +87,12 @@ function main() {
     bills: Number(process.env['STAGING_SEED_BILLS'] ?? DEFAULT_BILLS),
   })
   const sql = seedScript(
-    { password: process.env['STAGING_TEST_PASSWORD'], days: target.days, bills: target.bills },
+    {
+      password: process.env['STAGING_TEST_PASSWORD'],
+      days: target.days,
+      bills: target.bills,
+      ifEmpty: process.argv.includes('--if-empty'),
+    },
     readFileSync(join(root, 'supabase/staging/seed.sql'), 'utf8'),
   )
 

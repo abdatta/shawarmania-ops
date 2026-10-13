@@ -81,6 +81,14 @@ classified as (
       when tbl in ('customers', 'expense_categories',
                    'expense_category_operations', 'reserved_expense_categories')
         then 'global'
+      -- The change gates (a-release-can-be-switched-off): one answer per gate
+      -- for the whole business, never per outlet (owner, 2026-10-12), which
+      -- every signed-in principal and tablet reads so a page can run; their
+      -- dependencies; and the owner's history of turns. Tablet health carries
+      -- `outlet_id` and is classified by the first branch. Their teeth are in
+      -- section 8 below and in `86_a_release_can_be_switched_off.sql`.
+      when tbl in ('change_gates', 'change_gate_dependencies', 'change_gate_events')
+        then 'global'
       -- Tenant-less: belongs to no outlet at all, because the thing it counts
       -- happens before anybody has an outlet. Listed by name rather than
       -- inferred, so the next table with no outlet_id still has to be argued
@@ -389,6 +397,33 @@ select ok(
   and not has_table_privilege('authenticated', 'public.archived_manual_ledger_days', 'UPDATE')
   and not has_table_privilege('authenticated', 'public.archived_manual_ledger_days', 'DELETE'),
   'the notebook archive grants authenticated clients no verb');
+
+-- ---------------------------------------------------------------------------
+-- 8. What the change gates cost. Business-wide, so a mistake here reaches every
+-- device at once: each table carries exactly one policy, a select, and no client
+-- session holds any verb but select on any of them. Turning a gate goes through
+-- `set_change_gate` (the owner) or `change_gate_force` (the operator) and
+-- nothing else; `86_a_release_can_be_switched_off.sql` proves who may call them.
+
+select is(
+  (select string_agg(tablename || ':' || cmd, ', ' order by tablename)
+     from pg_policies
+    where schemaname = 'public'
+      and tablename in ('change_gates', 'change_gate_dependencies', 'change_gate_events')),
+  'change_gate_dependencies:SELECT, change_gate_events:SELECT, change_gates:SELECT',
+  'each change-gate table carries exactly one policy, a select'
+);
+
+select is(
+  (select count(*)::integer
+     from unnest(array['public.change_gates', 'public.change_gate_dependencies',
+                       'public.change_gate_events']) as t (tbl),
+          unnest(array['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']) as v (verb)
+    where has_table_privilege('authenticated', t.tbl, v.verb)
+       or has_table_privilege('anon', t.tbl, v.verb)),
+  0,
+  'no client session may write a change gate, its dependencies or its history'
+);
 
 select * from finish();
 rollback;

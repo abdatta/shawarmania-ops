@@ -41,15 +41,24 @@ export function createSupabaseChangeGatesAdapter(client: Client): ChangeGatesAda
      * A nudge to re-read, never the data: Realtime may be down, and the store
      * reads once a minute whatever happens here (D6). One channel however many
      * listeners, and the last one to leave takes it with it.
+     *
+     * It also nudges each time the channel joins. A turn made between a page's
+     * first read and its channel joining reaches no listener, and was left to
+     * the minute read: measured on the local stack, 62 s against 4 s for a turn
+     * once joined. Supabase reports a rejoin after a dropped connection the same
+     * way, so a turn made while a tablet was briefly off the channel is read too.
      */
     subscribe(onChange) {
       if (!channel) {
+        const nudge = () => {
+          for (const listener of [...listeners]) listener()
+        }
         channel = client
           .channel('change-gates')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'change_gates' }, () => {
-            for (const listener of [...listeners]) listener()
-          })
-        channel.subscribe()
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'change_gates' }, nudge)
+        channel.subscribe((status) => {
+          if (status === 'SUBSCRIBED') nudge()
+        })
       }
       listeners.add(onChange)
       return () => {

@@ -1262,6 +1262,15 @@ pushes the SHA to `main` with a **deploy key** held only in that environment. A
 deploy key, not `GITHUB_TOKEN`: a push made with `GITHUB_TOKEN` does not trigger
 other workflows, so Deploy would never run.
 
+**The first promotion is a direct push** (corrected during apply, before anything was
+pushed). GitHub starts a hand-run (`workflow_dispatch`) workflow only from the default
+branch, so Promote, Staging reset, Republish and Hotfix cannot run until this change is
+on `main`. This change therefore reaches `main` by one last direct push, of the SHA
+staging verified, in the owner's window; the `main` ruleset goes on straight after, and
+every later change goes through Promote. Until then nothing can seed staging by hand, so
+the Staging workflow seeds a project that holds no Test Cafe itself, after migrating, and
+leaves a seeded one alone.
+
 **`main` is protected by a repository ruleset**: no direct pushes, no force pushes,
 no deletion. The one bypass actor is that deploy key. The owner is not a bypass
 actor: an owner who needs `main` moved approves a Promote or a Hotfix like anyone

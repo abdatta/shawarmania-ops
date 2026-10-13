@@ -49,11 +49,15 @@ describe('where the seed may run', () => {
 })
 
 describe('what the seed sends', () => {
-  it('writes the password as an escaped literal and the counts as integers', () => {
-    const seed = 'x := {{seed.password}}; y := {{seed.days}}; z := {{seed.bills}};'
+  it('writes the password as an escaped literal, the counts as integers, and if-empty', () => {
+    const seed =
+      'x := {{seed.password}}; y := {{seed.days}}; z := {{seed.bills}}; e := {{seed.if_empty}};'
     expect(seedScript({ password: "it's-a-password", days: 90, bills: 3009 }, seed)).toBe(
-      "x := 'it''s-a-password'; y := 90; z := 3009;",
+      "x := 'it''s-a-password'; y := 90; z := 3009; e := false;",
     )
+    expect(
+      seedScript({ password: 'a-long-password', days: 90, bills: 3009, ifEmpty: true }, seed),
+    ).toContain('e := true;')
   })
 
   it('refuses a seed missing a place for any value', () => {
@@ -66,6 +70,7 @@ describe('what the seed sends', () => {
     const seed = readFileSync(resolve(process.cwd(), 'supabase/staging/seed.sql'), 'utf8')
     expect(seed).not.toMatch(/shawarmania-local/)
     expect(seed).toContain('{{seed.password}}')
+    expect(seed).toContain('{{seed.if_empty}}')
     expect(seed).toMatch(/create_billing_order\(/)
     expect(seed).toMatch(/pay_billing_order\(/)
   })

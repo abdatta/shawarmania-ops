@@ -262,10 +262,13 @@ workflow**, with the full SHA of the fix and a reason.
    production can start before it. Approving also cancels any Deploy run still
    going for another commit, so it cannot republish an older build over the fix.
 4. Then Deploy's order: migrate, Edge Functions, publish.
+5. Last, **main follows the fix**: `main` fast-forwards to it with the deploy key,
+   which GitHub holds for the owner's approval once more. Deploy then runs on
+   that push, finds no Staging run for the commit, runs the full suite and
+   republishes it.
 
-Afterwards, push the same commit to `main` if it is not already there, so Deploy
-runs the full suite on it. The hotfix's change folder records the reason, the
-approval and that suite's result.
+Once `stage` exists, the fix must already be on it. The hotfix's change folder
+records the reason, the approvals and the full suite's result afterwards.
 
 To check that the environment's reviewer is set — no file can prove it:
 

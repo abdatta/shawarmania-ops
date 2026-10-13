@@ -331,19 +331,45 @@ Both trees; `npm run lint:agents` green at the end.
 
 ## 8. Verification
 
-- [ ] 8.1 Run every gate CI runs, on fresh resets: lint (all invariants, including
+- [x] 8.1 Run every gate CI runs, on fresh resets: lint (all invariants, including
   the two new lints), format, typecheck, functions typecheck, contrast, unit, build,
   `test:e2e` and `test:e2e:on`, `test:db`, `test:rls`, `test:e2e:auth` and
   `test:e2e:auth:on`, the budget, generated types, and the prose tier's steps.
   Record counts here.
-- [ ] 8.2 Walk the live-built owner Change gates page at phone width in both themes, and
+  *(Done 2026-10-13, in `verify.yml`'s order with `CI=true`, the demo and auth suites
+  one after another, each database job on a fresh reset: lint (eleven invariants) 0
+  errors; format clean; typecheck and functions typecheck clean; unit 2,619 in 209 files;
+  contrast 78 pairs AA in both themes; build clean; `test:e2e` 350 passed and
+  `test:e2e:on` 352; `test:db` 3,542 in 87 files; `test:rls` every phase green;
+  `test:e2e:auth` 41 passed and `test:e2e:auth:on` 42, the request budget among them;
+  generated types unchanged; the prose tier's proposal check green. The first `test:db`
+  failed `01_schema_coverage.sql`: the three gate tables were unclassified. They are
+  `global` now, with teeth beside the customers table's — one select policy each, no
+  client verb but select — and the suite was rerun on a fresh reset. The lesson is the
+  one the repo already records: run every gate CI runs, not only the file you wrote.)*
+- [x] 8.2 Walk the live-built owner Change gates page at phone width in both themes, and
   the counter and kitchen at tablet width, with console and network clean. On the
   local stack: turn the probe on from the owner's page and watch an idle counter and
   kitchen take it within a minute, then off; turn a gate while typing on the
   counter and confirm the reload waits.
-- [ ] 8.3 Offline: with `tablet-health` on, take the counter offline, ring bills,
+- [x] 8.3 Offline: with `tablet-health` on, take the counter offline, ring bills,
   turn `tablet-health` off from the owner, reconnect; every bill settles exactly
   once and the counter reloads into off at its next free moment.
+  *(8.2 and 8.3 done 2026-10-13 on the local stack, driven by a throwaway Playwright spec
+  (kept outside the repository) and walked in the browser pane. An idle counter and
+  kitchen took the probe both ways in **4 s** each. A counter with a bill open did not
+  reload in 75 s, and reloaded 5 s after the bill was cleared. The first run found one
+  gap: a turn made within a second or two of the tablets opening took **62 s**, the
+  minute read, because their live channel had not joined. The change-gates channel now
+  asks for a read each time it joins — and so after every rejoin — and the same turn
+  lands in 4 s (a unit test pins the join nudge). Offline, with tablet health on: two
+  orders rung and one paid offline, tablet health turned off by the owner, reconnect —
+  each order arrived once, the paid one has exactly one bill, and the counter reloaded
+  into the turn (its build code lost TH). The owner's Change gates list and gate page
+  at phone width in light and dark, and the counter at tablet width: console clean,
+  every request 200. The gate page showed the offline counter's last minute honestly —
+  99 requests, 49 failed, waiting. The kitchen board was exercised by the automated runs
+  here and in 8.1, not walked by eye.)*
 
 ## 9. Staging and the `stage` branch
 
@@ -357,11 +383,28 @@ staging must verify this change before 10 promotes it to production.
   projects' plan, compute, Postgres major version and region through the Management
   API (read-only) and record them side by side in `docs/OPERATIONS.md`. Record the
   account's email there too, and nothing else about it.
+  *(Partly done 2026-10-13. The owner created the account and the project "Ops (Staging)",
+  ref `diimnemgqmoqrnqzopiz`, in its own organization. Read in the dashboard: Free plan,
+  Nano compute, ap-south-1 — production read through the Management API the same day:
+  Free, Nano (no compute add-on), ap-south-1, Postgres 17.6.1.147. Still to do: staging's
+  Postgres version through the Management API with the staging token, and the side-by-side
+  record and the account email in `docs/OPERATIONS.md` (part of 9.11's commit).)*
 - [ ] 9.2 **Owner:** set staging's Auth settings to production's (site URL and
   redirect URLs pointing at the staging address); bootstrap the owner's own Super
   Admin in staging the way production's was; create a Cloudflare Pages project
   `shawarmania-ops-staging` and an API token scoped to it. Ask the owner whether
   they want their own subdomain (design, Open questions).
+  *(Partly done 2026-10-13, in the owner's browser with their go-ahead. Staging Auth now
+  matches production's (read through the Management API): sign-ups off, email confirmation
+  on, manual linking and anonymous sign-ins off; site URL `https://stage-ops.shawarmania.in/`,
+  redirect `https://stage-ops.shawarmania.in/**`. Cloudflare Pages project
+  `shawarmania-ops-staging` (direct upload), production branch `stage`, custom domain
+  `stage-ops.shawarmania.in` added — Cloudflare made the CNAME to
+  `shawarmania-ops-staging.pages.dev` itself. Account ID `f2f737527a40ab8dc8052d3ba1fadabc`
+  for `CLOUDFLARE_ACCOUNT_ID`. Still the owner's: the Pages-scoped API token, and the staging
+  owner bootstrap is replaced by the seed's `staging.owner` unless they want their own.
+  Production's own site URL still reads the old `abdatta.github.io` address; nothing in the
+  app sends a Supabase auth email or redirect, so it is cosmetic there.)*
 - [x] 9.3 Build-time `VITE_APP_ENVIRONMENT=staging`: the **Staging · not a real
   outlet** band on every shell and role, and the manifest name *Shawarmania Ops
   (staging)*. Unit test: the band renders only for `staging`; a production build has
@@ -448,15 +491,47 @@ staging must verify this change before 10 promotes it to production.
   the `main` ruleset (no direct push, no force push, no deletion; the deploy key the
   only bypass) and the `stage` ruleset (no force push, no deletion). Confirm each
   with `gh api` read-only.
+  *(Credential handoff completed 2026-10-13, with the owner's explicit approval
+  for the access grants. All three repository variables and all six environment
+  secrets in the setup checklist are configured; the `promote` deploy key
+  (GitHub ID `166283612`) has write access. Both `production-promote` and
+  `production-hotfix` require `abdatta` as reviewer. The Supabase token is scoped
+  to staging alone, Project Settings Read and Edge Functions Read-write; the
+  Cloudflare token has Pages Edit for the named account, the scope its dashboard
+  offers, rather than an individual Pages project. Read-only API calls accepted
+  both tokens and confirmed the staging Pages project's `stage` production branch.
+  Staging's session-pooler password came from the local `SUPABASE_STAGE_PWD` and
+  passed a read-only SQL query. Management API reads: staging PostgreSQL
+  `17.11.0.003`, production `17.6.1.147`, both major 17 and `ap-south-1`.
+  No password, access token or private key was printed; temporary key and token
+  files were removed after storage and validation. The generated test password is
+  retained in a local, user-only file for the owner's fake-outlet walkthrough.
+  The `stage` branch, rulesets, 9.11's instruction commit, deployment/reset and
+  owner walkthrough remain pending; these tasks are deliberately still open.)*
+  *(Corrected 2026-10-13, before anything was pushed. GitHub starts a hand-run
+  (`workflow_dispatch`) workflow only from the default branch, so Promote, Staging reset,
+  Republish and Hotfix cannot run until this change is on `main`. Three consequences:
+  the `stage` ruleset goes on as soon as `stage` exists, but the `main` ruleset only after
+  10.2, whose push to `main` is this change's own, and the last direct one; the Staging
+  workflow seeds a staging that holds no Test Cafe itself (`seed-staging.mjs --if-empty`
+  after migrating), because Staging reset cannot yet; and `STAGING_TEST_PASSWORD` must be
+  in `staging-database` as well as `staging-smoke`, because the seed step and Staging
+  reset run there. **Owner:** add it there.)*
 - [ ] 9.11 In **one commit**, pushed to `stage` just before the ruleset is turned
   on: `AGENTS.md` (push to `stage`, never `main`; promotion is the release and keeps
   the deploy-window rule; a push to `stage` is safe at any hour), every workflow in
   both agent trees that pushes or releases, `docs/OPERATIONS.md` and
   `docs/RELEASES.md` (the life of a change with steps 5–5b, the fake-outlet runbook,
   Promote, the reset). `npm run lint:agents` green.
-- [ ] 9.12 Push this change to `stage`. Staging migrates and publishes; the smoke
-  suite passes; run the seed. Run the paused-project message once by pausing
-  staging deliberately, then resume it.
+  *(Prepared 2026-10-13: `stage-instructions.py` in this folder makes every edit —
+  `AGENTS.md`, `CLAUDE.md`, the quickfix lane, and the Staging section and life-of-a-change
+  rows of `docs/RELEASES.md` and `docs/OPERATIONS.md` — and was dry-run clean against this
+  commit, then reverted. Run it from the repository root, `npm run lint:agents` and
+  `npm run format:check`, commit, push to `stage`, then turn the `main` ruleset on. Delete
+  the script in that commit.)*
+- [ ] 9.12 Push this change to `stage`. Staging migrates, seeds the empty project
+  (`--if-empty`), publishes, and the smoke suite passes. Run the paused-project message
+  once by pausing staging deliberately, then resume it.
 - [ ] 9.13 **The fake outlet, with the owner.** Laptop 1 as *Test Cafe*'s counter
   (one-time code, shift handshake from the owner's phone), laptop 2 as its kitchen,
   the phone as owner. The owner turns `probe` on and off from staging's
@@ -466,20 +541,25 @@ staging must verify this change before 10 promotes it to production.
   (5.7). Record what was seen here.
 - [ ] 9.14 Promote rehearsal: Promote a SHA with no successful Staging run is
   refused; Promote of a SHA `main` is not an ancestor of is refused; a direct push to
-  `main` is refused by the ruleset. The real promotion is 10.2.
+  `main` is refused by the ruleset. *Only after 10.2*: Promote runs from `main`, which
+  does not hold it until then.
 
 ## 10. Production
 
 Promoting is the owner's decision and window. Nothing here is done without it.
-Production is reached only through Promote (9.9), from a SHA staging verified.
+Production is reached only through Promote (9.9), from a SHA staging verified — except
+this change's own first arrival, which carries Promote to `main` (10.2).
 
 - [ ] 10.1 Before the first push: the owner creates the `production-hotfix`
   environment in the repository's settings with themselves as required reviewer.
   Confirm it with `gh api repos/{owner}/{repo}/environments/production-hotfix`.
-- [ ] 10.2 At the owner's chosen window, the owner approves a Promote of the SHA
-  9.13 ran on. Confirm Deploy skipped the suite, the production build carries the
-  same SHA as staging's, the three tables exist, and every tablet still runs exactly
-  as before (all gates off).
+- [ ] 10.2 At the owner's chosen window, and with their go-ahead for that push, push
+  the SHA 9.13 ran on straight to `main` — the last direct push to `main`, because
+  Promote is not there to run until it lands. Confirm Deploy skipped the suite (it finds
+  the Staging run), the production build carries the same SHA as staging's, the three
+  tables exist, and every tablet still runs exactly as before (all gates off). Then the
+  **owner** turns on the `main` ruleset (no direct push, no force push, no deletion; the
+  deploy key the only bypass), and 9.14's rehearsal follows.
 - [ ] 10.3 With the owner, at a quiet hour: the owner turns `probe` on from
   their phone; every tablet's build code gains `PB` without anyone touching it,
   as it did on staging in 9.13;

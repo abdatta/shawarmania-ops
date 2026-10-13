@@ -26,14 +26,20 @@ declare
   c_password constant text := {{seed.password}};
   c_days constant integer := {{seed.days}};
   c_bills constant integer := {{seed.bills}};
+  -- `--if-empty`: a seeded staging is left as it is, rather than refused. The
+  -- Staging workflow seeds this way on every push, so the first push meets a
+  -- seeded project and every later one changes nothing.
+  c_if_empty constant boolean := {{seed.if_empty}};
 begin
   -- ── Refuse to run without the runner, or twice ─────────────────────────────
 
-  begin
-    if exists (select 1 from public.outlets where code = 'test-cafe') then
-      raise exception 'Staging is already seeded. Run the Staging reset workflow to start over.';
+  if exists (select 1 from public.outlets where code = 'test-cafe') then
+    if c_if_empty then
+      raise notice 'Staging already holds Test Cafe; nothing to seed.';
+      return;
     end if;
-  end;
+    raise exception 'Staging is already seeded. Run the Staging reset workflow to start over.';
+  end if;
 
   -- ── The outlet ──────────────────────────────────────────────────────────────
 
