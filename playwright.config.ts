@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test'
 
+import { GATE_STATE, skippedTags } from './e2e/support/change-gates'
 import { PORTS } from './ports'
 
 // This app's reserved range — see ports.ts. Not Vite's 4173 preview default,
@@ -40,6 +41,9 @@ export default defineConfig({
   // Serial in CI: the offline specs share a service worker registration.
   ...(process.env['CI'] ? { workers: 1 } : {}),
   reporter: process.env['CI'] ? [['github'], ['html', { open: 'never' }]] : [['list']],
+  // `CHANGE_GATES=on|off` (default off): the other state's tagged tests are left
+  // out (a-release-can-be-switched-off, D10). `e2e/test.ts` seeds the state.
+  grepInvert: skippedTags(GATE_STATE),
 
   use: {
     baseURL: BASE_URL,

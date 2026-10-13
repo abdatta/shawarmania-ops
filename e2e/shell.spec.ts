@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './test'
 
 // baseURL carries the deployment sub-path, so every goto here is relative.
 // A leading slash would resolve against the origin and skip the base.

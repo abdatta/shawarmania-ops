@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './test'
 
 /**
  * The two-level bottom bar, on a phone (#51).

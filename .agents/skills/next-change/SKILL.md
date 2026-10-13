@@ -29,13 +29,20 @@ and task checkboxes as the source of truth.
    then inventory order. Do not infer waves from change numbers.
 5. Recommend one primary change that advances the critical path. Put genuinely
    parallel options in a separate section. Prefer finishing an active change
-   with non-gate tasks over opening another.
+   with non-gate tasks over opening another. **Gates due for retirement come
+   first:** every `kind: 'change'` gate in `src/change-gates/gates.ts` whose
+   `retireBy` has passed or falls within seven days is work due before any new
+   change, so its retirement (the `retire-gate` workflow) is the primary
+   recommendation, with the date. Lint fails fourteen days after it.
 6. Read the recommended change's proposal and derive its pre-flight checklist,
    including:
    - First workflow action.
    - Dependency gates.
    - Current branch and intentionally scoped worktree state.
    - Context files and docs named by the proposal.
+   - Whether it changes a live surface's behaviour and so ships behind a change
+     gate, off, named in its proposal's `## Change gate` section (or
+     `No gate:` and why); migrations only add.
    - Migration, Supabase, seed, tenancy, offline, UI, or theme implications.
    - Work only the user can perform, such as real hardware or on-site checks.
 7. Read the Model cell and proposal banner. Report that label exactly as

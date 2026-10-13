@@ -35,6 +35,17 @@ would have resolved is a constant in this repo:
 been deployed and watched in real use, and the owner calls it. If you cannot
 show that it shipped, say so and stop.
 
+**A change with a gate archives only after the gate has been pulled once in
+production.** Find its gates: every entry in `src/change-gates/gates.ts` whose
+`change` is this change's name. For each, the production history must show it
+turned on and, after that, turned off and on again. Read `change_gate_events`
+read-only if you have production read access, or ask the owner to read the
+gate's *History* on the Change gates page. If the pull is missing, stop and say
+so. Then seed the retirement: `openspec/changes/retire-<key>/` with
+`.openspec.yaml` and a short `proposal.md` naming the gate, its `retireBy`, and
+the `retire-gate` workflow, with a `## Change gate` section reading
+`No gate: a retirement keeps the behaviour already on.`
+
 ## Check Completion
 
 1. List incomplete artifacts. Ask for explicit confirmation before continuing

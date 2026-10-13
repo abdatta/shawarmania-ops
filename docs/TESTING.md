@@ -17,10 +17,12 @@ Testing effort follows risk, and in this app risk is concentrated in three place
 ```bash
 npm test          # Vitest: unit, component, and build-tooling suites
 npm run test:e2e  # Playwright: shell, demo and the offline path, against a real build
+npm run test:e2e:on # the same, with every change gate on
 npm run test:e2e:auth # Playwright: sign-in, provisioning, deactivation (needs the local stack)
+npm run test:e2e:auth:on # the same, with every change gate on in the local database
 npm run test:db   # pgTAP: isolation + write-contract suites (needs the local stack)
 npm run test:rls  # REST probes: real sign-ins, hand-crafted cross-outlet requests
-npm run lint      # ESLint + no-hex + backlog/spec indexes + Edge Function config + agent instructions
+npm run lint      # ESLint + no-hex + backlog/spec indexes + Edge Function config + agent instructions + migrations only add + change gates
 npm run typecheck # tsc --noEmit, strict
 npm run functions:typecheck # Deno: generated-schema check for the Edge mapping contract
 npm run contrast  # WCAG validator over the token file, both themes
@@ -288,6 +290,9 @@ That is all `clientsClaim` governs, and it is worth being exact because this pag
 - **CI has two tiers, split by path.** A commit touching anything that can change the bundle, the schema or the policies runs the whole suite and gates the publish, exactly as it always has. A commit confined to prose — `docs/`, `openspec/changes|specs|todos/`, `.claude/`, `.agents/`, root markdown — runs the `Prose` workflow instead: `format:check`, `lint:todos`, `lint:specs`, and `lint:agents`, the four gates that genuinely apply, and no database. It publishes nothing, because there is nothing in it to publish. `openspec/tools/` is **not** prose: it is linted JavaScript and takes the full suite. The two path lists are exact complements, so every commit matches at least one tier and none goes unchecked; `scripts/check-workflow-path-tiers.test.mjs` fails if they ever drift apart.
 - **Dependency-advisory refreshes** record the vulnerable version and dependency path, whether it is browser-runtime reachable, and the compatible patched resolution. Verify the committed result with a clean `npm ci`, `npm ls` for every affected package, `npm audit`, the focused build/PWA tests, the production build, and the offline-shell/update-adoption browser cases. If no compatible fix exists, document the temporary safety case and a time-bounded review trigger rather than hiding the advisory.
 - **Tenancy-touching changes**: the isolation suite passes, including new cases for any new table.
+- **Changes behind a change gate** (see [Releases](RELEASES.md#tests-in-both-states)): both states. Unit tests run every gate off; `describeChangeGate('<key>', (on) => …)` runs a block once per state. The browser suites run with every gate off (`test:e2e`, `test:e2e:auth`) and with every gate on (`test:e2e:on`, `test:e2e:auth:on`), as separate CI jobs. A test tagged `@cg-on:<key>` runs only with gates on, `@cg-off:<key>` only with gates off — and that tag is the only edit an existing test may receive when a gate changes what it asserts — and `@cg-round-trip:<key>` runs with gates on, turns its own gate alone off mid-test and finishes the work on the old path. Each spec takes `test` from its suite's `./test`, which seeds the run's answers into every browser context before its first page; the auth suite's global setup turns the local database's gates to match and back off afterwards.
+- **Migration changes, again**: `npm run lint:migrations` — every migration after the baseline must leave every published build working. It replays as a must-fail against #74's migration, which replaced the function the published counter called.
+- **Counter or kitchen runtime changes**: the request budget, `e2e-auth/request-budget.spec.ts`, which counts an idle counter's and kitchen's requests over a measured minute and an ACK's and a payment's, in both states. A change that needs more raises the budget in its own diff.
 - **Migration changes**: after `db:reset`, run `npm run db:types` and include any generated schema change. Once it is staged, `git diff --exit-code src/data-access/database.types.ts` must be clean; ordinary TypeScript checking cannot detect a stale but internally valid generated snapshot.
 - **Billing or offline changes**: the offline E2E path passes.
 - **UI changes**: run the app and look at it — phone viewport and tablet viewport, light and dark themes.

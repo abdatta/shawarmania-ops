@@ -84,6 +84,50 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  # The same suite with every change gate on: the state a release creates. The
+  # job above is the gates-off run, production's default and the way back. The
+  # two run in parallel so a push waits no longer, and this one stops in
+  # seconds when no gate is declared, because then the two runs are the same
+  # (a-release-can-be-switched-off, D10).
+  e2e-gates-on:
+    name: e2e browser tests (gates on)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Is any change gate declared?
+        id: gates
+        run: |
+          count=$(node scripts/check-change-gates.mjs --count)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          if [ "$count" = "0" ]; then
+            echo "No change gate is declared, so gates on is gates off: nothing more to run."
+          fi
+
+      - name: Install Playwright browsers
+        if: steps.gates.outputs.count != '0'
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright with every gate on
+        if: steps.gates.outputs.count != '0'
+        run: npm run test:e2e:on
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.gates.outputs.count != '0' }}
+        with:
+          name: playwright-report-gates-on
+          path: playwright-report/
+          retention-days: 7
+
   # The tenancy boundary is enforced in the database, so the database is what
   # gets tested: every migration applied to a fresh stack, the pgTAP isolation
   # and write-contract suites, real-session REST probes, and a check that the
@@ -133,3 +177,48 @@ jobs:
         run: |
           npm run db:types
           git diff --exit-code src/data-access/database.types.ts
+
+  # The auth suite with every change gate on, against its own fresh stack: its
+  # global setup turns every declared gate on through the service role before
+  # the run (D10). Parallel with the job above, and skipped when no gate is
+  # declared.
+  db-gates-on:
+    name: auth browser tests (gates on)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Is any change gate declared?
+        id: gates
+        run: |
+          count=$(node scripts/check-change-gates.mjs --count)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          if [ "$count" = "0" ]; then
+            echo "No change gate is declared, so gates on is gates off: nothing more to run."
+          fi
+
+      - name: Start the local stack (applies migrations and seed)
+        if: steps.gates.outputs.count != '0'
+        run: npx supabase start
+
+      - name: Install Playwright browsers
+        if: steps.gates.outputs.count != '0'
+        run: npx playwright install --with-deps chromium
+
+      - name: Auth end-to-end with every gate on
+        if: steps.gates.outputs.count != '0'
+        run: npm run test:e2e:auth:on
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.gates.outputs.count != '0' }}
+        with:
+          name: playwright-report-auth-gates-on
+          path: playwright-report/
+          retention-days: 7

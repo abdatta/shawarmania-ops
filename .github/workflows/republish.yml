@@ -1,0 +1,103 @@
+# Kept short for the same reason as `Deploy`: GitHub prefixes every check with
+# the workflow name.
+name: Republish
+
+# Going back to a build that was verified (a-release-can-be-switched-off, D17).
+#
+# Actions → Republish → Run workflow, with the full SHA of a build Deploy once
+# published. The first job asks GitHub whether a Deploy run succeeded on exactly
+# that commit; if none did, it stops and says so, because only a build the full
+# suite passed may skip it now. Then it builds that commit and publishes it.
+#
+# No migration and no Edge Function deploy, deliberately: the forward schema
+# stays where it is, and that is safe because every migration only adds
+# (`npm run lint:migrations`), so an older build still finds everything it uses.
+#
+# This is the second rung of the rollback ladder. The first is turning a change
+# gate off on the Change gates page, which needs no build at all.
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full commit SHA of a build Deploy once published successfully
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verified:
+    name: the build was verified
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Require a successful Deploy run on exactly this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Give the full 40-character commit SHA, not \"$SHA\"." >&2
+            exit 1
+          fi
+          runs=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/deploy.yml/runs?head_sha=$SHA&status=success&per_page=1" \
+            --jq '.total_count')
+          if [ "$runs" = "0" ]; then
+            echo "No Deploy run succeeded on $SHA, so the full suite never passed this build." >&2
+            echo "Republish publishes only verified builds. Hotfix is the way out for anything else." >&2
+            exit 1
+          fi
+          echo "Deploy succeeded on $SHA. Republishing it." | tee -a "$GITHUB_STEP_SUMMARY"
+
+  build:
+    needs: verified
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+          # The build stamps the short commit SHA into the UI.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build the verified commit
+        env:
+          BASE_PATH: /
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  # Publications never overlap, whichever workflow makes them: Deploy, Republish
+  # and Hotfix hold the same group, and only while publishing.
+  deploy:
+    needs: [verified, build]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

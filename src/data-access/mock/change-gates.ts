@@ -9,6 +9,7 @@ import {
 import { CHANGE_GATES, CHANGE_GATE_KEYS, type ChangeGateDeclaration } from '@/change-gates/gates'
 import {
   ALL_ON,
+  DEMO_GATES_KEY,
   readSavedAnswers,
   snapshotFrom,
   writeSavedAnswers,
@@ -32,9 +33,11 @@ import { DEMO_KITCHEN_DEVICE_ID, DEMO_KITCHEN_LABEL } from './kitchen'
  * Change gates page turns one off to compare. Its turns — answers and history —
  * are kept in this tab's session storage, because a demo reload rebuilds every
  * other piece of demo state and a gate turned off for a comparison should stay
- * off across that; a demo reset forgets them with everything else.
+ * off across that; a demo reset forgets them with everything else. Where they
+ * are kept is declared beside the real device's key, in `@/change-gates/snapshot`,
+ * because the browser suites' gates-off run seeds it too (D10).
  */
-export const DEMO_GATES_KEY = 'shawarmania.demo.change-gates'
+export { DEMO_GATES_KEY }
 
 /** The turns made in this demo, kept beside the answers for the same reason. */
 export const DEMO_TURNS_KEY = 'shawarmania.demo.change-gate-turns'

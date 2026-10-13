@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { type Page } from '@playwright/test'
+import { expect, test } from './test'
 import {
   DEMO_HELPER_ACCOUNT_ID,
   DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID,

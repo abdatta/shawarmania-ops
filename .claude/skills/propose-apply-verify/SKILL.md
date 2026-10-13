@@ -41,7 +41,7 @@ Run as a loop, not a checklist:
 
 - `npm test`, `npm run lint`, `npm run typecheck` — all green.
 - `npm run build` — clean.
-- `npm run test:e2e` — against the production build (the suite builds it itself).
+- `npm run test:e2e` — against the production build (the suite builds it itself), with every change gate off; then `npm run test:e2e:on`, with every gate on, whenever any gate is declared (`node scripts/check-change-gates.mjs --count`).
 
 ### When applicable — derive from what the change touched
 
@@ -52,11 +52,13 @@ Run as a loop, not a checklist:
 - **Demo-mode safety** (anything touching the seam): demo walk makes no request beyond the app origin; the banner is present and undismissable; deep links survive reload.
 - **`*-live` changes**: the surface actually moved `demo` → `live`, and demo mode still works afterwards.
 - **The change's own Gate line**: verify every clause literally, and say which test or action proved it.
+- **A change behind a change gate** (AGENTS.md → *Every change can be turned off*): both states, in both browser suites — `test:e2e` and `test:e2e:on`, `test:e2e:auth` and `test:e2e:auth:on`. Prove **Off is today**: the off path's existing tests pass untouched, and a walk with the gate off shows the old behaviour. Prove the round trip — work started on the new path finishes after the gate turns off — or that `roundTrip: 'none: …'` is true. `npm run lint:migrations` and `npm run lint:change-gates` green.
+- **Counter or kitchen runtime** (anything that reads, polls, times or subscribes): the request budget, `e2e-auth/request-budget.spec.ts`, in both states. A change that needs more requests raises the budget in its own diff and says why.
 
 ### Rules of the loop
 
 - Fixes discovered here are part of THIS change — fix, re-verify, and note them in the report. Work beyond the change's scope goes to `openspec/todos/`, not into silent scope creep.
-- If a pre-existing test breaks because the change legitimately altered the UI/contract, fix the test to assert the same intent precisely — never delete or weaken an assertion to get green.
+- If a pre-existing test breaks because the change legitimately altered the UI/contract, fix the test to assert the same intent precisely — never delete or weaken an assertion to get green. **Behind a gate, do not edit it at all:** tag it `@cg-off:<key>` and write the new assertion as a new `@cg-on:<key>` test. A tag is the only change an existing test may receive.
 - Prefer real verification over asserting success. If a gate was not run, the report must say so.
 
 ## Phase 4 — Report, then hand back
@@ -69,6 +71,7 @@ End with a concise report containing, in order:
 4. **The fixes you made.**
 5. **The verification you repeated after each fix.**
 6. **The final status of all checks** (one line per gate).
-7. **Any remaining blockers or limitations that genuinely require the user** — prefix with 🧍.
+7. **The change gate**: its key and code, and what Off was proved to mean and by which test — or `No gate:` and why.
+8. **Any remaining blockers or limitations that genuinely require the user** — prefix with 🧍.
 
 Only after the full loop is complete, tell the user they can repeat the listed steps themselves as a final confirmation — and offer the next actions: `/opsx:archive <name>` (merges spec deltas, updates the docs the proposal named), commit/push on request, and `/next-change` for what follows.

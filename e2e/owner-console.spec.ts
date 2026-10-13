@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './test'
 import {
   OUTLET_KALYANI_ID as KAL,
   OUTLET_KANCHRAPARA_ID as KPA,

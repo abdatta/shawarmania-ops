@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './test'
 
 const KAL = '00000000-0000-4000-a000-000000000001'
 for (const width of [360, 390]) {

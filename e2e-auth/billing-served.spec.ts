@@ -1,4 +1,5 @@
-import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test'
+import { type APIRequestContext, type Locator, type Page } from '@playwright/test'
+import { expect, test } from './test'
 
 import { MAX_BILLING_RETRY_MS } from '../src/outbox/drain'
 import {

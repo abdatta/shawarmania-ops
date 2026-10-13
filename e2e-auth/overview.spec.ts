@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { type Page } from '@playwright/test'
+import { expect, test } from './test'
 
 const KAL = '00000000-0000-4000-a000-000000000001'
 const KPA = '00000000-0000-4000-a000-000000000002'

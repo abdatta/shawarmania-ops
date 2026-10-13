@@ -18,6 +18,8 @@ interface ImportMetaEnv {
    * one before the apex route exists.
    */
   readonly VITE_RECEIPT_BASE_URL?: string
+  /** `staging` for a staging build; anything else, or nothing, is production. */
+  readonly VITE_APP_ENVIRONMENT?: string
 }
 
 interface ImportMeta {

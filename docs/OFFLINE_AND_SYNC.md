@@ -233,6 +233,12 @@ Heartbeat transport failure never blocks billing, and the next trigger retries.
 This closes the response-loss case where the server accepted the final command
 but the last zero report disappeared and no later queue change occurred.
 
+### Change gates, offline
+
+A tablet keeps running the change-gate answers it loaded with (see [Releases](RELEASES.md)). Offline, it cannot hear a turn and keeps its last-known answers, saved on the device; reconnecting re-reads them, and a different answer reloads the page into it at its next free moment, never in the middle of a bill. A tablet that has never been told anything runs every gate off, which is the behaviour as it was before.
+
+**The outbox never reads a gate.** A bill queued while a gate was on is sent after it turns off, and the other way round, so turning a gate off can never strand queued work. A test fails if anything under `src/outbox/` imports the gate store. A change whose new path saves something declares how turning it off was proved to strand nothing.
+
 ## Moving a tablet between outlets
 
 Editing a tablet's name or current outlet is an **online administrative

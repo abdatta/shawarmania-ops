@@ -335,3 +335,20 @@
     animation: kitchen-pulse 1600ms ease-in-out infinite;
   }
 }
+
+/*
+ * A staging build's band takes the top row of every screen
+ * (a-release-can-be-switched-off, D19). It sits in the page's flow above the
+ * router, so every full-height layout gives up its height; without this a
+ * shell sized to the viewport would end a band's height below the fold.
+ * `main.tsx` marks the document only in a staging build.
+ */
+:root[data-environment='staging'] {
+  --staging-band: 1.5rem;
+}
+:root[data-environment='staging'] .h-dvh {
+  height: calc(100dvh - var(--staging-band));
+}
+:root[data-environment='staging'] .min-h-dvh {
+  min-height: calc(100dvh - var(--staging-band));
+}

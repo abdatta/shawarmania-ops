@@ -261,6 +261,17 @@ they already wear.
 
 Three cases the owner judged rare enough to accept rather than filter the kitchen to its business day (2026-10-08): an unpaid order left open overnight stays on the kitchen board until it is paid and prepared or cancelled; a counter that was offline overnight and delivers yesterday's unpaid orders in the morning puts them on the kitchen board as new; and an order taken on a till that is not in use today stays on every board until that till comes back, because only it can finish the order. Only an unacknowledged cancellation expires with its day.
 
+## Change gates switch, they do not watch
+
+A change gate is turned by the owner and nothing else (see [Releases](RELEASES.md)). Four things it deliberately does not do yet:
+
+- **Nothing turns a gate off by itself.** Tablet health shows a tablet's requests climbing or failing on the gate's page, but the owner decides. An automatic switch needs thresholds learnt from real traffic first, and a wrong automatic turn mid-service is its own incident. Noted in `openspec/todos/` with the shape agreed.
+- **A gate is one answer for the whole business**, never per outlet. Trying a change at one outlet first means turning it on at a quiet hour and watching that outlet's tablets. Per-outlet answers are noted for when there are outlets enough to want them.
+- **There is no trying a change on one device.** A query parameter to switch a gate for one session was considered and dropped: it would be a second source of truth a tablet could carry around unnoticed. Noted for later.
+- **A turn takes effect at the next free moment, not at once.** A tablet in the middle of a bill keeps the behaviour it started with; it reloads into the new answer when the page next frees up, usually within a minute or two. A tablet that is offline keeps its last answer until it reconnects.
+
+The public site at `shawarmania.in` is a separate deployable and reads no change gate.
+
 ## Deliberately deferred from v1
 
 ### Bills are record-only, except that a customer can now be shown one

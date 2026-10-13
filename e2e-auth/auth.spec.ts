@@ -1,4 +1,5 @@
-import { expect, test, type Browser, type Page } from '@playwright/test'
+import { type Browser, type Page } from '@playwright/test'
+import { expect, test } from './test'
 
 const PASSWORD = 'shawarmania-local'
 const NEW_PASSWORD = 'a-genuinely-set-password'

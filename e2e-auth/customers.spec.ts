@@ -1,4 +1,5 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { type APIRequestContext, type Page } from '@playwright/test'
+import { expect, test } from './test'
 
 import { LOCAL_ANON_KEY, OUTLET_KALYANI, PASSWORD, SUPABASE_URL } from './tills'
 

@@ -250,3 +250,89 @@ export async function railSettled(page: Page) {
 export function orderCard(page: Page, id: string) {
   return page.getByTestId('counter-activity-rail').locator(`[data-flip-id="${id}"]`)
 }
+
+// Moved from `kitchen-tablet.spec.ts` when the request budget needed the same
+// kitchen and the same orders (a-release-can-be-switched-off, D10).
+
+/**
+ * Customer phones for rung orders, new to the database on every run.
+ *
+ * A fixed start repeated the same numbers on every run, so on any database not
+ * freshly reset the customer already existed: the dialog first offers a name
+ * box, then the lookup answers and replaces it with the known customer, and the
+ * fill waited for a box that had gone. Ten numbers a second, from the clock,
+ * keeps runs apart for years; within a run the count goes on from there.
+ */
+let nextCustomerDigits = 9_000_000_000 + ((Math.floor(Date.now() / 1000) * 10) % 999_000_000)
+
+async function identifyCustomer(page: Page, name: string) {
+  await page.getByTestId('customer-row').click()
+  const dialog = page.getByRole('dialog', { name: 'Customer' })
+  for (const digit of String((nextCustomerDigits += 1))) {
+    await dialog.getByRole('button', { name: digit, exact: true }).click()
+  }
+  await dialog.getByPlaceholder(/name/i).fill(name)
+  await dialog.getByTestId('customer-confirm').click()
+  await expect(dialog).toHaveCount(0)
+}
+
+/** Ring one shawarma for a new customer and save it as an order; its card's id. */
+export async function ringOrder(page: Page, customerName: string): Promise<string> {
+  await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
+  await identifyCustomer(page, customerName)
+  // Fifteen seconds, not the five an assertion waits by default: a stack not
+  // freshly reset carries every earlier run's open orders on the rail, and the
+  // new card takes longer to draw among them.
+  return saveNewOrder(
+    page,
+    async () => {
+      await page.getByRole('button', { name: 'Order', exact: true }).click()
+      await expect(page.getByTestId('bill-total')).toHaveCount(0)
+    },
+    { timeout: 15_000 },
+  )
+}
+
+/** Make the seed's spare till a counter or a kitchen, its shift with it. */
+export async function setSpareKind(request: APIRequestContext, kind: 'counter' | 'kitchen') {
+  const key = serviceRoleKey()
+  const headers = {
+    apikey: key,
+    authorization: `Bearer ${key}`,
+    'content-type': 'application/json',
+    prefer: 'return=minimal',
+  }
+  const device = await request.patch(`${SUPABASE_URL}/rest/v1/counter_devices`, {
+    headers,
+    params: { id: `eq.${SPARE_TILL}` },
+    data: { kind, kitchen_filter_mode: 'exclude', kitchen_category_ids: [] },
+  })
+  expect(device.ok(), 'could not set the spare till kind').toBe(true)
+  const shift = await request.patch(`${SUPABASE_URL}/rest/v1/counter_shifts`, {
+    headers,
+    params: { id: `eq.${SPARE_SHIFT}` },
+    data: { kind },
+  })
+  expect(shift.ok(), 'could not set the spare till shift kind').toBe(true)
+}
+
+/** The spare till, signed in as the machine it is, opened at `/counter`. */
+export async function openKitchen(browser: Browser, request: APIRequestContext) {
+  const response = await request.post(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    headers: { apikey: LOCAL_ANON_KEY },
+    data: { email: `${TILL_TWO.alias}@login.shawarmania.invalid`, password: PASSWORD },
+  })
+  expect(response.ok(), 'the spare till could not sign in').toBe(true)
+  const session = (await response.json()) as Record<string, unknown>
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await page.addInitScript((value) => {
+    localStorage.setItem('shawarmania.auth', JSON.stringify(value))
+  }, session)
+  // Opened at the counter's address: a kitchen goes where its kind says.
+  await page.goto('counter')
+  await expect(page).toHaveURL(/\/kitchen$/)
+  await expect(page.getByRole('heading', { name: TILL_TWO.label })).toBeVisible()
+  await expect(page.getByTestId('kitchen-filter-summary')).toHaveText('Everything')
+  return { context, page }
+}

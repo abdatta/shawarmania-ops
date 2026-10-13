@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { expect, test } from '@playwright/test'
+import { expect, test } from './test'
 import type { Database } from '../src/data-access/database.types'
 import { createSupabaseMenuAdapter } from '../src/data-access/supabase-adapters/menu'
 

@@ -49,6 +49,10 @@ Every surface is in exactly one state, declared in a single registry — `src/ga
 
 A `hidden` surface is **absent**, not greyed out. A half-visible product looks unfinished in a way an absent one does not.
 
+**Surface gates are not change gates.** These three states decide whether a screen exists, and only a deploy changes them — `demo-mode-and-app-shell`'s design D3 made the registry a build-time constant, and it still is. A **change gate** decides which behaviour a screen that already exists runs, and the owner turns it while the app runs (see [Releases](RELEASES.md)). That narrows D3 rather than reversing it: D3 refused runtime toggles for *whether a surface is reachable*, and still does; a change gate never adds or removes a surface, and a new surface still arrives `demo`, then `live`, through the registry.
+
+**In the demo, every change gate starts on**, so a walkthrough shows the newest behaviour. The demo's **Change gates** page, at its address `/demo/owner/change-gates` — the demo has no account menu, so nothing links to it — turns a gate off to compare the two behaviours side by side. A demo turn takes effect at once and keeps the demo's orders, because the screens remount under the new answers rather than reloading; the answers and their history are kept in the tab's session storage, so a reload keeps them, and a demo reset forgets them with everything else. Its tablets are fixtures showing every state a real one can be in: running, waiting for a free moment, silent, failing.
+
 Promoting a surface from `demo` to `live` is the visible outcome of every `*-live` change. The roadmap is done when no surface is left in `demo`.
 
 **`hidden` also means "was here and is not any more", and that matters for revert

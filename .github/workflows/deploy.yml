@@ -22,12 +22,12 @@ name: Deploy
 # counters some minutes later rather than immediately, and only if the suite
 # agrees.
 #
-# Rollback is unchanged: Actions → Deploy → Run workflow,
-# choosing an earlier commit. It re-verifies that commit on the way through.
-# Accepted deliberately — the commit being rolled back to passed the same
-# suite when it landed, so the re-run is expected green, and a rollback only
-# reaches a counter tablet on its next launch anyway (see the service-worker
-# section of docs/OPERATIONS.md). CI minutes are not the slow part.
+# Rollback: first turn the change's gate off on the Change gates page, which
+# needs no build. Failing that, Actions → Republish publishes a build Deploy
+# once published, after checking it did, without re-running the suite; and
+# Actions → Deploy → Run workflow still re-verifies an earlier commit on the
+# way through. Hotfix is the owner-approved way forward when the counter is
+# down (a-release-can-be-switched-off, D17; docs/RELEASES.md).
 #
 # The trigger skips a commit that cannot change what is built, served or
 # migrated, because a publish for such a commit has nothing to publish. The list
@@ -59,10 +59,16 @@ permissions:
   pages: write
   id-token: write
 
-# One publish at a time. `cancel-in-progress: false` because cancelling a
+# One Deploy run at a time, so two pushes never interleave their migrations or
+# publish out of order. `cancel-in-progress: false` because cancelling a
 # half-finished publish is how you end up serving a partial build.
+#
+# This group used to be `pages`, held for the whole fifteen-minute run, which
+# would queue a Hotfix or a Republish behind a gate run. `pages` now sits on the
+# publishing job of all three workflows, so publications never overlap while a
+# run that is only verifying blocks nothing (D17).
 concurrency:
-  group: pages
+  group: deploy
   cancel-in-progress: false
 
 jobs:
@@ -167,6 +173,10 @@ jobs:
   migrate:
     needs: gate
     runs-on: ubuntu-latest
+    # Shared with Hotfix's migrate job: one migration run at a time.
+    concurrency:
+      group: production-migrations
+      cancel-in-progress: false
     environment:
       name: production-database
     steps:
@@ -283,6 +293,10 @@ jobs:
   deploy:
     needs: [gate, build, migrate, functions]
     runs-on: ubuntu-latest
+    # Shared with Republish and Hotfix: publications never overlap.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

@@ -185,6 +185,10 @@ never ride along in a counter's lookup (#32), and nothing has replaced them.
 
 Proved rather than asserted: `supabase/tests/20_global_customer_identity.sql`, `supabase/tests/59_a_gold_member_is_a_label.sql` and the customer probes in `supabase/tests/rest/rls-probes.test.ts` issue the hand-crafted requests — `select=*`, a `like` filter, a HEAD count, a customer id used to reach the other outlet's bills, a manager opening and changing customers their outlet did not serve or does not wholly serve, and every counter role calling the management path — and assert each is refused. `supabase/tests/66_a_regular_earns_points_and_gold.sql` does the same for the ledger, the settings and the counter's grant: another outlet's manager, a Biller, an Employee and a tablet each read no ledger row and set no rule, and a tablet at the wrong outlet cannot upgrade anybody.
 
+### Tablet health carries counts, never content
+
+With the **Tablet health** change gate on, a counter or kitchen reports how it is talking to the server: its build, the gates it loaded with, and over the last minute how many requests it made, how many failed and how long the slowest took. The counting wraps the app's one Supabase client and records, per request, only when it finished, whether it failed and how long it took — **never the URL's query string, a header or a body** — so no phone number, name, amount or order can reach a report, because the reporter never sees one. A tablet writes only its own row, from its own session; the owner reads every tablet's and a Franchise Admin their own outlets'. `src/data-access/request-health.test.ts` proves a query string is never read and that counting cannot change a request; `e2e-auth/change-gates.spec.ts` reads a real report and asserts it carries no query text.
+
 ## Employee location monitoring
 
 Attendance uses location, which makes this app a workplace-monitoring tool. That deserves explicit handling rather than being buried in a feature. This is live: real staff check in from their own phones.

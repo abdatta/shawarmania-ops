@@ -65,6 +65,23 @@ Everything the CLI would have resolved is a constant here:
    A PHASE GATE task is a real gate. Run what it names — do not tick it on the
    strength of having read the code.
 
+   **A change with a gate is built gate first** (AGENTS.md → *Every change can
+   be turned off*):
+   - Declare the gate in `src/change-gates/gates.ts` and insert its row, off,
+     in the migration that serves it, with the Change gate section's words.
+   - Leave the off path exactly as it is. The on path is new code behind
+     `useChangeGate('<key>')`, and new database objects — `name_v2`, never an
+     edit to a function or view a published build calls.
+   - Run `npm run lint:migrations` after writing each migration, and fix what it
+     says before going on. `npm run lint:change-gates` before you finish.
+   - Tag, never rewrite, an existing test the change contradicts:
+     `@cg-off:<key>`. New behaviour gets `@cg-on:<key>` and
+     `describeChangeGate('<key>', …)`.
+   - Anything the on path saves must survive the gate turning off: a
+     `@cg-round-trip:<key>` browser test, or `roundTrip: 'none: …'` saying why
+     nothing can be stranded.
+   - Never make the outbox read a gate.
+
 5. **On completion or pause, show status**
 
    Tasks completed this session, overall "N/M", and either a suggestion to

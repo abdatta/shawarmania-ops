@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Retire Gate'
+  short_description: 'Retire a change gate in two halves, code then database'
+  default_prompt: 'Use $retire-gate to retire a change gate that is due.'

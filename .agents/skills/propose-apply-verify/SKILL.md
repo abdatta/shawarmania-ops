@@ -74,6 +74,7 @@ npm test
 npm run contrast
 npm run build
 npm run test:e2e
+npm run test:e2e:on   # whenever any change gate is declared
 ```
 
 When migrations, policies, or tables changed and Docker is available, run:
@@ -84,6 +85,7 @@ npm run db:reset
 npm run test:db
 npm run test:rls
 npm run test:e2e:auth
+npm run test:e2e:auth:on   # whenever any change gate is declared
 ```
 
 Run `test:e2e:auth` for changes under auth, shells, account menus, or any role's
@@ -101,6 +103,14 @@ index surface even when the change is not described as authentication work.
 - Tenancy: prove every outlet-scoped table has RLS and cross-outlet requests
   fail at the database.
 - Change Gate: prove every clause literally and name the evidence.
+- A change behind a change gate (`AGENTS.md` → *Every change can be turned
+  off*): both states in both browser suites; prove Off is today — the off path's
+  existing tests pass untouched and a walk with the gate off shows the old
+  behaviour; prove the round trip, or that `roundTrip: 'none: …'` is true;
+  `npm run lint:migrations` and `npm run lint:change-gates` green.
+- Counter or kitchen runtime (anything that reads, polls, times or subscribes):
+  the request budget, `e2e-auth/request-budget.spec.ts`, in both states. Needing
+  more requests means raising the budget in the change's own diff, with why.
 
 Use the most effective local browser-control skill when visual or interactive
 verification is needed. Check console and network state as well as appearance.
@@ -110,7 +120,9 @@ verification is needed. Check console and network state as well as appearance.
 - Fixes within the change's scope belong to this change.
 - Put truly separate work in `openspec/todos/`; do not silently expand scope.
 - Update tests when a legitimate contract changed, but never delete or weaken
-  an assertion merely to get green.
+  an assertion merely to get green. Behind a gate, do not edit an existing test
+  at all: tag it `@cg-off:<key>` and add the new assertion as a `@cg-on:<key>`
+  test.
 - Prefer direct evidence. If a gate was not run, say why.
 - Ask the user to verify only what cannot be done without real hardware,
   credentials, on-site presence, or another external dependency.
@@ -125,7 +137,9 @@ Report, in this order:
 4. Fixes made.
 5. Checks repeated after fixes.
 6. Final result for every gate, one line each.
-7. Remaining blockers or limitations, prefixed `USER:` when only the user can
+7. The change gate: its key and code, and what Off was proved to mean and by
+   which test — or `No gate:` and why.
+8. Remaining blockers or limitations, prefixed `USER:` when only the user can
    clear them.
 
 Offer `$openspec-archive-change <name>`, commit/push on request, and

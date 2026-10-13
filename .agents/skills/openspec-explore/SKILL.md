@@ -71,6 +71,12 @@ Depending on the question:
 - Call out security, tenancy, money, time, offline, privacy, and operability
   consequences when relevant.
 - Suggest a spike or investigation when evidence is missing.
+- When an idea changes how a live surface behaves, ask early what Off would
+  mean. It ships behind a change gate, off, and the owner turns it on
+  (`AGENTS.md` → *Every change can be turned off*). Usually Off is simply today;
+  raise it when it is not — the new path saves data the old screens must live
+  with, several gates depend on one another, or Off would be unsafe — because
+  those shape the design.
 
 When a decision crystallizes, offer to capture it:
 

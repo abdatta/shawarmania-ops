@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './test'
 
 const CONNECTION_MESSAGE =
   "Could not reach Shawarmania. Check this device's internet connection and try again."

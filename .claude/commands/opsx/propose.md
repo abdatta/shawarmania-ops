@@ -82,6 +82,25 @@ They are constraints on what you write — never copy them into an artifact.
    test and end with a PHASE GATE task naming the checkpoint from ROADMAP.md.
    Re-read the file rather than trusting this summary.
 
+   **The proposal's `## Change gate` section is yours to write, not the
+   owner's to answer.** `npm run lint:change-gates` fails a change folder
+   created on or after 2026-10-13 without one, in both CI tiers. Name the gate
+   (a kebab-case key and a two-character code, capitals or digits with at least
+   one letter, unused by any live gate in `src/change-gates/gates.ts`), then
+   **On** and **Off**, each one sentence as the Change gates page will show it:
+   On is the change, Off is the behaviour as it is today. Or write `No gate:`
+   and why — docs, tooling, a lint, a new surface the gate registry already
+   holds back, or a correction that must reach every device at once. Several
+   gates are fine; a gate that only makes sense with another lists it under
+   *depends on*. **Do not ask the owner what On and Off mean.** Ask only when
+   Off cannot simply be today, and say which case it is: the new path writes
+   data the old path must live with (say what the old path does with it), or
+   Off would be unsafe. Then, in `design.md`, a **version-skew paragraph** for
+   every database object the change touches: how a build published before it
+   keeps working (new objects and `name_v2`, never an edited function), and
+   what turning the gate off does to anything the new path saved. AGENTS.md →
+   *Every change can be turned off* has the rest.
+
    **Spec deltas** use the header vocabulary `## ADDED Requirements`,
    `## MODIFIED Requirements`, `## REMOVED Requirements`,
    `## RENAMED Requirements`, with `### Requirement: <name>` beneath, written in

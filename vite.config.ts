@@ -9,6 +9,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { defineConfig, type Plugin } from 'vitest/config'
 
 import { PORTS } from './ports'
+import { manifestNames, parseAppEnvironment } from './src/env/app-environment'
 
 /**
  * GitHub Pages serves a project repo from `/<repo>/`, so that sub-path is the
@@ -76,8 +77,8 @@ export default defineConfig({
       registerType: 'prompt',
       injectRegister: false,
       manifest: {
-        name: 'Shawarmania Ops',
-        short_name: 'Shawarmania',
+        // A staging build installs as itself, never as the counter's app (D19).
+        ...manifestNames(parseAppEnvironment(process.env['VITE_APP_ENVIRONMENT'])),
         description: 'Cash-counter and outlet management for Shawarmania',
         // Base-relative, so the same config is correct under a project
         // sub-path and under a custom domain at the root.

@@ -77,6 +77,22 @@ For each artifact:
    summary.
 3. Write it, then verify it exists and reads coherently.
 
+**Write the proposal's `## Change gate` section yourself; never ask the owner
+for it.** `npm run lint:change-gates` fails a change folder created on or after
+2026-10-13 without one, in both CI tiers. Name the gate — a kebab-case key and a
+two-character code (capitals or digits, at least one letter, unused by any live
+gate in `src/change-gates/gates.ts`) — then On and Off, each one sentence as the
+Change gates page will show it: On is the change, Off is the behaviour as it is
+today. Or write `No gate:` and why: docs, tooling, a lint, a new surface the gate
+registry already holds back, or a correction that must reach every device at
+once. A gate that only makes sense with another lists it under *depends on*. Ask
+the owner only when Off cannot simply be today — the new path writes data the
+old path must live with, or Off would be unsafe — and say which. In `design.md`,
+add a version-skew paragraph for every database object the change touches: how
+a build published before it keeps working (new objects and `name_v2`, never an
+edited function), and what turning the gate off does to anything the new path
+saved. `AGENTS.md` → *Every change can be turned off* has the rest.
+
 Spec deltas use `## ADDED Requirements`, `## MODIFIED Requirements`,
 `## REMOVED Requirements` and `## RENAMED Requirements`, with
 `### Requirement: <name>` beneath, in SHALL language and `#### Scenario:`

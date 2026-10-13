@@ -72,6 +72,24 @@ When implementation exposes a design issue, update the OpenSpec artifacts only
 when that stays within the user's requested change; otherwise explain the
 scope decision and ask.
 
+### A change with a gate is built gate first
+
+See `AGENTS.md` → *Every change can be turned off*.
+
+- Declare the gate in `src/change-gates/gates.ts` and insert its row, off, in
+  the migration that serves it, with the Change gate section's words.
+- Leave the off path exactly as it is. The on path is new code behind
+  `useChangeGate('<key>')`, and new database objects — `name_v2`, never an edit
+  to a function or view a published build calls.
+- Run `npm run lint:migrations` after writing each migration and fix what it
+  says before going on; run `npm run lint:change-gates` before finishing.
+- Tag, never rewrite, an existing test the change contradicts: `@cg-off:<key>`.
+  New behaviour gets `@cg-on:<key>` and `describeChangeGate('<key>', …)`.
+- Anything the on path saves must survive the gate turning off: a
+  `@cg-round-trip:<key>` browser test, or `roundTrip: 'none: …'` saying why
+  nothing can be stranded.
+- Never make the outbox read a gate.
+
 ## Finish
 
 Report:

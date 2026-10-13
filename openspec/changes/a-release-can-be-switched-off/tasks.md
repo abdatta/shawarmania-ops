@@ -161,44 +161,89 @@ gate's on-path, so it declares no `change-gate`. It must pass
 
 ## 5. Tooling
 
-- [ ] 5.1 `scripts/check-migrations.mjs` and `npm run lint:migrations`, added to
+- [x] 5.1 `scripts/check-migrations.mjs` and `npm run lint:migrations`, added to
   `npm run lint`: every rule in design D8's table, the header declarations, inline
   exceptions, emergency, the baseline, comment and body stripping, remediation
   messages (D12). `scripts/check-migrations.test.mjs`: a failing and a passing
   fixture per rule, including #74's `create or replace function
   public.counter_kitchen_marks` as a must-fail fixture and this change's own
   migration as a must-pass.
-- [ ] 5.2 `scripts/check-change-gates.mjs` and `npm run lint:change-gates`, added to
+  *(Done 2026-10-12: 52 tests. Replayed with the baseline moved to 20261015000000 it
+  fails #74 at `20261016010000_the_kitchen_reports_ready_food.sql:209`, the replaced
+  `counter_kitchen_marks`. Replayed over the 68 migrations since 2026-08-20 it raised
+  only real non-additive changes (replaced functions, swapped check constraints, a `with`
+  query moving rows), none a misreading. Two additions D8 implied but did not list: a
+  contract migration may set `retired_at` and `enabled` on its own gate's row and no
+  other, and its key must already be in `RETIRED_CHANGE_GATES` (D11 step 11). A `do`
+  block's body is linted, `execute '…'` literals included, because it runs at migration
+  time; a unique index on an existing table counts as a constraint.)*
+- [x] 5.2 `scripts/check-change-gates.mjs` and `npm run lint:change-gates`, added to
   `npm run lint`: every check in design D4 — codes and dependencies included — and the `## Change gate` section check for
   change folders created on or after 2026-10-13. Remediation messages. Tests with
   fixtures, including a clock injected for the `retireBy` warning and failure. Add
   the Change-gate-section check to `docs.yml` as its own step, so a proposal-only commit
   meets it, and keep `check-workflow-path-tiers.test.mjs` green.
-- [ ] 5.3 Extend `scripts/check-agent-instructions.mjs` so `release` and
+  *(Done 2026-10-12: 23 tests, a clock injected. It reads `gates.ts` through the
+  TypeScript compiler, not a regular expression, and the gate rows through the migration
+  lint's SQL reader. Beyond D4's list it also fails a migration header naming an
+  undeclared gate, an `ops` gate with no `reason`, a gate whose `change` has no folder,
+  and a test tag naming an undeclared gate (with the retirement step as the remedy).
+  D4's "no unit test … and no browser test" is read as needing both, as 5.6 assumes. A
+  folder with no `created:` date fails, except the three written before folders had one.
+  First run failed both gates for want of an `@cg-on:` browser test — 5.6's work.)*
+- [x] 5.3 Extend `scripts/check-agent-instructions.mjs` so `release` and
   `retire-gate` must exist in both `.claude/skills/` and `.agents/skills/`, with a
   test.
-- [ ] 5.4 Playwright plumbing for `CHANGE_GATES=off|on` in both configs: the
+- [x] 5.4 Playwright plumbing for `CHANGE_GATES=off|on` in both configs: the
   demo init script (all off) for `off`; a global setup turning every declared gate
   on through the service role for the auth suite's `on`; the tag filter
   (`@cg-on:`, `@cg-off:`, `@cg-round-trip:` — the last in `on`, turning only its own
   gate off, D10); `npm run test:e2e:on` and `npm run test:e2e:auth:on`.
-- [ ] 5.5 `verify.yml`: `e2e browser tests (gates on)` and `auth browser tests
+- [x] 5.5 `verify.yml`: `e2e browser tests (gates on)` and `auth browser tests
   (gates on)` as parallel jobs, each exiting early with a line saying so when no
   change gate is declared. Keep `check-workflow-path-tiers.test.mjs` and
   `check-release-order.test.mjs` green.
-- [ ] 5.6 Tests carrying the probe's and tablet-health's coverage so 5.2 passes on
+- [x] 5.6 Tests carrying the probe's and tablet-health's coverage so 5.2 passes on
   this change: `describeChangeGate` for each; `@cg-on:probe` (demo and auth:
   the build code includes `PB`); `@cg-on:tablet-health` (auth: a report row appears
   with resource counts and no query text).
-- [ ] 5.7 The request budget (D10): `e2e-auth/request-budget.spec.ts` — counter and
+  *(5.4–5.6 done 2026-10-12. Each suite's specs take `test` from its own `./test`
+  (`e2e/test.ts`, `e2e-auth/test.ts`), which seeds the run's answers into every context
+  before its first page — the demo's session answers off for the off run; the device's
+  saved answers for the auth suite, including contexts a spec opens itself, so a tablet
+  boots running them rather than reloading into them mid-test. ESLint refuses a spec
+  importing Playwright's `test` directly. The auth suite's global setup
+  (`e2e-auth/change-gates.setup.ts`) turns the local database's gates to the run's state
+  through `change_gate_force` and back off after an on run; it sets off explicitly too,
+  against D10's "off sets nothing", so a crashed on run cannot leak into the next off
+  run, and it turns only gates that differ. `scripts/with-change-gates.mjs` sets the
+  variable, since npm scripts run under cmd.exe on Windows. Demo `change-gates.spec.ts`: 6
+  pass off (one `@cg-off:probe`), 7 pass on. Auth `change-gates.spec.ts`: the `@cg-off:`
+  test passes off, both `@cg-on:` tests pass on; the history shows the setup's two turns
+  on and teardown's two off. A demo reset inside a test returns to the demo's own start,
+  every gate on, until the next load — no spec relies on otherwise.)*
+- [x] 5.7 The request budget (D10): `e2e-auth/request-budget.spec.ts` — counter and
   kitchen idle over a measured minute after settling, then five dish ticks and one
   payment. Measure the current build three times, set each budget at 1.5× the worst,
   record the numbers, date and SHA in the test. Runs in both states.
-- [ ] 5.8 Prove the budget catches the incident: in a temporary worktree at
+- [x] 5.8 Prove the budget catches the incident: in a temporary worktree at
   `11bd95a7`, run the budget spec against that build on a freshly reset local stack
   (that commit's migrations), confirm it fails, record the counts here, remove the
   worktree, and reset the shared stack again.
-- [ ] 5.9 The ways out (D17). `republish.yml`: SHA input; the GitHub API check for a
+  *(5.7 and 5.8 done 2026-10-13. Budgets, at 1.5× the worst of seven readings at
+  `e38f420f` (four gates off, three gates on): counter idle minute 5 (read 2–3), kitchen
+  idle minute 14 (8–9), one ACK 11 (5–7), one payment 63 (33–42); gates on adds the
+  minute's gate read on each tablet. Against `11bd95a7` on its own migrations the spec
+  fails: **counter idle 661 a minute**, kitchen 7, ACK 7, payment 143 — production read
+  about 600 a minute on 12 October. Worktree removed, stack reset to this checkout.
+  The first repeated runs hung because the order helpers reused the same customer phone
+  numbers on every run: on a stack not freshly reset the customer already existed and the
+  name box was replaced mid-fill. Numbers now come from the clock, a click fails after 30 s
+  rather than waiting out the test, and `ringOrder` allows 15 s for its card among earlier
+  runs' open orders. The ACK and payment rows count requests in a ten-second window after
+  the action; #74's dish ticks are not counted, because they are not in this build — its
+  relaunch adds them to this spec.)*
+- [x] 5.9 The ways out (D17). `republish.yml`: SHA input; the GitHub API check for a
   successful Deploy run on exactly that SHA, before any build; build and publish; no
   migrate, no functions. `hotfix.yml`: SHA and reason inputs; the short gate (lint,
   typecheck, unit tests, build); then migrate, functions, publish in Deploy's order,
@@ -208,56 +253,81 @@ gate's on-path, so it declares no `change-gate`. It must pass
   `emergency-rollback.yml`. `scripts/check-republish.test.mjs` and
   `scripts/check-hotfix.test.mjs` pin the shapes; keep `check-release-order.test.mjs`
   green.
+  *(Done 2026-10-12. One correction, made in D17 too: Hotfix gates production with an
+  `approve` job in `production-hotfix` that migrate, functions and publish all need,
+  rather than running each of them in that environment, because their secrets live in
+  `production-database` and `production-functions` and a job has one environment.
+  Approving cancels any Deploy still running for another commit. Deploy keeps a
+  workflow-level group, renamed `deploy`, so pushes still never interleave; both
+  migrate jobs share `production-migrations`. Hotfix requires `main` to be an ancestor
+  of the fix and lists what it carries. Fast-forwarding `main` to the fix after
+  publishing needs Promote's deploy key, so it lands with 9.9. Shapes: 5 + 10 tests,
+  reading through `scripts/lib/workflow.mjs`.)*
 
 ## 6. Agent instructions
 
 Both trees; `npm run lint:agents` green at the end.
 
-- [ ] 6.1 `AGENTS.md`: a **Every change can be turned off** section under Hard Rules (D12's
+- [x] 6.1 `AGENTS.md`: a **Every change can be turned off** section under Hard Rules (D12's
   list, D11's table of the life of a change, and the ways out of D17); the
   Verification list gains `lint:migrations`, `lint:change-gates`, the two `on` jobs and
   the budget, mirroring `verify.yml`; the quickfix lane's refusal list gains
   "changes counter or kitchen runtime behaviour beyond copy and styling without a
   gate". `CLAUDE.md`: the third rule worth loading.
-- [ ] 6.2 Propose — `.claude/commands/opsx/propose.md` and
+- [x] 6.2 Propose — `.claude/commands/opsx/propose.md` and
   `.agents/skills/openspec-propose/SKILL.md`: the mandatory `## Change gate` section
   (the gate key, On and Off each in one owner-readable sentence, or `No gate:`
   and why) and a version-skew paragraph in design for every database object
   touched. **The agent derives it** — On is the change, Off is today — and asks the
   owner only in D11a's cases; the workflow says so in those words.
-- [ ] 6.3 Apply — `apply.md` and `openspec-apply-change`: build the gate and its
+- [x] 6.3 Apply — `apply.md` and `openspec-apply-change`: build the gate and its
   migration row first; off path untouched; `_v2` instead of editing; run
   `npm run lint:migrations` after each migration; tag old tests rather than editing
   them; the round trip for anything persisted.
-- [ ] 6.4 Archive — `archive.md` and `openspec-archive-change`: refuse until the
+- [x] 6.4 Archive — `archive.md` and `openspec-archive-change`: refuse until the
   gate's history shows it on in production and then pulled once (off and on again)
   — check `change_gate_events` read-only, or ask the owner; seed the retirement
   change with the gate's `retireBy`.
-- [ ] 6.5 Propose → apply → verify, both trees: both states, the budget, and the
+- [x] 6.5 Propose → apply → verify, both trees: both states, the budget, and the
   report names the gate and what Off was proved to mean.
-- [ ] 6.6 Quickfix (`.claude/skills/quickfix/SKILL.md`): the runtime-behaviour rule
+- [x] 6.6 Quickfix (`.claude/skills/quickfix/SKILL.md`): the runtime-behaviour rule
   from 6.1, and a pointer to Hotfix for when the counter is down.
-- [ ] 6.7 Next change, both trees: gates past or within seven days of `retireBy`
+- [x] 6.7 Next change, both trees: gates past or within seven days of `retireBy`
   listed first as work due.
-- [ ] 6.8 New workflows in both trees, `release` and `retire-gate` (D11, D12):
+- [x] 6.8 New workflows in both trees, `release` and `retire-gate` (D11, D12):
   preconditions, the quiet-hour check, turning on, what to watch on the gate's page
   and for how long, pulling it once, when to turn off; and the retirement sequence
   with the telemetry check before the contract migration. `agents/openai.yaml` for
   the Codex side, matching its siblings.
-- [ ] 6.9 Explore, both trees: one paragraph — when an idea changes a live surface,
+- [x] 6.9 Explore, both trees: one paragraph — when an idea changes a live surface,
   ask early what Off would mean.
+  *(Section 6 and 5.3 done 2026-10-12; `lint:agents` checks 20 files, green. Beyond the
+  list: `openspec/config.yaml` gains the rule as a non-negotiable and per-artifact
+  rules (proposal section, design version skew, tasks gate-first), since both propose
+  workflows tell the agent to re-read it; propose-apply-verify's "fix the broken test"
+  rule now says a gated change tags instead; `CLAUDE.md`'s quickfix line names runtime
+  behaviour. `lint:agents` now requires `next-change`, `propose-apply-verify`, `release`
+  and `retire-gate` in both `.claude/skills/` and `.agents/skills/` (10 tests).)*
 
 ## 7. Docs and the board
 
-- [ ] 7.1 `docs/RELEASES.md` (new), and every page the proposal names. In
+- [x] 7.1 `docs/RELEASES.md` (new), and every page the proposal names. In
   `docs/DEMO_MODE.md`, record D3 of `demo-mode-and-app-shell` as narrowed, not
   reversed. In `docs/OPERATIONS.md`, replace "Rollback is unchanged" with the ladder,
   the Republish and Hotfix runbooks (including how to check the `production-hotfix`
   environment's reviewer), and the dashboard SQL for `change_gate_force`.
-- [ ] 7.2 `docs/LIMITATIONS.md`; `openspec/todos/` notes for automatic gate-off
+- [x] 7.2 `docs/LIMITATIONS.md`; `openspec/todos/` notes for automatic gate-off
   (D14), trying a change on one device (D14) and per-outlet gating (D3), each
   with its trigger and the shape already agreed.
-- [ ] 7.3 `npm run roadmap:sync`.
+- [x] 7.3 `npm run roadmap:sync`.
+  *(Section 7 done 2026-10-12 for everything that exists today: `docs/RELEASES.md`
+  (new; the anchors `#change-gates` and `#migrations-only-add` the lints print), README,
+  OPERATIONS (the ladder, the concurrency groups, tablet health under Monitoring),
+  ARCHITECTURE, DATA_MODEL, ROLES_AND_PERMISSIONS, SCREENS, DEMO_MODE (D3 narrowed, not
+  reversed), OFFLINE_AND_SYNC, SECURITY_AND_PRIVACY, TESTING, GLOSSARY, LIMITATIONS; three
+  `openspec/todos/` notes. Staging, Promote and the `stage` branch are written into
+  RELEASES and OPERATIONS by section 9 when they exist, not before. `roadmap:sync`: already
+  in sync.)*
 
 ## 8. Verification
 
@@ -292,36 +362,53 @@ staging must verify this change before 10 promotes it to production.
   Admin in staging the way production's was; create a Cloudflare Pages project
   `shawarmania-ops-staging` and an API token scoped to it. Ask the owner whether
   they want their own subdomain (design, Open questions).
-- [ ] 9.3 Build-time `VITE_APP_ENVIRONMENT=staging`: the **Staging · not a real
+- [x] 9.3 Build-time `VITE_APP_ENVIRONMENT=staging`: the **Staging · not a real
   outlet** band on every shell and role, and the manifest name *Shawarmania Ops
   (staging)*. Unit test: the band renders only for `staging`; a production build has
   neither.
-- [ ] 9.4 Third parties stay out (D19): for each Edge Function and scheduled job that
+  *(Done 2026-10-12: `src/env/app-environment.ts` (pure, so `vite.config.ts` names the
+  manifest with it) and `src/components/staging-band.tsx`, 4 tests. The band is rendered
+  once above the router rather than in each shell's banner slot, so signed-out, setup and
+  kitchen screens get it too; in a staging build `index.css` takes its height off every
+  `h-dvh` and `min-h-dvh` layout, so nothing is pushed below the fold — measured on a
+  staging build: 1,257 + 21 = the 1,278 px viewport. Colours are the inverted text tokens,
+  distinct from the demo's amber strip, which it sits above in a staging demo. The tab
+  title reads *Staging · Shawarmania Ops*.)*
+- [x] 9.4 Third parties stay out (D19): for each Edge Function and scheduled job that
   reaches outside the project (`send-bill-receipts`, `bill-receipt-report`, the
   aggregator functions, `bill-receipt-recovery`, the aggregator jobs), prove it does
   nothing or fails closed when its secret or Vault entry is absent, with a test where
   one does not already exist. List them in `docs/OPERATIONS.md` as "never configured
   on staging".
+  *(Done 2026-10-12. What reaches outside: `send-bill-receipts`, `bill-receipt-report`,
+  `aggregator-reader`, `ingest-aggregator-cycle`, `request-aggregator-sync`, and the
+  receipt wake-up behind `bill-receipt-recovery`. `parse-operator-statement` and
+  `answer-aggregator-otp` reach nothing outside. No aggregator job runs inside the database
+  — the syncs run in the sync repository and call in with the secret. New:
+  `src/lib/third-parties-fail-closed.test.ts` (7: each refusal precedes the first call
+  out) and `supabase/tests/87_staging_reaches_no_third_party.sql` (5, including the
+  control that the same wake-up does make a request once configured). The list is in
+  OPERATIONS under *Never configured on staging*.)*
 - [ ] 9.5 `scripts/seed-staging.mjs`: a synthetic history at production's row
   counts (read from production as **counts only**, recorded in the script with the
   date), a generated menu of production's shape, *Test Cafe*, and one test account
   per role. Phone numbers from a reserved fictional range; integer paise; no
   production row copied. Run with the staging service-role key from the environment;
   refuses any URL whose project ref is production's. Test the refusal.
-- [ ] 9.6 `staging.yml`: on push to `stage` with Deploy's path filter — a paused-project
+- [x] 9.6 `staging.yml`: on push to `stage` with Deploy's path filter — a paused-project
   check with its one-sentence message; the suite (`verify.yml`); migrate, functions
   (the derive-the-ref guard), build with the staging variables, publish to Cloudflare
   Pages; then `test:e2e:staging`. Environments `staging-database`,
   `staging-functions`, `staging-pages`, `staging-smoke`; variables
   `STAGING_SUPABASE_URL`, `STAGING_SUPABASE_ANON_KEY`. A shape test in the style of
   `check-release-order.test.mjs`.
-- [ ] 9.7 `staging-reset.yml`: manual; wipe, re-migrate to `stage`'s tip, re-seed;
+- [x] 9.7 `staging-reset.yml`: manual; wipe, re-migrate to `stage`'s tip, re-seed;
   refuses production's ref. Confirm the CLI's remote reset works against the staging
   project and say which command was used.
 - [ ] 9.8 `e2e-staging/` and `npm run test:e2e:staging`: owner, Franchise Admin,
   counter and kitchen through one order, one payment and one change-gate turn on *Test
   Cafe*, the band visible on each; passwords from the environment only.
-- [ ] 9.9 `promote.yml` (D20): SHA input defaulting to `stage`'s tip; the successful
+- [x] 9.9 `promote.yml` (D20): SHA input defaulting to `stage`'s tip; the successful
   Staging run check and the ancestor check, each stopping with one sentence; the
   summary of commits and change folders; the push job in `production-promote` with
   the deploy key. `deploy.yml`: skip the suite when a successful Staging run exists
@@ -330,6 +417,18 @@ staging must verify this change before 10 promotes it to production.
   publishing. `ci.yml` and `docs.yml` triggers per D20's table. Extend
   `check-release-order.test.mjs`, `check-workflow-path-tiers.test.mjs` and
   `check-hotfix.test.mjs`; add `check-promote.test.mjs`.
+  *(9.6, 9.7 and 9.9 written 2026-10-13 and pinned by `check-promote.test.mjs` (14, with
+  Staging, Staging reset and Deploy's skip), `check-hotfix.test.mjs` (12) and the path
+  tiers. Staging stops in one sentence when its project is paused, read from the
+  Management API's project status with the staging account's token. Staging reset runs
+  `supabase db reset --db-url … --no-seed` — `--no-seed` because `supabase/seed.sql`
+  carries the local password — then `scripts/seed-staging.mjs`; that the CLI's remote
+  reset works against the hosted project is confirmed only at 9.12, on the real one.
+  Deploy's `staged` job reads a failed lookup as "not verified", the safe direction.
+  Hotfix's last job pushes `main` with the deploy key, which therefore lives in
+  `production-hotfix` as well as `production-promote`; GitHub asks the owner once more
+  for that job. `docs.yml` covers pushes to `main` and `stage` until 9.11 retires direct
+  pushes to `main`. Nothing here runs until `stage` exists.)*
 - [ ] 9.10 Create `stage` from `main`'s tip and push it. **Owner:** create the deploy
   key and the `production-promote` environment (themselves as required reviewer);
   the `main` ruleset (no direct push, no force push, no deletion; the deploy key the

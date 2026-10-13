@@ -26,6 +26,7 @@ This folder is the durable project wiki. It describes **what the app is and why*
 ## Running it
 
 - [Operations](OPERATIONS.md) — environments, deployment, backups, onboarding a new franchise outlet.
+- [Releases](RELEASES.md) — deploy versus release, change gates, why migrations only add, and the ways out when a change goes wrong.
 - [Security And Privacy](SECURITY_AND_PRIVACY.md) — PII handling, employee monitoring, key management.
 - [Testing](TESTING.md) — how to verify a change, including the tenancy isolation suite.
 - [Limitations](LIMITATIONS.md) — known edges and deliberate non-features.

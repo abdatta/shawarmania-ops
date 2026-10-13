@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Release'
+  short_description: 'Turn a deployed change on, safely, with the owner'
+  default_prompt: 'Use $release to check a deployed change is ready and guide the owner through turning its change gate on.'

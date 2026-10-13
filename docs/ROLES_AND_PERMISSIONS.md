@@ -114,6 +114,11 @@ assignment cannot be ended by anyone, including its holder.
 | See / correct username | ✓ managed accounts; own username read-only | ✓ managed Biller/Employee accounts; own username read-only | — | — |
 | Set up / remove counter tablet | ✓ | ✓ own outlet | — | — |
 | Edit counter tablet name / outlet | ✓ name or transfer | ✓ name only, own outlet | — | — |
+| **Change gates** *(see [Releases](RELEASES.md))* |
+| Read every change gate's answer (every device, so a toggle point can) | R | R | R | R |
+| See the Change gates page, its history and every tablet's health | ✓ | — | — | — |
+| Turn a change gate on or off | ✓ | — | — | — |
+| Read tablet health | ✓ all | R own outlets | — | — |
 | **Menu** |
 | View menu | R all | ✓ own outlet | R own outlet | — |
 | Add / edit / disable items and prices | ✓ | ✓ own outlet | — | — |
@@ -336,6 +341,8 @@ and the function refuses the other outlet's manager, a biller, an employee and a
 counter tablet. Details stays the owner's.
 
 Two deliberate asymmetries worth noting. **The Super Admin cannot create bills** — billing is a counter action tied to a set-up tablet and a live shift, and letting the owner ring up a sale from their phone would corrupt attribution and cash reconciliation. **The Biller only sees their own shift's bills**, not the outlet's whole history; reviewing the day is a manager's job, and it keeps a shared tablet from exposing the outlet's takings to whoever is standing at it. A bill accepted after its operator remotely left is therefore review work for that outlet's Franchise Admin or the Super Admin, never an alert for the next biller. Their append-only decision qualifies the immutable original attribution; it does not rewrite it.
+
+**Only the owner turns a change gate.** `set_change_gate` re-derives the caller's authority from their own token and refuses anyone else — a Franchise Admin, a Biller, an Employee and a counter or kitchen tablet alike — so no request can turn one on another's behalf. Every signed-in principal and every set-up tablet reads the answers, because every page needs them to run; nobody anonymous does. A tablet writes only its own health row, from its own device session. The dashboard's `change_gate_force` is the operator's way to the same turn and is not callable by any client.
 
 ## Authentication
 

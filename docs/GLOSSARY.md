@@ -350,3 +350,43 @@ CTA, fixed up to its `?`: here `https://shawarmania.in/bill?`.
 ### Brand token / semantic token
 
 Two layers of the theme. **Brand tokens** (`--brand-flame-orange`) hold Shawarmania's actual colours. **Semantic tokens** (`--color-primary`, `--color-surface`) describe roles. Components only ever read semantic tokens, so re-skinning for a franchise is a one-file change. See [Design System](DESIGN_SYSTEM.md).
+
+### Gate — always with its qualifier
+
+Three different things share the word, so it is never written alone. A **change gate** applies or removes one change while the app runs, turned by the owner. A **surface gate** decides whether a screen exists — `hidden`, `demo` or `live` in `src/gates/registry.ts` — and changes only with a deploy. A **phase gate** is a change's checkpoint task in its `tasks.md`. See [Releases](RELEASES.md).
+
+### Change gate
+
+**A switch for one change, turned by the owner on the Change gates page, followed by every device.** One answer for the whole business. Off is the behaviour as it was before the change; on is the change. Declared in code (`src/change-gates/gates.ts`) and as a `change_gates` row inserted, off, by the migration that serves it. Temporary: retired once the change has run on.
+
+### Toggle point
+
+**The one place in code that asks a change gate which way to go** — `useChangeGate('<key>')` — with the old path on one side and the new on the other. It reads the page's frozen answers, never the network.
+
+### Release
+
+**Turning a deployed change on.** A deploy puts code on the counters with every new behaviour off; the release is the owner turning its change gate on at a quiet hour, watching the tablets. Distinct from a deploy on purpose: a deploy can be followed by nothing anyone sees.
+
+### Gate code / build code
+
+A **gate code** is a change gate's two characters — capitals or digits, at least one a letter, like *DT* — unique among gates not yet retired. A **build code** is a page's build number and the codes of the gates it loaded with on, like `c1f19c32·DT-KR`, opened from the build number while any gate is on.
+
+### Expand / contract
+
+The two halves of changing anything a published build uses. **Expand**: add the new shape beside the old — a new column, a `name_v2` function — so every published build keeps working; every ordinary migration only expands. **Contract**: remove the old shape once no published build uses it, in a migration declaring `-- release: contract <key>`, a week after every tablet has updated.
+
+### Retire
+
+**Ending a change gate's life**, in two halves: code first (the off path and toggle points go, the key is tombstoned in `RETIRED_CHANGE_GATES` and never used again), then the contract migration. Due by the gate's `retireBy`.
+
+### Probe
+
+The first change gate, *PB*, whose only effect is its own code in the build code. It proves the path from the owner’s switch to every tablet with nothing at stake, and the change that introduced it also retires it, so the retirement path has run once before a real change needs it.
+
+### Rollback ladder
+
+**What to do when a release goes wrong, in order**: turn the change gate off; republish a build Deploy once verified; ship a hotfix with the owner's approval; fix forward. Each rung is slower and broader than the one before. See [Releases](RELEASES.md#the-ways-out).
+
+### Hotfix
+
+**The owner-approved way to publish a fix the full suite has not passed yet**, for the counter being down: a three-minute gate, the owner's approval in GitHub, then migrate, functions, publish. Not for an ordinary fix — that is the quickfix lane or a normal change.

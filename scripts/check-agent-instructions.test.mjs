@@ -5,12 +5,17 @@ import { findInstructionDrift } from './check-agent-instructions.mjs'
 /** Both trees complete, which is the state the repo is meant to hold. */
 const BOTH_TREES = {
   claudeCommands: ['propose.md', 'apply.md', 'archive.md', 'explore.md', 'sync.md'],
+  claudeSkills: ['next-change', 'propose-apply-verify', 'release', 'retire-gate', 'quickfix'],
   agentSkills: [
     'openspec-propose',
     'openspec-apply-change',
     'openspec-archive-change',
     'openspec-explore',
     'openspec-sync-specs',
+    'next-change',
+    'propose-apply-verify',
+    'release',
+    'retire-gate',
   ],
 }
 
@@ -109,10 +114,24 @@ describe('tree correspondence', () => {
 
   it('ignores files in either tree that are not part of the workflow', () => {
     const { lopsided } = drift([], {
+      ...BOTH_TREES,
       claudeCommands: [...BOTH_TREES.claudeCommands, 'README.md'],
-      agentSkills: [...BOTH_TREES.agentSkills, 'git-commit', 'next-change'],
+      agentSkills: [...BOTH_TREES.agentSkills, 'git-commit'],
     })
 
     expect(lopsided).toEqual([])
+  })
+
+  it('requires the release and retire-gate workflows in both trees', () => {
+    const { lopsided } = drift([], {
+      ...BOTH_TREES,
+      claudeSkills: BOTH_TREES.claudeSkills.filter((s) => s !== 'release'),
+      agentSkills: BOTH_TREES.agentSkills.filter((s) => s !== 'retire-gate' && s !== 'release'),
+    })
+
+    expect(lopsided).toEqual([
+      'release is missing from both .claude/skills/ and .agents/skills/',
+      '.claude/skills/retire-gate/ has no counterpart at .agents/skills/retire-gate/',
+    ])
   })
 })

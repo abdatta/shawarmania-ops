@@ -25,6 +25,13 @@ export type SavedAnswers = Partial<Record<string, boolean>>
 
 export const SAVED_ANSWERS_KEY = 'shawarmania.change-gates'
 
+/**
+ * The demo's answers, kept in the tab's session storage rather than the
+ * device's (design D15). Declared here, beside the device's key, so the browser
+ * suites can seed either without importing the demo.
+ */
+export const DEMO_GATES_KEY = 'shawarmania.demo.change-gates'
+
 function every(value: boolean): GateSnapshot {
   return Object.freeze(
     Object.fromEntries(CHANGE_GATE_KEYS.map((key) => [key, value])) as Record<

@@ -68,7 +68,10 @@ afterAll(async () => {
     p_reason: 'zz-change-gates: restored after the REST probe',
   })
   if (turnError) throw turnError
-  const { error } = await admin.from('device_health').delete().in('device_id', [DEVICE_KAL, DEVICE_KPA])
+  const { error } = await admin
+    .from('device_health')
+    .delete()
+    .in('device_id', [DEVICE_KAL, DEVICE_KPA])
   if (error) throw error
 })
 
@@ -78,7 +81,9 @@ describe('change gates over REST', () => {
       const signedIn = await signIn(alias)
       const { data, error } = await signedIn.from('change_gates').select('key, code, enabled')
       expect(error, alias).toBeNull()
-      expect(data?.map((gate) => gate.key)).toEqual(expect.arrayContaining(['probe', 'tablet-health']))
+      expect(data?.map((gate) => gate.key)).toEqual(
+        expect.arrayContaining(['probe', 'tablet-health']),
+      )
     }
     const { data, error } = await client().from('change_gates').select('key')
     expect(data ?? []).toEqual([])
@@ -108,7 +113,11 @@ describe('change gates over REST', () => {
       p_reason: 'zz-change-gates',
     })
     expect(error).toBeNull()
-    const { data } = await service().from('change_gates').select('enabled').eq('key', 'probe').single()
+    const { data } = await service()
+      .from('change_gates')
+      .select('enabled')
+      .eq('key', 'probe')
+      .single()
     expect(data?.enabled).toBe(!probeWasOn)
   })
 
@@ -158,7 +167,10 @@ describe('change gates over REST', () => {
     const manager = await signIn('admin.kalyani')
     expect((await manager.from('change_gate_events').select('id')).data ?? []).toEqual([])
     const owner = await signIn('owner')
-    const { data } = await owner.from('change_gate_events').select('gate_key').eq('gate_key', 'probe')
+    const { data } = await owner
+      .from('change_gate_events')
+      .select('gate_key')
+      .eq('gate_key', 'probe')
     expect((data ?? []).length).toBeGreaterThan(0)
   })
 })

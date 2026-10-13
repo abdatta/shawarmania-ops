@@ -1346,6 +1346,26 @@ Every check below is enforced by the schema and covered by the suites in `supaba
 `sales_analytics_series(uuid, date, date, integer, text, text)` is the Items chart: for every dish, one dish (its menu id, or `snapshot:<name>` for a line sold without one, exactly as `sales_analytics` keys it) or one captured category, it returns `{from, units[], revenue[]}`, one value per day of every window, oldest first, at most 368 of each, and `hourUnits[]`, `hourRevenue[]`: 24 Kolkata order-hour totals per window, current window first, at most 96 of each. It is read only when that subject is charted.
 
 No raw tickets, line records, identities or engagement data are returned by either. Settled bill totals and explicit business dates are authoritative; dish lines exclude packaging and bill-level discounts. No tracking table or ingestion RPC is introduced.
+## Change gates
+
+One answer per gate for the whole business, turned by the owner (see [Releases](RELEASES.md)). None of these tables is outlet-scoped except `device_health`.
+
+**`change_gates`** — `key` (kebab-case, primary key, never reused), `code` (two characters, capitals or digits, at least one a letter), `kind` (`change` | `ops`), `title`, `on_means`, `off_means`, `change_name`, `change_number` (null when the change has no roadmap row), `enabled` (default false), `changed_at`, `changed_by`, `created_at`, `retired_at`. One row per gate ever declared, inserted only by the migration that serves it, never deleted. The words the Change gates page shows live here rather than in the code, so a phone still on an older build lists a gate it has never heard of.
+
+**`change_gate_dependencies`** — `gate_key`, `depends_on`, both gates; no gate depends on itself and no dependency closes a loop.
+
+**`change_gate_events`** — `gate_key`, `enabled`, `at`, `changed_by`, `reason` (at most 200 characters), `source` (`app` | `operator`). One line per turn, including each gate turned off with a gate it depends on. Append-only, even for the database owner.
+
+**`device_health`** — one row per tablet: `device_id`, `outlet_id`, `build`, `booted_gates`, `window_seconds`, `requests`, `failed`, `slowest_ms`, `reported_at`. Overwritten each minute by the tablet itself; it holds counts and durations only.
+
+### The invariants
+
+- **Only the owner turns a gate**, through `set_change_gate`, which takes the authority from the caller's own token. `change_gate_force` is the same turn for the dashboard and the service role, recorded as an operator turn.
+- **A gate turns on only while every gate it depends on is on**, and **turning one off turns off every gate depending on it**, at any depth, each with its own event. Turning it back on brings none of them back.
+- **A retired gate reads off** and refuses a turn; a code is unique among gates not retired, so a retired gate's code may be given out again.
+- **`app_change_gate(key)`** is what a gated trigger, policy or function asks: true only while the gate and everything it depends on is on.
+- **A tablet writes only its own health row**: `report_device_health` takes the device and outlet from the tablet's session, never from its arguments.
+
 ## Retained rollback compatibility
 
 The retired dish workflow leaves `orders.label`, `order_items.note`,

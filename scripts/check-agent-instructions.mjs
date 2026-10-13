@@ -44,6 +44,7 @@ import { resolve, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const CLAUDE_COMMANDS = '.claude/commands/opsx'
+const CLAUDE_SKILLS = '.claude/skills'
 const AGENT_SKILLS = '.agents/skills'
 
 /**
@@ -57,6 +58,15 @@ const WORKFLOWS = [
   { command: 'explore.md', skill: 'openspec-explore' },
   { command: 'sync.md', skill: 'openspec-sync-specs' },
 ]
+
+/**
+ * Workflows written as a skill of the same name in both trees, each required in
+ * both — not only once it exists in one. `release` and `retire-gate` are how a
+ * change gate is turned on and retired (a-release-can-be-switched-off, D12):
+ * an agent that has never heard of them would leave a gate off forever, or
+ * alive forever, and nothing else would say so until lint failed on its date.
+ */
+const SHARED_SKILLS = ['next-change', 'propose-apply-verify', 'release', 'retire-gate']
 
 /**
  * An invocation is the bare or npx-prefixed binary followed by a subcommand.
@@ -103,7 +113,7 @@ function instructionFiles(root) {
  * The exported rule, taking its input rather than reading it, so the test can
  * drive it without a fixture tree on disk.
  */
-export function findInstructionDrift({ sources, claudeCommands, agentSkills }) {
+export function findInstructionDrift({ sources, claudeCommands, claudeSkills, agentSkills }) {
   const invocations = []
   for (const { path, text } of sources) {
     text.split('\n').forEach((line, index) => {
@@ -127,6 +137,18 @@ export function findInstructionDrift({ sources, claudeCommands, agentSkills }) {
     }
   }
 
+  for (const name of SHARED_SKILLS) {
+    const inClaude = claudeSkills.includes(name)
+    const inAgents = agentSkills.includes(name)
+    if (!inClaude && !inAgents) {
+      lopsided.push(`${name} is missing from both ${CLAUDE_SKILLS}/ and ${AGENT_SKILLS}/`)
+    } else if (!inAgents) {
+      lopsided.push(`${CLAUDE_SKILLS}/${name}/ has no counterpart at ${AGENT_SKILLS}/${name}/`)
+    } else if (!inClaude) {
+      lopsided.push(`${AGENT_SKILLS}/${name}/ has no counterpart at ${CLAUDE_SKILLS}/${name}/`)
+    }
+  }
+
   return { invocations, lopsided }
 }
 
@@ -142,6 +164,9 @@ function main() {
     sources: files.map((path) => ({ path, text: readFileSync(resolve(root, path), 'utf8') })),
     claudeCommands: existsSync(resolve(root, CLAUDE_COMMANDS))
       ? readdirSync(resolve(root, CLAUDE_COMMANDS))
+      : [],
+    claudeSkills: existsSync(resolve(root, CLAUDE_SKILLS))
+      ? readdirSync(resolve(root, CLAUDE_SKILLS))
       : [],
     agentSkills: existsSync(resolve(root, AGENT_SKILLS))
       ? readdirSync(resolve(root, AGENT_SKILLS))
@@ -170,7 +195,7 @@ function main() {
     process.stderr.write(`✗ ${lopsided.length} workflow(s) exist in only one tree:\n`)
     for (const line of lopsided) process.stderr.write(`  ${line}\n`)
     process.stderr.write(
-      '  Claude reads .claude/commands/opsx/, Codex reads .agents/skills/.\n' +
+      '  Claude reads .claude/commands/opsx/ and .claude/skills/, Codex reads .agents/skills/.\n' +
         '  Nothing syncs them; add the counterpart by hand.\n',
     )
   }

@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test'
 
+import { GATE_STATE, skippedTags } from './e2e/support/change-gates'
 import { PORTS } from './ports'
 
 /**
@@ -31,6 +32,12 @@ export default defineConfig({
   retries: process.env['CI'] ? 2 : 0,
   workers: 1,
   reporter: process.env['CI'] ? [['github'], ['html', { open: 'never' }]] : [['list']],
+  // `CHANGE_GATES=on|off` (default off): the local database's gates are turned
+  // to match before the run and back off after it, `e2e-auth/test.ts` saves the
+  // same answers on every tablet, and the other state's tagged tests are left
+  // out (a-release-can-be-switched-off, D10).
+  globalSetup: './e2e-auth/change-gates.setup.ts',
+  grepInvert: skippedTags(GATE_STATE),
 
   use: {
     baseURL: BASE_URL,

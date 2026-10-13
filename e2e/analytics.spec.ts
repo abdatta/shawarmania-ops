@@ -1,4 +1,5 @@
-import { expect, test, type Page, type TestInfo } from '@playwright/test'
+import { type Page, type TestInfo } from '@playwright/test'
+import { expect, test } from './test'
 
 /** Theme, phone size, and the two things every Analytics walk must end without. */
 async function openAnalytics(page: Page, testInfo: TestInfo, theme: string, path: string) {

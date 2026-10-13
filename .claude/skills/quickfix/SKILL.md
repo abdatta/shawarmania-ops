@@ -1,6 +1,6 @@
 ---
 name: quickfix
-description: Land a small bug fix or minor change end to end, fast, without the roadmap-change ceremony — reproduce, fix, pin with one test proved to fail before it, push and let CI gate. Use when the user reports a bug, says "quick fix", "small change", "just fix", or when a change is a correction to shipped behaviour rather than new capability. Refuses itself for migrations, RLS/policy, money arithmetic, offline/outbox, the gate registry and the demo seam, which go through /propose-apply-verify.
+description: Land a small bug fix or minor change end to end, fast, without the roadmap-change ceremony — reproduce, fix, pin with one test proved to fail before it, push and let CI gate. Use when the user reports a bug, says "quick fix", "small change", "just fix", or when a change is a correction to shipped behaviour rather than new capability. Refuses itself for migrations, RLS/policy, money arithmetic, offline/outbox, the gate registry, the demo seam and counter or kitchen runtime behaviour, which go through /propose-apply-verify.
 ---
 
 # Quickfix
@@ -20,7 +20,11 @@ cut; it explains which corners are load bearing.
 
 **Stop and use `/propose-apply-verify` instead if the fix touches:** a
 migration, an RLS policy or grant, money arithmetic, offline or outbox
-semantics, the gate registry, or the demo seam.
+semantics, the gate registry, the demo seam, or **how the counter or kitchen
+behaves at run time beyond copy and styling** — polling, reads, timers,
+subscriptions, the outbox's callers. That last kind ships behind a change gate,
+which this lane does not add; #74's counter freeze was three timers, each a
+one-line change (AGENTS.md → *Every change can be turned off*).
 
 The reason is not that these are likelier to fail a test. It is that **a green
 suite does not describe how they fail.** A forward-only migration that passes
@@ -28,6 +32,11 @@ every test and is still wrong is not undone by a follow-up push; silent
 over-permission passes every functional test in the repo.
 
 Say which one applies and hand off. Do not negotiate the lane down.
+
+**If the counter is down rather than wrong**, neither lane is the way out.
+Turn the change's gate off on the Change gates page first; if it has none,
+Republish the last good build; if that cannot help, Hotfix — a short gate and
+the owner's approval in GitHub (`docs/RELEASES.md`).
 
 If the change adds capability rather than correcting shipped behaviour, that is
 also not a quickfix, however small it looks.

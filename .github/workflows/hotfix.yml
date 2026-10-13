@@ -1,0 +1,258 @@
+# Kept short for the same reason as `Deploy`: GitHub prefixes every check with
+# the workflow name.
+name: Hotfix
+
+# Going forward with a build the full suite has not passed yet
+# (a-release-can-be-switched-off, D17). For the counter being down, not for an
+# ordinary fix: `/quickfix` and the normal release are for those.
+#
+# Actions → Hotfix → Run workflow, with the full SHA of the fix and a reason.
+# What happens, in order:
+#
+#   1. A short gate: lint (both release lints included, which admit a migration
+#      marked `-- release: emergency <reason>`), typecheck, unit tests. About
+#      three minutes. The browser and database suites are what it skips.
+#   2. The fix must carry everything already on `main`, or publishing it would
+#      take back what `main` published. The summary lists every commit it
+#      carries, so the owner sees them before approving.
+#   3. GitHub pauses at the `approve` job until the owner approves it: its
+#      environment, `production-hotfix`, names the owner as required reviewer,
+#      so no agent can ship one alone. Approving also cancels any Deploy still
+#      running for another commit, which would otherwise republish over the fix.
+#   4. Then Deploy's order: migrate, Edge Functions, publish. Each of those jobs
+#      keeps the environment it has in Deploy, because that is where its secret
+#      lives; none can start before the approval.
+#
+# Afterwards, push the same commit to `main` if it is not there already, so
+# Deploy runs the full suite on it and republishes it. The change folder records
+# the reason, the approval and that suite's result.
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full commit SHA of the fix
+        required: true
+        type: string
+      reason:
+        description: Why the full suite cannot be waited for (at least 20 characters)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: short gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+          fetch-depth: 0
+
+      - name: The fix is named exactly, and the reason is given
+        env:
+          SHA: ${{ inputs.sha }}
+          REASON: ${{ inputs.reason }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Give the full 40-character commit SHA, not \"$SHA\"." >&2
+            exit 1
+          fi
+          if [ "${#REASON}" -lt 20 ]; then
+            echo "Say why the full suite cannot be waited for, in at least 20 characters." >&2
+            exit 1
+          fi
+
+      - name: The fix carries everything already on main
+        env:
+          SHA: ${{ inputs.sha }}
+          REASON: ${{ inputs.reason }}
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor origin/main "$SHA"; then
+            echo "main is not an ancestor of $SHA: publishing it would take back what main published." >&2
+            echo "Build the fix on top of main and run Hotfix with that commit." >&2
+            exit 1
+          fi
+          {
+            echo "### Hotfix of \`$SHA\`"
+            echo
+            echo "**Reason:** $REASON"
+            echo
+            echo "Commits this carries beyond \`main\`:"
+            echo
+            git log --format='- `%h` %s' origin/main.."$SHA"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit and component tests
+        run: npm test
+
+  # Not behind the gate or the approval: nothing it makes can publish until
+  # `deploy`, which needs both.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+          # The build stamps the short commit SHA into the UI.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build the fix
+        env:
+          BASE_PATH: /
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  # The owner's approval. GitHub holds this job until the owner approves it in
+  # the `production-hotfix` environment, and every job that changes production
+  # needs it.
+  approve:
+    name: the owner approves
+    needs: check
+    runs-on: ubuntu-latest
+    environment:
+      name: production-hotfix
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Stop any Deploy still running for another commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          for status in queued in_progress waiting; do
+            gh api "repos/${{ github.repository }}/actions/workflows/deploy.yml/runs?status=$status" \
+              --jq ".workflow_runs[] | select(.head_sha != \"$SHA\") | .id" |
+              while read -r run; do
+                echo "Cancelling Deploy run $run: it would republish an older build over the hotfix." |
+                  tee -a "$GITHUB_STEP_SUMMARY"
+                gh api -X POST "repos/${{ github.repository }}/actions/runs/$run/cancel" || true
+              done
+          done
+          echo "The owner approved the hotfix of $SHA." | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # As in Deploy. One migration run at a time across Deploy and Hotfix.
+  migrate:
+    needs: approve
+    runs-on: ubuntu-latest
+    concurrency:
+      group: production-migrations
+      cancel-in-progress: false
+    environment:
+      name: production-database
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Require production database credential
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Apply forward production migrations
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: npx supabase db push --db-url "$SUPABASE_DB_URL" --yes
+
+  # As in Deploy, with the same refusal to guess a project.
+  functions:
+    needs: [approve, migrate]
+    runs-on: ubuntu-latest
+    environment:
+      name: production-functions
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Resolve the production project
+        id: project
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+        run: |
+          set -euo pipefail
+          test -n "${VITE_SUPABASE_URL:-}" || {
+            echo "VITE_SUPABASE_URL is not set; refusing to guess a project." >&2
+            exit 1
+          }
+          ref=$(printf '%s' "$VITE_SUPABASE_URL" \
+            | sed -nE 's#^https://([a-z0-9]{20})\.supabase\.co/?$#\1#p')
+          test -n "$ref" || {
+            echo "VITE_SUPABASE_URL carries no project reference: $VITE_SUPABASE_URL" >&2
+            exit 1
+          }
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+      - name: Require a function deployment credential
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: test -n "$SUPABASE_ACCESS_TOKEN"
+
+      - name: Deploy every Edge Function
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: npx supabase functions deploy --project-ref "${{ steps.project.outputs.ref }}" --use-api
+
+  deploy:
+    needs: [check, build, approve, migrate, functions]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -25,6 +25,19 @@
 
 ⚠️ **The Supabase account already contains a project that has nothing to do with this system.** It is not linked to this repo and must not be. `supabase link` against it, or pointing `.env` at it, would run this project's migrations into unrelated data. When staging and production are created, they are **new projects** — confirmed with the owner on 2026-07-26. If a command ever reports this repo as linked, that is a mistake to undo rather than a convenience to accept.
 
+### Never configured on staging
+
+Staging reaches no third party, by leaving out what each one needs. These are never set on the staging project, its Vault or its Edge Function secrets, and each function refuses or does nothing without them — `src/lib/third-parties-fail-closed.test.ts` holds the functions and `supabase/tests/87_staging_reaches_no_third_party.sql` the database:
+
+| Never configured | What it would reach | Without it |
+|---|---|---|
+| `RECEIPT_WORKER_SECRET`, `MSG91_AUTHKEY` (`send-bill-receipts`) | MSG91, so a customer's phone | 401 to every caller; 503 before claiming a receipt |
+| `RECEIPT_WEBHOOK_SECRET` (`bill-receipt-report`) | MSG91's delivery reports | 401 to every caller |
+| Vault `receipt_delivery_url`, `receipt_delivery_worker_secret` (the `bill-receipt-recovery` job and the receipt wake-up) | the sender above | sending cannot be switched on; a queued receipt makes no request |
+| `AGGREGATOR_SYNC_SECRET` (`aggregator-reader`, `ingest-aggregator-cycle`) | the sync repository's runs against Zomato, Swiggy and Hyperpure | 503 to every caller |
+| `GITHUB_DISPATCH_TOKEN`, `AGGREGATOR_SYNC_REPOSITORY` (`request-aggregator-sync`) | the sync repository's workflows | 503 to every caller |
+| The receipt Worker's `SUPABASE_*` secrets on Cloudflare | public receipt links | the Worker stays pointed at production only |
+
 ## Configuration
 
 Client-side environment variables — only ever the public pair:
@@ -169,16 +182,42 @@ other job would notice.
 minutes later rather than immediately, and only if the suite agrees. That is
 the trade being made on purpose.
 
-**Rollback is unchanged**: **Actions → Deploy → Run workflow**,
-choosing an earlier commit. It re-verifies that commit on the way through.
-Accepted deliberately — the commit being rolled back to passed the same suite
-when it landed, so the re-run is expected green, and a rollback only reaches a
-counter tablet on its next launch anyway (see *Service worker caution* below).
-CI minutes are not the slow part of a rollback.
+**A deploy is not a release.** Every behaviour change in a build ships behind
+a change gate, off, and the owner turns it on later from the Change gates page.
+So a push to `main` changes nothing anyone at a counter sees until then — see
+[Releases](RELEASES.md).
 
-One deploy runs at a time (`concurrency: pages`, never cancelled mid-flight),
-so two pushes in quick succession queue rather than racing; cancelling a
-half-finished publish is how a partial build gets served.
+**Rollback is a ladder**, and the first rung needs no build at all:
+
+1. **Turn the change's gate off** — account menu → **Change gates**. Every tablet
+   reloads into the old behaviour at its next free moment. If the owner's phone
+   cannot load the app, the Supabase dashboard's SQL editor does the same:
+   `select public.change_gate_force('<key>', false, '<reason>');`
+2. **Republish** a verified build — **Actions → Republish → Run workflow** with
+   the full SHA of a build Deploy once published. It checks a Deploy run
+   succeeded on exactly that commit, then builds and publishes it, with no
+   migration and no Edge Function deploy. That is safe because migrations only
+   add. **Actions → Deploy → Run workflow** on an earlier commit still works too,
+   and re-verifies it on the way through, at the cost of the suite's fifteen
+   minutes.
+3. **Hotfix** — **Actions → Hotfix → Run workflow** with the fix's SHA and a
+   reason: a short gate, the owner's approval in GitHub, then migrate, functions,
+   publish. For the counter being down, not an ordinary fix. The runbook,
+   including how to check the approval is really required, is in
+   [Releases](RELEASES.md#3-hotfix).
+4. **Fix forward** through the normal path.
+
+A rollback reaches a counter tablet at its next update check (see *Service
+worker caution* below); a gate turned off reaches it within a minute or two of
+idle.
+
+**One Deploy run at a time** (`concurrency: deploy`, never cancelled
+mid-flight), so two pushes in quick succession queue rather than racing their
+migrations. **One publication at a time** across Deploy, Republish and Hotfix:
+each holds `pages` only while it publishes, so a Hotfix never queues behind a
+Deploy run that is still verifying. Deploy's and Hotfix's migrations share
+`production-migrations`. Cancelling a half-finished publish is how a partial
+build gets served, so none of these groups cancels.
 
 Before the workflow builds or uploads, `npm run auth:readiness` posts one
 non-sensitive action to the hosted `email-sign-in` function. It permits
@@ -194,7 +233,7 @@ One prerequisite, and it is not optional: **the repo is public.** Pages from a p
 
 Beyond that the workflow is self-provisioning — `actions/configure-pages` enabled Pages on the first run, so the **Settings → Pages → Source** dropdown never had to be touched. If Pages is ever reset, that step will re-enable it rather than failing.
 
-The canonical production origin is **https://ops.shawarmania.in/**. GitHub Pages redirects the former `https://abdatta.github.io/shawarmania-ops/` project URL to the custom domain. Assets are immutable and hashed, so a rollback is re-running the deploy workflow on an earlier commit (`Actions → Deploy → Run workflow`).
+The canonical production origin is **https://ops.shawarmania.in/**. GitHub Pages redirects the former `https://abdatta.github.io/shawarmania-ops/` project URL to the custom domain. Assets are immutable and hashed, so republishing an earlier build (`Actions → Republish`) is a complete rollback of the frontend.
 
 ### The base path
 
@@ -1321,6 +1360,7 @@ Deliberately minimal at this scale — the useful signals are operational rather
 
 - **Sync backlog**: a tablet with a persistent unsynced queue is the most valuable alert in the system. It means bills exist in exactly one place.
 - **Device last-seen**: a counter device silent during trading hours means something is wrong at that outlet.
+- **Tablet health**: with the **Tablet health** change gate on, every gate's page shows each counter and kitchen's last minute — requests, failures, slowest request, build, and whether it runs the gate's current answer. A tablet's requests jumping well above its normal, or failures above zero, is the earliest sign of a change hurting the database; see [Releases](RELEASES.md#tablet-health).
 - **Cash differences**: a consistently non-zero difference at one outlet is a business signal, and the app already computes it.
 - **Identity functions**: monitor `admin-accounts`, `redeem-invite`, and
   `email-sign-in` non-2xx rates plus email-sign-in abuse limits. Logs may name

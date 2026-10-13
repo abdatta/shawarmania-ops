@@ -160,6 +160,31 @@ export default tseslint.config(
     },
   },
 
+  /**
+   * A browser spec takes `test` from its suite's `./test`, which seeds the run's
+   * change-gate state before any page loads (a-release-can-be-switched-off, D10).
+   * Playwright's own `test` would run the spec with whatever the demo or the
+   * device happened to boot with, whichever state the run claims to test.
+   */
+  {
+    files: ['e2e/**/*.spec.ts', 'e2e-auth/**/*.spec.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@playwright/test',
+              importNames: ['test'],
+              message:
+                "Import `test` (and `expect`) from './test', so the run's change-gate state is seeded. See docs/RELEASES.md#change-gates.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   {
     files: ['**/*.{mjs,js}', 'vite.config.ts', 'playwright.config.ts', 'playwright.auth.config.ts'],
     languageOptions: { globals: globals.node },

@@ -15,6 +15,9 @@ Keep entries behavior-focused:
 | --- | --- | --- | --- | --- |
 | [Menu Measurement And Experiment Advice](./menu-measurement-and-experiment-advice.md) | Feature | Deferred by owner, 2026-10-09 | Analytics / public menu | The owner resumes menu measurement or experiment advice |
 | [Customer Analytics](./customer-analytics.md) | Feature | Owner asked to record, 2026-10-09 | Analytics / Customers | The owner asks for any of its figures, or the Cafe has three months of named-customer bills |
+| [A Change Gate Could Turn Itself Off](./a-change-gate-could-turn-itself-off.md) | Feature | Deferred by design, 2026-10-12 | Releases | The owner first turns a change gate off because of tablet health |
+| [Try A Change On One Device](./try-a-change-on-one-device.md) | Feature | Deferred by owner, 2026-10-12 | Releases | The owner wants to see a release on real orders before the staff do |
+| [A Change Gate Per Outlet](./a-change-gate-per-outlet.md) | Feature | Deferred by owner, 2026-10-12 | Releases | Two outlets trading and the owner wanting a change at one first, or a manager asking to turn one |
 | [Bill Thermal Printing](./bill-thermal-printing.md) | Feature | Anticipated | Billing | A customer or regulator asks for a printed bill |
 | [Bill GST Breakup](./bill-gst-breakup.md) | Feature | Anticipated | Billing | The business registers for GST or a customer requires a tax invoice |
 | [Bill Receipt Delivery](./bill-receipt-delivery.md) | Feature | **Promoted 2026-09-21** | Billing | Fired: consent is taken at the counter, published and filed with an RCS registration; the channel moved to SMS via MSG91 on 2026-09-29. Seeded as `bill-receipt-delivery` (#59), shipped 2026-10-04 and archived 2026-10-07 |

@@ -933,10 +933,17 @@ and as narrow as it can be, and the incident's workflow is replaced by two.
 - `workflow_dispatch` with a commit SHA on `stage` and a reason. Since D20 the fix
   is pushed to `stage` like any commit, so staging receives it too; Hotfix does not
   wait for staging.
-- The publishing jobs run in a GitHub **environment, `production-hotfix`, whose
-  required reviewer is the owner**. GitHub pauses the run until the owner taps
-  Approve — on the phone, in the GitHub app — so no agent can ship one alone.
-  Environment reviewers are free for public repositories.
+- An **`approve` job runs in a GitHub environment, `production-hotfix`, whose
+  required reviewer is the owner**, and every job that changes production needs
+  it. GitHub pauses the run until the owner taps Approve — on the phone, in the
+  GitHub app — so no agent can ship one alone. Environment reviewers are free for
+  public repositories. *Corrected during apply:* this said the publishing jobs
+  themselves run in `production-hotfix`, but migrate and functions read their
+  secrets from `production-database` and `production-functions`, and a job has one
+  environment; one approval job that all of them need gates the same thing without
+  copying secrets.
+- Approving also **cancels any Deploy run still going for another commit**, which
+  would otherwise republish an older build over the fix once its suite finished.
 - A short gate first: `npm run lint` (including both new lints, which accept an
   `-- release: emergency` migration), typecheck, unit tests, build. About three
   minutes. The browser and database suites are what it skips.
@@ -964,6 +971,9 @@ and as narrow as it can be, and the incident's workflow is replaced by two.
 today, which would queue a hotfix behind a running Deploy for its whole fifteen
 minutes. The group moves to the publishing job in Deploy, Republish and Hotfix, so
 publications still never overlap while a gate run does not block an emergency.
+Deploy keeps a workflow-level group of its own, `deploy`, so two pushes still never
+interleave their migrations or publish out of order, and Deploy's and Hotfix's
+migrate jobs share `production-migrations`.
 
 **The escape hatches in code**, each printed on every lint run:
 
@@ -976,9 +986,9 @@ publications still never overlap while a gate run does not block an emergency.
 
 Tests pin the shapes, in the style of `check-release-order.test.mjs`:
 `scripts/check-republish.test.mjs` (the verification step precedes the build; no
-migrate or functions step) and `scripts/check-hotfix.test.mjs` (every publishing
-job uses the `production-hotfix` environment; the gate precedes migrate; migrate
-precedes functions precedes publish). The environment's reviewer is set in the
+migrate or functions step) and `scripts/check-hotfix.test.mjs` (every job that
+changes production needs the `approve` job in `production-hotfix`; the gate precedes
+migrate; migrate precedes functions precedes publish). The environment's reviewer is set in the
 repository's settings, which no file can prove — the runbook in
 `docs/OPERATIONS.md` says how to check it, and the production rehearsal in the tasks
 confirms it.

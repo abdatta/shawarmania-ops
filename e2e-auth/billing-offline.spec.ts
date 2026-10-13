@@ -1,10 +1,5 @@
-import {
-  expect,
-  test,
-  type APIRequestContext,
-  type BrowserContext,
-  type Page,
-} from '@playwright/test'
+import { type APIRequestContext, type BrowserContext, type Page } from '@playwright/test'
+import { expect, test } from './test'
 
 const PASSWORD = 'shawarmania-local'
 const SUPABASE_URL = process.env['VITE_SUPABASE_URL'] ?? 'http://127.0.0.1:54321'

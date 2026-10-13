@@ -103,6 +103,13 @@ jobs:
       - name: Every tracked text file is clean UTF-8
         run: npm run lint:encoding
 
+      # The same trap a third time: A PROPOSAL IS ITSELF A PROSE-ONLY COMMIT.
+      # Every change folder created on or after 2026-10-13 must say how its
+      # change is released and turned off (a-release-can-be-switched-off, D12);
+      # a commit adding only the proposal would otherwise never meet the check.
+      - name: Every new proposal says how its change is released
+        run: npm run lint:change-gates -- --proposals
+
       # Nothing else runs here on purpose. eslint, typecheck, the build and
       # every test suite take no input from any file this workflow's filter
       # admits — with `openspec/tools/**` excluded from that filter precisely
