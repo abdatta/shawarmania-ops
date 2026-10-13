@@ -4,7 +4,7 @@ import { defineConfig, devices } from '@playwright/test'
  * The staging smoke suite (a-release-can-be-switched-off, D19), against a
  * published staging build — never a local server, so there is no `webServer`.
  *
- *   STAGING_SUPABASE_URL=… STAGING_SUPABASE_ANON_KEY=… STAGING_TEST_PASSWORD=… \
+ *   STAGING_TEST_PASSWORD=… \
  *     npm run test:e2e:staging
  *
  * `STAGING_BASE_URL` points it somewhere else, such as a staging build served

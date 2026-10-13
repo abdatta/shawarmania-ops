@@ -6,10 +6,13 @@
 -- so the whole seed is one `do` block of nested blocks. Never by
 -- `supabase db reset`: this is not `supabase/seed.sql`, and nothing here is real.
 --
--- One outlet, *Test Cafe*, with a test account for every role, a counter and a
--- kitchen tablet, a generated menu of production's shape, and a trading history
--- sized to production's row counts — because the reads that froze the counter
--- on 12 October cost what they cost because of how many rows sit behind them.
+-- Two outlets. *Test Cafe* is the owner's fake outlet: a test account for every
+-- role, a generated menu of production's shape, and a trading history sized to
+-- production's row counts — because the reads that froze the counter on
+-- 12 October cost what they cost because of how many rows sit behind them. Its
+-- tablets are the ones the owner sets up. *Smoke tests* belongs to the smoke
+-- suite that ends every Staging run: its own manager and biller and a small menu,
+-- so the suite's orders, shifts and tablets never touch Test Cafe.
 -- Every order is rung, prepared and paid through the counter's own commands, as
 -- the counter tablet, against that day's shift: the same function, payload hash and guards the app uses, so
 -- every derived row (the order, its lines, the payment, the command, the public
@@ -26,19 +29,25 @@ declare
   c_password constant text := {{seed.password}};
   c_days constant integer := {{seed.days}};
   c_bills constant integer := {{seed.bills}};
-  -- `--if-empty`: a seeded staging is left as it is, rather than refused. The
-  -- Staging workflow seeds this way on every push, so the first push meets a
-  -- seeded project and every later one changes nothing.
+  -- `--if-empty`: only what is missing is seeded, and what is there is left as
+  -- it is, rather than refused. The Staging workflow seeds this way on every
+  -- push, so the first push fills an empty project and every later one changes
+  -- nothing unless this file has grown a part staging does not hold yet.
   c_if_empty constant boolean := {{seed.if_empty}};
+  v_cafe constant boolean := exists (select 1 from public.outlets where code = 'test-cafe');
+  v_smoke constant boolean := exists (select 1 from public.outlets where code = 'smoke-tests');
 begin
   -- ── Refuse to run without the runner, or twice ─────────────────────────────
 
-  if exists (select 1 from public.outlets where code = 'test-cafe') then
-    if c_if_empty then
-      raise notice 'Staging already holds Test Cafe; nothing to seed.';
-      return;
-    end if;
+  if (v_cafe or v_smoke) and not c_if_empty then
     raise exception 'Staging is already seeded. Run the Staging reset workflow to start over.';
+  end if;
+
+  <<cafe>>
+  begin
+  if v_cafe then
+    raise notice 'Staging already holds Test Cafe; leaving it as it is.';
+    exit cafe;
   end if;
 
   -- ── The outlet ──────────────────────────────────────────────────────────────
@@ -51,10 +60,10 @@ begin
      'Staging — not a real outlet', 'Synthetic Road', 'Kalyani', 'Nadia', '741235',
      '+91 90000 00000', 22.9750, 88.4345, 150, time '04:00', time '13:00', 'test-cafe');
 
-  -- ── Accounts: one per role, and the two tablets ─────────────────────────────
+  -- ── Accounts: one per role, and the tablet the history is rung on ───────────
   -- Usernames are the part before `@login.shawarmania.invalid`; every password is
-  -- the one the runner was given, which lives in the staging-smoke environment
-  -- and nowhere in this repository.
+  -- the one the runner was given, which lives in the staging environments and
+  -- nowhere in this repository.
 
   declare
     persona record;
@@ -67,8 +76,7 @@ begin
         ('5a000000-0000-4000-a000-000000000014'::uuid, 'staging.staff'),
         ('5a000000-0000-4000-a000-000000000015'::uuid, 'staging.griller'),
         ('5a000000-0000-4000-a000-000000000016'::uuid, 'staging.prep'),
-        ('5a000000-0000-4000-a000-000000000021'::uuid, 'staging.counter'),
-        ('5a000000-0000-4000-a000-000000000022'::uuid, 'staging.kitchen')
+        ('5a000000-0000-4000-a000-000000000021'::uuid, 'staging.counter')
       ) as p (id, username)
     loop
       insert into auth.users
@@ -120,16 +128,15 @@ begin
     ('5a000000-0000-4000-a000-000000000016', 'employee',        '5a000000-0000-4000-a000-000000000001', current_date - 120);
 
   -- A tablet is a machine principal: an auth user and a device row, no profile.
+  -- This one rings the history below and is then removed, keeping its rows, so
+  -- Test Cafe's Tablets list holds only what the owner sets up.
   insert into public.counter_devices
     (id, outlet_id, label, set_up_by, set_up_at, last_seen_at, last_reported_unsent,
      session_proven_at, kind)
   values
     ('5a000000-0000-4000-a000-000000000021', '5a000000-0000-4000-a000-000000000001',
      'Test Cafe counter', '5a000000-0000-4000-a000-000000000012',
-     now() - interval '120 days', now(), 0, now() - interval '120 days', 'counter'),
-    ('5a000000-0000-4000-a000-000000000022', '5a000000-0000-4000-a000-000000000001',
-     'Test Cafe kitchen', '5a000000-0000-4000-a000-000000000012',
-     now() - interval '120 days', now(), 0, now() - interval '120 days', 'kitchen');
+     now() - interval '120 days', now(), 0, now() - interval '120 days', 'counter');
 
   -- ── A menu of production's shape: 17 categories, 132 items ──────────────────
 
@@ -330,14 +337,105 @@ begin
            public.app_business_date(now(), time '04:00') - 1,
            interval '1 day') as g (d)
    cross join lateral (select g.d::date as day) as dd;
+  end cafe;
 
-  raise notice '%', 'Staging seeded: ' ||
+  -- ── Smoke tests: the smoke suite's own outlet ───────────────────────────────
+  -- Every Staging run ends with the smoke suite setting up a counter and a
+  -- kitchen tablet, opening a shift on each, ringing, acknowledging and paying
+  -- one order, then leaving both shifts and removing both tablets. It does it
+  -- all here, as this outlet's own manager and biller, so nothing it writes or
+  -- ends is the owner's. Nothing is pruned: a run leaves about one bill and a few
+  -- small rows behind, around 20 kB, against the 39 MB staging held and the Free
+  -- plan's 500 MB when this was measured on 13 October.
+
+  <<smoke>>
+  begin
+    if v_smoke then
+      exit smoke;
+    end if;
+
+    insert into public.outlets
+      (id, code, name, location_label, address_line1, city, district, pincode, phone,
+       latitude, longitude, geofence_radius_m, business_day_cutover, arrival_deadline, menu_slug)
+    values
+      ('5a000000-0000-4000-a000-000000000002', 'smoke-tests', 'Smoke tests',
+       'Staging — the automatic smoke suite', 'Synthetic Road', 'Kalyani', 'Nadia', '741235',
+       '+91 90000 00001', 22.9750, 88.4345, 150, time '04:00', time '13:00', 'smoke-tests');
+
+    declare
+      persona record;
+    begin
+      for persona in
+        select * from (values
+          ('5a000000-0000-4000-a000-000000000031'::uuid, 'staging.smoke.manager'),
+          ('5a000000-0000-4000-a000-000000000032'::uuid, 'staging.smoke.biller')
+        ) as p (id, username)
+      loop
+        insert into auth.users
+          (instance_id, id, aud, role, email, email_confirmed_at, encrypted_password,
+           raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+           confirmation_token, recovery_token, email_change_token_new,
+           email_change_token_current, email_change, phone_change,
+           phone_change_token, reauthentication_token, is_sso_user)
+        values
+          ('00000000-0000-0000-0000-000000000000', persona.id, 'authenticated', 'authenticated',
+           persona.username || '@login.shawarmania.invalid', now(),
+           extensions.crypt(c_password, extensions.gen_salt('bf')),
+           '{"provider": "email", "providers": ["email"]}'::jsonb, '{}'::jsonb,
+           now(), now(), '', '', '', '', '', '', '', '', false);
+        insert into auth.identities
+          (provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+        values
+          (persona.id::text, persona.id,
+           jsonb_build_object('sub', persona.id::text,
+             'email', persona.username || '@login.shawarmania.invalid', 'email_verified', true),
+           'email', now(), now(), now());
+      end loop;
+    end;
+
+    insert into public.profiles (id, full_name, phone, is_active, role_title)
+    values
+      ('5a000000-0000-4000-a000-000000000031', 'Smoke Manager (test)', '919000000031', true, 'Manager'),
+      ('5a000000-0000-4000-a000-000000000032', 'Smoke Biller (test)',  '919000000032', true, null);
+
+    insert into public.assignments (person_id, role, outlet_id, started_on)
+    values
+      ('5a000000-0000-4000-a000-000000000031', 'franchise_admin', '5a000000-0000-4000-a000-000000000002', current_date - 120),
+      ('5a000000-0000-4000-a000-000000000032', 'biller',          '5a000000-0000-4000-a000-000000000002', current_date - 120);
+
+    insert into public.menu_categories (id, outlet_id, name, sort_order)
+    values ('5a000000-0000-4000-a011-000000000001', '5a000000-0000-4000-a000-000000000002', 'Smoke', 1);
+
+    insert into public.menu_items
+      (id, outlet_id, category_id, name, price_paise, is_veg, is_available, sort_order)
+    select ('5a000000-0000-4000-a012-' || lpad(n::text, 12, '0'))::uuid,
+           '5a000000-0000-4000-a000-000000000002',
+           '5a000000-0000-4000-a011-000000000001',
+           'Smoke dish ' || n,
+           (9900 + n * 1000),
+           n = 3, true, n
+      from generate_series(1, 3) as n;
+  end smoke;
+
+  -- ── Tablets the smoke suite no longer signs in as ───────────────────────────
+  -- Earlier seeds left Test Cafe a counter and a kitchen tablet for the suite.
+  -- Retire them wherever they still stand, as an owner removing them would:
+  -- removal keeps a tablet's rows, so Test Cafe's history is untouched.
+
+  perform public.remove_counter_device(d.id, '5a000000-0000-4000-a000-000000000011')
+     from public.counter_devices d
+    where d.id in ('5a000000-0000-4000-a000-000000000021', '5a000000-0000-4000-a000-000000000022')
+      and d.removed_at is null;
+
+  raise notice '%', 'Staging holds Test Cafe with ' ||
          (select count(*) from public.bills where outlet_id = '5a000000-0000-4000-a000-000000000001') ||
          ' bills, ' ||
          (select count(*) from public.bill_items bi join public.bills b on b.id = bi.bill_id
            where b.outlet_id = '5a000000-0000-4000-a000-000000000001') ||
-         ' lines, ' ||
+         ' lines and ' ||
          (select count(*) from public.bill_payments where outlet_id = '5a000000-0000-4000-a000-000000000001') ||
-         ' payments.';
+         ' payments, and Smoke tests with ' ||
+         (select count(*) from public.bills where outlet_id = '5a000000-0000-4000-a000-000000000002') ||
+         ' bills.';
 end;
 $seed$;

@@ -5,14 +5,14 @@
  *
  *   STAGING_SUPABASE_DB_URL=… STAGING_TEST_PASSWORD=… node scripts/seed-staging.mjs
  *   STAGING_TEST_PASSWORD=… node scripts/seed-staging.mjs --local   # rehearse on the local stack
- *   … node scripts/seed-staging.mjs --if-empty   # seed only a staging that holds no Test Cafe
+ *   … node scripts/seed-staging.mjs --if-empty   # seed only what staging is missing
  *
- * Runs `supabase/staging/seed.sql` — *Test Cafe*, an account per role, a counter
- * and a kitchen tablet, a generated menu, and about three thousand bills rung
- * through the counter's own command — against the staging database, after
- * refusing anything that names production's project. The Staging workflow runs
- * it with `--if-empty` on every push, which seeds a new project once and leaves a
- * seeded one alone; the Staging reset workflow runs it after wiping staging.
+ * Runs `supabase/staging/seed.sql` — *Test Cafe*, an account per role, a generated
+ * menu and about three thousand bills rung through the counter's own command; and
+ * *Smoke tests*, the smoke suite's own outlet — against the staging database,
+ * after refusing anything that names production's project. The Staging workflow
+ * runs it with `--if-empty` on every push, which seeds what is missing and leaves
+ * what is there alone; the Staging reset workflow runs it after wiping staging.
  *
  * The test accounts' password comes from the environment, never from this
  * repository. It reaches the database inside the statement, written to a

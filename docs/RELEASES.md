@@ -321,11 +321,14 @@ as long as it takes to trust it. With **Tablet health** on, the gate's page show
 both laptops' requests a minute beside the budget's numbers.
 
 **How an agent verifies on staging.** Not by typing a password into a browser:
-`npm run test:e2e:staging`, with `STAGING_SUPABASE_URL`, `STAGING_SUPABASE_ANON_KEY`
-and `STAGING_TEST_PASSWORD` in the environment. It walks the owner, a manager, a
-counter and a kitchen through one order, one acknowledgement, one payment and one
-change-gate turn on *Test Cafe*, checking the band on each, and leaves both shifts
-at the end.
+`npm run test:e2e:staging`, with `STAGING_TEST_PASSWORD` in the environment. It
+works only at *Smoke tests*, an outlet of its own, as that outlet's manager and
+biller: it sets up a counter and a kitchen tablet with setup codes, walks them
+through one order, one acknowledgement and one payment, leaves both shifts and
+removes both tablets, then has the owner turn a change gate on and back off,
+restoring what it found. The band is checked on every screen. *Test Cafe* and its
+accounts are never touched, so a push cannot disturb the owner mid-walkthrough;
+the gate turn is the one thing shared, because gates are business-wide.
 
 **Promoting.** Actions → Promote → Run workflow, with the commit's full SHA, or
 nothing for the newest commit on `stage` that Staging verified. A docs-only commit
@@ -352,8 +355,12 @@ none starts, run Staging by hand on `stage` (Actions → Staging → Run workflo
 
 **Starting over.** Actions → Staging reset wipes staging's database, re-applies every
 migration on `stage`, and re-runs `scripts/seed-staging.mjs`: *Test Cafe*, a test
-account for every role, a counter and a kitchen tablet, and about three thousand
-bills rung through the counter's own command.
+account for every role and about three thousand bills rung through the counter's
+own command, on a tablet then removed so its Tablets list starts empty; and *Smoke
+tests*, the smoke suite's outlet, with its own manager, biller and three dishes.
+Nothing is pruned between resets: a Staging run leaves about one bill and a few small
+rows at *Smoke tests*, around 20 kB, and staging held 39 MB of the Free plan's 500 MB
+when that was measured (2026-10-13).
 
 **Reading the protections.** No file can prove them, so read them:
 

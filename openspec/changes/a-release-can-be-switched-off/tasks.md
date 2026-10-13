@@ -553,6 +553,18 @@ staging must verify this change before 10 promotes it to production.
   *(2026-10-13, Staging run `38457964697` on `8ad96b90`, green in 16m15s: the suite
   11m, migrate and the first seed 2m, functions 29s, publish 32s, smoke 1m57s. Open: the
   paused-project message.)*
+- [x] 9.12a The smoke suite moves to its own outlet (D19, at the owner's request
+  during 9.13): *Smoke tests* with its own manager and biller, where the suite sets
+  up a counter and a kitchen tablet with setup codes and removes them afterwards, so
+  Test Cafe and its accounts are the owner's alone. `--if-empty` now seeds whatever
+  is missing, so the next Staging run adds the outlet to the staging already seeded
+  and retires the two tablets earlier seeds left in Test Cafe.
+  *(Done 2026-10-13. Rehearsed on the local stack: the old seed then the new one with
+  `--if-empty` — Test Cafe's 120 bills untouched, its two tablets removed, Smoke
+  tests added; again, changing nothing; plain mode refusing; a fresh seed leaving
+  Test Cafe's list empty. The smoke suite against a local staging build: green in
+  21 s, every tablet it set up removed and no shift left open, including after a
+  crashed run's tablet was put back by hand. Measured staging: 39 MB of 500 MB.)*
 - [ ] 9.13 **The fake outlet, with the owner.** Laptop 1 as *Test Cafe*'s counter
   (one-time code, shift handshake from the owner's phone), laptop 2 as its kitchen,
   the phone as owner. The owner turns `probe` on and off from staging's

@@ -310,7 +310,10 @@ export function OutletTablets({
         <Card className="border-accent">
           <CardTitle>Setup code</CardTitle>
           <CardBody className="space-y-2">
-            <p className="text-center font-mono text-3xl font-bold tracking-widest text-content">
+            <p
+              data-testid="tablet-setup-code"
+              className="text-center font-mono text-3xl font-bold tracking-widest text-content"
+            >
               {issued}
             </p>
             <p>

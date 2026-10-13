@@ -3,16 +3,21 @@ import { expect, test, type Browser, type BrowserContext, type Page } from '@pla
 /**
  * Staging's smoke suite (a-release-can-be-switched-off, design D19): what
  * Staging runs after every publish, and what an agent runs when asked to verify
- * on staging. It writes only to *Test Cafe*, the outlet `scripts/seed-staging.mjs`
- * made, and signs in only as its test accounts and tablets.
+ * on staging. It works only at *Smoke tests*, the outlet `scripts/seed-staging.mjs`
+ * made for it, as that outlet's own manager and biller, so *Test Cafe* and its
+ * accounts stay the owner's: nothing the owner is trying on the fake outlet is
+ * rung over, left or removed by a push.
  *
- * The owner, the manager, a counter and a kitchen meet only at the server, as
- * they would at the outlet: the counter's shift opened by the two-device
- * handshake from the Biller's phone, the kitchen's from the manager's, one
- * order rung, acknowledged in the kitchen and paid, and the probe change gate
- * turned on and back off from the owner's Change gates page. The staging band is
- * checked on every screen. Both shifts are left at the end, so staging is as
- * the run found it.
+ * The manager sets up a counter and a kitchen tablet with setup codes, as an
+ * owner would, and they meet only at the server, as they would at the outlet:
+ * the counter's shift opened by the two-device handshake from the biller's
+ * phone, the kitchen's from the manager's, one order rung, acknowledged in the
+ * kitchen and paid. Both shifts are left and both tablets removed at the end,
+ * and any a crashed run left are removed first, so the outlet's Tablets list is
+ * empty between runs. Then the owner turns the probe change gate on and back off
+ * from the Change gates page, restoring whatever it found: gates are
+ * business-wide, the one thing this run shares with the owner. The staging band
+ * is checked on every screen.
  *
  * Passwords come from the environment — `STAGING_TEST_PASSWORD` locally, the
  * `staging-smoke` GitHub environment in CI — and never from this repository.
@@ -24,11 +29,14 @@ function required(name: string): string {
   return value
 }
 
-const SUPABASE_URL = required('STAGING_SUPABASE_URL')
-const ANON_KEY = required('STAGING_SUPABASE_ANON_KEY')
 const PASSWORD = required('STAGING_TEST_PASSWORD')
 
 const BAND = 'Staging · not a real outlet'
+
+/** The seed's *Smoke tests* outlet, and a suffix that names this run's tablets. */
+const SMOKE_OUTLET = '5a000000-0000-4000-a000-000000000002'
+const RUN = Date.now().toString(36).slice(-6)
+const SUITE_TABLET = /^Remove Smoke (counter|kitchen) /
 
 /** A phone signed in as a person, through the sign-in screen. */
 async function phone(
@@ -47,24 +55,58 @@ async function phone(
   return { context, page }
 }
 
-/** A seeded tablet, signed in as the machine it is, the way a set-up tablet holds its session. */
-async function tablet(
-  browser: Browser,
-  username: string,
-): Promise<{ context: BrowserContext; page: Page }> {
-  const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-    method: 'POST',
-    headers: { apikey: ANON_KEY, 'content-type': 'application/json' },
-    body: JSON.stringify({ email: `${username}@login.shawarmania.invalid`, password: PASSWORD }),
+/** The manager's phone on *Smoke tests*, once its tablets have been read. */
+async function smokeTablets(manager: Page) {
+  await manager.goto(`admin/outlets/${SMOKE_OUTLET}`)
+  await expect(manager.getByText(BAND)).toBeVisible()
+  await expect(manager.getByRole('button', { name: 'Re-read the tablets' })).toBeVisible({
+    timeout: 30_000,
   })
-  expect(response.ok, `${username} could not sign in`).toBe(true)
-  const session = (await response.json()) as Record<string, unknown>
+}
+
+/** Removes every tablet this suite set up, including any a crashed run left behind. */
+async function removeSuiteTablets(manager: Page) {
+  await smokeTablets(manager)
+  const remove = manager.getByRole('button', { name: SUITE_TABLET })
+  while ((await remove.count()) > 0) {
+    const before = await remove.count()
+    await remove.first().click()
+    await manager
+      .getByRole('dialog', { name: /^Remove Smoke / })
+      .getByRole('button', { name: 'Remove', exact: true })
+      .click()
+    await expect(remove).toHaveCount(before - 1, { timeout: 30_000 })
+  }
+}
+
+/**
+ * A fresh browser made a tablet the way an owner makes one: the manager generates
+ * a setup code on their phone and it is typed on the tablet.
+ */
+async function setUpTablet(
+  browser: Browser,
+  manager: Page,
+  label: string,
+  use: 'Billing' | 'Kitchen',
+): Promise<{ context: BrowserContext; page: Page }> {
+  await manager.getByTestId('add-tablet').click()
+  const sheet = manager.getByRole('dialog', { name: 'Set up a tablet at Smoke tests' })
+  await sheet.getByLabel('What to call it').fill(label)
+  await sheet.getByRole('radio', { name: use, exact: true }).click()
+  await sheet.getByRole('button', { name: 'Generate a code' }).click()
+  const code = (await manager.getByTestId('tablet-setup-code').textContent())?.trim() ?? ''
+  expect(code, 'no setup code was shown').not.toBe('')
+  await manager.getByRole('button', { name: 'Done', exact: true }).click()
+
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
   const page = await context.newPage()
-  await page.addInitScript((value) => {
-    localStorage.setItem('shawarmania.auth', JSON.stringify(value))
-  }, session)
-  await page.goto('counter')
+  await page.goto('counter/setup')
+  await expect(page.getByText(BAND)).toBeVisible()
+  await page.getByLabel('Setup code').fill(code)
+  await page.getByRole('button', { name: 'Set up', exact: true }).click()
+  await expect(page).toHaveURL(use === 'Kitchen' ? /\/kitchen$/ : /\/counter$/, {
+    timeout: 30_000,
+  })
   await expect(page.getByText(BAND)).toBeVisible()
   return { context, page }
 }
@@ -100,27 +142,32 @@ async function leaveShift(person: Page, job: 'counter' | 'kitchen') {
 const customerPhone = () =>
   String(9_000_000_000 + ((Math.floor(Date.now() / 1000) * 10) % 999_000_000))
 
-test('Test Cafe trades end to end on staging, and the owner turns a change gate', async ({
+test('a counter and a kitchen set up on staging trade end to end, and the owner turns a change gate', async ({
   browser,
 }) => {
   test.slow()
 
-  const biller = await phone(browser, 'staging.biller')
-  const manager = await phone(browser, 'staging.manager')
-  const counter = await tablet(browser, 'staging.counter')
-  const kitchen = await tablet(browser, 'staging.kitchen')
+  const manager = await phone(browser, 'staging.smoke.manager')
+  const biller = await phone(browser, 'staging.smoke.biller')
+  const tablets: { context: BrowserContext }[] = []
 
   try {
-    await openShift(counter.page, biller.page, 'staging.biller', 'counter')
+    await removeSuiteTablets(manager.page)
+    const counter = await setUpTablet(browser, manager.page, `Smoke counter ${RUN}`, 'Billing')
+    tablets.push(counter)
+    const kitchen = await setUpTablet(browser, manager.page, `Smoke kitchen ${RUN}`, 'Kitchen')
+    tablets.push(kitchen)
+
+    await openShift(counter.page, biller.page, 'staging.smoke.biller', 'counter')
     await expect(counter.page.getByTestId('menu-grid')).toBeVisible({ timeout: 30_000 })
-    await openShift(kitchen.page, manager.page, 'staging.manager', 'kitchen')
+    await openShift(kitchen.page, manager.page, 'staging.smoke.manager', 'kitchen')
     await expect(kitchen.page).toHaveURL(/\/kitchen$/)
     await expect(kitchen.page.getByTestId('kitchen-filter-summary')).toBeVisible({
       timeout: 30_000,
     })
 
     // One order, for a customer the counter has never seen.
-    await counter.page.getByRole('button', { name: 'Test dish 1', exact: true }).click()
+    await counter.page.getByRole('button', { name: 'Smoke dish 1', exact: true }).click()
     await counter.page.getByTestId('customer-row').click()
     const customer = counter.page.getByRole('dialog', { name: 'Customer' })
     for (const digit of customerPhone()) {
@@ -162,7 +209,9 @@ test('Test Cafe trades end to end on staging, and the owner turns a change gate'
   } finally {
     await leaveShift(manager.page, 'kitchen').catch(() => undefined)
     await leaveShift(biller.page, 'counter').catch(() => undefined)
-    for (const side of [counter, kitchen, manager, biller]) await side.context.close()
+    // A failure here is left for the next run, which removes leftovers first.
+    await removeSuiteTablets(manager.page).catch(() => undefined)
+    for (const side of [...tablets, manager, biller]) await side.context.close()
   }
 
   // The owner turns the probe on and back off, as a release would.
@@ -183,7 +232,8 @@ test('Test Cafe trades end to end on staging, and the owner turns a change gate'
   }
 })
 
-test('staging installs under its own name and its own icons', async ({ request }) => {
+test('staging installs under its own name and its own icons', async ({ request, baseURL }) => {
+  const base = baseURL ?? ''
   const manifest = (await (await request.get('manifest.webmanifest')).json()) as {
     short_name: string
     icons: { src: string }[]
@@ -191,11 +241,13 @@ test('staging installs under its own name and its own icons', async ({ request }
   expect(manifest.short_name).toBe('Staging')
   expect(manifest.icons.length).toBeGreaterThan(0)
   const page = await (await request.get('.')).text()
-  const links = [...page.matchAll(/href="\/?([^"]*\.png)"/g)].map((match) => match[1] ?? '')
+  const links = [...page.matchAll(/href="([^"]*\.png)"/g)].map((match) => match[1] ?? '')
   expect(links.length).toBeGreaterThan(0)
+  // Resolved against the base, so a build served under a sub-path checks the same.
   for (const src of [...manifest.icons.map((icon) => icon.src), ...links]) {
-    expect(src, src).toMatch(/^icons\/staging\/[a-z0-9-]+\.png$/)
-    const icon = await request.get(src)
+    const url = new URL(src, base)
+    expect(url.pathname, src).toMatch(/\/icons\/staging\/[a-z0-9-]+\.png$/)
+    const icon = await request.get(url.href)
     expect(icon.status(), src).toBe(200)
     expect(icon.headers()['content-type'], src).toContain('image/png')
   }

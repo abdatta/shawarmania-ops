@@ -77,10 +77,19 @@ describe('Staging', () => {
     expect(commandsOf(yaml, 'build')).toMatch(/VITE_APP_ENVIRONMENT: staging/)
   })
 
-  it('seeds a staging that holds no Test Cafe, after migrating and before publishing', () => {
+  it('seeds whatever staging is missing, after migrating and before publishing', () => {
     const migrate = commandsOf(yaml, 'migrate')
     expect(migrate).toMatch(/node scripts\/seed-staging\.mjs --if-empty/)
     expect(migrate.indexOf('supabase db push')).toBeLessThan(migrate.indexOf('seed-staging.mjs'))
+  })
+
+  it('smokes only at its own outlet, never as Test Cafe’s accounts or tablets', () => {
+    const smoke = readFileSync(resolve(process.cwd(), 'e2e-staging/smoke.spec.ts'), 'utf8')
+    const seed = readFileSync(resolve(process.cwd(), 'supabase/staging/seed.sql'), 'utf8')
+    expect(seed).toMatch(/'smoke-tests', 'Smoke tests'/)
+    expect(smoke).toMatch(/staging\.smoke\.manager/)
+    expect(smoke).toMatch(/staging\.smoke\.biller/)
+    expect(smoke).not.toMatch(/'staging\.(manager|biller|counter|kitchen)'/)
   })
 
   it('refuses a rewritten stage that no longer contains main, before staging moves', () => {

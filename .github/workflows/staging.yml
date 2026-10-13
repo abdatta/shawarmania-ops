@@ -125,10 +125,11 @@ jobs:
 
       # A new staging project holds nothing for the smoke suite to sign in to, and
       # Staging reset cannot seed it yet: GitHub runs a hand-started workflow only
-      # from the default branch, which `stage` is not. So every push seeds a
-      # staging that holds no Test Cafe, and leaves a seeded one alone. The test
-      # password lives in this environment as well as in `staging-smoke`.
-      - name: Seed staging if it holds no Test Cafe
+      # from the default branch, which `stage` is not. So every push seeds what
+      # staging is missing (Test Cafe, the smoke suite's outlet) and leaves what it
+      # holds alone. The test password lives in this environment as well as in
+      # `staging-smoke`.
+      - name: Seed whatever staging is missing
         env:
           STAGING_SUPABASE_DB_URL: ${{ secrets.STAGING_SUPABASE_DB_URL }}
           STAGING_TEST_PASSWORD: ${{ secrets.STAGING_TEST_PASSWORD }}
@@ -228,8 +229,9 @@ jobs:
           accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy dist --project-name=shawarmania-ops-staging --branch=stage
 
-  # The owner, a Franchise Admin, a counter and a kitchen on Test Cafe through
-  # one order, one payment and one change-gate turn, against what was published.
+  # Smoke tests' manager and biller, a counter and a kitchen they set up and
+  # remove, one order, one payment, and the owner's change-gate turn, against
+  # what was published. Test Cafe is never touched.
   smoke:
     needs: publish
     runs-on: ubuntu-latest
@@ -251,8 +253,6 @@ jobs:
       - name: Smoke the published staging build
         env:
           STAGING_BASE_URL: https://stage-ops.shawarmania.in/
-          STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
-          STAGING_SUPABASE_ANON_KEY: ${{ vars.STAGING_SUPABASE_ANON_KEY }}
           STAGING_TEST_PASSWORD: ${{ secrets.STAGING_TEST_PASSWORD }}
         run: npm run test:e2e:staging
 

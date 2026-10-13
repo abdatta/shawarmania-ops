@@ -1198,10 +1198,23 @@ staging is not a local development host, so an agent's browser tools may not
 sign in there. Instead `npm run test:e2e:staging` — a Playwright smoke suite
 (`e2e-staging/`) that signs in as the staging test accounts, whose passwords come
 from the environment (`STAGING_*` variables locally, the `staging-smoke` GitHub
-environment in CI) and never from the repo. It walks owner, Franchise Admin,
-counter and kitchen through one order, one payment and one change-gate turn, with
-the band visible on each. `staging.yml` runs it after each publish; an agent runs
-it locally when asked to verify on staging. It writes only to *Test Cafe*.
+environment in CI) and never from the repo. `staging.yml` runs it after each
+publish; an agent runs it locally when asked to verify on staging.
+
+It works only at *Smoke tests*, an outlet the seed makes for it with its own
+Franchise Admin and Biller, never at *Test Cafe*: the manager sets up a counter and
+a kitchen tablet with setup codes, the two meet through one order, one
+acknowledgement and one payment, both shifts are left and both tablets removed, and
+any a crashed run left are removed first. Then the owner turns a change gate on and
+back off, restoring what it found, with the band visible on every screen. The owner
+asked for this on 2026-10-13, during the first fake-outlet walkthrough: a push could
+otherwise ring an order onto the owner's counter, press *Leave counter* on a shift
+the owner held through the same test Biller, or leave two permanent test tablets in
+Test Cafe's list. The gate turn is the one thing still shared, because gates are
+business-wide. Nothing at *Smoke tests* is pruned: a run leaves about one bill and a
+few small rows, around 20 kB, and staging held 39 MB of the Free plan's 500 MB when
+that was measured. Rejected: seeded tablets the suite signs in as by password (the
+first version), which also skipped the setup-code path every real tablet takes.
 
 **Rejected:**
 
