@@ -829,7 +829,11 @@ describe('mock billing adapter', () => {
       expect(adapter.getCounterState().sync.pending).toBe(0)
     })
 
-    it("keeps an unprepared order's payment reversible however long ago it was taken", async () => {
+    it("keeps an unprepared order's payment reversible however long ago it was taken that day", async () => {
+      // The hour below must not cross the 04:00 cutover: past it the day change
+      // finishes the order and starts the five minutes (#69), as it does live.
+      // Started from the wall clock, this failed every night from 03:00 to 04:00.
+      vi.setSystemTime(new Date('2026-10-13T12:00:00+05:30'))
       const store = createDemoStore()
       const adapter = createMockBillingAdapter(store)
       const saved = await adapter.saveOrder(
