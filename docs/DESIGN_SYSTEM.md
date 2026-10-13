@@ -49,7 +49,17 @@ Two details are load-bearing rather than incidental:
 - **The maskable variant is composited full-bleed with the art inset to 80%.** The mark has transparent rounded corners, and Android crops a maskable icon to whatever shape the launcher uses — shipped as-is, its edges get clipped.
 - **The field colour is sampled from the master, not hard-coded.** It reads as `#14100b`, which is `--brand-bg`. If the artwork is ever replaced, the derived background follows it rather than quietly disagreeing.
 
-Replacing the mark is: swap the master, run the script, commit what changes.
+**Staging has its own mark.** `assets/brand/shawarmania-mark-staging-512.png` is the
+master with the wrap and flame recoloured blue — the wrap gradient-mapped by lightness
+through `#172554`, `#1d4ed8`, `#38bdf8` and `#e0f2fe`, the flame `#38bdf8` at its foot
+to `#bae6fd` at its tips — with the field and alpha untouched, so an installed staging
+app is told apart on a home screen before its name is read. The script derives
+`public/icons/staging/` from it beside `public/icons/`, and a staging build uses only
+that set (`iconDirectory` in `src/env/app-environment.ts`).
+
+Replacing the mark is: swap the master, recolour the staging master the same way, run
+the script, commit what changes. `scripts/generate-icons.test.mjs` fails while the two
+masters' silhouettes differ.
 
 ### Portal extensions
 

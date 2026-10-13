@@ -1,11 +1,19 @@
 #!/usr/bin/env node
 /**
- * Derive the icon set from the brand master.
+ * Derive the icon sets from the brand masters.
  *
  * Source of truth: assets/brand/shawarmania-mark-512.png — the same mark the
  * Shawarmania site serves as its favicon. Everything under public/icons/ is
  * generated from it, so replacing the master and re-running this is the whole
  * job of changing the app's icon.
+ *
+ * Staging installs under its own icon (a-release-can-be-switched-off, D19), so
+ * an installed staging app cannot pass for the counter's:
+ * assets/brand/shawarmania-mark-staging-512.png is the same mark with the wrap
+ * and flame recoloured blue, its field and alpha untouched, and
+ * public/icons/staging/ is derived from it the same way. Replacing the mark
+ * means recolouring it again (docs/DESIGN_SYSTEM.md, "The mark");
+ * generate-icons.test.mjs fails until the two silhouettes agree.
  *
  *   npm run icons:generate
  *
@@ -19,8 +27,14 @@ import { fileURLToPath } from 'node:url'
 
 import { canvas, decodePng, drawOnto, encodePng, flatten, resize } from './lib/png.mjs'
 
-const MASTER = fileURLToPath(new URL('../assets/brand/shawarmania-mark-512.png', import.meta.url))
-const OUT_DIR = fileURLToPath(new URL('../public/icons', import.meta.url))
+const SETS = [
+  { master: '../assets/brand/shawarmania-mark-512.png', out: '../public/icons' },
+  { master: '../assets/brand/shawarmania-mark-staging-512.png', out: '../public/icons/staging' },
+].map(({ master, out }) => ({
+  master: fileURLToPath(new URL(master, import.meta.url)),
+  name: master.replace('../', ''),
+  out: fileURLToPath(new URL(out, import.meta.url)),
+}))
 
 /**
  * The mark sits on a solid field with transparent rounded corners. Find that
@@ -51,51 +65,64 @@ function backgroundColour(image) {
   return modal.split(',').map(Number)
 }
 
-const master = decodePng(readFileSync(MASTER))
-if (master.width !== master.height) {
-  throw new Error(`Master must be square, got ${master.width}x${master.height}`)
+function deriveSet({ master: masterPath, name, out }) {
+  const master = decodePng(readFileSync(masterPath))
+  if (master.width !== master.height) {
+    throw new Error(`Master must be square, got ${master.width}x${master.height}`)
+  }
+
+  const background = backgroundColour(master)
+  mkdirSync(out, { recursive: true })
+
+  function write(file, image) {
+    writeFileSync(join(out, file), encodePng(image))
+    process.stdout.write(`  ${file.padEnd(28)} ${image.width}px
+`)
+  }
+
+  /**
+   * `purpose: any` icons keep the transparent rounded corners — launchers that
+   * respect them get the mark's own silhouette rather than a square.
+   */
+  write('icon-512.png', master)
+  write('icon-192.png', resize(master, 192, 192))
+
+  /**
+   * A maskable icon is cropped to whatever shape the platform chooses, so the
+   * art has to survive a circle. Full-bleed background, mark inset to the 80%
+   * safe zone. Without this the rounded corners get clipped and the mark loses
+   * its edges on Android.
+   */
+  const SAFE_ZONE = 0.8
+  const inset = Math.round((512 * (1 - SAFE_ZONE)) / 2)
+  write(
+    'icon-maskable-512.png',
+    drawOnto(
+      canvas(512, background),
+      resize(master, 512 - inset * 2, 512 - inset * 2),
+      inset,
+      inset,
+    ),
+  )
+
+  /**
+   * iOS composites an apple-touch-icon onto white if it has transparency, which
+   * would put a white ring around the mark. Flatten onto the mark's own field
+   * instead so the result is what we intend rather than what Safari picks.
+   */
+  write('apple-touch-icon-180.png', flatten(resize(master, 180, 180), background))
+
+  // Browser tabs. 32 is the common ask; 48 covers higher-DPI tab strips.
+  write('favicon-32.png', resize(master, 32, 32))
+  write('favicon-48.png', resize(master, 48, 48))
+
+  process.stdout.write(
+    `
+✓ Icon set derived from ${name} ` +
+      `(field #${background.map((c) => c.toString(16).padStart(2, '0')).join('')})
+
+`,
+  )
 }
 
-const background = backgroundColour(master)
-mkdirSync(OUT_DIR, { recursive: true })
-
-function write(name, image) {
-  writeFileSync(join(OUT_DIR, name), encodePng(image))
-  process.stdout.write(`  ${name.padEnd(28)} ${image.width}px\n`)
-}
-
-/**
- * `purpose: any` icons keep the transparent rounded corners — launchers that
- * respect them get the mark's own silhouette rather than a square.
- */
-write('icon-512.png', master)
-write('icon-192.png', resize(master, 192, 192))
-
-/**
- * A maskable icon is cropped to whatever shape the platform chooses, so the
- * art has to survive a circle. Full-bleed background, mark inset to the 80%
- * safe zone. Without this the rounded corners get clipped and the mark loses
- * its edges on Android.
- */
-const SAFE_ZONE = 0.8
-const inset = Math.round((512 * (1 - SAFE_ZONE)) / 2)
-write(
-  'icon-maskable-512.png',
-  drawOnto(canvas(512, background), resize(master, 512 - inset * 2, 512 - inset * 2), inset, inset),
-)
-
-/**
- * iOS composites an apple-touch-icon onto white if it has transparency, which
- * would put a white ring around the mark. Flatten onto the mark's own field
- * instead so the result is what we intend rather than what Safari picks.
- */
-write('apple-touch-icon-180.png', flatten(resize(master, 180, 180), background))
-
-// Browser tabs. 32 is the common ask; 48 covers higher-DPI tab strips.
-write('favicon-32.png', resize(master, 32, 32))
-write('favicon-48.png', resize(master, 48, 48))
-
-process.stdout.write(
-  `\n✓ Icon set derived from assets/brand/shawarmania-mark-512.png ` +
-    `(field #${background.map((c) => c.toString(16).padStart(2, '0')).join('')})\n`,
-)
+for (const set of SETS) deriveSet(set)

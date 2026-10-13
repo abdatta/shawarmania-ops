@@ -1159,8 +1159,12 @@ uses, inverted.
 **How it is told apart.** A staging build is built with
 `VITE_APP_ENVIRONMENT=staging` and shows a permanent band — **Staging · not a real
 outlet** — on every surface, in every role, and its web manifest names the app
-*Shawarmania Ops (staging)*. A tablet at an outlet that somehow opened the staging
-address could not mistake it for the counter. Production builds have no band and
+*Shawarmania Ops (staging)*, short name *Staging*, under its own icon: the same mark
+with the wrap and flame recoloured blue on the same black field, chosen by the owner
+on 2026-10-13 from mock-ups of new fields, flame colours, hazard tape and a blueprint
+line drawing. A whole new field colour read as a different app rather than a sibling;
+a blue flame alone was too small a change to see at launcher size. A tablet at an
+outlet that somehow opened the staging address could not mistake it for the counter. Production builds have no band and
 no code path for one beyond the build-time constant. This is a build
 configuration, not a change gate: production never runs the band.
 

@@ -182,3 +182,21 @@ test('Test Cafe trades end to end on staging, and the owner turns a change gate'
     await owner.context.close()
   }
 })
+
+test('staging installs under its own name and its own icons', async ({ request }) => {
+  const manifest = (await (await request.get('manifest.webmanifest')).json()) as {
+    short_name: string
+    icons: { src: string }[]
+  }
+  expect(manifest.short_name).toBe('Staging')
+  expect(manifest.icons.length).toBeGreaterThan(0)
+  const page = await (await request.get('.')).text()
+  const links = [...page.matchAll(/href="\/?([^"]*\.png)"/g)].map((match) => match[1] ?? '')
+  expect(links.length).toBeGreaterThan(0)
+  for (const src of [...manifest.icons.map((icon) => icon.src), ...links]) {
+    expect(src, src).toMatch(/^icons\/staging\/[a-z0-9-]+\.png$/)
+    const icon = await request.get(src)
+    expect(icon.status(), src).toBe(200)
+    expect(icon.headers()['content-type'], src).toContain('image/png')
+  }
+})

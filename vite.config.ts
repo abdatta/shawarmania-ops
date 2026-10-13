@@ -9,7 +9,12 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { defineConfig, type Plugin } from 'vitest/config'
 
 import { PORTS } from './ports'
-import { manifestNames, parseAppEnvironment } from './src/env/app-environment'
+import {
+  iconDirectory,
+  manifestNames,
+  parseAppEnvironment,
+  withIconLinks,
+} from './src/env/app-environment'
 
 /**
  * GitHub Pages serves a project repo from `/<repo>/`, so that sub-path is the
@@ -20,6 +25,10 @@ import { manifestNames, parseAppEnvironment } from './src/env/app-environment'
  * time and nothing else.
  */
 const base = process.env['BASE_PATH'] ?? '/shawarmania-ops/'
+
+/** Production unless `VITE_APP_ENVIRONMENT=staging` (src/env/app-environment.ts). */
+const environment = parseAppEnvironment(process.env['VITE_APP_ENVIRONMENT'])
+const icons = iconDirectory(environment)
 
 /** Short commit SHA, or `unknown` outside a git checkout (e.g. a source tarball). */
 function buildSha(): string {
@@ -42,6 +51,17 @@ function buildSha(): string {
  * `.nojekyll` stops Pages from running the artifact through Jekyll, which
  * would drop any path segment beginning with an underscore.
  */
+/**
+ * Points `index.html`'s favicon and touch-icon links at this build's icon set,
+ * before Vite resolves them against `public/` and the base.
+ */
+function environmentIcons(): Plugin {
+  return {
+    name: 'shawarmania:environment-icons',
+    transformIndexHtml: { order: 'pre', handler: (html) => withIconLinks(html, environment) },
+  }
+}
+
 function githubPagesFallback(): Plugin {
   return {
     name: 'shawarmania:github-pages-fallback',
@@ -77,8 +97,9 @@ export default defineConfig({
       registerType: 'prompt',
       injectRegister: false,
       manifest: {
-        // A staging build installs as itself, never as the counter's app (D19).
-        ...manifestNames(parseAppEnvironment(process.env['VITE_APP_ENVIRONMENT'])),
+        // A staging build installs as itself, never as the counter's app (D19):
+        // its own name and its own icon set.
+        ...manifestNames(environment),
         description: 'Cash-counter and outlet management for Shawarmania',
         // Base-relative, so the same config is correct under a project
         // sub-path and under a custom domain at the root.
@@ -95,10 +116,10 @@ export default defineConfig({
         background_color: '#14100b',
         theme_color: '#fafaf9',
         icons: [
-          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: `${icons}/icon-192.png`, sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: `${icons}/icon-512.png`, sizes: '512x512', type: 'image/png', purpose: 'any' },
           {
-            src: 'icons/icon-maskable-512.png',
+            src: `${icons}/icon-maskable-512.png`,
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',
@@ -107,10 +128,13 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg,woff,woff2}'],
+        // Both icon sets ship in every build; each caches only its own.
+        globIgnores: environment === 'staging' ? ['icons/*.png'] : ['icons/staging/**'],
         navigateFallback: `${base}index.html`,
         cleanupOutdatedCaches: true,
       },
     }),
+    environmentIcons(),
     githubPagesFallback(),
   ],
   resolve: {

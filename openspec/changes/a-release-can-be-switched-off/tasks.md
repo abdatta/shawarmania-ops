@@ -417,6 +417,16 @@ staging must verify this change before 10 promotes it to production.
   staging build: 1,257 + 21 = the 1,278 px viewport. Colours are the inverted text tokens,
   distinct from the demo's amber strip, which it sits above in a staging demo. The tab
   title reads *Staging · Shawarmania Ops*.)*
+- [x] 9.3a Staging installs under its own icon (D19): the brand mark with the wrap and
+  flame recoloured blue, the owner's pick of the mock-ups.
+  *(Done 2026-10-13: `assets/brand/shawarmania-mark-staging-512.png`, same field and
+  alpha as the master; `npm run icons:generate` derives `public/icons/staging/` from it
+  beside `public/icons/`. A staging build points its manifest and `index.html` links
+  there and precaches only that set; a production build's manifest, links and precache
+  list are unchanged. Tests: `src/env/app-environment.test.ts`,
+  `scripts/generate-icons.test.mjs` (the two masters share a silhouette, so replacing
+  one alone fails), and a smoke check that the published staging site serves its own
+  icons — it failed against the build live before this.)*
 - [x] 9.4 Third parties stay out (D19): for each Edge Function and scheduled job that
   reaches outside the project (`send-bill-receipts`, `bill-receipt-report`, the
   aggregator functions, `bill-receipt-recovery`, the aggregator jobs), prove it does

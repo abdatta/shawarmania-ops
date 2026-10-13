@@ -23,4 +23,19 @@ export function manifestNames(environment: AppEnvironment): { name: string; shor
     : { name: 'Shawarmania Ops', short_name: 'Shawarmania' }
 }
 
+/**
+ * Where a build's icons live, relative to the base. Staging's are the same mark
+ * with the wrap and flame recoloured blue (scripts/generate-icons.mjs), so an
+ * installed staging app is told apart on a home screen before its name is read.
+ */
+export function iconDirectory(environment: AppEnvironment): string {
+  return environment === 'staging' ? 'icons/staging' : 'icons'
+}
+
+/** `index.html` with its favicon and touch-icon links pointed at the build's icons. */
+export function withIconLinks(html: string, environment: AppEnvironment): string {
+  const directory = iconDirectory(environment)
+  return html.replace(/href="\/icons\/(?=[^"/]+\.png")/g, `href="/${directory}/`)
+}
+
 export const STAGING_BAND_TEXT = 'Staging · not a real outlet'
