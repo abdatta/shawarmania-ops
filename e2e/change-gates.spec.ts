@@ -25,28 +25,40 @@ test('the demo’s Change gates opens from its address, and nothing links to it'
 })
 
 test(
-  'with every gate on, the stamp opens the build code with each gate’s code',
+  'with every gate on, a tap on the stamp copies the build with each gate’s code',
   { tag: ['@cg-on:probe', '@cg-on:tablet-health'] },
-  async ({ page }) => {
+  async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
     await page.goto('demo/owner/change-gates')
-    await page.getByTestId('build-version').click()
-    await expect(page.getByTestId('build-code')).toHaveText(/^[0-9a-f]+·PB-TH$/)
+    const stamp = page.getByTestId('build-version')
+    await expect(stamp).toHaveAttribute('data-build-code', /^[0-9a-f]+·PB-TH$/)
+    const builtAt = ((await stamp.textContent()) ?? '').split(' · ')[1]
+    await stamp.click()
+    await expect(stamp).toContainText('Copied')
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      `Build ${await stamp.getAttribute('data-build-code')} · ${builtAt}`,
+    )
   },
 )
 
 test(
-  'with every gate off, the stamp is plain text, and turning the probe on puts PB in it at once',
+  'with every gate off, the build code is the build alone, and turning the probe on puts PB in it at once',
   { tag: '@cg-off:probe' },
   async ({ page }) => {
     await page.goto('demo/owner/change-gates/probe')
     await expect(page.getByTestId('gate-since')).toContainText(/^Off/)
-    await expect(page.getByTestId('build-version')).toHaveJSProperty('tagName', 'P')
+    await expect(page.getByTestId('build-version')).toHaveAttribute(
+      'data-build-code',
+      /^[0-9a-f]+$/,
+    )
 
     await page.getByRole('switch', { name: 'Turn on Probe' }).click()
     await page.getByTestId('confirm-turn-submit').click()
     await expect(page.getByTestId('gate-since')).toContainText(/^On/)
-    await page.getByTestId('build-version').click()
-    await expect(page.getByTestId('build-code')).toHaveText(/^[0-9a-f]+·PB$/)
+    await expect(page.getByTestId('build-version')).toHaveAttribute(
+      'data-build-code',
+      /^[0-9a-f]+·PB$/,
+    )
   },
 )
 
@@ -55,12 +67,7 @@ test(
   { tag: ['@cg-on:probe', '@cg-on:tablet-health'] },
   async ({ page }) => {
     await page.goto('demo/owner/change-gates/probe')
-    const codeAfterOpening = async () => {
-      await page.getByTestId('build-version').click()
-      const code = await page.getByTestId('build-code').textContent()
-      await page.getByRole('button', { name: 'Close' }).click()
-      return code
-    }
+    const codeAfterOpening = () => page.getByTestId('build-version').getAttribute('data-build-code')
     expect(await codeAfterOpening()).toMatch(/·PB-TH$/)
 
     await page.getByRole('switch', { name: 'Turn off Probe' }).click()

@@ -565,6 +565,12 @@ staging must verify this change before 10 promotes it to production.
   Test Cafe's list empty. The smoke suite against a local staging build: green in
   21 s, every tablet it set up removed and no shift left open, including after a
   crashed run's tablet was put back by hand. Measured staging: 39 MB of 500 MB.)*
+- [x] 9.12b The build stamp copies on a tap (D16, the owner's call during 9.13): it is
+  always a button, and a tap copies *Build <sha>·<codes> · <built>*, showing *Copied*,
+  or shows and selects that line where the clipboard is refused. The pop-up with the
+  build code and a Copy is gone. Tests read the code from the stamp's
+  `data-build-code`; the demo suite checks the clipboard itself.
+  *(Done 2026-10-13: unit 7 tests, demo e2e green with gates off and on.)*
 - [ ] 9.13 **The fake outlet, with the owner.** Laptop 1 as *Test Cafe*'s counter
   (one-time code, shift handshake from the owner's phone), laptop 2 as its kitchen,
   the phone as owner. The owner turns `probe` on and off from staging's

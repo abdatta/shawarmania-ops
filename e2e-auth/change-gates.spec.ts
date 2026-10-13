@@ -42,8 +42,10 @@ test(
   { tag: '@cg-on:probe' },
   async ({ browser, request }) => {
     const { context, page } = await openTill(browser, request, TILL_ONE)
-    await page.getByTestId('build-version').click()
-    await expect(page.getByTestId('build-code')).toHaveText(/^[0-9a-f]+·(\w\w-)*PB(-\w\w)*$/)
+    await expect(page.getByTestId('build-version')).toHaveAttribute(
+      'data-build-code',
+      /^[0-9a-f]+·(\w\w-)*PB(-\w\w)*$/,
+    )
     await context.close()
   },
 )

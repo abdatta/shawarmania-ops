@@ -11,7 +11,7 @@ the existing update path — is specified in `change-gates`.
 
 ### Requirement: The running build is identifiable in the UI
 
-The UI SHALL display a build version identifier (short commit SHA and build time) so the running build of any device can be read off-screen. It SHALL be in the account menu, and at the foot of every screen without an account menu — the signed-out screens, the counter tablet, its setup and shift-start screens, and the kitchen tablet — and of the Change gates pages (owner, 2026-10-12). It SHALL read as it always has. While any declared change gate is on for the page, it SHALL be a button opening the **build code** — the short SHA, a middle dot, then the codes of every declared gate the page loaded with on, in declaration order, joined by dashes, e.g. `c1f19c32·DT-KR` — with a Copy that selects the code instead where the clipboard is refused (owner, 2026-10-13).
+The UI SHALL display a build version identifier (short commit SHA and build time) so the running build of any device can be read off-screen. It SHALL be in the account menu, and at the foot of every screen without an account menu — the signed-out screens, the counter tablet, its setup and shift-start screens, and the kitchen tablet — and of the Change gates pages (owner, 2026-10-12). It SHALL read as it always has. It SHALL be a button, and a tap SHALL copy its line with the **build code** in place of the short SHA — the short SHA, a middle dot, then the codes of every declared gate the page loaded with on, in declaration order, joined by dashes, e.g. *Build c1f19c32·DT-KR · 13 Oct 2026, 03:15 am*, or the short SHA alone when none is on — and SHALL show and select that line instead, claiming no copy, where the clipboard is refused (owner, 2026-10-13).
 
 #### Scenario: Version visible on device
 
@@ -40,13 +40,13 @@ The UI SHALL display a build version identifier (short commit SHA and build time
 
 - **WHEN** a page loads with the gates coded *DT* and *KR* on, and its build
   identifier is tapped
-- **THEN** the identifier itself reads *Build <sha> · <time>* as always, and opens
-  the build code `<sha>·DT-KR` with a Copy
+- **THEN** the identifier itself reads *Build <sha> · <time>* as always, and the
+  clipboard holds *Build <sha>·DT-KR · <time>*
 
-#### Scenario: Nothing on, nothing to open
+#### Scenario: Nothing on, the build alone
 
-- **WHEN** a page loads with no gate on
-- **THEN** its build identifier is plain text, not a button
+- **WHEN** a page loads with no gate on, and its build identifier is tapped
+- **THEN** the clipboard holds *Build <sha> · <time>*
 
 ## ADDED Requirements
 

@@ -46,8 +46,8 @@ got backwards:
     (owner, 2026-10-12 and -13; D21). It runs only while every gate it depends on,
     at any depth, is on; turning any of them off turns it off; turning that one
     back on does not turn it back on. Not a tree: the list is flat.
-13. **The build number reads as it always did.** While a gate is on it opens the
-    *build code* — `c1f19c32·DT-KR` — with a Copy. It shows at the foot of every
+13. **The build number reads as it always did**, and a tap copies the line with the
+    *build code* — `c1f19c32·DT-KR` — in place of the build. It shows at the foot of every
     screen without an account menu, not on every screen (D16).
 
 > **Added 2026-10-12, after implementation had started.** Items 9 and 10, D19, D20,
@@ -883,18 +883,19 @@ shift-start screens, the kitchen, and the Change gates pages; every other phone
 page shows it inside the account menu. It is chrome, not behaviour, and ships
 ungated.
 
-**It reads as it always has, and opens the build code** (owner, 2026-10-13:
-"remove the suffix on the build thing and keep it just the commit hash … make it
-clickable if non-zero number of change gates are active … a popup with the full
-code … and a copy button for anyone trying to report to me"). The stamp stays
-*Build 1a2b3c4 · 13 Oct 2026, 03:15 am*. While any gate is on for the page it is
-a button; it opens **Build code**, `c1f19c32·DT-KR` — the build, a middle dot,
-then the codes of the gates the page loaded with on, in declaration order, joined
-by dashes — and **Copy** (selecting the code instead where the clipboard is
-refused, as over plain http on a phone). Only declared gates are listed — a gate
-the build does not know has no toggle point in it to run. An earlier round put the
-codes in the stamp itself (*Build 1a2b3c4 · DT KR PRB*); the owner preferred the
-stamp unchanged.
+**It reads as it always has, and a tap copies it** (owner, 2026-10-13). The stamp
+stays *Build 1a2b3c4 · 13 Oct 2026, 03:15 am* and is always a button. A tap copies
+that line with the **build code** in place of the build —
+*Build c1f19c32·DT-KR · 13 Oct 2026, 03:15 am*: the build, a middle dot, then the
+codes of the gates the page loaded with on, in declaration order, joined by dashes
+— and the stamp reads *Copied* for two seconds. Where the clipboard is refused, as
+over plain http on a phone, the full line is shown and selected instead and nothing
+claims a copy. Only declared gates are listed — a gate the build does not know has
+no toggle point in it to run. Two rounds came first. One put the codes in the stamp
+itself (*Build 1a2b3c4 · DT KR PRB*); the owner preferred the stamp unchanged. The
+next made the stamp a button only while a gate was on, opening a pop-up with the
+code and a Copy; the owner dropped the pop-up the same day, after using it on
+staging: one tap is the whole job, and the copy should carry the time too.
 
 - **`probe`** (*PB*): has no toggle point at all. Its code appearing in the build
   code is its whole effect, and proves the whole path on production devices with

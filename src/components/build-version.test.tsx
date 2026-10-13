@@ -11,27 +11,42 @@ import { BuildVersion } from './build-version'
 
 /**
  * The build stamp (a-release-can-be-switched-off, D16): the build and when it
- * was built, as it always read; while any change gate is on, a button opening
- * the build code — the build and the gates it runs — with a Copy.
+ * was built, as it always read, and one tap copies that line with the change
+ * gates it runs added to the build.
  */
 
-afterEach(() => vi.unstubAllGlobals())
+function stubClipboard(writeText: (text: string) => Promise<void>) {
+  Object.defineProperty(window.navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText },
+  })
+}
+
+afterEach(() => {
+  Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: undefined })
+  vi.unstubAllGlobals()
+})
 
 describe('the build stamp', () => {
-  it('reads as it always has, and is not a button, while no gate is on', () => {
-    render(<BuildVersion />)
-    const stamp = screen.getByTestId('build-version')
-    expect(stamp).toHaveTextContent(/^Build \S+ · \d/)
-    expect(stamp.tagName).toBe('P')
-  })
-
-  it('reads the same while gates are on, and opens the build code to copy', async () => {
+  it('reads as it always has, and a tap copies the line', async () => {
     const user = userEvent.setup()
     const writeText = vi.fn().mockResolvedValue(undefined)
-    Object.defineProperty(window.navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText },
-    })
+    stubClipboard(writeText)
+    render(<BuildVersion />)
+    const stamp = screen.getByTestId('build-version')
+    expect(stamp.tagName).toBe('BUTTON')
+    expect(stamp).toHaveTextContent(/^Build \S+ · \d/)
+    const line = stamp.textContent
+
+    await user.click(stamp)
+    expect(writeText).toHaveBeenCalledWith(line)
+    await waitFor(() => expect(stamp).toHaveTextContent('Copied'))
+  })
+
+  it('reads the same while gates are on, and copies them with the build', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    stubClipboard(writeText)
     render(
       <ChangeGatesContext.Provider value={{ ...ALL_OFF, probe: true, 'tablet-health': true }}>
         <BuildVersion />
@@ -40,30 +55,42 @@ describe('the build stamp', () => {
     const stamp = screen.getByTestId('build-version')
     expect(stamp).toHaveTextContent(/^Build \S+ · \d/)
     expect(stamp).not.toHaveTextContent('PB')
-    expect(stamp.tagName).toBe('BUTTON')
+    expect(stamp).toHaveAttribute('data-build-code', `${BUILD_SHA}·PB-TH`)
+    const builtAt = (stamp.textContent ?? '').split(' · ')[1]
 
     await user.click(stamp)
-    expect(screen.getByTestId('build-code')).toHaveTextContent(`${BUILD_SHA}·PB-TH`)
-    await user.click(screen.getByTestId('copy-build-code'))
-    expect(writeText).toHaveBeenCalledWith(`${BUILD_SHA}·PB-TH`)
-    await waitFor(() => expect(screen.getByTestId('copy-build-code')).toHaveTextContent('Copied'))
+    expect(writeText).toHaveBeenCalledWith(`Build ${BUILD_SHA}·PB-TH · ${builtAt}`)
+  })
+
+  it('shows and selects the whole line where the clipboard is refused, claiming no copy', async () => {
+    const user = userEvent.setup()
+    stubClipboard(vi.fn().mockRejectedValue(new Error('not allowed')))
+    render(
+      <ChangeGatesContext.Provider value={{ ...ALL_OFF, probe: true }}>
+        <BuildVersion />
+      </ChangeGatesContext.Provider>,
+    )
+    const stamp = screen.getByTestId('build-version')
+    await user.click(stamp)
+    await waitFor(() => expect(stamp).toHaveTextContent(`Build ${BUILD_SHA}·PB · `))
+    expect(stamp).not.toHaveTextContent('Copied')
+    expect(window.getSelection()?.toString()).toContain(`${BUILD_SHA}·PB`)
   })
 })
 
 describeChangeGate('probe', (on) => {
-  it(on ? 'puts PB in the build code' : 'leaves the stamp plain text', async () => {
+  it(on ? 'puts PB in the copied build' : 'copies the build alone', async () => {
     const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    stubClipboard(writeText)
     render(
       <ChangeGatesForTest on={{ probe: on }}>
         <BuildVersion />
       </ChangeGatesForTest>,
     )
-    const stamp = screen.getByTestId('build-version')
-    if (!on) {
-      expect(stamp.tagName).toBe('P')
-      return
-    }
-    await user.click(stamp)
-    expect(screen.getByTestId('build-code')).toHaveTextContent(`${BUILD_SHA}·PB`)
+    await user.click(screen.getByTestId('build-version'))
+    const copied = String(writeText.mock.calls[0]?.[0])
+    if (on) expect(copied).toMatch(new RegExp(`^Build ${BUILD_SHA}·(\\w\\w-)*PB(-\\w\\w)* · `))
+    else expect(copied).not.toContain('PB')
   })
 })

@@ -107,12 +107,12 @@ an existing screen runs, and moves when the owner turns it.
   letter: *DT* for Dish ticks, *PB* for the probe (owner, 2026-10-13). It is unique
   among the gates not yet cleaned up, checked when a gate is added; a retired
   gate's code may be given out again, its key never.
-- **The build code.** The build number reads as it always has. While any gate is
-  on for the screen, the build number can be tapped, and opens the **build
-  code** — the build and the codes of the gates the screen is running, joined by a
-  middle dot: `c1f19c32·DT-KR` — with a **Copy** button, so anybody reporting a
-  problem hands over exactly what they were running in one line (owner,
-  2026-10-13).
+- **The build code.** The build number reads as it always has, and a tap copies
+  that line with the **build code** in place of the build — the build and the codes
+  of the gates the screen is running, joined by a middle dot:
+  *Build c1f19c32·DT-KR · 13 Oct 2026, 03:15 am* — so anybody reporting a problem
+  hands over exactly what they were running, and when it was built, in one paste
+  (owner, 2026-10-13).
 - **Several gates can be on at once, and a gate can depend on others** — one or
   several (owner, 2026-10-12 and 2026-10-13). It can be turned on only while every
   gate it depends on is on; turning any of those off turns it off too, and says so
@@ -273,8 +273,8 @@ October. So each rule has one way out, and each way out is loud and recorded:
   the signed-out screens, the counter (below Expenses, taking no height from the
   till), the counter's setup and shift-start screens, the kitchen, and the Change
   gates pages. Every other phone page already shows it inside the account menu.
-- **It reads as it always has** — *Build 1a2b3c4 · 13 Oct 2026, 03:15 am* — and
-  while any gate is on, a tap opens the build code (above).
+- **It reads as it always has** — *Build 1a2b3c4 · 13 Oct 2026, 03:15 am* — and a
+  tap copies it with the build code (above).
 
 ### The agent workflows
 
