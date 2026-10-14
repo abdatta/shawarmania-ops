@@ -480,8 +480,9 @@ screen reader; and the customer on one line beside Cancel order. A dish SHALL re
 acknowledged only when every kitchen still owing it has acknowledged at least what
 it owes. With `kitchen-ready` off, nothing SHALL read Done. The kitchens' answers
 SHALL come from a read that only the owner and that outlet's franchise admins may
-make, made with the page's other reads when it opens and never on a timer; if it
-fails the orders SHALL still list. With `dish-ticks` off the tab SHALL be as it was.
+make. Opening the page SHALL only count the open orders; choosing the Orders tab,
+or tapping it again, SHALL read the orders and their kitchens afresh, never on a
+timer; if the kitchens' read fails the orders SHALL still list. With `dish-ticks` off the tab SHALL be as it was.
 
 #### Scenario: The owner checks an order from away
 

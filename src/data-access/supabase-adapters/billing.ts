@@ -2447,6 +2447,17 @@ export function createSupabaseBillingAdapter(
       return readOrders(outletId, true)
     },
 
+    async countManagerOpenOrders(outletId) {
+      // The pipeline's own predicate, counted by the server: no rows travel.
+      const { count, error } = await client
+        .from('orders')
+        .select('id', { count: 'exact', head: true })
+        .eq('outlet_id', outletId)
+        .or(pipelineFilter(null)!)
+      if (error) throw actionError(error, 'Could not count open orders.')
+      return count ?? 0
+    },
+
     async managerCancelOrder(orderId, reason) {
       if (!reason.trim())
         throw new BillingActionError('blank_reason', 'A cancellation needs a reason.')

@@ -1860,6 +1860,12 @@ export interface BillingAdapter {
   getBill(billId: string): Promise<BillingBill | null>
   voidBill(billId: string, reason: string): Promise<BillingBill>
   listManagerOpenOrders(outletId: string): Promise<BillingOrder[]>
+  /**
+   * How many orders `listManagerOpenOrders` would list, without reading them:
+   * the billing history's tab count while the orders themselves are not shown
+   * (each-dish-is-ticked-off, design R11; `dish-ticks`).
+   */
+  countManagerOpenOrders(outletId: string): Promise<number>
   managerCancelOrder(orderId: string, reason: string): Promise<BillingOrder>
   reviewAttribution(
     billId: string,

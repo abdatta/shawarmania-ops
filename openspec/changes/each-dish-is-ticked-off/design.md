@@ -350,9 +350,13 @@ compact and filled in (owner: "add to today's card … compact"), drawn by
   not change, plus `ackedLines`. It answers exactly those `orders_select` lets read
   the orders — the owner, and that outlet's franchise admins — and refuses the
   rest with 42501, tablets included (pgTAP 89, the dish-ticks REST probe).
-- **When.** With the page's other reads when it opens, never on a timer and never
-  live: the owner's pages have no Realtime, to keep egress low (owner). If the read
-  fails the orders still list, with no kitchen chips and every waiting dish placed.
+- **When.** Opening the page only counts the open orders, for the tab's label;
+  choosing the Orders tab reads the orders and their kitchens afresh, each time it
+  is chosen or tapped again, and on a new outlet or day while it is open (owner,
+  14 October: switching tabs is how the owner refreshes). Never on a timer and
+  never live: the owner's pages have no Realtime, to keep egress low (owner). If
+  the kitchens' read fails the orders still list, with no kitchen chips and every
+  waiting dish placed.
 
 **Rejected:** the counter's card, read-only, on this tab (owner chose today's card,
 compacted); a live tab (egress).

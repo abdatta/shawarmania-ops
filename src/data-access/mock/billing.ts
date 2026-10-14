@@ -2432,6 +2432,11 @@ export function createMockBillingAdapter(
       return projectedOrders(outletId).filter(inPipeline)
     },
 
+    async countManagerOpenOrders(outletId) {
+      requireManager(outletId)
+      return projectedOrders(outletId).filter(inPipeline).length
+    },
+
     async managerCancelOrder(orderId, reason) {
       const row = store.orders.find((order) => order.id === orderId)
       if (!row) throw new BillingActionError('not_found', 'That order was not found.')

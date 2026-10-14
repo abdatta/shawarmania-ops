@@ -98,12 +98,19 @@ function BillingHistoryShimmer() {
 export function ManagerBillingHistory() {
   const { billing, outlets: outletsAdapter, kitchen } = useAdapters()
   const session = useSession()
-  // With the dish ticks on, an open order says what the counter's card says
-  // (each-dish-is-ticked-off, design R11): its kitchens' answers come from one
-  // more read, made with the others when the page opens and never on a timer.
+  /*
+    With the dish ticks on (each-dish-is-ticked-off, design R11) an open order
+    says what the counter's card says, and the Orders tab reads for itself: the
+    page counts the open orders when it opens, and the orders and their
+    kitchens' answers are read each time the tab is chosen — so switching to it
+    is how the owner sees the latest — never on a timer and never live.
+  */
   const dishWorkflow = useChangeGate('dish-ticks')
   const [marks, setMarks] = useState<KitchenMarks | null>(null)
   const [readAt, setReadAt] = useState(() => new Date())
+  const [openCount, setOpenCount] = useState<number | null>(null)
+  /** The outlet the listed open orders are of; another means not read yet. */
+  const [ordersOutlet, setOrdersOutlet] = useState<string | null>(null)
   // Which outlet, asked the way every other outlet-scoped surface asks it: chips
   // in the header, remembered between surfaces, conferring nothing.
   const { outletId, selector: outletSelector } = useOutletScope()
@@ -194,6 +201,30 @@ export function ManagerBillingHistory() {
     }
   }, [outletId, outletsAdapter])
 
+  // The Orders tab's own read, on the dish path.
+  const loadOrders = useCallback(
+    async (isCurrent: () => boolean = () => true) => {
+      if (!outletId) return
+      try {
+        const [nextOrders, nextMarks] = await Promise.all([
+          billing.listManagerOpenOrders(outletId),
+          // The orders still list if the kitchens cannot be read.
+          kitchen.readManagerDishMarks(outletId).catch(() => null),
+        ])
+        if (!isCurrent()) return
+        setOrders(nextOrders)
+        setMarks(nextMarks)
+        setReadAt(new Date())
+        setOpenCount(nextOrders.length)
+        setOrdersOutlet(outletId)
+      } catch (cause) {
+        if (!isCurrent()) return
+        setMessage(cause instanceof DataActionError ? cause.message : 'Could not load open orders.')
+      }
+    },
+    [billing, kitchen, outletId],
+  )
+
   const load = useCallback(async () => {
     await Promise.resolve()
     if (!outletId || !businessDate) return
@@ -203,18 +234,18 @@ export function ManagerBillingHistory() {
       // parameters stay on the adapter for the counter, and this surface passes
       // neither: every bill of the day is listed, and each says for itself
       // whether it was paid or cancelled and what it was paid with.
-      const [nextBills, nextOrders, nextDiagnostics, nextBillers, nextMarks] = await Promise.all([
+      const [nextBills, nextOrders, nextDiagnostics, nextBillers, nextCount] = await Promise.all([
         billing.listManagerHistory({ outletId, businessDate, status: 'all', paymentMethod: 'all' }),
-        billing.listManagerOpenOrders(outletId),
+        // On the dish path the orders are the Orders tab's to read; the page
+        // only counts them for the tab's label.
+        dishWorkflow ? null : billing.listManagerOpenOrders(outletId),
         billing.listDeliveryDiagnostics(outletId),
         billing.listBillers(outletId),
-        // The orders still list if the kitchens cannot be read.
-        dishWorkflow ? kitchen.readManagerDishMarks(outletId).catch(() => null) : null,
+        dishWorkflow ? billing.countManagerOpenOrders(outletId) : null,
       ])
-      setMarks(nextMarks)
-      setReadAt(new Date())
       setBills(nextBills)
-      setOrders(nextOrders)
+      if (nextOrders) setOrders(nextOrders)
+      if (nextCount !== null) setOpenCount(nextCount)
       setDiagnostics(nextDiagnostics)
       setBillers(nextBillers)
       setSelectedId((current) =>
@@ -227,11 +258,23 @@ export function ManagerBillingHistory() {
     } finally {
       setLoading(false)
     }
-  }, [billing, businessDate, outletId, dishWorkflow, kitchen])
+  }, [billing, businessDate, outletId, dishWorkflow])
 
   useEffect(() => {
     void Promise.resolve().then(load)
   }, [load])
+
+  // Choosing the Orders tab reads it afresh, and so does a new outlet or day
+  // while it is open (dish path).
+  // A read for an outlet or day no longer shown is dropped when it lands.
+  useEffect(() => {
+    if (!dishWorkflow || view !== 'orders') return
+    let current = true
+    void Promise.resolve().then(() => loadOrders(() => current))
+    return () => {
+      current = false
+    }
+  }, [dishWorkflow, view, loadOrders, businessDate])
 
   const mutate = async (operation: () => Promise<unknown>, keepBillOpen = false) => {
     try {
@@ -242,6 +285,8 @@ export function ManagerBillingHistory() {
       setCancellingOrderId(null)
       if (!keepBillOpen) setSelectedId(null)
       await load()
+      // A cancellation on the Orders tab leaves it showing the orders as they now are.
+      if (dishWorkflow && view === 'orders') await loadOrders()
     } catch (cause) {
       setMessage(
         cause instanceof DataActionError ? cause.message : 'That action could not be completed.',
@@ -268,6 +313,9 @@ export function ManagerBillingHistory() {
   }
 
   const chooseView = (next: View) => {
+    // Choosing another tab reads it in the effect above; the one already open,
+    // tapped again, is read again here.
+    if (dishWorkflow && next === 'orders' && view === 'orders') void loadOrders()
     setView(next)
     setSelectedId(null)
     setCancellingId(null)
@@ -423,7 +471,7 @@ export function ManagerBillingHistory() {
             ['bills', `Bills (${bills.length})`],
             // The count is the whole board — both bands — under the plain name
             // this page has always used; the band names live in the sections.
-            ['orders', `Open orders (${orders.length})`],
+            ['orders', `Open orders (${dishWorkflow ? (openCount ?? '…') : orders.length})`],
             ['status', syncProblemCount > 0 ? `Status (${syncProblemCount})` : 'Status'],
           ] as const
         ).map(([id, label]) => (
@@ -504,7 +552,12 @@ export function ManagerBillingHistory() {
         // they are read without choosing a view.
         <ManagerSyncStatus diagnostics={diagnostics} />
       ) : view === 'orders' ? (
-        orders.length === 0 ? (
+        dishWorkflow && ordersOutlet !== outletId ? (
+          <LoadingRegion label="open orders" className="space-y-2">
+            <Shimmer className="h-40 rounded-xl" />
+            <Shimmer className="h-40 rounded-xl" />
+          </LoadingRegion>
+        ) : orders.length === 0 ? (
           <EmptyState icon={ReceiptText} title="No open orders at this outlet." />
         ) : (
           // The manager reads the pipeline in two groups, not a flat pile. The

@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { expect, it, vi } from 'vitest'
@@ -38,6 +38,8 @@ describeChangeGate('dish-ticks', (on) => {
       createDemoData({ dishTicks: on ? 'on' : 'off' }),
     )
     const kitchens = vi.spyOn(adapters.kitchen, 'readManagerDishMarks')
+    const list = vi.spyOn(adapters.billing, 'listManagerOpenOrders')
+    const count = vi.spyOn(adapters.billing, 'countManagerOpenOrders')
     render(
       <ChangeGatesForTest on={{ 'dish-ticks': on, 'kitchen-ready': on }}>
         <MemoryRouter>
@@ -49,15 +51,36 @@ describeChangeGate('dish-ticks', (on) => {
         </MemoryRouter>
       </ChangeGatesForTest>,
     )
-    await user.click(await screen.findByRole('tab', { name: /Open orders/ }))
-    const card = screen.getByTestId('manager-open-order-104')
+    const tab = await screen.findByRole('tab', { name: /Open orders \(\d+\)/ })
     if (on) {
+      // Opening the page counts the open orders and reads none of them.
+      expect(count).toHaveBeenCalledOnce()
+      expect(list).not.toHaveBeenCalled()
+      expect(kitchens).not.toHaveBeenCalled()
+    } else {
+      await waitFor(() => expect(list).toHaveBeenCalledOnce())
+      expect(count).not.toHaveBeenCalled()
+    }
+    await user.click(tab)
+    const card = await screen.findByTestId('manager-open-order-104')
+    if (on) {
+      // Choosing the tab reads it; leaving and coming back reads it again.
+      expect(list).toHaveBeenCalledOnce()
       expect(kitchens).toHaveBeenCalledOnce()
-      expect(within(card).getByTestId('manager-dish-order-104')).toBeInTheDocument()
-      expect(within(card).queryByText('Order items')).toBeNull()
-      await user.click(within(card).getByRole('button', { name: 'Cancel order 104' }))
+      await user.click(screen.getByRole('tab', { name: /^Bills/ }))
+      await user.click(screen.getByRole('tab', { name: /Open orders/ }))
+      await waitFor(() => expect(list).toHaveBeenCalledTimes(2))
+      expect(kitchens).toHaveBeenCalledTimes(2)
+      // Tapping the open tab again reads it again too.
+      await user.click(screen.getByRole('tab', { name: /Open orders/ }))
+      await waitFor(() => expect(list).toHaveBeenCalledTimes(3))
+      const fresh = await screen.findByTestId('manager-open-order-104')
+      expect(within(fresh).getByTestId('manager-dish-order-104')).toBeInTheDocument()
+      expect(within(fresh).queryByText('Order items')).toBeNull()
+      await user.click(within(fresh).getByRole('button', { name: 'Cancel order 104' }))
     } else {
       expect(kitchens).not.toHaveBeenCalled()
+      expect(list).toHaveBeenCalledOnce()
       expect(card).toHaveTextContent('Order items')
       expect(card).toHaveTextContent('Customer details')
       await user.click(within(card).getByRole('button', { name: 'Cancel this order' }))
