@@ -46,7 +46,9 @@ export function ReadyDish({
       >
         {ticked && <Check size={11} strokeWidth={4} />}
       </span>
-      <span className="flex min-h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-transparent px-1.5 py-1">
+      {/* Its left edge gives back what the checkbox's took, so the quantity and
+          name stay where they were. */}
+      <span className="flex min-h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-transparent py-1 pr-1.5 pl-[calc(7.5px_-_0.25rem)]">
         <span
           data-testid="dish-quantity"
           className="grid h-4 min-w-4 shrink-0 place-items-center text-xs font-black tabular-nums"
@@ -67,7 +69,9 @@ export function ReadyDish({
     </>
   )
   const className = cn(
-    'flex w-full items-center gap-0.5 rounded-md pl-1 text-left text-[13px] leading-4',
+    // As much room left of the checkbox as above and below it on a one-line
+    // row: half of what the row's height leaves the 15px box (owner, 2026-10-14).
+    'flex w-full items-center gap-0.5 rounded-md pl-[calc((1.75rem_-_15px)/2)] text-left text-[13px] leading-4',
     ready ? 'dish-ready-fill' : ticked ? 'text-primary' : 'text-content',
   )
   return (
