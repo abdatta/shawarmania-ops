@@ -167,7 +167,10 @@ export function DishOpenOrderSummary({
           {order.customerName || order.customerPhone ? (
             <>
               <span className="truncate font-semibold">
-                {[order.customerName, order.customerPhone && formatIndianPhone(order.customerPhone)]
+                {[
+                  order.customerName,
+                  order.customerPhone && `+91 ${formatIndianPhone(order.customerPhone)}`,
+                ]
                   .filter(Boolean)
                   .join(' · ')}
               </span>

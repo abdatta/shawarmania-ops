@@ -163,3 +163,16 @@ it('reads nothing as Done while kitchen-ready is off', () => {
   expect(stateOf('Dish done')).toBe('placed')
   expect(screen.getByText('Kitchen 1 · seen')).toBeInTheDocument()
 })
+
+it('writes the customer as the rest of the app does, +91 and all', () => {
+  render(
+    <ChangeGatesForTest on={{ 'dish-ticks': true, 'kitchen-ready': true }}>
+      <DishOpenOrderSummary
+        order={{ ...order, customerName: 'Anushka Bose', customerPhone: '+919000010349' }}
+        marks={marks}
+        now={new Date()}
+      />
+    </ChangeGatesForTest>,
+  )
+  expect(screen.getByText('Anushka Bose · +91 90000 10349')).toBeInTheDocument()
+})
