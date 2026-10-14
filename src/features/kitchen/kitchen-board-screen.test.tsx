@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { AdaptersContext } from '@/data-access/adapters-context'
 import type { KitchenAlertKind } from '@/data-access/adapters'
@@ -78,6 +78,12 @@ function ringUpOrder(data: ReturnType<typeof createDemoData>, number: number) {
 }
 
 describe('the kitchen board', () => {
+  // Every tap on the board schedules a sound check 300 ms later
+  // (kitchen-board-screen.tsx). Let it land while this page still exists: left
+  // pending, it fired in whatever file the worker ran next, where `window` may
+  // not exist, and failed a CI shard whose every test had passed.
+  afterEach(() => new Promise((resolve) => window.setTimeout(resolve, 350)))
+
   it('opens silently, then shakes and rings for an order that arrives, until ACK', async () => {
     const user = userEvent.setup()
     const { data, played } = renderBoard()
