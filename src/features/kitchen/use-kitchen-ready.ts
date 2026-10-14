@@ -52,6 +52,13 @@ export function useKitchenReady(
   const previous = useRef<readonly KitchenCardView[]>([])
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>())
   const generation = useRef(0)
+  /*
+    Receipts this tablet undid. The Undo is settled before the board redraws
+    without its receipt, so by then nothing is pending for it, and the receipt
+    going would read as a counter handover — fading out and holding an empty
+    slot while its own ticket opened beside it. An undone receipt simply goes.
+  */
+  const undone = useRef(new Set<string>())
   const publish = (next: Map<string, PendingReady>) => {
     current.current = next
     setPending(next)
@@ -69,8 +76,12 @@ export function useKitchenReady(
       (card) =>
         card.order.readyId &&
         !cards.some((next) => next.order.id === card.order.id) &&
-        !current.current.has(card.order.id),
+        !current.current.has(card.order.id) &&
+        !undone.current.has(card.order.id),
     )
+    for (const id of undone.current) {
+      if (!cards.some((card) => card.order.id === id)) undone.current.delete(id)
+    }
     const returned = cards.filter((card) => {
       const phase = current.current.get(card.order.id)?.phase
       return phase === 'leaving' || phase === 'gap'
@@ -133,6 +144,7 @@ export function useKitchenReady(
       slotOrder,
     }
     publish(new Map(current.current).set(orderId, entry))
+    if (undo) undone.current.add(orderId)
     const write = undo
       ? kitchen.undoReady!(entry.id, undo)
       : kitchen.ready!({
@@ -146,6 +158,7 @@ export function useKitchenReady(
         if (generation.current === token) remove(orderId)
       })
       .catch((failure: unknown) => {
+        undone.current.delete(orderId)
         if (generation.current !== token) return
         remove(orderId)
         setError(failure instanceof Error ? failure.message : 'Could not update Done.')
@@ -157,6 +170,7 @@ export function useKitchenReady(
     previous.current = []
     for (const timer of timers.current) clearTimeout(timer)
     timers.current.clear()
+    undone.current.clear()
     publish(new Map())
     setError(null)
   }

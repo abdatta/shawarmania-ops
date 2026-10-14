@@ -139,6 +139,10 @@ export function DishKitchenCard({
         readyPhase === 'gap' && 'invisible pointer-events-none',
       )}
       aria-hidden={readyPhase === 'gap' || undefined}
+      // The board keeps each card in its column; a Done receipt and the ticket
+      // it reopens into belong to one order, and one takes the other's place.
+      data-masonry-key={order.id}
+      data-masonry-group={order.sourceOrderId ?? order.id}
     >
       <article
         data-testid={

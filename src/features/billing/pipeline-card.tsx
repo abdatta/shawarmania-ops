@@ -711,6 +711,40 @@ export function PipelineCard({
  * order (owner, 2026-10-12): two rings, then it stops. With `kitchen-ready`
  * off a kitchen's Ready food reads as acknowledged, which it is (R4).
  */
+/**
+ * The Ready bell, swinging while the handbell's order rings (design R6). When
+ * the ring ends it finishes the swing it is in and stops at rest, rather than
+ * snapping back mid-swing (owner, 2026-10-14): each swing of the keyframes
+ * starts and ends upright, so the next iteration's start is that rest.
+ */
+export function ReadyBell({ ringing }: { ringing: boolean }) {
+  const [wasRinging, setWasRinging] = useState(ringing)
+  const [settling, setSettling] = useState(false)
+  if (wasRinging !== ringing) {
+    setWasRinging(ringing)
+    setSettling(!ringing)
+  }
+  useEffect(() => {
+    if (!settling) return
+    // No iteration comes when the swing is not animating (reduced motion, a
+    // hidden page); a swing is 440 ms, so this only ever ends a stuck one.
+    const done = window.setTimeout(() => setSettling(false), 500)
+    return () => window.clearTimeout(done)
+  }, [settling])
+  return (
+    <Bell
+      aria-hidden
+      size={18}
+      fill="currentColor"
+      data-settling={settling || undefined}
+      className={ringing || settling ? 'dish-bell-swing' : undefined}
+      onAnimationIteration={() => {
+        if (!ringing) setSettling(false)
+      }}
+    />
+  )
+}
+
 function DishKitchenStatus({
   states,
   labels,
@@ -746,12 +780,7 @@ function DishKitchenStatus({
             )}
           >
             {state === 'ready' ? (
-              <Bell
-                aria-hidden
-                size={18}
-                fill="currentColor"
-                className={ringing ? 'dish-bell-swing' : undefined}
-              />
+              <ReadyBell ringing={ringing} />
             ) : state === 'acknowledged' ? (
               <CheckCheck aria-hidden size={18} strokeWidth={2.25} />
             ) : state === 'sent' ? (

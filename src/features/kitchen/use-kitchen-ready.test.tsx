@@ -112,6 +112,19 @@ it('does not animate removal caused by a local Undo and clears holds on station 
   expect(result.current.pending.size).toBe(0)
 })
 
+it('lets an undone receipt go without a handover exit when the board redraws after the Undo settles', async () => {
+  const { result, card, rerender, doneCard } = await setup()
+  await act(async () => result.current.toggle(card))
+  const done = await doneCard()
+  rerender({ cards: [done] })
+  // Settled first, redrawn after: nothing is pending by the time the receipt goes.
+  await act(async () => result.current.toggle(done))
+  expect(result.current.pending.size).toBe(0)
+  rerender({ cards: [card] })
+  expect(result.current.pending.size).toBe(0)
+  expect(retainReadySlots([card], result.current.pending)).toEqual([card])
+})
+
 it('cancels departure on an untick and cannot let an old timer retire a new hold', async () => {
   const { result, card, rerender, doneCard } = await setup()
   await act(async () => result.current.toggle(card))

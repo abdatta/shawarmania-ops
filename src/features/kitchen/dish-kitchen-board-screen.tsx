@@ -88,12 +88,27 @@ export function DishKitchenBoardScreen({ player }: { player?: TunePlayer }) {
     return board?.sort === 'newest_first' ? [...shown].reverse() : shown
   }, [board?.sort, cards, readyOn])
   const ready = useKitchenReady(kitchen, read, baseOrdered)
-  // Hold a departing Done ticket in its original slot through the fade and gap.
+  /*
+    Hold a departing Done ticket in its original slot through the fade and gap.
+    A Done or an Undo still saving is held too, until the board shows what it
+    became: then the receipt (or ticket) it replaces goes in the same render
+    the new card arrives, and the new card takes its column — never both on the
+    board at once, with everything around them dealt again (owner, 2026-10-14).
+  */
+  const orderOf = (card: KitchenCardView) => card.order.sourceOrderId ?? card.order.id
+  const held = new Map(
+    [...ready.pending].filter(
+      ([id, entry]) =>
+        entry.phase !== 'saving' ||
+        baseOrdered.some((card) => card.order.id === id) ||
+        !baseOrdered.some((card) => orderOf(card) === orderOf(entry.card)),
+    ),
+  )
   const ordered = retainReadySlots(
     baseOrdered.filter(
-      (card) => ![...ready.pending.values()].some((held) => held.id === card.order.readyId),
+      (card) => ![...ready.pending.values()].some((entry) => entry.id === card.order.readyId),
     ),
-    ready.pending,
+    held,
   )
   const grid = useRef<HTMLDivElement>(null)
   useKitchenMasonry(
