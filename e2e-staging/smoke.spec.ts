@@ -39,6 +39,23 @@ const SMOKE_OUTLET = '5a000000-0000-4000-a000-000000000002'
 const RUN = Date.now().toString(36).slice(-6)
 const SUITE_TABLET = /^Remove Smoke (counter|kitchen) /
 
+/**
+ * Types the password without handing it to a Playwright action. A report of a
+ * failed run is public — the repository is — and `fill(PASSWORD)` puts the
+ * value in the step list. The page asks for it through a binding instead, and
+ * sets it the way typing would, so React sees an input event.
+ */
+async function typePassword(page: Page): Promise<void> {
+  await page.exposeFunction('__smokePassword', () => PASSWORD)
+  await page.getByLabel('Password').evaluate(async (input: HTMLInputElement) => {
+    const value = await (
+      window as unknown as { __smokePassword(): Promise<string> }
+    ).__smokePassword()
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
 /** A phone signed in as a person, through the sign-in screen. */
 async function phone(
   browser: Browser,
@@ -49,9 +66,17 @@ async function phone(
   await page.goto('sign-in')
   await expect(page.getByTestId(RIBBON)).toBeVisible()
   await page.getByLabel('Username or email', { exact: true }).fill(username)
-  await page.getByLabel('Password').fill(PASSWORD)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).not.toHaveURL(/\/sign-in$/)
+  try {
+    await typePassword(page)
+    await page.getByRole('button', { name: 'Sign in' }).click()
+    await expect(page).not.toHaveURL(/\/sign-in$/)
+  } catch (cause) {
+    // A failed expectation carries a snapshot of the page, typed password and
+    // all, into the public report. Leave the screen first; the error rethrown
+    // here carries no snapshot of its own.
+    await page.goto('about:blank')
+    throw new Error(`${username} did not get past sign-in.`, { cause })
+  }
   await expect(page.getByTestId(RIBBON)).toBeVisible()
   return { context, page }
 }

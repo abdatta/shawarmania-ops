@@ -12,6 +12,12 @@ import { defineConfig, devices } from '@playwright/test'
  */
 const BASE_URL = process.env['STAGING_BASE_URL'] ?? 'https://stage-ops.shawarmania.in/'
 
+// The report of a failed run is public, because the repository is, so nothing
+// in it may carry the test password. A failure's own page snapshot would show
+// it typed on the sign-in screen (the smoke spec leaves that screen before it
+// fails); this turns off the snapshot Playwright adds for any other failure.
+process.env['PLAYWRIGHT_NO_COPY_PROMPT'] = '1'
+
 export default defineConfig({
   testDir: './e2e-staging',
   timeout: 180_000,
@@ -22,7 +28,10 @@ export default defineConfig({
   reporter: process.env['CI'] ? [['github'], ['html', { open: 'never' }]] : [['list']],
   use: {
     baseURL: BASE_URL,
-    trace: 'retain-on-failure',
+    // No trace: it records the sign-in request, whose body is the password, and
+    // the session tokens that come back. A failure keeps a screenshot instead.
+    trace: 'off',
+    screenshot: 'only-on-failure',
     // A remote build answers slower than a local one; a stuck step still fails
     // at the step, not at the test's timeout.
     actionTimeout: 30_000,
