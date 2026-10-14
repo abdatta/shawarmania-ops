@@ -19,7 +19,7 @@
 | **Staging** | Verification before release, and the owner's fake outlet | Separate Supabase project in a separate account, synthetic data at production's scale, published from `stage` to `stage-ops.shawarmania.in` |
 | **Production** | The live counters | Separate Supabase project, real business data |
 
-**Production data is never copied into staging or local.** It contains customer and employee PII. When a production-shaped dataset is needed for debugging, generate a synthetic one at the same scale.
+**Production data about people is never copied into staging or local.** It contains customer and employee PII. When a production-shaped dataset is needed for debugging, generate a synthetic one at the same scale. The one production row set staging carries is a trading outlet's menu — public business facts the storefront already shows — written into `supabase/staging/seed.sql` at the owner's request (2026-10-13); its staff and customers are invented.
 
 **Production is provisioned and live** (2026-07-27), with the attendance and setup schema and screens deployed to it. Whatever is in it is real, and the first outlet created there is the business's own. **Staging is provisioned** (see [Releases](RELEASES.md#staging)): every commit is pushed to `stage`, verified and published there, and reaches production only when the owner approves a Promote. It is sized like production on purpose, because the freeze of 12 October was load on the smallest compute, and a faster database would have hidden it:
 

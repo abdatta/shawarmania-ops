@@ -389,7 +389,10 @@ staging must verify this change before 10 promotes it to production.
   Free, Nano (no compute add-on), ap-south-1, Postgres 17.6.1.147. Still to do: staging's
   Postgres version through the Management API with the staging token, and the side-by-side
   record and the account email in `docs/OPERATIONS.md` (part of 9.11's commit).)*
-- [ ] 9.2 **Owner:** set staging's Auth settings to production's (site URL and
+  *(Since: staging's Postgres `17.11.0.003` read through the Management API (9.10's note),
+  and the side-by-side table is in `docs/OPERATIONS.md`. Still open: the account's email
+  there, which only the owner has.)*
+- [x] 9.2 **Owner:** set staging's Auth settings to production's (site URL and
   redirect URLs pointing at the staging address); bootstrap the owner's own Super
   Admin in staging the way production's was; create a Cloudflare Pages project
   `shawarmania-ops-staging` and an API token scoped to it. Ask the owner whether
@@ -405,6 +408,9 @@ staging must verify this change before 10 promotes it to production.
   owner bootstrap is replaced by the seed's `staging.owner` unless they want their own.
   Production's own site URL still reads the old `abdatta.github.io` address; nothing in the
   app sends a Supabase auth email or redirect, so it is cosmetic there.)*
+  *(Done 2026-10-13: the Cloudflare token came with the credential handoff (9.10) and
+  publishes every Staging run; the owner uses the seed's `staging.owner` and wanted no
+  separate bootstrap.)*
 - [x] 9.3 Build-time `VITE_APP_ENVIRONMENT=staging`: the **Staging · not a real
   outlet** band on every shell and role, and the manifest name *Shawarmania Ops
   (staging)*. Unit test: the band renders only for `staging`; a production build has
@@ -610,16 +616,32 @@ Promoting is the owner's decision and window. Nothing here is done without it.
 Production is reached only through Promote (9.9), from a SHA staging verified — except
 this change's own first arrival, which carries Promote to `main` (10.2).
 
-- [ ] 10.1 Before the first push: the owner creates the `production-hotfix`
+- [x] 10.1 Before the first push: the owner creates the `production-hotfix`
   environment in the repository's settings with themselves as required reviewer.
   Confirm it with `gh api repos/{owner}/{repo}/environments/production-hotfix`.
-- [ ] 10.2 At the owner's chosen window, and with their go-ahead for that push, push
+  *(Done 2026-10-13 in the credential handoff; `gh api` reads `abdatta` as its required
+  reviewer, and it holds `PROMOTE_DEPLOY_KEY`.)*
+- [x] 10.2 At the owner's chosen window, and with their go-ahead for that push, push
   the SHA 9.13 ran on straight to `main` — the last direct push to `main`, because
   Promote is not there to run until it lands. Confirm Deploy skipped the suite (it finds
   the Staging run), the production build carries the same SHA as staging's, the three
   tables exist, and every tablet still runs exactly as before (all gates off). Then the
   **owner** turns on the `main` ruleset (no direct push, no force push, no deletion; the
   deploy key the only bypass), and 9.14's rehearsal follows.
+  *(Done 2026-10-14 at 05:56 IST, with the owner's go-ahead, outside trading (no shift
+  open; the last bill 23:25 the night before). Pushed `79ae9435`, the newest commit
+  Staging verified (run `38488172907`), rather than `52d5f29`, the build 9.13 ran on: the
+  three commits between are the tap-to-copy stamp, staging's realistic data and ribbon,
+  and a test fix, each through its own green Staging run. Deploy `38490140960` found the
+  Staging run, skipped the suite, and migrated, deployed functions and published in
+  1m19s. Production then held `20261018000000`, the four tables (`change_gates`,
+  `change_gate_events`, `change_gate_dependencies`, `device_health`), `probe` and
+  `tablet-health` both off, and served build `79ae943` under its own name and icon. No
+  tablet was trading, so "runs exactly as before" is read off the first service, with
+  every gate off. The `main` ruleset (id `25040290`) was created through the API at the
+  owner's request ("if you can do it yourself go ahead"): deletion, non-fast-forward and
+  update refused, the deploy-key actor its one bypass, and only the `promote` key exists;
+  `gh api repos/abdatta/shawarmania-ops/rules/branches/main` reads all three back.)*
 - [ ] 10.3 With the owner, at a quiet hour: the owner turns `probe` on from
   their phone; every tablet's build code gains `PB` without anyone touching it,
   as it did on staging in 9.13;
