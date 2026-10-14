@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import type { ScrollLink } from '@/lib/scroll-link'
 
 import { MyShiftSurface } from './my-shift-surface'
 
@@ -21,15 +22,14 @@ import { MyShiftSurface } from './my-shift-surface'
 export function CounterRecords({
   expenses,
   railWidth,
-  scrollLeft,
-  onHorizontalScroll,
+  scrollLink,
   asOf,
   refreshKey = 0,
 }: {
   expenses: ReactNode
   railWidth?: number | undefined
-  scrollLeft?: number
-  onHorizontalScroll?: (left: number) => void
+  /** Scrolls sideways with the work row above (`createScrollLink`). */
+  scrollLink?: ScrollLink | undefined
   asOf?: string | undefined
   refreshKey?: number
 }) {
@@ -56,14 +56,14 @@ export function CounterRecords({
   }, [])
 
   useEffect(() => {
-    if (scrollLeft !== undefined && recordsRef.current) recordsRef.current.scrollLeft = scrollLeft
-  }, [scrollLeft])
+    if (!scrollLink || !recordsRef.current) return
+    return scrollLink.attach(recordsRef.current)
+  }, [scrollLink])
 
   return (
     <section className="space-y-3" data-testid="counter-records">
       <div
         ref={recordsRef}
-        onScroll={(event) => onHorizontalScroll?.(event.currentTarget.scrollLeft)}
         className="grid h-[calc(100dvh-4rem)] min-h-0 grid-cols-[minmax(22rem,1fr)_var(--counter-rail-width)] items-stretch gap-3 overflow-x-auto"
         style={
           {

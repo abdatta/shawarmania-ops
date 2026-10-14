@@ -14,6 +14,7 @@ import { KitchenMarksProvider } from '@/features/billing/kitchen-marks'
 import { ExpenseList } from '@/features/expenses/expense-list'
 import { getSurface, isRenderable } from '@/gates/registry'
 import { cn } from '@/lib/cn'
+import { createScrollLink, type ScrollLink } from '@/lib/scroll-link'
 import { useCounterDevice } from '@/session/counter-context'
 import type { CounterShift } from '@/session/counter-session'
 import { counterResumeStopAt, hasMaterialClockSkew } from '@/outbox'
@@ -70,7 +71,8 @@ export function CounterShell({
   const [finishOpen, setFinishOpen] = useState(false)
   const [boundaryReached, setBoundaryReached] = useState(false)
   const [railWidth, setRailWidth] = useState<number>()
-  const [horizontalScroll, setHorizontalScroll] = useState(0)
+  // The work row and the records row below scroll sideways as one, outside React.
+  const [scrollLink] = useState(createScrollLink)
   const [billRefresh, setBillRefresh] = useState(0)
   const resume = device.offlineResume
 
@@ -186,15 +188,13 @@ export function CounterShell({
             <>
               <BillingPanel
                 onRailWidthChange={setRailWidth}
-                scrollLeft={horizontalScroll}
-                onHorizontalScroll={setHorizontalScroll}
+                scrollLink={scrollLink}
                 onBillRefresh={setBillRefresh}
               />
               <CounterRecords
                 expenses={<CounterExpenses shift={shift} />}
                 railWidth={railWidth}
-                scrollLeft={horizontalScroll}
-                onHorizontalScroll={setHorizontalScroll}
+                scrollLink={scrollLink}
                 asOf={resume?.lastSuccessfulReadAt}
                 refreshKey={billRefresh}
               />
@@ -233,13 +233,11 @@ export function CounterShell({
  */
 function BillingPanel({
   onRailWidthChange,
-  scrollLeft,
-  onHorizontalScroll,
+  scrollLink,
   onBillRefresh,
 }: {
   onRailWidthChange?: ((width: number) => void) | undefined
-  scrollLeft?: number | undefined
-  onHorizontalScroll?: ((left: number) => void) | undefined
+  scrollLink?: ScrollLink | undefined
   onBillRefresh?: ((refresh: number) => void) | undefined
 }) {
   const device = useCounterDevice()
@@ -249,8 +247,7 @@ function BillingPanel({
         <BillingCounter
           outletId={device.device.outletId}
           onRailWidthChange={onRailWidthChange}
-          scrollLeft={scrollLeft}
-          onHorizontalScroll={onHorizontalScroll}
+          scrollLink={scrollLink}
           onBillRefresh={onBillRefresh}
         />
       </div>

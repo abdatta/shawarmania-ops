@@ -64,6 +64,7 @@ import { useOnForeground } from '@/features/attention/attention'
 import { getPartState, isRenderable } from '@/gates/registry'
 import { newUuid } from '@/lib/uuid'
 import { cn } from '@/lib/cn'
+import type { ScrollLink } from '@/lib/scroll-link'
 import { declareUnsavedWork } from '@/pwa/occupancy'
 import { SessionContext } from '@/session/context'
 import { CounterDeviceContext } from '@/session/counter-context'
@@ -282,16 +283,15 @@ function readCounterColumnWidths(): CounterColumnWidths {
 export function BillingCounter({
   outletId: counterOutletId,
   onRailWidthChange,
-  scrollLeft,
-  onHorizontalScroll,
+  scrollLink,
   onBillRefresh,
 }: {
   outletId?: string
   /** The dish ticks' records row sits under the rail at its width. */
   onRailWidthChange?: ((width: number) => void) | undefined
   /** The till and the records row below it scroll sideways together. */
-  scrollLeft?: number | undefined
-  onHorizontalScroll?: ((left: number) => void) | undefined
+  /** Scrolls sideways with the records row below (dish ticks; `createScrollLink`). */
+  scrollLink?: ScrollLink | undefined
   /**
    * The dish ticks moved Bills this shift out from the till to the records row,
    * so the till hands up the refresh it would have given its middle column: on
@@ -397,9 +397,9 @@ export function BillingCounter({
     if (dishWorkflow) onRailWidthChange?.(columnWidths.bill + columnWidths.activity)
   }, [dishWorkflow, columnWidths.bill, columnWidths.activity, onRailWidthChange])
   useEffect(() => {
-    if (dishWorkflow && scrollLeft !== undefined && workspaceRef.current)
-      workspaceRef.current.scrollLeft = scrollLeft
-  }, [dishWorkflow, scrollLeft])
+    if (!dishWorkflow || !scrollLink || !workspaceRef.current) return
+    return scrollLink.attach(workspaceRef.current)
+  }, [dishWorkflow, scrollLink])
   useEffect(() => {
     if (dishWorkflow) onBillRefresh?.(billRefresh)
   }, [dishWorkflow, billRefresh, onBillRefresh])
@@ -1283,9 +1283,6 @@ export function BillingCounter({
     <div
       data-testid="counter-workspace"
       ref={workspaceRef}
-      onScroll={
-        dishWorkflow ? (event) => onHorizontalScroll?.(event.currentTarget.scrollLeft) : undefined
-      }
       className={
         dishWorkflow
           ? 'grid h-full min-h-0 grid-cols-[minmax(22rem,1fr)_var(--counter-rail-width)] gap-3 overflow-x-auto overflow-y-hidden'
