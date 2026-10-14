@@ -122,9 +122,13 @@ jobs:
               echo "| Commit | Subject | Change folders |"
               echo "|---|---|---|"
               git rev-list --reverse origin/main.."$SHA" | while read -r commit; do
+                # A commit with no change folder leaves grep nothing to print,
+                # and grep then exits 1, which pipefail makes the step's
+                # failure: the first Promote stopped on exactly that. None is
+                # an answer here, so it may not fail.
                 folders=$(git show --name-only --format= "$commit" \
                   | sed -nE 's#^openspec/changes/([^/]+)/.*#\1#p' \
-                  | grep -v '^archive$' | sort -u | paste -sd ' ' -)
+                  | { grep -v '^archive$' || true; } | sort -u | paste -sd ' ' -)
                 printf '| `%s` | %s | %s |\n' "${commit:0:8}" \
                   "$(git log -1 --format=%s "$commit" | sed 's/|/\\|/g')" "${folders:-—}"
               done

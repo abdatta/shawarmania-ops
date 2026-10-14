@@ -27,6 +27,14 @@ describe('Promote', () => {
     expect(check).toMatch(/git rev-list origin\/main\.\.origin\/stage/)
   })
 
+  it('lists a commit that touches no change folder instead of failing on it', () => {
+    // Under `set -euo pipefail`, a bare `grep -v` with nothing to print fails
+    // the step; the first Promote, on 14 October 2026, stopped there.
+    const check = commandsOf(yaml, 'check')
+    expect(check).toMatch(/\{ grep -v '\^archive\$' \|\| true; \}/)
+    expect(check).not.toMatch(/\| grep -v '\^archive\$'/)
+  })
+
   it('lists what it leaves on stage, so a docs-only tip is seen waiting', () => {
     expect(commandsOf(yaml, 'check')).toMatch(/git log --reverse .*"\$SHA"\.\.origin\/stage/)
   })
