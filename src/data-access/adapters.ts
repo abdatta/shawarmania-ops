@@ -2199,6 +2199,11 @@ export interface KitchenMarks {
    * none on shift, the counter says the kitchen is offline.
    */
   kitchenTablets: number
+  /**
+   * The owner's read only (design R11): per order, the item lines every kitchen
+   * still owing them has acknowledged. The counter's read leaves it out.
+   */
+  ackedLines?: Record<string, string[]>
 }
 
 /** Why an acknowledgement did not land. `stale`: the order changed; re-read. */
@@ -2247,6 +2252,12 @@ export interface KitchenAdapter {
    * answers, plus each kitchen's slot and each dish's ready quantity.
    */
   readDishMarks(): Promise<KitchenMarks>
+  /**
+   * The same read for an outlet's owner and franchise admins, for the Orders
+   * tab (each-dish-is-ticked-off, design R11; `dish-ticks` only). Read when
+   * the tab opens, never on a timer.
+   */
+  readManagerDishMarks(outletId: string): Promise<KitchenMarks>
   setFilter(
     mode: KitchenFilterMode,
     categoryIds: readonly string[],

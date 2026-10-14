@@ -467,3 +467,28 @@ The quantity changer SHALL use one compact pill, and the note action SHALL be a
 pencil at the right of the item row. Save SHALL be a single unwrapped word.
 Demo orders SHALL mostly have service choices consistent with the demo settings,
 including dine-in/table and takeaway, with at most two legacy no-service examples.
+
+### Requirement: The owner's Orders tab says what the counter's card says
+
+With `dish-ticks` on, each open order on the billing history's Orders tab SHALL
+show, compactly: its number, label and total; when it was ordered and how long
+ago, who rang it, and its table or takeaway; whether it is paid; each kitchen's
+answer in words (sent, seen, ready, served); each dish with its quantity, note and
+price in one of four states — placed, acknowledged, Done, handed over — in the
+counter's marks (✓, ✓✓, the bell, a ticked box), each named on hover and to a
+screen reader; and the customer on one line beside Cancel order. A dish SHALL read
+acknowledged only when every kitchen still owing it has acknowledged at least what
+it owes. With `kitchen-ready` off, nothing SHALL read Done. The kitchens' answers
+SHALL come from a read that only the owner and that outlet's franchise admins may
+make, made with the page's other reads when it opens and never on a timer; if it
+fails the orders SHALL still list. With `dish-ticks` off the tab SHALL be as it was.
+
+#### Scenario: The owner checks an order from away
+
+- **WHEN** the owner opens the Orders tab while Kitchen 1 has acknowledged one dish of an unpaid order, marked another Done and the counter has handed over a third
+- **THEN** the card says Not paid and Kitchen 1 · ready, and the three dishes show ✓✓, the bell and a ticked box
+
+#### Scenario: Another outlet's manager cannot read these kitchens
+
+- **WHEN** a franchise admin of another outlet asks for this outlet's kitchens
+- **THEN** the read is refused, as reading its orders is

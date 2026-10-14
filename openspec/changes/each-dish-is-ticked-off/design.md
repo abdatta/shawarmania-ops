@@ -5,7 +5,7 @@
 This change went live on 12 October 2026, froze the counter, and was rolled back
 that evening. It relaunches under #75 (`a-release-can-be-switched-off`). Decisions
 D1–D11 below are the first launch's, and the owner approved their screens on 11
-October; they stand except where *Relaunch under #75* (R1–R10) replaces them, and
+October; they stand except where *Relaunch under #75* (R1–R11) replaces them, and
 each replaced passage says so where it sits. The decisions most often got
 backwards:
 
@@ -313,14 +313,49 @@ the pull (#75 D11).
 
 - **D2**'s label column and its clearing inside the order guard → R8.
 - **D9**'s silent checkbox cue (the pulsing dot the owner chose on 11 October) → R6.
-  The rest of D9 — ticked text, checkbox geometry, the age ring, the slots, the
-  kitchen's Done — stands.
+  The rest of D9 — ticked text, checkbox geometry, the slots, the kitchen's Done —
+  stands. Its age ring on the counter's card went on 14 October (*The approved UI
+  contract*); the kitchen keeps its ring.
 - **D10**'s "nothing merges before the live half" → the gates: everything merges,
   and ships off.
 - **D11**'s ten- and five-second fallbacks → R5. Its first half stands: a tick and a
   payment release the card on local acceptance, never waiting on a read.
 - The first launch's verification log is at `9e916642` in history; this change
   writes a new one.
+
+### R11. The owner's Orders tab says what the counter's card says
+
+Asked on 14 October, after the relaunch shipped off: the owner watches the outlet
+from the billing history's Orders tab when away, and it showed none of what the
+dish ticks added. With `dish-ticks` on, each open order there is today's card made
+compact and filled in (owner: "add to today's card … compact"), drawn by
+`dish-open-order-summary.tsx`; off, the tab is byte for byte what it was.
+
+- **What it says.** Number, label and total; when ordered and how long ago, who
+  rang it, table or takeaway; Paid or Not paid; a chip per kitchen in words —
+  *sent*, *seen*, *ready*, *served*; one row per dish with quantity, note and price;
+  the customer on one line beside a small **Cancel order**, which opens the page's
+  cancellation as before.
+- **A dish's four states**, the owner's list: placed, acknowledged, Done, handed
+  over — in the counter's own marks, ✓, ✓✓, the bell, a ticked box, each named on
+  hover and to a screen reader. A first draft drew three, with an empty circle for
+  *not ready yet*; the owner asked what it meant and named the four.
+- **Acknowledged, per dish.** An ACK is a kitchen's, for the food it shows, so a
+  dish reads acknowledged only when every kitchen still owing it has acknowledged
+  at least what it owes: its line in that kitchen's ticket and in that ticket's
+  latest ACK. A dish no kitchen owes is Done, handed over, or carried by none on
+  shift, and reads by the other three.
+- **The read.** `manager_kitchen_marks_v2(outlet)` is `counter_kitchen_marks_v2()`
+  for a named outlet, copied rather than shared because the published function may
+  not change, plus `ackedLines`. It answers exactly those `orders_select` lets read
+  the orders — the owner, and that outlet's franchise admins — and refuses the
+  rest with 42501, tablets included (pgTAP 89, the dish-ticks REST probe).
+- **When.** With the page's other reads when it opens, never on a timer and never
+  live: the owner's pages have no Realtime, to keep egress low (owner). If the read
+  fails the orders still list, with no kitchen chips and every waiting dish placed.
+
+**Rejected:** the counter's card, read-only, on this tab (owner chose today's card,
+compacted); a live tab (egress).
 
 ## The approved UI contract (11 October 2026)
 

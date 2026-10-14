@@ -10,6 +10,7 @@ import { MemberMark } from '@/components/ui/member-mark'
 import { Modal } from '@/components/ui/modal'
 import { Money } from '@/components/ui/money'
 import { DayField, PeriodBar } from '@/components/ui/period-bar'
+import { useChangeGate } from '@/change-gates/context'
 import { useAdapters } from '@/data-access'
 import {
   BILLING_PAYMENT_METHODS,
@@ -19,6 +20,7 @@ import {
   type BillingDeliveryDiagnostic,
   type BillingOrder,
   type CounterBiller,
+  type KitchenMarks,
 } from '@/data-access/adapters'
 import {
   carryPeriod,
@@ -33,6 +35,7 @@ import { useSession } from '@/session/context'
 import { averageBillPaise, combinedTakingsPaise, paymentTotalPaise } from './day-totals'
 import { ManagerBillDetail } from './manager-bill-detail'
 import { BillDetailTransition, DETAIL_TRANSITION_MS, ManagerBillSummary } from './manager-bill-row'
+import { DishOpenOrderSummary } from './dish-open-order-summary'
 import { countSyncProblems, ManagerSyncStatus } from './manager-sync-status'
 import { PaymentTotalCards } from './payment-total-cards'
 
@@ -93,8 +96,14 @@ function BillingHistoryShimmer() {
 }
 
 export function ManagerBillingHistory() {
-  const { billing, outlets: outletsAdapter } = useAdapters()
+  const { billing, outlets: outletsAdapter, kitchen } = useAdapters()
   const session = useSession()
+  // With the dish ticks on, an open order says what the counter's card says
+  // (each-dish-is-ticked-off, design R11): its kitchens' answers come from one
+  // more read, made with the others when the page opens and never on a timer.
+  const dishWorkflow = useChangeGate('dish-ticks')
+  const [marks, setMarks] = useState<KitchenMarks | null>(null)
+  const [readAt, setReadAt] = useState(() => new Date())
   // Which outlet, asked the way every other outlet-scoped surface asks it: chips
   // in the header, remembered between surfaces, conferring nothing.
   const { outletId, selector: outletSelector } = useOutletScope()
@@ -194,12 +203,16 @@ export function ManagerBillingHistory() {
       // parameters stay on the adapter for the counter, and this surface passes
       // neither: every bill of the day is listed, and each says for itself
       // whether it was paid or cancelled and what it was paid with.
-      const [nextBills, nextOrders, nextDiagnostics, nextBillers] = await Promise.all([
+      const [nextBills, nextOrders, nextDiagnostics, nextBillers, nextMarks] = await Promise.all([
         billing.listManagerHistory({ outletId, businessDate, status: 'all', paymentMethod: 'all' }),
         billing.listManagerOpenOrders(outletId),
         billing.listDeliveryDiagnostics(outletId),
         billing.listBillers(outletId),
+        // The orders still list if the kitchens cannot be read.
+        dishWorkflow ? kitchen.readManagerDishMarks(outletId).catch(() => null) : null,
       ])
+      setMarks(nextMarks)
+      setReadAt(new Date())
       setBills(nextBills)
       setOrders(nextOrders)
       setDiagnostics(nextDiagnostics)
@@ -214,7 +227,7 @@ export function ManagerBillingHistory() {
     } finally {
       setLoading(false)
     }
-  }, [billing, businessDate, outletId])
+  }, [billing, businessDate, outletId, dishWorkflow, kitchen])
 
   useEffect(() => {
     void Promise.resolve().then(load)
@@ -515,69 +528,89 @@ export function ManagerBillingHistory() {
                           data-testid={`manager-open-order-${order.orderNumber}`}
                           className="rounded-xl border border-border bg-surface p-3"
                         >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-xl font-black text-content">
-                                Order {order.orderNumber}
-                              </p>
-                              <p className="mt-1 text-xs text-content-muted">
-                                {formatDayTime(order.orderedAt)} · created by {order.creatorName}
-                              </p>
-                            </div>
-                            <Money paise={order.totalPaise} display className="shrink-0" />
-                          </div>
+                          {dishWorkflow ? (
+                            <DishOpenOrderSummary
+                              order={order}
+                              marks={marks}
+                              now={readAt}
+                              {...(!cancellingOrder && {
+                                onCancel: () => {
+                                  setCancellingOrderId(order.id)
+                                  setReason('')
+                                },
+                              })}
+                            />
+                          ) : (
+                            <>
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-xl font-black text-content">
+                                    Order {order.orderNumber}
+                                  </p>
+                                  <p className="mt-1 text-xs text-content-muted">
+                                    {formatDayTime(order.orderedAt)} · created by{' '}
+                                    {order.creatorName}
+                                  </p>
+                                </div>
+                                <Money paise={order.totalPaise} display className="shrink-0" />
+                              </div>
 
-                          <section className="mt-3 rounded-xl border border-border bg-surface p-3">
-                            <h3 className="text-sm font-black text-content">Order items</h3>
-                            <ul className="mt-2 divide-y divide-border">
-                              {order.lines.map((line, index) => (
-                                <li
-                                  key={`${line.menuItemId}-${index}`}
-                                  className="grid grid-cols-[1fr_auto] gap-x-3 py-2 first:pt-0 last:pb-0"
-                                >
-                                  <div className="min-w-0">
-                                    <p className="font-semibold leading-tight text-content">
-                                      {line.itemName}
-                                    </p>
-                                    <p className="mt-1 text-xs text-content-muted">
-                                      {line.quantity} × <Money paise={line.unitPricePaise} /> each
-                                    </p>
+                              <section className="mt-3 rounded-xl border border-border bg-surface p-3">
+                                <h3 className="text-sm font-black text-content">Order items</h3>
+                                <ul className="mt-2 divide-y divide-border">
+                                  {order.lines.map((line, index) => (
+                                    <li
+                                      key={`${line.menuItemId}-${index}`}
+                                      className="grid grid-cols-[1fr_auto] gap-x-3 py-2 first:pt-0 last:pb-0"
+                                    >
+                                      <div className="min-w-0">
+                                        <p className="font-semibold leading-tight text-content">
+                                          {line.itemName}
+                                        </p>
+                                        <p className="mt-1 text-xs text-content-muted">
+                                          {line.quantity} × <Money paise={line.unitPricePaise} />{' '}
+                                          each
+                                        </p>
+                                      </div>
+                                      <Money
+                                        paise={line.unitPricePaise * line.quantity}
+                                        className="self-center font-bold"
+                                      />
+                                    </li>
+                                  ))}
+                                </ul>
+                              </section>
+
+                              <section className="mt-3 rounded-xl border border-border bg-surface p-3">
+                                <h3 className="text-sm font-black text-content">
+                                  Customer details
+                                </h3>
+                                <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2">
+                                  <div>
+                                    <dt className="text-xs font-semibold text-content-muted">
+                                      Customer name
+                                    </dt>
+                                    <dd className="mt-0.5 flex items-center gap-1.5 text-sm font-semibold text-content">
+                                      <span className="min-w-0 break-words">
+                                        {order.customerName || 'Not provided'}
+                                      </span>
+                                      {order.customerTier === 'gold' && <MemberMark />}
+                                    </dd>
                                   </div>
-                                  <Money
-                                    paise={line.unitPricePaise * line.quantity}
-                                    className="self-center font-bold"
-                                  />
-                                </li>
-                              ))}
-                            </ul>
-                          </section>
+                                  <div>
+                                    <dt className="text-xs font-semibold text-content-muted">
+                                      Customer phone
+                                    </dt>
+                                    <dd className="mt-0.5 break-words text-sm font-semibold text-content">
+                                      {order.customerPhone || 'Not provided'}
+                                    </dd>
+                                  </div>
+                                </dl>
+                              </section>
+                            </>
+                          )}
 
-                          <section className="mt-3 rounded-xl border border-border bg-surface p-3">
-                            <h3 className="text-sm font-black text-content">Customer details</h3>
-                            <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2">
-                              <div>
-                                <dt className="text-xs font-semibold text-content-muted">
-                                  Customer name
-                                </dt>
-                                <dd className="mt-0.5 flex items-center gap-1.5 text-sm font-semibold text-content">
-                                  <span className="min-w-0 break-words">
-                                    {order.customerName || 'Not provided'}
-                                  </span>
-                                  {order.customerTier === 'gold' && <MemberMark />}
-                                </dd>
-                              </div>
-                              <div>
-                                <dt className="text-xs font-semibold text-content-muted">
-                                  Customer phone
-                                </dt>
-                                <dd className="mt-0.5 break-words text-sm font-semibold text-content">
-                                  {order.customerPhone || 'Not provided'}
-                                </dd>
-                              </div>
-                            </dl>
-                          </section>
-
-                          {!cancellingOrder && (
+                          {!dishWorkflow && !cancellingOrder && (
                             <div className="mt-3 border-t border-border pt-3">
                               <Button
                                 variant="secondary"

@@ -2,7 +2,7 @@
 
 ## 0. Before you start
 
-Read design → *Read this first* and *Relaunch under #75* (R1–R10) before anything
+Read design → *Read this first* and *Relaunch under #75* (R1–R11) before anything
 else. The first launch's tasks were ticked on 12 October and unticked by the
 rollback; these replace them. The first launch's code is at `9e916642` and is the
 reference for every screen, but it is ported onto the on path, never restored over
@@ -103,6 +103,12 @@ One migration, dated after the newest, declaring `-- change-gate: dish-ticks`.
   proved by the request budget with the gates on (counter idle 3 a minute against
   2 off, kitchen idle 9 against 8), and no demo-only component is reachable from
   the live tree.
+
+- [x] 4.6 The owner's Orders tab (design R11): `manager_kitchen_marks_v2` with its
+  `ackedLines`, owner and franchise admins only; the compact card with the four dish
+  states and the kitchens in words, behind `dish-ticks`, read on open only; pgTAP
+  89, the REST probe, unit tests in both states, the old browser test tagged
+  `@cg-off:dish-ticks`.
 
 ## 5. Tests in both states
 

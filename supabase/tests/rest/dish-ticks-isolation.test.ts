@@ -248,6 +248,27 @@ describe('dish records and labels enforce isolation over hand-crafted HTTP reque
     expect(kitchens.data).toEqual([])
   })
 
+  it("reads an outlet's kitchens to its owner and refuses every other caller", async () => {
+    const owner = callers.find(([label]) => label === 'owner')![1]
+    const read = await owner.rpc('manager_kitchen_marks_v2', { p_outlet_id: kpa })
+    expect(read.error).toBeNull()
+    expect(
+      (read.data as { orders: { orderId: string }[] }).orders.some(
+        (order) => order.orderId === orderId,
+      ),
+    ).toBe(true)
+    // The other outlet's admin, the people on the floor, and the tablets.
+    for (const [label, caller] of [
+      ...callers.filter(([label]) => label !== 'owner'),
+      ['own counter', counter] as [string, Client],
+      ['own kitchen', kitchenOwn] as [string, Client],
+    ]) {
+      const refused = await caller.rpc('manager_kitchen_marks_v2', { p_outlet_id: kpa })
+      expect(refused.error?.code, label).toBe('42501')
+      expect(refused.data, label).toBeNull()
+    }
+  })
+
   it("refuses a Ready naming another outlet's order", async () => {
     const refused = await kitchen.rpc('kitchen_ready_v2', {
       p_id: randomUUID(),

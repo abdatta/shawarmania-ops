@@ -600,6 +600,40 @@ export function createMockKitchenAdapter(
       return counterMarks(true)
     },
 
+    async readManagerDishMarks(outletId) {
+      // What the counter reads, for the one outlet asked about.
+      const marks = counterMarks(true)
+      const here = new Set(
+        store.orders.filter((order) => order.outlet_id === outletId).map((order) => order.id),
+      )
+      const only = <T>(byOrder: Record<string, T> | undefined) =>
+        byOrder && Object.fromEntries(Object.entries(byOrder).filter(([id]) => here.has(id)))
+      // A dish is acknowledged when a kitchen's latest ACK of the order names it.
+      const acks = [
+        ...kitchen.acks,
+        ...Object.entries(kitchen.stationAcks ?? {})
+          .filter(([station]) => Number(station) !== (kitchen.station ?? 1))
+          .flatMap(([, list]) => list),
+      ]
+      const ackedLines = Object.fromEntries(
+        [...here]
+          .map((orderId) => {
+            const latest = acks
+              .filter((ack) => ack.orderId === orderId)
+              .sort((a, b) => b.ackedAt.localeCompare(a.ackedAt))[0]
+            return [orderId, latest ? latest.lines.map((line) => line.id) : []] as const
+          })
+          .filter(([, lines]) => lines.length > 0),
+      )
+      return {
+        ...marks,
+        orders: only(marks.orders)!,
+        ...(marks.dishStates ? { dishStates: only(marks.dishStates)! } : {}),
+        ...(marks.readyQuantities ? { readyQuantities: only(marks.readyQuantities)! } : {}),
+        ackedLines,
+      }
+    },
+
     async acknowledgeDish(input) {
       return acknowledgeWith(input, true)
     },

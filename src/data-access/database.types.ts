@@ -5858,6 +5858,7 @@ export type Database = {
         }
         Returns: Json
       }
+      manager_kitchen_marks_v2: { Args: { p_outlet_id: string }; Returns: Json }
       mark_account_as_left: {
         Args: {
           p_actor_id: string

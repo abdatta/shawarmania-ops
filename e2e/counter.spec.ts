@@ -1682,153 +1682,158 @@ test.describe('the counter in both themes', () => {
 })
 
 test.describe('manager billing history', () => {
-  test('opens structured bills in place, cancels progressively, clears an order and groups sync status', async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 390, height: 844 })
-    await page.goto('demo/admin/billing-history')
-    await expect(page.getByRole('heading', { name: 'Billing history' })).toBeVisible()
-    // Two questions and no more: the status and payment pickers are gone, and
-    // the day is asked in the same bar the ledger uses.
-    await expect(page.getByLabel('Bill status')).toHaveCount(0)
-    await expect(page.getByLabel('Payment method')).toHaveCount(0)
-    const period = page.getByTestId('billing-history-period')
-    await expect(period).toHaveJSProperty(
-      'scrollWidth',
-      await period.evaluate((node) => node.clientWidth),
-    )
+  test(
+    'opens structured bills in place, cancels progressively, clears an order and groups sync status',
+    { tag: '@cg-off:dish-ticks' },
+    async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 })
+      await page.goto('demo/admin/billing-history')
+      await expect(page.getByRole('heading', { name: 'Billing history' })).toBeVisible()
+      // Two questions and no more: the status and payment pickers are gone, and
+      // the day is asked in the same bar the ledger uses.
+      await expect(page.getByLabel('Bill status')).toHaveCount(0)
+      await expect(page.getByLabel('Payment method')).toHaveCount(0)
+      const period = page.getByTestId('billing-history-period')
+      await expect(period).toHaveJSProperty(
+        'scrollWidth',
+        await period.evaluate((node) => node.clientWidth),
+      )
 
-    const businessDateButton = page.getByTestId('billing-history-day-open')
-    const businessDatePicker = page.getByTestId('billing-history-day-picker')
-    await expect(businessDateButton).toHaveText('Today')
-    const todayBusinessDate = await businessDatePicker.inputValue()
-    await businessDatePicker.fill('2026-08-01')
-    await expect(businessDateButton).toHaveText('01 Aug 2026')
-    // A step back reaches the day before without opening the calendar, and
-    // there is no stepping past the outlet's own today.
-    await page.getByTestId('billing-history-step-back').click()
-    await expect(businessDateButton).toHaveText('31 Jul 2026')
-    await businessDatePicker.fill(todayBusinessDate)
-    await expect(businessDateButton).toHaveText('Today')
-    await expect(page.getByTestId('billing-history-step-forward')).toBeDisabled()
+      const businessDateButton = page.getByTestId('billing-history-day-open')
+      const businessDatePicker = page.getByTestId('billing-history-day-picker')
+      await expect(businessDateButton).toHaveText('Today')
+      const todayBusinessDate = await businessDatePicker.inputValue()
+      await businessDatePicker.fill('2026-08-01')
+      await expect(businessDateButton).toHaveText('01 Aug 2026')
+      // A step back reaches the day before without opening the calendar, and
+      // there is no stepping past the outlet's own today.
+      await page.getByTestId('billing-history-step-back').click()
+      await expect(businessDateButton).toHaveText('31 Jul 2026')
+      await businessDatePicker.fill(todayBusinessDate)
+      await expect(businessDateButton).toHaveText('Today')
+      await expect(page.getByTestId('billing-history-step-forward')).toBeDisabled()
 
-    const bills = page.getByTestId('manager-bill-list').locator(':scope > li')
-    const firstSummary = bills.nth(0).getByRole('button', { name: /Bill \d+ Paid/ })
-    const secondSummary = bills.nth(1).getByRole('button', { name: /Bill \d+ Paid/ })
-    await expect(firstSummary).toContainText(/(Today|Yesterday), \d{2}:\d{2} (am|pm)/)
-    // The first row depends on the seeded time ordering. Both names are valid
-    // immutable biller snapshots; the history surface must show one explicitly.
-    await expect(firstSummary).toContainText(/by Demo (?:Morning )?Biller/)
-    await firstSummary.click()
-    await expect(bills.nth(0)).toContainText('Order items')
-    await expect(bills.nth(0)).toContainText('Paid by')
-    await expect(firstSummary).not.toHaveClass(/border-primary/)
-    await expect(
-      bills.nth(0).getByTestId('manager-bill-detail-transition').locator('article'),
-    ).not.toHaveClass(/border-primary/)
-    const customerDetails = bills.nth(0).getByText('Customer details')
-    const billTimeline = bills.nth(0).getByText('Bill timeline')
-    const customerDisclosure = customerDetails.locator('xpath=ancestor::details')
-    const timelineDisclosure = billTimeline.locator('xpath=ancestor::details')
-    await expect(customerDisclosure).not.toHaveAttribute('open')
-    await expect(timelineDisclosure).not.toHaveAttribute('open')
-    await customerDetails.click()
-    await expect(customerDisclosure).toHaveAttribute('open', '')
-    await billTimeline.click()
-    await expect(timelineDisclosure).toHaveAttribute('open', '')
-    const detailBox = await bills.nth(0).getByTestId('manager-bill-detail-transition').boundingBox()
-    expect(detailBox).not.toBeNull()
-    // Even with both optional disclosures opened, the two-column facts stay bounded.
-    expect(detailBox!.height).toBeLessThan(620)
-    await expect(bills.nth(0).getByLabel(/Cancellation reason/)).toHaveCount(0)
+      const bills = page.getByTestId('manager-bill-list').locator(':scope > li')
+      const firstSummary = bills.nth(0).getByRole('button', { name: /Bill \d+ Paid/ })
+      const secondSummary = bills.nth(1).getByRole('button', { name: /Bill \d+ Paid/ })
+      await expect(firstSummary).toContainText(/(Today|Yesterday), \d{2}:\d{2} (am|pm)/)
+      // The first row depends on the seeded time ordering. Both names are valid
+      // immutable biller snapshots; the history surface must show one explicitly.
+      await expect(firstSummary).toContainText(/by Demo (?:Morning )?Biller/)
+      await firstSummary.click()
+      await expect(bills.nth(0)).toContainText('Order items')
+      await expect(bills.nth(0)).toContainText('Paid by')
+      await expect(firstSummary).not.toHaveClass(/border-primary/)
+      await expect(
+        bills.nth(0).getByTestId('manager-bill-detail-transition').locator('article'),
+      ).not.toHaveClass(/border-primary/)
+      const customerDetails = bills.nth(0).getByText('Customer details')
+      const billTimeline = bills.nth(0).getByText('Bill timeline')
+      const customerDisclosure = customerDetails.locator('xpath=ancestor::details')
+      const timelineDisclosure = billTimeline.locator('xpath=ancestor::details')
+      await expect(customerDisclosure).not.toHaveAttribute('open')
+      await expect(timelineDisclosure).not.toHaveAttribute('open')
+      await customerDetails.click()
+      await expect(customerDisclosure).toHaveAttribute('open', '')
+      await billTimeline.click()
+      await expect(timelineDisclosure).toHaveAttribute('open', '')
+      const detailBox = await bills
+        .nth(0)
+        .getByTestId('manager-bill-detail-transition')
+        .boundingBox()
+      expect(detailBox).not.toBeNull()
+      // Even with both optional disclosures opened, the two-column facts stay bounded.
+      expect(detailBox!.height).toBeLessThan(620)
+      await expect(bills.nth(0).getByLabel(/Cancellation reason/)).toHaveCount(0)
 
-    await secondSummary.evaluate((node) => node.scrollIntoView({ block: 'center' }))
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(200)
-    const secondSummaryBeforeSwap = await secondSummary.boundingBox()
-    expect(secondSummaryBeforeSwap).not.toBeNull()
-    await secondSummary.click()
-    await expect(firstSummary).toHaveAttribute('aria-expanded', 'false')
-    await expect(secondSummary).toHaveAttribute('aria-expanded', 'true')
-    await expect(bills.nth(0).getByTestId('manager-bill-detail-transition')).toHaveAttribute(
-      'data-open',
-      'false',
-    )
-    await page.waitForTimeout(280)
-    await expect(bills.nth(0).getByTestId('manager-bill-detail-transition')).toHaveCount(0)
-    const secondSummaryAfterSwap = await secondSummary.boundingBox()
-    expect(secondSummaryAfterSwap).not.toBeNull()
-    // The summary the manager pressed stays under the finger while the taller
-    // detail above it closes. It holds by scrolling the page up as that detail
-    // collapses, so the promise is bounded by the scroll the page actually has:
-    // once the page is at its very top there is nothing left to give, and the
-    // row rises by whatever was still owed. That case is allowed here, but only
-    // there — a jump with room above it would be the regression this guards.
-    const scrolledToTop = await page.evaluate(() => window.scrollY === 0)
-    const shift = secondSummaryAfterSwap!.y - secondSummaryBeforeSwap!.y
-    if (scrolledToTop) {
-      expect(shift).toBeGreaterThan(-120)
-      expect(shift).toBeLessThan(8)
-    } else {
-      expect(Math.abs(shift)).toBeLessThan(8)
-    }
-    await expect(secondSummary).toBeInViewport()
-    await bills.nth(1).getByRole('button', { name: 'Cancel this bill' }).click()
-    await bills
-      .nth(1)
-      .getByLabel(/Cancellation reason/)
-      .fill('Wrong item rung')
-    await bills.nth(1).getByRole('button', { name: 'Cancel bill' }).click()
-    await expect(bills.nth(1)).toContainText('Cancelled')
-    await expect(page.getByText(/Bill \d+ was cancelled/)).toHaveCount(0)
+      await secondSummary.evaluate((node) => node.scrollIntoView({ block: 'center' }))
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(200)
+      const secondSummaryBeforeSwap = await secondSummary.boundingBox()
+      expect(secondSummaryBeforeSwap).not.toBeNull()
+      await secondSummary.click()
+      await expect(firstSummary).toHaveAttribute('aria-expanded', 'false')
+      await expect(secondSummary).toHaveAttribute('aria-expanded', 'true')
+      await expect(bills.nth(0).getByTestId('manager-bill-detail-transition')).toHaveAttribute(
+        'data-open',
+        'false',
+      )
+      await page.waitForTimeout(280)
+      await expect(bills.nth(0).getByTestId('manager-bill-detail-transition')).toHaveCount(0)
+      const secondSummaryAfterSwap = await secondSummary.boundingBox()
+      expect(secondSummaryAfterSwap).not.toBeNull()
+      // The summary the manager pressed stays under the finger while the taller
+      // detail above it closes. It holds by scrolling the page up as that detail
+      // collapses, so the promise is bounded by the scroll the page actually has:
+      // once the page is at its very top there is nothing left to give, and the
+      // row rises by whatever was still owed. That case is allowed here, but only
+      // there — a jump with room above it would be the regression this guards.
+      const scrolledToTop = await page.evaluate(() => window.scrollY === 0)
+      const shift = secondSummaryAfterSwap!.y - secondSummaryBeforeSwap!.y
+      if (scrolledToTop) {
+        expect(shift).toBeGreaterThan(-120)
+        expect(shift).toBeLessThan(8)
+      } else {
+        expect(Math.abs(shift)).toBeLessThan(8)
+      }
+      await expect(secondSummary).toBeInViewport()
+      await bills.nth(1).getByRole('button', { name: 'Cancel this bill' }).click()
+      await bills
+        .nth(1)
+        .getByLabel(/Cancellation reason/)
+        .fill('Wrong item rung')
+      await bills.nth(1).getByRole('button', { name: 'Cancel bill' }).click()
+      await expect(bills.nth(1)).toContainText('Cancelled')
+      await expect(page.getByText(/Bill \d+ was cancelled/)).toHaveCount(0)
 
-    // The day's four figures are above the tabs, so they are still on screen
-    // after a cancellation without a tab being chosen — and, at 390px, still on
-    // one row that does not scroll sideways.
-    const totals = page.getByRole('region', { name: 'Payment totals' })
-    await expect(totals.getByTestId('billing-total-cash')).toBeVisible()
-    await expect(totals.getByTestId('billing-total-upi')).toBeVisible()
-    await expect(totals.getByTestId('billing-total-combined')).toBeVisible()
-    await expect(totals.getByTestId('billing-total-average')).toContainText('AOV')
-    await expect(totals).toHaveJSProperty(
-      'scrollWidth',
-      await totals.evaluate((node) => node.clientWidth),
-    )
-    const cardTops = await totals
-      .getByTestId(/^billing-total-/)
-      .evaluateAll((cards) => cards.map((card) => card.getBoundingClientRect().top))
-    expect(cardTops).toHaveLength(4)
-    expect(Math.max(...cardTops) - Math.min(...cardTops)).toBeLessThan(1)
+      // The day's four figures are above the tabs, so they are still on screen
+      // after a cancellation without a tab being chosen — and, at 390px, still on
+      // one row that does not scroll sideways.
+      const totals = page.getByRole('region', { name: 'Payment totals' })
+      await expect(totals.getByTestId('billing-total-cash')).toBeVisible()
+      await expect(totals.getByTestId('billing-total-upi')).toBeVisible()
+      await expect(totals.getByTestId('billing-total-combined')).toBeVisible()
+      await expect(totals.getByTestId('billing-total-average')).toContainText('AOV')
+      await expect(totals).toHaveJSProperty(
+        'scrollWidth',
+        await totals.evaluate((node) => node.clientWidth),
+      )
+      const cardTops = await totals
+        .getByTestId(/^billing-total-/)
+        .evaluateAll((cards) => cards.map((card) => card.getBoundingClientRect().top))
+      expect(cardTops).toHaveLength(4)
+      expect(Math.max(...cardTops) - Math.min(...cardTops)).toBeLessThan(1)
 
-    await page.getByRole('tab', { name: /^Status/ }).click()
-    await expect(page.getByRole('heading', { name: 'Tablet sync status' })).toBeVisible()
-    // Status is the sync panel and nothing else now; the figures stay above it.
-    await expect(page.getByRole('heading', { name: 'Payment totals' })).toHaveCount(0)
-    await expect(page.getByTestId('billing-total-cash')).toHaveCount(1)
+      await page.getByRole('tab', { name: /^Status/ }).click()
+      await expect(page.getByRole('heading', { name: 'Tablet sync status' })).toBeVisible()
+      // Status is the sync panel and nothing else now; the figures stay above it.
+      await expect(page.getByRole('heading', { name: 'Payment totals' })).toHaveCount(0)
+      await expect(page.getByTestId('billing-total-cash')).toHaveCount(1)
 
-    await page.getByRole('tab', { name: /Open orders/ }).click()
-    await expect(page.getByTestId('billing-total-cash')).toBeVisible()
-    const openOrder = page.getByTestId('manager-open-order-104')
-    await expect(openOrder).toContainText('Order items')
-    await expect(openOrder).toContainText('Customer details')
-    await expect(openOrder).toContainText('created by')
-    await expect(openOrder.getByLabel(/Cancellation reason for order/)).toHaveCount(0)
-    await openOrder.getByRole('button', { name: 'Cancel this order' }).click()
-    const orderCancellation = page.getByRole('dialog', { name: 'Cancel order 104' })
-    await expect(orderCancellation).toBeVisible()
-    await orderCancellation.getByLabel(/Cancellation reason for order/).fill('Tablet unavailable')
-    await orderCancellation.getByRole('button', { name: 'Cancel order' }).click()
-    await expect(openOrder).toHaveCount(0)
-    await expect(page.getByText(/Nothing was transferred/)).toHaveCount(0)
+      await page.getByRole('tab', { name: /Open orders/ }).click()
+      await expect(page.getByTestId('billing-total-cash')).toBeVisible()
+      const openOrder = page.getByTestId('manager-open-order-104')
+      await expect(openOrder).toContainText('Order items')
+      await expect(openOrder).toContainText('Customer details')
+      await expect(openOrder).toContainText('created by')
+      await expect(openOrder.getByLabel(/Cancellation reason for order/)).toHaveCount(0)
+      await openOrder.getByRole('button', { name: 'Cancel this order' }).click()
+      const orderCancellation = page.getByRole('dialog', { name: 'Cancel order 104' })
+      await expect(orderCancellation).toBeVisible()
+      await orderCancellation.getByLabel(/Cancellation reason for order/).fill('Tablet unavailable')
+      await orderCancellation.getByRole('button', { name: 'Cancel order' }).click()
+      await expect(openOrder).toHaveCount(0)
+      await expect(page.getByText(/Nothing was transferred/)).toHaveCount(0)
 
-    await page.getByRole('tab', { name: /^Status/ }).click()
-    await expect(page.getByRole('heading', { name: 'Tablet sync status' })).toBeVisible()
-    await expect(page.getByText(/recent sync problem/i)).toBeVisible()
-    await expect(page.getByText(/Reference [0-9a-f]+/)).toBeHidden()
-    await page.getByText(/Show technical details/).click()
-    await expect(page.getByText(/Short references only/)).toBeVisible()
-    await expect(page.getByText(/Reference [0-9a-f]+/)).toBeVisible()
-    await expect(page.getByRole('button', { name: /Correct|Discard/ })).toHaveCount(0)
-  })
+      await page.getByRole('tab', { name: /^Status/ }).click()
+      await expect(page.getByRole('heading', { name: 'Tablet sync status' })).toBeVisible()
+      await expect(page.getByText(/recent sync problem/i)).toBeVisible()
+      await expect(page.getByText(/Reference [0-9a-f]+/)).toBeHidden()
+      await page.getByText(/Show technical details/).click()
+      await expect(page.getByText(/Short references only/)).toBeVisible()
+      await expect(page.getByText(/Reference [0-9a-f]+/)).toBeVisible()
+      await expect(page.getByRole('button', { name: /Correct|Discard/ })).toHaveCount(0)
+    },
+  )
 })
 
 test.describe('the rail as tickets, with the kitchen bell (#72)', () => {

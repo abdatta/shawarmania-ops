@@ -1461,7 +1461,11 @@ column, price or payment fact. `counter_kitchen_marks_v2()` adds, per open order
 each item line's ready quantity (line id to quantity) and, per kitchen, a
 `dishStates` entry — sent, acknowledged, ready or handed over, null where that
 kitchen does not carry the order — with no dish-to-kitchen mapping, person or
-time. `kitchen_acknowledge_v2()` records the kitchen's full visible lines, notes
+time. `manager_kitchen_marks_v2(outlet)` is the same read for the owner's Orders tab,
+for a named outlet, answering only the owner and that outlet's franchise admins
+(those `orders_select` lets read the orders), plus `ackedLines`: per order, the
+item lines every kitchen still owing them has acknowledged.
+`kitchen_acknowledge_v2()` records the kitchen's full visible lines, notes
 included. **Acknowledgements are full snapshots on both paths**, so either board
 reads the other's: after the gate turns off, an acknowledged order with food
 already handed over shows on the old board in full and quiet, never ringing.

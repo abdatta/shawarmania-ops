@@ -172,6 +172,7 @@ export function parseDishKitchenMarks(value: Json): KitchenMarks {
         }[]
       | null
     kitchenTablets: number | null
+    ackedLines?: Record<string, string[]>
   }
   return {
     kitchens: marks.kitchens ?? [],
@@ -183,6 +184,7 @@ export function parseDishKitchenMarks(value: Json): KitchenMarks {
     dishStates: Object.fromEntries(
       (marks.orders ?? []).map((order) => [order.orderId, order.dishStates ?? []]),
     ),
+    ...(marks.ackedLines ? { ackedLines: marks.ackedLines } : {}),
   }
 }
 
@@ -263,6 +265,14 @@ export function createSupabaseKitchenAdapter(client: SupabaseClient<Database>): 
 
     async readDishMarks(): Promise<KitchenMarks> {
       const { data, error } = await client.rpc('counter_kitchen_marks_v2')
+      if (error) throw error
+      return parseDishKitchenMarks(data)
+    },
+
+    async readManagerDishMarks(outletId): Promise<KitchenMarks> {
+      const { data, error } = await client.rpc('manager_kitchen_marks_v2', {
+        p_outlet_id: outletId,
+      })
       if (error) throw error
       return parseDishKitchenMarks(data)
     },
