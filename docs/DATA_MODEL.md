@@ -278,7 +278,9 @@ Menu is per-outlet from day one. Two outlets may share item names and differ on 
 tablet, creator and counter shift, `ordered_at`, explicit `business_date`,
 customer-form snapshot and `customer_tier`, integer-paise totals, `status`
 (`open` | `paid` | `cancelled`), and separate revision, cancellation and payment
-attribution.
+attribution. An order's label does not live here: it is a row in `order_labels`
+(see [Dish ticks](#dish-ticks-74)), and the nullable `orders.label` column is
+unused.
 
 **How it was served** *(#60)*: `service_type` (`dine_in` | `takeaway`, null for
 neither), `table_number` (1 to 999, only on dine-in), and `table_shared`. The
@@ -299,7 +301,9 @@ touches the permanent bill-number counter.
 
 **`order_items`** — `id`, `order_id`, `menu_item_id`, captured `item_name` and
 `unit_price_paise`, `quantity`, `line_total_paise`. Existing lines retain their
-snapshot through later menu changes.
+snapshot through later menu changes. `note` is a nullable instruction for the
+kitchen, written only while `dish-ticks` is on (see [Dish ticks](#dish-ticks-74));
+a bill line never copies it.
 
 `kind` (`item` | `packaging`, default `item`) *(#60)*. A packaging line is named
 *Packaging*, has no `menu_item_id` and no category — so no menu discount can reach
@@ -413,7 +417,9 @@ confirmation. No client role may run it or write the column. A counter Prepared
 command delivered after the stamp, with an earlier command time, replaces it with
 the counter's time and source; a payment take-back clears it. Rows prepared before
 #69 — including those the retired laptop repair stamped at `paid_at` — read
-`counter`, because nothing tells them apart.
+`counter`, because nothing tells them apart. With `dish-ticks` on, a counter's
+`prepared_at` is derived from the dishes rather than ticked as a whole; see
+[Dish ticks](#dish-ticks-74).
 
 **`billing_commands`** — compact idempotency receipts containing envelope
 identity, attribution, command type/version/hash, client and server clocks,
@@ -1366,11 +1372,102 @@ One answer per gate for the whole business, turned by the owner (see [Releases](
 - **`app_change_gate(key)`** is what a gated trigger, policy or function asks: true only while the gate and everything it depends on is on.
 - **A tablet writes only its own health row**: `report_device_health` takes the device and outlet from the tablet's session, never from its arguments.
 
-## Retained rollback compatibility
+## Dish ticks *(#74)*
 
-The retired dish workflow leaves `orders.label`, `order_items.note`,
-`order_line_preparations` and append-only `kitchen_readies` in the database for
-history and delivery of previously queued commands. The restored counter and
-kitchen do not consume these fields or use Ready to determine preparation.
-The additive dish-command receipt type and RPC remain accepted during the
-transition; bill identities, money and recorded whole-order preparation survive.
+Behind the `dish-ticks` change gate, and `kitchen-ready`, which depends on it, for
+Ready. The model above is the model with both gates off, and none of it changes:
+everything here only adds, and the `_v2` functions below are called only by the
+on path. With a gate off, nothing in this section is read or written by the
+counter or kitchen, and the rows stay. The migration inserts both gate rows, off,
+and the dependency row.
+
+**`order_labels`** — `order_id` (primary key, references `orders`), `outlet_id`,
+`label` (trimmed, 1–24 characters). One row per labelled order, written by
+`create_billing_order_v2` and `revise_billing_order_v2` — a blank label deletes
+the row — and embedded in the on path's order read, so a label costs no request.
+RLS: select for a live counter shift at its own outlet, the outlet's Franchise
+Admins and the owner; **no kitchen select**; no client write. Never copied to a
+bill. **It lives only while its order is on the rail.** `orders_label_leaves_the_rail`,
+an `after update` trigger on `orders`, deletes the label once the order is
+cancelled, or paid with `prepared_at` set — every path that finishes an order, the
+counter's tick, a payment, the day change — and returns at once unless
+`app_change_gate('dish-ticks')`. While the gate is off nothing clears a label and
+no screen reads one; the on path's next `create_billing_order_v2` at that outlet
+first deletes the labels of every order already off the rail, which is the sweep.
+
+**`orders.label`** — a nullable column and its shape check, unused. The order
+guard every published build's writes run through refuses any change to it, so
+labels moved to their own table rather than the guard being replaced. Dropped by
+the retirement's contract migration.
+
+**`order_items.note`** — nullable, trimmed to 1–60 characters, allowed only on
+`kind = 'item'` lines by check constraint, carried as an optional `note` key on
+each line of the on path's create and revise commands. Carries no amount, so bill
+arithmetic is unchanged; copied to no bill line. A *locked* line — ticked, or with
+Ready quantity — keeps its note: a revision that changes it is accepted with the
+note unchanged, so a queued edit never becomes needs-attention work. The older
+create and revise functions accept the key and drop it, and a build reading
+`order_items(*)` ignores the extra field.
+
+**`order_line_preparations`** — `order_item_id` (primary key, references
+`order_items` on delete cascade), `outlet_id`, `order_id`, `quantity` (the line's
+quantity when it was ticked), `prepared_at`, `shift_id`, `person_id`. A line is
+**ticked** while that quantity is at least its current quantity, so a quantity
+raised later shows the extra unticked. Written only by `prepare_order_lines_v2`,
+the idempotent `prepare_order_lines` command; an untick deletes the row; a removed
+line takes its row with it. RLS: select for a live counter shift at its outlet and
+its managers; no kitchen select (a kitchen learns of ticks through the board); no
+client write.
+
+**Prepared is derived from the dishes.** After applying its lines,
+`prepare_order_lines_v2` sets the order's `prepared_at` to its own time and
+`prepared_source` to `counter` when every item line is ticked, and clears both
+when one is not and the order is open. A finished order is never reprepared by an
+untick, and a tick landing on an order the day change finished replaces the
+cutover with its earlier time (#69). `revise_billing_order_v2` clears an open
+order's counter-set `prepared_at` when the revision leaves an item line unticked.
+**An order prepared the old way reads every dish ticked.** A whole-order
+`set_order_preparation`, queued while the gate was off and delivered while on, or
+the day change, sets `prepared_at` and writes no tick rows; the on path reads
+every item line of a prepared order as ticked, in the server and the client.
+Before an untick, `prepare_order_lines_v2` writes tick rows for the order's
+untouched item lines at the order's preparation time, so unticking one dish never
+unticks the rest. Read the other way, the old counter shows an order Prepared
+exactly when `prepared_at` is set, so an order the on path has only partly ticked
+reads unprepared there, and the old kitchen board shows all of its food.
+
+**`kitchen_readies`** — `id` (client UUID, idempotent), `outlet_id`, `device_id`,
+`shift_id`, `person_id`, `order_id`, `lines` (jsonb, `[{ id, quantity }]` as the
+kitchen saw them), `undoes` (null, or the Ready an Undo row reverses) and `at`.
+Append-only by trigger; written only by `kitchen_ready_v2` and
+`kitchen_ready_undo_v2`, which need a live kitchen shift and are online-only like
+ACK. A Ready is not refused for a stale version: what the kitchen saw is what it
+made. A dish's **ready quantity** is the sum of its quantities over Ready rows no
+Undo reverses, capped at the line's current quantity, so a quantity lowered
+meanwhile is capped and one raised leaves the extra owed. **Ready answers for
+ACK:** `kitchen_ready_v2` also records an acknowledgement of the order's current
+version when the kitchen has none, timed just before the Ready, so the old board
+and bell read a Done order as seen. RLS: select for the writing kitchen shift's
+outlet and the outlet's managers; no client write.
+
+**The on path's reads.** `kitchen_board_v2()` returns narrow tickets with *owed*
+quantity (quantity less the greater of ready and ticked), notes and ticket numbers
+(*#N · n*, n one more than the kitchen's unreversed Readies of the order), and
+Done receipts for Ready food not yet ticked at the counter. It judges New, Edited
+and Cancelled against acknowledgements made after the tablet's latest unreversed
+Ready, through its current filter, with the current tick and Ready subtracted from
+both sides so a tick after an ACK stays silent. It returns no label, customer
+column, price or payment fact. `counter_kitchen_marks_v2()` adds, per open order,
+each item line's ready quantity (line id to quantity) and, per kitchen, a
+`dishStates` entry — sent, acknowledged, ready or handed over, null where that
+kitchen does not carry the order — with no dish-to-kitchen mapping, person or
+time. `kitchen_acknowledge_v2()` records the kitchen's full visible lines, notes
+included. **Acknowledgements are full snapshots on both paths**, so either board
+reads the other's: after the gate turns off, an acknowledged order with food
+already handed over shows on the old board in full and quiet, never ringing.
+
+**Isolation.** `order_labels`, `order_line_preparations` and `kitchen_readies`
+is probed in `supabase/tests/rest/dish-ticks-isolation.test.ts`, run as its own
+`test:rls` phase: a counter shift, a kitchen shift and a Franchise Admin of one outlet hand-craft a
+read of the other outlet's rows and receive nothing, and every client role's
+direct insert, update and delete is refused.

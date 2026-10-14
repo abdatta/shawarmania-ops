@@ -77,7 +77,9 @@ device keeps its last answer.
 the other. Anything the new path saves must survive the gate turning off: a gate
 is declared `roundTrip: 'tested'`, with a browser test that does new work, turns
 that one gate off and finishes the work on the old path, or `roundTrip: 'none: …'`
-saying why nothing can be stranded.
+saying why nothing can be stranded. Where the new path's queued work must reach
+new functions, the command carries a `variant` naming them, so the outbox routes
+by the command and not by a gate ([the worked example](#a-commands-variant-reaches-the-functions-it-was-written-for)).
 
 ## The life of a change
 
@@ -189,17 +191,53 @@ Every pairing of a build with the schema must work.
   the fallback, on is every release. Two gates that do interact say so in their
   designs and add a test for the pair.
 
+## The first real gate pair: dish ticks and kitchen Ready
+
+#74 reached the counters on 12 October as a change with no switch and froze them. It returned behind two gates, and is the worked example of everything above.
+
+| Gate | Code | Depends on | On | Off |
+|---|---|---|---|---|
+| `dish-ticks` | DT | — | The counter is the menu and a two-column rail with Bills and Expenses below; orders take a label, dishes take notes, each dish is ticked off on its own, and the kitchen sees only the food it still owes. | The counter and kitchen as they were before #74: three columns, one Prepared tick per order, no labels or notes. |
+| `kitchen-ready` | KR | `dish-ticks` | The kitchen marks its food Done; on the counter those dishes fill orange and the order's bell swings to the handbell. | The kitchen has ACK only, as before #74. |
+
+Ready is its own gate because it is the riskiest part to turn on — the counter's only sound, and a new habit for the kitchen — and the owner may want the ticks without it. The layout is not a third gate: it exists to give the rail room for the ticks and the composer, and has no use alone. Ready depends on the ticks because its whole effect on the counter is on a dish row only the ticks draw.
+
+**Where the code forks.** `useChangeGate('dish-ticks')` is read where the counter and the kitchen choose their screen, and the on path's screens are new files beside the old ones; the old files are not edited beyond that one choice, and `kitchen-ready` is read inside the on path. The live adapters are built with the page's boot answer, so with the gate off their requests are today's, request for request. Database objects are new too: `_v2` functions beside the ones the published counter calls, one new table for labels, and one trigger on `orders` that does nothing unless `dish-ticks` is on. Every `_v2` function was first created by a migration declaring `-- change-gate: dish-ticks`, so a fix during staging may replace it.
+
+### A command's variant reaches the functions it was written for
+
+The outbox never reads a gate, yet an order queued under the on path must reach `create_billing_order_v2` and one queued under the off path `create_billing_order`, whatever the gate says when the queue drains. The command *type* cannot carry the difference: `billing_commands.command_type` is a check on an existing table, and a new value would be a new constraint. So the envelope gains an optional **`variant: 'dishes'`**, set by the on path's adapter when it accepts a command and never by the off path's. The function is chosen from the type and the variant — `create_order`, `revise_order` and `prepare_order_lines` with the variant go to their `_v2` — and every other command, and every envelope without the field, goes where it always went. The field sits outside the payload, so the payload hash and the server's replay check are unchanged and an off-path envelope is byte for byte today's. A command keeps its variant for its whole life, which is what makes a tick queued while on safe to deliver after the gate is off. Use it when a future change needs queued work to reach new functions.
+
+### What Off does with what On saved
+
+On saves data the old counter and kitchen must live with, so Off is not simply today for orders already on the rail. None of it is a product choice — each answer is the old screens reading the rows as they always have — but it is what the owner will see when turning a gate off, and the release workflow says it.
+
+- **A dish already ticked.** The old counter shows an order Prepared only once every dish was ticked; a partly ticked order reads unprepared, and the old kitchen board shows all of its food again, quietly, as acknowledged, never ringing.
+- **A dish the kitchen marked Ready.** The same: Ready answers for ACK in the data, so the old kitchen does not ring for it. With only `kitchen-ready` off, Ready food stays off the kitchen's board and the counter shows it as an ordinary unticked dish.
+- **A note.** The old kitchen board does not show notes, so an order already taken with *No sauce* loses the words on the kitchen's screen. Say them aloud while the gate is off.
+- **A label.** The old screens never show it, and nothing clears it while off; the on path's next order at that outlet removes the labels of orders already off the rail.
+- **Queued work.** A dish tick or a labelled order queued while on is delivered after Off, to the functions it was written for.
+
+Going the other way, an order the old path prepared reads with every dish ticked. The round-trip tests (`@cg-round-trip:dish-ticks`, `@cg-round-trip:kitchen-ready`) prove each of these.
+
+### Releasing the pair
+
+Push to `stage`; Staging runs the suite in both states and publishes the staging site. The owner turns `dish-ticks`, then `kitchen-ready`, on in staging's Change gates page and runs *Cafe Staging* as an outlet, including the handbell by ear. An agent runs `npm run test:e2e:staging`. A Promote in the owner's deploy window ships both off; `/release dish-ticks` at a quiet hour, watching each tablet's requests on the gate's page through the next service; one pull, off and on; then `kitchen-ready` the same way. Archive waits for real use and the pull.
+
 ## The request budget
 
 `e2e-auth/request-budget.spec.ts` signs in a counter and a kitchen against the
 local stack, rings eight orders, leaves both idle, and counts every request to
 the Supabase origin for a measured minute — then one ACK at the kitchen and one
-payment at the counter. The Realtime socket is one connection and is not
-counted. The budgets were measured on the build before any gated change and set
-at one and a half times the worst reading; the readings, their date and commit
-are in the test. It runs in both states, and #74's build fails it. A change
-that needs more requests raises the budget in its own diff, where a reviewer
-sees the number move.
+payment at the counter, and, with the dish gates on, one dish tick. The
+Realtime socket is one connection and is not counted. The budgets were measured
+on the build before any gated change and set at one and a half times the worst
+reading; the readings, their date and commit are in the test. It runs in both
+states, and the on path of #74 holds it: it reads when something tells it to —
+its own write, the kitchen pulse, a return to the foreground — and never on a
+timer, which is what the 12 October build did. A change that needs more
+requests raises the budget in its own diff, where a reviewer sees the number
+move.
 
 ## Tablet health
 

@@ -118,6 +118,10 @@ Values the ops portal needs that the marketing site has no equivalent for. They 
 | `--color-danger` | `#b91c1c` | |
 | `--color-warning` | `#b45309` | Deep enough to carry white text |
 | `--color-on-warning` | `#ffffff` | |
+| `--color-dish-ready` | `#c2410c` | The counter's Ready dish row fill (#74) — the primary, as a role of its own so it can part from it. Used only with `dish-ticks` and `kitchen-ready` on |
+| `--color-on-dish-ready` | `#ffffff` | Dish name, quantity and checkbox on that fill; the primary button's pair, already validated |
+| `--dish-ready-shine` | white at 55% | The band that crosses a Ready row; decoration, not gated. The same in both themes |
+| `--color-danger-critical` | `#991b1b` | A counter order's age ring from forty minutes, darker than `--color-danger` so the step from twenty to forty reads |
 | `--color-marker-veg` | `#16a34a` | The veg dot — non-text (3.3:1), so the brand green stands |
 | `--color-marker-nonveg` | `#b91c1c` | The non-veg dot |
 | `--color-member` | `#b45309` | The gold member star's outline — what carries its 3:1 against a card |
@@ -142,6 +146,10 @@ Values the ops portal needs that the marketing site has no equivalent for. They 
 | `--color-danger` | `#f87171` | **Lightened.** `#b91c1c` on the dark canvas is ~2.9:1 and fails |
 | `--color-warning` | `#fbbf24` | |
 | `--color-on-warning` | `#1c1917` | Ink on amber, never white |
+| `--color-dish-ready` | `#f97316` | The Ready dish row fill: the brand orange |
+| `--color-on-dish-ready` | `#1c1917` | Ink on that orange |
+| `--dish-ready-shine` | white at 55% | As in light |
+| `--color-danger-critical` | `#f25e5e` | The forty-minute age ring: the step beyond `--color-danger`, lightened as the dark ground needs |
 | `--color-marker-veg` | `#4ade80` | |
 | `--color-marker-nonveg` | `#f87171` | |
 | `--color-member` | `#ffc53d` | Gold carries itself on a dark ground |
@@ -248,6 +256,18 @@ The counter numbers are larger on purpose. Billing happens fast, one-handed, som
 ## Analytics series
 
 Analytics comparison series use semantic `--primary`, `--chart-previous`, `--chart-earlier` and `--chart-oldest`: orange, slate, blue and violet, corrected for each theme. Columns use solid rounded fills and numbered legends in stable left-to-right period order; no hatch textures. Lines also retain distinct dash patterns. Numbered badge ink uses `--surface`; the contrast validator gates all four fill/ink pairs at 4.5:1, also exceeding the 3:1 needed for chart marks against their surface. These are data-series roles, separate from success/danger status semantics.
+
+## The counter's dish rows and Ready *(#74)*
+
+With `dish-ticks` off, the pipeline card is the one under *A checkbox in a button states a fact*: two toggle buttons, Prepared and Paid. With it on, the card's dishes carry the state instead (see [Screens](SCREENS.md#the-counter-with-dish-ticks-on)).
+
+- **A dish row has three states**, told apart by more than colour. Waiting: gray text, an empty 15px checkbox. Ticked: orange text, a filled checkbox with a check, and no filled row. Ready, with `kitchen-ready` on: the whole row filled. The checkbox is fixed at 15px — smaller than the 17px Paid box and unchanged when a note or wrapping makes the row taller — and the quantity is always a separate visible element. Rows are 6px apart with vertically centred contents; they show a hand cursor and a faint shadow on mouse hover, and look the same on touch. Tokens for the checkbox and the ticked text are semantic and contrast-validated in both themes.
+- **The Ready fill** is `--color-dish-ready` behind `--color-on-dish-ready`, whole-row, with the checkbox drawn on it in gray. It is a fill because the biller misses a quiet cue while dealing with a customer, and it has to read from across a counter in both themes.
+- **The shine** is the menu page's offer-banner shine, in CSS alone: a 105-degree band, transparent to `--dish-ready-shine` at the middle and back, crossing the row left to right over 2.4 seconds with a 1.2 second delay, repeating until the dish is ticked.
+- **The bell swings** only while a Ready is being announced: a short rocking about a point near the top of the bell, 440 ms a swing, for about nine seconds, and it is still at every other time. The handbell is synthesised in the browser: a four-strike figure played twice, about three seconds; it is the counter's only sound.
+- **Under reduced motion** the fill stays and the shine and the swing do not move; a retiring kitchen receipt only fades.
+- **The age ring** shows total minutes, never `1h`, in its existing footprint: neutral, warning from ten, `--color-danger` from twenty, `--color-danger-critical` from forty. The gold star overlaps the order number without taking headline width.
+- **Shimmers follow the layout.** The counter's loading shapes reserve both rail columns, the Expenses and Bills panels at their loaded widths, and the kitchen's responsive columns.
 
 ## What we deliberately do not import from the marketing site
 

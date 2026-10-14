@@ -239,6 +239,18 @@ A tablet keeps running the change-gate answers it loaded with (see [Releases](RE
 
 **The outbox never reads a gate.** A bill queued while a gate was on is sent after it turns off, and the other way round, so turning a gate off can never strand queued work. A test fails if anything under `src/outbox/` imports the gate store. A change whose new path saves something declares how turning it off was proved to strand nothing.
 
+### Dish ticks, offline
+
+With `dish-ticks` off the outbox carries exactly the commands described above. With it on, three things join them (#74).
+
+- **`prepare_order_lines` is a command like any other.** A dish tick or untick is a durable, client-UUID, idempotent envelope, drained in order on the same dependency chain as that order's revisions and payment. The tick shows at once from the outbox's optimistic state, survives a reload and an offline reopen, and a tick for a line removed meanwhile is accepted and changes nothing. A label and a dish note ride the existing create and revise envelopes as optional keys, so a command queued without them stays valid.
+- **A command's `variant` says which functions it was written for.** The on path's adapter stamps an optional `variant: 'dishes'` on an envelope as it accepts it, and the off path never does. The function a command is delivered to is chosen from its type and variant: `create_order`, `revise_order` and `prepare_order_lines` with the variant go to their `_v2` functions, and everything else, and every envelope without the field, goes where it has always gone. The command *type* cannot change, because `billing_commands.command_type` is a check constraint on an existing table, so the variant is the route. It is envelope metadata, outside the payload, so the payload hash and the server's replay check are untouched, and an off-path envelope is byte for byte what it was before. **A command keeps its variant for its whole life**, so work queued while the gate was on is delivered to `_v2` after it turns off, to the functions it was written for, which stay published while the gate exists. The outbox still reads no gate: it reads the command.
+- **Ready and Undo are online-only kitchen actions**, like ACK. A failed one keeps the earlier state and says so. The counter fills a dish only from a read it has made: offline it shows the last readiness it read and rings only for a Ready it reads arriving.
+
+The on path adds no read on a timer. The counter re-reads the rail after its own writes, its kitchen marks on mount, after a rail reload and on the kitchen pulse (Realtime), and both on a return to the foreground or the network — the reads the off path makes, and no others.
+
+A whole-order Prepared queued while the gate was off and delivered while it is on marks the order prepared without tick rows; the on path reads every dish of a prepared order as ticked ([Data Model](DATA_MODEL.md#dish-ticks-74)).
+
 ## Moving a tablet between outlets
 
 Editing a tablet's name or current outlet is an **online administrative

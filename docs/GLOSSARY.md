@@ -52,7 +52,8 @@ open and belongs to the tablet that created it. Full payment converts it to an
 immutable bill; cancellation keeps attributed history and consumes no bill number.
 Its preparation is finished by the counter's **Prepared** tick or, for a paid
 order nobody ticked, by the **day change** at the cutover ending its payment's
-business day (#69).
+business day (#69). With `dish-ticks` on, the counter finishes it by
+[ticking](#tick) every dish.
 
 ### Order number
 
@@ -153,6 +154,34 @@ A shift on a kitchen tablet. Opened by the counter's handshake and held by the s
 ### ACK
 
 A kitchen's acknowledgement of a card that is alerting — new, edited or cancelled. Stored per kitchen tablet with the lines it acknowledged, so the next edit is diffed against it after a reload.
+
+### Label
+
+*(#74, `dish-ticks`.)* A few optional letters typed at the top of the composer — a name, "red shirt" — that headline an order's card on the counter and nowhere else. Not a customer: it never touches the customer's name or phone, though at payment it is offered as the name for a number with none. Thrown away, in the database, when the order leaves the rail; on no receipt, bill, report or export, and never shown to a kitchen. Held in `order_labels`.
+
+### Note
+
+*(#74.)* A short instruction on one dish line — *No sauce* — written in the composer, shown under that dish on the counter's card and on the card of the kitchen that shows it. Carries no price and is on no receipt. Not a note on the whole order, and not on a packaging line.
+
+### Locked dish
+
+*(#74.)* A line the kitchen has marked Ready or the counter has ticked. Tapping its menu tile or its + starts a new line instead of raising it, and its note can no longer change; − still works.
+
+### Tick
+
+*(#74.)* The counter's record, per dish, that the food has been handed over; the dish turns orange with a filled checkbox. An order's **Prepared** follows its dishes — Prepared is every dish ticked — and an order marked prepared any other way reads every dish ticked.
+
+### Ready / Done
+
+*(#74, `kitchen-ready`.)* The kitchen's record that it has made food: **Done** is the control on the kitchen's ticket and **Ready** is what the counter sees, the dish row filling orange with the handbell and the order's swinging bell. Append-only and undoable; Ready never ticks anything, and handover at the counter is a tick.
+
+### Ticket
+
+*(#74.)* A kitchen card for the food it still owes on one order. Food added after a Ready arrives as a **later ticket** numbered *#42 · 2*; a Done ticket is kept as a gray **receipt** until its food is ticked at the counter. The counter's rail card is also called a ticket, for its torn edge; the surface says which.
+
+### Variant
+
+*(#74.)* The optional field on an outbox command that says which functions it was written for — `variant: 'dishes'` sends it to the `_v2` functions the dish ticks use. It is how queued work reaches the functions it was written for after a gate turns, because the outbox reads no gate. Absent on every off-path command.
 
 ### Shift
 
