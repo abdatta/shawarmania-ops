@@ -1051,7 +1051,7 @@ describe('BillingCounter with the dish ticks on', () => {
     expect(added!.orderLineId).toBeUndefined()
   })
 
-  it('grows one new line when a locked dish is stepped up, not a line per tap', async () => {
+  it('steps a partly made dish as one row, saving the added food as one new line', async () => {
     const store = dishStore()
     const saved = store.orders.find((order) => order.order_number === 104)
     if (!saved) throw new Error('Expected the demo open order')
@@ -1075,9 +1075,20 @@ describe('BillingCounter with the dish ticks on', () => {
     )
     await person.click(within(openOrder).getByRole('menuitem', { name: 'Edit' }))
 
+    // One row, with its true total and what is made; no Locked.
     const more = () => screen.getAllByRole('button', { name: 'One more Classic Chicken Shawarma' })
+    expect(more()).toHaveLength(1)
     for (let tap = 0; tap < 3; tap++) await person.click(more()[0]!)
-    expect(more()).toHaveLength(2)
+    expect(more()).toHaveLength(1)
+    expect(screen.getByTestId(`bill-quantity-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent(
+      String(classic.quantity + 3),
+    )
+    expect(screen.getByTestId(`bill-made-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent(
+      `${classic.quantity} made`,
+    )
+    expect(screen.queryByText('Locked')).toBeNull()
+    // Less takes off the food not made yet first.
+    await person.click(screen.getByRole('button', { name: 'One fewer Classic Chicken Shawarma' }))
     await person.click(screen.getByTestId('save-order'))
 
     await waitFor(() => expect(reviseOrder).toHaveBeenCalledTimes(1))
@@ -1086,7 +1097,7 @@ describe('BillingCounter with the dish ticks on', () => {
     )
     expect(lines).toHaveLength(2)
     expect(lines[0]).toMatchObject({ orderLineId: classic.id, quantity: classic.quantity })
-    expect(lines[1]!.quantity).toBe(3)
+    expect(lines[1]!.quantity).toBe(2)
     expect(lines[1]!.orderLineId).toBeUndefined()
   })
 

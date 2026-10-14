@@ -54,6 +54,82 @@ export function dishLineKey(line: {
     : (line.workflowLineId ?? line.orderLineId ?? line.menuItemId)
 }
 
+/** How much of a line the kitchen has made or the counter has handed over. */
+export function dishMade(line: DishLineFacts): number {
+  return Math.min(line.quantity, Math.max(line.preparedQuantity ?? 0, line.readyQuantity ?? 0))
+}
+
+/** One row of the composer: every line of one dish, note and price. */
+export interface DishRow<T extends DishLineFacts> {
+  /** The key of the row's first line: its controls are called by it. */
+  key: string
+  lines: T[]
+  quantity: number
+  /** How much of it is made: Done or handed over. */
+  made: number
+  /** The line more food goes on and a note applies to: the newest not made. */
+  growing: T | null
+}
+
+/**
+ * The composer's rows (owner, 2026-10-14). A dish the kitchen has partly made
+ * is still one row in the composer, with its true total: the made food and the
+ * food added since are separate lines only because a rail row ticks as one and
+ * the kitchen sends later food as its own ticket. Those are the rail's and the
+ * kitchen's, so the composer joins them again — by dish, note and captured
+ * price, since a line at an older price or with another note is a different sale.
+ */
+export function dishRows<T extends DishLineFacts & { kind?: LineKind | null }>(
+  lines: readonly T[],
+): DishRow<T>[] {
+  const rows: DishRow<T>[] = []
+  const byDish = new Map<string, DishRow<T>>()
+  for (const line of lines) {
+    const dish = isPackagingLine(line)
+      ? null
+      : `${line.menuItemId}|${line.note ?? ''}|${line.unitPricePaise}`
+    const row = dish === null ? undefined : byDish.get(dish)
+    if (row) {
+      row.lines.push(line)
+      row.quantity += line.quantity
+      row.made += dishMade(line)
+      if (!dishLocked(line)) row.growing = line
+      continue
+    }
+    const fresh: DishRow<T> = {
+      key: dishLineKey(line),
+      lines: [line],
+      quantity: line.quantity,
+      made: dishMade(line),
+      growing: dishLocked(line) ? null : line,
+    }
+    rows.push(fresh)
+    if (dish !== null) byDish.set(dish, fresh)
+  }
+  return rows
+}
+
+/**
+ * The rail's rounds of an order (design R12): the lines it was created with,
+ * then each edit's additions in the order they were made. The rail draws a
+ * plain divider between rounds, so the same dish appearing twice says why —
+ * as the kitchen numbers the same food #N · 2 (owner, 2026-10-14).
+ */
+export function dishRounds<T extends { addedAt?: string }>(
+  lines: readonly T[],
+): { line: T; index: number }[][] {
+  const first: { line: T; index: number }[] = []
+  const later = new Map<string, { line: T; index: number }[]>()
+  lines.forEach((line, index) => {
+    if (!line.addedAt) first.push({ line, index })
+    else later.set(line.addedAt, [...(later.get(line.addedAt) ?? []), { line, index }])
+  })
+  const rounds = [...later.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, round]) => round)
+  return first.length > 0 ? [first, ...rounds] : rounds
+}
+
 /** The newest unnoted, unlocked line is the one a menu tap can grow. */
 export function addDish<T extends DishLineFacts>(lines: readonly T[], fresh: T): T[] {
   const index = lines.findLastIndex(

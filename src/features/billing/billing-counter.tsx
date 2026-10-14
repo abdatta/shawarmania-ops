@@ -310,6 +310,8 @@ export function BillingCounter({
   const kitchenMarks = useKitchenMarks()?.marks
   const [label, setLabel] = useState('')
   const [noteLine, setNoteLine] = useState<BillLineDraft | null>(null)
+  /** How much of the noted row is made: its note is for the rest. */
+  const [noteMade, setNoteMade] = useState(0)
   const [railLabels, setRailLabels] = useState<string[]>([])
   const resume = counterDevice?.offlineResume
   const { billing, counter, customers, menu: menuAdapter, outlets } = useAdapters()
@@ -860,20 +862,21 @@ export function BillingCounter({
         dishLocked(billLines.find((item) => dishLineKey(item) === dishLineKey(line)) ?? line)
       const stepped = dishWorkflow ? lines.find((line) => dishLineKey(line) === key) : undefined
       let next: BillLineDraft[]
-      if (stepped && delta > 0 && locked(stepped)) {
+      if (stepped) {
         /*
-          A locked dish is the kitchen's or handed over, so more of it is food
-          on a line of its own — and the next tap grows that line, as a menu tap
-          would, rather than starting another line of one each time.
+          A composer row is a dish, note and price, whatever lines it is made of
+          (owner, 2026-10-14): food the kitchen has made, or the counter handed
+          over, stays on its own line for the rail and the kitchen, and the row
+          shows them together. So + grows the food not made yet, and starts a
+          line for it when there is none; − takes off food not made yet first.
         */
-        const growing = lines.findLastIndex(
-          (line) => line.menuItemId === stepped.menuItemId && !line.note && !locked(line),
-        )
-        if (growing >= 0) {
-          next = lines.map((line, position) =>
-            position === growing ? withQuantity(line, line.quantity + 1) : line,
-          )
-        } else {
+        const inRow = (line: BillLineDraft) =>
+          !isPackagingLine(line) &&
+          line.menuItemId === stepped.menuItemId &&
+          (line.note ?? '') === (stepped.note ?? '') &&
+          line.unitPricePaise === stepped.unitPricePaise
+        const unmade = lines.findLastIndex((line) => inRow(line) && !locked(line))
+        if (delta > 0 && unmade < 0) {
           const item = menu
             ?.flatMap((category) => category.items)
             .find((item) => item.id === stepped.menuItemId)
@@ -882,24 +885,31 @@ export function BillingCounter({
             { categoryId: item.category_id, unitPricePaise: item.price_paise, quantity: 1 },
             discountRules,
           )
-          next = lines.flatMap((line) =>
-            line === stepped
-              ? [
-                  line,
-                  {
-                    workflowLineId: newUuid(),
-                    menuItemId: item.id,
-                    itemName: item.name,
-                    unitPricePaise: item.price_paise,
-                    quantity: 1,
-                    ...discount,
-                    categoryName: categoryNameById.get(item.category_id) ?? null,
-                  },
-                ]
-              : [line],
-          )
+          next = [
+            ...lines,
+            {
+              workflowLineId: newUuid(),
+              menuItemId: item.id,
+              itemName: item.name,
+              unitPricePaise: item.price_paise,
+              quantity: 1,
+              ...discount,
+              categoryName: categoryNameById.get(item.category_id) ?? null,
+              ...(stepped.note ? { note: stepped.note } : {}),
+            },
+          ]
+        } else {
+          const target = unmade >= 0 ? unmade : lines.findLastIndex(inRow)
+          next = lines.flatMap((line, position) => {
+            if (position !== target) return [line]
+            const quantity = line.quantity + delta
+            // Below one there is no line: taking the last one off is how a
+            // line is removed.
+            return quantity < 1 ? [] : [withQuantity(line, quantity)]
+          })
         }
         setLines(next)
+        if (next.length === 0 && editingOrder === null) resetBillContext()
         return
       }
       next = lines.flatMap((line) => {
@@ -1419,7 +1429,10 @@ export function BillingCounter({
                         )}
                       </div>
                     ),
-                    onNote: (line: BillLineDraft) => setNoteLine(line),
+                    onNote: (line: BillLineDraft, made: number) => {
+                      setNoteLine(line)
+                      setNoteMade(made)
+                    },
                   }
                 : {})}
               onChangeQuantity={changeQuantity}
@@ -1628,6 +1641,7 @@ export function BillingCounter({
         <DishNoteSheet
           key={dishLineKey(noteLine)}
           line={noteLine}
+          made={noteMade}
           onClose={() => setNoteLine(null)}
           onSave={(note, onlyOne) => {
             const item = menu

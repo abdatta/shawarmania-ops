@@ -22,6 +22,7 @@ import type { BillingOrder } from '@/data-access/adapters'
 import type { KitchenAnswer, KitchenBell, KitchenDishState, SharedTable } from '@/domain'
 import {
   dishAge,
+  dishRounds,
   isAwaitingOrderNumber,
   serviceTypeLabel,
   tableLabel,
@@ -530,26 +531,52 @@ export function PipelineCard({
             aria-label={`Items for ${reference}`}
           >
             {dishTicks ? (
-              order.lines.map((line, index) =>
-                line.kind === 'packaging' ? (
-                  <li key={index} className="text-xs text-content-muted">
-                    {line.quantity} {line.itemName}
-                  </li>
-                ) : (
-                  <ReadyDish
-                    readyOn={readyOn}
-                    key={line.orderLineId ?? index}
-                    line={line}
-                    readyQuantity={
-                      readyQuantities[line.orderLineId ?? ''] ?? line.readyQuantity ?? 0
-                    }
-                    interactive={!foreignTill && (tickable ?? !busy) && onTickLine !== undefined}
-                    onTick={() =>
-                      onTickLine?.(line.orderLineId!, (line.preparedQuantity ?? 0) < line.quantity)
-                    }
-                  />
-                ),
-              )
+              <>
+                {/* Each edit's food below a plain divider (design R12). */}
+                {dishRounds(order.lines.filter((line) => line.kind !== 'packaging')).flatMap(
+                  (round, roundIndex) => [
+                    ...(roundIndex > 0
+                      ? [
+                          <li
+                            key={`round-${roundIndex}`}
+                            role="separator"
+                            aria-label="Added later"
+                            data-testid="dish-round-divider"
+                            className="mt-2! mb-0.5 border-t border-dashed border-border"
+                          />,
+                        ]
+                      : []),
+                    ...round.map(({ line, index }) => (
+                      <ReadyDish
+                        readyOn={readyOn}
+                        key={line.orderLineId ?? index}
+                        line={line}
+                        readyQuantity={
+                          readyQuantities[line.orderLineId ?? ''] ?? line.readyQuantity ?? 0
+                        }
+                        interactive={
+                          !foreignTill && (tickable ?? !busy) && onTickLine !== undefined
+                        }
+                        onTick={() =>
+                          onTickLine?.(
+                            line.orderLineId!,
+                            (line.preparedQuantity ?? 0) < line.quantity,
+                          )
+                        }
+                      />
+                    )),
+                  ],
+                )}
+                {/* The bags are the order's, not a round's: last, after every
+                    divider, just above the footer (owner, 2026-10-14). */}
+                {order.lines
+                  .filter((line) => line.kind === 'packaging')
+                  .map((line, index) => (
+                    <li key={`packaging-${index}`} className="text-xs text-content-muted">
+                      {line.quantity} {line.itemName}
+                    </li>
+                  ))}
+              </>
             ) : (
               <>
                 {order.lines.map((line, index) => (

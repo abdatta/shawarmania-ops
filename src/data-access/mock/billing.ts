@@ -682,6 +682,11 @@ export function createMockBillingAdapter(
           const locked =
             (notes.preparations[id] ?? 0) > 0 || (old && readyQuantity(store, id, old.quantity) > 0)
           if (!locked) notes.notes[id] = line.note?.trim() || null
+          // A line this edit adds is marked, as the database's trigger does.
+          if (!old && line.kind !== 'packaging') {
+            notes.additions ??= {}
+            notes.additions[id] = new Date().toISOString()
+          }
         }
       }
       for (const old of oldLines)

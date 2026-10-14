@@ -2,7 +2,7 @@
 
 ## 0. Before you start
 
-Read design → *Read this first* and *Relaunch under #75* (R1–R11) before anything
+Read design → *Read this first* and *Relaunch under #75* (R1–R12) before anything
 else. The first launch's tasks were ticked on 12 October and unticked by the
 rollback; these replace them. The first launch's code is at `9e916642` and is the
 reference for every screen, but it is ported onto the on path, never restored over
@@ -109,6 +109,11 @@ One migration, dated after the newest, declaring `-- change-gate: dish-ticks`.
   states and the kitchens in words, behind `dish-ticks`, read on open only; pgTAP
   89, the REST probe, unit tests in both states, the old browser test tagged
   `@cg-off:dish-ticks`.
+
+- [x] 4.7 One row per dish in the composer and each edit set apart on the rail
+  (design R12): `dishRows`, `dishRounds`, the note sheet's made count,
+  `order_line_additions` and its gated trigger, packaging last; pgTAP 90, the REST
+  probe's refusals, unit tests.
 
 ## 5. Tests in both states
 

@@ -3828,6 +3828,49 @@ export type Database = {
           },
         ]
       }
+      order_line_additions: {
+        Row: {
+          added_at: string
+          order_id: string
+          order_item_id: string
+          outlet_id: string
+        }
+        Insert: {
+          added_at?: string
+          order_id: string
+          order_item_id: string
+          outlet_id: string
+        }
+        Update: {
+          added_at?: string
+          order_id?: string
+          order_item_id?: string
+          outlet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_line_additions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_line_additions_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: true
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_line_additions_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_line_preparations: {
         Row: {
           order_id: string

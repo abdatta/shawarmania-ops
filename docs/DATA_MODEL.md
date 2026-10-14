@@ -1470,6 +1470,12 @@ included. **Acknowledgements are full snapshots on both paths**, so either board
 reads the other's: after the gate turns off, an acknowledged order with food
 already handed over shows on the old board in full and quiet, never ringing.
 
+**`order_line_additions`** — `order_item_id` (primary key, references
+`order_items`), `order_id`, `outlet_id`, `added_at`: one row per item line an edit
+added to an order that already existed, written only by a trigger on
+`order_items` that is inert while `dish-ticks` is off. The rail sets each edit's
+lines below a divider. Read like the ticks; no client writes it.
+
 **Isolation.** `order_labels`, `order_line_preparations` and `kitchen_readies`
 is probed in `supabase/tests/rest/dish-ticks-isolation.test.ts`, run as its own
 `test:rls` phase: a counter shift, a kitchen shift and a Franchise Admin of one outlet hand-craft a

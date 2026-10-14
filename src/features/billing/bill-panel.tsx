@@ -1,17 +1,10 @@
-import { LockKeyhole, Minus, Pencil, Plus } from 'lucide-react'
+import { Minus, Pencil, Plus } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Money } from '@/components/ui/money'
 import type { BillLineDraft } from '@/data-access/adapters'
-import {
-  dishLineKey,
-  dishLocked,
-  isPackagingLine,
-  isWaivedPackaging,
-  lineKey,
-  lineTotalPaise,
-} from '@/domain'
+import { dishRows, isPackagingLine, isWaivedPackaging, lineKey, lineTotalPaise } from '@/domain'
 import { cn } from '@/lib/cn'
 
 /**
@@ -47,7 +40,11 @@ export function BillPanel({
 }: {
   lines: BillLineDraft[]
   labelField?: ReactNode
-  onNote?: (line: BillLineDraft) => void
+  /**
+   * The dish ticks' note action, for a row: its line not made yet (or its first,
+   * when all of it is made) and how much of the row is made.
+   */
+  onNote?: (line: BillLineDraft, made: number) => void
   /** Keyed by `lineKey`, so the packaging line is changed like any other. */
   onChangeQuantity: (lineKey: string, delta: number) => void
   /**
@@ -68,6 +65,20 @@ export function BillPanel({
   addDiscount?: ReactNode
 }) {
   const editing = editingOrderReference !== undefined
+  /*
+    The dish ticks draw one row per dish, note and price, with its true total:
+    food the kitchen has made and food added since are separate lines only for
+    the rail and the kitchen (owner, 2026-10-14). A row's controls are called by
+    its first line's key. Off, a row is a line, as ever.
+  */
+  const rows = onNote
+    ? dishRows(lines).map((row) => ({
+        line: { ...row.lines[0]!, quantity: row.quantity },
+        key: row.key,
+        made: row.made,
+        noted: row.growing ?? row.lines[0]!,
+      }))
+    : lines.map((line) => ({ line, key: lineKey(line), made: 0, noted: line }))
 
   return (
     /*
@@ -109,16 +120,13 @@ export function BillPanel({
           </p>
         ) : (
           <ul className="divide-y divide-border">
-            {lines.map((line, index) => {
-              // The dish ticks key a line by its own identity, so a noted or
-              // locked line is its own line; the first line of a dish keeps the
+            {rows.map(({ line, key, made, noted }, index) => {
+              // A noted dish is its own row; the first row of a dish keeps the
               // menu item in its test id. Off, a line is its menu item, as ever.
-              const key = onNote ? dishLineKey(line) : lineKey(line)
               const testKey =
                 !onNote || isPackagingLine(line)
                   ? key
-                  : lines.findIndex((candidate) => candidate.menuItemId === line.menuItemId) ===
-                      index
+                  : rows.findIndex((row) => row.line.menuItemId === line.menuItemId) === index
                     ? line.menuItemId
                     : key
               const packaging = isPackagingLine(line)
@@ -142,10 +150,12 @@ export function BillPanel({
                     {onNote && line.note && (
                       <p className="text-xs font-semibold text-accent-text">{line.note}</p>
                     )}
-                    {onNote && dishLocked(line) && (
-                      <p className="flex items-center gap-1 text-xs text-content-muted">
-                        <LockKeyhole aria-hidden size={12} />
-                        Locked
+                    {onNote && made > 0 && (
+                      <p
+                        data-testid={`bill-made-${testKey}`}
+                        className="text-xs text-content-muted"
+                      >
+                        {made} made
                       </p>
                     )}
                     <Money paise={line.unitPricePaise} className="text-xs text-content-muted" />
@@ -230,8 +240,7 @@ export function BillPanel({
                       size="phone"
                       className="h-10 w-8 shrink-0 border-transparent bg-transparent px-0 shadow-none hover:border-border"
                       aria-label={`Note for ${line.itemName}`}
-                      disabled={dishLocked(line)}
-                      onClick={() => onNote(line)}
+                      onClick={() => onNote(noted, made)}
                     >
                       <Pencil aria-hidden size={15} />
                     </Button>

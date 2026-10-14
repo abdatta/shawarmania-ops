@@ -307,6 +307,14 @@ describe('dish records and labels enforce isolation over hand-crafted HTTP reque
         caller.from('order_labels').insert({ order_id: orderId, outlet_id: kpa, label: 'Mine' }),
         caller.from('order_labels').update({ label: 'Mine' }).eq('order_id', orderId),
         caller.from('order_labels').delete().eq('order_id', orderId),
+        caller
+          .from('order_line_additions')
+          .insert({ order_item_id: lineId, order_id: orderId, outlet_id: kpa }),
+        caller
+          .from('order_line_additions')
+          .update({ added_at: new Date().toISOString() })
+          .eq('order_item_id', lineId),
+        caller.from('order_line_additions').delete().eq('order_item_id', lineId),
       ]) {
         const { error } = await operation
         expect(error?.code, label).toBe('42501')

@@ -18,6 +18,8 @@ export interface DemoDishWorkflow {
   preparations: Record<string, number>
   readies: DemoReady[]
   commands: string[]
+  /** When an edit added each line, as `order_line_additions` (design R12). */
+  additions?: Record<string, string>
 }
 
 export function readyQuantity(store: DemoStore, id: string, quantity: number): number {
@@ -44,6 +46,9 @@ export function workflowLines(store: DemoStore, lines: BillLineDraft[]): BillLin
       note: store.dishWorkflow!.notes[id] ?? null,
       preparedQuantity: store.dishWorkflow!.preparations[id] ?? 0,
       readyQuantity: readyQuantity(store, id, line.quantity),
+      ...(store.dishWorkflow!.additions?.[id]
+        ? { addedAt: store.dishWorkflow!.additions[id] }
+        : {}),
     }
   })
 }

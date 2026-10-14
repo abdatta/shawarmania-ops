@@ -108,7 +108,7 @@ item's tile SHALL show the total quantity of that item across its lines.
 #### Scenario: A ready dish takes no more
 
 - **WHEN** the biller edits an order whose two Chicken Shawarmas the kitchen has marked Ready, and taps Chicken Shawarma
-- **THEN** the two stay as they are, locked, and a new line of one Chicken Shawarma is added
+- **THEN** the two stay as they are, locked, and a new line of one Chicken Shawarma is added, which the composer shows on the same row as the two
 
 ### Requirement: Pipeline orders remain editable until they are paid
 
@@ -117,7 +117,12 @@ complete quantity-and-item lines and total. A card SHALL show its temporary labe
 NOT be truncated or collapsed because these lists are preparation work. Any
 operator holding the owning tablet's live shift SHALL reopen and change lines,
 quantities, notes, label and customer form values until payment or cancellation,
-except that a locked line SHALL take no more and keep its note. No discount
+except that a locked line SHALL take no more and keep its note: the composer SHALL
+nonetheless show every line of one dish, note and captured price as one row with
+its true total and how many are made, its + SHALL grow the food not made yet (or
+start a line for it) and its − SHALL take food not made yet off first, and the
+row SHALL NOT say *Locked*. The note action on a partly made row SHALL apply to the
+food not made yet and say so; on a row all made it SHALL say the note cannot change. No discount
 control SHALL appear. The original order time and business date SHALL remain
 unchanged, and visible on the order while it is edited. On the combined tablet workspace, edit SHALL use the
 same menu and composer used for a new order, laid over the rail's left half. Any
@@ -129,10 +134,15 @@ or cancelled. Once an order is paid, revision SHALL close for it everywhere.
 - **WHEN** a pipeline order contains several different items and has a customer name
 - **THEN** every item and quantity is readable without expansion, the total is prominent, the card labels its reference as Order # followed by the number, and customer details remain in payment and edit, while a small line under the label says how long ago it was ordered
 
-#### Scenario: A locked line in the composer
+#### Scenario: A partly made dish in the composer
 
-- **WHEN** an order with a ticked line is opened for edit
-- **THEN** that line shows as locked, its + adds a new line beside it, its note cannot be changed, and its − still lowers it
+- **WHEN** an order with one ticked Paneer Shawarma is opened for edit and the biller taps its + twice
+- **THEN** the composer shows one Paneer Shawarma row of three, *1 made*, and saving keeps the ticked line and adds a new line of two
+
+#### Scenario: Each edit's food on the rail
+
+- **WHEN** an edit adds food to an order on the rail, and a later edit adds more
+- **THEN** the card lists the order's first food, then a plain dashed divider and the first edit's food, then another divider and the second's, with packaging last of all
 
 ### Requirement: A pipeline card states handover per item and payment in its footer
 

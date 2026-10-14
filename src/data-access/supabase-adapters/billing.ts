@@ -77,6 +77,8 @@ type OrderReadRow = Tables<'orders'> & {
   order_items: (Tables<'order_items'> & {
     /** Embedded only by the dish ticks' read (each-dish-is-ticked-off, design D8). */
     order_line_preparations?: { quantity: number } | { quantity: number }[] | null
+    /** Embedded only by the dish ticks' read: an edit's addition (design R12). */
+    order_line_additions?: { added_at: string } | { added_at: string }[] | null
   })[]
   /** Embedded only by the dish ticks' read; a label lives in its own table (R8). */
   order_labels?: { label: string } | { label: string }[] | null
@@ -94,7 +96,7 @@ const ORDER_SELECT =
  * as before, with two to-one embeds (each-dish-is-ticked-off, design D8, R8).
  */
 const DISH_ORDER_SELECT =
-  '*, order_items(*, order_line_preparations(quantity)), order_labels(label), order_discounts(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name)'
+  '*, order_items(*, order_line_preparations(quantity), order_line_additions(added_at)), order_labels(label), order_discounts(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name)'
 
 type BillReadRow = Tables<'bills'> & {
   bill_items: Tables<'bill_items'>[]
@@ -159,11 +161,15 @@ function allDishesTicked(lines: readonly BillLineDraft[]): boolean {
 function reviseDishLines(
   previous: readonly BillLineDraft[],
   next: BillLineDraft[],
+  /** When the edit was made: a line it adds is marked with it (design R12). */
+  at: string,
 ): BillLineDraft[] {
   return next.map((line) => {
     const old = previous.find((candidate) => candidate.orderLineId === line.orderLineId)
+    const addedAt = old ? old.addedAt : line.kind === 'packaging' ? undefined : at
     return {
       ...line,
+      ...(addedAt ? { addedAt } : {}),
       preparedQuantity: old?.preparedQuantity ?? 0,
       readyQuantity: old?.readyQuantity ?? 0,
       note:
@@ -313,6 +319,9 @@ function orderView(
             row.prepared_at !== null && item.kind === 'item'
               ? item.quantity
               : (joined(item.order_line_preparations ?? null)?.quantity ?? 0),
+          ...(joined(item.order_line_additions ?? null)
+            ? { addedAt: joined(item.order_line_additions ?? null)!.added_at }
+            : {}),
         }))
       : row.order_items.map(orderLineView),
     discounts: (row.order_discounts ?? []).map((discount) => ({
@@ -939,7 +948,11 @@ export function createSupabaseBillingAdapter(
             // The dish ticks' revision (design D6): ticks and notes stay with
             // their lines, a locked line keeps its note, and an unticked dish
             // unprepares the order, as `revise_billing_order_v2` will.
-            const lines = reviseDishLines(current.lines, lineDrafts(payload.lines))
+            const lines = reviseDishLines(
+              current.lines,
+              lineDrafts(payload.lines),
+              envelope.command.createdAt,
+            )
             overlaid.set(payload.orderId, {
               ...current,
               customerName: payload.customerName,
@@ -2003,7 +2016,7 @@ export function createSupabaseBillingAdapter(
         discountPaise: discountTotalPaise(input.lines, input.discounts ?? []),
       })
       const dishLines = dishes
-        ? reviseDishLines(existing.lines, lineDrafts(command.payload.lines))
+        ? reviseDishLines(existing.lines, lineDrafts(command.payload.lines), command.createdAt)
         : null
       const revised = {
         ...existing,

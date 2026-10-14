@@ -5,7 +5,7 @@
 This change went live on 12 October 2026, froze the counter, and was rolled back
 that evening. It relaunches under #75 (`a-release-can-be-switched-off`). Decisions
 D1–D11 below are the first launch's, and the owner approved their screens on 11
-October; they stand except where *Relaunch under #75* (R1–R11) replaces them, and
+October; they stand except where *Relaunch under #75* (R1–R12) replaces them, and
 each replaced passage says so where it sits. The decisions most often got
 backwards:
 
@@ -360,6 +360,33 @@ compact and filled in (owner: "add to today's card … compact"), drawn by
 
 **Rejected:** the counter's card, read-only, on this tab (owner chose today's card,
 compacted); a live tab (egress).
+
+### R12. A dish is one row in the composer; each edit is set apart on the rail
+
+Asked on 14 October: a + on a dish the kitchen had made added a line elsewhere in
+the composer, which the biller did not notice and read as + not working — and −
+on the same row worked, so *Locked* was inconsistent as well as unclear. The
+separate line exists for the rail (a row ticks as one) and the kitchen (later
+food is its own ticket), not for the composer, so:
+
+- **The composer joins them.** One row per dish, note and captured price, with the
+  true total and *N made* under the name (`dishRows`); no *Locked*. + grows the
+  food not made yet or starts a line for it at the menu's price; − takes food not
+  made yet off first, then made food, as − always could. The note action applies
+  to the food not made yet and says so; on a row all made it explains that the
+  note cannot change. Saving sends the lines as before.
+- **The rail sets each edit apart** with a plain dashed divider — the owner chose it
+  over a tag, a + mark, a *+1* quantity, a side bar, the ticket number and an
+  inset box — so the same dish twice reads as two rounds (`dishRounds`). A third
+  edit gets a second divider, as the kitchen's #N · 3; food added to a round
+  still unmade grows that round's line. Packaging is the order's, not a round's,
+  and sits last of all, after every divider.
+- **What an edit added** is recorded by a gated trigger in `order_line_additions`
+  (migration 20261021000000): a line inserted into an order older than the
+  transaction is an edit's, since a create shares its order's `now()` and a
+  revision's upsert takes the update path for every line it keeps. Inert while
+  `dish-ticks` is off; read like the ticks; pgTAP 90. A revision still in the
+  outbox marks its new lines with its own time, so the divider shows offline.
 
 ## The approved UI contract (11 October 2026)
 

@@ -3,6 +3,8 @@ import type { DishLineFacts } from './dish-workflow'
 import type { DishKitchenLineFacts } from './dish-workflow'
 import {
   addDish,
+  dishRounds,
+  dishRows,
   dishAge,
   diffDishKitchenLines,
   dishKitchenCardState,
@@ -247,5 +249,65 @@ describe('dishAge', () => {
 
   it('never says an order is from the future', () => {
     expect(dishAge(at, after(-3))).toBe('just now')
+  })
+})
+
+describe('dishRows', () => {
+  const line = (id: string, quantity: number, facts: Partial<DishLineFacts> = {}) => ({
+    workflowLineId: id,
+    menuItemId: 'paneer',
+    itemName: 'Paneer Shawarma',
+    unitPricePaise: 15000,
+    quantity,
+    ...facts,
+  })
+
+  it('joins a made line and the food added since into one row with the true total', () => {
+    const rows = dishRows([
+      line('made', 1, { preparedQuantity: 1 }),
+      line('mojito', 1, { menuItemId: 'mojito', itemName: 'Virgin Mojito' }),
+      line('added', 2),
+    ])
+    expect(rows.map((row) => [row.key, row.quantity, row.made])).toEqual([
+      ['made', 3, 1],
+      ['mojito', 1, 0],
+    ])
+    expect(rows[0]!.growing?.workflowLineId).toBe('added')
+  })
+
+  it('counts Ready food as made, and a row all made has nothing to grow', () => {
+    const [row] = dishRows([line('ready', 2, { readyQuantity: 2 })])
+    expect(row).toMatchObject({ quantity: 2, made: 2, growing: null })
+  })
+
+  it('keeps another note or an older price on its own row', () => {
+    const rows = dishRows([
+      line('plain', 1),
+      line('noted', 1, { note: 'No onion' }),
+      line('older', 1, { unitPricePaise: 14000 }),
+    ])
+    expect(rows.map((row) => row.key)).toEqual(['plain', 'noted', 'older'])
+  })
+})
+
+describe('dishRounds', () => {
+  it('keeps the first lines first, then each edit in the order made, each line once', () => {
+    const lines = [
+      { id: 'a' },
+      { id: 'c', addedAt: '2026-10-14T10:20:00Z' },
+      { id: 'b' },
+      { id: 'd', addedAt: '2026-10-14T10:05:00Z' },
+      { id: 'e', addedAt: '2026-10-14T10:20:00Z' },
+    ]
+    expect(dishRounds(lines).map((round) => round.map(({ line }) => line.id))).toEqual([
+      ['a', 'b'],
+      ['d'],
+      ['c', 'e'],
+    ])
+  })
+
+  it('draws one round when nothing was added', () => {
+    const plain: { id: string; addedAt?: string }[] = [{ id: 'a' }, { id: 'b' }]
+    expect(dishRounds(plain)).toHaveLength(1)
   })
 })

@@ -241,6 +241,9 @@ export {
   DISH_WAIT_CRITICAL_MINUTES,
   dishLineKey,
   dishLocked,
+  dishMade,
+  dishRounds,
+  dishRows,
   dishOwed,
   dishWaitTone,
   NOTE_SEEDS,
@@ -251,6 +254,7 @@ export {
   type DishKitchenLineDiff,
   type DishKitchenLineFacts,
   type DishLineFacts,
+  type DishRow,
   type DishWaitTone,
   type KitchenDishState,
 } from './dish-workflow'

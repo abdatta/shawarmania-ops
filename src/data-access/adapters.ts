@@ -1332,6 +1332,12 @@ export interface BillLineDraft {
   note?: string | null
   preparedQuantity?: number
   readyQuantity?: number
+  /**
+   * When an edit added this line to its order (design R12; `dish-ticks`):
+   * absent for the lines an order was created with. The rail sets each edit's
+   * lines below a divider.
+   */
+  addedAt?: string
   /** Existing order-item identity, retained when revising captured prices. */
   orderLineId?: Tables<'order_items'>['id']
   /**
