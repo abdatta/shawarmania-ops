@@ -1,6 +1,7 @@
 import { Ban, ChevronDown, Clock3, ReceiptText, UserRound } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 
+import { useChangeGate } from '@/change-gates/context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { MemberMark } from '@/components/ui/member-mark'
@@ -13,6 +14,7 @@ import { BillDiscountRows } from './bill-discount-rows'
 import { LineAmount } from './line-amount'
 import { BillReceiptAction } from './bill-receipt-action'
 import { ReceiptDeliveryStatus } from './receipt-delivery-status'
+import { formatIndianPhone } from '../../../shared/phone'
 
 const CANCELLATION_REASONS = ['Duplicate bill', 'Mistaken entry'] as const
 
@@ -131,6 +133,8 @@ export function ManagerBillDetail({
     reason?: string | null,
   ) => Promise<unknown>
 }) {
+  // With the dish ticks on, the phone reads as every other surface writes it.
+  const plusNinetyOne = useChangeGate('dish-ticks')
   const detailId = `bill-detail-${bill.id}`
   const cancellationActor =
     bill.voidedBy?.id === currentUserId ? 'You' : (bill.voidedBy?.name ?? 'someone')
@@ -296,7 +300,13 @@ export function ManagerBillDetail({
                   {bill.customerTier === 'gold' && <MemberMark />}
                 </span>
               </Fact>
-              <Fact label="Customer phone">{bill.customerPhone || 'Not provided'}</Fact>
+              <Fact label="Customer phone">
+                {bill.customerPhone
+                  ? plusNinetyOne
+                    ? `+91 ${formatIndianPhone(bill.customerPhone)}`
+                    : bill.customerPhone
+                  : 'Not provided'}
+              </Fact>
               {bill.receiptDelivery && (
                 <div className="col-span-2">
                   <Fact label="Receipt SMS">

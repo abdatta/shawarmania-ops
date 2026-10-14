@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { BillingBill } from '@/data-access/adapters'
+import { ChangeGatesForTest, describeChangeGate } from '@/test/change-gates'
 
 import { ManagerBillDetail } from './manager-bill-detail'
 
@@ -358,5 +359,24 @@ describe('manager bill detail', () => {
     const cancel = screen.getByRole('button', { name: 'Cancel this bill' })
     expect(cancel).toBeVisible()
     expect(cancel).toHaveClass('ml-auto')
+  })
+})
+
+describeChangeGate('dish-ticks', (on) => {
+  it(`writes the customer's phone ${on ? 'as +91 98765 43210' : 'as it is stored'}`, () => {
+    render(
+      <ChangeGatesForTest on={{ 'dish-ticks': on }}>
+        <ManagerBillDetail
+          bill={{ ...bill, customerPhone: '+919876543210' }}
+          cancelling={false}
+          reason=""
+          onReasonChange={vi.fn()}
+          onStartCancelling={vi.fn()}
+          onKeepBill={vi.fn()}
+          onConfirmCancellation={vi.fn()}
+        />
+      </ChangeGatesForTest>,
+    )
+    expect(screen.getByText(on ? '+91 98765 43210' : '+919876543210')).toBeInTheDocument()
   })
 })
