@@ -3795,6 +3795,39 @@ export type Database = {
           },
         ]
       }
+      order_labels: {
+        Row: {
+          label: string
+          order_id: string
+          outlet_id: string
+        }
+        Insert: {
+          label: string
+          order_id: string
+          outlet_id: string
+        }
+        Update: {
+          label?: string
+          order_id?: string
+          outlet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_labels_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_labels_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_line_preparations: {
         Row: {
           order_id: string
@@ -5126,6 +5159,7 @@ export type Database = {
         Returns: Json
       }
       counter_kitchen_marks: { Args: never; Returns: Json }
+      counter_kitchen_marks_v2: { Args: never; Returns: Json }
       counter_operations_snapshot: {
         Args: { p_outlet_ids: string[] }
         Returns: {
@@ -5176,6 +5210,17 @@ export type Database = {
         }[]
       }
       create_billing_order: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
+      }
+      create_billing_order_v2: {
         Args: {
           p_command_id?: string
           p_created_at?: string
@@ -5452,9 +5497,23 @@ export type Database = {
         Args: { p_at: string; p_order: string }
         Returns: undefined
       }
+      derive_dish_preparation_v2: {
+        Args: { p_at: string; p_order_id: string }
+        Returns: undefined
+      }
       discount_presets_valid: { Args: { p_presets: Json }; Returns: boolean }
       dish_line_locked: { Args: { p_line: string }; Returns: boolean }
+      dish_line_locked_v2: { Args: { p_line_id: string }; Returns: boolean }
+      dish_lines_v2: { Args: { p_order_id: string }; Returns: Json }
       dish_ready_quantity: { Args: { p_line: string }; Returns: number }
+      dish_ticks_from_preparation_v2: {
+        Args: {
+          p_actor: string
+          p_order: Database["public"]["Tables"]["orders"]["Row"]
+          p_shift_id: string
+        }
+        Returns: undefined
+      }
       drawer_cash_expenses_by_day: {
         Args: { p_from: string; p_outlet_id: string; p_to: string }
         Returns: {
@@ -5686,7 +5745,17 @@ export type Database = {
         }
         Returns: Json
       }
+      kitchen_acknowledge_v2: {
+        Args: {
+          p_id: string
+          p_kind: string
+          p_order_id: string
+          p_order_version: string
+        }
+        Returns: Json
+      }
       kitchen_board: { Args: never; Returns: Json }
+      kitchen_board_v2: { Args: never; Returns: Json }
       kitchen_done_lines: { Args: { p_ready: string }; Returns: Json }
       kitchen_filter_lines: {
         Args: { p_category_ids: string[]; p_lines: Json; p_mode: string }
@@ -5704,6 +5773,14 @@ export type Database = {
         Args: { p_lines: Json; p_ready?: boolean }
         Returns: Json
       }
+      kitchen_owed_snapshot_v2: {
+        Args: { p_dish_lines: Json; p_snapshot: Json }
+        Returns: Json
+      }
+      kitchen_owed_v2: {
+        Args: { p_category_ids: string[]; p_dish_lines: Json; p_mode: string }
+        Returns: Json
+      }
       kitchen_ready: {
         Args: { p_id: string; p_lines: Json; p_order_id: string }
         Returns: Json
@@ -5712,7 +5789,28 @@ export type Database = {
         Args: { p_id: string; p_ready_id: string }
         Returns: Json
       }
+      kitchen_ready_undo_v2: {
+        Args: { p_id: string; p_ready_id: string }
+        Returns: Json
+      }
+      kitchen_ready_v2: {
+        Args: { p_id: string; p_lines: Json; p_order_id: string }
+        Returns: Json
+      }
+      kitchen_receipts_v2: {
+        Args: { p_device_id: string; p_dish_lines: Json; p_order_id: string }
+        Returns: {
+          at: string
+          lines: Json
+          ready_id: string
+          ticket: number
+        }[]
+      }
       kitchen_same_lines: {
+        Args: { p_left: Json; p_right: Json }
+        Returns: boolean
+      }
+      kitchen_same_lines_v2: {
         Args: { p_left: Json; p_right: Json }
         Returns: boolean
       }
@@ -5720,7 +5818,19 @@ export type Database = {
         Args: { p_device: string; p_order: string }
         Returns: Json
       }
+      kitchen_ticket_v2: {
+        Args: {
+          p_device: Database["public"]["Tables"]["counter_devices"]["Row"]
+          p_dish_lines: Json
+          p_order: Database["public"]["Tables"]["orders"]["Row"]
+        }
+        Returns: Json
+      }
       kitchen_visible_lines: {
+        Args: { p_category_ids: string[]; p_mode: string; p_order_id: string }
+        Returns: Json
+      }
+      kitchen_visible_lines_v2: {
         Args: { p_category_ids: string[]; p_mode: string; p_order_id: string }
         Returns: Json
       }
@@ -5840,6 +5950,17 @@ export type Database = {
         Returns: Json
       }
       prepare_order_lines: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
+      }
+      prepare_order_lines_v2: {
         Args: {
           p_command_id?: string
           p_created_at?: string
@@ -6108,6 +6229,17 @@ export type Database = {
         }
       }
       revise_billing_order: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
+      }
+      revise_billing_order_v2: {
         Args: {
           p_command_id?: string
           p_created_at?: string

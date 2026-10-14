@@ -14,6 +14,9 @@ export default defineConfig({
     // The billing race probe mutates immutable money history and therefore runs
     // in its own second phase after the seed-sensitive isolation files.
     exclude: [
+      // Makes dedicated devices and append-only Ready history after the seed
+      // probes: vitest.dish-ticks.config.ts.
+      'supabase/tests/rest/dish-ticks-isolation.test.ts',
       'supabase/tests/rest/counter-handshake.test.ts',
       'supabase/tests/rest/zz-billing-command-races.test.ts',
       // Makes real drawer writes and cleans up after itself with the
