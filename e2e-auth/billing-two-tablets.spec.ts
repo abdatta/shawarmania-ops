@@ -108,44 +108,47 @@ async function billsFor(
   }[]
 }
 
-test('two tablets bill one outlet at once, own their own orders, and neither drains the other', async ({
-  browser,
-  request,
-}) => {
-  test.slow()
+test(
+  'two tablets bill one outlet at once, own their own orders, and neither drains the other',
+  { tag: '@cg-off:dish-ticks' },
+  async ({ browser, request }) => {
+    test.slow()
 
-  await setSpareTillInService(request, true)
+    await setSpareTillInService(request, true)
 
-  const one = await openTill(browser, request, TILL_ONE)
-  const two = await openTill(browser, request, TILL_TWO)
-  const token = await managerToken(request)
+    const one = await openTill(browser, request, TILL_ONE)
+    const two = await openTill(browser, request, TILL_TWO)
+    const token = await managerToken(request)
 
-  try {
-    // ---------------------------------------------------------------------
-    // 1. Both tills pay at the same moment.
-    //
-    // Submitted together so the per-outlet allocator is genuinely contended
-    // through the whole app rather than one request at a time.
-    await Promise.all([markPaid(one.page, 'Concurrent One'), markPaid(two.page, 'Concurrent Two')])
-    await one.page.waitForTimeout(AFTER_LOCAL_ACCEPTANCE_MS)
+    try {
+      // ---------------------------------------------------------------------
+      // 1. Both tills pay at the same moment.
+      //
+      // Submitted together so the per-outlet allocator is genuinely contended
+      // through the whole app rather than one request at a time.
+      await Promise.all([
+        markPaid(one.page, 'Concurrent One'),
+        markPaid(two.page, 'Concurrent Two'),
+      ])
+      await one.page.waitForTimeout(AFTER_LOCAL_ACCEPTANCE_MS)
 
-    const paid = await billsFor(request, token, ['Concurrent One', 'Concurrent Two'])
-    expect(paid).toHaveLength(2)
-    // Distinct, sequential, and one per till: a shared counter would have
-    // produced a duplicate, a gap, or both bills on one device.
-    expect(new Set(paid.map((bill) => bill.bill_number)).size).toBe(2)
-    expect(paid[1]!.bill_number - paid[0]!.bill_number).toBe(1)
-    expect(new Set(paid.map((bill) => bill.counter_device_id)).size).toBe(2)
+      const paid = await billsFor(request, token, ['Concurrent One', 'Concurrent Two'])
+      expect(paid).toHaveLength(2)
+      // Distinct, sequential, and one per till: a shared counter would have
+      // produced a duplicate, a gap, or both bills on one device.
+      expect(new Set(paid.map((bill) => bill.bill_number)).size).toBe(2)
+      expect(paid[1]!.bill_number - paid[0]!.bill_number).toBe(1)
+      expect(new Set(paid.map((bill) => bill.counter_device_id)).size).toBe(2)
 
-    // ---------------------------------------------------------------------
-    // 2. The neighbour sees the order, is told whose it is, and cannot act.
-    const kitchenOwesThis = await saveOrder(one.page, 'Kitchen Owes This')
+      // ---------------------------------------------------------------------
+      // 2. The neighbour sees the order, is told whose it is, and cannot act.
+      const kitchenOwesThis = await saveOrder(one.page, 'Kitchen Owes This')
 
-    // The outlet's pipeline, on the other till: the order is there, named with
-    // the counter that took it, and its two facts are *printed* rather than
-    // offered. Without the till chip this card is indistinguishable from its own
-    // work whenever one person holds both shifts.
-    /*
+      // The outlet's pipeline, on the other till: the order is there, named with
+      // the counter that took it, and its two facts are *printed* rather than
+      // offered. Without the till chip this card is indistinguishable from its own
+      // work whenever one person holds both shifts.
+      /*
       Scoped to THIS order's card, not to the rail.
 
       The rail is the outlet's, so it carries whatever else the outlet has open
@@ -157,80 +160,81 @@ test('two tablets bill one outlet at once, own their own orders, and neither dra
       every control on screen. Found by the order's id, which both tills share,
       since the card no longer prints the customer's name.
     */
-    const neighbourCard = orderCard(two.page, kitchenOwesThis)
-    await expect(neighbourCard).toBeVisible({ timeout: 20_000 })
-    await expect(neighbourCard).toContainText(`on ${TILL_ONE.label}`)
-    /*
+      const neighbourCard = orderCard(two.page, kitchenOwesThis)
+      await expect(neighbourCard).toBeVisible({ timeout: 20_000 })
+      await expect(neighbourCard).toContainText(`on ${TILL_ONE.label}`)
+      /*
       Drawn without control chrome rather than as a dimmed button (#55): a
       disabled button is a promise the screen is refusing to keep, and billers
       read it as breakage. So the assertion is that there is no control here at
       all — just the fact, with no pressed state to misreport to a screen
       reader — which is a stronger claim than "disabled" was.
     */
-    await expect(neighbourCard.getByRole('button', { name: 'Prepared' })).toHaveCount(0)
-    const neighbourFact = neighbourCard.getByText('Prepared', { exact: true })
-    await expect(neighbourFact).toBeVisible()
-    await expect(neighbourFact).toHaveAttribute('data-fact', 'true')
-    await expect(neighbourFact).not.toHaveAttribute('aria-pressed', /.*/)
+      await expect(neighbourCard.getByRole('button', { name: 'Prepared' })).toHaveCount(0)
+      const neighbourFact = neighbourCard.getByText('Prepared', { exact: true })
+      await expect(neighbourFact).toBeVisible()
+      await expect(neighbourFact).toHaveAttribute('data-fact', 'true')
+      await expect(neighbourFact).not.toHaveAttribute('aria-pressed', /.*/)
 
-    // And the same order is still fully actionable on the till that took it,
-    // which is the assertion that keeps the gate from being "stand everything
-    // down".
-    const ownCard = orderCard(one.page, kitchenOwesThis)
-    await expect(ownCard).toBeVisible({ timeout: 20_000 })
-    const ownControl = ownCard.getByRole('button', { name: 'Prepared' })
-    await expect(ownControl).toBeEnabled()
-    await expect(ownControl).toHaveAttribute('aria-pressed', 'false')
-    // Its own card names no till: the order is this counter's own work.
-    await expect(ownCard).not.toContainText(`on ${TILL_ONE.label}`)
+      // And the same order is still fully actionable on the till that took it,
+      // which is the assertion that keeps the gate from being "stand everything
+      // down".
+      const ownCard = orderCard(one.page, kitchenOwesThis)
+      await expect(ownCard).toBeVisible({ timeout: 20_000 })
+      const ownControl = ownCard.getByRole('button', { name: 'Prepared' })
+      await expect(ownControl).toBeEnabled()
+      await expect(ownControl).toHaveAttribute('aria-pressed', 'false')
+      // Its own card names no till: the order is this counter's own work.
+      await expect(ownCard).not.toContainText(`on ${TILL_ONE.label}`)
 
-    // ---------------------------------------------------------------------
-    // 3. One till loses the network while the other keeps trading.
-    await two.context.setOffline(true)
-    await markPaid(two.page, 'Captured Offline')
-    // Accepted locally, so it is not on the server yet.
-    expect(await billsFor(request, token, ['Captured Offline'])).toHaveLength(0)
+      // ---------------------------------------------------------------------
+      // 3. One till loses the network while the other keeps trading.
+      await two.context.setOffline(true)
+      await markPaid(two.page, 'Captured Offline')
+      // Accepted locally, so it is not on the server yet.
+      expect(await billsFor(request, token, ['Captured Offline'])).toHaveLength(0)
 
-    // The online till is not blocked by its neighbour's outage, and its work
-    // reaches the server while the other's waits.
-    await markPaid(one.page, 'Traded Meanwhile')
-    await one.page.waitForTimeout(AFTER_LOCAL_ACCEPTANCE_MS)
-    expect(await billsFor(request, token, ['Traded Meanwhile'])).toHaveLength(1)
-    // And the offline till's work is still nobody else's to deliver.
-    expect(await billsFor(request, token, ['Captured Offline'])).toHaveLength(0)
+      // The online till is not blocked by its neighbour's outage, and its work
+      // reaches the server while the other's waits.
+      await markPaid(one.page, 'Traded Meanwhile')
+      await one.page.waitForTimeout(AFTER_LOCAL_ACCEPTANCE_MS)
+      expect(await billsFor(request, token, ['Traded Meanwhile'])).toHaveLength(1)
+      // And the offline till's work is still nobody else's to deliver.
+      expect(await billsFor(request, token, ['Captured Offline'])).toHaveLength(0)
 
-    // ---------------------------------------------------------------------
-    // 4. The offline till reconnects and drains its own queue.
-    await two.context.setOffline(false)
-    await expect
-      .poll(async () => (await billsFor(request, token, ['Captured Offline'])).length, {
-        timeout: 60_000,
-      })
-      .toBe(1)
+      // ---------------------------------------------------------------------
+      // 4. The offline till reconnects and drains its own queue.
+      await two.context.setOffline(false)
+      await expect
+        .poll(async () => (await billsFor(request, token, ['Captured Offline'])).length, {
+          timeout: 60_000,
+        })
+        .toBe(1)
 
-    // ---------------------------------------------------------------------
-    // 5. Every bill exists exactly once, numbered in acceptance order.
-    const all = await billsFor(request, token, [
-      'Concurrent One',
-      'Concurrent Two',
-      'Captured Offline',
-      'Traded Meanwhile',
-    ])
-    expect(all).toHaveLength(4)
-    const numbers = all.map((bill) => bill.bill_number)
-    expect(new Set(numbers).size).toBe(4)
+      // ---------------------------------------------------------------------
+      // 5. Every bill exists exactly once, numbered in acceptance order.
+      const all = await billsFor(request, token, [
+        'Concurrent One',
+        'Concurrent Two',
+        'Captured Offline',
+        'Traded Meanwhile',
+      ])
+      expect(all).toHaveLength(4)
+      const numbers = all.map((bill) => bill.bill_number)
+      expect(new Set(numbers).size).toBe(4)
 
-    // The bill captured offline synced last, so it carries the HIGHEST number
-    // despite having been taken before 'Traded Meanwhile'. That is the
-    // documented consequence of numbering by acceptance, and asserting it here
-    // is what stops somebody "fixing" it into event order later.
-    const byName = new Map(all.map((bill) => [bill.customer_name, bill.bill_number]))
-    expect(byName.get('Captured Offline')!).toBeGreaterThan(byName.get('Traded Meanwhile')!)
-  } finally {
-    await one.context.close()
-    await two.context.close()
-    // Put the shop back the way the seed left it, so a later spec in this file
-    // -- or a rerun without a reset -- still sees one till per outlet.
-    await setSpareTillInService(request, false)
-  }
-})
+      // The bill captured offline synced last, so it carries the HIGHEST number
+      // despite having been taken before 'Traded Meanwhile'. That is the
+      // documented consequence of numbering by acceptance, and asserting it here
+      // is what stops somebody "fixing" it into event order later.
+      const byName = new Map(all.map((bill) => [bill.customer_name, bill.bill_number]))
+      expect(byName.get('Captured Offline')!).toBeGreaterThan(byName.get('Traded Meanwhile')!)
+    } finally {
+      await one.context.close()
+      await two.context.close()
+      // Put the shop back the way the seed left it, so a later spec in this file
+      // -- or a rerun without a reset -- still sees one till per outlet.
+      await setSpareTillInService(request, false)
+    }
+  },
+)

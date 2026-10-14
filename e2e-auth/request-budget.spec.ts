@@ -1,6 +1,8 @@
 import { type BrowserContext, type Page } from '@playwright/test'
 import { expect, test } from './test'
 
+import { GATE_STATE } from '../e2e/support/change-gates'
+
 import {
   SUPABASE_URL,
   TILL_ONE,
@@ -47,12 +49,31 @@ const ACTION_WINDOW_MS = 10_000
  *
  * Gates on adds one request a minute on each tablet: the minute's re-read of the
  * change gates. #74's counter made about 600 requests a minute in production.
+ *
+ * One dish tick (each-dish-is-ticked-off, R5) was added 2026-10-14 on the local
+ * stack at `013ae06b`, with the same idle, ACK and payment readings taken again
+ * beside it, and its budget set the same way. Gates off a dish has no tick, so the
+ * same hand taps Prepared on a third card: logged as `counterPreparedTap`, with no
+ * budget, to show a tick costs what the tap it replaces costs.
+ *
+ * | Reading | Gates off (3 runs) | Gates on (4 runs) | Worst | Budget |
+ * |---|---|---|---|---|
+ * | Counter, an idle minute | 2, 2, 2 | 3, 3, 3, 3 | 3 | 5 |
+ * | Kitchen, an idle minute | 8, 8, 8 | 9, 9, 9, 9 | 9 | 14 |
+ * | Kitchen, one ACK | 5, 5, 5 | 5, 5, 7, 5 | 7 | 11 |
+ * | Counter, one payment | 42, 33, 42 | 33, 42, 33, 33 | 42 | 63 |
+ * | Counter, one Prepared tap | 27, 27, 27 | (not taken) | 27 | none |
+ * | Counter, one dish tick | (not taken) | 28, 28, 31, 28 | 31 | 47 |
+ *
+ * The four existing budgets held in both states, unraised.
  */
 const BUDGET = {
   counterIdleMinute: 5,
   kitchenIdleMinute: 14,
   kitchenAck: 11,
   counterPayment: 63,
+  /** Gates on only: one dish ticked on a rail card (each-dish-is-ticked-off, R5). */
+  counterDishTick: 47,
 }
 
 // A click with no limit waits out the whole test when its target never comes;
@@ -130,8 +151,31 @@ test('an idle counter and kitchen, an ACK and a payment each stay within their r
       await counter.page.waitForTimeout(ACTION_WINDOW_MS)
     })
 
-    const measured = { counterIdleMinute, kitchenIdleMinute, kitchenAck, counterPayment }
-    console.log(`request budget readings: ${JSON.stringify(measured)}`)
+    // One tick of the dish on a third card. Gates on, that is `dish-ticks`' tick
+    // (the rail reloads after its own write, the kitchen pulse brings the marks);
+    // gates off the dish has no tick, so the same hand taps Prepared instead --
+    // recorded for comparison, with no budget of its own.
+    const tapped = await counted(counterRequests, async () => {
+      await railSettled(counter.page)
+      const card = orderCard(counter.page, ids[2]!)
+      if (GATE_STATE === 'on') {
+        await card.getByRole('button', { name: /^Tick / }).click()
+      } else {
+        await card.getByRole('button', { name: 'Prepared', exact: true, pressed: false }).click()
+      }
+      await counter.page.waitForTimeout(ACTION_WINDOW_MS)
+    })
+
+    const measured: Record<string, number> = {
+      counterIdleMinute,
+      kitchenIdleMinute,
+      kitchenAck,
+      counterPayment,
+      ...(GATE_STATE === 'on' ? { counterDishTick: tapped } : {}),
+    }
+    console.log(
+      `request budget readings: ${JSON.stringify({ ...measured, ...(GATE_STATE === 'off' ? { counterPreparedTap: tapped } : {}) })}`,
+    )
     for (const [what, count] of Object.entries(measured)) {
       expect(
         count,

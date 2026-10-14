@@ -31,7 +31,7 @@ test(
     await context.grantPermissions(['clipboard-read', 'clipboard-write'])
     await page.goto('demo/owner/change-gates')
     const stamp = page.getByTestId('build-version')
-    await expect(stamp).toHaveAttribute('data-build-code', /^[0-9a-f]+·PB-TH$/)
+    await expect(stamp).toHaveAttribute('data-build-code', /^[0-9a-f]+·PB-TH(-[A-Z]{2})*$/)
     const builtAt = ((await stamp.textContent()) ?? '').split(' · ')[1]
     await stamp.click()
     await expect(stamp).toContainText('Copied')
@@ -68,14 +68,14 @@ test(
   async ({ page }) => {
     await page.goto('demo/owner/change-gates/probe')
     const codeAfterOpening = () => page.getByTestId('build-version').getAttribute('data-build-code')
-    expect(await codeAfterOpening()).toMatch(/·PB-TH$/)
+    expect(await codeAfterOpening()).toMatch(/·PB-TH(-[A-Z]{2})*$/)
 
     await page.getByRole('switch', { name: 'Turn off Probe' }).click()
     await page.getByTestId('turn-reason').fill('Comparing the two')
     await page.getByTestId('confirm-turn-submit').click()
 
     await expect(page.getByTestId('gate-since')).toContainText(/^Off/)
-    expect(await codeAfterOpening()).toMatch(/·TH$/)
+    expect(await codeAfterOpening()).toMatch(/·TH(-[A-Z]{2})*$/)
     await expect(page.getByTestId('gate-history').getByRole('listitem').first()).toContainText(
       'Comparing the two',
     )
@@ -86,27 +86,31 @@ test(
     await expect(page.getByTestId('gate-history').getByRole('listitem').first()).toContainText(
       'Comparing the two',
     )
-    expect(await codeAfterOpening()).toMatch(/·TH$/)
+    expect(await codeAfterOpening()).toMatch(/·TH(-[A-Z]{2})*$/)
 
     // …and a reset is the starting scenario, which has every gate on.
     await page.getByTestId('demo-reset').click()
     await page.getByRole('button', { name: 'Discard and start again' }).click()
     await expect(page.getByTestId('gate-since')).toContainText(/^On/)
-    expect(await codeAfterOpening()).toMatch(/·PB-TH$/)
+    expect(await codeAfterOpening()).toMatch(/·PB-TH(-[A-Z]{2})*$/)
   },
 )
 
-test('turning a gate off turns off the gates that depend on it', async ({ page }) => {
-  await page.goto('demo/owner/change-gates/dish-ticks')
-  await page.getByTestId('turn-gate').click()
-  await expect(page.getByTestId('turn-also-off')).toContainText('Kitchen Ready')
-  await page.getByTestId('confirm-turn-submit').click()
-  await expect(page.getByTestId('gate-since')).toContainText(/^Off/)
+test(
+  'turning a gate off turns off the gates that depend on it',
+  { tag: ['@cg-on:dish-ticks', '@cg-on:kitchen-ready'] },
+  async ({ page }) => {
+    await page.goto('demo/owner/change-gates/dish-ticks')
+    await page.getByTestId('turn-gate').click()
+    await expect(page.getByTestId('turn-also-off')).toContainText('Kitchen Ready')
+    await page.getByTestId('confirm-turn-submit').click()
+    await expect(page.getByTestId('gate-since')).toContainText(/^Off/)
 
-  await page.goto('demo/owner/change-gates/kitchen-ready')
-  await expect(page.getByTestId('gate-since')).toContainText(/^Off/)
-  await expect(page.getByTestId('turn-gate')).toBeDisabled()
-})
+    await page.goto('demo/owner/change-gates/kitchen-ready')
+    await expect(page.getByTestId('gate-since')).toContainText(/^Off/)
+    await expect(page.getByTestId('turn-gate')).toBeDisabled()
+  },
+)
 
 for (const [where, path] of [
   ['the counter', 'demo/biller'],
