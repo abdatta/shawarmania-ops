@@ -18,10 +18,10 @@ import { Modal } from '@/components/ui/modal'
 import { Shimmer } from '@/components/ui/loading'
 import { useAnchoredPanel } from '@/components/ui/anchored-panel'
 import { Money } from '@/components/ui/money'
-import { OrderAgeRing } from '@/components/ui/order-age-ring'
 import type { BillingOrder } from '@/data-access/adapters'
 import type { KitchenAnswer, KitchenBell, KitchenDishState, SharedTable } from '@/domain'
 import {
+  dishAge,
   isAwaitingOrderNumber,
   serviceTypeLabel,
   tableLabel,
@@ -337,11 +337,13 @@ export function PipelineCard({
       <div className="flex min-w-0 items-stretch gap-2">
         {/* The taller reference anchors the header. Customer and timing share
             its height rather than adding two extra rows to the ticket. */}
+        {/* On the dish path the reference is as tall as the label and its age
+            together, and so is the total (owner, 2026-10-14). */}
         <span
           data-testid={`order-reference-${order.id}`}
           className={cn(
             'flex shrink-0 items-center font-display text-[1.375rem] leading-6 text-primary',
-            dishTicks && 'relative',
+            dishTicks && 'relative text-[1.875rem] leading-[2.125rem]',
           )}
         >
           {dishTicks && member && (
@@ -361,9 +363,30 @@ export function PipelineCard({
             `#${order.orderNumber}`
           )}
         </span>
-        {dishTicks && order.label && (
-          <span className="min-w-0 flex-1 self-center text-sm font-black leading-tight text-content">
-            {order.label}
+        {/*
+          How long ago it was ordered, small, under the label: a fact, not a
+          timer. A ring counting on until payment measured nothing — food is
+          handed over dish by dish, a table orders again after its first food,
+          and paying last is the custom (owner, 2026-10-14).
+        */}
+        {dishTicks && (
+          <span
+            className={cn(
+              'flex min-w-0 flex-col justify-center',
+              order.label ? 'flex-1' : 'shrink-0',
+            )}
+          >
+            {order.label && (
+              <span className="truncate text-sm font-black leading-tight text-content">
+                {order.label}
+              </span>
+            )}
+            <span
+              data-testid={`order-age-${order.id}`}
+              className="text-xs leading-4 text-content-muted"
+            >
+              {dishAge(order.orderedAt, new Date(nowMs ?? Date.parse(order.orderedAt)))}
+            </span>
           </span>
         )}
         {!dishTicks && order.serviceType && (
@@ -453,46 +476,45 @@ export function PipelineCard({
                 className="text-xs text-content-muted line-through"
               />
             )}
-            <Money paise={totalPaise} display className="font-black text-content" />
-          </span>
-          {dishTicks ? (
-            <OrderAgeRing
-              orderedAt={order.orderedAt}
-              now={new Date(nowMs ?? Date.parse(order.orderedAt))}
-              compact
+            <Money
+              paise={totalPaise}
+              display
+              className={cn(
+                'font-black text-content',
+                dishTicks && 'text-[1.875rem] leading-[2.125rem]',
+              )}
             />
-          ) : (
-            (hasCustomer || canSetCustomer) && (
-              <Button
-                variant="secondary"
-                size="phone"
-                className="relative h-9 w-9 px-0"
-                data-testid={`order-customer-${order.id}`}
-                aria-label={
-                  hasCustomer
-                    ? `Customer for ${reference}${member ? ', gold member' : ''}`
-                    : `Add a customer to ${reference}`
-                }
-                disabled={busy}
-                onClick={() => (hasCustomer ? setCustomerOpen(true) : onSetCustomer?.(order))}
-              >
-                {hasCustomer ? (
-                  <UserRound aria-hidden className="text-primary" size={17} />
-                ) : (
-                  <UserRoundPlus aria-hidden className="text-content-muted" size={17} />
-                )}
-                {/*
+          </span>
+          {!dishTicks && (hasCustomer || canSetCustomer) && (
+            <Button
+              variant="secondary"
+              size="phone"
+              className="relative h-9 w-9 px-0"
+              data-testid={`order-customer-${order.id}`}
+              aria-label={
+                hasCustomer
+                  ? `Customer for ${reference}${member ? ', gold member' : ''}`
+                  : `Add a customer to ${reference}`
+              }
+              disabled={busy}
+              onClick={() => (hasCustomer ? setCustomerOpen(true) : onSetCustomer?.(order))}
+            >
+              {hasCustomer ? (
+                <UserRound aria-hidden className="text-primary" size={17} />
+              ) : (
+                <UserRoundPlus aria-hidden className="text-content-muted" size={17} />
+              )}
+              {/*
                 The star rides on the customer it belongs to, not beside the
                 order's number [owner, 2026-10-05]. Read from the order's own
                 snapshot, never the live membership: the kitchen acts on "was a
                 member when they ordered", and a revocation tonight must not
                 change a card already being made.
               */}
-                {member && (
-                  <MemberMark className="pointer-events-none absolute -right-1.5 -top-1.5 rounded-full border border-border bg-surface p-0.5" />
-                )}
-              </Button>
-            )
+              {member && (
+                <MemberMark className="pointer-events-none absolute -right-1.5 -top-1.5 rounded-full border border-border bg-surface p-0.5" />
+              )}
+            </Button>
           )}
         </div>
       </div>

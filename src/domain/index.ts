@@ -235,6 +235,7 @@ export {
 } from './kitchen'
 export {
   addDish,
+  dishAge,
   diffDishKitchenLines,
   dishKitchenCardState,
   DISH_WAIT_CRITICAL_MINUTES,

@@ -95,9 +95,25 @@ export function noteDish<T extends DishLineFacts>(
   })
 }
 
-// ── Waiting time on the counter's age ring (design D9) ───────────────────────
+/**
+ * How long ago an order was placed, as the counter's card says it under the
+ * label: light, and nothing more (owner, 2026-10-14). The order's age stopped
+ * being a measure of the kitchen once a table orders again after its first
+ * food came, and of payment once paying last became the custom, so the card
+ * shows it as a fact, not a countdown.
+ */
+export function dishAge(orderedAt: string, now: Date): string {
+  const minutes = Math.max(0, Math.floor((now.getTime() - Date.parse(orderedAt)) / 60_000))
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return rest ? `${hours}h ${rest}m ago` : `${hours}h ago`
+}
 
-/** A darker, contrast-validated red from forty minutes, on the counter's ring only. */
+// ── Waiting time on the kitchen's age ring (design D9) ───────────────────────
+
+/** A darker, contrast-validated red from forty minutes, on the dish path's age ring. */
 export const DISH_WAIT_CRITICAL_MINUTES = 40
 
 export type DishWaitTone = 'normal' | 'warning' | 'danger' | 'critical'

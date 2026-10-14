@@ -950,13 +950,13 @@ describe('BillingCounter with the dish ticks on', () => {
     const saved = await within(rail).findByTestId(`open-order-local-${clientId}`)
     // The customer is behind the card's customer button, not printed on it.
     expect(within(saved).queryByRole('button', { name: /^Customer for / })).not.toBeInTheDocument()
-    expect(within(saved).getByTestId('order-age')).toBeInTheDocument()
+    expect(within(saved).getByTestId(`order-age-${clientId}`)).toBeInTheDocument()
     expect(saved.querySelector('.animate-pulse')).toBeInTheDocument()
     expect(saved).not.toHaveTextContent(/#\d/)
     expect(within(saved).getByText('Classic Chicken Shawarma')).toBeInTheDocument()
     expect(within(saved).getByText('Mayonnaise Chicken Shawarma')).toBeInTheDocument()
-    // The compact ring now carries the order's age.
-    expect(within(saved).getByTestId('order-age')).toHaveTextContent(/^0$/)
+    // How long ago it was ordered, small under where the label goes.
+    expect(within(saved).getByTestId(`order-age-${clientId}`)).toHaveTextContent('just now')
     expect(within(saved).queryByText('Demo Biller')).not.toBeInTheDocument()
     expect(saved).toHaveTextContent('₹290')
 

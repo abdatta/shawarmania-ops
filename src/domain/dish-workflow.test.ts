@@ -3,6 +3,7 @@ import type { DishLineFacts } from './dish-workflow'
 import type { DishKitchenLineFacts } from './dish-workflow'
 import {
   addDish,
+  dishAge,
   diffDishKitchenLines,
   dishKitchenCardState,
   dishLineKey,
@@ -229,5 +230,22 @@ describe('diffDishKitchenLines', () => {
       [kitchenLine({ note: 'No sauce' })],
     )
     expect(rows.every((row) => row.change === 'same')).toBe(true)
+  })
+})
+
+describe('dishAge', () => {
+  const at = '2026-10-14T10:00:00.000Z'
+  const after = (minutes: number) => new Date(Date.parse(at) + minutes * 60_000)
+
+  it('says how long ago an order was placed, lightly', () => {
+    expect(dishAge(at, after(0.5))).toBe('just now')
+    expect(dishAge(at, after(1))).toBe('1m ago')
+    expect(dishAge(at, after(21))).toBe('21m ago')
+    expect(dishAge(at, after(60))).toBe('1h ago')
+    expect(dishAge(at, after(84))).toBe('1h 24m ago')
+  })
+
+  it('never says an order is from the future', () => {
+    expect(dishAge(at, after(-3))).toBe('just now')
   })
 })

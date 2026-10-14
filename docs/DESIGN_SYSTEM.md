@@ -121,7 +121,7 @@ Values the ops portal needs that the marketing site has no equivalent for. They 
 | `--color-dish-ready` | `#c2410c` | The counter's Ready dish row fill (#74) — the primary, as a role of its own so it can part from it. Used only with `dish-ticks` and `kitchen-ready` on |
 | `--color-on-dish-ready` | `#ffffff` | Dish name, quantity and checkbox on that fill; the primary button's pair, already validated |
 | `--dish-ready-shine` | white at 55% | The band that crosses a Ready row; decoration, not gated. The same in both themes |
-| `--color-danger-critical` | `#991b1b` | A counter order's age ring from forty minutes, darker than `--color-danger` so the step from twenty to forty reads |
+| `--color-danger-critical` | `#991b1b` | The kitchen's age ring from forty minutes, darker than `--color-danger` so the step from twenty to forty reads |
 | `--color-marker-veg` | `#16a34a` | The veg dot — non-text (3.3:1), so the brand green stands |
 | `--color-marker-nonveg` | `#b91c1c` | The non-veg dot |
 | `--color-member` | `#b45309` | The gold member star's outline — what carries its 3:1 against a card |
@@ -266,7 +266,7 @@ With `dish-ticks` off, the pipeline card is the one under *A checkbox in a butto
 - **The shine** is the menu page's offer-banner shine, in CSS alone: a 105-degree band, transparent to `--dish-ready-shine` at the middle and back, crossing the row left to right over 2.4 seconds with a 1.2 second delay, repeating until the dish is ticked.
 - **The bell swings** only while a Ready is being announced: a short rocking about a point near the top of the bell, 440 ms a swing, for about nine seconds, and it is still at every other time. The handbell is synthesised in the browser: a four-strike figure played twice, about three seconds; it is the counter's only sound.
 - **Under reduced motion** the fill stays and the shine and the swing do not move; a retiring kitchen receipt only fades.
-- **The age ring** shows total minutes, never `1h`, in its existing footprint: neutral, warning from ten, `--color-danger` from twenty, `--color-danger-critical` from forty. The gold star overlaps the order number without taking headline width.
+- **The kitchen's age ring** shows total minutes, never `1h`, in its existing footprint: neutral, warning from ten, `--color-danger` from twenty, `--color-danger-critical` from forty. The counter's card has no ring: under its label a small muted *21m ago*, with the order number and total each as tall as the label and that line together. The gold star overlaps the order number without taking headline width.
 - **Shimmers follow the layout.** The counter's loading shapes reserve both rail columns, the Expenses and Bills panels at their loaded widths, and the kitchen's responsive columns.
 
 ## What we deliberately do not import from the marketing site

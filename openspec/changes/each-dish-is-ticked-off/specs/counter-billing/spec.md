@@ -113,7 +113,7 @@ item's tile SHALL show the total quantity of that item across its lines.
 ### Requirement: Pipeline orders remain editable until they are paid
 
 The pipeline SHALL list this outlet's unpaid orders, each with its reference,
-complete quantity-and-item lines and total. A card SHALL show its temporary label and compact age ring. Customer entry remains in payment and composer edit. Items SHALL
+complete quantity-and-item lines and total. A card SHALL show its temporary label and how long ago it was ordered. Customer entry remains in payment and composer edit. Items SHALL
 NOT be truncated or collapsed because these lists are preparation work. Any
 operator holding the owning tablet's live shift SHALL reopen and change lines,
 quantities, notes, label and customer form values until payment or cancellation,
@@ -127,7 +127,7 @@ or cancelled. Once an order is paid, revision SHALL close for it everywhere.
 #### Scenario: Staff scans work to prepare
 
 - **WHEN** a pipeline order contains several different items and has a customer name
-- **THEN** every item and quantity is readable without expansion, the total is prominent, the card labels its reference as Order # followed by the number, and customer details remain in payment and edit, while the compact age ring shows waiting time
+- **THEN** every item and quantity is readable without expansion, the total is prominent, the card labels its reference as Order # followed by the number, and customer details remain in payment and edit, while a small line under the label says how long ago it was ordered
 
 #### Scenario: A locked line in the composer
 
@@ -136,10 +136,13 @@ or cancelled. Once an order is paid, revision SHALL close for it everywhere.
 
 ### Requirement: A pipeline card states handover per item and payment in its footer
 
-A card SHALL show its orange order number, full label when present, total, and a
-compact age ring no larger than the previous customer control. The ring SHALL
-display centered total minutes, including ages above one hour, and use warning at
-10, red at 20, and darker contrast-validated red at 40 minutes. A gold member star SHALL overlap
+A card SHALL show its orange order number, full label when present, and total. Under
+the label, or alone where there is none, the card SHALL say how long ago the order
+was placed in small muted text (*21m ago*, *1h 5m ago*), and the order number and
+total SHALL each be as tall as the label and that line together. The card SHALL NOT
+carry a timer or age ring: an order's age measures neither the kitchen, which hands
+food over dish by dish and again as a table orders more, nor payment, which comes
+last (owner, 2026-10-14). A gold member star SHALL overlap
 the order number without moving it. Table N, Dine-in or Takeaway SHALL be centered in its footer space beside
 Paid, leaving the label header uncluttered. Without service, Paid SHALL take the
 full available footer width. The aggregate Prepared control SHALL be omitted.
@@ -235,7 +238,7 @@ SHALL be able to read its own outlet's kitchen pulse and no other outlet's.
 ### Requirement: Each kitchen has its own sent, acknowledged, ready and handed-over indicator
 
 Each live kitchen carrying an order SHALL have one stable slot, ordered by kitchen
-label, midway between the age ring and overflow control. The slot SHALL show a
+label, midway between the total and overflow control. The slot SHALL show a
 neutral single tick when sent, orange double tick when the kitchen's current
 visible food is acknowledged, orange bell while that kitchen has Ready food
 awaiting counter handover, and no icon after all its food is handed over. The
@@ -318,7 +321,7 @@ without moving the card.
 Cards SHALL retain the torn ticket edge and prominent display-face order number.
 Dish quantities SHALL remain visible separately from fixed checkboxes. A one-dish
 card SHALL remain compact at approximately nine rem or less, without stretching
-to a taller neighbour. Independent kitchen slots SHALL fit between the age ring
+to a taller neighbour. Independent kitchen slots SHALL fit between the total
 and overflow control without enlarging the card or adding an ACK-dot cluster.
 
 #### Scenario: Compact independent cards
@@ -417,7 +420,7 @@ nothing and swing nothing. The handbell SHALL be the counter's only sound. Under
 reduced motion the fill SHALL stay and the shine and swing SHALL NOT move.
 
 Rows SHALL have space between them and vertically centered contents. The kitchen
-status slots SHALL be centered between the age ring and bottom action icon.
+status slots SHALL be centered between the total and bottom action icon.
 Clickable dish rows SHALL show a hand cursor and subtle shadow on mouse hover,
 without adding that hover treatment on touchscreens.
 The dish checkbox SHALL be fixed at 15px, smaller than the former 17px Prepared

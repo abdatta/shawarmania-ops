@@ -586,7 +586,13 @@ only the order.
 The order-level **Prepared** control is omitted: the item ticks state handover.
 Its footer space carries Table N or Takeaway. Without a service, Paid spans the
 available footer width. Service details leave the header, which holds number,
-label, total and an age ring no larger than the former customer control. The
+label and total. Under the label, small and muted, the card says how long ago the
+order was placed (*21m ago*); the number and total are each as tall as the label
+and that line together. The first launch's age ring there was removed on 14
+October 2026: an order's age measured neither the kitchen, which hands food over
+dish by dish and again as a table orders more, nor payment, which comes last, so a
+ring counting on until payment alerted to nothing. A ring per dish until handover
+was considered and refused as too much on the card. The kitchen keeps its ring. The
 member badge sits on the order number. Customer entry remains in payment and edit.
 The composer uses an accessible, visually hidden Order Label caption and an
 Order Label placeholder, a compact quantity pill, a right-aligned pencil, and Save.
