@@ -42,21 +42,38 @@ export { DEMO_GATES_KEY }
 /** The turns made in this demo, kept beside the answers for the same reason. */
 export const DEMO_TURNS_KEY = 'shawarmania.demo.change-gate-turns'
 
-/** The declared gates' owner-facing words, as their migration will insert them. */
+/** The declared gates' owner-facing words and roadmap numbers, as their migrations insert them. */
 const WORDS: Record<
   (typeof CHANGE_GATE_KEYS)[number],
-  Pick<ChangeGateSummary, 'title' | 'onMeans' | 'offMeans'>
+  Pick<ChangeGateSummary, 'title' | 'onMeans' | 'offMeans' | 'changeNumber'>
 > = {
   probe: {
     title: 'Probe',
     onMeans: 'Every build code includes PB.',
     offMeans: 'PB is not in the build code.',
+    changeNumber: 75,
   },
   'tablet-health': {
     title: 'Tablet health',
     onMeans:
       'Every tablet reports, each minute, how many requests it made, how many failed and the slowest one.',
     offMeans: 'Tablets report nothing new.',
+    changeNumber: 75,
+  },
+  'dish-ticks': {
+    title: 'Dish ticks',
+    onMeans:
+      'The counter is the menu and a two-column rail with Bills and Expenses below; orders take a label, dishes take notes, each dish is ticked off on its own, and the kitchen sees only the food it still owes.',
+    offMeans:
+      'The counter and kitchen as they were before #74: three columns, one Prepared tick per order, no labels or notes.',
+    changeNumber: 74,
+  },
+  'kitchen-ready': {
+    title: 'Kitchen Ready',
+    onMeans:
+      "The kitchen marks its food Done; on the counter those dishes fill orange and the order's bell swings to two rings of the handbell.",
+    offMeans: 'The kitchen has ACK only, as before #74.',
+    changeNumber: 74,
   },
 }
 
@@ -64,55 +81,21 @@ const WORDS: Record<
  * Every gate the demo lists, in the owner's words. In the real app the words
  * live in each gate's database row (D4), so an older build on the owner's phone
  * can still read a newer gate; the demo has no database, so they live here.
- *
- * **Two of these are examples, not declarations.** Dish ticks and Kitchen Ready
- * are how #74 is expected to come back — Ready dependent on the dish ticks — and
- * they are here so the walkthrough shows one gate depending on another (owner,
- * 2026-10-12). No code reads them: turning them in the demo changes nothing but
- * this page, and they never appear in a build code.
  */
 const DEMO_GATES: (Omit<ChangeGateSummary, 'enabled' | 'changedAt' | 'changedByName'> & {
   declared: boolean
-})[] = [
-  {
-    key: 'dish-ticks',
-    code: 'DT',
-    kind: 'change',
-    title: 'Dish ticks',
-    onMeans: 'Each dish on a rail card is ticked off on its own, and Prepared follows the dishes.',
-    offMeans: 'The counter as it was before #74: one Prepared tick per order.',
-    changeName: 'each-dish-is-ticked-off',
-    changeNumber: 74,
-    dependsOn: [],
-    declared: false,
-  },
-  {
-    key: 'kitchen-ready',
-    code: 'KR',
-    kind: 'change',
-    title: 'Kitchen Ready',
-    onMeans:
-      'The kitchen marks its food Ready, and those dishes shake on the counter until ticked.',
-    offMeans: 'The kitchen has ACK only, as before #74.',
-    changeName: 'each-dish-is-ticked-off',
-    changeNumber: 74,
-    dependsOn: ['dish-ticks'],
-    declared: false,
-  },
-  ...CHANGE_GATE_KEYS.map((key) => {
-    const declared = CHANGE_GATES[key] as ChangeGateDeclaration
-    return {
-      key,
-      code: declared.code,
-      kind: declared.kind,
-      ...WORDS[key],
-      changeName: declared.change,
-      changeNumber: 75,
-      dependsOn: [...(declared.dependsOn ?? [])],
-      declared: true,
-    }
-  }),
-]
+})[] = CHANGE_GATE_KEYS.map((key) => {
+  const declared = CHANGE_GATES[key] as ChangeGateDeclaration
+  return {
+    key,
+    code: declared.code,
+    kind: declared.kind,
+    ...WORDS[key],
+    changeName: declared.change,
+    dependsOn: [...(declared.dependsOn ?? [])],
+    declared: true,
+  }
+})
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE

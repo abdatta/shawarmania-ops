@@ -88,6 +88,32 @@ export const CHANGE_GATES = {
     roundTrip:
       'none: a health report is overwritten every minute and no other path reads what it writes',
   },
+  /**
+   * #74 relaunched (each-dish-is-ticked-off, design R1): the two-column counter,
+   * labels, dish notes and each dish ticked off on its own, with the kitchen
+   * seeing only the food it still owes. Off is the counter and kitchen as they
+   * were before #74.
+   */
+  'dish-ticks': {
+    kind: 'change',
+    code: 'DT',
+    change: 'each-dish-is-ticked-off',
+    retireBy: '2026-12-15',
+    roundTrip: 'tested',
+  },
+  /**
+   * The kitchen's Done, and on the counter the dish's orange fill and two rings
+   * of the handbell (design R1, R6). Runs only while `dish-ticks` is on: its
+   * whole effect on the counter is on a dish row only the ticks draw.
+   */
+  'kitchen-ready': {
+    kind: 'change',
+    code: 'KR',
+    change: 'each-dish-is-ticked-off',
+    dependsOn: ['dish-ticks'],
+    retireBy: '2026-12-15',
+    roundTrip: 'tested',
+  },
 } as const satisfies Record<string, ChangeGateDeclaration>
 
 export type ChangeGateKey = keyof typeof CHANGE_GATES

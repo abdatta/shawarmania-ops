@@ -21,16 +21,19 @@ import { CounterActivity } from './counter-activity'
  * to cross the gap cannot live in a box that clips at the gap.
  */
 export function CounterActivityRail({
+  twoColumns = false,
   refreshKey,
   savedOrderKey = 0,
   editingOrder,
   onEditOrder,
   onSetOrderCustomer,
   onActivityChanged,
+  onOrdersRead,
   pin,
   asOf,
   checkoutSettings,
 }: {
+  twoColumns?: boolean
   refreshKey: number
   /** Bumped only when an order is saved on this tablet. */
   savedOrderKey?: number
@@ -40,6 +43,7 @@ export function CounterActivityRail({
   onSetOrderCustomer: (order: BillingOrder) => void
   /** The pipeline already reloads itself; notify the bills column only. */
   onActivityChanged: () => void
+  onOrdersRead?: (orders: BillingOrder[]) => void
   /** The docked card, built by the composer that owns the draft it displays. */
   pin: ReactNode
   asOf?: string
@@ -58,7 +62,11 @@ export function CounterActivityRail({
         as well would sweep this shift's bills and every other open order into the
         same highlight, which says the opposite of what the highlight is for.
       */
-      className="flex min-h-0 flex-col rounded-xl border border-border bg-surface"
+      className={
+        twoColumns
+          ? 'relative flex min-h-0 flex-col rounded-xl border border-border bg-surface'
+          : 'flex min-h-0 flex-col rounded-xl border border-border bg-surface'
+      }
     >
       {asOf && (
         <p
@@ -79,26 +87,32 @@ export function CounterActivityRail({
       */}
       <div
         style={{
-          marginLeft: 'calc(var(--dock-overhang) * -1)',
-          paddingLeft: 'calc(0.75rem + var(--dock-overhang))',
+          marginLeft: twoColumns ? 0 : 'calc(var(--dock-overhang) * -1)',
+          paddingLeft: twoColumns ? '0.75rem' : 'calc(0.75rem + var(--dock-overhang))',
         }}
         className="flex min-h-0 flex-1 flex-col py-2 pr-3"
       >
         {editing && (
           <div
-            style={{ marginLeft: 'calc(var(--dock-reach) * -1)' }}
-            className="z-10 my-2 shrink-0 animate-[dock-in_200ms_ease-out] motion-reduce:animate-none"
+            style={{ marginLeft: twoColumns ? 0 : 'calc(var(--dock-reach) * -1)' }}
+            className={
+              twoColumns
+                ? 'absolute right-3 top-2 z-20 w-[calc((100%-2.25rem)/2)]'
+                : 'z-10 my-2 shrink-0 animate-[dock-in_200ms_ease-out] motion-reduce:animate-none'
+            }
           >
             {pin}
           </div>
         )}
         <CounterActivity
+          twoColumns={twoColumns}
           refreshKey={refreshKey}
           savedOrderKey={savedOrderKey}
           editingOrderId={editingOrder?.id ?? null}
           onEditOrder={onEditOrder}
           onSetOrderCustomer={onSetOrderCustomer}
           onActivityChanged={onActivityChanged}
+          {...(onOrdersRead ? { onOrdersRead } : {})}
           {...(checkoutSettings ? { checkoutSettings } : {})}
         />
       </div>

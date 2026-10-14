@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 import {
-  BILLING_COMMAND_RPC,
+  billingCommandRpc,
   billingCommandRpcArguments,
   type BillingCommand,
 } from '../../../shared/billing-command'
@@ -47,7 +47,9 @@ export function createSupabaseBillingCommandAdapter(
 ): BillingCommandAdapter {
   return {
     async execute(command: BillingCommand): Promise<BillingCommandResult> {
-      const rpc = BILLING_COMMAND_RPC[command.type]
+      // A command queued by the dish ticks reaches their `_v2` functions whatever
+      // the gate says now (each-dish-is-ticked-off, design R3).
+      const rpc = billingCommandRpc(command)
       const args = billingCommandRpcArguments(command)
       // All eight command functions deliberately share one envelope signature.
       // The generated client cannot express a dynamic key preserving that fact,

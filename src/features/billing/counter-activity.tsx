@@ -1,5 +1,6 @@
 import type { BillingOrder, OutletMenu } from '@/data-access/adapters'
 
+import { DishOpenOrdersSurface } from './dish-open-orders-surface'
 import { OpenOrdersSurface } from './open-orders-surface'
 
 /**
@@ -16,16 +17,22 @@ import { OpenOrdersSurface } from './open-orders-surface'
  * adjacent. It sits **outside** the list's scroller for the same reason as
  * always — scrolling the pipeline must never scroll the order being edited
  * away; here that is true by construction, because nothing above it moves.
+ *
+ * With the dish ticks on (`twoColumns`, each-dish-is-ticked-off) the rail is
+ * their own, in two columns; off, it is today's.
  */
 export function CounterActivity({
+  twoColumns = false,
   refreshKey,
   savedOrderKey = 0,
   editingOrderId = null,
   onEditOrder,
   onSetOrderCustomer,
   onActivityChanged,
+  onOrdersRead,
   checkoutSettings,
 }: {
+  twoColumns?: boolean
   refreshKey: number
   /** Bumped only when an order is saved on this tablet. */
   savedOrderKey?: number
@@ -33,20 +40,36 @@ export function CounterActivity({
   onEditOrder?: (order: BillingOrder) => void
   onSetOrderCustomer?: (order: BillingOrder) => void
   onActivityChanged?: () => void
+  /** The dish ticks' rail hands its orders up, so the label warning reads them, not the server. */
+  onOrdersRead?: (orders: BillingOrder[]) => void
   checkoutSettings?: Pick<OutletMenu, 'service' | 'loyalty'>
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <OpenOrdersSurface
-        embedded
-        refreshKey={refreshKey}
-        savedOrderKey={savedOrderKey}
-        editingOrderId={editingOrderId}
-        {...(onEditOrder ? { onEditOrder } : {})}
-        {...(onSetOrderCustomer ? { onSetOrderCustomer } : {})}
-        {...(onActivityChanged ? { onActivityChanged } : {})}
-        {...(checkoutSettings ? { checkoutSettings } : {})}
-      />
+      {twoColumns ? (
+        <DishOpenOrdersSurface
+          embedded
+          refreshKey={refreshKey}
+          savedOrderKey={savedOrderKey}
+          editingOrderId={editingOrderId}
+          {...(onEditOrder ? { onEditOrder } : {})}
+          {...(onSetOrderCustomer ? { onSetOrderCustomer } : {})}
+          {...(onActivityChanged ? { onActivityChanged } : {})}
+          {...(onOrdersRead ? { onOrdersRead } : {})}
+          {...(checkoutSettings ? { checkoutSettings } : {})}
+        />
+      ) : (
+        <OpenOrdersSurface
+          embedded
+          refreshKey={refreshKey}
+          savedOrderKey={savedOrderKey}
+          editingOrderId={editingOrderId}
+          {...(onEditOrder ? { onEditOrder } : {})}
+          {...(onSetOrderCustomer ? { onSetOrderCustomer } : {})}
+          {...(onActivityChanged ? { onActivityChanged } : {})}
+          {...(checkoutSettings ? { checkoutSettings } : {})}
+        />
+      )}
     </div>
   )
 }

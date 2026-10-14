@@ -7,7 +7,7 @@ import {
 } from '@/data-access/mock/kitchen'
 import { DEMO_OUTLET_ID } from '@/data-access/mock/store'
 import { DEMO_BILLER_ID } from '@/data-access/mock/fixtures/billing'
-import { KitchenBoardScreen } from '@/features/kitchen/kitchen-board-screen'
+import { KitchenScreen } from '@/features/kitchen/kitchen-screen'
 import { CounterDeviceContext } from '@/session/counter-context'
 import type { CounterDeviceSession } from '@/session/counter-session'
 
@@ -51,7 +51,7 @@ export function DemoKitchen({ banner, today }: { banner: ReactNode; today: strin
       <div className="sticky top-0 z-40" data-window-edge="top">
         {banner}
       </div>
-      <KitchenBoardScreen />
+      <KitchenScreen />
     </CounterDeviceContext.Provider>
   )
 }

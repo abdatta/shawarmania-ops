@@ -233,3 +233,23 @@ export {
   type KitchenLineFacts,
   type KitchenWaitTone,
 } from './kitchen'
+export {
+  addDish,
+  diffDishKitchenLines,
+  dishKitchenCardState,
+  DISH_WAIT_CRITICAL_MINUTES,
+  dishLineKey,
+  dishLocked,
+  dishOwed,
+  dishWaitTone,
+  NOTE_SEEDS,
+  NOTE_STORAGE_KEY,
+  noteDish,
+  rankedNotes,
+  sameDishLines,
+  type DishKitchenLineDiff,
+  type DishKitchenLineFacts,
+  type DishLineFacts,
+  type DishWaitTone,
+  type KitchenDishState,
+} from './dish-workflow'

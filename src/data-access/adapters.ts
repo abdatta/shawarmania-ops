@@ -1,6 +1,7 @@
 import type {
   BillingCommandResult,
   KitchenAnswer,
+  KitchenDishState,
   LineKind,
   MonthDayInput,
   MonthReading,
@@ -1321,6 +1322,16 @@ export interface CounterShift {
  * these two columns at all.
  */
 export interface BillLineDraft {
+  /**
+   * The dish ticks (each-dish-is-ticked-off; `dish-ticks` only). Absent on every
+   * line the off path builds or reads: a new line's identity before it is saved,
+   * its note, and how much of it the counter has ticked and the kitchens marked
+   * Ready.
+   */
+  workflowLineId?: string
+  note?: string | null
+  preparedQuantity?: number
+  readyQuantity?: number
   /** Existing order-item identity, retained when revising captured prices. */
   orderLineId?: Tables<'order_items'>['id']
   /**
@@ -1436,6 +1447,7 @@ export type BillStatus = Tables<'bills'>['status']
 
 /** A saved order as the counter and manager surfaces read it. */
 export interface BillingOrder extends ServiceFacts {
+  label?: string | null
   id: Tables<'orders'>['id']
   outletId: Tables<'orders'>['outlet_id']
   deviceId: Tables<'orders'>['device_id']
@@ -1505,6 +1517,7 @@ export interface BillingOrder extends ServiceFacts {
 export type BillVoidKind = NonNullable<Tables<'bills'>['void_kind']>
 
 export interface SaveOrderInput extends ServiceFacts {
+  label?: string | null
   clientId: string
   outletId: string
   shiftId: string
@@ -1782,6 +1795,7 @@ export interface BillingAdapter {
     input: Pick<
       SaveOrderInput,
       | 'lines'
+      | 'label'
       | 'discounts'
       | 'customerId'
       | 'customerName'
@@ -1807,6 +1821,17 @@ export interface BillingAdapter {
    * paid order is refused: the bills border is terminal in that direction.
    */
   markOrderPrepared(orderId: string, prepared: boolean): Promise<BillingOrder>
+  /**
+   * Tick or untick dishes on this tablet's own order (each-dish-is-ticked-off,
+   * `dish-ticks` only): a durable, idempotent outbox command, queued with the
+   * dish ticks' variant so it reaches `prepare_order_lines_v2` whatever the gate
+   * says by the time it is delivered (design R3).
+   */
+  markOrderLinesPrepared(
+    id: string,
+    orderId: string,
+    lines: { id: string; prepared: boolean }[],
+  ): Promise<BillingOrder>
   /**
    * Take this tablet's own payment back within the grace window. A settled
    * bill is voided as `counter_unpay`; money held against a paid-but-unprepared
@@ -2090,6 +2115,7 @@ export type KitchenAlertKind = 'new' | 'edit' | 'cancel'
 
 /** One line as the kitchen sees it: a dish and how many. Never a price. */
 export interface KitchenLine {
+  note?: string | null
   id: string
   menuItemId: string | null
   itemName: string
@@ -2112,6 +2138,10 @@ export interface KitchenAcknowledgement {
  * and a kitchen shift holds no select on the tables that carry them.
  */
 export interface KitchenOrder {
+  /** Done receipt: distinct ticket identity, original order for commands. */
+  sourceOrderId?: string
+  readyId?: string
+  ticketNumber?: number
   id: string
   orderNumber: number
   serviceType: ServiceType | null
@@ -2159,6 +2189,9 @@ export interface KitchenCategory {
  * carries are absent. Nothing about dishes, times or people.
  */
 export interface KitchenMarks {
+  readyQuantities?: Record<string, Record<string, number>>
+  /** Per kitchen, in the same stable order as `kitchens`; null means not carrying. */
+  dishStates?: Record<string, (KitchenDishState | null)[]>
   kitchens: { id: string; label: string }[]
   orders: Record<string, (KitchenAnswer | null)[]>
   /**
@@ -2177,7 +2210,30 @@ export type KitchenAcknowledgeOutcome = 'accepted' | 'stale'
  * the kitchen holds no outbox and caches nothing for a restart.
  */
 export interface KitchenAdapter {
+  /** The review demo can walk both kitchen stations. */
+  setDemoStation?(station: number): void
   readBoard(): Promise<KitchenBoard>
+  /**
+   * The dish ticks' board (each-dish-is-ticked-off, design D7; `dish-ticks`
+   * only): notes, only the food still owed, each Done receipt as its own card,
+   * and a later ticket's number. Never a label.
+   */
+  readDishBoard(): Promise<KitchenBoard>
+  /** ACK on the dish ticks' board: it records the full lines, notes included (R4). */
+  acknowledgeDish(input: {
+    id: string
+    orderId: string
+    kind: KitchenAlertKind
+    orderVersion: string
+  }): Promise<KitchenAcknowledgeOutcome>
+  /** Done: the lines and quantities the cook was shown (D5; `kitchen-ready` only). */
+  ready(input: {
+    id: string
+    orderId: string
+    lines: { id: string; quantity: number }[]
+  }): Promise<void>
+  /** Undo a Done. No time window; the counter's handover stays (D5). */
+  undoReady(id: string, readyId: string): Promise<void>
   listCategories(): Promise<KitchenCategory[]>
   /** Saves the filter and the sort together, as the one sheet on the tablet does. */
   /**
@@ -2186,6 +2242,11 @@ export interface KitchenAdapter {
    * fires on an ACK, a filter change and a kitchen shift starting or ending.
    */
   readCounterMarks(): Promise<KitchenMarks>
+  /**
+   * The dish ticks' read of the kitchens (D8; `dish-ticks` only): the same
+   * answers, plus each kitchen's slot and each dish's ready quantity.
+   */
+  readDishMarks(): Promise<KitchenMarks>
   setFilter(
     mode: KitchenFilterMode,
     categoryIds: readonly string[],

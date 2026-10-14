@@ -5,7 +5,7 @@ import { ShiftRequestScreen } from '@/features/counter/shift-request-screen'
 import { useCounterDevice } from '@/session/counter-context'
 import type { CounterShift } from '@/session/counter-session'
 
-import { KitchenBoardScreen } from './kitchen-board-screen'
+import { KitchenScreen } from './kitchen-screen'
 import type { TunePlayer } from './ringer'
 
 /** How often the kitchen tells the Tablets list it is still there. */
@@ -89,5 +89,5 @@ function KitchenShiftWatch({
       unsubscribe()
     }
   }, [counter, deviceId, shiftId, onEnded])
-  return <KitchenBoardScreen {...(player ? { player } : {})} />
+  return <KitchenScreen {...(player ? { player } : {})} />
 }

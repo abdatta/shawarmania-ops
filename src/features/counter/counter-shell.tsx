@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { useChangeGate } from '@/change-gates/context'
 import { BuildVersion } from '@/components/build-version'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
@@ -8,6 +9,7 @@ import { useAdapters } from '@/data-access'
 import type { ExpenseRecord } from '@/data-access/adapters'
 import { resolveBusinessDate } from '@/domain'
 import { BillingCounter } from '@/features/billing/billing-counter'
+import { CounterRecords } from '@/features/billing/counter-records'
 import { KitchenMarksProvider } from '@/features/billing/kitchen-marks'
 import { ExpenseList } from '@/features/expenses/expense-list'
 import { getSurface, isRenderable } from '@/gates/registry'
@@ -43,6 +45,12 @@ export function CounterShell({
   onShiftChanged: () => void
 }) {
   const device = useCounterDevice()
+  /**
+   * The dish ticks (each-dish-is-ticked-off, design R1): the till becomes the
+   * menu and a two-column rail, and Bills and Expenses sit side by side below
+   * it. Off, everything here is the counter as it was before #74.
+   */
+  const dishWorkflow = useChangeGate('dish-ticks')
   const { counter } = useAdapters()
   /**
    * The outgoing operator has stepped away and somebody else is taking the
@@ -61,6 +69,9 @@ export function CounterShell({
   const [handingOver, setHandingOver] = useState(false)
   const [finishOpen, setFinishOpen] = useState(false)
   const [boundaryReached, setBoundaryReached] = useState(false)
+  const [railWidth, setRailWidth] = useState<number>()
+  const [horizontalScroll, setHorizontalScroll] = useState(0)
+  const [billRefresh, setBillRefresh] = useState(0)
   const resume = device.offlineResume
 
   /**
@@ -98,8 +109,20 @@ export function CounterShell({
 
   return (
     <KitchenMarksProvider>
-      <div className="min-h-dvh bg-canvas p-4 text-content">
-        <div className="mx-auto max-w-[100rem] space-y-4">
+      <div
+        className={
+          dishWorkflow
+            ? 'min-h-dvh overflow-clip bg-canvas p-4 text-content'
+            : 'min-h-dvh bg-canvas p-4 text-content'
+        }
+      >
+        <div
+          className={
+            dishWorkflow
+              ? 'mx-auto flex max-w-[100rem] flex-col gap-4'
+              : 'mx-auto max-w-[100rem] space-y-4'
+          }
+        >
           {resume && (
             <div
               role="status"
@@ -159,8 +182,29 @@ export function CounterShell({
             </div>
           </header>
 
-          <BillingPanel />
-          <CounterExpenses shift={shift} />
+          {dishWorkflow ? (
+            <>
+              <BillingPanel
+                onRailWidthChange={setRailWidth}
+                scrollLeft={horizontalScroll}
+                onHorizontalScroll={setHorizontalScroll}
+                onBillRefresh={setBillRefresh}
+              />
+              <CounterRecords
+                expenses={<CounterExpenses shift={shift} />}
+                railWidth={railWidth}
+                scrollLeft={horizontalScroll}
+                onHorizontalScroll={setHorizontalScroll}
+                asOf={resume?.lastSuccessfulReadAt}
+                refreshKey={billRefresh}
+              />
+            </>
+          ) : (
+            <>
+              <BillingPanel />
+              <CounterExpenses shift={shift} />
+            </>
+          )}
           {/* Below Expenses, at the foot of the scroll: it takes no room from the
               till above it. */}
           <BuildVersion className="pb-2 text-center" />
@@ -187,12 +231,28 @@ export function CounterShell({
  * branch is the only real context that mounts the till; personal Biller sessions
  * stay on their staff phone shell.
  */
-function BillingPanel() {
+function BillingPanel({
+  onRailWidthChange,
+  scrollLeft,
+  onHorizontalScroll,
+  onBillRefresh,
+}: {
+  onRailWidthChange?: ((width: number) => void) | undefined
+  scrollLeft?: number | undefined
+  onHorizontalScroll?: ((left: number) => void) | undefined
+  onBillRefresh?: ((refresh: number) => void) | undefined
+}) {
   const device = useCounterDevice()
   if (isRenderable(getSurface('counter-billing').state, 'real')) {
     return (
       <div className="h-[calc(100dvh-8rem)] min-h-[36rem]">
-        <BillingCounter outletId={device.device.outletId} />
+        <BillingCounter
+          outletId={device.device.outletId}
+          onRailWidthChange={onRailWidthChange}
+          scrollLeft={scrollLeft}
+          onHorizontalScroll={onHorizontalScroll}
+          onBillRefresh={onBillRefresh}
+        />
       </div>
     )
   }

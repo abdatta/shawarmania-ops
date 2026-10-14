@@ -21,15 +21,24 @@ import { PaymentTotalCards } from './payment-total-cards'
 import { UnpayDialog, CancelAfterPaidDialog } from './pipeline-card'
 import { useFlip } from './flip'
 import { useCounterState } from './use-counter-state'
+import { useRefreshQueue } from '@/lib/use-refresh-queue'
 import { OfflineFillHint } from './offline-fill-hint'
 
 export function MyShiftSurface({
   embedded = false,
+  records = false,
   refreshKey = 0,
   onActivityChanged,
   asOf,
 }: {
   embedded?: boolean
+  /**
+   * In the dish ticks' records row below the till (each-dish-is-ticked-off,
+   * `dish-ticks` only): a taller loading shape for the taller panel, and one
+   * read at a time with one trailing read kept, so a burst of refreshes makes
+   * two reads rather than a pile of them (design R5).
+   */
+  records?: boolean
   refreshKey?: number
   onActivityChanged?: () => void
   asOf?: string
@@ -48,7 +57,7 @@ export function MyShiftSurface({
   const billListRef = useRef<HTMLDivElement | null>(null)
   useFlip(billListRef, [history])
 
-  const load = useCallback(async () => {
+  const loadNow = useCallback(async () => {
     await Promise.resolve()
     if (!shift) {
       setAttention([])
@@ -61,6 +70,26 @@ export function MyShiftSurface({
     setHistory(nextHistory)
     setAttention(nextAttention)
   }, [billing, shift])
+
+  const read = useCallback(
+    async (isCurrent: () => boolean) => {
+      await Promise.resolve()
+      if (!shift) {
+        setAttention([])
+        return setHistory({ bills: [], totals: [] })
+      }
+      const [nextHistory, nextAttention] = await Promise.all([
+        billing.listShiftHistory(shift.id),
+        billing.listAttention(),
+      ])
+      if (!isCurrent()) return
+      setHistory(nextHistory)
+      setAttention(nextAttention)
+    },
+    [billing, shift],
+  )
+  const queued = useRefreshQueue(read)
+  const load = records ? queued.refresh : loadNow
 
   useEffect(() => {
     void Promise.resolve()
@@ -87,16 +116,36 @@ export function MyShiftSurface({
       // The bills column's own silhouette: the totals pair over collapsed bill
       // rows — reshaped beside this column's new layout, per the standing
       // placeholder rule.
-      <LoadingRegion label="this shift" className="space-y-2" data-testid="bills-loading">
-        <OfflineFillHint />
-        <div className="grid grid-cols-2 gap-2">
-          <Shimmer className="h-12" />
-          <Shimmer className="h-12" />
-        </div>
-        {[1, 2, 3].map((key) => (
-          <Shimmer key={key} className="h-9" />
-        ))}
-      </LoadingRegion>
+      records ? (
+        <LoadingRegion
+          label="this shift"
+          className="flex min-h-0 flex-1 flex-col gap-2"
+          data-testid="bills-loading"
+        >
+          <OfflineFillHint />
+          <Shimmer className="h-4 w-28 shrink-0" />
+          <div className="grid shrink-0 grid-cols-2 gap-2">
+            <Shimmer className="h-20" />
+            <Shimmer className="h-20" />
+          </div>
+          <div className="min-h-0 flex-1 space-y-2 overflow-hidden">
+            {Array.from({ length: 8 }, (_, key) => (
+              <Shimmer key={key} className="h-9" />
+            ))}
+          </div>
+        </LoadingRegion>
+      ) : (
+        <LoadingRegion label="this shift" className="space-y-2" data-testid="bills-loading">
+          <OfflineFillHint />
+          <div className="grid grid-cols-2 gap-2">
+            <Shimmer className="h-12" />
+            <Shimmer className="h-12" />
+          </div>
+          {[1, 2, 3].map((key) => (
+            <Shimmer key={key} className="h-9" />
+          ))}
+        </LoadingRegion>
+      )
     )
 
   const tenderLabelOf = (bill: BillingBill): string | null => {

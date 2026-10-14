@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   BILLING_COMMAND_RPC,
   BILLING_COMMAND_SCHEMA_VERSIONS,
+  billingCommandRpc,
   billingCommandRpcArguments,
   billingPayloadHash,
   canonicalBillingJson,
@@ -282,11 +283,66 @@ describe('billing command canonical identity', () => {
       'manager_cancel_order',
       'confirm_end_of_day',
       'set_order_preparation',
+      'prepare_order_lines',
       'void_order_payment',
       'cancel_paid_order',
     ]
-    expect(types.map((type) => BILLING_COMMAND_RPC[type])).toHaveLength(12)
-    expect(new Set(types.map((type) => BILLING_COMMAND_RPC[type])).size).toBe(12)
+    expect(types.map((type) => BILLING_COMMAND_RPC[type])).toHaveLength(13)
+    expect(new Set(types.map((type) => BILLING_COMMAND_RPC[type])).size).toBe(13)
+  })
+
+  describe('a command written for the dish ticks (each-dish-is-ticked-off, design R3)', () => {
+    const orderId = 'd0000000-0000-4000-a000-000000000001'
+    const tick = {
+      orderId,
+      lines: [{ id: 'd2000000-0000-4000-a000-000000000001', prepared: true }],
+    }
+    const base = {
+      commandId: 'd3000000-0000-4000-a000-000000000001',
+      tabletId: 't0000000-0000-4000-a000-000000000001',
+      shiftId: 's0000000-0000-4000-a000-000000000001',
+      createdAt: '2026-10-14T06:00:00.000Z',
+    }
+
+    it('reaches the _v2 functions it was written for, and everything else goes where it went', async () => {
+      const onPath = await createBillingCommand({
+        ...base,
+        type: 'prepare_order_lines',
+        payload: tick,
+        variant: 'dishes',
+      })
+      expect(billingCommandRpc(onPath)).toBe('prepare_order_lines_v2')
+      expect(billingCommandRpc({ type: 'create_order', variant: 'dishes' })).toBe(
+        'create_billing_order_v2',
+      )
+      expect(billingCommandRpc({ type: 'revise_order', variant: 'dishes' })).toBe(
+        'revise_billing_order_v2',
+      )
+      // Pay-now makes a bill with no order: nothing for a label or note to attach to.
+      expect(billingCommandRpc({ type: 'pay_now', variant: 'dishes' })).toBe('pay_billing_now')
+      expect(billingCommandRpc({ type: 'pay_order', variant: 'dishes' })).toBe('pay_billing_order')
+      for (const type of Object.keys(BILLING_COMMAND_RPC) as BillingCommandType[]) {
+        expect(billingCommandRpc({ type })).toBe(BILLING_COMMAND_RPC[type])
+      }
+    })
+
+    it('leaves an off-path command byte-for-byte as it was, and the variant outside the hash', async () => {
+      const offPath = await createBillingCommand({
+        ...base,
+        type: 'prepare_order_lines',
+        payload: tick,
+      })
+      expect(Object.keys(offPath)).not.toContain('variant')
+      expect(JSON.stringify(offPath)).not.toContain('variant')
+      const onPath = await createBillingCommand({
+        ...base,
+        type: 'prepare_order_lines',
+        payload: tick,
+        variant: 'dishes',
+      })
+      expect(onPath.payloadHash).toBe(offPath.payloadHash)
+      expect(billingCommandRpcArguments(onPath)).toEqual(billingCommandRpcArguments(offPath))
+    })
   })
 
   it('carries the preparation and unwind payloads through the canonical hash unchanged', async () => {

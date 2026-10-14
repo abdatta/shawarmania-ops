@@ -76,6 +76,8 @@
   --brand-veg-deep: #15803d;
   --brand-veg-soft: #4ade80;
   --brand-nonveg-soft: #f87171;
+  --brand-crimson: #991b1b;
+  --brand-crimson-soft: #f25e5e;
   --brand-amber-deep: #b45309;
   --brand-amber: #fbbf24;
 
@@ -132,10 +134,16 @@
   --chart-oldest: var(--brand-chart-violet);
 
   --success: var(--brand-veg-deep);
+  --dish-ready: var(--primary);
+  /* Ready dish text on its fill: the primary button's pair, already validated. */
+  --on-dish-ready: var(--on-primary);
+  /* The offer-banner shine: white at 55%, in both themes. */
+  --dish-ready-shine: color-mix(in srgb, var(--brand-white) 55%, transparent);
   --on-success: var(--brand-white);
   /* Filled success controls are read against their fill, not the canvas.
      Their pair therefore intentionally reverses the standalone status tone. */
   --danger: var(--brand-nonveg);
+  --danger-critical: var(--brand-crimson);
   --warning: var(--brand-amber-deep);
   --on-warning: var(--brand-white);
 
@@ -216,8 +224,14 @@
   --chart-oldest: var(--brand-chart-violet-soft);
 
   --success: var(--brand-veg-soft);
+  --dish-ready: var(--primary);
+  /* Ready dish text on its fill: the primary button's pair, already validated. */
+  --on-dish-ready: var(--on-primary);
+  /* The offer-banner shine: white at 55%, in both themes. */
+  --dish-ready-shine: color-mix(in srgb, var(--brand-white) 55%, transparent);
   --on-success: var(--brand-stone-900);
   --danger: var(--brand-nonveg-soft);
+  --danger-critical: var(--brand-crimson-soft);
   --warning: var(--brand-amber);
   --on-warning: var(--brand-stone-900);
 

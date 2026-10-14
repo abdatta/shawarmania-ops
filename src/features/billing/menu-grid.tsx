@@ -32,11 +32,13 @@ export function MenuGrid({
   menu,
   quantities,
   onAdd,
+  dishReview = false,
 }: {
   menu: MenuCategoryWithItems[]
   /** Quantity currently on the bill, by menu item id. */
   quantities: Map<string, number>
   onAdd: (item: Tables<'menu_items'>) => void
+  dishReview?: boolean
 }) {
   const [query, setQuery] = useState('')
   const shown = useMemo(() => filterMenu(menu, query), [menu, query])
@@ -60,7 +62,13 @@ export function MenuGrid({
             a viewport-keyed `sm:grid-cols-3` would put three tiles in a phone's
             width of space at exactly the wrong moment.
           */}
-          <div className="grid grid-cols-2 gap-2 @md:grid-cols-3 @2xl:grid-cols-4">
+          <div
+            className={
+              dishReview
+                ? 'grid grid-cols-2 gap-2 @xl:grid-cols-3 @3xl:grid-cols-4'
+                : 'grid grid-cols-2 gap-2 @md:grid-cols-3 @2xl:grid-cols-4'
+            }
+          >
             {items.map((item) => {
               const quantity = quantities.get(item.id) ?? 0
               return (
@@ -84,14 +92,23 @@ export function MenuGrid({
                   )}
                 >
                   <span className="flex min-w-0 flex-1 items-start gap-1.5">
-                    <VegMarker isVeg={item.is_veg} className="mt-0.5" />
+                    <VegMarker
+                      isVeg={item.is_veg}
+                      className={dishReview ? 'mt-0.5 shrink-0' : 'mt-0.5'}
+                    />
                     {/*
                       Never truncated. A biller picking between "Mozzarella Cheese
                       Chicken Shawarma" and "Mayonnaise Chicken Shawarma" needs the
                       end of the name, and an ellipsis takes exactly the part that
                       tells them apart.
                     */}
-                    <span className="text-sm font-semibold leading-tight text-content">
+                    <span
+                      className={
+                        dishReview
+                          ? 'min-w-0 flex-1 break-words text-sm font-semibold leading-tight text-content'
+                          : 'text-sm font-semibold leading-tight text-content'
+                      }
+                    >
                       {item.name}
                     </span>
                   </span>

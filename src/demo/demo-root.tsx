@@ -106,7 +106,7 @@ export function DemoRoot() {
    * Only a reset replaces it.
    */
   const data = useMemo(
-    () => createDemoData({ matureHistory: true }),
+    () => createDemoData({ matureHistory: true, dishTicks: 'demo' }),
     // resetCount is the point of this dependency: a fresh dataset is exactly
     // what a reset is.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -144,8 +144,16 @@ export function DemoRoot() {
   // server and nowhere else.
   const epoch = started.epoch
   useEffect(
-    () => mirrorDemoOrders(data.store, data.kitchen, epoch, resetFromAnotherTab),
-    [data, epoch, resetFromAnotherTab],
+    () =>
+      mirrorDemoOrders(
+        data.store,
+        data.kitchen,
+        epoch,
+        resetFromAnotherTab,
+        kitchen ? 'kitchen' : 'counter',
+        data.dishTicks,
+      ),
+    [data, epoch, resetFromAnotherTab, kitchen],
   )
 
   // The tablet's own address, with nothing after it.

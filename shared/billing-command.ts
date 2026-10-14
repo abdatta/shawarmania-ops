@@ -215,6 +215,23 @@ export interface BillingCommandPayloads {
   readonly cancel_paid_order: UnwindOrderPaymentPayload
 }
 
+/**
+ * Which family of server functions a command was written for
+ * (each-dish-is-ticked-off, design R3).
+ *
+ * A change gate cannot reach the outbox (a-release-can-be-switched-off, D7), and
+ * a command's type cannot change meaning, so a path that needs new server
+ * functions says so on the command itself when it queues it. The command keeps
+ * it for its whole life: one queued while a gate was on reaches the functions it
+ * was written for after the gate turns off, which stay published while the gate
+ * exists. Absent on every command the off path writes, which therefore stays
+ * byte-for-byte what it was. Envelope metadata, never part of the payload or its
+ * hash.
+ *
+ * - `dishes` — the dish ticks' `_v2` functions (`dish-ticks`).
+ */
+export type BillingCommandVariant = 'dishes'
+
 export interface BillingCommandEnvelope<
   TType extends BillingCommandType = BillingCommandType,
   TPayload extends BillingCommandPayloads[TType] = BillingCommandPayloads[TType],
@@ -227,6 +244,7 @@ export interface BillingCommandEnvelope<
   readonly createdAt: string
   readonly payload: TPayload
   readonly payloadHash: string
+  readonly variant?: BillingCommandVariant
 }
 
 export type BillingCommand = {
@@ -264,11 +282,15 @@ export async function createBillingCommand<TType extends BillingCommandType>(inp
   readonly type: TType
   readonly createdAt: string
   readonly payload: BillingCommandPayloads[TType]
+  /** Only a path that needs other functions says so; the field is otherwise absent. */
+  readonly variant?: BillingCommandVariant
 }): Promise<BillingCommandEnvelope<TType, BillingCommandPayloads[TType]>> {
+  const { variant, ...rest } = input
   return {
-    ...input,
+    ...rest,
     schemaVersion: BILLING_COMMAND_SCHEMA_VERSION,
     payloadHash: await billingPayloadHash(input.payload as unknown as JsonObject),
+    ...(variant ? { variant } : {}),
   }
 }
 
@@ -298,4 +320,23 @@ export const BILLING_COMMAND_RPC: Readonly<Record<BillingCommandType, string>> =
   prepare_order_lines: 'prepare_order_lines',
   void_order_payment: 'unpay_billing_order',
   cancel_paid_order: 'cancel_paid_billing_order',
+}
+
+/** The functions a variant replaces; every type it does not name goes where it always has. */
+export const BILLING_COMMAND_VARIANT_RPC: Readonly<
+  Record<BillingCommandVariant, Partial<Record<BillingCommandType, string>>>
+> = {
+  dishes: {
+    create_order: 'create_billing_order_v2',
+    revise_order: 'revise_billing_order_v2',
+    prepare_order_lines: 'prepare_order_lines_v2',
+  },
+}
+
+/** The RPC a command is delivered to: its variant's, else its type's. Reads no gate. */
+export function billingCommandRpc(command: Pick<BillingCommand, 'type' | 'variant'>): string {
+  return (
+    (command.variant ? BILLING_COMMAND_VARIANT_RPC[command.variant][command.type] : undefined) ??
+    BILLING_COMMAND_RPC[command.type]
+  )
 }

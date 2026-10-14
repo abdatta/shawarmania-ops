@@ -494,6 +494,65 @@ describe('the live tablet acceptance boundary', () => {
     database.close()
   })
 
+  it('keeps dish ticks, labels and notes across an offline reopen and queues their dependencies', async () => {
+    const billing = createSupabaseBillingAdapter(offlineClient(), session, undefined, {
+      dishes: true,
+    })
+    const created = await billing.saveOrder({
+      ...orderInput,
+      label: 'Red shirt',
+      lines: [{ ...draft.lines[0]!, note: 'No sauce' }],
+    })
+    const lineId = created.lines[0]!.orderLineId!
+    await billing.markOrderLinesPrepared!(crypto.randomUUID(), created.id, [
+      { id: lineId, prepared: true },
+    ])
+    const reopened = createSupabaseBillingAdapter(offlineClient(), session, undefined, {
+      dishes: true,
+    })
+    await expect(reopened.listOpenOrders(session.device.outletId)).resolves.toMatchObject([
+      {
+        id: created.id,
+        label: 'Red shirt',
+        preparedAt: expect.any(String),
+        lines: [{ orderLineId: lineId, note: 'No sauce', preparedQuantity: 1 }],
+      },
+    ])
+    await reopened.markOrderLinesPrepared!(crypto.randomUUID(), created.id, [
+      { id: lineId, prepared: false },
+    ])
+    await expect(reopened.listOpenOrders(session.device.outletId)).resolves.toMatchObject([
+      { id: created.id, preparedAt: null, lines: [{ preparedQuantity: 0 }] },
+    ])
+    const database = new BillingDeliveryDatabase()
+    const rows = await database.envelopes.toArray()
+    expect(rows.filter((row) => row.type === 'prepare_order_lines')).toHaveLength(2)
+    expect(await database.dependencies.count()).toBeGreaterThanOrEqual(2)
+    // Every order command written on the dish path names the functions it was written for.
+    for (const row of rows) expect(row.command.variant).toBe('dishes')
+    expect(rows.find((row) => row.type === 'create_order')?.command.payload).toMatchObject({
+      label: 'Red shirt',
+      lines: [{ note: 'No sauce' }],
+    })
+    database.close()
+  })
+
+  it('writes an order command exactly as before with the dish ticks off: no variant, label or note', async () => {
+    const billing = createSupabaseBillingAdapter(offlineClient(), session)
+    await billing.saveOrder({
+      ...orderInput,
+      label: 'Red shirt',
+      lines: [{ ...draft.lines[0]!, note: 'No sauce' }],
+    })
+    const database = new BillingDeliveryDatabase()
+    const row = (await database.envelopes.toArray()).find((r) => r.type === 'create_order')!
+    expect(Object.keys(row.command)).not.toContain('variant')
+    const payload = row.command.payload as unknown as { lines: object[] }
+    expect(payload).not.toHaveProperty('label')
+    expect(payload.lines[0]).not.toHaveProperty('note')
+    database.close()
+  })
+
   it('queues a saved order with its bill discount, its table and its bags', async () => {
     const billing = createSupabaseBillingAdapter(offlineClient(), session)
     const tenPercent = {
@@ -1807,5 +1866,54 @@ describe('a customer’s bills, as summaries', () => {
       totalPaise: 46_800,
     })
     expect(page.bills[1]).toMatchObject({ status: 'void', paymentMethod: 'cash', tillLabel: null })
+  })
+})
+
+describe('a read that began before a dish tick', () => {
+  it('does not put its older rows back over the tick, so the next tick keeps it', async () => {
+    const row = openPreparedRow({
+      prepared_at: null,
+      order_items: ['oi-1', 'oi-2'].map((id) => ({
+        id,
+        menu_item_id: id,
+        item_name: `Dish ${id}`,
+        unit_price_paise: 24_000,
+        quantity: 1,
+        line_total_paise: 24_000,
+        order_line_preparations: [],
+      })),
+    })
+    // The first read is the rail's warm-up; the second stalls until released,
+    // as a pipeline read can while the counter keeps ticking.
+    let reads = 0
+    let release!: () => void
+    const stalled = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const client = raceOrdersClient(row, async () => {
+      reads++
+      if (reads === 2) await stalled
+    })
+    const billing = createSupabaseBillingAdapter(client, session, undefined, { dishes: true })
+    const store = new BillingDeliveryStore(new BillingDeliveryDatabase())
+    await billing.listOpenOrders('outlet-1')
+
+    const read = billing.listOpenOrders('outlet-1')
+    const first = crypto.randomUUID()
+    await billing.markOrderLinesPrepared!(first, PREPARED_ORDER_ID, [
+      { id: 'oi-1', prepared: true },
+    ])
+    // Delivered while the read is still out: the envelope is gone.
+    await store.recordResult(first, { status: 'accepted', commandId: first }, 1)
+    release()
+    const railed = await read
+    expect(railed.find((order) => order.id === PREPARED_ORDER_ID)?.lines[0]).toMatchObject({
+      preparedQuantity: 1,
+    })
+
+    const updated = await billing.markOrderLinesPrepared!(crypto.randomUUID(), PREPARED_ORDER_ID, [
+      { id: 'oi-2', prepared: true },
+    ])
+    expect(updated.lines.map((line) => line.preparedQuantity)).toEqual([1, 1])
   })
 })

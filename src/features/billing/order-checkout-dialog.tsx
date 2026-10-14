@@ -233,6 +233,7 @@ export function OrderCheckoutDialog({
   }
   return (
     <CheckoutDialog
+      suggestedName={order.label ?? ''}
       open
       collectCustomerDetails={service.collectCustomerDetails ?? true}
       customer={customer}

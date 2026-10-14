@@ -18,9 +18,12 @@
   --color-primary: var(--primary);
   --color-on-primary: var(--on-primary);
   --color-accent-text: var(--accent-text);
+  --color-dish-ready: var(--dish-ready);
+  --color-on-dish-ready: var(--on-dish-ready);
   --color-success: var(--success);
   --color-on-success: var(--on-success);
   --color-danger: var(--danger);
+  --color-danger-critical: var(--danger-critical);
   --color-warning: var(--warning);
   --color-on-warning: var(--on-warning);
   --color-focus-ring: var(--focus-ring);
@@ -335,5 +338,110 @@
 
   @media (prefers-reduced-motion: reduce) {
     animation: kitchen-pulse 1600ms ease-in-out infinite;
+  }
+}
+
+/* The dish ticks' two-column rail packs its cards into the shorter column
+   (each-dish-is-ticked-off, design D1). */
+.pipeline-masonry::before {
+  content: '';
+  display: block;
+  height: var(--pipeline-height, 0px);
+  pointer-events: none;
+}
+
+/*
+ * Ready on the counter (each-dish-is-ticked-off, design R6, owner 2026-10-12):
+ * the whole dish row fills with the orange accent, its text inverted, and a
+ * light band crosses it until the biller ticks the dish. The band is the menu
+ * page's offer-banner shine — the same angle, width, timing and pause.
+ */
+.dish-ready-fill {
+  position: relative;
+  overflow: hidden;
+  background: var(--dish-ready);
+  color: var(--on-dish-ready);
+}
+.dish-ready-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    var(--dish-ready-shine) 50%,
+    transparent 65%
+  );
+  transform: translateX(-120%);
+  animation: dish-ready-shine 2.4s ease-in-out 1.2s infinite;
+  pointer-events: none;
+}
+@keyframes dish-ready-shine {
+  0% {
+    transform: translateX(-120%);
+  }
+  55%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+/* The order's Ready bell swings while the handbell rings, and only then. */
+@keyframes dish-bell-swing {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  20% {
+    transform: rotate(-18deg);
+  }
+  45% {
+    transform: rotate(16deg);
+  }
+  70% {
+    transform: rotate(-9deg);
+  }
+  88% {
+    transform: rotate(5deg);
+  }
+}
+.dish-bell-swing {
+  transform-origin: 50% 12%;
+  animation: dish-bell-swing 440ms ease-in-out infinite;
+}
+
+/* Counter handover retires a Done ticket after its held-slot exit. */
+@keyframes kitchen-ready-exit {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+}
+.kitchen-ready-exit {
+  animation: kitchen-ready-exit 320ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kitchen-ready-exit {
+    animation-name: dish-ready-fade-out;
+  }
+  /* The fill stays; the shine and the swing do not move. */
+  .dish-ready-fill::after {
+    animation: none;
+    display: none;
+  }
+  .dish-bell-swing {
+    animation: none;
+  }
+}
+@keyframes dish-ready-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }
