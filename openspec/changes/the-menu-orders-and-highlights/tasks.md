@@ -25,4 +25,4 @@
 ## 4. Authorised release — no merge commits
 
 - [x] 4.1 Pin the parallel REST fixture cleanup regression with a red/green check, scope sign-out to fixture sessions only, and rerun a fresh database suite and the standard parallel six-phase REST/RLS command. Evidence: verification.md.
-- [ ] 4.2 Fast-forward main, release through the verified migration/functions/Pages workflow, inspect the served build and hosted menu, and record release evidence. Do not archive automatically.
+- [x] 4.2 Fast-forward main, release through the verified migration/functions/Pages workflow, inspect the served build and hosted menu, and record release evidence. Do not archive automatically. *(Read 2026-10-15: `main` holds the change with no merge commit, and Deploy run `37683905355` passed on `2a3af2a1`, its descendant, on 2026-10-08 02:11 IST. Production's migration history holds `20261007000000_menu_orders_and_highlights`; Kalyani Cafe has a *Highlights* section of 4 dishes, set by its managers; `https://shawarmania.in/menu/kalyani-cafe/` serves *Highlights* as its first section, ahead of *Shawarmas*.)*

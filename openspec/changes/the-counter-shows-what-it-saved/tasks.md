@@ -165,8 +165,10 @@ method nothing off-path calls.
   A database run after those browser runs, without a reset, failed four
   count-sensitive pgTAP checks and one tablet-health REST check on their rows; a
   reset cleared every one.
-- [ ] 8.2 Squash to three to five commits and push `HEAD:stage`, never `main`. The
+- [x] 8.2 Squash to three to five commits and push `HEAD:stage`, never `main`. The
   stage push runs the browser suites in both gate states.
+  *(Five commits, `207fb977` to `da92417a`; Staging passed on `da92417a` (run started 15 October
+  08:25 IST).)*
 
 ## 9. PHASE GATE
 
@@ -177,3 +179,7 @@ method nothing off-path calls.
   `instant-saves` on at a quiet hour and watches the tablets on the gate's page,
   then pulls it once, off and on again; it runs through real service. Archive only
   after that, on the owner's word.
+  *(Partly done, read 2026-10-15: Staging green on `da92417a`; the owner turned
+  `instant-saves` on in staging at 08:38 IST, promoted it (run `38674957424`, Deploy
+  green) and turned it on in production at 08:44 IST, before trading. Whether staging
+  was tried throttled is not recorded. Still open: the pull, and a real service.)*

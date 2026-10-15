@@ -161,13 +161,25 @@ One migration, dated after the newest, declaring `-- change-gate: dish-ticks`.
 - [ ] 7.5 **Owner:** on *Cafe Staging*, turn `dish-ticks` on, then `kitchen-ready`;
   run a service with the laptop as the counter and the phone as the kitchen; hear
   the handbell; turn each off and on once.
+  *(Half done, read from staging 2026-10-15: the owner turned `dish-ticks` on at
+  15:08:38 IST on 14 October and `kitchen-ready` eight seconds later. Neither has
+  been turned off there since, so the off-and-on is still open.)*
 
 ## 8. Release
 
-- [ ] 8.1 **Owner:** Promote in the deploy window; it ships with both gates off.
+- [x] 8.1 **Owner:** Promote in the deploy window; it ships with both gates off.
+  *(Promote run `38550692305`, then Deploy on `5e2e8729`, 14 October 16:29 IST; both
+  gates were off until the owner turned them on at 16:40. `d1704ae3`'s follow-ups were
+  promoted the same night, run `38656885347`.)*
 - [ ] 8.2 `/release dish-ticks` at a quiet hour; watch each tablet on the gate's
   page through the next service; pull it once, off and on.
+  *(Half done, read from production 2026-10-15: on from the app at 16:40:58 IST on 14
+  October and through that evening's service — 94 dish ticks that day, both tablets
+  booting it, none of their requests failed (last reports 23:52 and 23:58). Not yet
+  pulled: its history holds the one turn on.)*
 - [ ] 8.3 `/release kitchen-ready` the same way.
+  *(Half done, as 8.2: on at 16:41:04 IST on 14 October, 40 kitchen Readies that
+  service; not yet pulled.)*
 - [ ] 8.4 Real use; then archive, which refuses until the history shows each pull.
 
 ## 9. Phase gate

@@ -5,4 +5,4 @@
 - [x] 3. Prove the counter and live tests bite: with the identity dropped in the composer's edit and in `orderLineView()` respectively, each fails; restored, each passes.
 - [x] 4. `docs/LIMITATIONS.md` narrowed to the offline new-sale case; `openspec/todos/an-offline-sale-keeps-its-price.md` written and indexed.
 - [x] 5. Gates, 2026-10-09: format, lint (0 errors, 16 existing warnings, none in touched files), app and Edge types, 2,311 unit tests, 70 contrast pairs, build, 312 demo e2e; and the Docker job from a fresh reset: 3,268 database assertions, 289 RLS/HTTP tests, 36 auth e2e, schema parity clean.
-- [ ] 6. GATE: CI green on the commit. The owner picks the push; this commit is local until then.
+- [x] 6. GATE: CI green on the commit. The owner picks the push; this commit is local until then. *(Read 2026-10-15: `c54be8fa` reached `main` and Deploy run `37972203572` passed on it, suite included, on 2026-10-09 23:47 IST; in production since.)*
