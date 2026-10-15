@@ -425,6 +425,28 @@ guaranteed to reach a busy counter within a shift**. Where that matters, the
 tablet has to be reloaded deliberately, which the Update action is there to make
 a one-tap job rather than a browser-menu one.
 
+### A slow connection still holds four things
+
+With `instant-saves` on, the counter shows its own saves without waiting for the
+server (see [Offline And Sync](OFFLINE_AND_SYNC.md#rules-that-make-this-safe)).
+Four waits on a slow connection remain, found while tracing it and each its own
+change if wanted:
+
+- **A reload waits on the server with no limit.** Opening the counter checks
+  the tablet and its shift with three requests in a row, and the remembered
+  shift is used only when they fail outright, never while they are merely slow.
+  Every reload for a new build or a turned gate pays this.
+- **A save reaches the server up to two seconds late.** The outbox sends on a
+  two-second tick and is not woken by a save, so the kitchen sees an order a
+  little later than it could. A send that hangs holds the queue, because
+  requests carry no time limit.
+- **The kitchen's ACK has no saving look.** Its ring stops at once, but the
+  button stays until the server answers and the board is read again. Done
+  already shows at once.
+- **A returning customer waits for the lookup.** The customer dialog uses the
+  customers this tablet remembers only when the lookup fails, not while it is
+  slow.
+
 ### Connectivity is the browser's opinion, not a reachable backend
 
 The decision to reload asks the browser whether it is online. That reliably

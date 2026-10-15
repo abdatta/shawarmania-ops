@@ -158,6 +158,23 @@ offered for payment again. Those guards key on projected state and never on
 command history, because taking a payment back reopens an order precisely so it
 can be paid a second time.
 
+**With `instant-saves` on, the counter draws its own saves from its own record
+first.** A save is durable on the tablet in milliseconds, so the screen does not
+wait for the server to say what the tablet already knows. The billing adapter has
+two reads that ask no network: `peekOpenOrders` is the half of the pipeline read
+that does not ask the server, run over the rows the tablet holds, which is the
+same projection it serves when the server fails; `peekShiftHistory` is the
+shift's bills as last drawn, the queued work laid over them. After Order, Save
+changes, a payment or a correction in Bills, the surface draws the peek and then
+asks the server once, as the save always did, so the counter makes no more
+requests than before. **A read begun before a save never draws over it**: the
+surface drops any read already out when it draws a save, because that read's
+snapshot predates the save and would take the save off the screen until the next
+read. Only a save drops reads. A change notice that did would, on a busy outlet
+with a weak connection, keep dropping them, and the server's answer would never
+land. With the gate off, each save re-reads the server and draws what comes back,
+as before.
+
 **Client-generated UUIDs.** Every counter record gets its ID on the device, before it is ever sent. The client can therefore reference its own rows immediately, and a retry carries the same identity as the original.
 
 **Exact command receipts.** The server claims the command UUID with its type,
