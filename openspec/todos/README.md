@@ -24,6 +24,7 @@ Keep entries behavior-focused:
 | [The Tablet Name On A Ticket Costs A Round Trip](./the-tablet-name-on-a-ticket-costs-a-round-trip.md) | Scaling risk | Open, sized and deferred 2026-09-21 | Billing | The label call reappears as a visible share of egress after a cycle, or a change is already migrating `orders` and `bills` and can carry the backfill |
 | [Supply Bills Paid Outside The Payout](./supply-bills-paid-outside-the-payout.md) | Feature | Owner asked to explore, 2026-08-18 | Outlet expenses | The owner asks in earnest and picks a route: supplier portal, invoice email, or bank statement |
 | [Six Tabs For One Person](./six-tabs-for-one-person.md) | Gap | Open | App shell | Somebody holding two roles says the bar is crowded, or a new surface pushes a common shape past five |
+| [A Phone Sheet Hangs From The Top](./a-phone-sheet-hangs-from-the-top.md) | Gap | Open, found 2026-10-14 | App shell | The owner sees it and wants it changed, or a change reworks the sheet |
 | [The Document Should Not Be What Scrolls](./the-document-should-not-be-what-scrolls.md) | Gap | Open, found 2026-09-03 | App shell | Somebody mis-taps because a row moved under their thumb, or a change is already opening all four shells |
 | [Outlet Scope From The Address](./outlet-scope-from-the-address.md) | Feature | Anticipated | App shell | Somebody wants to send a link to one shop's figures |
 | [Aggregator Settlement](./aggregator-settlement.md) | Feature | Anticipated | Reporting | Aggregator volume grows enough to distort a decision |
