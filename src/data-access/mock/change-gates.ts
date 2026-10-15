@@ -83,6 +83,14 @@ const WORDS: Record<
     offMeans: 'A pop-up closes only from its own buttons or Escape, as it does today.',
     changeNumber: null,
   },
+  'instant-saves': {
+    title: 'Instant saves',
+    onMeans:
+      'The counter shows an order, an edit or a payment the moment the tablet has saved it, and checks with the server afterwards.',
+    offMeans:
+      'The counter shows an order, an edit or a payment once it has asked the server again, which takes a moment on a slow connection.',
+    changeNumber: null,
+  },
 }
 
 /**

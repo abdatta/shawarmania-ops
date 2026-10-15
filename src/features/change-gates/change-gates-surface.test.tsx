@@ -137,7 +137,7 @@ describe('a change gate’s own page', () => {
 
     await user.click(screen.getByTestId('turn-gate'))
     expect(await screen.findByTestId('turn-also-off')).toHaveTextContent(
-      'This also turns off Kitchen Ready, which depends on it.',
+      'This also turns off Kitchen Ready, Instant saves, which depend on it.',
     )
   })
 

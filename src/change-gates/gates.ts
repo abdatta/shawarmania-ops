@@ -126,6 +126,21 @@ export const CHANGE_GATES = {
     retireBy: '2026-12-15',
     roundTrip: 'none: the gate changes only how a pop-up can be closed and saves nothing',
   },
+  /**
+   * The counter draws an order, an edit or a payment from the tablet's own
+   * record the moment it is saved, instead of waiting for the server's re-read
+   * (the-counter-shows-what-it-saved, design D1–D6). Built for the counter #74
+   * runs, so it runs only while both of #74's gates are on (D7).
+   */
+  'instant-saves': {
+    kind: 'change',
+    code: 'IS',
+    change: 'the-counter-shows-what-it-saved',
+    dependsOn: ['dish-ticks', 'kitchen-ready'],
+    retireBy: '2027-01-15',
+    roundTrip:
+      'none: the on path persists nothing; it draws the tablet’s own queue and cache sooner, and every save is the same command with the gate on or off',
+  },
 } as const satisfies Record<string, ChangeGateDeclaration>
 
 export type ChangeGateKey = keyof typeof CHANGE_GATES
