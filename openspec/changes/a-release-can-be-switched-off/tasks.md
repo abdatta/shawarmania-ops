@@ -647,13 +647,27 @@ this change's own first arrival, which carries Promote to `main` (10.2).
   as it did on staging in 9.13;
   measure the time per tablet. Then off, then on, then off — the pull. Record times
   here.
+  *(Half done, read from production 2026-10-15: the owner turned `probe` on from the
+  app at 09:29 IST on 14 October (reason "Test"), and both of Kalyani Cafe's tablets
+  — *Kalyani Counter 2* and *Shawarma Kitchen* — reported it in their booted gates
+  through that day's service, last at 23:52 and 23:58. The per-tablet times were not
+  recorded, and a health report is overwritten each minute, so they cannot be read
+  back now. Still open: the pull (off, on, off) with its times, and `probe` is on
+  where this task ends it off.)*
 - [ ] 10.4 The owner turns `tablet-health` on; the gate's page shows each tablet's
   build, requests, failures and slowest request within two minutes; watch through
   one service; pull it once. Record what it showed.
+  *(Half done, read from production 2026-10-15: on from the app at 09:30 IST on 14
+  October, and it ran through that day's service, the first with `dish-ticks` and
+  `kitchen-ready` on. Each tablet's last report: *Kalyani Counter 2*, build
+  `5e2e872`, 16 requests in 60 s, none failed, slowest 530 ms (23:52); *Shawarma
+  Kitchen*, build `5e2e872`, 9 requests, none failed, slowest 216 ms (23:58). Not
+  yet pulled: its history holds the one turn on and nothing since.)*
 - [ ] 10.5 Ways-out rehearsal, outside service and with the owner's agreement:
   Republish with an unverified SHA is refused; Republish of the current verified SHA
   publishes without the suite; Hotfix of the current SHA waits for the owner's
   approval and, once approved, publishes while a Deploy run is still verifying.
+  *(Not started as of 2026-10-15: neither Republish nor Hotfix has a run.)*
 
 ## 11. Retire the probe
 
