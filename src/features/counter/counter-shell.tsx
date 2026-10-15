@@ -74,6 +74,13 @@ export function CounterShell({
   // The work row and the records row below scroll sideways as one, outside React.
   const [scrollLink] = useState(createScrollLink)
   const [billRefresh, setBillRefresh] = useState(0)
+  /*
+    The till's and Bills' own saves, each handed to the other with
+    `instant-saves` on (the-counter-shows-what-it-saved, design D3). Both stay
+    0 with it off: nothing below bumps them then.
+  */
+  const [billOwnSave, setBillOwnSave] = useState(0)
+  const [railOwnSave, setRailOwnSave] = useState(0)
   const resume = device.offlineResume
 
   /**
@@ -190,6 +197,8 @@ export function CounterShell({
                 onRailWidthChange={setRailWidth}
                 scrollLink={scrollLink}
                 onBillRefresh={setBillRefresh}
+                onBillOwnSave={setBillOwnSave}
+                railOwnSave={railOwnSave}
               />
               <CounterRecords
                 expenses={<CounterExpenses shift={shift} />}
@@ -197,6 +206,8 @@ export function CounterShell({
                 scrollLink={scrollLink}
                 asOf={resume?.lastSuccessfulReadAt}
                 refreshKey={billRefresh}
+                ownSaveKey={billOwnSave}
+                onOwnSave={() => setRailOwnSave((value) => value + 1)}
               />
             </>
           ) : (
@@ -235,10 +246,14 @@ function BillingPanel({
   onRailWidthChange,
   scrollLink,
   onBillRefresh,
+  onBillOwnSave,
+  railOwnSave,
 }: {
   onRailWidthChange?: ((width: number) => void) | undefined
   scrollLink?: ScrollLink | undefined
   onBillRefresh?: ((refresh: number) => void) | undefined
+  onBillOwnSave?: ((save: number) => void) | undefined
+  railOwnSave?: number | undefined
 }) {
   const device = useCounterDevice()
   if (isRenderable(getSurface('counter-billing').state, 'real')) {
@@ -249,6 +264,8 @@ function BillingPanel({
           onRailWidthChange={onRailWidthChange}
           scrollLink={scrollLink}
           onBillRefresh={onBillRefresh}
+          onBillOwnSave={onBillOwnSave}
+          railOwnSave={railOwnSave}
         />
       </div>
     )

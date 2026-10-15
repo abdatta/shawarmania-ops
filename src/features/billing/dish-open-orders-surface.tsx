@@ -78,6 +78,7 @@ function methodLabelOf(bill: BillingBill): string | null {
 export function DishOpenOrdersSurface({
   embedded = false,
   refreshKey = 0,
+  ownSaveKey = 0,
   savedOrderKey = 0,
   onActivityChanged,
   onOrdersRead,
@@ -88,6 +89,13 @@ export function DishOpenOrdersSurface({
 }: {
   embedded?: boolean
   refreshKey?: number
+  /**
+   * Bumped by a save on this tablet that the rail should show — an order, an
+   * edit, a take-back from Bills — with `instant-saves` on. Distinct from
+   * `refreshKey`, which the outlet's change notices and the foreground bump too
+   * (the-counter-shows-what-it-saved, design D3).
+   */
+  ownSaveKey?: number
   /**
    * Bumped when an order is saved **on this tablet**, and only then: the rail
    * returns to its newest end so the order just taken is the visible one. A
@@ -169,6 +177,51 @@ export function DishOpenOrdersSurface({
       .then(load)
       .catch(() => setError('Could not load the pipeline.'))
   }, [load, refreshKey])
+
+  /*
+    A save on this tablet, with `instant-saves` on (the-counter-shows-what-it-
+    saved, design D3, D4). The rail draws what the tablet holds — the order just
+    taken, the edit just made, the order a take-back reopened — and then asks
+    the server, once, as the save always did.
+
+    A read already on its way is dropped first: it took its snapshot before the
+    save, and landing after the drawing it would take the save off the rail
+    until the next read put it back. Only a save does this. A change notice
+    dropping reads as it went could, on a busy outlet with a weak connection,
+    keep the server's answer from ever landing.
+  */
+  const instantSaves = useChangeGate('instant-saves')
+  useEffect(() => {
+    if (!instantSaves || ownSaveKey === 0) return
+    let current = true
+    queue.invalidate()
+    void (async () => {
+      if (outletId && shift) {
+        const held = await billing.peekOpenOrders(outletId)
+        if (current && held) {
+          setOrders(held)
+          onOrdersRead?.(held)
+          const history = held.some((order) => order.billId)
+            ? await billing.peekShiftHistory(shift.id)
+            : null
+          if (current && history) {
+            const nextTenders = new Map<string, string>()
+            for (const bill of history.bills) {
+              const label = methodLabelOf(bill)
+              if (label) nextTenders.set(bill.id, label)
+            }
+            setTenders(nextTenders)
+          }
+        }
+      }
+      await load()
+    })().catch(() => setError('Could not refresh the pipeline.'))
+    return () => {
+      current = false
+    }
+    // Keyed on the save alone: the rest are read as they stand when it lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownSaveKey])
 
   // The handbell and the bells that swing with it, from the reads above (R6).
   const swinging = useReadyRinger(orders, marks, readyOn)

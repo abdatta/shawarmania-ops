@@ -285,6 +285,8 @@ export function BillingCounter({
   onRailWidthChange,
   scrollLink,
   onBillRefresh,
+  onBillOwnSave,
+  railOwnSave = 0,
 }: {
   outletId?: string
   /** The dish ticks' records row sits under the rail at its width. */
@@ -298,6 +300,14 @@ export function BillingCounter({
    * its own writes, the outlet's billing events and the foreground (design R5).
    */
   onBillRefresh?: ((refresh: number) => void) | undefined
+  /**
+   * With `instant-saves` on, the till's own saves that Bills this shift should
+   * show at once — Pay now, and the rail's payments — handed up beside
+   * `onBillRefresh` (the-counter-shows-what-it-saved, design D3).
+   */
+  onBillOwnSave?: ((save: number) => void) | undefined
+  /** The Bills panel's own saves, handed down for the rail to show (design D3). */
+  railOwnSave?: number | undefined
 } = {}) {
   const session = useContext(SessionContext)
   const counterDevice = useContext(CounterDeviceContext)
@@ -307,6 +317,13 @@ export function BillingCounter({
    * locked lines. Off, every branch below is the counter as it was before #74.
    */
   const dishWorkflow = useChangeGate('dish-ticks')
+  /**
+   * The till shows what it saved before the server answers
+   * (the-counter-shows-what-it-saved). On, the till's own saves bump the
+   * own-save keys below in place of the refresh keys; off, every save refreshes
+   * as it did before.
+   */
+  const instantSaves = useChangeGate('instant-saves')
   const kitchenMarks = useKitchenMarks()?.marks
   const [label, setLabel] = useState('')
   const [noteLine, setNoteLine] = useState<BillLineDraft | null>(null)
@@ -384,6 +401,13 @@ export function BillingCounter({
     till's order arriving must not move the list under the biller's thumb.
   */
   const [savedOrderKey, setSavedOrderKey] = useState(0)
+  /*
+    This tablet's own saves, with `instant-saves` on (design D3): each surface
+    draws what the tablet holds and then asks the server once. Kept apart from
+    the refresh keys, which the outlet's change notices bump too.
+  */
+  const [railSave, setRailSave] = useState(0)
+  const [billSave, setBillSave] = useState(0)
   const [editingOrder, setEditingOrder] = useState<BillingOrder | null>(null)
   const [columnWidths, setColumnWidths] = useState<CounterColumnWidths>(readCounterColumnWidths)
 
@@ -403,6 +427,9 @@ export function BillingCounter({
   useEffect(() => {
     if (dishWorkflow) onBillRefresh?.(billRefresh)
   }, [dishWorkflow, billRefresh, onBillRefresh])
+  useEffect(() => {
+    if (instantSaves && billSave > 0) onBillOwnSave?.(billSave)
+  }, [instantSaves, billSave, onBillOwnSave])
 
   const resizeColumn = useCallback((column: CounterColumn, requestedWidth: number) => {
     setColumnWidths((current) => {
@@ -1061,7 +1088,8 @@ export function BillingCounter({
         tableNumber: serviceType === 'dine_in' ? tableNumber : null,
       })
       clearPanel()
-      setPipelineRefresh((value) => value + 1)
+      if (instantSaves) setRailSave((value) => value + 1)
+      else setPipelineRefresh((value) => value + 1)
       setSavedOrderKey((value) => value + 1)
     } catch (cause) {
       setError(cause instanceof DataActionError ? cause.message : 'That order could not be saved.')
@@ -1094,7 +1122,8 @@ export function BillingCounter({
         tableNumber: serviceType === 'dine_in' ? tableNumber : null,
       })
       leaveOrderEdit()
-      setPipelineRefresh((value) => value + 1)
+      if (instantSaves) setRailSave((value) => value + 1)
+      else setPipelineRefresh((value) => value + 1)
     } catch (cause) {
       setError(
         cause instanceof DataActionError ? cause.message : 'That order could not be updated.',
@@ -1153,7 +1182,8 @@ export function BillingCounter({
       })
       setPaymentDialogOpen(false)
       clearPanel()
-      setBillRefresh((value) => value + 1)
+      if (instantSaves) setBillSave((value) => value + 1)
+      else setBillRefresh((value) => value + 1)
     } catch (cause) {
       setError(
         cause instanceof DataActionError
@@ -1188,6 +1218,27 @@ export function BillingCounter({
   function openTables() {
     setTableDialogOpen(true)
     if (!outletId) return
+    // What the tablet already holds marks the busy tables at once, and the
+    // server's read below corrects it (the-counter-shows-what-it-saved, D6).
+    // Dropped if the server's answer is already in.
+    if (instantSaves) {
+      let answered = false
+      void billing
+        .peekOpenOrders(outletId)
+        .then((held) => {
+          if (held && !answered) setTableOrders(held)
+        })
+        .catch(() => undefined)
+      void billing
+        .listOpenOrders(outletId)
+        .then((orders) => {
+          answered = true
+          setTableOrders(orders)
+        })
+        // A failed read keeps what the peek drew rather than emptying it.
+        .catch(() => undefined)
+      return
+    }
     void billing
       .listOpenOrders(outletId)
       .then(setTableOrders)
@@ -1613,12 +1664,15 @@ export function BillingCounter({
           checkoutSettings={{ service: serviceSettings, loyalty: loyaltySettings }}
           {...(resume ? { asOf: resume.lastSuccessfulReadAt } : {})}
           refreshKey={pipelineRefresh}
+          ownSaveKey={railSave + railOwnSave}
           onOrdersRead={readRailLabels}
           savedOrderKey={savedOrderKey}
           editingOrder={editingOrder}
           onEditOrder={beginOrderEdit}
           onSetOrderCustomer={beginOrderCustomerEdit}
-          onActivityChanged={() => setBillRefresh((value) => value + 1)}
+          onActivityChanged={() =>
+            instantSaves ? setBillSave((value) => value + 1) : setBillRefresh((value) => value + 1)
+          }
           pin={
             editingOrder && (
               <EditingOrderPin

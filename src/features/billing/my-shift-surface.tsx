@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/layout/empty-state'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
+import { useChangeGate } from '@/change-gates/context'
 import { useAdapters } from '@/data-access'
 import {
   DataActionError,
@@ -28,7 +29,9 @@ export function MyShiftSurface({
   embedded = false,
   records = false,
   refreshKey = 0,
+  ownSaveKey = 0,
   onActivityChanged,
+  onOwnSave,
   asOf,
 }: {
   embedded?: boolean
@@ -40,7 +43,15 @@ export function MyShiftSurface({
    */
   records?: boolean
   refreshKey?: number
+  /**
+   * Bumped by the till's own saves that Bills should show at once — Pay now, a
+   * payment from the rail — with `instant-saves` on, in the records row only
+   * (the-counter-shows-what-it-saved, design D3).
+   */
+  ownSaveKey?: number
   onActivityChanged?: () => void
+  /** This panel's own saves, handed up for the rail to show (design D3). */
+  onOwnSave?: () => void
   asOf?: string
 } = {}) {
   const { billing } = useAdapters()
@@ -91,13 +102,76 @@ export function MyShiftSurface({
   const queued = useRefreshQueue(read)
   const load = records ? queued.refresh : loadNow
 
+  /*
+    The records row shows what the tablet saved before the server answers
+    (the-counter-shows-what-it-saved, design D3–D5). Off, or outside the
+    records row, every read and message below is as it was.
+  */
+  const instant = useChangeGate('instant-saves') && records
+  const historyShown = useRef(false)
+  useEffect(() => {
+    historyShown.current = history !== null
+  }, [history])
+  /*
+    Draw what the tablet holds, then ask the server once. A read already out
+    is dropped first: its snapshot predates the save, and landing after the
+    drawing it would take the save off the panel until the next read. A later
+    save's drawing supersedes an earlier one still reading the queue.
+  */
+  const ownSaves = useRef(0)
+  const drawOwnSave = () => {
+    const token = ++ownSaves.current
+    queued.invalidate()
+    void (async () => {
+      if (!shift) return
+      const [held, nextAttention] = await Promise.all([
+        billing.peekShiftHistory(shift.id),
+        billing.listAttention(),
+      ])
+      if (token === ownSaves.current) {
+        if (held) setHistory(held)
+        setAttention(nextAttention)
+      }
+      await queued.refresh()
+    })().catch(() => {
+      // A failed read is not the save failing, and the panel keeps what it
+      // shows; only a panel with nothing to show says it could not load.
+      if (!historyShown.current) setMessage('Could not load this shift.')
+    })
+  }
+
   useEffect(() => {
     void Promise.resolve()
       .then(load)
-      .catch(() => setMessage('Could not load this shift.'))
-  }, [load, refreshKey])
+      .catch(() => {
+        if (!(instant && historyShown.current)) setMessage('Could not load this shift.')
+      })
+  }, [load, refreshKey, instant])
+
+  useEffect(() => {
+    if (instant && ownSaveKey > 0) drawOwnSave()
+    // Keyed on the save alone: the rest are read as they stand when it lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownSaveKey])
 
   const resolve = async (operation: () => Promise<unknown>, success: string) => {
+    if (instant) {
+      // The save's own answer, then the drawing; the read after it cannot
+      // reach this `catch` and turn a saved take-back into a failure.
+      try {
+        await operation()
+      } catch (cause) {
+        setMessage(
+          cause instanceof DataActionError ? cause.message : 'That item could not be resolved.',
+        )
+        return
+      }
+      setMessage(success)
+      setReason('')
+      drawOwnSave()
+      onOwnSave?.()
+      return
+    }
     try {
       await operation()
       setMessage(success)
@@ -379,6 +453,26 @@ export function MyShiftSurface({
           if (!editingPayment) return
           setSavingPayment(true)
           setMessage(null)
+          if (instant) {
+            void billing
+              .correctBillPayment(editingPayment.id, editingPayment.paymentRevision, payments)
+              .then(
+                () => {
+                  setEditingPayment(null)
+                  setMessage('Payment updated.')
+                  drawOwnSave()
+                  onOwnSave?.()
+                },
+                (cause: unknown) =>
+                  setMessage(
+                    cause instanceof DataActionError
+                      ? cause.message
+                      : 'That payment could not be updated.',
+                  ),
+              )
+              .finally(() => setSavingPayment(false))
+            return
+          }
           void billing
             .correctBillPayment(editingPayment.id, editingPayment.paymentRevision, payments)
             .then(async () => {

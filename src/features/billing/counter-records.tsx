@@ -25,6 +25,8 @@ export function CounterRecords({
   scrollLink,
   asOf,
   refreshKey = 0,
+  ownSaveKey = 0,
+  onOwnSave,
 }: {
   expenses: ReactNode
   railWidth?: number | undefined
@@ -32,6 +34,10 @@ export function CounterRecords({
   scrollLink?: ScrollLink | undefined
   asOf?: string | undefined
   refreshKey?: number
+  /** The till's own saves for Bills, with `instant-saves` on (the-counter-shows-what-it-saved). */
+  ownSaveKey?: number
+  /** Bills' own saves, handed up for the rail. */
+  onOwnSave?: (() => void) | undefined
 }) {
   const recordsRef = useRef<HTMLDivElement>(null)
   const [recordsHeight, setRecordsHeight] = useState<number | null>(null)
@@ -80,7 +86,14 @@ export function CounterRecords({
           {expenses}
         </section>
         <div className="flex h-full min-h-0 min-w-0 flex-col rounded-xl border border-border bg-surface p-3">
-          <MyShiftSurface embedded records refreshKey={refreshKey} {...(asOf ? { asOf } : {})} />
+          <MyShiftSurface
+            embedded
+            records
+            refreshKey={refreshKey}
+            ownSaveKey={ownSaveKey}
+            {...(onOwnSave ? { onOwnSave } : {})}
+            {...(asOf ? { asOf } : {})}
+          />
         </div>
       </div>
     </section>

@@ -23,6 +23,7 @@ import { CounterActivity } from './counter-activity'
 export function CounterActivityRail({
   twoColumns = false,
   refreshKey,
+  ownSaveKey = 0,
   savedOrderKey = 0,
   editingOrder,
   onEditOrder,
@@ -35,6 +36,11 @@ export function CounterActivityRail({
 }: {
   twoColumns?: boolean
   refreshKey: number
+  /**
+   * Bumped by this tablet's own saves, with `instant-saves` on: the rail draws
+   * what the tablet holds, then asks the server (the-counter-shows-what-it-saved).
+   */
+  ownSaveKey?: number
   /** Bumped only when an order is saved on this tablet. */
   savedOrderKey?: number
   editingOrder: BillingOrder | null
@@ -107,6 +113,7 @@ export function CounterActivityRail({
         <CounterActivity
           twoColumns={twoColumns}
           refreshKey={refreshKey}
+          ownSaveKey={ownSaveKey}
           savedOrderKey={savedOrderKey}
           editingOrderId={editingOrder?.id ?? null}
           onEditOrder={onEditOrder}

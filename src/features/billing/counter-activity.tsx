@@ -24,6 +24,7 @@ import { OpenOrdersSurface } from './open-orders-surface'
 export function CounterActivity({
   twoColumns = false,
   refreshKey,
+  ownSaveKey = 0,
   savedOrderKey = 0,
   editingOrderId = null,
   onEditOrder,
@@ -34,6 +35,8 @@ export function CounterActivity({
 }: {
   twoColumns?: boolean
   refreshKey: number
+  /** This tablet's own saves, for the dish ticks' rail (`instant-saves`). */
+  ownSaveKey?: number
   /** Bumped only when an order is saved on this tablet. */
   savedOrderKey?: number
   editingOrderId?: string | null
@@ -50,6 +53,7 @@ export function CounterActivity({
         <DishOpenOrdersSurface
           embedded
           refreshKey={refreshKey}
+          ownSaveKey={ownSaveKey}
           savedOrderKey={savedOrderKey}
           editingOrderId={editingOrderId}
           {...(onEditOrder ? { onEditOrder } : {})}
