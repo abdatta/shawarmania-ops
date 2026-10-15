@@ -64,4 +64,29 @@ test.describe('dialogs close from the keyboard', () => {
     await page.keyboard.press('Escape')
     await expect(page.locator('#escape-probe')).toHaveJSProperty('open', false)
   })
+
+  test('a bare native dialog does not close on a click on its backdrop, which Modal does itself', async ({
+    page,
+  }) => {
+    await page.goto('demo/owner')
+
+    // The other half of what `Modal` leans on, and the half the code once
+    // believed the platform supplied: a modal dialog takes Escape and focus
+    // containment from the top layer, and a click on its backdrop is only a click
+    // whose target is the dialog. `Modal` closes on one itself
+    // (a-popup-closes-when-you-tap-outside-it); if this ever fails, the
+    // platform has started to and that code is redundant.
+    await page.evaluate(() => {
+      const probe = document.createElement('dialog')
+      probe.id = 'backdrop-probe'
+      probe.textContent = 'probe'
+      document.body.appendChild(probe)
+      probe.showModal()
+    })
+    await expect(page.locator('#backdrop-probe')).toHaveJSProperty('open', true)
+
+    await page.mouse.click(4, 4)
+
+    await expect(page.locator('#backdrop-probe')).toHaveJSProperty('open', true)
+  })
 })

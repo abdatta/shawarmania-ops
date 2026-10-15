@@ -215,6 +215,7 @@ export function ExpenseCategoriesSurface() {
       </Card>
 
       <FormSheet
+        busy={busy}
         open={action !== null}
         onClose={() => setAction(null)}
         title={action?.kind === 'merge' ? 'Merge category' : 'Rename category'}

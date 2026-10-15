@@ -49,6 +49,7 @@ export function ConfirmDialog({
       open={open}
       onClose={onClose}
       aria-label={title}
+      dismissOnOutsideTap={!busy}
       className="m-auto w-full max-w-sm rounded-xl p-4"
     >
       <h2 className="text-base font-semibold text-content">{title}</h2>

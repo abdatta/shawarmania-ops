@@ -650,6 +650,7 @@ export function AccountsSurface() {
       )}
 
       <FormSheet
+        busy={busy}
         open={formOpen}
         onClose={() => setFormOpen(false)}
 
@@ -977,6 +978,7 @@ function ChangeUsernameSheet({
 
   return (
     <FormSheet
+      busy={busy}
       open={account !== null}
       onClose={onClose}
       title={account ? `Change username for ${account.fullName}` : 'Change username'}
@@ -1042,6 +1044,7 @@ function AccountEmailSheet({
 
   return (
     <FormSheet
+      busy={busy}
       open={account !== null}
       onClose={onClose}
       title={account ? `Email for ${account.fullName}` : 'Email'}
@@ -1208,6 +1211,7 @@ function EditPersonSheet({
 
   return (
     <FormSheet
+      busy={busy}
       open={account !== null}
       onClose={onClose}
       title={account ? `Edit ${account.fullName}` : 'Edit person'}

@@ -81,6 +81,7 @@ function OpenPointsDialog({
       open
       onClose={onClose}
       aria-label={current === null ? 'Use points' : 'Change points'}
+      dismissOnOutsideTap={!busy}
       className="m-auto w-[min(94vw,30rem)] rounded-2xl p-4"
     >
       <h2 ref={headingRef} tabIndex={-1} className="text-lg font-black text-content outline-none">

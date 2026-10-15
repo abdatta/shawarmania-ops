@@ -472,6 +472,7 @@ export function OutletTablets({
       )}
 
       <FormSheet
+        busy={busy}
         open={adding}
         title={`Set up a tablet at ${outletName}`}
         onClose={() => setAdding(false)}
@@ -509,6 +510,7 @@ export function OutletTablets({
       </FormSheet>
 
       <FormSheet
+        busy={busy}
         open={editing !== null}
         title={editing ? `Edit ${editing.label}` : 'Edit tablet'}
         onClose={() => {

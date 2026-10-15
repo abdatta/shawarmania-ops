@@ -1208,6 +1208,7 @@ export function CashDrawerSurface() {
 
       {/* ── Count & Collect ─────────────────────────────────────────────── */}
       <FormSheet
+        busy={busy}
         open={sheet === 'count'}
         onClose={closeSheets}
         title="Count & Collect"
@@ -1476,6 +1477,7 @@ export function CashDrawerSurface() {
 
       {/* ── Fix the newest count, which nothing has anchored on ────────── */}
       <FormSheet
+        busy={busy}
         open={sheet === 'edit'}
         onClose={closeSheets}
         title="Fix this count"
@@ -1593,6 +1595,7 @@ export function CashDrawerSurface() {
 
       {/* ── Adjust a locked count ──────────────────────────────────────── */}
       <FormSheet
+        busy={busy}
         open={sheet === 'adjust'}
         onClose={closeSheets}
         title="Adjust a count"

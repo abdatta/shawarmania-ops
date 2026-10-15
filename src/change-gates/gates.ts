@@ -114,6 +114,18 @@ export const CHANGE_GATES = {
     retireBy: '2026-12-15',
     roundTrip: 'tested',
   },
+  /**
+   * Tapping the dimmed space outside a pop-up closes it. The shared `Modal`
+   * reads this once, when the page loads, and attaches the handler only while it
+   * is on, so off is the element it rendered before the change.
+   */
+  'outside-tap-closes': {
+    kind: 'change',
+    code: 'OT',
+    change: 'a-popup-closes-when-you-tap-outside-it',
+    retireBy: '2026-12-15',
+    roundTrip: 'none: the gate changes only how a pop-up can be closed and saves nothing',
+  },
 } as const satisfies Record<string, ChangeGateDeclaration>
 
 export type ChangeGateKey = keyof typeof CHANGE_GATES

@@ -38,6 +38,7 @@ export function ConfirmTurn({
       open={open}
       onClose={onClose}
       aria-label={`${verb} ${title}?`}
+      dismissOnOutsideTap={!busy}
       className="m-auto w-full max-w-sm rounded-xl p-4"
     >
       {/* Mounted only while open, so each opening starts with an empty reason:

@@ -620,6 +620,7 @@ export function ExpenseList({
       )}
 
       <FormSheet
+        busy={busy}
         open={open}
         onClose={() => {
           setOpen(false)

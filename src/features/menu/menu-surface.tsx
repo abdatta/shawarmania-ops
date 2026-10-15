@@ -553,6 +553,7 @@ function OutletMenuSurface({
       )}
 
       <FormSheet
+        busy={busy}
         key={editing?.id ?? 'new-item'}
         open={itemFormOpen}
         onClose={() => setItemFormOpen(false)}
@@ -642,6 +643,7 @@ function OutletMenuSurface({
       )}
 
       <FormSheet
+        busy={busy}
         open={renaming !== null}
         onClose={() => setRenaming(null)}
         title="Rename category"

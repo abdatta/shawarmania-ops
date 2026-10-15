@@ -75,6 +75,14 @@ const WORDS: Record<
     offMeans: 'The kitchen has ACK only, as before #74.',
     changeNumber: 74,
   },
+  // No roadmap row: a correction to how pop-ups close, so the page names the
+  // change by its folder alone.
+  'outside-tap-closes': {
+    title: 'Tap outside closes pop-ups',
+    onMeans: 'Tapping the dimmed space outside a pop-up closes it, the same as its Close button.',
+    offMeans: 'A pop-up closes only from its own buttons or Escape, as it does today.',
+    changeNumber: null,
+  },
 }
 
 /**
@@ -169,6 +177,14 @@ export function createDemoChangeGates(
    */
   const events: ChangeGateEvent[] = [
     ...turns,
+    {
+      key: 'outside-tap-closes',
+      enabled: true,
+      at: ago(HOUR),
+      byName: owner,
+      reason: null,
+      source: 'app',
+    },
     {
       key: 'kitchen-ready',
       enabled: true,

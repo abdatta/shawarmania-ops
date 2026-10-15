@@ -97,6 +97,7 @@ function OpenPaymentDialog({
       open
       onClose={onClose}
       aria-label="Record payment"
+      dismissOnOutsideTap={!busy}
       className="m-auto w-[min(94vw,30rem)] rounded-2xl p-4"
     >
       <div className="flex items-start justify-between gap-3">

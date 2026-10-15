@@ -1,8 +1,9 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { InstallAppButton } from '@/components/install-app-button'
+import { ChangeGatesForTest, describeChangeGate } from '@/test/change-gates'
 
 import { InstallPromptProvider } from './install-prompt'
 
@@ -218,5 +219,52 @@ describe('PWA install affordance', () => {
     dispatchInstallCapability()
 
     expect(screen.getByRole('button', { name: installName })).toHaveClass('w-[96px]')
+  })
+
+  describeChangeGate('outside-tap-closes', (on) => {
+    const hint =
+      'In Safari, tap Share, then Add to Home Screen. Turn on Open as Web App, then tap Add.'
+
+    async function openTheIosHint() {
+      setNavigatorProperty(
+        'userAgent',
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1',
+      )
+      setNavigatorProperty('platform', 'iPhone')
+      setNavigatorProperty('maxTouchPoints', 5)
+      render(
+        <ChangeGatesForTest on={{ 'outside-tap-closes': on }}>
+          <InstallPromptProvider>
+            <p data-testid="elsewhere">Elsewhere on the page</p>
+            <InstallAppButton />
+          </InstallPromptProvider>
+        </ChangeGatesForTest>,
+      )
+      await userEvent.setup().click(screen.getByRole('button', { name: installName }))
+      expect(screen.getByText(hint)).toBeInTheDocument()
+    }
+
+    it(
+      on
+        ? 'closes the iOS hint when a pointer lands outside it'
+        : 'leaves the iOS hint open when a pointer lands outside it, as before',
+      async () => {
+        await openTheIosHint()
+
+        fireEvent.pointerDown(screen.getByTestId('elsewhere'))
+
+        if (on) expect(screen.queryByText(hint)).not.toBeInTheDocument()
+        else expect(screen.getByText(hint)).toBeInTheDocument()
+      },
+    )
+
+    it('keeps the iOS hint open when the pointer lands on its own button or on the hint', async () => {
+      await openTheIosHint()
+
+      fireEvent.pointerDown(screen.getByRole('button', { name: installName }))
+      fireEvent.pointerDown(screen.getByText(hint))
+
+      expect(screen.getByText(hint)).toBeInTheDocument()
+    })
   })
 })

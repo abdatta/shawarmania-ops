@@ -25,6 +25,12 @@ interface FormSheetProps {
    * only one of the two is ever on screen at a time.
    */
   error?: string | null
+  /**
+   * A save is in flight. A tap on the dimmed space outside then closes
+   * nothing, as on every dialog that takes `busy` (see `Modal`); the Close
+   * button and Escape are the sheet's own business and are left as they are.
+   */
+  busy?: boolean
 }
 
 /**
@@ -32,12 +38,21 @@ interface FormSheetProps {
  * sheet on wider screens. Inputs inside inherit the 16px floor from the base
  * layer, so mobile browsers never zoom on focus.
  */
-export function FormSheet({ open, onClose, title, children, footer, error }: FormSheetProps) {
+export function FormSheet({
+  open,
+  onClose,
+  title,
+  children,
+  footer,
+  error,
+  busy = false,
+}: FormSheetProps) {
   return (
     <Modal
       open={open}
       onClose={onClose}
       aria-label={title}
+      dismissOnOutsideTap={!busy}
       className={
         'fixed inset-x-0 bottom-0 m-0 w-full max-w-none rounded-t-xl border-t p-0 ' +
         'sm:inset-x-auto sm:inset-y-0 sm:right-0 sm:h-dvh sm:max-h-none sm:w-96 ' +

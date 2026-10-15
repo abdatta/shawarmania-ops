@@ -25,8 +25,8 @@ import { cn } from '@/lib/cn'
  *
  * So now **the chip is the button**, and the explanation opens as a small modal
  * over the surface. Nothing reflows, the top layer means no ancestor's
- * `overflow` can clip it, and Escape, focus containment and backdrop dismissal
- * come from `<dialog>` rather than from code here.
+ * `overflow` can clip it, and Escape and focus containment come from `<dialog>`
+ * and a tap outside closes it through `Modal`, rather than from code here.
  *
  * **What must NOT go behind it.** Anything the reader has to see before acting:
  * the difference on a count, and the alert that a minus means money going in.

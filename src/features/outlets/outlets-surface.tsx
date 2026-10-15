@@ -1286,6 +1286,7 @@ function OutletFormSheet({
 
   return (
     <FormSheet
+      busy={busy}
       open={open}
       onClose={onClose}
       title={editing ? `Edit ${editing.name}` : 'Add outlet'}
@@ -1651,6 +1652,7 @@ function CaptureSheet({
 
   return (
     <FormSheet
+      busy={state.kind === 'saving'}
       open={outlet !== null}
       onClose={onClose}
       title={outlet ? `Capture ${outlet.name}` : 'Capture position'}

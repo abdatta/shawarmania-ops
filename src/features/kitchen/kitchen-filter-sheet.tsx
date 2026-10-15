@@ -124,6 +124,7 @@ export function KitchenFilterSheet({
 
   return (
     <FormSheet
+      busy={saving}
       open={open}
       title="What this kitchen shows"
       onClose={saving ? () => undefined : onClose}

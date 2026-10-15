@@ -69,6 +69,7 @@ export function FinishDaySheet({
 
   return (
     <FormSheet
+      busy={busy}
       open={open}
       title="Finish day"
       onClose={busy ? () => undefined : onClose}

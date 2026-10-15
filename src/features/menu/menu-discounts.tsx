@@ -235,6 +235,7 @@ export function MenuDiscountsCard({
       )}
 
       <FormSheet
+        busy={busy || saving}
         open={open}
         onClose={() => setOpen(false)}
         title={editing ? 'Edit discount' : 'Add discount'}

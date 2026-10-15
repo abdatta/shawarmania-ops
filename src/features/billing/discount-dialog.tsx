@@ -105,6 +105,7 @@ function OpenDiscountDialog({
       open
       onClose={onClose}
       aria-label={editing ? 'Edit discount' : 'Add discount'}
+      dismissOnOutsideTap={!busy}
       className="m-auto w-[min(94vw,30rem)] rounded-2xl p-4"
     >
       <h2 ref={headingRef} tabIndex={-1} className="text-lg font-black text-content outline-none">

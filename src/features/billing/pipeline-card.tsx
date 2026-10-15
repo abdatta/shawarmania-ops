@@ -1013,6 +1013,7 @@ export function UnpayDialog({
       open={open}
       onClose={onClose}
       aria-label={`Take back the payment for ${reference}`}
+      dismissOnOutsideTap={!busy}
       className="m-auto w-[min(92vw,26rem)] rounded-2xl p-4"
     >
       {/* The form mounts only while the dialog is open, so its reason state
@@ -1065,6 +1066,7 @@ export function CancelAfterPaidDialog({
       open={open}
       onClose={onClose}
       aria-label={`Cancel the paid ${reference}`}
+      dismissOnOutsideTap={!busy}
       className="m-auto w-[min(92vw,26rem)] rounded-2xl border-danger p-4"
     >
       {open && (

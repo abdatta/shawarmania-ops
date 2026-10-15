@@ -132,6 +132,7 @@ export function MenuHighlightsCard({
       </Card>
 
       <FormSheet
+        busy={saving || busy}
         open={editing}
         onClose={() => {
           if (!saving) setEditing(false)

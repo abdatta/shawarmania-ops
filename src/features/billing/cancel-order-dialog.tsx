@@ -41,6 +41,7 @@ function OpenCancelOrderDialog({
       open
       onClose={onClose}
       aria-label={`Cancel order ${reference}`}
+      dismissOnOutsideTap={!busy}
       className="m-auto w-[min(92vw,26rem)] rounded-2xl p-4"
     >
       <h2 className="text-lg font-black text-content">Cancel order {reference}</h2>
