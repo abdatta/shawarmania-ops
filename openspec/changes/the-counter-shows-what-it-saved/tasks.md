@@ -182,4 +182,6 @@ method nothing off-path calls.
   *(Partly done, read 2026-10-15: Staging green on `da92417a`; the owner turned
   `instant-saves` on in staging at 08:38 IST, promoted it (run `38674957424`, Deploy
   green) and turned it on in production at 08:44 IST, before trading. Whether staging
-  was tried throttled is not recorded. Still open: the pull, and a real service.)*
+  was tried throttled is not recorded. Pulled 2026-10-15: off with `dish-ticks` at 09:23 IST, on again at 11:48, after
+  `dish-ticks` and `kitchen-ready`. Still open: a real service with it on, and the
+  throttled try.)*

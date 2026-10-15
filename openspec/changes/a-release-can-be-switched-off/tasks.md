@@ -654,7 +654,12 @@ this change's own first arrival, which carries Promote to `main` (10.2).
   recorded, and a health report is overwritten each minute, so they cannot be read
   back now. Still open: the pull (off, on, off) with its times, and `probe` is on
   where this task ends it off.)*
-- [ ] 10.4 The owner turns `tablet-health` on; the gate's page shows each tablet's
+  *(2026-10-15: the owner turned it off at 09:23 IST and Claude, at the owner's
+  request, back on at 11:46. Both tablets were switched off at the time (silent since
+  23:58 the night before), so there was no tablet to time. The owner's own browser
+  showed `PB` in its build code within a minute, with no reload. Still open: the
+  per-tablet times, and the last off: the owner asked for every gate to be left on.)*
+- [x] 10.4 The owner turns `tablet-health` on; the gate's page shows each tablet's
   build, requests, failures and slowest request within two minutes; watch through
   one service; pull it once. Record what it showed.
   *(Half done, read from production 2026-10-15: on from the app at 09:30 IST on 14
@@ -663,6 +668,8 @@ this change's own first arrival, which carries Promote to `main` (10.2).
   `5e2e872`, 16 requests in 60 s, none failed, slowest 530 ms (23:52); *Shawarma
   Kitchen*, build `5e2e872`, 9 requests, none failed, slowest 216 ms (23:58). Not
   yet pulled: its history holds the one turn on and nothing since.)*
+  *(Pulled 2026-10-15: the owner turned it off at 09:23 IST, and Claude turned it back
+  on from the owner's session at 11:45, first of the six so the reports would flow.)*
 - [ ] 10.5 Ways-out rehearsal, outside service and with the owner's agreement:
   Republish with an unverified SHA is refused; Republish of the current verified SHA
   publishes without the suite; Hotfix of the current SHA waits for the owner's

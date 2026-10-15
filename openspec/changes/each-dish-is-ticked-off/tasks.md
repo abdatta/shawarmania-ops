@@ -152,9 +152,11 @@ One migration, dated after the newest, declaring `-- change-gate: dish-ticks`.
   typecheck, unit, contrast, build, pgTAP, RLS and generated types on a fresh local
   stack; the demo and auth suites off and on in the Staging run (AGENTS.md,
   Verification), all green on 14 October 2026.
-- [ ] 7.2 Walk the built counter and kitchen with both gates off and on, phone and
+- [x] 7.2 Walk the built counter and kitchen with both gates off and on, phone and
   tablet widths, light and dark, console and network clean; write
   `verification.md`.
+  *(2026-10-15, on production's demo, build `da92417`: see `verification.md`. One
+  cosmetic finding at phone width, an unavailable tile's name breaking mid-word.)*
 - [x] 7.3 Land the change as three to five commits; with the owner's go-ahead, push
   `HEAD:stage`, fast-forward only; Staging green.
 - [x] 7.4 `npm run test:e2e:staging` against the published staging site.
@@ -171,16 +173,21 @@ One migration, dated after the newest, declaring `-- change-gate: dish-ticks`.
   *(Promote run `38550692305`, then Deploy on `5e2e8729`, 14 October 16:29 IST; both
   gates were off until the owner turned them on at 16:40. `d1704ae3`'s follow-ups were
   promoted the same night, run `38656885347`.)*
-- [ ] 8.2 `/release dish-ticks` at a quiet hour; watch each tablet on the gate's
+- [x] 8.2 `/release dish-ticks` at a quiet hour; watch each tablet on the gate's
   page through the next service; pull it once, off and on.
   *(Half done, read from production 2026-10-15: on from the app at 16:40:58 IST on 14
   October and through that evening's service — 94 dish ticks that day, both tablets
   booting it, none of their requests failed (last reports 23:52 and 23:58). Not yet
   pulled: its history holds the one turn on.)*
-- [ ] 8.3 `/release kitchen-ready` the same way.
-  *(Half done, as 8.2: on at 16:41:04 IST on 14 October, 40 kitchen Readies that
-  service; not yet pulled.)*
+  *(Pulled 2026-10-15: the owner turned it off at 09:23 IST, and Claude turned it back
+  on from the owner's session at 11:47, with their go-ahead.)*
+- [x] 8.3 `/release kitchen-ready` the same way.
+  *(As 8.2: on at 16:41:04 IST on 14 October, 40 kitchen Readies that service; off
+  with `dish-ticks` at 09:23 on 15 October and on again at 11:47.)*
 - [ ] 8.4 Real use; then archive, which refuses until the history shows each pull.
+  *(Both pulls are in the history now. The service on 14 October ran build `5e2e872`.
+  The build carrying `d1704ae3`'s follow-ups has not traded yet, so real use of the
+  final build is the next service.)*
 
 ## 9. Phase gate
 
