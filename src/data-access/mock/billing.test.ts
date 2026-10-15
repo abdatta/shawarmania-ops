@@ -1182,3 +1182,21 @@ describe('mock order line identities', () => {
     unsubscribe()
   })
 })
+
+describe('the demo’s peeks', () => {
+  // the-counter-shows-what-it-saved, design D1: the demo asks no network, so
+  // what it lists is already what the tablet holds.
+  it('agree with its lists, queued work included', async () => {
+    const store = createDemoStore()
+    const adapter = createMockBillingAdapter(store)
+    await adapter.saveOrder(orderDraft(store, '10000000-0000-4000-8000-0000000000e1'))
+    await adapter.settleBill(draft(store, '0d000000-0000-4000-8000-0000000000e2'))
+
+    expect(await adapter.peekOpenOrders(DEMO_OUTLET_ID)).toEqual(
+      await adapter.listOpenOrders(DEMO_OUTLET_ID),
+    )
+    expect(await adapter.peekShiftHistory(DEMO_OPEN_SHIFT_ID)).toEqual(
+      await adapter.listShiftHistory(DEMO_OPEN_SHIFT_ID),
+    )
+  })
+})

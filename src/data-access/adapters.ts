@@ -1813,6 +1813,13 @@ export interface BillingAdapter {
   ): Promise<BillingOrder>
   listOpenOrders(outletId: string): Promise<BillingOrder[]>
   /**
+   * The pipeline as this tablet holds it now, with no request
+   * (the-counter-shows-what-it-saved, design D1): what `listOpenOrders` would
+   * return if the server failed, read without asking it first. **Null** before
+   * the first read of this outlet on this page has given it anything to hold.
+   */
+  peekOpenOrders(outletId: string): Promise<BillingOrder[] | null>
+  /**
    * Record tender against an open order. When the order is already prepared
    * this settles it into a bill and resolves with that bill; when its food is
    * still owed the money is held against the order and **null** resolves — no
@@ -1852,6 +1859,13 @@ export interface BillingAdapter {
    */
   cancelPaidOrder(orderId: string, reason: string): Promise<BillingOrder>
   listShiftHistory(shiftId: string): Promise<ShiftBillingHistory>
+  /**
+   * This shift's bills as this tablet holds them now, with no request
+   * (the-counter-shows-what-it-saved, design D1): the last bills it drew with
+   * its queued work laid over them. **Null** when it holds none — no read of
+   * this shift on this page and no resume record.
+   */
+  peekShiftHistory(shiftId: string): Promise<ShiftBillingHistory | null>
   listManagerHistory(filters: BillingHistoryFilters): Promise<BillingBill[]>
   /**
    * One customer's bills at one outlet, newest first, one page of summaries

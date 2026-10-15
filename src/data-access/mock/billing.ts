@@ -1949,6 +1949,17 @@ export function createMockBillingAdapter(
       return projectedOrders(outletId).filter(inPipeline)
     },
 
+    // The demo asks no network, so what it lists is already what the tablet
+    // holds (the-counter-shows-what-it-saved, D1). Null rather than a refusal
+    // without an open shift: a peek then has nothing to draw.
+    async peekOpenOrders(outletId) {
+      return adapter.listOpenOrders(outletId).catch(() => null)
+    },
+
+    async peekShiftHistory(shiftId) {
+      return adapter.listShiftHistory(shiftId).catch(() => null)
+    },
+
     async markOrderLinesPrepared(id, orderId, changes) {
       const shift = requireOpenShift()
       const workflow = store.dishWorkflow

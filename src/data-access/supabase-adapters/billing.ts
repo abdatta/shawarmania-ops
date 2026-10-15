@@ -31,6 +31,7 @@ import {
   type PaymentAllocation,
   type SaveOrderInput,
   type ServiceFacts,
+  type ShiftBillingHistory,
 } from '../adapters'
 import type { Database, Tables } from '../database.types'
 import {
@@ -511,6 +512,25 @@ function discountTotalPaise(
 }
 
 /**
+ * A shift's bills with the cash and UPI they took, in integer paise. One
+ * function for the read and the peek, so the two can never total differently
+ * (the-counter-shows-what-it-saved, design D1).
+ */
+function shiftHistoryOf(bills: BillingBill[]): ShiftBillingHistory {
+  return {
+    bills,
+    totals: BILLING_PAYMENT_METHODS.map((method) => ({
+      method,
+      totalPaise: bills
+        .filter((bill) => bill.status === 'settled')
+        .flatMap((bill) => bill.payments)
+        .filter((payment) => payment.method === method)
+        .reduce((sum, payment) => sum + payment.amountPaise, 0),
+    })),
+  }
+}
+
+/**
  * Each line as the command carries it, its kind included (#60). A dish ticks'
  * order line also carries its note, under the identity the composer gave it
  * (each-dish-is-ticked-off); off, a line is exactly what it was, key for key,
@@ -749,9 +769,20 @@ export function createSupabaseBillingAdapter(
     sync: { kind: 'synced', pending: 0 },
   }
 
+  /*
+    What a peek may start from (the-counter-shows-what-it-saved, design D1).
+    An outlet's pipeline is held once a read of it has finished on this page,
+    or a resume record seeded it; before that a peek has nothing to draw and
+    says so. A shift's bills are held as last drawn, queued work included, so a
+    payment delivered since is still in them though its envelope is gone.
+  */
+  const pipelineHeld = new Set<string>()
+  const shiftBillsHeld = new Map<string, BillingBill[]>()
+
   for (const order of counterSession?.offlineResume?.pipeline ?? []) {
     orderCache.set(order.id, structuredClone(order))
   }
+  if (counterSession?.offlineResume) pipelineHeld.add(counterSession.device.outletId)
 
   /**
    * The star a sale still in the queue is drawn with: what this till was last
@@ -1146,9 +1177,7 @@ export function createSupabaseBillingAdapter(
     let orders: BillingOrder[]
     if (error) {
       if (!counterSession?.shift) throw actionError(error, 'Could not load open orders.')
-      orders = [...orderCache.values()].filter(
-        (order) => order.outletId === outletId && (!pipelineOnly || inPipeline(order)),
-      )
+      orders = heldOrders(outletId, pipelineOnly)
     } else {
       const rows = data as unknown as OrderReadRow[]
       const labels = await deviceLabelsFor(
@@ -1163,7 +1192,32 @@ export function createSupabaseBillingAdapter(
       for (const order of orders) if (!newer(order.id)) orderCache.set(order.id, order)
     }
 
-    if (local) orders = projectOrders(orders, local)
+    if (pipelineOnly) pipelineHeld.add(outletId)
+    return overlayHeld(outletId, pipelineOnly, orders, local, newer)
+  }
+
+  /** The rows this tablet holds for an outlet: the last it read, and what it wrote since. */
+  function heldOrders(outletId: string, pipelineOnly: boolean): BillingOrder[] {
+    return [...orderCache.values()].filter(
+      (order) => order.outletId === outletId && (!pipelineOnly || inPipeline(order)),
+    )
+  }
+
+  /**
+   * The half of `readOrders` that does not ask the server: the envelopes laid
+   * over the rows it was given, a newer local write kept over an older row, and
+   * the cache left holding the result. `peekOpenOrders` runs it over the held
+   * rows, which is exactly what `readOrders` does when the server fails
+   * (the-counter-shows-what-it-saved, design D1).
+   */
+  function overlayHeld(
+    outletId: string,
+    pipelineOnly: boolean,
+    rows: BillingOrder[],
+    local: readonly BillingDeliveryEnvelopeRecord[] | null,
+    newer: (orderId: string) => boolean,
+  ): BillingOrder[] {
+    let orders = local ? projectOrders(rows, local) : rows
 
     if (dishes) {
       orders = orders.map((order) =>
@@ -1177,6 +1231,15 @@ export function createSupabaseBillingAdapter(
 
     for (const order of orders) orderCache.set(order.id, order)
     return orders.filter((order) => !pipelineOnly || inPipeline(order))
+  }
+
+  async function peekOrders(outletId: string): Promise<BillingOrder[] | null> {
+    if (!pipelineHeld.has(outletId)) return null
+    // Envelopes first, held rows second, as `readOrders` does. The held rows are
+    // the cache itself, so a write landing between the two is already in them
+    // and nothing can be newer than they are.
+    const local = await projectableEnvelopes(outletId)
+    return overlayHeld(outletId, true, heldOrders(outletId, true), local, () => false)
   }
 
   async function readOrder(orderId: string): Promise<BillingOrder | null> {
@@ -1316,6 +1379,11 @@ export function createSupabaseBillingAdapter(
     shiftId: string,
     serverBills: readonly BillingBill[],
     known?: readonly BillingDeliveryEnvelopeRecord[] | null,
+    /**
+     * False for a peek, which asks no network: a queued payment for an order
+     * this tablet does not hold is left for the next read rather than fetched.
+     */
+    network = true,
   ): Promise<BillingBill[]> {
     const bills = new Map(serverBills.map((bill) => [bill.id, bill]))
     if (!database || !counterSession) return [...bills.values()]
@@ -1417,7 +1485,7 @@ export function createSupabaseBillingAdapter(
         const order =
           orderSnapshots.get(command.payload.orderId) ??
           orderCache.get(command.payload.orderId) ??
-          (await readOrder(command.payload.orderId))
+          (network ? await readOrder(command.payload.orderId) : null)
         if (order) {
           bills.set(command.payload.billId, {
             id: command.payload.billId,
@@ -2038,6 +2106,10 @@ export function createSupabaseBillingAdapter(
       return readOrders(outletId, true)
     },
 
+    peekOpenOrders(outletId) {
+      return peekOrders(outletId)
+    },
+
     async payOrder(orderId, payments): Promise<BillingBill | null> {
       const { session, shift } = requireTablet()
       const existing = await projectOrder(orderId)
@@ -2333,17 +2405,22 @@ export function createSupabaseBillingAdapter(
       const bills = (await overlayDurableBills(shiftId, serverBills, known)).sort((a, b) =>
         b.paidAt.localeCompare(a.paidAt),
       )
-      return {
-        bills,
-        totals: BILLING_PAYMENT_METHODS.map((method) => ({
-          method,
-          totalPaise: bills
-            .filter((bill) => bill.status === 'settled')
-            .flatMap((bill) => bill.payments)
-            .filter((payment) => payment.method === method)
-            .reduce((sum, payment) => sum + payment.amountPaise, 0),
-        })),
-      }
+      shiftBillsHeld.set(shiftId, bills)
+      return shiftHistoryOf(bills)
+    },
+
+    async peekShiftHistory(shiftId) {
+      const resumed =
+        counterSession?.offlineResume?.shift.id === shiftId
+          ? counterSession.offlineResume.bills
+          : null
+      const held = shiftBillsHeld.get(shiftId) ?? (resumed ? structuredClone(resumed) : null)
+      if (!held) return null
+      const bills = (
+        await overlayDurableBills(shiftId, held, await shiftEnvelopes(shiftId), false)
+      ).sort((a, b) => b.paidAt.localeCompare(a.paidAt))
+      shiftBillsHeld.set(shiftId, bills)
+      return shiftHistoryOf(bills)
     },
 
     async listManagerHistory(filters) {

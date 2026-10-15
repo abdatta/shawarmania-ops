@@ -1917,3 +1917,119 @@ describe('a read that began before a dish tick', () => {
     expect(updated.lines.map((line) => line.preparedQuantity)).toEqual([1, 1])
   })
 })
+
+describe('a peek draws what the tablet holds, with no request', () => {
+  // the-counter-shows-what-it-saved, design D1.
+  it('holds nothing before the first read, and says so', async () => {
+    const from = vi.fn()
+    const billing = createSupabaseBillingAdapter(
+      { rpc: vi.fn(), from } as unknown as SupabaseClient<Database>,
+      session,
+      undefined,
+      { dishes: true },
+    )
+    expect(await billing.peekOpenOrders('outlet-1')).toBeNull()
+    expect(await billing.peekShiftHistory('shift-1')).toBeNull()
+    expect(from).not.toHaveBeenCalled()
+  })
+
+  it('draws an order saved and then revised while the next read is held', async () => {
+    let reads = 0
+    const held = new Promise<void>(() => undefined)
+    const client = raceOrdersClient(openPreparedRow(), async () => {
+      reads++
+      if (reads > 1) await held
+    })
+    const billing = createSupabaseBillingAdapter(client, session, undefined, { dishes: true })
+    await billing.listOpenOrders('outlet-1')
+    void billing.listOpenOrders('outlet-1')
+
+    await billing.saveOrder({ ...orderInput, label: 'Red shirt' })
+    const saved = (await billing.peekOpenOrders('outlet-1'))?.find(
+      (order) => order.id === orderInput.clientId,
+    )
+    expect(saved).toMatchObject({
+      orderNumber: AWAITING_ORDER_NUMBER,
+      status: 'open',
+      label: 'Red shirt',
+      totalPaise: 13_900,
+    })
+
+    await billing.reviseOrder(orderInput.clientId, {
+      label: 'Red shirt',
+      lines: [...draft.lines, { ...draft.lines[0]!, menuItemId: 'item-2', itemName: 'Fries' }],
+      discounts: [],
+      customerId: null,
+      customerName: 'Asha',
+      customerPhone: null,
+    })
+    const revised = (await billing.peekOpenOrders('outlet-1'))?.find(
+      (order) => order.id === orderInput.clientId,
+    )
+    expect(revised?.lines.map((line) => line.itemName)).toEqual([
+      'Classic Chicken Shawarma',
+      'Fries',
+    ])
+    expect(revised?.totalPaise).toBe(27_800)
+    // The server's order is still drawn beside it, and nothing else was asked.
+    expect((await billing.peekOpenOrders('outlet-1'))?.map((order) => order.id)).toContain(
+      PREPARED_ORDER_ID,
+    )
+    expect(reads).toBe(2)
+  })
+
+  it('is what the read returns when the server fails', async () => {
+    const billing = createSupabaseBillingAdapter(offlineClient(), session, undefined, {
+      dishes: true,
+    })
+    await billing.listOpenOrders('outlet-1')
+    await billing.saveOrder(orderInput)
+    const peeked = await billing.peekOpenOrders('outlet-1')
+    expect(peeked?.map((order) => order.id)).toEqual([orderInput.clientId])
+    expect(peeked).toEqual(await billing.listOpenOrders('outlet-1'))
+  })
+
+  it('draws a payment, its correction and a take-back in the shift’s bills', async () => {
+    const billing = createSupabaseBillingAdapter(emptyReadableClient(), session, undefined, {
+      dishes: true,
+    })
+    const store = new BillingDeliveryStore(new BillingDeliveryDatabase())
+    await billing.listShiftHistory('shift-1')
+    await billing.listOpenOrders('outlet-1')
+
+    await billing.settleBill(draft)
+    let peeked = await billing.peekShiftHistory('shift-1')
+    expect(peeked?.bills.map((bill) => [bill.id, bill.billNumber])).toEqual([[draft.clientId, 0]])
+    expect(peeked?.totals).toEqual([
+      { method: 'cash', totalPaise: 10_000 },
+      { method: 'upi', totalPaise: 3_900 },
+    ])
+
+    // Delivered before the next read: the envelope is gone, the bill is not.
+    await store.recordResult(draft.clientId, { status: 'accepted', commandId: draft.clientId }, 1)
+    peeked = await billing.peekShiftHistory('shift-1')
+    expect(peeked?.bills.map((bill) => bill.id)).toEqual([draft.clientId])
+
+    await billing.correctBillPayment(draft.clientId, 0, [{ method: 'upi', amountPaise: 13_900 }])
+    peeked = await billing.peekShiftHistory('shift-1')
+    expect(peeked?.totals).toEqual([
+      { method: 'cash', totalPaise: 0 },
+      { method: 'upi', totalPaise: 13_900 },
+    ])
+
+    await billing.saveOrder(orderInput)
+    const bill = await billing.payOrder(orderInput.clientId, [
+      { method: 'cash', amountPaise: 13_900 },
+    ])
+    peeked = await billing.peekShiftHistory('shift-1')
+    expect(peeked?.bills.map((candidate) => candidate.id)).toContain(bill!.id)
+
+    await billing.unpayOrder(orderInput.clientId, bill!.id, 'Wrong order')
+    peeked = await billing.peekShiftHistory('shift-1')
+    expect(peeked?.bills.map((candidate) => candidate.id)).not.toContain(bill!.id)
+    expect(
+      (await billing.peekOpenOrders('outlet-1'))?.find((order) => order.id === orderInput.clientId)
+        ?.status,
+    ).toBe('open')
+  })
+})
