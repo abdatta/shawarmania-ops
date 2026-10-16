@@ -83,7 +83,7 @@ whether any of it is safe to use in production.
 
 ## 4. The mark
 
-- [x] 4.1 Billing history: a paper bill's row reads **Paper** where the till and
+- [x] 4.1 Billing history: a paper bill's row reads **from paper** where the till and
       biller are; its detail reads *Entered by <name> · <date>*. Every other
       screen from 1.2 does the same. Component tests for both kinds of bill.
 - [x] 4.2 Demo: add a few paper bills to the scenario at one outlet, typed from
@@ -118,15 +118,15 @@ whether any of it is safe to use in production.
       names a tablet, biller or shift, all name the manager, the phone's receipt
       is skipped, and each day's Ledger takings include them; `--target
       production` against staging's URL is refused; the undo voided 42 and a
-      second undo none. Still to do: the owner looks at the cancelled Paper
-      bills in staging's Billing history, since signing in to a web page is
-      theirs.)*
+      second undo none. The owner looked at them on staging and asked for
+      *from paper* in place of a bare *Paper*; a second, paid paper day was
+      entered and kept.)*
 - [ ] 6.3 Owner Promote. Before the first production entry, confirm every
       device the owner uses runs the promoted build (1.2's display reads).
 - [ ] 6.4 PHASE GATE (#77, Wave F): the owner runs the script against a file of
       written orders for an outlet already marked closed, sees the day's totals
       by tender before anything is written, then writes one bill per order;
-      each bill reads Paper in Billing history, naming who entered it and when,
+      each bill reads from paper in Billing history, naming who entered it and when,
       and names no tablet, shift or biller; the bills count in Overview, the
       Ledger, Analytics and the drawer exactly as counter bills do, proved
       against the file's totals; the same file again creates nothing; the undo

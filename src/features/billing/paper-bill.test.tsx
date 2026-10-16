@@ -6,7 +6,7 @@ import type { BillingBill } from '@/data-access/adapters'
 import { ManagerBillDetail } from './manager-bill-detail'
 import { ManagerBillSummary } from './manager-bill-row'
 
-// a-sale-taken-on-paper-says-so: a bill nobody rang reads Paper where a
+// a-sale-taken-on-paper-says-so: a bill nobody rang reads "from paper" where a
 // counter bill names its biller and till, and says who entered it.
 
 const counterBill: BillingBill = {
@@ -81,9 +81,9 @@ function detail(bill: BillingBill) {
 }
 
 describe('a paper bill', () => {
-  it('reads Paper in its row, naming no biller and no till', () => {
+  it('reads "from paper" in its row, naming no biller and no till', () => {
     const row = summary(paperBill)
-    expect(within(row).getByTestId('paper-bill-bill-2')).toHaveTextContent('Paper')
+    expect(within(row).getByTestId('paper-bill-bill-2')).toHaveTextContent('from paper')
     expect(row).not.toHaveTextContent('by ')
     expect(row).not.toHaveTextContent('Counter operator')
     expect(row).not.toHaveTextContent(' on ')

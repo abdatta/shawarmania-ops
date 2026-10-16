@@ -277,7 +277,7 @@ generated types say `counter_device_id: string` and `biller_profile_id: string`.
    per read that seeds one paper bill and asserts the figure moves.
 2. **Every client read that renders a bill's till or biller** — Billing history
    above all, which resolves the till's name from the identity effective at
-   payment — must render null as *Paper*. Apply records what a published build
+   payment — must render null as *from paper*. Apply records what a published build
    shows for a null on each such screen; it cannot be changed for that build,
    and the owner reads it before the first production entry.
 3. **Per-person and per-tablet figures**, wherever they exist, gain a *Paper*
@@ -290,7 +290,7 @@ unchanged and satisfy the new check.
 
 ## UI
 
-The whole UI change is the mark. Billing history's row reads **Paper** where a
+The whole UI change is the mark. Billing history's row reads **from paper** where a
 counter bill names its till and biller, and the expanded bill says *Entered by
 <name> · <date>*. Any other screen that names a bill's till or biller (found by
 audit step 2) does the same. Nothing is added to navigation. The shimmer is

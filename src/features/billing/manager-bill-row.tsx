@@ -101,11 +101,12 @@ export function ManagerBillSummary({
           {methodLabel(bill.paymentMethod)} · {formatDayTime(bill.paidAt)} ·{' '}
           {/*
             A sale written on paper and entered afterwards was rung by
-            nobody on no till, so it says Paper where a counter bill names
-            them (a-sale-taken-on-paper-says-so).
+            nobody on no till, so it says "from paper" where a counter bill
+            says "by" its biller: the same preposition-first shape, so the
+            two read alike (a-sale-taken-on-paper-says-so; owner, 2026-10-16).
           */}
           {bill.entrySource === 'paper' ? (
-            <span data-testid={`paper-bill-${bill.id}`}>Paper</span>
+            <span data-testid={`paper-bill-${bill.id}`}>from paper</span>
           ) : (
             <>
               by {bill.billerName}

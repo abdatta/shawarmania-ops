@@ -7,7 +7,7 @@
 > · **Gate**: the owner runs the paper-sales script against a file of written
 > orders for an outlet already marked closed, sees the day's totals by tender
 > before anything is written, then writes one bill per order; each bill reads
-> **Paper** in Billing history, naming who entered it and when, and names no
+> *from paper* in Billing history, naming who entered it and when, and names no
 > tablet, shift or biller; the bills count in Overview, the Ledger, Analytics and
 > the drawer exactly as counter bills do, proved by reading each against the
 > file's totals; running the same file again creates nothing; the script's undo
@@ -64,7 +64,7 @@ idea for billing.
   already counted in the drawer shows the late bills as an exception beside its
   count, as a late counter bill does today.
 - **The one piece of UI is the mark.** In Billing history a paper bill reads
-  **Paper** where a counter bill names its till and biller, and its detail says
+  *from paper* where a counter bill says *by* its biller and *on* its till, and its detail says
   who entered it and when.
 - **It works on a closed outlet**, for any business day up to the outlet's
   today. A five-day stall is closed by the time its last sheet is entered.
@@ -84,7 +84,7 @@ Each question was put to the owner with a recommendation. Their answers:
 | 7 | Discounts and free food? | **As at the counter**: a percentage or flat discount with its reason; food given free is a 100% discount. *As built (2026-10-16): the counter's discounts have no reason column, so a paper bill's has none either; a percentage is entered as the rupee amount it came to; an order given away entirely cannot come to nothing, because every bill, at the counter too, comes to at least ₹1. **Owner, 2026-10-16: a free dish is billed at ₹1, as the counter already does**, so the script's ` free` prices a dish at ₹1 and a wholly free order is a bill of ₹1 a dish.* |
 | 8 | Customers? | **An optional phone (and name) where the sheet has one.** It links the bill to the customer and earns points at that outlet as a counter bill would. **No receipt SMS is sent.** Paper bills never spend points. |
 | 9 | A change gate? | **None** [owner asked whether one is needed; agreed it is not]. See below. |
-| 10 | The word on the bill | **Paper.** |
+| 10 | The word on the bill | **Paper.** *Changed 2026-10-16 after the owner saw staging: the row reads **from paper**, because every counter row reads *by* its biller and a bare *Paper* beside them was confusing.* |
 | 11 | The 1 October bills | **Left as they are.** Cancelling and re-entering them would add 75 cancelled bills to that day and nothing true. |
 | 12 | A new check on `bills` | **Agreed**: the database itself refuses a paper bill without an enterer and a counter bill without a tablet. Recorded as the owner's agreement for the release-lint exception in `design.md`. |
 
@@ -120,7 +120,7 @@ file's bills. The owner asked whether a gate was needed and agreed it is not
 
 - `docs/DATA_MODEL.md` — bills: how a bill was entered, who entered it, the
   columns that are empty on a paper bill, and the check that pairs them.
-- `docs/SCREENS.md` — the Paper mark in Billing history.
+- `docs/SCREENS.md` — *from paper* in Billing history.
 - `docs/OPERATIONS.md` — a runbook, *a day traded on paper*: the file format,
   the dry run, the write, the undo, staging first, for a pop-up outlet and for a
   counter-down day. It is the entry path, so it is complete enough for an agent

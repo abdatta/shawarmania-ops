@@ -150,17 +150,17 @@ message SHALL be queued or sent for a paper bill.
 - **THEN** the customer earns that bill's points and no receipt message is ever
   claimed for sending
 
-### Requirement: A paper bill reads Paper
+### Requirement: A paper bill reads from paper
 
-Wherever a bill's till or biller is shown, a paper bill SHALL read **Paper** in
+Wherever a bill's till or biller is shown, a paper bill SHALL read **from paper** in
 its place, and its detail SHALL say who entered it and when. In demo mode the
 scenario SHALL include paper bills so the mark is walkable.
 
 #### Scenario: Billing history lists a paper bill
 
 - **WHEN** the owner opens Billing history for a day with paper bills
-- **THEN** each paper bill's row reads Paper where a counter bill names its till
-  and biller, and expanding it shows who entered it and when
+- **THEN** each paper bill's row reads from paper where a counter bill reads by
+  its biller and on its till, and expanding it shows who entered it and when
 
 ### Requirement: A file of paper sales is checked before it is written, and can be undone
 
