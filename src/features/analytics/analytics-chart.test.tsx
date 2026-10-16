@@ -334,6 +334,44 @@ describe('interactive sales figures', () => {
       expect(hours.getByRole('status')).toHaveTextContent(`12:00${hourlyValue}`)
     },
   )
+  it.each([
+    ['One Revenue drops the paise as Overview does', true, '₹3,98,108'],
+    ['without One Revenue the headline still rounds', false, '₹3,98,109'],
+  ])('a revenue headline of ₹3,98,108.97: %s', (_, oneRevenue, shown) => {
+    const total = 39_810_897
+    inRouter(
+      <SalesPanel
+        data={{
+          days: [{ date: '2026-10-01', revenue: total, orders: 1, units: 1, discounts: 0 }],
+          items: [],
+          categories: [],
+          delivery: [],
+          hours: [],
+          ...(oneRevenue && {
+            totals: [
+              { period: 0, counter: total, delivery: 0, orders: 1 },
+              { period: 1, counter: 100_000, delivery: 0, orders: 1 },
+            ],
+            cutAt: null,
+          }),
+        }}
+        from="2026-10-01"
+        to="2026-10-01"
+        grain="day"
+        metric="revenue"
+        periods={2}
+        windows={
+          oneRevenue
+            ? [
+                { first: '2026-10-01', last: '2026-10-01', cut: false },
+                { first: '2026-09-01', last: '2026-09-01', cut: false },
+              ]
+            : undefined
+        }
+      />,
+    )
+    expect(screen.getByTestId('sales-trend-value')).toHaveTextContent(new RegExp(`^${shown}$`))
+  })
   it('four periods read as a direction and against the usual, not against the last one', () => {
     const days = [100_000, 110_000, 120_000, 130_000].map((revenue, index) => ({
       date: `2026-10-0${index + 1}`,
