@@ -604,11 +604,25 @@ staging must verify this change before 10 promotes it to production.
   roughly 600 a minute #74's counter made; slowest request 5.8 s once on the counter
   and 0.8 s on the kitchen — the counter's is one sample, worth watching when Tablet
   health first runs in production. Recorded before staging was wiped for 9.12c.)*
-- [ ] 9.14 Promote rehearsal: Promote a SHA with no successful Staging run is
+- [x] 9.14 Promote rehearsal: Promote a SHA with no successful Staging run is
   refused; Promote with no SHA, while `stage`'s tip is docs-only, takes the newest
   verified commit beneath it and lists the tip as left behind; Promote of a SHA `main` is not an ancestor of is refused; a direct push to
   `main` is refused by the ruleset. *Only after 10.2*: Promote runs from `main`, which
   does not hold it until then.
+  *(Done 2026-10-15, outside trading, with the owner. Promote `72cebc03`, a docs-only
+  commit Staging never ran on: refused, "No Staging run succeeded on …" (run
+  `38695092428`). Promote `9973dc55`, which Staging passed but which is behind `main`:
+  refused, "main is not an ancestor of …" (`38695315185`; a first try, `38695096046`,
+  was cancelled by the three dispatches overlapping). `git push origin <sha>:main`:
+  rejected, "push declined due to repository rule violations". The empty-box case
+  needed a verified commit under a docs-only tip, so Staging was dispatched by hand on
+  `72cebc03` (`38696346700`, green) and the three docs-only commits of
+  `a-swiggy-week-with-no-orders-is-empty` were pushed above it. Promote with no SHA
+  (`38697289671`) then named `72cebc03` as the newest verified commit, listed the
+  three as left on stage, and after the owner's approval fast-forwarded `main` to it.
+  Deploy did not run, the commit being docs-only. Earlier the same morning, with
+  nothing verified above `main`, Promote with no SHA refused: "No commit on stage
+  above main has passed Staging yet" (`38695099763`).)*
 
 ## 10. Production
 
@@ -642,7 +656,7 @@ this change's own first arrival, which carries Promote to `main` (10.2).
   owner's request ("if you can do it yourself go ahead"): deletion, non-fast-forward and
   update refused, the deploy-key actor its one bypass, and only the `promote` key exists;
   `gh api repos/abdatta/shawarmania-ops/rules/branches/main` reads all three back.)*
-- [ ] 10.3 With the owner, at a quiet hour: the owner turns `probe` on from
+- [x] 10.3 With the owner, at a quiet hour: the owner turns `probe` on from
   their phone; every tablet's build code gains `PB` without anyone touching it,
   as it did on staging in 9.13;
   measure the time per tablet. Then off, then on, then off — the pull. Record times
@@ -659,6 +673,13 @@ this change's own first arrival, which carries Promote to `main` (10.2).
   23:58 the night before), so there was no tablet to time. The owner's own browser
   showed `PB` in its build code within a minute, with no reload. Still open: the
   per-tablet times, and the last off: the owner asked for every gate to be left on.)*
+  *(Timed 2026-10-15, as soon as both tablets were up on build `da92417` before trade
+  (counter 13:28, kitchen 13:41 IST), from the owner's session with their go-ahead.
+  Off at 13:43:06: *Kalyani Counter 2* reported without `PB` 5 s later, *Shawarma
+  Kitchen* 6 s later. On at 13:43:33: 4 s and 6 s. Each tablet reports as soon as it
+  switches, so these are the switch times, not a minute's sampling. Nobody touched
+  either tablet and nothing was deployed. Left on at the owner's request, which is
+  where this task differs from its own wording.)*
 - [x] 10.4 The owner turns `tablet-health` on; the gate's page shows each tablet's
   build, requests, failures and slowest request within two minutes; watch through
   one service; pull it once. Record what it showed.
@@ -674,7 +695,19 @@ this change's own first arrival, which carries Promote to `main` (10.2).
   Republish with an unverified SHA is refused; Republish of the current verified SHA
   publishes without the suite; Hotfix of the current SHA waits for the owner's
   approval and, once approved, publishes while a Deploy run is still verifying.
-  *(Not started as of 2026-10-15: neither Republish nor Hotfix has a run.)*
+  *(Done 2026-10-15 at 12:22–12:35 IST, before opening, with the owner, all but the
+  last clause. Republish of `72cebc03`, which no Deploy ran on: refused, "No Deploy run
+  succeeded on …, so the full suite never passed this build" (`38695103584`).
+  Republish of `da92417`, the live build: verified, built and published in about three
+  minutes without the suite (`38695107832`); the served bundle changed from
+  `index-DZDFhIwW.js` to `index-CUij4egz.js`, the rebuild's new timestamp, with both
+  tablets switched off. Hotfix of `da92417` (`38695144602`): the short gate passed in
+  four minutes, then the run waited until the owner approved it in
+  `production-hotfix`; migrate (nothing to apply), functions and publish followed, and
+  *main follows the fix* waited for the second approval and left `main` where it was.
+  Not shown: a hotfix publishing while a Deploy run is still verifying, because no
+  Deploy was running. That case arises when a Deploy runs the full suite, as it does
+  after a hotfix lands on `main`.)*
 
 ## 11. Retire the probe
 
