@@ -78,7 +78,12 @@ describeChangeGate('one-revenue', (on) => {
       overview: {
         ...base.overview,
         month: async () => month,
-        today: async () => ({ cashPaise: 359_500, upiPaise: 182_300, deliveryPaise: 0 }),
+        today: async () => ({
+          cashPaise: 359_500,
+          upiPaise: 182_300,
+          deliveryPaise: 0,
+          openPaise: 0,
+        }),
       },
     }
     renderWith(on, <OutletsOverview />, adapters, 'super_admin')
@@ -110,7 +115,7 @@ describeChangeGate('one-revenue', (on) => {
           ...month,
           previous: { ...month.previous, revenuePaise: 0, hasSales: false },
         }),
-        today: async () => ({ cashPaise: 0, upiPaise: 0, deliveryPaise: 0 }),
+        today: async () => ({ cashPaise: 0, upiPaise: 0, deliveryPaise: 0, openPaise: 0 }),
       },
     }
     renderWith(on, <OutletsOverview />, adapters, 'super_admin')

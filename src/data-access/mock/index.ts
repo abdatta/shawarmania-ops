@@ -242,6 +242,7 @@ export function createMockAdapters(
       createDemoLoyaltyHooks(data.customers, store),
       // Asked each call: a demo turn takes effect at once.
       data.dishTicks,
+      () => [...data.kitchen.acks, ...Object.values(data.kitchen.stationAcks ?? {}).flat()],
     ),
     // The role scopes the tablet list as `counter_devices_select` will, and the
     // persona's name stands in for the username the tablet types — demo mode has

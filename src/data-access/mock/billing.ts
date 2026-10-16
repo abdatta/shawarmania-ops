@@ -26,6 +26,7 @@ import {
   type BillingAttributionOutcome,
   type BillingAttributionReview,
   type BillingBill,
+  type BillingDayStats,
   type BillingOrder,
   type CounterBiller,
   type CounterShift,
@@ -168,6 +169,12 @@ export function createMockBillingAdapter(
    * demo's data stays. A test of billing alone leaves it off.
    */
   dishTicksOn: () => boolean = () => false,
+  /**
+   * The demo kitchens' acknowledgements, for the Stats tab's Seen
+   * (billing-day-at-a-glance). They live with the demo kitchen, not the store;
+   * a test of billing alone has none.
+   */
+  kitchenAcks: () => readonly { orderId: string }[] = () => [],
 ): BillingAdapter {
   /** The dish records, only while the dish ticks run; off, reads and revisions are as before #74. */
   const dish = () => (dishTicksOn() ? store.dishWorkflow : undefined)
@@ -2459,9 +2466,11 @@ export function createMockBillingAdapter(
       return projectedOrders(outletId).filter(inPipeline)
     },
 
-    async countManagerOpenOrders(outletId) {
+    async countManagerOpenOrders(outletId, businessDate) {
       requireManager(outletId)
-      return projectedOrders(outletId).filter(inPipeline).length
+      return projectedOrders(outletId)
+        .filter(inPipeline)
+        .filter((order) => !businessDate || order.businessDate === businessDate).length
     },
 
     async managerCancelOrder(orderId, reason) {
@@ -2571,6 +2580,63 @@ export function createMockBillingAdapter(
           ageMs: Math.max(0, Date.now() - new Date(command.received_at).getTime()),
           orderNumber: mockRefusedOrderNumber(command.result),
         }))
+    },
+
+    // The database's definitions (design D3) over the demo's own rows. The demo
+    // keeps no log of revisions, so an order it changed stands for one revised.
+    async readDayStats(outletId, businessDate): Promise<BillingDayStats> {
+      requireManager(outletId)
+      const orders = store.orders.filter(
+        (order) => order.outlet_id === outletId && order.business_date === businessDate,
+      )
+      const ids = new Set(orders.map((order) => order.id))
+      const lastReady = new Map<string, number>()
+      for (const ready of store.dishWorkflow?.readies ?? []) {
+        if (ready.undone || !ids.has(ready.orderId)) continue
+        const at = Date.parse(ready.at)
+        lastReady.set(ready.orderId, Math.max(at, lastReady.get(ready.orderId) ?? at))
+      }
+      const toReady: number[] = []
+      const handover: number[] = []
+      for (const order of orders) {
+        const at = lastReady.get(order.id)
+        if (at === undefined || order.prepared_source === 'day_change') continue
+        const ordered = Date.parse(order.ordered_at)
+        if (at >= ordered) toReady.push((at - ordered) / 1000)
+        if (order.prepared_source === 'counter' && order.prepared_at) {
+          const prepared = Date.parse(order.prepared_at)
+          if (prepared >= at) handover.push((prepared - at) / 1000)
+        }
+      }
+      const mean = (values: number[]) =>
+        values.length === 0
+          ? null
+          : Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
+      const bills = store.bills.filter(
+        (bill) => bill.outlet_id === outletId && bill.business_date === businessDate,
+      )
+      return {
+        placed: orders.length,
+        updated: orders.filter((order) => order.changed_at !== null).length,
+        cancelled: orders.filter((order) => order.status === 'cancelled').length,
+        paid: orders.filter((order) => order.status === 'paid').length,
+        seen: new Set(
+          kitchenAcks()
+            .map((ack) => ack.orderId)
+            .filter((id) => ids.has(id)),
+        ).size,
+        ready: lastReady.size,
+        toReadySeconds: mean(toReady),
+        handoverSeconds: mean(handover),
+        billsCancelled: bills.filter(
+          (bill) => bill.status === 'void' && (bill.void_kind ?? 'manager_void') === 'manager_void',
+        ).length,
+        cancelledAfterPaid: bills.filter((bill) => bill.void_kind === 'cancelled_after_paid')
+          .length,
+        paymentUndone: bills.filter((bill) => bill.void_kind === 'counter_unpay').length,
+        paymentChanged: bills.filter((bill) => (paymentCorrections.get(bill.id)?.length ?? 0) > 0)
+          .length,
+      }
     },
   }
   return adapter

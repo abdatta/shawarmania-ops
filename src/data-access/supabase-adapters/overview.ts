@@ -54,7 +54,7 @@ export function createSupabaseOverviewAdapter(client: SupabaseClient<Database>):
       return (data ?? []).map((row) => row.last_seen_at)
     },
     async today(outletId) {
-      const { data, error } = await client.rpc('overview_today', { p_outlet_id: outletId })
+      const { data, error } = await client.rpc('overview_today_v2', { p_outlet_id: outletId })
       if (error) throw error
       return data as unknown as OverviewToday
     },

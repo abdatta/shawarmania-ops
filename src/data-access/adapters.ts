@@ -1731,6 +1731,26 @@ export interface ShiftBillingHistory {
   totals: BillingMethodTotal[]
 }
 
+/**
+ * One outlet-day's figures for Billing history's Stats tab
+ * (billing-day-at-a-glance, design D3). Counts, and two averages in whole
+ * seconds that are null where nothing could be measured.
+ */
+export interface BillingDayStats {
+  placed: number
+  updated: number
+  cancelled: number
+  paid: number
+  seen: number
+  ready: number
+  toReadySeconds: number | null
+  handoverSeconds: number | null
+  billsCancelled: number
+  cancelledAfterPaid: number
+  paymentUndone: number
+  paymentChanged: number
+}
+
 /** Non-identifying delivery metadata safe to show on a manager phone. */
 export interface BillingDeliveryDiagnostic {
   reference: Tables<'billing_commands'>['id']
@@ -1895,9 +1915,10 @@ export interface BillingAdapter {
   /**
    * How many orders `listManagerOpenOrders` would list, without reading them:
    * the billing history's tab count while the orders themselves are not shown
-   * (each-dish-is-ticked-off, design R11; `dish-ticks`).
+   * (each-dish-is-ticked-off, design R11; `dish-ticks`). With a business date,
+   * only that day's (billing-day-at-a-glance, design D2).
    */
-  countManagerOpenOrders(outletId: string): Promise<number>
+  countManagerOpenOrders(outletId: string, businessDate?: string): Promise<number>
   managerCancelOrder(orderId: string, reason: string): Promise<BillingOrder>
   reviewAttribution(
     billId: string,
@@ -1909,6 +1930,8 @@ export interface BillingAdapter {
   correctAttention(reference: string, correctionId: string): Promise<BillingAttentionItem>
   discardAttention(reference: string, reason: string): Promise<BillingAttentionItem>
   listDeliveryDiagnostics(outletId: string): Promise<BillingDeliveryDiagnostic[]>
+  /** The Stats tab's figures for one outlet-day, in one read (billing-day-at-a-glance). */
+  readDayStats(outletId: string, businessDate: string): Promise<BillingDayStats>
   /** Demo-only clock control; live adapters deliberately omit it. */
   advanceDemoPaymentClock?(milliseconds: number): void
 }

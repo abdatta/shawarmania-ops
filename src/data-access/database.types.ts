@@ -5067,6 +5067,10 @@ export type Database = {
         Args: { p_business_date: string; p_outlet_id: string }
         Returns: Json
       }
+      billing_day_stats: {
+        Args: { p_business_date: string; p_outlet_id: string }
+        Returns: Json
+      }
       billing_device_context: {
         Args: { p_created_at: string; p_shift_id: string }
         Returns: Json
@@ -5981,6 +5985,7 @@ export type Database = {
         Returns: Json
       }
       overview_today: { Args: { p_outlet_id: string }; Returns: Json }
+      overview_today_v2: { Args: { p_outlet_id: string }; Returns: Json }
       pay_billing_now: {
         Args: {
           p_command_id?: string

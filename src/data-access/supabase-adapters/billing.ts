@@ -24,6 +24,7 @@ import {
   type BillingAttributionReview,
   type BillingBill,
   type BillingCommandAdapter,
+  type BillingDayStats,
   type BillingDeliveryDiagnostic,
   type BillingOrder,
   type CounterState,
@@ -2544,13 +2545,14 @@ export function createSupabaseBillingAdapter(
       return readOrders(outletId, true)
     },
 
-    async countManagerOpenOrders(outletId) {
+    async countManagerOpenOrders(outletId, businessDate) {
       // The pipeline's own predicate, counted by the server: no rows travel.
-      const { count, error } = await client
+      let query = client
         .from('orders')
         .select('id', { count: 'exact', head: true })
         .eq('outlet_id', outletId)
-        .or(pipelineFilter(null)!)
+      if (businessDate) query = query.eq('business_date', businessDate)
+      const { count, error } = await query.or(pipelineFilter(null)!)
       if (error) throw actionError(error, 'Could not count open orders.')
       return count ?? 0
     },
@@ -2718,6 +2720,15 @@ export function createSupabaseBillingAdapter(
         ageMs: Math.max(0, Date.now() - Date.parse(row.received_at)),
         orderNumber: refusedOrderNumber(row.result),
       }))
+    },
+
+    async readDayStats(outletId, businessDate): Promise<BillingDayStats> {
+      const { data, error } = await client.rpc('billing_day_stats', {
+        p_outlet_id: outletId,
+        p_business_date: businessDate,
+      })
+      if (error) throw actionError(error, 'Could not load the day’s stats.')
+      return data as unknown as BillingDayStats
     },
   }
 }

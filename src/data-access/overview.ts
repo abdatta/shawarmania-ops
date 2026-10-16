@@ -22,6 +22,11 @@ export interface OverviewToday {
   cashPaise: number
   upiPaise: number
   deliveryPaise: number
+  /**
+   * Today's open, unpaid orders, summed (billing-day-at-a-glance, design D1).
+   * Not revenue: a paid order still being cooked is already in the three above.
+   */
+  openPaise: number
 }
 /** The window a month is compared with, cut at the time it is now where it ends today. */
 export interface OverviewComparison {

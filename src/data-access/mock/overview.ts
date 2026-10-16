@@ -89,6 +89,12 @@ export function createMockOverviewAdapter(
         cashPaise: revenue.cashPaise,
         upiPaise: revenue.upiPaise,
         deliveryPaise: revenue.channels.reduce((sum, c) => sum + c.grossPaise, 0),
+        openPaise: store.orders
+          .filter(
+            (o) =>
+              o.outlet_id === outletId && o.status === 'open' && o.business_date === store.today,
+          )
+          .reduce((sum, o) => sum + o.total_paise, 0),
       }
     },
     async month(outletId) {
