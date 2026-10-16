@@ -83,6 +83,12 @@ describe('the demo counter shift', () => {
       // `bills.shift_id` is the pre-tablet model, left alive only for history the
       // demo does not have. Every demo bill is within four days of today.
       expect(bill.shift_id).toBeNull()
+      // A sale entered from paper was taken in no shift at all
+      // (a-sale-taken-on-paper-says-so); every bill a counter rang has one.
+      if (bill.entry_source === 'paper') {
+        expect(bill.counter_shift_id).toBeNull()
+        continue
+      }
       expect(bill.counter_shift_id).not.toBeNull()
       expect(data.store.shifts.some((row) => row.id === bill.counter_shift_id)).toBe(true)
     }

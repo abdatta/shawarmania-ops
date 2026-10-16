@@ -1577,6 +1577,16 @@ export interface BillingBill extends ServiceFacts {
    * nothing rather than as a guess.
    */
   tillLabel: string | null
+  /**
+   * How the sale was recorded (a-sale-taken-on-paper-says-so). `paper` is a sale
+   * written on paper and entered afterwards: it names no till, shift or biller,
+   * so `billerName` and `tillLabel` say nothing true about it and a surface
+   * shows **Paper** with who entered it instead. Absent reads as `counter`.
+   */
+  entrySource?: 'counter' | 'paper'
+  /** Who entered a paper bill, and when; null on a counter bill. */
+  enteredByName?: string | null
+  enteredAt?: string | null
   /** The original shift operator id. It never changes when attribution is reviewed. */
   billerId?: string
   /** True only when the server accepted this sale in the bounded remote-leave gap. */
@@ -1697,6 +1707,7 @@ export type BillingBillSummary = Pick<
   | 'paidAt'
   | 'billerName'
   | 'tillLabel'
+  | 'entrySource'
   | 'totalPaise'
 >
 

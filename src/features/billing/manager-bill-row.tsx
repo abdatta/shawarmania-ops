@@ -98,14 +98,26 @@ export function ManagerBillSummary({
           )}
         </span>
         <span className="mt-1 block text-sm font-normal text-content-muted">
-          {methodLabel(bill.paymentMethod)} · {formatDayTime(bill.paidAt)} · by {bill.billerName}
+          {methodLabel(bill.paymentMethod)} · {formatDayTime(bill.paidAt)} ·{' '}
           {/*
-            And which till, where the outlet has more than one.
-            The operator's name does not answer it: one person may
-            hold a shift on both counters, so reconciling a
-            two-till evening needs the till named.
+            A sale written on paper and entered afterwards was rung by
+            nobody on no till, so it says Paper where a counter bill names
+            them (a-sale-taken-on-paper-says-so).
           */}
-          {bill.tillLabel && <> · on {bill.tillLabel}</>}
+          {bill.entrySource === 'paper' ? (
+            <span data-testid={`paper-bill-${bill.id}`}>Paper</span>
+          ) : (
+            <>
+              by {bill.billerName}
+              {/*
+                And which till, where the outlet has more than one.
+                The operator's name does not answer it: one person may
+                hold a shift on both counters, so reconciling a
+                two-till evening needs the till named.
+              */}
+              {bill.tillLabel && <> · on {bill.tillLabel}</>}
+            </>
+          )}
         </span>
       </span>
       <span className="flex shrink-0 items-center gap-2">

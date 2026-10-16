@@ -322,6 +322,12 @@ export function ManagerBillDetail({
               <Fact label="Ordered">{formatDayTime(bill.orderedAt)}</Fact>
               <Fact label="Paid">{formatDayTime(bill.paidAt)}</Fact>
               <Fact label="Revenue day">{formatBusinessDate(bill.businessDate)}</Fact>
+              {bill.entrySource === 'paper' && (
+                <Fact label="Entered from paper">
+                  {bill.enteredByName ?? 'An admin'}
+                  {bill.enteredAt && ` · ${formatDayTime(bill.enteredAt)}`}
+                </Fact>
+              )}
               {bill.paymentBusinessDate !== bill.businessDate && (
                 <Fact label="Payment day">{formatBusinessDate(bill.paymentBusinessDate)}</Fact>
               )}

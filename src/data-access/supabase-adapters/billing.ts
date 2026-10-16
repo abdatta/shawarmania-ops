@@ -119,6 +119,8 @@ type BillReadRow = Tables<'bills'> & {
     | { order_number: number; prepared_at: string | null }[]
     | null
   biller: { full_name: string } | { full_name: string }[] | null
+  // Who entered a paper bill (a-sale-taken-on-paper-says-so); null on a counter bill.
+  enterer?: { full_name: string } | { full_name: string }[] | null
   voider: { id: string; full_name: string } | { id: string; full_name: string }[] | null
   attribution_reviews: ReviewReadRow[] | ReviewReadRow | null
 }
@@ -425,7 +427,11 @@ function billView(
     status: row.status,
     billerName: joined(row.biller)?.full_name ?? 'Counter operator',
     tillLabel: historicalDeviceLabel,
-    billerId: row.biller_profile_id,
+    entrySource: row.entry_source === 'paper' ? 'paper' : 'counter',
+    enteredByName: joined(row.enterer ?? null)?.full_name ?? null,
+    enteredAt: row.entered_at,
+    // A paper bill has no biller, so the field is absent rather than undefined.
+    ...(row.biller_profile_id ? { billerId: row.biller_profile_id } : {}),
     recordedAfterShiftEnd: row.recorded_after_shift_end,
     attributionShiftEndedAt: row.attribution_shift_ended_at,
     attributionReview: review
@@ -1280,7 +1286,7 @@ export function createSupabaseBillingAdapter(
     let query = client
       .from('bills')
       .select(
-        '*, bill_items(*), bill_discounts(*), bill_public_links(token, revoked_at), bill_receipt_deliveries(state, failure_code), bill_payments(*), order:orders!bills_order_id_fkey(order_number, prepared_at), biller:profiles!bills_biller_profile_id_fkey(full_name), voider:profiles!bills_voided_by_fkey(id, full_name), attribution_reviews:billing_attribution_reviews(*, resolved_operator:profiles!billing_attribution_reviews_resolved_operator_id_fkey(full_name), reviewer:profiles!billing_attribution_reviews_reviewed_by_fkey(full_name))',
+        '*, bill_items(*), bill_discounts(*), bill_public_links(token, revoked_at), bill_receipt_deliveries(state, failure_code), bill_payments(*), order:orders!bills_order_id_fkey(order_number, prepared_at), biller:profiles!bills_biller_profile_id_fkey(full_name), enterer:profiles!bills_entered_by_fkey(full_name), voider:profiles!bills_voided_by_fkey(id, full_name), attribution_reviews:billing_attribution_reviews(*, resolved_operator:profiles!billing_attribution_reviews_resolved_operator_id_fkey(full_name), reviewer:profiles!billing_attribution_reviews_reviewed_by_fkey(full_name))',
       )
     if (filters.id) query = query.eq('id', filters.id)
     if (filters.outletId) query = query.eq('outlet_id', filters.outletId)
@@ -2464,7 +2470,7 @@ export function createSupabaseBillingAdapter(
       const { data, error } = await client
         .from('bills')
         .select(
-          'id, bill_number, status, void_kind, recorded_after_shift_end, paid_at, total_paise, payment_method, bill_payments(method), biller:profiles!bills_biller_profile_id_fkey(full_name)',
+          'id, bill_number, status, void_kind, recorded_after_shift_end, paid_at, total_paise, payment_method, entry_source, bill_payments(method), biller:profiles!bills_biller_profile_id_fkey(full_name)',
         )
         .eq('outlet_id', outletId)
         .eq('customer_id', customerId)
@@ -2505,6 +2511,7 @@ export function createSupabaseBillingAdapter(
             paidAt: row.paid_at,
             billerName: joined(row.biller)?.full_name ?? 'Counter operator',
             tillLabel: labels.get(row.id) ?? null,
+            entrySource: row.entry_source === 'paper' ? 'paper' : 'counter',
             totalPaise: row.total_paise,
           }
         }),

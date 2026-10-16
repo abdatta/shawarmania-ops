@@ -129,6 +129,7 @@ function managerHistoryClient(
     revoked_at: null,
   },
   delivery: { state: string; failure_code: string | null }[] | null = null,
+  overrides: Record<string, unknown> = {},
 ) {
   const bill = {
     id: 'bill-1',
@@ -161,6 +162,7 @@ function managerHistoryClient(
     counter_device: { label: 'Current renamed tablet' },
     bill_public_links: publicLink,
     bill_receipt_deliveries: delivery,
+    ...overrides,
   }
   const selected: string[] = []
   const from = vi.fn((table: string) => {
@@ -220,6 +222,26 @@ describe('the live tablet acceptance boundary', () => {
       p_event_kind: 'bill',
       p_event_ids: ['bill-1'],
     })
+  })
+
+  it('reads a paper bill as Paper, naming who entered it and no biller', async () => {
+    const { client, selected } = managerHistoryClient(undefined, null, {
+      entry_source: 'paper',
+      entered_at: '2026-08-13T04:45:00.000Z',
+      enterer: { full_name: 'Demo Manager' },
+      biller_profile_id: null,
+      biller: null,
+    })
+    const billing = createSupabaseBillingAdapter(client)
+
+    const [bill] = await billing.listManagerHistory({ outletId: 'outlet-1' })
+    expect(bill).toMatchObject({
+      entrySource: 'paper',
+      enteredByName: 'Demo Manager',
+      enteredAt: '2026-08-13T04:45:00.000Z',
+    })
+    expect(bill).not.toHaveProperty('billerId')
+    expect(selected[0]).toContain('enterer:profiles!bills_entered_by_fkey(full_name)')
   })
 
   /*
@@ -1863,6 +1885,7 @@ describe('a customer’s bills, as summaries', () => {
       paidAt: '2026-10-01T08:00:00.000Z',
       billerName: 'Priya Das',
       tillLabel: 'Counter 2',
+      entrySource: 'counter',
       totalPaise: 46_800,
     })
     expect(page.bills[1]).toMatchObject({ status: 'void', paymentMethod: 'cash', tillLabel: null })

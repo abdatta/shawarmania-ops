@@ -44,7 +44,7 @@ import { menuCategoryFixtures, menuDiscountFixtures, menuItemFixtures } from './
 import { expenseSeeds, OPENING_CASH_PAISE } from './fixtures/operations'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID, outletFixtures } from './fixtures/outlets'
 import { customerFixtures, DEMO_MEMBER_CUSTOMER_PHONE, seededTierAt } from './fixtures/customers'
-import { personaFixtures } from './fixtures/personas'
+import { DEMO_MANAGER_ID, personaFixtures } from './fixtures/personas'
 
 /**
  * The demo store — one mutable dataset per demo session, shared by every mock
@@ -533,20 +533,24 @@ export function createDemoStore(
       // The departed operator, never the one who came next. A flagged bill that
       // read "by Demo Biller" would be demonstrating the exact inheritance the
       // after-departure contract exists to prevent.
-      biller_profile_id: seed.recordedAfterDeparture
-        ? DEMO_MORNING_BILLER_ID
-        : billerForOutlet(outletId),
-      counter_device_id: deviceForOutlet(outletId),
+      biller_profile_id: seed.enteredFromPaper
+        ? null
+        : seed.recordedAfterDeparture
+          ? DEMO_MORNING_BILLER_ID
+          : billerForOutlet(outletId),
+      // A paper bill was rung on no till (a-sale-taken-on-paper-says-so).
+      counter_device_id: seed.enteredFromPaper ? null : deviceForOutlet(outletId),
       // Recent bills use the live tablet; archival history has no tablet shift.
       shift_id: null,
       // A sale the tablet captured in the gap after a remote departure stays
       // under the shift that was live when the tablet last knew — never under
       // the operator who came next.
-      counter_shift_id: historical
-        ? null
-        : seed.recordedAfterDeparture
-          ? DEMO_MORNING_SHIFT_ID
-          : shiftForOutlet(outletId),
+      counter_shift_id:
+        historical || seed.enteredFromPaper
+          ? null
+          : seed.recordedAfterDeparture
+            ? DEMO_MORNING_SHIFT_ID
+            : shiftForOutlet(outletId),
       order_id: null,
       business_date: date,
       created_at: createdAt,
@@ -555,6 +559,10 @@ export function createDemoStore(
       payment_business_date: date,
       recorded_after_shift_end: seed.recordedAfterDeparture === true,
       attribution_shift_ended_at: seed.recordedAfterDeparture ? instantAt(date, '11:00') : null,
+      entry_source: seed.enteredFromPaper ? 'paper' : 'counter',
+      entered_by: seed.enteredFromPaper ? DEMO_MANAGER_ID : null,
+      entered_at: seed.enteredFromPaper ? instantAt(businessDate(seed.daysAgo - 1), '10:15') : null,
+      entry_payload_hash: seed.enteredFromPaper ? 'demo-paper' : null,
       // A bill that arrived after its day was closed reached the server the
       // next morning. `created_at` is when it was rung; `synced_at` is when it
       // landed, and the gap between them is the whole reconciliation problem.

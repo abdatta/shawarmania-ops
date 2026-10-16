@@ -165,6 +165,12 @@ export interface BillSeed {
    * to review rather than being reassigned to whoever came next.
    */
   recordedAfterDeparture?: boolean
+  /**
+   * Written on paper and entered afterwards by the manager
+   * (a-sale-taken-on-paper-says-so): it names no till, shift or biller, so
+   * Billing history shows the Paper mark on the walkthrough.
+   */
+  enteredFromPaper?: boolean
 }
 
 /** Resolve a seed's outlet, and its lines' menu items within that outlet. */
@@ -407,6 +413,7 @@ export const billSeeds: BillSeed[] = [
     time: '13:10',
     paymentMethod: 'cash',
     lines: [{ item: 'classic', quantity: 2 }],
+    enteredFromPaper: true,
   },
   {
     outletId: OUTLET_KANCHRAPARA_ID,
@@ -414,6 +421,7 @@ export const billSeeds: BillSeed[] = [
     time: '20:00',
     paymentMethod: 'upi',
     lines: [{ item: 'mayo', quantity: 1 }],
+    enteredFromPaper: true,
   },
 
   // ── Kanchrapara, two days ago ────────────────────────────────────────────
