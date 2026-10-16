@@ -1,7 +1,15 @@
-import { type Page } from '@playwright/test'
+import { type APIRequestContext, type Page } from '@playwright/test'
 import { expect, test } from './test'
 
-import { TILL_ONE, openTill, orderCard, railSettled, saveNewOrder } from './tills'
+import {
+  SUPABASE_URL,
+  TILL_ONE,
+  openTill,
+  orderCard,
+  railSettled,
+  saveNewOrder,
+  serviceRoleKey,
+} from './tills'
 
 /**
  * The counter shows what it saved before the server answers
@@ -23,6 +31,13 @@ import { TILL_ONE, openTill, orderCard, railSettled, saveNewOrder } from './till
  * Added on 2026-10-15, after a throttled look seemed to show an order waiting
  * for its command; that look was the harness, and this keeps the question
  * answered.
+ *
+ * The tablet boots with every gate on and reloads into the database's answer at
+ * its first free moment if that differs. A reload here empties what the tablet
+ * holds while every read is held, so the database must say `instant-saves` is
+ * on before the test starts. It failed on Staging from 2026-10-15 at whichever
+ * step that reload landed on, because the round trips in `dish-ticks.spec.ts`
+ * left it off.
  */
 
 const SLOW_MS = 5_000
@@ -58,6 +73,7 @@ async function slowServer(page: Page) {
   await page.route('**/rest/v1/rpc/**', slow)
   return {
     held,
+    /** Answer everything held, and stop holding. Safe to call twice. */
     restore: async () => {
       release()
       await page.unroute('**/rest/v1/orders?**')
@@ -67,23 +83,36 @@ async function slowServer(page: Page) {
   }
 }
 
-// Quarantined 2026-10-16: it passes locally every time and fails on Staging's
-// slower runner at varying steps (the edit not shown within AT_ONCE, Bills
-// empty, the 270 s timeout), including at 88398bfe before #76. The
-// instant-saves unit tests still prove the behaviour; restore this once it is
-// deterministic on CI ("Fix the flaky instant-saves browser test on Staging").
-test.fixme(
+/** Whether the local database has `instant-saves` on, as this run's tablets boot it. */
+async function gateOnInDatabase(request: APIRequestContext): Promise<boolean> {
+  const key = serviceRoleKey()
+  const response = await request.get(`${SUPABASE_URL}/rest/v1/change_gates`, {
+    headers: { apikey: key, authorization: `Bearer ${key}` },
+    params: { key: 'eq.instant-saves', select: 'enabled' },
+  })
+  expect(response.ok(), 'could not read change_gates').toBe(true)
+  const rows = (await response.json()) as { enabled: boolean }[]
+  return rows[0]?.enabled === true
+}
+
+test(
   'an order, its edit, its payment and its take-back are on screen before a slow server answers',
   { tag: '@cg-on:instant-saves' },
   async ({ browser, request }) => {
     test.slow()
+    expect(
+      await gateOnInDatabase(request),
+      'instant-saves is off in the database, so the tablet would reload into it mid-test: a spec before this one left it off',
+    ).toBe(true)
     const counter = await openTill(browser, request, TILL_ONE)
     const page = counter.page
+    let server: Awaited<ReturnType<typeof slowServer>> | undefined
     try {
       await railSettled(page)
       const bills = page.getByRole('region', { name: 'Bills this shift' })
       await expect(bills).toBeVisible()
-      const { held, restore } = await slowServer(page)
+      server = await slowServer(page)
+      const { held, restore } = server
 
       // Order: on the rail at once, numberless until the server numbers it.
       await page.getByRole('button', { name: CLASSIC, exact: true }).click()
@@ -154,6 +183,9 @@ test.fixme(
         timeout: 30_000,
       })
     } finally {
+      // A held request left waiting keeps the context from closing until the
+      // test times out, so a failure would read as the 270 s timeout.
+      await server?.restore()
       await counter.context.close()
     }
   },

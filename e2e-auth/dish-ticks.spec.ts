@@ -19,6 +19,7 @@ import {
   setSpareKind,
   setSpareTillInService,
 } from './tills'
+import { turnEveryGate } from './change-gates.setup'
 
 /**
  * #74 each-dish-is-ticked-off, relaunched behind its gates
@@ -99,10 +100,16 @@ async function turnGate(request: APIRequestContext, key: string, enabled: boolea
   expect(response.ok(), `could not turn ${key} ${enabled ? 'on' : 'off'}`).toBe(true)
 }
 
-/** Every gate back on, parents first: what the gates-on run needs after a round trip. */
-async function turnBothOn(request: APIRequestContext) {
-  await turnGate(request, DISH_TICKS, true)
-  await turnGate(request, KITCHEN_READY, true)
+/**
+ * Every gate back on, parents first: what the gates-on run needs after a round
+ * trip. Every gate, not only the one the test turned: turning a gate off turns
+ * off every gate that depends on it (`instant-saves` on both of these), and
+ * turning it back on leaves them off. A dependent left off made each later
+ * spec's tablet boot with it on, read it off, and reload into the old screens
+ * at its first free moment, mid-test.
+ */
+async function turnEveryGateOn() {
+  await turnEveryGate('on')
 }
 
 /**
@@ -422,7 +429,7 @@ test(
         .toBe(true)
       await expectOneBill(request, id)
     } finally {
-      await turnBothOn(request)
+      await turnEveryGateOn()
       await closeAll([kitchen, counter], request)
     }
   },
@@ -487,7 +494,7 @@ test(
       await expectOneBill(request, id)
       await expect(kitchen.page.locator(`[data-order-id="${id}"]`)).toHaveCount(0)
     } finally {
-      await turnBothOn(request)
+      await turnEveryGateOn()
       await closeAll([kitchen, counter], request)
     }
   },
