@@ -132,19 +132,35 @@ method nothing off-path calls.
   timeout on an analytics screen this change does not touch, which passed alone
   on rerun. The Change gates page test now lists *Instant saves* beside *Kitchen
   Ready* among what turning *Dish ticks* off takes with it.
-- [ ] 6.4 By hand in the browser pane, both themes, gate on: save, edit and pay
+- [x] 6.4 By hand in the browser pane, both themes, gate on: save, edit and pay
   with the network throttled in devtools; no card blinks off and on, and nothing
   reflows when the server's answer lands. *Not done, 2026-10-14:* the pane has no
   devtools throttling, and the demo asks no network, so it looks the same either
   way. The held-route browser spec (6.1) did this on the real local stack with
   every gate on. The owner's throttled try on *Cafe Staging* (9.1) is the look.
-  *2026-10-15, a machine try that needs reading before this closes:* a scratch
-  auth-suite test (not committed) throttled the whole connection through CDP, 1.5 s
-  latency and 100/50 kbit/s, rather than holding only the `orders` and `bills`
-  reads as `instant-saves.spec.ts` does. In both themes the new order's card was
-  **not** on the rail within one second of Order (`saveNewOrder` timed out). Not yet
-  told apart: whether the save waits on the command's own round trip under latency,
-  or the scratch test's set-up. Find out before this archives.
+  *Done by machine, 2026-10-15, on the local stack with every gate on, light and
+  dark:* devtools' own throttle through Chrome's protocol
+  (`Network.emulateNetworkConditions`: 1.5 s latency, 100 kbit/s down, 50 up),
+  and separately every command held. Order was on the rail in 190–265 ms, Save
+  changes in 90–125 ms and the bill in Bills in 110–170 ms; the order's card was
+  added once and removed once (when paid and handed over), and did not move when
+  its number landed. A first scratch run had seemed to show the card waiting for
+  the order's command: that was its harness, not the counter. It tapped a dish the
+  local menu does not have and hung, and its tick loop pointed at buttons that
+  had been renamed by the tick before. The code agrees: `saveOrder`,
+  `reviseOrder`, `payOrder` and `settleBill` resolve at the IndexedDB write,
+  and the rail and Bills draw from `peekOpenOrders` and `peekShiftHistory`, which
+  ask no network. What the committed spec did not cover was the command itself:
+  it held only the `orders` and `bills` reads, and its steps finished inside the
+  outbox's two-second send, so no command was ever in flight. It now holds every
+  database function until the end, waits for `create_billing_order_v2` to be out
+  and held before it edits, pays and takes back, and covers Save changes; it was
+  proved to fail with `instant-saves` alone off, and with each of the Save
+  changes and Paid fixes taken out alone (docs/TESTING.md). The owner's throttled
+  try on *Cafe Staging* is recorded in 9.1. (This answers the scratch CDP run noted
+  here earlier on 2026-10-15, whose card was not on the rail within one second of
+  Order: rerun on the same throttle it was there in about 200 ms, so that run's
+  failure was its set-up, not the save waiting on its command.)
 
 ## 7. Docs
 
@@ -179,7 +195,7 @@ method nothing off-path calls.
 
 ## 9. PHASE GATE
 
-- [ ] 9.1 **PHASE GATE — release checkpoint** (AGENTS.md → *The life of a change*;
+- [x] 9.1 **PHASE GATE — release checkpoint** (AGENTS.md → *The life of a change*;
   no ROADMAP.md row, as a correction): CI green on `stage` in both gate states;
   the owner tries it on *Cafe Staging* with the network throttled; an
   owner-approved Promote deploys it to the counters **off**; the owner turns
@@ -192,3 +208,7 @@ method nothing off-path calls.
   was tried throttled is not recorded. Pulled 2026-10-15: off with `dish-ticks` at 09:23 IST, on again at 11:48, after
   `dish-ticks` and `kitchen-ready`. Still open: a real service with it on, and the
   throttled try.)*
+  *(Done, 2026-10-16 IST: production ran a full service with it on, 15 October on
+  `da92417`, 64 bills, no failed requests and nothing reported by the biller. The
+  owner has tried it on *Cafe Staging* with the network throttled (reported 16
+  October). Every step is done; it archives on the owner's word.)*
