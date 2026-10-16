@@ -28,10 +28,11 @@ context: |
   - Brand colours live only in the brand token layer; components read semantic
     tokens and contain no hex literals.
   - Every behaviour change to a live surface ships behind a change gate, off,
-    and Off is the behaviour as it is today. Migrations only add: no replaced
-    function or view a build calls (write `_v2`), no drop, rename, retype, new
-    constraint or change to existing rows outside a retirement's contract
-    migration. Queued work is never stranded by turning a gate off.
+    and Off is the behaviour as it is today, unless it cannot reach the
+    counter or kitchen and a revert cleanly undoes it. Migrations only add: no
+    replaced function or view a build calls (write `_v2`), no drop, rename,
+    retype, new constraint or change to existing rows outside a retirement's
+    contract migration. Queued work is never stranded by turning a gate off.
 
   Currency is Indian rupees; time zone is Asia/Kolkata. Full context is in
   `docs/` — start at `docs/README.md`. The agent contract is `AGENTS.md`.
@@ -46,7 +47,9 @@ rules:
       Off, each one sentence as the Change gates page will show it — On is the
       change, Off is the behaviour today. Or "No gate:" and why (docs, tooling, a
       new surface the gate registry holds back, a correction that must reach every
-      device). Ask the owner only when Off cannot simply be today, and say why.
+      device, or a change away from the counter and kitchen that a revert
+      cleanly undoes, per AGENTS.md "A revert is enough"). Ask the owner only
+      when Off cannot simply be today, and say why.
   design:
     - Record rejected alternatives and why, not just the chosen approach.
     - Call out any RLS policy, money arithmetic, or offline semantics explicitly.

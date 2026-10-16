@@ -536,7 +536,7 @@ export function checkProposals(folders) {
           `${where}/proposal.md`,
           'has no `## Change gate` section',
           'every change says how it is released and how it is turned off, so the owner can turn it off.',
-          'Add `## Change gate`: the key, its two-letter code, and what On and Off mean, worded as the Change gates page will show them — Off is the behaviour as it is today. Or `No gate:` and why (docs, tooling, a new surface the registry holds back, or a fix that must reach every device).',
+          'Add `## Change gate`: the key, its two-letter code, and what On and Off mean, worded as the Change gates page will show them — Off is the behaviour as it is today. Or `No gate:` and why (docs, tooling, a new surface the registry holds back, a fix that must reach every device, or a change away from the counter that a revert cleanly undoes).',
         ),
       )
     }

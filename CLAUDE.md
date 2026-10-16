@@ -11,4 +11,4 @@ Quick orientation:
 - **Where does a commit go?** To `stage` (`git push origin HEAD:stage`), never `main`. Staging verifies it; the owner promotes it to the counters. See [`docs/RELEASES.md`](docs/RELEASES.md#staging).
 - **Where is the truth?** `docs/` for what the app is, `openspec/specs/` for what it must do, `openspec/changes/` for what's changing.
 
-Three rules worth loading before you touch anything: **outlet isolation is enforced in the database, not the UI**, **money is integer paise, never floats**, and **every change can be turned off** — a behaviour change ships behind a change gate, off, and migrations only add. The rest are in [`AGENTS.md`](AGENTS.md).
+Three rules worth loading before you touch anything: **outlet isolation is enforced in the database, not the UI**, **money is integer paise, never floats**, and **every change can be turned off** — a behaviour change ships behind a change gate, off, unless it is away from the counter and a revert cleanly undoes it, and migrations only add. The rest are in [`AGENTS.md`](AGENTS.md).

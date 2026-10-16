@@ -84,9 +84,10 @@ two-character code (capitals or digits, at least one letter, unused by any live
 gate in `src/change-gates/gates.ts`) — then On and Off, each one sentence as the
 Change gates page will show it: On is the change, Off is the behaviour as it is
 today. Or write `No gate:` and why: docs, tooling, a lint, a new surface the gate
-registry already holds back, or a correction that must reach every device at
-once. A gate that only makes sense with another lists it under *depends on*. Ask
-the owner only when Off cannot simply be today — the new path writes data the
+registry already holds back, a correction that must reach every device at
+once, or a change away from the counter and kitchen that a revert cleanly
+undoes (`AGENTS.md` → *A revert is enough*, both conditions answered). A gate
+that only makes sense with another lists it under *depends on*. Ask the owner only when Off cannot simply be today — the new path writes data the
 old path must live with, or Off would be unsafe — and say which. In `design.md`,
 add a version-skew paragraph for every database object the change touches: how
 a build published before it keeps working (new objects and `name_v2`, never an

@@ -72,7 +72,9 @@ Depending on the question:
   consequences when relevant.
 - Suggest a spike or investigation when evidence is missing.
 - When an idea changes how a live surface behaves, ask early what Off would
-  mean. It ships behind a change gate, off, and the owner turns it on
+  mean. It ships behind a change gate, off (unless it cannot reach the
+  counter or kitchen and a revert cleanly undoes it: `AGENTS.md` → *A revert
+  is enough*), and the owner turns it on
   (`AGENTS.md` → *Every change can be turned off*). Usually Off is simply today;
   raise it when it is not — the new path saves data the old screens must live
   with, several gates depend on one another, or Off would be unsafe — because

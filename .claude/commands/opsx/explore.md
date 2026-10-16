@@ -77,7 +77,9 @@ Depending on what the user brings, you might:
 - Suggest spikes or investigations
 
 **Ask early what Off would mean.** When an idea changes how a live surface
-behaves, it will ship behind a change gate, off, and the owner turns it on
+behaves, it will ship behind a change gate, off (unless it cannot reach the
+counter or kitchen and a revert cleanly undoes it: AGENTS.md → *A revert is
+enough*), and the owner turns it on
 (AGENTS.md → *Every change can be turned off*). Usually Off is simply today; say
 so and move on. It is worth raising while exploring when it is not — the new
 path saves data the old screens must then live with, the change needs several

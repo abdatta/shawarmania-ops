@@ -208,8 +208,9 @@ other job would notice.
 minutes later rather than immediately, and only if the suite agrees. That is
 the trade being made on purpose.
 
-**A deploy is not a release.** Every behaviour change in a build ships behind
-a change gate, off, and the owner turns it on later from the Change gates page.
+**A deploy is not a release.** Every behaviour change in a build that could
+reach a counter or kitchen ships behind a change gate, off, and the owner turns
+it on later from the Change gates page.
 So a push to `main` changes nothing anyone at a counter sees until then — see
 [Releases](RELEASES.md).
 

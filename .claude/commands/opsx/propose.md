@@ -90,7 +90,9 @@ They are constraints on what you write — never copy them into an artifact.
    **On** and **Off**, each one sentence as the Change gates page will show it:
    On is the change, Off is the behaviour as it is today. Or write `No gate:`
    and why — docs, tooling, a lint, a new surface the gate registry already
-   holds back, or a correction that must reach every device at once. Several
+   holds back, a correction that must reach every device at once, or a
+   change away from the counter and kitchen that a revert cleanly undoes
+   (`AGENTS.md` → *A revert is enough*: say how both conditions hold). Several
    gates are fine; a gate that only makes sense with another lists it under
    *depends on*. **Do not ask the owner what On and Off mean.** Ask only when
    Off cannot simply be today, and say which case it is: the new path writes

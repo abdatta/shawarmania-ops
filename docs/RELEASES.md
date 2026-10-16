@@ -11,8 +11,8 @@ they are separate steps on purpose.
 
 A push to `main` deploys: the whole suite runs, migrations apply, the build is
 published (see [Operations](OPERATIONS.md#a-push-to-main-publishes-once-the-suite-agrees)).
-Every behaviour change in that build ships **off**, so a deploy changes nothing
-anyone at a counter can see. The release is later, when the owner turns the
+Every behaviour change in that build that could reach a counter or kitchen ships
+**off**, so a deploy changes nothing anyone at a counter can see. The release is later, when the owner turns the
 change's gate on from their phone at a quiet hour, and it can be undone in
 seconds by turning it off.
 
@@ -22,6 +22,43 @@ minute instead of about 40, the smallest database compute ran out of CPU, and
 the counters froze. Nothing could switch the change off. The fix took an hour
 through CI, and the rollback was a workflow written during the incident that
 published with no checks at all.
+
+### When a revert is enough
+
+A gate buys one thing a revert cannot: **speed**. A revert travels through
+`stage`, the suite and a Promote — about an hour — and Republish puts back the
+whole build, every other change in it included. An hour is fine for a screen
+nobody bills from and costly for a counter that cannot bill. So a behaviour
+change may write `No gate:` instead of a gate when both of these hold, and the
+proposal says how each does:
+
+1. **The revert is clean.** After it, everything the old build works with is
+   still in a shape the old build handles. The new build may add what it likes
+   for itself — a table, a column, rows the old build never selects — and the
+   old build ignores it. What it must not do is change the old build's own
+   territory in a shape the old build does not expect. The four places that
+   happens without looking like it:
+   - **Rows the old build reads.** A new status on an `orders` row is in the
+     old build's territory; the old order list meets it after the revert.
+   - **The outbox.** Work a tablet queued under the new build is replayed by
+     the old one.
+   - **Browser storage.** A new key is fine; a reshaped existing value is read
+     by the old build on its next load.
+   - **Edge Functions.** Republish puts back the build, not the functions, so
+     the old build must still work against the new function.
+2. **It cannot reach the live counter or kitchen** — directly, or through a
+   component they share (the outside-tap change lived in the shared Modal),
+   app-wide code (the shell, sign-in, routing, the gate snapshot), load on the
+   database (#74 was "only" polling), or a table they read.
+
+Most owner-console work passes both: a new report, a reworked settings page, a
+change to how Analytics reads the ledger. Anything that touches billing, the
+kitchen display, payments, the outbox or polling does not, and keeps its
+switch. Passing both makes the gate optional, not forbidden — one that lets the
+owner compare both states side by side on staging can still earn its keep.
+
+A revert does not undo data. Rows the faulty build wrote stay as written and
+are corrected by hand; a gate would not have undone them either.
 
 ## Change gates
 
