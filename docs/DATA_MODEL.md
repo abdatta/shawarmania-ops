@@ -342,6 +342,25 @@ any later shift or cutoff. The bill remains in ordinary revenue and tender
 totals and retains its original person and shift; the flag qualifies that
 attribution rather than replacing it.
 
+**How a bill was entered** *(a-sale-taken-on-paper-says-so, #77)* —
+`entry_source` is `counter` for every bill a tablet rang and `paper` for a sale
+written on paper and entered afterwards. A paper bill names **no tablet, no
+biller and no shift** (`counter_device_id`, `biller_profile_id` and
+`counter_shift_id` are null, which is why the first two are nullable), and names
+instead who entered it and when (`entered_by`, `entered_at`), with
+`entry_payload_hash`, the canonical hash of what was sent, so the same written
+order sent again is recognised. `bills_entry_source_attribution` holds the
+pairing for every writer: a counter bill has a tablet and a biller and no
+enterer, a paper bill the reverse. Paper bills are written only by
+`record_paper_bill(bill, outlet, payload)`, a definer function the owner may call
+for any outlet and a Franchise Admin for an outlet they manage, never a tablet;
+it takes each dish's name, price and category from the outlet's menu (a price
+may be stated), works out the totals, and runs the counter's own validators over
+the payload a till would have sent. Everything else about a paper bill is a
+bill's: its number from the outlet's sequence, its line snapshots, its payments,
+its void, its points when it carries a customer. It never sends a receipt: its
+delivery row is written already `skipped`.
+
 - `payment_method`: nullable compatibility summary. It is `cash` or `upi` for a single-tender bill and null for mixed tender. Aggregators, Card and Other are not accepted payment categories.
 - `pricing_mode`: `no_tax` | `gst_inclusive` | `gst_exclusive`. **v1 always writes `no_tax` and `tax_paise = 0`.** It exists now so that when GST is enabled, historical bills stay unambiguous instead of being silently reinterpreted under new rules.
 - `unique (outlet_id, bill_number)` — bill numbers are unique within an outlet, not globally.

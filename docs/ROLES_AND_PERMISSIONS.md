@@ -126,6 +126,7 @@ assignment cannot be ended by anyone, including its holder.
 | Create a bill | — | — | ✓ own outlet | — |
 | View bills | R all | R own outlet | R own shift | — |
 | Void a bill | ✓ | ✓ own outlet | — | — |
+| Record a sale taken on paper (by command, #77) | ✓ | ✓ own outlet | — | — |
 | **Customers** (business-wide, see below) |
 | Retrieve a customer by their **complete** phone, with — for this outlet — whether they are gold, their points balance and whether they are eligible for gold | — | — | ✓ | — |
 | Use a customer's points on the bill, up to the outlet's cap | — | — | ✓ | — |

@@ -766,6 +766,90 @@ handover moves an outlet from one of two records to the other, and there is now
 only one. A new outlet therefore has no parallel run to complete — it opens on
 the live records directly, which is what steps 8 to 12 above describe.
 
+## A day traded on paper *(#77)*
+
+A pop-up stall at an event, or a counter that could not bill for a day, writes
+its orders on paper. They are entered afterwards as **paper bills**: ordinary
+bills that say who entered them and name no tablet, shift or biller. There is no
+screen for it [owner, 2026-10-15]; the sheets are many, and an agent or the owner
+enters them with `scripts/paper-sales.mjs`. Never invent a tablet, a shift or a
+biller to get a sale in, which is what the 1 October 2026 opening day needed
+before this existed: its 75 bills sit on one shift on the Cafe's test tablet,
+credited to one biller, and stay as they are.
+
+**Before the event.** Create the outlet (Outlets → *Add outlet*) and its menu,
+only what the stall sells. It needs no tablet and no fence. Ask the stall to
+keep **one line per order**: the quantity of each dish, and the money in a
+**Cash** or a **UPI** column, plus the time where they can. Give the stall its
+own UPI QR if possible: with a shared one, its UPI payments must be told apart
+from the Cafe's afterwards by matching the Cafe's UPI bills, and the paper's own
+UPI column is the check on that.
+
+**Transcribe each day into a CSV**, one row per written order. The header names
+the columns, in any order:
+
+| Column | What it holds |
+|---|---|
+| `order_key` | Unique per written order and never reused: `puja26-d1-p2-07` (day, page, line). The bill's id is derived from it, which is what makes a rerun safe. |
+| `outlet` | The outlet's short code, as on its Outlets page. |
+| `business_date` | `YYYY-MM-DD`, the trading day the order belongs to. |
+| `time` | `HH:MM` Kolkata. Required: the sheet's time, the UPI app's for a UPI order, otherwise a best guess. After midnight and before the cutover, the script puts it on the next calendar date itself. |
+| `items` | `Dish*quantity`, `;` between dishes. `@price` in rupees where the price charged differs from today's menu; ` free` for a dish given away inside a paid order: `Classic Chicken Shawarma*2; Classic Chicken Shawarma*1 free`. |
+| `cash`, `upi` | Rupees taken in each; blank is nothing. They must add up to the order. |
+| `discount` | Optional rupees off the whole order. |
+| `phone`, `name` | Optional. A phone links the customer and earns points at that outlet; no SMS is sent. |
+
+An order given away entirely cannot be a bill (every bill is at least ₹1, as at
+the counter), so leave it out and note it.
+
+**Keep the sign-in in an untracked env file**, never the service-role key:
+
+```
+PAPER_SALES_SUPABASE_URL=https://<project>.supabase.co
+PAPER_SALES_ANON_KEY=<the project's anon key>
+PAPER_SALES_LOGIN=<your email or username>
+PAPER_SALES_PASSWORD=<your password>
+```
+
+The owner may enter for any outlet, a manager for the outlets they manage; every
+bill names whoever signed in.
+
+**Dry run, then check.** Nothing is written without `--commit`:
+
+```
+node --env-file=.env.paper scripts/paper-sales.mjs day1.csv --target staging
+```
+
+It prints, per outlet and day, the orders, items, cash, UPI, discounts and total,
+and how many are already recorded; and every row it cannot record, with the
+reason. **Hold the totals against the sheet's own totals and the UPI app's list
+for the day before writing anything.** Run it against staging first (a staging
+outlet with the same menu), then `--target production`. The script refuses
+production unless the URL and `--target` both say so.
+
+**Write.** Add `--commit`. It records one order per call and stops at the first
+refusal, naming the line and the reason; fix the row and run the same command
+again. Orders already recorded are recognised and skipped, so a rerun never
+doubles anything, and an order key sent again with different content is
+refused rather than overwritten.
+
+**Undo.** A wrong file is cancelled, not deleted:
+
+```
+node --env-file=.env.paper scripts/paper-sales.mjs day1.csv --target production --undo --reason "Entered the wrong day"
+```
+
+dry until `--commit`, then voids every recorded bill in the file through the
+ordinary *Cancel this bill* path, reversing any points. Then correct the CSV,
+give the corrected orders **new order keys**, and enter them again.
+
+**Afterwards.** Paper bills count in Overview, the Ledger, Analytics and, for
+cash, the outlet's drawer. A day whose drawer was already counted shows them as
+late-arriving work beside the count rather than moving it. Record the stall's
+expenses and its cash count from away, as for any outlet, and mark the outlet
+closed once its last sheet is in; paper bills can still be entered for its
+trading days afterwards.
+
 ## Kitchen tablets *(#70)*
 
 **Setting one up.** On the outlet's page, **Tablets → Set up**, name it, choose *Use this tablet for:* **Kitchen**, and type the code on the tablet as for any counter. It opens on the kitchen's shift-start screen; somebody who may hold a counter shift starts one from their phone.

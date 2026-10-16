@@ -62,6 +62,14 @@ delivery outlet for invoices through 15 September 2026, and Kalyani is the
 delivery outlet from 16 September 2026. The provider app's displayed location
 may lag this operational fact, so invoice-date routing in Ops is authoritative.
 
+**Pop-up stalls at events trade on paper** (owner, 2026-10-15). A stall for a
+festival, a fest or another one-off occasion is created as an ordinary outlet,
+sells a short menu through a rush with as few staff as possible, writes each
+order on a sheet, and is marked closed when the event ends. Its sheets are
+entered afterwards as paper bills, by an agent or by the owner running the
+paper-sales script; the first is the Durga Puja 2026 stall. See
+[Operations](OPERATIONS.md#a-day-traded-on-paper-77).
+
 ## Menu
 
 Kalyani Cafe's menu as of October 2026, from the owner's own Menu screen: sixty items in ten categories, chicken and mutton shawarmas at its heart, with vegetarian items marked. Prices appear to be **tax-inclusive** with no GST breakup shown to customers, which is why v1 stores bills with `pricing_mode = 'no_tax'`. The demo carries it item for item (`src/data-access/mock/fixtures/menu.ts`). The menu began at seven shawarmas and a burger, which is what the counter was first designed around.

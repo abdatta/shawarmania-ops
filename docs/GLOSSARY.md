@@ -45,6 +45,14 @@ A paid customer transaction created only by a successful pay-order or pay-now
 command. It is append-only: a correction is an attributed void plus a new bill,
 never edited sale facts.
 
+### Paper sale
+
+A sale written on paper (at a pop-up stall, or on a day the counter could not
+bill) and entered afterwards as a **paper bill**: an ordinary settled bill that
+names who entered it and when, and no tablet, shift or biller. It counts
+wherever a bill counts. Entered only by command, through the paper-sales script
+([Operations](OPERATIONS.md#a-day-traded-on-paper-77)).
+
 ### Order
 
 Short-lived working state for food being prepared. It is editable only while
