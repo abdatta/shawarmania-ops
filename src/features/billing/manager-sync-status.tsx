@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, ChevronDown, Server } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 
 import type { BillingDeliveryDiagnostic } from '@/data-access/adapters'
 import { formatDayTime, isCorrectableRefusal } from '@/domain'
@@ -53,137 +53,77 @@ export function countSyncProblems(diagnostics: readonly BillingDeliveryDiagnosti
   return syncProblems(diagnostics).length
 }
 
-export function ManagerSyncStatus({ diagnostics }: { diagnostics: BillingDeliveryDiagnostic[] }) {
-  const problems = syncProblems(diagnostics)
-  const successful = diagnostics.filter((item) => !isSyncProblem(item))
-  const activityCounts = [
-    ...successful.reduce((counts, item) => {
-      counts.set(item.commandType, (counts.get(item.commandType) ?? 0) + 1)
-      return counts
-    }, new Map<string, number>()),
-  ].sort((left, right) => right[1] - left[1])
+/** How long ago, in the fewest words that are still exact enough to act on. */
+export function syncAge(receivedAt: string, now: Date): string {
+  const minutes = Math.floor(Math.max(0, now.getTime() - Date.parse(receivedAt)) / 60_000)
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes} min ago`
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} h ago`
+  return formatDayTime(receivedAt, now)
+}
 
-  if (diagnostics.length === 0) {
-    return (
-      <div className="rounded-xl border border-border bg-surface p-4 text-center">
-        <Server aria-hidden size={26} className="mx-auto text-content-muted" />
-        <p className="mt-2 font-bold text-content">No recent sync activity</p>
-        <p className="mt-1 text-sm text-content-muted">
-          Tablet activity will appear here after it reaches the server.
-        </p>
-      </div>
-    )
-  }
+/**
+ * The tablets' latest delivery, as one chip above the day's Stats
+ * (billing-day-at-a-glance, design D3). It is a reading of now, not of the
+ * chosen day, so it ignores the date: the newest received command's age, or
+ * the refusals waiting, each listed beneath in plain words. The grouped counts
+ * and the technical details it replaced were never read (owner, 2026-10-16).
+ */
+export function ManagerSyncStatus({
+  diagnostics,
+  now = new Date(),
+}: {
+  diagnostics: readonly BillingDeliveryDiagnostic[]
+  now?: Date
+}) {
+  const problems = syncProblems(diagnostics)
+  const newest = diagnostics.reduce<string | null>(
+    (latest, item) => (latest === null || item.receivedAt > latest ? item.receivedAt : latest),
+    null,
+  )
 
   return (
-    <section className="space-y-3" aria-labelledby="sync-status-heading">
-      <div>
-        <h2 id="sync-status-heading" className="text-lg font-black text-content">
-          Tablet sync status
-        </h2>
-        <p className="text-sm text-content-muted">
-          A read-only check that recent billing activity reached the server.
-        </p>
-      </div>
-
-      <div
-        className={`rounded-xl border bg-surface p-4 ${problems.length > 0 ? 'border-danger' : 'border-success'}`}
+    <section className="space-y-2" aria-label="Tablet sync">
+      <p
+        data-testid="sync-chip"
+        className={`inline-flex min-h-9 items-center gap-2 rounded-full border bg-surface px-3 text-sm font-semibold text-content ${problems.length > 0 ? 'border-danger' : newest === null ? 'border-border' : 'border-success'}`}
       >
-        <div className="flex items-start gap-3">
-          {problems.length > 0 ? (
-            <AlertTriangle aria-hidden size={22} className="mt-0.5 shrink-0 text-danger" />
-          ) : (
-            <CheckCircle2 aria-hidden size={22} className="mt-0.5 shrink-0 text-success" />
-          )}
-          <div>
-            <p className="font-black text-content">
-              {problems.length > 0
-                ? `${problems.length} recent sync ${problems.length === 1 ? 'problem' : 'problems'}`
-                : 'No recent sync problems'}
-            </p>
-            <p className="mt-1 text-sm text-content-muted">
-              {problems.length > 0
-                ? 'The originating tablet can discard these, or correct the few a resend could fix.'
-                : 'The recent tablet activity shown below reached the server.'}
-            </p>
-          </div>
-        </div>
-      </div>
+        <span
+          aria-hidden
+          className={`h-2.5 w-2.5 rounded-full ${problems.length > 0 ? 'bg-danger' : newest === null ? 'bg-content-muted' : 'bg-success'}`}
+        />
+        {problems.length > 0
+          ? `${problems.length} sync ${problems.length === 1 ? 'problem' : 'problems'}`
+          : newest === null
+            ? 'No tablet activity yet'
+            : `In sync · ${syncAge(newest, now)}`}
+      </p>
 
       {problems.length > 0 && (
         <div className="space-y-2" aria-label="Sync problems">
           {problems.map((item) => (
             <article
               key={item.reference}
-              className="rounded-xl border border-danger bg-surface p-3"
+              className="flex items-start gap-3 rounded-xl border border-danger bg-surface p-3"
             >
-              <p className="font-bold text-content">
-                {actionLabel(item.commandType)} needs attention
-                {item.orderNumber === null ? '' : ` · Order ${item.orderNumber}`}
-              </p>
-              <p className="mt-1 text-sm text-content-muted">
-                The server reported {plainWords(item.resultCategory)}{' '}
-                {formatDayTime(item.receivedAt)}.
-                {isCorrectableRefusal(item.resultCategory)
-                  ? ''
-                  : ' Resending it cannot change the answer, so the tablet should discard it.'}
-              </p>
+              <AlertTriangle aria-hidden size={20} className="mt-0.5 shrink-0 text-danger" />
+              <div>
+                <p className="font-bold text-content">
+                  {actionLabel(item.commandType)} needs attention
+                  {item.orderNumber === null ? '' : ` · Order ${item.orderNumber}`}
+                </p>
+                <p className="mt-1 text-sm text-content-muted">
+                  The server reported {plainWords(item.resultCategory)}{' '}
+                  {formatDayTime(item.receivedAt)}.
+                  {isCorrectableRefusal(item.resultCategory)
+                    ? ' The tablet that sent it can correct it.'
+                    : ' Resending it cannot change the answer, so the tablet should discard it.'}
+                </p>
+              </div>
             </article>
           ))}
         </div>
       )}
-
-      {activityCounts.length > 0 && (
-        <div className="rounded-xl border border-border bg-surface p-3">
-          <h3 className="font-black text-content">Recent activity delivered</h3>
-          <dl className="mt-2 divide-y divide-border">
-            {activityCounts.map(([commandType, count]) => (
-              <div
-                key={commandType}
-                className="flex justify-between gap-3 py-2 first:pt-0 last:pb-0"
-              >
-                <dt className="text-sm text-content-muted">{actionLabel(commandType)}</dt>
-                <dd className="font-bold text-content">{count}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      )}
-
-      <details className="group rounded-xl border border-border bg-surface">
-        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 font-bold text-content focus-visible:focus-ring [&::-webkit-details-marker]:hidden">
-          <span>Show technical details ({diagnostics.length})</span>
-          <ChevronDown
-            aria-hidden
-            size={18}
-            className="text-content-muted transition-transform group-open:rotate-180"
-          />
-        </summary>
-        <div className="border-t border-border px-3">
-          <p className="py-3 text-xs text-content-muted">
-            Short references only. Customer details and command contents are never included.
-          </p>
-          <ul className="divide-y divide-border">
-            {[...diagnostics]
-              .sort((left, right) => Number(isSyncProblem(right)) - Number(isSyncProblem(left)))
-              .map((item) => (
-                <li key={item.reference} className="py-3 text-sm">
-                  <div className="flex flex-wrap justify-between gap-x-3 gap-y-1">
-                    <span className="font-bold text-content">{actionLabel(item.commandType)}</span>
-                    <span className="font-semibold text-content">
-                      {plainWords(item.resultCategory)}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-content-muted">
-                    Reference {item.reference.slice(0, 8)}
-                    {item.orderNumber === null ? '' : ` · order ${item.orderNumber}`} · received{' '}
-                    {formatDayTime(item.receivedAt)}
-                  </p>
-                </li>
-              ))}
-          </ul>
-        </div>
-      </details>
     </section>
   )
 }

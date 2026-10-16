@@ -493,9 +493,17 @@ function OneRevenueCard({ outlet }: { outlet: Tables<'outlets'> }) {
         >
           {sales.value && (
             <>
-              <MetricValue icon={Banknote} tone="primary">
-                <OverviewMoney paise={todayTotal} data-testid={`sales-${outlet.id}`} />
-              </MetricValue>
+              {sales.value.openPaise > 0 ? (
+                <TodayValue
+                  outletId={outlet.id}
+                  totalPaise={todayTotal}
+                  openPaise={sales.value.openPaise}
+                />
+              ) : (
+                <MetricValue icon={Banknote} tone="primary">
+                  <OverviewMoney paise={todayTotal} data-testid={`sales-${outlet.id}`} />
+                </MetricValue>
+              )}
               <TenderLine
                 outletId={outlet.id}
                 cashPaise={sales.value.cashPaise}
@@ -641,6 +649,99 @@ function OneRevenueCard({ outlet }: { outlet: Tables<'outlets'> }) {
         </Metric>
       </div>
     </Card>
+  )
+}
+
+/**
+ * Today's revenue with the sale still in progress beside it: `₹35,630 · ₹1,240`
+ * (billing-day-at-a-glance, design D1). The second figure is today's open,
+ * unpaid orders, in exact rupees and the tender figures' weight and colour,
+ * with no label (owner, 2026-10-16). It is not revenue.
+ *
+ * A phone's cell is about 110px beside its icon, which a five-digit day and a
+ * four-digit open amount overrun. So, as the tender line does, every form is
+ * measured against the cell and the first that fits is drawn: the icon with
+ * the figure at the tenders' size, then at half the headline's, then the same
+ * two without the icon. The icon is the decoration; both figures are the point.
+ */
+function TodayValue({
+  outletId,
+  totalPaise,
+  openPaise,
+}: {
+  outletId: string
+  totalPaise: number
+  openPaise: number
+}) {
+  const box = useRef<HTMLDivElement>(null)
+  const measures = useRef<(HTMLSpanElement | null)[]>([])
+  const [form, setForm] = useState(0)
+  useLayoutEffect(() => {
+    const element = box.current
+    if (!element) return
+    const choose = () => {
+      const width = element.clientWidth
+      // No layout to measure (jsdom under test): the first form stands.
+      if (!width) return
+      const [regular = 0, small = 0] = measures.current.map((m) => m?.scrollWidth ?? 0)
+      // The icon is h-9 w-9 beside a gap-1.
+      const icon = 40
+      setForm(regular + icon <= width ? 0 : small + icon <= width ? 1 : regular <= width ? 2 : 3)
+    }
+    choose()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(choose)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [totalPaise, openPaise])
+  const open = formatPaise(openPaise - (openPaise % 100)).replace(/\.\d{2}$/, '')
+  const figures = (small: boolean, shown = true) => (
+    <span className="flex items-baseline gap-1 whitespace-nowrap">
+      <OverviewMoney
+        paise={totalPaise}
+        {...(shown ? { 'data-testid': `sales-${outletId}` } : {})}
+      />
+      <span
+        className={`${small ? 'text-[0.6875rem]' : 'text-[0.8125rem]'} font-bold text-content-muted`}
+        {...(shown
+          ? {
+              title: `Open orders not yet paid ${formatPaise(openPaise)}`,
+              'data-testid': `open-${outletId}`,
+            }
+          : {})}
+      >
+        <span aria-hidden>· </span>
+        {open}
+      </span>
+    </span>
+  )
+  const withIcon = form < 2
+  return (
+    <div ref={box} className="relative flex min-h-9 items-center justify-between gap-1">
+      {/* Both sizes, measured and never seen. */}
+      <div aria-hidden className="invisible absolute left-0 top-0 h-0 overflow-hidden">
+        {[false, true].map((small, index) => (
+          <span
+            key={index}
+            ref={(element) => {
+              measures.current[index] = element
+            }}
+            className="block w-max"
+          >
+            {figures(small, false)}
+          </span>
+        ))}
+      </div>
+      <div className="min-w-0">{figures(form % 2 === 1)}</div>
+      {withIcon && (
+        <span
+          aria-hidden
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-accent-text"
+        >
+          <Banknote size={22} strokeWidth={1.8} />
+        </span>
+      )}
+    </div>
   )
 }
 

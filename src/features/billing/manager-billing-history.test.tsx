@@ -154,8 +154,8 @@ describe('the day’s figures sit outside the tabs', () => {
    * The four money cards answer the question the surface is opened for — what
    * did this outlet take today — so they are not behind a tab. They sit under
    * the day bar and above the tab strip, on screen with the Bills list the
-   * surface lands on and still there through both other views. Status keeps the
-   * tablet sync panel it is named for and nothing else.
+   * surface lands on and still there through both other views. Stats holds the
+   * tablets' sync and the day's counts, never these.
    */
   it('shows all four on the view the surface lands on', async () => {
     renderHistory()
@@ -183,7 +183,7 @@ describe('the day’s figures sit outside the tabs', () => {
 
     await screen.findByTestId('manager-bill-list')
 
-    for (const name of [/^Open orders/, /^Status/, /^Bills/]) {
+    for (const name of [/^Open orders/, /^Stats/, /^Bills/]) {
       await user.click(screen.getByRole('tab', { name }))
       // One copy, not one per view: a second row inside a tab would be two
       // readings of the same day that can disagree while one is stale.
@@ -192,15 +192,16 @@ describe('the day’s figures sit outside the tabs', () => {
     }
   })
 
-  it('leaves Status to the sync activity it is named for', async () => {
+  it('leaves Stats to the sync and the day’s counts', async () => {
     const user = userEvent.setup()
     renderHistory()
 
     await screen.findByTestId('manager-bill-list')
-    await user.click(screen.getByRole('tab', { name: /^Status/ }))
+    await user.click(screen.getByRole('tab', { name: /^Stats/ }))
 
-    const syncStatus = screen.getByRole('heading', { name: 'Tablet sync status' })
+    const syncStatus = screen.getByTestId('sync-chip')
     expect(syncStatus).toBeVisible()
+    expect(await screen.findByTestId('day-stats')).toBeVisible()
     // The heading and the sentence that framed the cards inside this view left
     // with them: the day bar sitting directly above the row says which day, and
     // the outlet selector in the header says which outlet.
@@ -243,7 +244,7 @@ describe('the day’s figures sit outside the tabs', () => {
   })
 })
 
-describe('the Status tab carries its own problem count', () => {
+describe('the Stats tab carries its own problem count', () => {
   /**
    * The count belongs on the tab because a refusal is otherwise invisible until
    * somebody opens the tab that holds it, and nobody opens a tab that looks
@@ -259,8 +260,8 @@ describe('the Status tab carries its own problem count', () => {
 
     // One refused command in the demo outlet, and the tab says so while the
     // panel behind it is still shut.
-    expect(await screen.findByRole('tab', { name: 'Status (1)' })).toBeVisible()
-    expect(screen.queryByRole('heading', { name: 'Tablet sync status' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: 'Stats (1)' })).toBeVisible()
+    expect(screen.queryByTestId('sync-chip')).not.toBeInTheDocument()
   })
 
   it('stays a plain name when nothing was refused', async () => {
@@ -287,8 +288,8 @@ describe('the Status tab carries its own problem count', () => {
 
     await screen.findByTestId('manager-bill-list')
 
-    expect(await screen.findByRole('tab', { name: 'Status' })).toBeVisible()
-    expect(screen.queryByRole('tab', { name: /^Status \(/ })).not.toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: 'Stats' })).toBeVisible()
+    expect(screen.queryByRole('tab', { name: /^Stats \(/ })).not.toBeInTheDocument()
   })
 
   it('counts exactly what the panel behind it lists', async () => {
@@ -299,16 +300,14 @@ describe('the Status tab carries its own problem count', () => {
 
     // The tab's number and the panel's heading are the same predicate over the
     // same array, so this fails the moment they are derived apart.
-    const tab = await screen.findByRole('tab', { name: /^Status/ })
-    const counted = /Status \((\d+)\)/.exec(tab.textContent ?? '')?.[1] ?? '0'
+    const tab = await screen.findByRole('tab', { name: /^Stats/ })
+    const counted = /Stats \((\d+)\)/.exec(tab.textContent ?? '')?.[1] ?? '0'
 
     await user.click(tab)
 
-    expect(
-      screen.getByText(
-        counted === '1' ? '1 recent sync problem' : `${counted} recent sync problems`,
-      ),
-    ).toBeVisible()
+    expect(screen.getByTestId('sync-chip')).toHaveTextContent(
+      counted === '1' ? '1 sync problem' : `${counted} sync problems`,
+    )
   })
 })
 
@@ -390,5 +389,138 @@ describe('the day survives an outlet switch', () => {
 
     await chooseOutlet(OUTLET_KANCHRAPARA_ID)
     expect(await screen.findByTestId('billing-history-day-picker')).toHaveAttribute('value', chosen)
+  })
+})
+
+/** billing-day-at-a-glance, design D2: the Open orders tab is the chosen day's. */
+describe('open orders follow the day', () => {
+  it('names the day’s unpaid total, and an earlier day lists none of today’s', async () => {
+    const user = userEvent.setup()
+    const { adapters } = renderHistory()
+
+    await screen.findByTestId('manager-bill-list')
+    const today = screen.getByTestId('billing-history-day-picker').getAttribute('value')!
+    const open = (await adapters.billing.listManagerOpenOrders(OUTLET_KALYANI_ID)).filter(
+      (order) => order.businessDate === today,
+    )
+    expect(open.length).toBeGreaterThan(0)
+    // Unpaid only: an order already paid is revenue, not money still to come.
+    const unpaid = open
+      .filter((order) => order.status === 'open')
+      .reduce((sum, order) => sum + order.totalPaise, 0)
+
+    await user.click(screen.getByRole('tab', { name: /^Open orders/ }))
+    expect(screen.getByRole('tab', { name: `Open orders (${open.length})` })).toBeVisible()
+    expect(screen.getByTestId('open-orders-unpaid')).toHaveTextContent(formatPaise(unpaid))
+
+    await user.click(screen.getByTestId('billing-history-step-back'))
+    expect(await screen.findByText('No open orders on this day.')).toBeVisible()
+    expect(screen.getByRole('tab', { name: 'Open orders (0)' })).toBeVisible()
+  })
+})
+
+/** billing-day-at-a-glance, design D3: Stats is the chosen day, whole. */
+describe('the Stats tab reads the chosen day', () => {
+  it('shows the three groups, a dash for an average with nothing to average, and reads again for another day', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin')
+    const asked: string[] = []
+    renderHistory({
+      ...adapters,
+      billing: {
+        ...adapters.billing,
+        readDayStats: async (_outletId, businessDate) => {
+          asked.push(businessDate)
+          return {
+            placed: 142,
+            updated: 18,
+            cancelled: 3,
+            paid: 136,
+            seen: 139,
+            ready: 137,
+            toReadySeconds: 400,
+            handoverSeconds: null,
+            billsCancelled: 1,
+            cancelledAfterPaid: 2,
+            paymentUndone: 4,
+            paymentChanged: 1,
+          }
+        },
+      },
+    })
+
+    await screen.findByTestId('manager-bill-list')
+    // Nothing is read for Stats until it is chosen.
+    expect(asked).toHaveLength(0)
+    await user.click(screen.getByRole('tab', { name: /^Stats/ }))
+
+    const stats = await screen.findByTestId('day-stats')
+    for (const group of ['Counter', 'Kitchen', 'Bills'])
+      expect(within(stats).getByRole('region', { name: group })).toBeVisible()
+    expect(screen.getByTestId('stat-placed')).toHaveTextContent('142')
+    expect(screen.getByTestId('stat-to-ready')).toHaveTextContent('6m 40s')
+    expect(screen.getByTestId('stat-handover')).toHaveTextContent('—')
+    expect(screen.getByTestId('stat-cancelled-after-paid')).toHaveTextContent('2')
+    expect(screen.queryByText(/Show technical details/)).not.toBeInTheDocument()
+
+    const today = asked[0]!
+    await user.click(screen.getByTestId('billing-history-step-back'))
+    await screen.findByTestId('day-stats')
+    expect(asked.at(-1)).toBe(shiftBusinessDate(today, -1))
+  })
+})
+
+/** billing-day-at-a-glance, design D4: the Bills tab's one Filter. */
+describe('the Bills filter', () => {
+  it('narrows and orders the list, names itself, and leaves the day’s figures alone', async () => {
+    const user = userEvent.setup()
+    renderHistory()
+
+    const list = await screen.findByTestId('manager-bill-list')
+    const all = within(list).getAllByRole('button', { name: /^Bill \d+/ }).length
+    expect(screen.getByRole('tab', { name: `Bills (${all})` })).toBeVisible()
+    const combined = screen.getByTestId('billing-total-combined').textContent
+
+    await user.click(screen.getByRole('button', { name: 'Filter' }))
+    await user.click(screen.getByRole('radio', { name: 'Amount' }))
+    await user.click(screen.getByRole('button', { name: 'UPI' }))
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+
+    expect(screen.getByTestId('bill-filter-summary')).toHaveTextContent('UPI · Amount, highest')
+    const shown = within(screen.getByTestId('manager-bill-list')).getAllByRole('button', {
+      name: /^Bill \d+/,
+    })
+    expect(shown.length).toBeLessThan(all)
+    expect(screen.getByRole('tab', { name: `Bills (${shown.length}/${all})` })).toBeVisible()
+    // Highest first: each row's amount is no more than the one above it.
+    const amounts = shown.map((row) =>
+      Number(/₹([\d,]+)/.exec(row.textContent ?? '')![1]!.replace(/,/g, '')),
+    )
+    expect([...amounts].sort((a, b) => b - a)).toEqual(amounts)
+    expect(screen.getByTestId('billing-total-combined').textContent).toBe(combined)
+
+    await user.click(screen.getByTestId('bill-filter-clear'))
+    expect(screen.getByRole('tab', { name: `Bills (${all})` })).toBeVisible()
+    expect(screen.getByTestId('bill-filter-summary')).toHaveTextContent('Filter')
+  })
+
+  it('says when nothing matches, and Clear brings every bill back', async () => {
+    const user = userEvent.setup()
+    renderHistory()
+
+    const list = await screen.findByTestId('manager-bill-list')
+    const all = within(list).getAllByRole('button', { name: /^Bill \d+/ }).length
+    await user.click(screen.getByRole('button', { name: 'Filter' }))
+    // The demo day has no cancelled-after-paid bill.
+    await user.click(screen.getByRole('button', { name: 'Cancelled after paid' }))
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+
+    expect(screen.getByText('No bills match')).toBeVisible()
+    await user.click(screen.getAllByRole('button', { name: 'Clear' }).at(-1)!)
+    expect(
+      within(await screen.findByTestId('manager-bill-list')).getAllByRole('button', {
+        name: /^Bill \d+/,
+      }),
+    ).toHaveLength(all)
   })
 })

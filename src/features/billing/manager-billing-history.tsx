@@ -1,4 +1,4 @@
-import { ReceiptText } from 'lucide-react'
+import { ReceiptText, SlidersHorizontal } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { EmptyState } from '@/components/layout/empty-state'
@@ -17,6 +17,7 @@ import {
   DataActionError,
   type BillingBill,
   type BillingAttributionOutcome,
+  type BillingDayStats,
   type BillingDeliveryDiagnostic,
   type BillingOrder,
   type CounterBiller,
@@ -32,10 +33,20 @@ import {
 import { useOutletScope } from '@/features/outlet-scope'
 import { useSession } from '@/session/context'
 
+import {
+  applyBillFilter,
+  billFilterSummary,
+  dayTablets,
+  DEFAULT_BILL_FILTER,
+  isDefaultBillFilter,
+  type BillFilter,
+} from './bill-filter'
+import { BillFilterSheet } from './bill-filter-sheet'
 import { averageBillPaise, combinedTakingsPaise, paymentTotalPaise } from './day-totals'
 import { ManagerBillDetail } from './manager-bill-detail'
 import { BillDetailTransition, DETAIL_TRANSITION_MS, ManagerBillSummary } from './manager-bill-row'
 import { DishOpenOrderSummary } from './dish-open-order-summary'
+import { ManagerDayStats, ManagerDayStatsShimmer } from './manager-day-stats'
 import { countSyncProblems, ManagerSyncStatus } from './manager-sync-status'
 import { PaymentTotalCards } from './payment-total-cards'
 
@@ -69,7 +80,7 @@ function splitPipeline(orders: readonly BillingOrder[]): {
   return { preparing, unpaidPrepared }
 }
 
-type View = 'bills' | 'orders' | 'status'
+type View = 'bills' | 'orders' | 'stats'
 
 const ORDER_CANCELLATION_REASONS = ['Duplicate order', 'Mistaken entry'] as const
 
@@ -145,6 +156,16 @@ export function ManagerBillingHistory() {
   const [reason, setReason] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  /*
+    The Bills tab's sort and filter (billing-day-at-a-glance, design D4). Kept
+    while the day or outlet changes — the reader is asking the same question of
+    another day — and gone when they leave the page. Never stored.
+  */
+  const [filter, setFilter] = useState<BillFilter>(DEFAULT_BILL_FILTER)
+  const [filterOpen, setFilterOpen] = useState(false)
+  /** The Stats tab's figures, and the outlet-day they are of; another means not read yet. */
+  const [stats, setStats] = useState<{ key: string; value: BillingDayStats } | null>(null)
+  const [statsFailed, setStatsFailed] = useState<string | null>(null)
   const closingTimers = useRef<number[]>([])
   const anchorFrame = useRef<number | null>(null)
   // Empty until this outlet's own today has landed, which is what holds the day
@@ -163,6 +184,17 @@ export function ManagerBillingHistory() {
     totalPaise: paymentTotalPaise(paidBills, paymentMethod),
   }))
   const takingsPaise = combinedTakingsPaise(methodTotals)
+  // What the Bills tab lists: the filter narrows and orders the day's bills,
+  // and touches none of the figures above, which stay the day's.
+  const visibleBills = applyBillFilter(bills, filter)
+  const filtering = !isDefaultBillFilter(filter)
+  // Open orders follow the day bar (design D2). Filtered here rather than in the
+  // adapter's read, which the counter shares.
+  const dayOrders = orders.filter((order) => order.businessDate === businessDate)
+  const unpaidPaise = dayOrders
+    .filter((order) => order.status === 'open')
+    .reduce((sum, order) => sum + order.totalPaise, 0)
+  const statsKey = `${outletId}|${businessDate}`
   // The refusals waiting behind the Status tab, named on the tab itself. Its two
   // neighbours already carry their counts, so a tab that says nothing reads as a
   // tab with nothing in it — which is how the first production refusal went
@@ -215,7 +247,9 @@ export function ManagerBillingHistory() {
         setOrders(nextOrders)
         setMarks(nextMarks)
         setReadAt(new Date())
-        setOpenCount(nextOrders.length)
+        // No count here: these are every day's open orders, and the tab counts
+        // the chosen day's — from the list itself while it is open, and from the
+        // page's own day-scoped count otherwise.
         setOrdersOutlet(outletId)
       } catch (cause) {
         if (!isCurrent()) return
@@ -241,7 +275,7 @@ export function ManagerBillingHistory() {
         dishWorkflow ? null : billing.listManagerOpenOrders(outletId),
         billing.listDeliveryDiagnostics(outletId),
         billing.listBillers(outletId),
-        dishWorkflow ? billing.countManagerOpenOrders(outletId) : null,
+        dishWorkflow ? billing.countManagerOpenOrders(outletId, businessDate) : null,
       ])
       setBills(nextBills)
       if (nextOrders) setOrders(nextOrders)
@@ -275,6 +309,30 @@ export function ManagerBillingHistory() {
       current = false
     }
   }, [dishWorkflow, view, loadOrders, businessDate])
+
+  // Choosing Stats reads the chosen day's figures, and so does a new outlet or
+  // day while it is open. A read for a day no longer shown is dropped.
+  useEffect(() => {
+    if (view !== 'stats' || !outletId || !businessDate) return
+    let current = true
+    const key = `${outletId}|${businessDate}`
+    void Promise.resolve()
+      .then(() => billing.readDayStats(outletId, businessDate))
+      .then((value) => {
+        if (!current) return
+        setStats({ key, value })
+        setStatsFailed(null)
+      })
+      .catch((cause: unknown) => {
+        if (current)
+          setStatsFailed(
+            cause instanceof DataActionError ? cause.message : 'Could not load the day’s stats.',
+          )
+      })
+    return () => {
+      current = false
+    }
+  }, [billing, view, outletId, businessDate])
 
   const mutate = async (operation: () => Promise<unknown>, keepBillOpen = false) => {
     try {
@@ -369,8 +427,10 @@ export function ManagerBillingHistory() {
       closeDetail(billId)
       setSelectedId(null)
     } else {
-      const currentIndex = selectedId ? bills.findIndex((bill) => bill.id === selectedId) : -1
-      const nextIndex = bills.findIndex((bill) => bill.id === billId)
+      const currentIndex = selectedId
+        ? visibleBills.findIndex((bill) => bill.id === selectedId)
+        : -1
+      const nextIndex = visibleBills.findIndex((bill) => bill.id === billId)
       if (selectedId) closeDetail(selectedId)
       if (currentIndex >= 0 && nextIndex > currentIndex) anchorSummaryDuringSwap(billId)
       setSelectedId(billId)
@@ -468,11 +528,38 @@ export function ManagerBillingHistory() {
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="Billing history views">
         {(
           [
-            ['bills', `Bills (${bills.length})`],
+            [
+              'bills',
+              filtering && visibleBills.length !== bills.length
+                ? `Bills (${visibleBills.length}/${bills.length})`
+                : `Bills (${bills.length})`,
+            ],
             // The count is the whole board — both bands — under the plain name
             // this page has always used; the band names live in the sections.
-            ['orders', `Open orders (${dishWorkflow ? (openCount ?? '…') : orders.length})`],
-            ['status', syncProblemCount > 0 ? `Status (${syncProblemCount})` : 'Status'],
+            // It is the chosen day's, as the list is.
+            [
+              'orders',
+              `Open orders (${
+                !dishWorkflow || (view === 'orders' && ordersOutlet === outletId)
+                  ? dayOrders.length
+                  : (openCount ?? '…')
+              })`,
+            ],
+            // A refusal keeps its count on the tab, in red, so it reads as a
+            // warning rather than as a number of stats.
+            [
+              'stats',
+              syncProblemCount > 0 ? (
+                <>
+                  Stats {/* Red on the plain tab; the chosen tab's fill keeps its own colour. */}
+                  <span className={view === 'stats' ? undefined : 'text-danger'}>
+                    ({syncProblemCount})
+                  </span>
+                </>
+              ) : (
+                'Stats'
+              ),
+            ],
           ] as const
         ).map(([id, label]) => (
           <Button
@@ -500,256 +587,330 @@ export function ManagerBillingHistory() {
       {loading ? (
         <BillingHistoryShimmer />
       ) : view === 'bills' ? (
-        bills.length === 0 ? (
-          <EmptyState icon={ReceiptText} title="No bills match these filters." />
-        ) : (
-          <ul className="space-y-2" data-testid="manager-bill-list">
-            {bills.map((bill) => {
-              const expanded = bill.id === selectedId
-              const showingDetail = expanded || closingIds.includes(bill.id)
-              return (
-                <li key={bill.id} data-testid={`manager-bill-${bill.id}`}>
-                  <ManagerBillSummary
-                    bill={bill}
-                    expanded={expanded}
-                    showingDetail={showingDetail}
-                    onToggle={() => selectBill(bill.id)}
-                  />
-                  {showingDetail && (
-                    <BillDetailTransition open={expanded}>
-                      <ManagerBillDetail
-                        bill={bill}
-                        currentUserId={session.userId}
-                        cancelling={cancellingId === bill.id}
-                        reason={reason}
-                        onReasonChange={setReason}
-                        onStartCancelling={() => {
-                          setCancellingId(bill.id)
-                          setReason('')
-                        }}
-                        onKeepBill={() => {
-                          setCancellingId(null)
-                          setReason('')
-                        }}
-                        onConfirmCancellation={() =>
-                          void mutate(() => billing.voidBill(bill.id, reason), true)
-                        }
-                        eligibleBillers={billers}
-                        onReviewAttribution={(outcome, resolvedOperatorId, reviewReason) =>
-                          reviewAttribution(bill.id, outcome, resolvedOperatorId, reviewReason)
-                        }
-                      />
-                    </BillDetailTransition>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-        )
-      ) : view === 'status' ? (
-        // The tablet sync activity this view is named for, and nothing else. The
-        // day's figures used to sit above it and now sit above the tabs, where
-        // they are read without choosing a view.
-        <ManagerSyncStatus diagnostics={diagnostics} />
+        <div className="space-y-2">
+          {bills.length > 0 && (
+            <div className="flex items-center justify-end gap-2">
+              {filtering && (
+                <Button
+                  variant="ghost"
+                  size="phone"
+                  onClick={() => setFilter(DEFAULT_BILL_FILTER)}
+                  data-testid="bill-filter-clear"
+                >
+                  Clear
+                </Button>
+              )}
+              {/* What is in force is the button's own label, as on the kitchen. */}
+              <button
+                type="button"
+                onClick={() => setFilterOpen(true)}
+                aria-label={filtering ? `Filter: ${billFilterSummary(filter)}` : 'Filter'}
+                className="inline-flex min-h-12 min-w-0 max-w-[75%] items-center gap-2 rounded-xl border-2 border-border px-4 font-bold text-content focus-visible:focus-ring"
+              >
+                <SlidersHorizontal aria-hidden size={20} className="shrink-0" />
+                <span data-testid="bill-filter-summary" className="truncate">
+                  {filtering ? billFilterSummary(filter) : 'Filter'}
+                </span>
+              </button>
+            </div>
+          )}
+          {filterOpen && (
+            <BillFilterSheet
+              open
+              filter={filter}
+              tablets={dayTablets(bills)}
+              onChange={setFilter}
+              onClose={() => setFilterOpen(false)}
+            />
+          )}
+          {bills.length === 0 ? (
+            <EmptyState icon={ReceiptText} title="No bills on this day." />
+          ) : visibleBills.length === 0 ? (
+            <div className="space-y-3">
+              <EmptyState icon={ReceiptText} title="No bills match" />
+              <div className="flex justify-center">
+                <Button
+                  variant="secondary"
+                  size="phone"
+                  onClick={() => setFilter(DEFAULT_BILL_FILTER)}
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <ul className="space-y-2" data-testid="manager-bill-list">
+              {visibleBills.map((bill) => {
+                const expanded = bill.id === selectedId
+                const showingDetail = expanded || closingIds.includes(bill.id)
+                return (
+                  <li key={bill.id} data-testid={`manager-bill-${bill.id}`}>
+                    <ManagerBillSummary
+                      bill={bill}
+                      expanded={expanded}
+                      showingDetail={showingDetail}
+                      onToggle={() => selectBill(bill.id)}
+                    />
+                    {showingDetail && (
+                      <BillDetailTransition open={expanded}>
+                        <ManagerBillDetail
+                          bill={bill}
+                          currentUserId={session.userId}
+                          cancelling={cancellingId === bill.id}
+                          reason={reason}
+                          onReasonChange={setReason}
+                          onStartCancelling={() => {
+                            setCancellingId(bill.id)
+                            setReason('')
+                          }}
+                          onKeepBill={() => {
+                            setCancellingId(null)
+                            setReason('')
+                          }}
+                          onConfirmCancellation={() =>
+                            void mutate(() => billing.voidBill(bill.id, reason), true)
+                          }
+                          eligibleBillers={billers}
+                          onReviewAttribution={(outcome, resolvedOperatorId, reviewReason) =>
+                            reviewAttribution(bill.id, outcome, resolvedOperatorId, reviewReason)
+                          }
+                        />
+                      </BillDetailTransition>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      ) : view === 'stats' ? (
+        // The tablets' sync, which speaks for now, then the chosen day's figures
+        // (billing-day-at-a-glance, design D3).
+        <div className="space-y-3">
+          <ManagerSyncStatus diagnostics={diagnostics} />
+          {stats?.key === statsKey ? (
+            <ManagerDayStats stats={stats.value} />
+          ) : statsFailed ? (
+            <p
+              role="status"
+              className="rounded-lg border border-border bg-surface p-3 text-sm font-semibold text-content"
+            >
+              {statsFailed}
+            </p>
+          ) : (
+            <ManagerDayStatsShimmer />
+          )}
+        </div>
       ) : view === 'orders' ? (
         dishWorkflow && ordersOutlet !== outletId ? (
           <LoadingRegion label="open orders" className="space-y-2">
             <Shimmer className="h-40 rounded-xl" />
             <Shimmer className="h-40 rounded-xl" />
           </LoadingRegion>
-        ) : orders.length === 0 ? (
-          <EmptyState icon={ReceiptText} title="No open orders at this outlet." />
+        ) : dayOrders.length === 0 ? (
+          <EmptyState icon={ReceiptText} title="No open orders on this day." />
         ) : (
-          // The manager reads the pipeline in two groups, not a flat pile. The
-          // counter's rail is one list now (#55); this screen is unchanged.
-          (
-            [
-              ['Preparing', splitPipeline(orders).preparing],
-              ['Unpaid Prepared Orders', splitPipeline(orders).unpaidPrepared],
-            ] as const
-          ).map(
-            ([sectionTitle, sectionOrders]) =>
-              sectionOrders.length > 0 && (
-                <section key={sectionTitle} aria-label={sectionTitle} className="space-y-2">
-                  <h3 className="text-sm font-black text-content">{sectionTitle}</h3>
-                  <ul className="space-y-2">
-                    {sectionOrders.map((order) => {
-                      const cancellingOrder = cancellingOrderId === order.id
-                      return (
-                        <li
-                          key={order.id}
-                          data-testid={`manager-open-order-${order.orderNumber}`}
-                          className="rounded-xl border border-border bg-surface p-3"
-                        >
-                          {dishWorkflow ? (
-                            <DishOpenOrderSummary
-                              order={order}
-                              marks={marks}
-                              now={readAt}
-                              {...(!cancellingOrder && {
-                                onCancel: () => {
-                                  setCancellingOrderId(order.id)
-                                  setReason('')
-                                },
-                              })}
-                            />
-                          ) : (
-                            <>
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="text-xl font-black text-content">
-                                    Order {order.orderNumber}
-                                  </p>
-                                  <p className="mt-1 text-xs text-content-muted">
-                                    {formatDayTime(order.orderedAt)} · created by{' '}
-                                    {order.creatorName}
-                                  </p>
-                                </div>
-                                <Money paise={order.totalPaise} display className="shrink-0" />
-                              </div>
-
-                              <section className="mt-3 rounded-xl border border-border bg-surface p-3">
-                                <h3 className="text-sm font-black text-content">Order items</h3>
-                                <ul className="mt-2 divide-y divide-border">
-                                  {order.lines.map((line, index) => (
-                                    <li
-                                      key={`${line.menuItemId}-${index}`}
-                                      className="grid grid-cols-[1fr_auto] gap-x-3 py-2 first:pt-0 last:pb-0"
-                                    >
-                                      <div className="min-w-0">
-                                        <p className="font-semibold leading-tight text-content">
-                                          {line.itemName}
-                                        </p>
-                                        <p className="mt-1 text-xs text-content-muted">
-                                          {line.quantity} × <Money paise={line.unitPricePaise} />{' '}
-                                          each
-                                        </p>
-                                      </div>
-                                      <Money
-                                        paise={line.unitPricePaise * line.quantity}
-                                        className="self-center font-bold"
-                                      />
-                                    </li>
-                                  ))}
-                                </ul>
-                              </section>
-
-                              <section className="mt-3 rounded-xl border border-border bg-surface p-3">
-                                <h3 className="text-sm font-black text-content">
-                                  Customer details
-                                </h3>
-                                <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2">
-                                  <div>
-                                    <dt className="text-xs font-semibold text-content-muted">
-                                      Customer name
-                                    </dt>
-                                    <dd className="mt-0.5 flex items-center gap-1.5 text-sm font-semibold text-content">
-                                      <span className="min-w-0 break-words">
-                                        {order.customerName || 'Not provided'}
-                                      </span>
-                                      {order.customerTier === 'gold' && <MemberMark />}
-                                    </dd>
-                                  </div>
-                                  <div>
-                                    <dt className="text-xs font-semibold text-content-muted">
-                                      Customer phone
-                                    </dt>
-                                    <dd className="mt-0.5 break-words text-sm font-semibold text-content">
-                                      {order.customerPhone || 'Not provided'}
-                                    </dd>
-                                  </div>
-                                </dl>
-                              </section>
-                            </>
-                          )}
-
-                          {!dishWorkflow && !cancellingOrder && (
-                            <div className="mt-3 border-t border-border pt-3">
-                              <Button
-                                variant="secondary"
-                                className="text-danger"
-                                onClick={() => {
-                                  setCancellingOrderId(order.id)
-                                  setReason('')
-                                }}
-                              >
-                                Cancel this order
-                              </Button>
-                            </div>
-                          )}
-                          <Modal
-                            open={cancellingOrder}
-                            onClose={() => {
-                              setCancellingOrderId(null)
-                              setReason('')
-                            }}
-                            aria-label={`Cancel order ${order.orderNumber}`}
-                            className="m-auto w-[min(92vw,26rem)] rounded-2xl p-4"
+          <>
+            {/* What the day's open orders still owe: unpaid ones only, as
+                Overview's figure beside Today's revenue (design D2). A header
+                like the two section names below it, with its value on the
+                right; "yet to be paid", because "unpaid" reads as never
+                (owner, 2026-10-16). */}
+            <h3 className="flex items-baseline justify-between text-sm font-black text-content">
+              Yet to be paid
+              <Money paise={unpaidPaise} className="font-black" data-testid="open-orders-unpaid" />
+            </h3>
+            {/* The manager reads the pipeline in two groups, not a flat pile.
+                The counter's rail is one list now (#55); this screen is unchanged. */}
+            {(
+              [
+                ['Preparing', splitPipeline(dayOrders).preparing],
+                ['Unpaid Prepared Orders', splitPipeline(dayOrders).unpaidPrepared],
+              ] as const
+            ).map(
+              ([sectionTitle, sectionOrders]) =>
+                sectionOrders.length > 0 && (
+                  <section key={sectionTitle} aria-label={sectionTitle} className="space-y-2">
+                    <h3 className="text-sm font-black text-content">{sectionTitle}</h3>
+                    <ul className="space-y-2">
+                      {sectionOrders.map((order) => {
+                        const cancellingOrder = cancellingOrderId === order.id
+                        return (
+                          <li
+                            key={order.id}
+                            data-testid={`manager-open-order-${order.orderNumber}`}
+                            className="rounded-xl border border-border bg-surface p-3"
                           >
-                            <h2 className="text-lg font-black text-content">
-                              Cancel order {order.orderNumber}?
-                            </h2>
-                            <label
-                              htmlFor={`cancel-order-reason-${order.id}`}
-                              className="mt-4 block text-sm font-bold text-content"
-                            >
-                              Cancellation reason
-                            </label>
-                            <div
-                              className="mt-3 grid grid-cols-2 gap-2"
-                              role="group"
-                              aria-label="Common cancellation reasons"
-                            >
-                              {ORDER_CANCELLATION_REASONS.map((candidate) => (
+                            {dishWorkflow ? (
+                              <DishOpenOrderSummary
+                                order={order}
+                                marks={marks}
+                                now={readAt}
+                                {...(!cancellingOrder && {
+                                  onCancel: () => {
+                                    setCancellingOrderId(order.id)
+                                    setReason('')
+                                  },
+                                })}
+                              />
+                            ) : (
+                              <>
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-xl font-black text-content">
+                                      Order {order.orderNumber}
+                                    </p>
+                                    <p className="mt-1 text-xs text-content-muted">
+                                      {formatDayTime(order.orderedAt)} · created by{' '}
+                                      {order.creatorName}
+                                    </p>
+                                  </div>
+                                  <Money paise={order.totalPaise} display className="shrink-0" />
+                                </div>
+
+                                <section className="mt-3 rounded-xl border border-border bg-surface p-3">
+                                  <h3 className="text-sm font-black text-content">Order items</h3>
+                                  <ul className="mt-2 divide-y divide-border">
+                                    {order.lines.map((line, index) => (
+                                      <li
+                                        key={`${line.menuItemId}-${index}`}
+                                        className="grid grid-cols-[1fr_auto] gap-x-3 py-2 first:pt-0 last:pb-0"
+                                      >
+                                        <div className="min-w-0">
+                                          <p className="font-semibold leading-tight text-content">
+                                            {line.itemName}
+                                          </p>
+                                          <p className="mt-1 text-xs text-content-muted">
+                                            {line.quantity} × <Money paise={line.unitPricePaise} />{' '}
+                                            each
+                                          </p>
+                                        </div>
+                                        <Money
+                                          paise={line.unitPricePaise * line.quantity}
+                                          className="self-center font-bold"
+                                        />
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </section>
+
+                                <section className="mt-3 rounded-xl border border-border bg-surface p-3">
+                                  <h3 className="text-sm font-black text-content">
+                                    Customer details
+                                  </h3>
+                                  <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2">
+                                    <div>
+                                      <dt className="text-xs font-semibold text-content-muted">
+                                        Customer name
+                                      </dt>
+                                      <dd className="mt-0.5 flex items-center gap-1.5 text-sm font-semibold text-content">
+                                        <span className="min-w-0 break-words">
+                                          {order.customerName || 'Not provided'}
+                                        </span>
+                                        {order.customerTier === 'gold' && <MemberMark />}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-xs font-semibold text-content-muted">
+                                        Customer phone
+                                      </dt>
+                                      <dd className="mt-0.5 break-words text-sm font-semibold text-content">
+                                        {order.customerPhone || 'Not provided'}
+                                      </dd>
+                                    </div>
+                                  </dl>
+                                </section>
+                              </>
+                            )}
+
+                            {!dishWorkflow && !cancellingOrder && (
+                              <div className="mt-3 border-t border-border pt-3">
                                 <Button
-                                  key={candidate}
-                                  variant={reason === candidate ? 'primary' : 'secondary'}
-                                  size="phone"
-                                  aria-pressed={reason === candidate}
-                                  onClick={() => setReason(candidate)}
+                                  variant="secondary"
+                                  className="text-danger"
+                                  onClick={() => {
+                                    setCancellingOrderId(order.id)
+                                    setReason('')
+                                  }}
                                 >
-                                  {candidate}
+                                  Cancel this order
                                 </Button>
-                              ))}
-                            </div>
-                            <Input
-                              id={`cancel-order-reason-${order.id}`}
-                              aria-label={`Cancellation reason for order ${order.orderNumber}`}
-                              className="mt-1"
-                              placeholder="Or type a reason"
-                              value={reason}
-                              onChange={(event) => setReason(event.target.value)}
-                            />
-                            <div className="mt-4 grid grid-cols-2 gap-2">
-                              <Button
-                                variant="secondary"
-                                size="control"
-                                onClick={() => {
-                                  setCancellingOrderId(null)
-                                  setReason('')
-                                }}
+                              </div>
+                            )}
+                            <Modal
+                              open={cancellingOrder}
+                              onClose={() => {
+                                setCancellingOrderId(null)
+                                setReason('')
+                              }}
+                              aria-label={`Cancel order ${order.orderNumber}`}
+                              className="m-auto w-[min(92vw,26rem)] rounded-2xl p-4"
+                            >
+                              <h2 className="text-lg font-black text-content">
+                                Cancel order {order.orderNumber}?
+                              </h2>
+                              <label
+                                htmlFor={`cancel-order-reason-${order.id}`}
+                                className="mt-4 block text-sm font-bold text-content"
                               >
-                                Keep order
-                              </Button>
-                              <Button
-                                variant="danger"
-                                size="control"
-                                disabled={!reason.trim()}
-                                onClick={() =>
-                                  void mutate(() => billing.managerCancelOrder(order.id, reason))
-                                }
+                                Cancellation reason
+                              </label>
+                              <div
+                                className="mt-3 grid grid-cols-2 gap-2"
+                                role="group"
+                                aria-label="Common cancellation reasons"
                               >
-                                Cancel order
-                              </Button>
-                            </div>
-                          </Modal>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </section>
-              ),
-          )
+                                {ORDER_CANCELLATION_REASONS.map((candidate) => (
+                                  <Button
+                                    key={candidate}
+                                    variant={reason === candidate ? 'primary' : 'secondary'}
+                                    size="phone"
+                                    aria-pressed={reason === candidate}
+                                    onClick={() => setReason(candidate)}
+                                  >
+                                    {candidate}
+                                  </Button>
+                                ))}
+                              </div>
+                              <Input
+                                id={`cancel-order-reason-${order.id}`}
+                                aria-label={`Cancellation reason for order ${order.orderNumber}`}
+                                className="mt-1"
+                                placeholder="Or type a reason"
+                                value={reason}
+                                onChange={(event) => setReason(event.target.value)}
+                              />
+                              <div className="mt-4 grid grid-cols-2 gap-2">
+                                <Button
+                                  variant="secondary"
+                                  size="control"
+                                  onClick={() => {
+                                    setCancellingOrderId(null)
+                                    setReason('')
+                                  }}
+                                >
+                                  Keep order
+                                </Button>
+                                <Button
+                                  variant="danger"
+                                  size="control"
+                                  disabled={!reason.trim()}
+                                  onClick={() =>
+                                    void mutate(() => billing.managerCancelOrder(order.id, reason))
+                                  }
+                                >
+                                  Cancel order
+                                </Button>
+                              </div>
+                            </Modal>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </section>
+                ),
+            )}
+          </>
         )
       ) : null}
     </section>

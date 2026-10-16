@@ -155,6 +155,57 @@ describeChangeGate('one-revenue', (on) => {
   })
 })
 
+/**
+ * The sale in progress beside Today's revenue (billing-day-at-a-glance, design
+ * D1). It lives on One Revenue's card, so it is read with the gate on; off, the
+ * old card has no such figure to show.
+ */
+describeChangeGate('one-revenue', (on) => {
+  it('shows today’s unpaid open orders beside the headline in exact rupees, or nothing', async () => {
+    const base = createMockAdapters('super_admin')
+    const adapters: DataAdapters = {
+      ...base,
+      overview: {
+        ...base.overview,
+        month: async () => month,
+        today: async () => ({
+          cashPaise: 2_100_000,
+          upiPaise: 1_463_000,
+          deliveryPaise: 0,
+          openPaise: 1_234_000,
+        }),
+      },
+    }
+    renderWith(on, <OutletsOverview />, adapters, 'super_admin')
+    const card = await screen.findByTestId(`outlet-card-${KAL}`)
+    if (on) {
+      expect(await within(card).findByTestId(`sales-${KAL}`)).toHaveTextContent('₹35,630')
+      // Exact, never ₹12.3k, and not part of the revenue figure.
+      expect(within(card).getByTestId(`open-${KAL}`)).toHaveTextContent('· ₹12,340')
+      expect(within(card).getByTestId(`open-${KAL}`)).not.toHaveTextContent('k')
+    } else {
+      await within(card).findByTestId(`sales-${KAL}`)
+      expect(within(card).queryByTestId(`open-${KAL}`)).toBeNull()
+    }
+  })
+
+  it('is absent when nothing is open', async () => {
+    const base = createMockAdapters('super_admin')
+    const adapters: DataAdapters = {
+      ...base,
+      overview: {
+        ...base.overview,
+        month: async () => month,
+        today: async () => ({ cashPaise: 500_000, upiPaise: 0, deliveryPaise: 0, openPaise: 0 }),
+      },
+    }
+    renderWith(on, <OutletsOverview />, adapters, 'super_admin')
+    const card = await screen.findByTestId(`outlet-card-${KAL}`)
+    await within(card).findByTestId(`sales-${KAL}`)
+    expect(within(card).queryByTestId(`open-${KAL}`)).toBeNull()
+  })
+})
+
 it('Today’s revenue opens Billing history for today (owner, 2026-10-16)', async () => {
   const base = createMockAdapters('super_admin')
   renderWith(true, <OutletsOverview />, base, 'super_admin')

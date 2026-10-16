@@ -183,6 +183,14 @@ A kitchen's acknowledgement of a card that is alerting — new, edited or cancel
 
 *(#74, `kitchen-ready`.)* The kitchen's record that it has made food: **Done** is the control on the kitchen's ticket and **Ready** is what the counter sees, the dish row filling orange with the handbell and the order's swinging bell. Append-only and undoable; Ready never ticks anything, and handover at the counter is a tick.
 
+### Avg to ready / Avg handover
+
+*(#78.)* Two of Billing history's Stats, each averaged over one business day's orders. **Avg to ready** runs from the order time to its last live **Ready** across its kitchens, so an order split between two kitchens is ready when the second finishes. **Avg handover** runs from that last Ready to the counter's **Prepared**, the moment the food was handed over. Both leave out orders the day change finished and orders no kitchen marked ready, and read a dash when nothing could be measured.
+
+### Payment undone / Payment changed
+
+*(#78.)* **Payment undone** is a bill the counter voided within its five-minute window to take the payment again, reopening the order (`void_kind = 'counter_unpay'`). **Cancelled after paid** is the counter cancelling the order itself in that window (`cancelled_after_paid`). **Payment changed** is a bill whose tender was corrected afterwards, cash to UPI or back, counted once however many corrections it carries.
+
 ### Ticket
 
 *(#74.)* A kitchen card for the food it still owes on one order. Food added after a Ready arrives as a **later ticket** numbered *#42 · 2*; a Done ticket is kept as a gray **receipt** until its food is ticked at the counter. The counter's rail card is also called a ticket, for its torn edge; the surface says which.

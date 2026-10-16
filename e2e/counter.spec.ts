@@ -1803,9 +1803,10 @@ test.describe('manager billing history', () => {
       expect(cardTops).toHaveLength(4)
       expect(Math.max(...cardTops) - Math.min(...cardTops)).toBeLessThan(1)
 
-      await page.getByRole('tab', { name: /^Status/ }).click()
-      await expect(page.getByRole('heading', { name: 'Tablet sync status' })).toBeVisible()
-      // Status is the sync panel and nothing else now; the figures stay above it.
+      await page.getByRole('tab', { name: /^Stats/ }).click()
+      await expect(page.getByTestId('sync-chip')).toBeVisible()
+      await expect(page.getByTestId('day-stats')).toBeVisible()
+      // Stats is the sync and the day's counts; the money figures stay above it.
       await expect(page.getByRole('heading', { name: 'Payment totals' })).toHaveCount(0)
       await expect(page.getByTestId('billing-total-cash')).toHaveCount(1)
 
@@ -1824,14 +1825,15 @@ test.describe('manager billing history', () => {
       await expect(openOrder).toHaveCount(0)
       await expect(page.getByText(/Nothing was transferred/)).toHaveCount(0)
 
-      await page.getByRole('tab', { name: /^Status/ }).click()
-      await expect(page.getByRole('heading', { name: 'Tablet sync status' })).toBeVisible()
-      await expect(page.getByText(/recent sync problem/i)).toBeVisible()
-      await expect(page.getByText(/Reference [0-9a-f]+/)).toBeHidden()
-      await page.getByText(/Show technical details/).click()
-      await expect(page.getByText(/Short references only/)).toBeVisible()
-      await expect(page.getByText(/Reference [0-9a-f]+/)).toBeVisible()
+      await page.getByRole('tab', { name: /^Stats/ }).click()
+      await expect(page.getByTestId('sync-chip')).toContainText(/sync problem/)
+      // The technical details are gone (billing-day-at-a-glance): no short
+      // references, and still nothing a manager could correct from here.
+      await expect(page.getByText(/Show technical details/)).toHaveCount(0)
+      await expect(page.getByText(/Reference [0-9a-f]+/)).toHaveCount(0)
       await expect(page.getByRole('button', { name: /Correct|Discard/ })).toHaveCount(0)
+      // The day's figures count the order cancelled above.
+      await expect(page.getByTestId('stat-cancelled')).not.toHaveText('0')
     },
   )
 })
