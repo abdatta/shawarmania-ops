@@ -1,6 +1,5 @@
 import { useEffect, useRef, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
 
-import { useChangeGate } from '@/change-gates/context'
 import { useKeypadKeys } from '@/components/ui/use-keypad-keys'
 import { cn } from '@/lib/cn'
 
@@ -19,8 +18,8 @@ interface ModalProps {
   className?: string
   'aria-label'?: string
   /**
-   * Whether a tap on the dimmed space outside the panel closes it, once the
-   * `outside-tap-closes` change gate is on. Yes unless a dialog passes false;
+   * Whether a tap on the dimmed space outside the panel closes it. Yes unless
+   * a dialog passes false;
    * every dialog that takes a `busy` passes `!busy`, so a request in flight is
    * not walked away from by a stray tap.
    */
@@ -69,9 +68,8 @@ function landedOutside(event: PointerEvent<HTMLDialogElement> | MouseEvent<HTMLD
  *
  * **Tapping the backdrop is not the platform's, and used to close nothing.** A
  * modal `<dialog>` takes Escape and focus containment from the top layer; a click
- * on its `::backdrop` is only a click whose target is the dialog. With the
- * `outside-tap-closes` change gate on, a press that starts on the backdrop and a
- * release that ends on it close the dialog through `onClose` — the same call its
+ * on its `::backdrop` is only a click whose target is the dialog. A press that
+ * starts on the backdrop and a release that ends on it close the dialog through `onClose` — the same call its
  * Close button makes, so a dialog that refuses to close while it saves refuses
  * this too, and one that records a decision on close records it. A press that
  * starts inside and ends outside (selecting text past the edge), a tap on the
@@ -90,7 +88,6 @@ export function Modal({
   const ref = useRef<HTMLDialogElement>(null)
   const pressedOutside = useRef(false)
   const openedAt = useRef(0)
-  const outsideTapCloses = useChangeGate('outside-tap-closes') && dismissOnOutsideTap
   useKeypadKeys(ref, open)
 
   useEffect(() => {
@@ -128,7 +125,7 @@ export function Modal({
         'border border-border bg-surface text-content shadow-lg backdrop:bg-content/40',
         className,
       )}
-      {...(outsideTapCloses
+      {...(dismissOnOutsideTap
         ? {
             // The grace is read when the finger comes down, not when it lifts:
             // a press that began in it began on a backdrop that was not there

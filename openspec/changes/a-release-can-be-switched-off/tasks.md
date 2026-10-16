@@ -709,18 +709,37 @@ this change's own first arrival, which carries Promote to `main` (10.2).
   Deploy was running. That case arises when a Deploy runs the full suite, as it does
   after a hotfix lands on `main`.)*
 
-## 11. Retire the probe
+## 11. The probe stays; the retirement path runs on `outside-tap-closes`
 
-The retirement path, run once before any real change needs it.
+The retirement path, run once before any real change needs it. Planned on the
+probe; the owner kept the probe instead (2026-10-16), because by then it was the
+switch the gate system's own tests turn — the demo and authenticated suites, and
+the staging smoke run after every publish — and no product gate can be turned for
+that. The path runs first on `outside-tap-closes`, whose change archived on 15
+October.
 
-- [ ] 11.1 Using the `retire-gate` workflow: remove the probe's toggle point and its
-  tests' tags, move `probe` to `RETIRED_CHANGE_GATES`, release that build.
-- [ ] 11.2 Once every tablet's health report shows a build without the probe for a
-  week, a contract migration (`-- release: contract probe`) setting its
-  `retired_at`. Confirm `lint:migrations` accepts it and would have refused it before
-  11.1.
-- [ ] 11.3 Note in this file what the workflow got wrong or left unsaid, and fix the
-  workflow in both trees.
+- [x] 11.1 The probe is the gate system's own test switch: `selfTest: true` and a
+  `reason` in its declaration, no `retireBy`. In the code only: its row stays a
+  `change` gate, since `lint:migrations` refuses an update of an existing row's
+  `kind`. `lint:change-gates` exempts a self-test gate from the cap of five and
+  from `retireBy`, and fails one that is not a `change` gate, has no reason, has a
+  `retireBy`, depends on another gate, or is read anywhere in `src/` outside its
+  tests (`useChangeGate`, `snapshot[…]`, `bootSnapshot()[…]`, `snapshot.…`).
+  `/next-change` never lists it as due. Proposal, design D11 and D16, the
+  `change-gates` and `project-scaffold` deltas, `docs/RELEASES.md` and
+  `docs/GLOSSARY.md` say so.
+- [ ] 11.2 `retire-outside-tap-closes` through both halves: its code half released,
+  then, once every tablet's health report shows the retirement build for a week,
+  its contract migration (`-- release: contract outside-tap-closes`). Confirm
+  `lint:migrations` accepts it and would have refused it before the key was
+  tombstoned. Tracked in that folder's tasks.
+- [x] 11.3 What the workflow left unsaid, found on `outside-tap-closes`, fixed in
+  both trees: the demo's gate words and history (`src/data-access/mock/change-gates.ts`)
+  lose the key; a requirement naming the gate loses its gate sentence and gate-off
+  scenario through a `MODIFIED` delta, and `docs/` stops calling it gated; a
+  child's contract migration lands before or with its parent's, because the
+  database's dependencies turn a child off with its parent; and the probe is
+  never retired.
 
 ## 12. Phase gate
 

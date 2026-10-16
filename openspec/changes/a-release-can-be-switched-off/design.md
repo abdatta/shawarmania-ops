@@ -681,7 +681,9 @@ fourteen days after it; extending it is a reviewed diff with a reason. At most f
 not count; D21) —
 Hodgson's inventory limit, sized to a team whose
 every change is reviewed by one owner. `ops` gates have no expiry, are rare, and
-each carries its reason in the declaration.
+each carries its reason in the declaration. A **self-test** gate (`selfTest: true`,
+only the probe, D16) has no `retireBy` and does not count toward the cap: it has
+no toggle point, so it doubles nothing a suite must run.
 
 **`/next-change`** lists gates past or within seven days of `retireBy` as work
 due before any new change — the garbage-collection loop the harness-engineering
@@ -899,8 +901,16 @@ staging: one tap is the whole job, and the copy should carry the time too.
 
 - **`probe`** (*PB*): has no toggle point at all. Its code appearing in the build
   code is its whole effect, and proves the whole path on production devices with
-  no product risk. It is then retired by this change's own last section — so the
-  retirement path has run once before a real change needs it.
+  no product risk. It was to be retired by this change's own last section, so the
+  retirement path would run once before a real change needed it. It stays
+  instead (owner, 2026-10-16): by then it was the switch the gate system's own
+  tests turn — the demo and authenticated suites, and the staging smoke run after
+  every publish — and nothing else can be turned for that without changing the
+  product. Its declaration carries `selfTest: true` and a reason, in the code
+  only (the row stays a `change` gate, since a migration may not change a row's
+  kind). Lint exempts a self-test gate from the cap and from `retireBy`, and
+  holds it to changing nothing: no toggle point, no dependency. The retirement
+  path ran first on `outside-tap-closes`.
 - **`tablet-health`**: the instrumented fetch and the reporter run only
   when this was on at boot. The instrumented fetch wraps every request the app
   makes, so a fault in it could hurt the counter; it is gated like any other

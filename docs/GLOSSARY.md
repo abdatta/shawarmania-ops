@@ -410,7 +410,7 @@ The two halves of changing anything a published build uses. **Expand**: add the 
 
 ### Probe
 
-The first change gate, *PB*, whose only effect is its own code in the build code. It proves the path from the owner’s switch to every tablet with nothing at stake, and the change that introduced it also retires it, so the retirement path has run once before a real change needs it.
+The first change gate, *PB*, whose only effect is its own code in the build code. It proves the path from the owner’s switch to every tablet with nothing at stake, and stays for good as the gate system’s own test switch: marked `selfTest`, it has no retirement date and counts toward no limit (owner, 2026-10-16).
 
 ### Rollback ladder
 

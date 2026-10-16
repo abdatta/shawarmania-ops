@@ -3,7 +3,6 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { InstallAppButton } from '@/components/install-app-button'
-import { ChangeGatesForTest, describeChangeGate } from '@/test/change-gates'
 
 import { InstallPromptProvider } from './install-prompt'
 
@@ -221,7 +220,7 @@ describe('PWA install affordance', () => {
     expect(screen.getByRole('button', { name: installName })).toHaveClass('w-[96px]')
   })
 
-  describeChangeGate('outside-tap-closes', (on) => {
+  describe('the iOS hint and a tap outside it', () => {
     const hint =
       'In Safari, tap Share, then Add to Home Screen. Turn on Open as Web App, then tap Add.'
 
@@ -233,30 +232,22 @@ describe('PWA install affordance', () => {
       setNavigatorProperty('platform', 'iPhone')
       setNavigatorProperty('maxTouchPoints', 5)
       render(
-        <ChangeGatesForTest on={{ 'outside-tap-closes': on }}>
-          <InstallPromptProvider>
-            <p data-testid="elsewhere">Elsewhere on the page</p>
-            <InstallAppButton />
-          </InstallPromptProvider>
-        </ChangeGatesForTest>,
+        <InstallPromptProvider>
+          <p data-testid="elsewhere">Elsewhere on the page</p>
+          <InstallAppButton />
+        </InstallPromptProvider>,
       )
       await userEvent.setup().click(screen.getByRole('button', { name: installName }))
       expect(screen.getByText(hint)).toBeInTheDocument()
     }
 
-    it(
-      on
-        ? 'closes the iOS hint when a pointer lands outside it'
-        : 'leaves the iOS hint open when a pointer lands outside it, as before',
-      async () => {
-        await openTheIosHint()
+    it('closes the iOS hint when a pointer lands outside it', async () => {
+      await openTheIosHint()
 
-        fireEvent.pointerDown(screen.getByTestId('elsewhere'))
+      fireEvent.pointerDown(screen.getByTestId('elsewhere'))
 
-        if (on) expect(screen.queryByText(hint)).not.toBeInTheDocument()
-        else expect(screen.getByText(hint)).toBeInTheDocument()
-      },
-    )
+      expect(screen.queryByText(hint)).not.toBeInTheDocument()
+    })
 
     it('keeps the iOS hint open when the pointer lands on its own button or on the hint', async () => {
       await openTheIosHint()

@@ -33,7 +33,9 @@ and task checkboxes as the source of truth.
    first:** every `kind: 'change'` gate in `src/change-gates/gates.ts` whose
    `retireBy` has passed or falls within seven days is work due before any new
    change, so its retirement (the `retire-gate` workflow) is the primary
-   recommendation, with the date. Lint fails fourteen days after it.
+   recommendation, with the date. Lint fails fourteen days after it. A gate
+   marked `selfTest` (the `probe`) has no `retireBy` and is never due: it is
+   the gate system's own test switch.
 6. Read the recommended change's proposal and derive its pre-flight checklist,
    including:
    - First workflow action.

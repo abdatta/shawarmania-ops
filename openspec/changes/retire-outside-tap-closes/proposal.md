@@ -20,6 +20,9 @@ The `retire-gate` workflow, in its two halves:
   lose the gate check. The `dismissOnOutsideTap` prop stays. `outside-tap-closes`
   moves to `RETIRED_CHANGE_GATES`. `@cg-off:outside-tap-closes` tests are deleted,
   and the `@cg-on:` tags are dropped so the rest run in both states.
+- **Spec and docs.** `design-system`'s *A pop-up closes when the space outside it
+  is tapped* loses its gate sentence and its *The gate is off* scenario;
+  `docs/DESIGN_SYSTEM.md` stops calling the behaviour gated.
 - **Database, a week after every tablet runs the retirement build.** A contract
   migration (`-- release: contract outside-tap-closes`) sets the gate's
   `retired_at`. Nothing else in the schema belongs to this gate.

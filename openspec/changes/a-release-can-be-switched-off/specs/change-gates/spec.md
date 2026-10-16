@@ -330,9 +330,9 @@ proved on real devices before anyone depends on it.
 
 The `probe` gate (code *PB*) SHALL have no toggle point: its only effect SHALL be
 its code appearing in the build code while it is on. It SHALL be turned on and off
-in production by the owner, and then retired by its own retirement path — its
-declaration removed, its key kept as a tombstone, and its gate marked retired by a
-contract migration.
+in production by the owner, and then SHALL stay declared as the gate system's own
+test switch, which the browser suites and the staging smoke run turn. It SHALL
+never be retired.
 
 #### Scenario: The probe appears and disappears
 

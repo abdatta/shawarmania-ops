@@ -50,6 +50,9 @@ export const RETIRE_GRACE_DAYS = 14
 const GATE_KEY = /^[a-z][a-z0-9-]*$/
 const GATE_CODE = /^(?=.*[A-Z])[A-Z0-9]{2}$/
 const TAG = /@cg-(on|off|round-trip):([a-z][a-z0-9-]*)/g
+/** `useChangeGate('key')`, `snapshot['key']`, `bootSnapshot()['key']`, `snapshot.key`. */
+const TOGGLE_POINT =
+  /(?:useChangeGate\(\s*|[sS]napshot(?:\(\))?\s*\[\s*)['"]([a-z][a-z0-9-]*)['"]|[sS]napshot(?:\(\))?\.([a-z][a-z0-9]*)\b/g
 
 const failure = (where, what, why, instead) => ({ where, what, why, instead })
 
@@ -184,6 +187,7 @@ export function checkChangeGates({
   unreadable = [],
   unitTests,
   browserTags,
+  togglePoints = new Map(),
   changes,
   today,
 }) {
@@ -337,7 +341,28 @@ export function checkChangeGates({
       }
     }
 
-    if (gate.kind === 'change' && (gate.dependsOn ?? []).length === 0) roots += 1
+    if (gate.kind === 'change' && !gate.selfTest && (gate.dependsOn ?? []).length === 0) roots += 1
+
+    if (gate.selfTest) {
+      const broken = [
+        gate.kind !== 'change' && 'is not a `change` gate',
+        !gate.reason && 'has no `reason`',
+        gate.retireBy !== undefined && 'has a `retireBy`',
+        (gate.dependsOn ?? []).length > 0 && 'depends on another gate',
+        (togglePoints.get(key) ?? []).length > 0 &&
+          `is read by ${togglePoints.get(key).join(', ')}`,
+      ].filter(Boolean)
+      for (const what of broken) {
+        failures.push(
+          failure(
+            at(key),
+            `is a self-test gate that ${what}`,
+            'a self-test gate counts toward no limit and is never retired, which holds only while it changes nothing a suite must run both ways.',
+            'Keep it a `change` gate with a `reason`, no `retireBy`, no dependency and no toggle point — or drop `selfTest` and give it a `retireBy`.',
+          ),
+        )
+      }
+    }
 
     if (gate.kind === 'ops' && !gate.reason) {
       failures.push(
@@ -361,7 +386,7 @@ export function checkChangeGates({
       )
     }
 
-    if (gate.kind === 'change') {
+    if (gate.kind === 'change' && !gate.selfTest) {
       if (
         !/^\d{4}-\d{2}-\d{2}$/.test(gate.retireBy ?? '') ||
         Number.isNaN(Date.parse(gate.retireBy))
@@ -608,6 +633,15 @@ function main() {
       unitTests.set(match[1], [...(unitTests.get(match[1]) ?? []), relative(base, file)])
     }
   }
+  // A toggle point is a read of a gate by the app, outside its tests.
+  const togglePoints = new Map()
+  for (const file of filesUnder(join(base, 'src'), /\.tsx?$/)) {
+    if (/\.test\.tsx?$/.test(file)) continue
+    for (const match of readFileSync(file, 'utf8').matchAll(TOGGLE_POINT)) {
+      const key = match[1] ?? match[2]
+      togglePoints.set(key, [...(togglePoints.get(key) ?? []), relative(base, file)])
+    }
+  }
   const browserTags = []
   for (const dir of ['e2e', 'e2e-auth']) {
     for (const file of filesUnder(join(base, dir), /\.spec\.ts$/)) {
@@ -632,6 +666,7 @@ function main() {
     ...migrations,
     unitTests,
     browserTags,
+    togglePoints,
     changes: new Set([...active, ...archived]),
     today: todayInIndia(),
   })

@@ -48,31 +48,41 @@ export interface ChangeGateDeclaration {
   /**
    * The date (YYYY-MM-DD) by which its retirement change is due. Lint warns from
    * this date and fails fourteen days after it; moving it is a reviewed edit with
-   * a reason.
+   * a reason. Every `change` gate has one, except a self-test gate, which is
+   * never retired.
    */
-  retireBy: string
+  retireBy?: string
   /**
    * How turning it off was proved to strand nothing. `'tested'` when a browser
    * test tagged `@cg-round-trip:<key>` exists; otherwise a sentence starting
    * `none:` saying why there is nothing to strand.
    */
   roundTrip: 'tested' | `none: ${string}`
-  /** For an `ops` gate: why it is permanent. */
+  /**
+   * The gate system's own test switch, kept for good (owner, 2026-10-16). It has
+   * no toggle point and depends on nothing, so it doubles nothing a suite must
+   * run: it counts toward no limit, has no `retireBy`, and `/next-change` never
+   * lists it as due. Declared only here: its row stays a `change` gate.
+   */
+  selfTest?: true
+  /** For an `ops` or a self-test gate: why it is permanent. */
   reason?: string
 }
 
 export const CHANGE_GATES = {
   /**
    * Proves the path end to end with no product risk: its only effect is its own
-   * code appearing in the build stamp (design D16). Retired by this change's own
-   * last section, so the retirement path has run once before a real change
-   * needs it.
+   * code appearing in the build stamp (design D16). The switch the gate system's
+   * own tests turn — the demo and authenticated suites, and the staging smoke
+   * run after every publish — so it stays.
    */
   probe: {
     kind: 'change',
     code: 'PB',
     change: 'a-release-can-be-switched-off',
-    retireBy: '2026-11-30',
+    selfTest: true,
+    reason:
+      'the gate system’s own tests and the staging smoke run turn it to prove a turn reaches every tablet, and no product gate can be turned for that',
     roundTrip: 'none: the probe changes nothing but its code in the build stamp',
   },
   /**
@@ -113,18 +123,6 @@ export const CHANGE_GATES = {
     dependsOn: ['dish-ticks'],
     retireBy: '2026-12-15',
     roundTrip: 'tested',
-  },
-  /**
-   * Tapping the dimmed space outside a pop-up closes it. The shared `Modal`
-   * reads this once, when the page loads, and attaches the handler only while it
-   * is on, so off is the element it rendered before the change.
-   */
-  'outside-tap-closes': {
-    kind: 'change',
-    code: 'OT',
-    change: 'a-popup-closes-when-you-tap-outside-it',
-    retireBy: '2026-12-15',
-    roundTrip: 'none: the gate changes only how a pop-up can be closed and saves nothing',
   },
   /**
    * The counter draws an order, an edit or a payment from the tablet's own
@@ -169,7 +167,10 @@ export const CHANGE_GATE_KEYS = Object.keys(CHANGE_GATES) as ChangeGateKey[]
  * The database enforces the same with rows that are never deleted. Codes are
  * not tombstoned: they are unique among live gates only.
  */
-export const RETIRED_CHANGE_GATES: readonly string[] = []
+export const RETIRED_CHANGE_GATES: readonly string[] = [
+  // retire-outside-tap-closes: a tap outside a pop-up always closes it.
+  'outside-tap-closes',
+]
 
 export function isChangeGateKey(key: string): key is ChangeGateKey {
   return Object.prototype.hasOwnProperty.call(CHANGE_GATES, key)

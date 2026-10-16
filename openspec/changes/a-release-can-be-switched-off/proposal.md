@@ -265,8 +265,11 @@ October. So each rule has one way out, and each way out is loud and recorded:
 
 - This change ships one real gate, **`probe`** (code *PB*), whose only effect is
   its own code appearing in the build code. It is turned on and off in
-  production to prove the path end to end, then retired by the same retirement
-  path every later gate will take.
+  production to prove the path end to end, and then stays as the gate system's
+  own test switch, marked `selfTest`: the demo and authenticated suites and the
+  staging smoke run turn it after every publish, and no product gate can be
+  turned for that (owner, 2026-10-16). It counts toward no limit and is never
+  retired. The retirement path ran first on `outside-tap-closes` instead.
 
 ### The build number
 

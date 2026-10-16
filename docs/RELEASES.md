@@ -102,7 +102,10 @@ by the command and not by a gate ([the worked example](#a-commands-variant-reach
 **Expiry and the cap.** Every `change` gate carries `retireBy`; lint warns from
 that date and fails fourteen days after. At most five `change` gates that depend
 on nothing are declared at once — every live gate doubles what must be tested.
-An `ops` gate is a permanent switch, rare, and its declaration says why.
+An `ops` gate is a permanent switch, rare, and its declaration says why. The
+`probe` is the one **self-test** gate (`selfTest: true`): the switch the gate
+system's own tests turn, with no toggle point, no `retireBy`, and no place in the
+count of five.
 
 ## Migrations only add
 

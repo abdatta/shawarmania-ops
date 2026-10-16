@@ -6,7 +6,6 @@ import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { FormSheet } from '@/components/layout/form-sheet'
 import { Modal } from '@/components/ui/modal'
 import { PaymentDialog } from '@/features/billing/payment-dialog'
-import { ChangeGatesForTest, describeChangeGate } from '@/test/change-gates'
 
 /**
  * A tap on the space outside a pop-up (a-popup-closes-when-you-tap-outside-it).
@@ -50,42 +49,32 @@ function afterTheGrace() {
   now += 500
 }
 
-function renderOpen(
-  on: boolean,
-  props: Partial<ComponentProps<typeof Modal>> & { onClose: () => void },
-) {
+function renderOpen(props: Partial<ComponentProps<typeof Modal>> & { onClose: () => void }) {
   return render(
-    <ChangeGatesForTest on={{ 'outside-tap-closes': on }}>
-      <Modal open aria-label="Probe" className="p-4" {...props}>
-        <label>
-          Name
-          <input />
-        </label>
-        <button type="button">Inside</button>
-      </Modal>
-    </ChangeGatesForTest>,
+    <Modal open aria-label="Probe" className="p-4" {...props}>
+      <label>
+        Name
+        <input />
+      </label>
+      <button type="button">Inside</button>
+    </Modal>,
   )
 }
 
-describeChangeGate('outside-tap-closes', (on) => {
-  it(
-    on
-      ? 'closes through onClose when a tap lands on the backdrop'
-      : 'does nothing when a tap lands on the backdrop, as before',
-    () => {
-      const onClose = vi.fn()
-      renderOpen(on, { onClose })
-      afterTheGrace()
+describe('a tap outside a pop-up', () => {
+  it('closes through onClose when a tap lands on the backdrop', () => {
+    const onClose = vi.fn()
+    renderOpen({ onClose })
+    afterTheGrace()
 
-      tap(screen.getByRole('dialog'), OUTSIDE)
+    tap(screen.getByRole('dialog'), OUTSIDE)
 
-      expect(onClose).toHaveBeenCalledTimes(on ? 1 : 0)
-    },
-  )
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
 
   it('does not close when a tap lands on the dialog’s own padding', () => {
     const onClose = vi.fn()
-    renderOpen(on, { onClose })
+    renderOpen({ onClose })
     afterTheGrace()
 
     tap(screen.getByRole('dialog'), PADDING)
@@ -95,7 +84,7 @@ describeChangeGate('outside-tap-closes', (on) => {
 
   it('does not close when a tap lands on a control inside', () => {
     const onClose = vi.fn()
-    renderOpen(on, { onClose })
+    renderOpen({ onClose })
     afterTheGrace()
 
     tap(screen.getByRole('button', { name: 'Inside' }), OUTSIDE)
@@ -105,7 +94,7 @@ describeChangeGate('outside-tap-closes', (on) => {
 
   it('does not close when a press starts inside and is released outside', () => {
     const onClose = vi.fn()
-    renderOpen(on, { onClose })
+    renderOpen({ onClose })
     afterTheGrace()
 
     // Selecting text in a field and letting go past the edge: the browser
@@ -118,7 +107,7 @@ describeChangeGate('outside-tap-closes', (on) => {
 
   it('does not close on a click that no press on the backdrop began', () => {
     const onClose = vi.fn()
-    renderOpen(on, { onClose })
+    renderOpen({ onClose })
     afterTheGrace()
 
     // A keyboard- or script-initiated click carries no press and often no
@@ -130,7 +119,7 @@ describeChangeGate('outside-tap-closes', (on) => {
 
   it('does not close from the second tap of a double-tap on the button that opened it', () => {
     const onClose = vi.fn()
-    renderOpen(on, { onClose })
+    renderOpen({ onClose })
     now += 120
 
     tap(screen.getByRole('dialog'), OUTSIDE)
@@ -140,7 +129,7 @@ describeChangeGate('outside-tap-closes', (on) => {
 
   it('does not close from a press that began in the grace and was held past it', () => {
     const onClose = vi.fn()
-    renderOpen(on, { onClose })
+    renderOpen({ onClose })
     now += 120
 
     // The finger came down on a backdrop that was not there when it aimed;
@@ -154,17 +143,15 @@ describeChangeGate('outside-tap-closes', (on) => {
 
   it('forgets a press on the backdrop that never became a click when it opens again', () => {
     const onClose = vi.fn()
-    const { rerender } = renderOpen(on, { onClose })
+    const { rerender } = renderOpen({ onClose })
     afterTheGrace()
 
     // A press that turned into a scroll: the browser cancels it and sends no click.
     fireEvent.pointerDown(screen.getByRole('dialog'), OUTSIDE)
     const again = (open: boolean) => (
-      <ChangeGatesForTest on={{ 'outside-tap-closes': on }}>
-        <Modal open={open} aria-label="Probe" className="p-4" onClose={onClose}>
-          <button type="button">Inside</button>
-        </Modal>
-      </ChangeGatesForTest>
+      <Modal open={open} aria-label="Probe" className="p-4" onClose={onClose}>
+        <button type="button">Inside</button>
+      </Modal>
     )
     rerender(again(false))
     rerender(again(true))
@@ -179,7 +166,7 @@ describeChangeGate('outside-tap-closes', (on) => {
 
   it('does not close when the dialog asks not to be dismissed this way', () => {
     const onClose = vi.fn()
-    renderOpen(on, { onClose, dismissOnOutsideTap: false })
+    renderOpen({ onClose, dismissOnOutsideTap: false })
     afterTheGrace()
 
     tap(screen.getByRole('dialog'), OUTSIDE)
@@ -188,7 +175,7 @@ describeChangeGate('outside-tap-closes', (on) => {
   })
 
   it('stays open when onClose declines, as a pop-up that is saving does', () => {
-    renderOpen(on, { onClose: () => undefined })
+    renderOpen({ onClose: () => undefined })
     afterTheGrace()
 
     tap(screen.getByRole('dialog'), OUTSIDE)
@@ -202,36 +189,32 @@ describeChangeGate('outside-tap-closes', (on) => {
     const outer = vi.fn()
     const inner = vi.fn()
     render(
-      <ChangeGatesForTest on={{ 'outside-tap-closes': on }}>
-        <Modal open aria-label="Outer" onClose={outer}>
-          <Modal open aria-label="Inner" onClose={inner}>
-            <button type="button">Deep</button>
-          </Modal>
+      <Modal open aria-label="Outer" onClose={outer}>
+        <Modal open aria-label="Inner" onClose={inner}>
+          <button type="button">Deep</button>
         </Modal>
-      </ChangeGatesForTest>,
+      </Modal>,
     )
     afterTheGrace()
 
     tap(screen.getByRole('dialog', { name: 'Inner' }), OUTSIDE)
 
-    expect(inner).toHaveBeenCalledTimes(on ? 1 : 0)
+    expect(inner).toHaveBeenCalledTimes(1)
     expect(outer).not.toHaveBeenCalled()
   })
 
   describe('a confirmation that is busy', () => {
     function renderConfirm(busy: boolean, onClose: () => void) {
       render(
-        <ChangeGatesForTest on={{ 'outside-tap-closes': on }}>
-          <ConfirmDialog
-            open
-            title="Remove it?"
-            consequence="It goes."
-            confirmLabel="Remove"
-            busy={busy}
-            onConfirm={() => undefined}
-            onClose={onClose}
-          />
-        </ChangeGatesForTest>,
+        <ConfirmDialog
+          open
+          title="Remove it?"
+          consequence="It goes."
+          confirmLabel="Remove"
+          busy={busy}
+          onConfirm={() => undefined}
+          onClose={onClose}
+        />,
       )
       afterTheGrace()
     }
@@ -245,29 +228,22 @@ describeChangeGate('outside-tap-closes', (on) => {
       expect(onClose).not.toHaveBeenCalled()
     })
 
-    it(
-      on
-        ? 'closes on a tap on the backdrop once idle'
-        : 'ignores a tap on the backdrop once idle, as before',
-      () => {
-        const onClose = vi.fn()
-        renderConfirm(false, onClose)
+    it('closes on a tap on the backdrop once idle', () => {
+      const onClose = vi.fn()
+      renderConfirm(false, onClose)
 
-        tap(screen.getByRole('dialog', { name: 'Remove it?' }), OUTSIDE)
+      tap(screen.getByRole('dialog', { name: 'Remove it?' }), OUTSIDE)
 
-        expect(onClose).toHaveBeenCalledTimes(on ? 1 : 0)
-      },
-    )
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('a sheet that is saving', () => {
     function renderSheet(busy: boolean, onClose: () => void) {
       render(
-        <ChangeGatesForTest on={{ 'outside-tap-closes': on }}>
-          <FormSheet open title="Count & Collect" busy={busy} onClose={onClose}>
-            <input aria-label="Counted" />
-          </FormSheet>
-        </ChangeGatesForTest>,
+        <FormSheet open title="Count & Collect" busy={busy} onClose={onClose}>
+          <input aria-label="Counted" />
+        </FormSheet>,
       )
       afterTheGrace()
     }
@@ -281,33 +257,26 @@ describeChangeGate('outside-tap-closes', (on) => {
       expect(onClose).not.toHaveBeenCalled()
     })
 
-    it(
-      on
-        ? 'closes on a tap on the backdrop once idle, as Close does'
-        : 'ignores a tap on the backdrop once idle, as before',
-      () => {
-        const onClose = vi.fn()
-        renderSheet(false, onClose)
+    it('closes on a tap on the backdrop once idle, as Close does', () => {
+      const onClose = vi.fn()
+      renderSheet(false, onClose)
 
-        tap(screen.getByRole('dialog', { name: 'Count & Collect' }), OUTSIDE)
+      tap(screen.getByRole('dialog', { name: 'Count & Collect' }), OUTSIDE)
 
-        expect(onClose).toHaveBeenCalledTimes(on ? 1 : 0)
-      },
-    )
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('the payment dialog', () => {
     function renderPayment(busy: boolean, onClose: () => void) {
       render(
-        <ChangeGatesForTest on={{ 'outside-tap-closes': on }}>
-          <PaymentDialog
-            open
-            totalPaise={25_000}
-            busy={busy}
-            onClose={onClose}
-            onConfirm={() => undefined}
-          />
-        </ChangeGatesForTest>,
+        <PaymentDialog
+          open
+          totalPaise={25_000}
+          busy={busy}
+          onClose={onClose}
+          onConfirm={() => undefined}
+        />,
       )
       afterTheGrace()
     }
@@ -321,34 +290,13 @@ describeChangeGate('outside-tap-closes', (on) => {
       expect(onClose).not.toHaveBeenCalled()
     })
 
-    it(
-      on
-        ? 'closes on a tap on the backdrop while idle, as Back does'
-        : 'ignores a tap on the backdrop while idle, as before',
-      () => {
-        const onClose = vi.fn()
-        renderPayment(false, onClose)
+    it('closes on a tap on the backdrop while idle, as Back does', () => {
+      const onClose = vi.fn()
+      renderPayment(false, onClose)
 
-        tap(screen.getByRole('dialog', { name: 'Record payment' }), OUTSIDE)
+      tap(screen.getByRole('dialog', { name: 'Record payment' }), OUTSIDE)
 
-        expect(onClose).toHaveBeenCalledTimes(on ? 1 : 0)
-      },
-    )
-  })
-})
-
-describe('the dialog with no change-gate provider', () => {
-  it('reads the gate as off, so a pop-up rendered on its own is as it was', () => {
-    const onClose = vi.fn()
-    render(
-      <Modal open aria-label="Alone" onClose={onClose}>
-        <p>Words</p>
-      </Modal>,
-    )
-    afterTheGrace()
-
-    tap(screen.getByRole('dialog'), OUTSIDE)
-
-    expect(onClose).not.toHaveBeenCalled()
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
   })
 })

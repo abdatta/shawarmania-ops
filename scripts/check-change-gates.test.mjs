@@ -213,6 +213,55 @@ describe('retirement is on time', () => {
     )
   })
 
+  it('exempts a self-test gate from the root limit and retireBy, and holds it to changing nothing', () => {
+    const selfTest = (overrides = {}) => ({
+      ...world().declared,
+      'dish-ticks': gate({
+        selfTest: true,
+        reason: 'the gate system’s own tests turn it',
+        retireBy: undefined,
+        ...overrides,
+      }),
+    })
+    const aboutDishTicks = (input) =>
+      checkChangeGates(input).failures.filter((failure) => failure.where.includes('`dish-ticks`'))
+    expect(aboutDishTicks(world({ declared: selfTest(), today: '2027-06-01' }))).toEqual([])
+    expect(checkChangeGates(world({ declared: selfTest(), today: '2027-06-01' })).warnings).toEqual(
+      [],
+    )
+
+    const roots = (count) =>
+      whats(
+        world({
+          declared: {
+            ...selfTest(),
+            ...Object.fromEntries(
+              Array.from({ length: count }, (_, i) => [`g${i}`, gate({ code: `G${i}` })]),
+            ),
+          },
+        }),
+      ).filter((what) => /depend on nothing/.test(what))
+    expect(roots(MAX_ROOT_GATES)).toEqual([])
+
+    expect(whats(world({ declared: selfTest({ reason: undefined }) }))).toContain(
+      'is a self-test gate that has no `reason`',
+    )
+    expect(whats(world({ declared: selfTest({ retireBy: '2026-12-01' }) }))).toContain(
+      'is a self-test gate that has a `retireBy`',
+    )
+    expect(whats(world({ declared: selfTest({ dependsOn: ['kitchen-ready'] }) }))).toContain(
+      'is a self-test gate that depends on another gate',
+    )
+    expect(
+      whats(
+        world({
+          declared: selfTest(),
+          togglePoints: new Map([['dish-ticks', ['src/counter.tsx']]]),
+        }),
+      ),
+    ).toContain('is a self-test gate that is read by src/counter.tsx')
+  })
+
   it('fails a gate whose change has no folder', () => {
     expect(whats(world({ changes: new Set() }))).toContainEqual(
       expect.stringContaining('which has no folder in openspec/changes/'),

@@ -76,13 +76,21 @@ declared; when more than five
 declaration says why with `none:` — no browser test tagged
 `@cg-round-trip:<key>`.
 
-Every declaration SHALL carry a `retireBy` date. Lint SHALL warn from that date and
-SHALL fail fourteen days after it.
+Every declaration SHALL carry a `retireBy` date, except the self-test gate (the
+probe), which is never retired. Lint SHALL warn from that date and SHALL fail
+fourteen days after it. A self-test gate SHALL NOT count toward the limit on gates
+that depend on nothing, and lint SHALL fail one that is read by the app, depends
+on another gate, or has no reason.
 
 #### Scenario: An expired gate fails the build
 
 - **WHEN** a declared gate's `retireBy` passed more than fourteen days ago
 - **THEN** lint fails, naming the gate and the retirement workflow
+
+#### Scenario: The probe never expires
+
+- **WHEN** the probe is declared `selfTest` with a reason and no `retireBy`
+- **THEN** lint passes on any date, and the probe does not count toward the five
 
 #### Scenario: A sixth independent gate is refused
 

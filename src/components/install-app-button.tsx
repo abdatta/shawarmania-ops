@@ -1,7 +1,6 @@
 import { Download } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
-import { useChangeGate } from '@/change-gates/context'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/cn'
 import { usePrefersReducedMotion } from '@/lib/use-prefers-reduced-motion'
@@ -33,19 +32,18 @@ export function InstallAppButton() {
   const prefersReducedMotion = usePrefersReducedMotion()
   const [isLabelExpanded, setIsLabelExpanded] = useState(false)
   const [isIosHintOpen, setIsIosHintOpen] = useState(false)
-  const outsideTapCloses = useChangeGate('outside-tap-closes')
   const buttonRef = useRef<HTMLDivElement>(null)
 
   // The hint is a bubble rather than a pop-up, so it takes the same outside
   // pointer the menus do (`account-menu.tsx`), only while it is open.
   useEffect(() => {
-    if (!outsideTapCloses || !isIosHintOpen) return
+    if (!isIosHintOpen) return
     function onPointerDown(event: PointerEvent) {
       if (!buttonRef.current?.contains(event.target as Node)) setIsIosHintOpen(false)
     }
     document.addEventListener('pointerdown', onPointerDown)
     return () => document.removeEventListener('pointerdown', onPointerDown)
-  }, [outsideTapCloses, isIosHintOpen])
+  }, [isIosHintOpen])
 
   useEffect(() => {
     if (!mode || prefersReducedMotion || hasSeenInstallLabel()) return

@@ -4,7 +4,7 @@ import { expect, test } from './test'
 
 /**
  * A tap on the dimmed space outside a pop-up
- * (a-popup-closes-when-you-tap-outside-it, change gate `outside-tap-closes`).
+ * (a-popup-closes-when-you-tap-outside-it).
  *
  * These use a real mouse on a real backdrop in a real browser, because the
  * claims worth proving are about where the browser reports a click: on the
@@ -39,88 +39,60 @@ async function openAddPerson(page: Page) {
 }
 
 test.describe('tapping outside a pop-up', () => {
-  test(
-    'closes a confirmation without taking its action',
-    { tag: '@cg-on:outside-tap-closes' },
-    async ({ page }) => {
-      const dialog = await openStartAgain(page)
+  test('closes a confirmation without taking its action', async ({ page }) => {
+    const dialog = await openStartAgain(page)
 
-      await page.mouse.click(4, 4)
+    await page.mouse.click(4, 4)
 
-      await expect(dialog).toBeHidden()
-      // Dismissing is not confirming: the demo was not reset, so its banner is
-      // still there to start it again from.
-      await expect(page.getByRole('button', { name: 'Start again' })).toBeVisible()
-    },
-  )
+    await expect(dialog).toBeHidden()
+    // Dismissing is not confirming: the demo was not reset, so its banner is
+    // still there to start it again from.
+    await expect(page.getByRole('button', { name: 'Start again' })).toBeVisible()
+  })
 
-  test(
-    'does nothing with the gate off, as before, and Escape still closes it',
-    { tag: '@cg-off:outside-tap-closes' },
-    async ({ page }) => {
-      const dialog = await openStartAgain(page)
+  test('leaves a confirmation open when the tap lands on its own padding', async ({ page }) => {
+    const dialog = await openStartAgain(page)
+    const box = (await dialog.boundingBox())!
 
-      await page.mouse.click(4, 4)
-      await expect(dialog).toBeVisible()
+    // Half-way down the left edge, inside the border and left of any text:
+    // the browser reports a click here on the dialog, as it does on the backdrop.
+    await page.mouse.click(box.x + 6, box.y + box.height / 2)
 
-      await page.keyboard.press('Escape')
-      await expect(dialog).toBeHidden()
-    },
-  )
+    await expect(dialog).toBeVisible()
+  })
 
-  test(
-    'leaves a confirmation open when the tap lands on its own padding',
-    { tag: '@cg-on:outside-tap-closes' },
-    async ({ page }) => {
-      const dialog = await openStartAgain(page)
-      const box = (await dialog.boundingBox())!
+  test('closes a sheet, and keeps it when a press starts in a field and ends outside', async ({
+    page,
+  }) => {
+    const sheet = await openAddPerson(page)
+    const field = sheet.getByRole('textbox').first()
+    const box = (await field.boundingBox())!
 
-      // Half-way down the left edge, inside the border and left of any text:
-      // the browser reports a click here on the dialog, as it does on the backdrop.
-      await page.mouse.click(box.x + 6, box.y + box.height / 2)
+    // Selecting text and letting go past the edge: the click is reported on
+    // the dialog, outside its rectangle.
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(4, 4, { steps: 6 })
+    await page.mouse.up()
+    await expect(sheet).toBeVisible()
 
-      await expect(dialog).toBeVisible()
-    },
-  )
+    await page.mouse.click(4, 4)
+    await expect(sheet).toBeHidden()
+  })
 
-  test(
-    'closes a sheet, and keeps it when a press starts in a field and ends outside',
-    { tag: '@cg-on:outside-tap-closes' },
-    async ({ page }) => {
-      const sheet = await openAddPerson(page)
-      const field = sheet.getByRole('textbox').first()
-      const box = (await field.boundingBox())!
+  test('closes a phone’s sheet from the strip of screen it leaves uncovered', async ({ page }) => {
+    await page.setViewportSize({ width: 412, height: 915 })
+    const sheet = await openAddPerson(page)
+    const box = (await sheet.boundingBox())!
 
-      // Selecting text and letting go past the edge: the click is reported on
-      // the dialog, outside its rectangle.
-      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-      await page.mouse.down()
-      await page.mouse.move(4, 4, { steps: 6 })
-      await page.mouse.up()
-      await expect(sheet).toBeVisible()
+    // A sheet holds at most 85% of the screen's height and spans its width, so
+    // the only backdrop on a phone is the strip above or below it: aim at the
+    // middle of the bigger one, whichever edge the sheet hangs from.
+    const above = box.y
+    const below = 915 - (box.y + box.height)
+    expect(Math.max(above, below)).toBeGreaterThan(40)
+    await page.mouse.click(206, above > below ? above / 2 : box.y + box.height + below / 2)
 
-      await page.mouse.click(4, 4)
-      await expect(sheet).toBeHidden()
-    },
-  )
-
-  test(
-    'closes a phone’s sheet from the strip of screen it leaves uncovered',
-    { tag: '@cg-on:outside-tap-closes' },
-    async ({ page }) => {
-      await page.setViewportSize({ width: 412, height: 915 })
-      const sheet = await openAddPerson(page)
-      const box = (await sheet.boundingBox())!
-
-      // A sheet holds at most 85% of the screen's height and spans its width, so
-      // the only backdrop on a phone is the strip above or below it: aim at the
-      // middle of the bigger one, whichever edge the sheet hangs from.
-      const above = box.y
-      const below = 915 - (box.y + box.height)
-      expect(Math.max(above, below)).toBeGreaterThan(40)
-      await page.mouse.click(206, above > below ? above / 2 : box.y + box.height + below / 2)
-
-      await expect(sheet).toBeHidden()
-    },
-  )
+    await expect(sheet).toBeHidden()
+  })
 })
