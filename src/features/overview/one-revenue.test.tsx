@@ -149,3 +149,11 @@ describeChangeGate('one-revenue', (on) => {
     }
   })
 })
+
+it('Today’s revenue opens Billing history for today (owner, 2026-10-16)', async () => {
+  const base = createMockAdapters('super_admin')
+  renderWith(true, <OutletsOverview />, base, 'super_admin')
+  const card = await screen.findByTestId(`outlet-card-${KAL}`)
+  const link = await within(card).findByRole('link', { name: /Today's revenue/ })
+  expect(link.getAttribute('href')).toMatch(/\/billing-history\?outlet=/)
+})

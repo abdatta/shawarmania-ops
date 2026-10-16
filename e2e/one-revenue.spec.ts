@@ -33,7 +33,7 @@ test(
 )
 
 test(
-  'Overview today opens the Ledger day, and Month steps a calendar month at a time',
+  'Overview today opens Billing history, and Month steps a calendar month at a time',
   { tag: '@cg-on:one-revenue' },
   async ({ page }) => {
     await page.goto('demo/owner')
@@ -41,8 +41,8 @@ test(
       .getByTestId(`outlet-card-${KAL}`)
       .getByRole('link', { name: /Today's revenue/ })
       .click()
-    await expect(page).toHaveURL(new RegExp(`ledger\\?outlet=${KAL}$`))
-    await expect(page.getByTestId('ledger-revenue')).toBeVisible()
+    await expect(page).toHaveURL(new RegExp(`billing-history\\?outlet=${KAL}$`))
+    await expect(page.getByRole('heading', { name: 'Billing history' })).toBeVisible()
 
     await page.goto(`demo/owner/analytics/sales?outlet=${KAL}`)
     await expect(page.getByRole('button', { name: 'Last 30 days' })).toHaveCount(0)

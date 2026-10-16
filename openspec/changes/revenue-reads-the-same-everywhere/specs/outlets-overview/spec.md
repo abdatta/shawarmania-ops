@@ -50,7 +50,7 @@ Revenue and estimated P&L SHALL cover the current month from its 1st through tod
 
 ### Requirement: Metrics link to the displayed source scope
 
-Today's revenue SHALL link to that outlet's Ledger day view for today; Drawer SHALL link to its Drawer page; revenue and P&L SHALL link to its Ledger in the displayed month view. Demo SHALL use the same layout, calculations and source scope with no real-data writes. Database reads SHALL reject a manager requesting another outlet.
+Today's revenue SHALL link to that outlet's Billing history for today; Drawer SHALL link to its Drawer page; revenue and P&L SHALL link to its Ledger in the displayed month view. Demo SHALL use the same layout, calculations and source scope with no real-data writes. Database reads SHALL reject a manager requesting another outlet.
 
 #### Scenario: Current-month card
 
@@ -60,7 +60,7 @@ Today's revenue SHALL link to that outlet's Ledger day view for today; Drawer SH
 #### Scenario: Today's revenue
 
 - **WHEN** a viewer taps today's revenue
-- **THEN** the Ledger opens that outlet's day view for today, where cash, UPI and each delivery channel are broken down
+- **THEN** Billing history opens that outlet on today
 
 ### Requirement: Compact cards retain legible financial signals
 

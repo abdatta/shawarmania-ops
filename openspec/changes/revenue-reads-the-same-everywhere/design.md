@@ -185,8 +185,11 @@ Cash/UPI split, were both tried and dropped.
 **Tiles.**
 
 - **Today's revenue**: Cash · UPI · Delivery beneath in compact notation; links
-  to the Ledger's day view for today, the one screen that breaks down all three.
-  The day view's billing history stays one tap from the Ledger.
+  to Billing history for today, where *Today's counter sales* always led. This
+  was first built to open the Ledger's day view, the one screen that breaks down
+  all three; the owner, once it was live, called that move unintended and asked
+  for Billing back (2026-10-16). Delivery's breakdown stays one tap away in the
+  Ledger.
 - **{Month} revenue**: the subtext always shows a change: `▲ 5.2% vs 1–15 Sep`.
   The tooltip and accessible name add *to 3:40 pm* when cut. With no sales in the
   earlier window it reads `No sales 1–15 Sep` and the icon stays neutral. The

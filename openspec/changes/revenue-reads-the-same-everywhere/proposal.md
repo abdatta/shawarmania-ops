@@ -64,8 +64,8 @@ place where the figure is broken down.
 **Overview**
 
 - **Today's revenue** (was *Today's counter sales*) adds delivery imported for
-  today to Cash and UPI, with the three named beneath it. It opens the Ledger's
-  day view for today.
+  today to Cash and UPI, with the three named beneath it. It opens Billing
+  history for today, as *Today's counter sales* did (owner, 2026-10-16).
 - **October revenue** includes today and **always** shows its change against the
   same dates last month. Where last month had no sales it says so (*No sales 1–15
   Sep*) instead of hiding the line. The header reads *Month to date*.

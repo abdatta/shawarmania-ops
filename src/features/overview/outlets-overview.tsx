@@ -486,7 +486,7 @@ function OneRevenueCard({ outlet }: { outlet: Tables<'outlets'> }) {
       <div className="grid grid-cols-2 divide-x divide-border">
         <Metric
           label="Today's revenue"
-          to={source('ledger')}
+          to={source('billing-history')}
           loading={sales.value === undefined}
           error={sales.error}
           retry={sales.retry}

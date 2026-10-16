@@ -133,6 +133,10 @@ database object is new.
   add `@cg-on:one-revenue` tests: the three surfaces agree for one outlet and
   month; Overview shows no delivery qualifier with sparse delivery; Month steps
   by calendar month.
+- [x] 5.2a Today's revenue opens Billing history again, as Today's counter
+  sales did: the owner, once the gate was on in production, called the move to
+  the Ledger unintended (2026-10-16). The on path's link, its browser test and
+  a unit test that fails with the Ledger link; design, spec and SCREENS say so.
 - [ ] 5.3 Confirm the counter and kitchen request budget
   (`e2e-auth/request-budget.spec.ts`) is unchanged, with the gate on and off.
 
