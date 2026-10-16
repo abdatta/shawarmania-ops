@@ -328,6 +328,8 @@ This is not a filing-grade financial report and must not be used as one. Specifi
 
 The cash-basis / consumption-basis distinction is real and the UI always states which is shown. See [Data Model](DATA_MODEL.md#two-modelling-traps-in-this-domain).
 
+**With *One revenue* on (#76), three more edges of the estimate are deliberate.** A delivery day whose commission the platform has not stated yet adds no commission, so profit reads high by that amount for up to about a week; the Ledger says how many days are waiting, Overview does not. Weekly platform charges (Swiggy advertising) and tax deducted at source stay outside revenue, expenses and profit, as before. And a comparison is the same **dates**, not the same weekdays: a month to date with one more Saturday than last month's reads slightly up, less so as the month goes on. An outlet compares only with its own history, so a new outlet's first month says *No sales* for the month before.
+
 ### Bills are not complete revenue in v1
 
 Swiggy and Zomato orders are **not rung as bills**. Zomato's revenue and

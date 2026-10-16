@@ -209,10 +209,46 @@ The sum of the **latest accepted effective Cash allocations** of settled bills.
 **The only sales figure that affects the cash drawer.** Revenue uses the order
 business date; UPI, Swiggy and Zomato never move the drawer.
 
-For revenue and reporting, cash sales are grouped by `payment_business_date`. For
-the **drawer**, they are grouped by payment *instant* into a
-[drawer interval](#drawer-interval) rather than by date, because a date cannot
-express 22:00 and the drawer is counted mid-shift.
+For revenue and reporting, cash sales are grouped by the bill's `business_date`,
+the order's day, on every screen that reports them. For the **drawer**, they are
+grouped by payment *instant* into a [drawer interval](#drawer-interval) rather
+than by date, because a date cannot express 22:00 and the drawer is counted
+mid-shift.
+
+### Revenue
+
+**Everything customers paid**: settled counter bills' cash and UPI, after bill
+discounts, plus each delivery channel's sales **before commission**, as the
+platform states them, on the bill's or the channel day's business date. Delivery
+not yet imported counts as nothing. With the *One revenue* change gate on (#76)
+this is what Overview, the Ledger and Analytics → Sales all mean by the word, to
+the paisa; with it off, Overview and the Ledger count delivery after commission.
+A dish's *Dish revenue* on Items is narrower on purpose: its line totals, without
+packaging or whole-bill discounts.
+
+### Delivery commission
+
+What a delivery platform kept on a day: its stated sales less what the outlet
+received, from the day the platform states it. With *One revenue* on it is an
+**expense**, listed under *Delivery commission* on that date, worked out from the
+channel's figures on every read and never typed in or stored as an expense row. A
+day not stated yet adds none and is counted as *waiting*. A charge on a day with
+no orders (a negative receipt) is commission in full.
+
+### Month to date
+
+The 1st of the current month through today's business date, resolved through the
+outlet's cutover by the server's clock: what Overview's month tiles, the Ledger's
+current month and Analytics' **Month** read with *One revenue* on.
+
+### Comparison
+
+The same dates in the earlier period: 1–15 October against 1–15 September, or the
+equal window just before for a 1-day or 7-day range. Where the current period ends
+today, the earlier period's last date counts **only up to the same time of day**,
+so a half-finished today is never set against a whole day; a chart point for an
+earlier date stays that date's whole figure. A month longer than the one before it
+compares with the whole of the shorter one, uncut.
 
 ### Drawer observation
 

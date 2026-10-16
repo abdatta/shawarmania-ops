@@ -50,45 +50,56 @@ test('Overview remembers its last outlet-card loading shape across tabs', async 
   ).toContain(2)
 })
 
-test('day one shows the completed previous month and links to it', async ({ page }) => {
-  await page.clock.setFixedTime(new Date('2026-10-01T12:00:00+05:30'))
-  await page.goto('demo/owner')
-  const card = page.getByTestId(`outlet-card-${KAL}`)
-  await expect(card.getByRole('link', { name: /September revenue/ })).toBeVisible()
-  await expect(card.getByRole('link', { name: /September revenue/ })).toHaveAttribute(
-    'title',
-    'September revenue · Full month',
-  )
-  await card.getByRole('link', { name: /September revenue/ }).click()
-  await expect(page.getByTestId('statement-month-picker')).toHaveAttribute('data-month', '2026-09')
-})
+test(
+  'day one shows the completed previous month and links to it',
+  { tag: '@cg-off:one-revenue' },
+  async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-10-01T12:00:00+05:30'))
+    await page.goto('demo/owner')
+    const card = page.getByTestId(`outlet-card-${KAL}`)
+    await expect(card.getByRole('link', { name: /September revenue/ })).toBeVisible()
+    await expect(card.getByRole('link', { name: /September revenue/ })).toHaveAttribute(
+      'title',
+      'September revenue · Full month',
+    )
+    await card.getByRole('link', { name: /September revenue/ }).click()
+    await expect(page.getByTestId('statement-month-picker')).toHaveAttribute(
+      'data-month',
+      '2026-09',
+    )
+  },
+)
 
-test('Overview links preserve outlet and the displayed month on reload', async ({ page }) => {
-  await page.goto('demo/owner')
-  const card = page.getByTestId(`outlet-card-${KPA}`)
-  await expect(page.getByTestId(`sales-${KPA}`)).toBeVisible()
-  await card.getByRole('link', { name: /Today's counter sales/ }).click()
-  await expect(page).toHaveURL(new RegExp(`billing-history\\?outlet=${KPA}`))
-  await expect(page.getByTestId('manager-bill-list')).toBeVisible()
-  await page.goto('demo/owner')
-  await page.getByTestId(`open-outlet-${KPA}`).click()
-  await expect(page).toHaveURL(new RegExp(`outlets/${KPA}`))
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Shawarmania Kanchrapara')
-  await expect(page.getByTestId('outlet-tablets')).toBeVisible()
-  await page.goto('demo/owner')
-  await page
-    .getByTestId(`outlet-card-${KAL}`)
-    .getByRole('link', { name: /revenue/ })
-    .click()
-  const month = overviewPeriod(resolveBusinessDate(new Date(), '04:00')).month
-  await expect(page).toHaveURL(new RegExp(`ledger\\?outlet=${KAL}&view=month&month=${month}`))
-  await page.reload()
-  await expect(page.getByTestId('statement-month-picker')).toHaveAttribute('data-month', month)
-  await expect(page.getByRole('button', { name: 'The month', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  )
-})
+test(
+  'Overview links preserve outlet and the displayed month on reload',
+  { tag: '@cg-off:one-revenue' },
+  async ({ page }) => {
+    await page.goto('demo/owner')
+    const card = page.getByTestId(`outlet-card-${KPA}`)
+    await expect(page.getByTestId(`sales-${KPA}`)).toBeVisible()
+    await card.getByRole('link', { name: /Today's counter sales/ }).click()
+    await expect(page).toHaveURL(new RegExp(`billing-history\\?outlet=${KPA}`))
+    await expect(page.getByTestId('manager-bill-list')).toBeVisible()
+    await page.goto('demo/owner')
+    await page.getByTestId(`open-outlet-${KPA}`).click()
+    await expect(page).toHaveURL(new RegExp(`outlets/${KPA}`))
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Shawarmania Kanchrapara')
+    await expect(page.getByTestId('outlet-tablets')).toBeVisible()
+    await page.goto('demo/owner')
+    await page
+      .getByTestId(`outlet-card-${KAL}`)
+      .getByRole('link', { name: /revenue/ })
+      .click()
+    const month = overviewPeriod(resolveBusinessDate(new Date(), '04:00')).month
+    await expect(page).toHaveURL(new RegExp(`ledger\\?outlet=${KAL}&view=month&month=${month}`))
+    await page.reload()
+    await expect(page.getByTestId('statement-month-picker')).toHaveAttribute('data-month', month)
+    await expect(page.getByRole('button', { name: 'The month', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  },
+)
 
 test('Overview expected cash agrees with its linked Drawer', async ({ page }) => {
   await page.goto('demo/owner')
