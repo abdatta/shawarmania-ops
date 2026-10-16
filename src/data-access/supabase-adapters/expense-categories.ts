@@ -55,6 +55,15 @@ export function createSupabaseExpenseCategoriesAdapter(
   client: SupabaseClient<Database>,
 ): ExpenseCategoriesAdapter {
   return {
+    async names() {
+      const { data, error } = await client
+        .from('expense_categories')
+        .select('name')
+        .order('name', { ascending: true })
+      if (error) throw categoryError(error)
+      return (data ?? []).map((row) => row.name)
+    },
+
     async list() {
       const { data, error } = await client
         .from('expense_categories')

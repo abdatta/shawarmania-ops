@@ -2127,6 +2127,14 @@ export interface CounterAdapter {
    * silently dead channel cannot leave prices or open work stale all evening.
    */
   subscribeToOutletBilling(outletId: string, onChange: () => void): () => void
+  /**
+   * The same nudges on the same channel, each naming the table that moved, so a
+   * caller can tell a menu edit from a sale (the-app-asks-the-server-less, D4).
+   */
+  subscribeToOutletBillingTables(
+    outletId: string,
+    onChange: (table: OutletBillingTable) => void,
+  ): () => void
   /** The tablet's heartbeat: what it last said about unresolved local work. */
   reportState(unresolved: number, oldestUnresolvedAt: string | null): Promise<void>
 }
@@ -2733,6 +2741,12 @@ export interface ExpenseCategoryMoveResult {
 
 export interface ExpenseCategoriesAdapter {
   list(): Promise<ExpenseCategorySuggestion[]>
+  /**
+   * The names alone, in `list()`'s order, in one request: what a suggestion
+   * list needs, without counting each category's use one request at a time
+   * (the-app-asks-the-server-less, D5).
+   */
+  names(): Promise<string[]>
   rename(from: string, to: string, rewriteHistory: boolean): Promise<ExpenseCategoryMoveResult>
   merge(from: string, into: string): Promise<ExpenseCategoryMoveResult>
   retire(name: string): Promise<void>
@@ -2949,6 +2963,11 @@ export interface ChangeGatesAdapter {
    * from the tablet's own session; a person's session is refused.
    */
   reportHealth(report: DeviceHealthReport): Promise<void>
+  /**
+   * The same report, answered with every live gate's answer, as `read()` gives
+   * it (the-app-asks-the-server-less, D8): one request a minute instead of two.
+   */
+  reportHealthReadingGates(report: DeviceHealthReport): Promise<Record<string, boolean>>
 }
 
 /** What a tablet reports about itself each minute. Counts only. */
@@ -2960,6 +2979,9 @@ export interface DeviceHealthReport {
   failed: number
   slowestMs: number
 }
+
+/** The tables whose changes `subscribeToOutletBilling` reports. */
+export type OutletBillingTable = 'menu_categories' | 'menu_items' | 'orders' | 'bills'
 
 /** The bag of domain adapters a session provider supplies to its tree. */
 export interface DataAdapters {

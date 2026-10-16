@@ -141,6 +141,21 @@ export const CHANGE_GATES = {
     roundTrip:
       'none: the on path persists nothing; it draws the tablet’s own queue and cache sooner, and every save is the same command with the gate on or off',
   },
+  /**
+   * The app skips re-reads it does not need (the-app-asks-the-server-less,
+   * design D1–D8): the kitchen's categories, the counter's menu on every sale,
+   * the expense list's per-category counts, badges on every return to the
+   * foreground, a tablet's separate minute gate read. Off, every screen
+   * re-reads exactly as it did before.
+   */
+  'fewer-requests': {
+    kind: 'change',
+    code: 'FR',
+    change: 'the-app-asks-the-server-less',
+    retireBy: '2027-01-31',
+    roundTrip:
+      'none: the on path changes when the app reads, never what it writes; a v2 health report writes the row a v1 report writes',
+  },
 } as const satisfies Record<string, ChangeGateDeclaration>
 
 export type ChangeGateKey = keyof typeof CHANGE_GATES

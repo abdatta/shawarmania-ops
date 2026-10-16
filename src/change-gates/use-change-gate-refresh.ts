@@ -9,9 +9,14 @@ import { startChangeGateRefresh } from './refresh'
  * mounted (D6). The phone, the counter and the kitchen each run one; the demo
  * does not, because its gates live in the demo's own state.
  */
-export function useChangeGateRefresh(adapter: ChangeGatesAdapter | null | undefined): void {
+export function useChangeGateRefresh(
+  adapter: ChangeGatesAdapter | null | undefined,
+  { minuteRead = true }: { minuteRead?: boolean } = {},
+): void {
   useEffect(() => {
     if (!adapter) return
-    return startChangeGateRefresh(adapter)
-  }, [adapter])
+    // Off its own minute read only when the tablet's health report brings the
+    // answers instead (the-app-asks-the-server-less, D8).
+    return startChangeGateRefresh(adapter, { minuteRead })
+  }, [adapter, minuteRead])
 }

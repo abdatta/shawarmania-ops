@@ -15,7 +15,9 @@
  * this list.
  */
 export const AUTH_SHARDS: readonly (readonly string[])[] = [
-  ['request-budget.spec.ts'],
+  // The two measured-minute specs. `fewer-requests` runs only with gates on, so
+  // the gates-off run of this shard is the request budget alone.
+  ['request-budget.spec.ts', 'fewer-requests.spec.ts'],
   ['billing-served.spec.ts'],
   ['billing-offline.spec.ts', 'kitchen-tablet.spec.ts'],
 ]

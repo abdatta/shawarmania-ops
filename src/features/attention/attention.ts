@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 
+import { useChangeGate } from '@/change-gates/context'
+import { FOREGROUND_REREAD_AFTER_MS, olderThan } from '@/lib/freshness'
+
 /**
  * The attention mechanism: how a surface tells the rest of the app that
  * somebody is waiting on it (spec: attention-badges).
@@ -75,6 +78,8 @@ interface SharedStore {
   value: unknown
   /** True while a read is out, so simultaneous readers make one request. */
   reading: boolean
+  /** When the last read settled with a value (epoch ms); null before one has. */
+  readAt: number | null
   changed: Set<() => void>
 }
 
@@ -88,7 +93,7 @@ const stores = new WeakMap<object, SharedStore>()
 function storeFor(key: object): SharedStore {
   const found = stores.get(key)
   if (found) return found
-  const made: SharedStore = { value: null, reading: false, changed: new Set() }
+  const made: SharedStore = { value: null, reading: false, readAt: null, changed: new Set() }
   stores.set(key, made)
   return made
 }
@@ -116,6 +121,7 @@ function beginRead(key: object, read: () => Promise<unknown>): void {
   void read()
     .then((next) => {
       store.value = next
+      store.readAt = Date.now()
     })
     // A failure leaves the previous value alone: blanking a badge would say the
     // work is done, which is the one wrong thing it can say.
@@ -162,7 +168,14 @@ export function useSharedRead<T>(
     if (storeFor(key).value === null) reread()
   }, [key, reread])
 
-  useOnForeground(reread)
+  // With `fewer-requests` on, a return to the foreground re-reads only a count
+  // older than two minutes: on a laptop that is every switch between browser
+  // tabs (the-app-asks-the-server-less, D6). A nudge still re-reads at once.
+  const fewerRequests = useChangeGate('fewer-requests')
+  const rereadIfStale = useCallback(() => {
+    if (olderThan(storeFor(key).readAt, FOREGROUND_REREAD_AFTER_MS)) reread()
+  }, [key, reread])
+  useOnForeground(fewerRequests ? rereadIfStale : reread)
   useAttentionNudge(reread)
 
   return { value, reread }

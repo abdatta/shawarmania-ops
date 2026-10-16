@@ -19,6 +19,7 @@ import { useOffscreenCards, type Offscreen } from './use-offscreen-cards'
 import { useWakeLock } from './use-wake-lock'
 import { retainReadySlots, useKitchenReady } from './use-kitchen-ready'
 import { useKitchenMasonry } from './use-kitchen-masonry'
+import { kitchenFilterKey } from './kitchen-filter-key'
 
 /**
  * The kitchen tablet's screen with the dish ticks on (each-dish-is-ticked-off,
@@ -48,8 +49,11 @@ export function DishKitchenBoardScreen({ player }: { player?: TunePlayer }) {
   const [categories, setCategories] = useState<KitchenCategory[]>([])
   const [muted, setMuted] = useState(() => audioBlocked())
   useWakeLock()
+  const fewerRequests = useChangeGate('fewer-requests')
+  const filterKey = kitchenFilterKey(board?.filter)
 
   useEffect(() => {
+    if (fewerRequests) return
     let active = true
     void kitchen
       .listCategories()
@@ -60,7 +64,24 @@ export function DishKitchenBoardScreen({ player }: { player?: TunePlayer }) {
     return () => {
       active = false
     }
-  }, [kitchen, board?.filter.mode, board?.filter.categoryIds])
+  }, [kitchen, board?.filter.mode, board?.filter.categoryIds, fewerRequests])
+
+  // With `fewer-requests` on, the names are read when the filter really changes,
+  // not beside every board read: the ids arrive as a new array each time
+  // (the-app-asks-the-server-less, D3).
+  useEffect(() => {
+    if (!fewerRequests || filterKey === null) return
+    let active = true
+    void kitchen
+      .listCategories()
+      .then((rows) => {
+        if (active) setCategories(rows)
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [kitchen, filterKey, fewerRequests])
 
   useEffect(() => {
     const timer = window.setInterval(() => setMuted(audioBlocked()), 2000)

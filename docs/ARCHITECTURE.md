@@ -384,6 +384,35 @@ allocates from a per-outlet counter, so a failed payment, cancelled order or
 exact replay consumes none. Daily order numbers use a separate
 per-outlet/per-business-date counter and restart after cutover.
 
+## How a screen keeps its data fresh
+
+Every request the app makes costs a line in Supabase's API-gateway log, about
+2.8 KB, and on the smallest compute it costs the counter too. On 12 October a
+counter that asked every second froze the database. So a screen re-reads when
+something says its data changed, and not otherwise:
+
+- **On a change notice, not a timer.** A Realtime notice, the screen's own write,
+  its first load. A timer exists only as a backstop for a notice that can be
+  missed (the kitchen board's 20 seconds), and it waits for the last read to
+  finish before it asks again.
+- **Only what the notice names.** A sale is not a menu edit: the counter
+  refreshes its bills and rail for one, its menu for the other.
+- **A burst is one read.** One sale sends two or three notices within a few
+  milliseconds; they are answered by one refresh.
+- **On returning to the foreground, only when stale.** A count read moments ago
+  is still the count; on a laptop, every switch between browser tabs is a return
+  to the foreground.
+
+The numbers live in one place, `src/lib/freshness.ts`: how old a count may be
+before a foreground return re-reads it (two minutes), how old the counter's menu
+may be before a sale reloads it (two minutes, because discounts and outlet
+settings have no notice of their own), what counts as one burst (300 ms), and
+how often a running aggregator sync is checked (three seconds). Its
+`mergeBursts` helper is the one way to answer a burst. The request budget
+([Testing](TESTING.md)) is what holds a screen to all of this. These rules are
+behind the `fewer-requests` change gate until it retires; with it off, each of
+those screens reads as it did before.
+
 ## Offline boundary
 
 Deliberately asymmetric, because the risk is asymmetric:

@@ -6221,6 +6221,17 @@ export type Database = {
         }
         Returns: undefined
       }
+      report_device_health_v2: {
+        Args: {
+          p_booted_gates: string[]
+          p_build: string
+          p_failed: number
+          p_requests: number
+          p_slowest_ms: number
+          p_window_seconds: number
+        }
+        Returns: Json
+      }
       request_counter_shift: {
         Args: {
           p_code_hash: string

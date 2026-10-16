@@ -1395,7 +1395,57 @@ Deliberately minimal at this scale — the useful signals are operational rather
 - **Egress**: the free plan allows 5 GB a month, and a read that over-fetches
   spends it long before the business grows into it. See below for how to find
   out which endpoint is spending it.
+- **Log volume**: see below. From 2027 the Free plan allows 1 GB of log
+  ingestion a month and 100 GB of log reading.
 - Supabase's built-in error and usage dashboards cover the rest.
+
+### Supabase log volume
+
+Two meters on Organization → Usage → **Logs**, both enforced from the start of
+2027. **Log ingestion** is what Supabase writes: 1 GB a month on Free, and going
+over puts a Free project under the Fair Use Policy. **Log query** is what anybody
+reads back — the dashboard, the Management API, an agent — and on Free it is 100
+GB a month; going over gives the *next* month one hour of retention and ten
+queries a minute, and a second month over cuts log access off.
+
+**Where ingestion comes from.** Measured 15 October 2026: about 96% is the API
+gateway, one ~2.8 KB line per request the app makes (about 30,000 a day then).
+Postgres is about 2.5%, almost all of it `pg_cron` announcing its every-minute
+job. Nothing in Supabase's settings trims the gateway line; the only lever is
+fewer requests ([How a screen keeps its data fresh](ARCHITECTURE.md#how-a-screen-keeps-its-data-fresh)).
+The Postgres log settings Supabase's guide points at are all platform defaults
+here and already quiet: `log_statement = ddl`, `log_min_duration_statement = -1`,
+pgAudit off, connections not logged. Leave `log_min_messages` at `warning`: a
+statement timeout (SQLSTATE 57014) is an `ERROR`, and it was the evidence on 12
+October.
+
+**The one Postgres setting worth turning** is `cron.log_statement`, about 2,900
+lines a day. Every run is already in `cron.job_run_details`, kept a week by
+`cron-run-history-keeps-a-week`, longer than Free's one day of logs. It is
+production configuration, not a migration, and the owner's call:
+
+```bash
+npx supabase postgres-config update --config cron.log_statement=off --project-ref iefcidjbfnmsiqithqbj
+```
+
+Undo by setting it back to `on`. It may restart the database, so not while the
+counter trades.
+
+**Measuring it.** One query over a day, grouped by source, says where the volume
+is; group `edge_logs` by `request.path` and `request.headers.cf_connecting_ip`
+to see which device asks for what. That is how the 15 October numbers were read.
+
+**Reading logs within the query allowance.** A query is charged for what it
+scans, which is mostly its time window: on 12 October about eighty incident
+queries, each over 23 hours, scanned 74 GB in a day, three quarters of the month.
+So:
+
+- Pass a narrow window in the request (`iso_timestamp_start`,
+  `iso_timestamp_end`): the incident's half hour, not the day.
+- Filter by `source` in the query and aggregate there; never pull rows to count
+  them afterwards.
+- Do not re-run a wide query to look at it again, and never poll the logs
+  endpoint from a script. Anything continuous belongs in a log drain.
 
 ### Attributing an egress spike
 

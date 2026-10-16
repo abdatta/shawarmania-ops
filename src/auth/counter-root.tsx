@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useGatesOnHealthReport } from '@/change-gates/use-gates-on-report'
 import { useDeviceHealthReport } from '@/change-gates/use-device-health-report'
 import { useChangeGateRefresh } from '@/change-gates/use-change-gate-refresh'
 import { Navigate } from 'react-router'
@@ -46,10 +47,18 @@ export function CounterRoot() {
     }
   }, [counterSession])
 
+  // With `fewer-requests` and Tablet health on, the minute's gate answers come
+  // back on the health report rather than a read of their own
+  // (the-app-asks-the-server-less, D8).
+  const gatesOnReport = useGatesOnHealthReport()
   // This tablet's change-gate answers, kept current (a-release-can-be-switched-off, D6).
-  useChangeGateRefresh(counterSession ? adapters?.changeGates : null)
+  useChangeGateRefresh(counterSession ? adapters?.changeGates : null, {
+    minuteRead: !gatesOnReport,
+  })
   // Its health, each minute, while Tablet health is on (D13).
-  useDeviceHealthReport(counterSession ? adapters?.changeGates : null)
+  useDeviceHealthReport(counterSession ? adapters?.changeGates : null, {
+    carriesGates: gatesOnReport,
+  })
 
   if (state.status === 'loading') return <LoadingShell />
   if (state.status === 'unavailable') return <UnconfirmedSession onRetry={revalidate} />

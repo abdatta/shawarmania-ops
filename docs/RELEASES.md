@@ -239,6 +239,12 @@ timer, which is what the 12 October build did. A change that needs more
 requests raises the budget in its own diff, where a reviewer sees the number
 move.
 
+A change whose purpose is fewer requests proves it with a second, lower budget
+of its own, tagged `@cg-on:<key>`, rather than editing this one: an existing
+test takes only a tag. `e2e-auth/fewer-requests.spec.ts` is the first
+(the-app-asks-the-server-less); it shares this spec's CI shard, and runs only
+with gates on.
+
 ## Tablet health
 
 With the **Tablet health** gate on, each counter and kitchen counts its own
@@ -250,6 +256,12 @@ request. Every gate's page lists every tablet, grouped by outlet: *running* this
 gate's current answer or still *waiting* for a free moment to reload into it,
 *38 requests · 0 failed · slowest 0.4 s · 20 s ago*, or *Silent* after two
 minutes without a report.
+
+With **Fewer requests** on as well, the report also brings back every gate's
+answer, and the tablet stops reading the gates on its own each minute: one
+request a minute where there were two. A turn still reaches a tablet within
+seconds over its live channel, and within the minute at worst; if a report
+fails, the tablet reads the gates directly instead.
 
 The numbers are not about any one gate. For most changes they sit at their
 normal values and say nothing. They matter for the change that does something to

@@ -12,6 +12,21 @@ import type { Database } from '../database.types'
 type Client = SupabaseClient<Database>
 
 /**
+ * `report_device_health_v2`'s answer, `{ key: enabled }`, kept only where both
+ * sides are what a read would give: a string key and a boolean.
+ */
+export function gateAnswers(value: unknown): Record<string, boolean> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new DataActionError('report_failed', 'Could not report tablet health.')
+  }
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).filter(
+      (entry): entry is [string, boolean] => typeof entry[1] === 'boolean',
+    ),
+  )
+}
+
+/**
  * The live change-gate adapter (a-release-can-be-switched-off, tasks 3.1).
  *
  * Every device reads the live gates' own answers; the page it runs on works out
@@ -173,6 +188,19 @@ export function createSupabaseChangeGatesAdapter(client: Client): ChangeGatesAda
         p_slowest_ms: report.slowestMs,
       })
       if (error) throw new DataActionError('report_failed', 'Could not report tablet health.')
+    },
+
+    async reportHealthReadingGates(report) {
+      const { data, error } = await client.rpc('report_device_health_v2', {
+        p_build: report.build,
+        p_booted_gates: report.bootedGates,
+        p_window_seconds: report.windowSeconds,
+        p_requests: report.requests,
+        p_failed: report.failed,
+        p_slowest_ms: report.slowestMs,
+      })
+      if (error) throw new DataActionError('report_failed', 'Could not report tablet health.')
+      return gateAnswers(data)
     },
   }
 }

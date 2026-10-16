@@ -8,6 +8,7 @@ import {
   type CounterShiftRequest,
   type IssuedShiftRequest,
   type LiveCounterShift,
+  type OutletBillingTable,
   type TabletKind,
 } from '../adapters'
 import {
@@ -640,6 +641,13 @@ export function createMockCounterAdapter(
     },
 
     subscribeToOutletBilling(_outletId: string, _onChange: () => void): () => void {
+      return () => {}
+    },
+
+    subscribeToOutletBillingTables(
+      _outletId: string,
+      _onChange: (table: OutletBillingTable) => void,
+    ): () => void {
       return () => {}
     },
 

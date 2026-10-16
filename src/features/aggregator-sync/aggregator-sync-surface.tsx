@@ -12,7 +12,9 @@ import type {
 } from '@/data-access/adapters'
 
 import { attentionChanged } from '@/features/attention/attention'
+import { useChangeGate } from '@/change-gates/context'
 import { cn } from '@/lib/cn'
+import { RUNNING_SYNC_CHECK_MS } from '@/lib/freshness'
 
 import type { AggregatorChannelConfig } from './channel-config'
 import { needsOwner } from './needs-you-count'
@@ -265,6 +267,10 @@ export function AggregatorSyncSurface({
    * sync about a job that had not begun.
    */
   const wasRunning = useRef(false)
+  // A run takes tens of seconds; three seconds between checks is as soon as
+  // anybody notices it finish (the-app-asks-the-server-less, D7).
+  const fewerRequests = useChangeGate('fewer-requests')
+  const runningCheckMs = fewerRequests ? RUNNING_SYNC_CHECK_MS : 700
   useEffect(() => {
     // On the Zomato side a capture-only repair never touches the Zomato run
     // rows, so following the surface means watching EITHER channel's running
@@ -289,9 +295,16 @@ export function AggregatorSyncSurface({
     wasRunning.current = true
     const timer = setInterval(() => {
       void refresh().catch(() => undefined)
-    }, 700)
+    }, runningCheckMs)
     return () => clearInterval(timer)
-  }, [health?.running, hyperpure?.running, refresh, config.showsHyperpure, historyChanged])
+  }, [
+    health?.running,
+    hyperpure?.running,
+    refresh,
+    config.showsHyperpure,
+    historyChanged,
+    runningCheckMs,
+  ])
 
   const act = async (action: () => Promise<void>) => {
     setBusy(true)

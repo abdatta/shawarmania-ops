@@ -51,6 +51,10 @@ export function createMockExpenseCategoriesAdapter(
   }
 
   return {
+    async names() {
+      return [...store.expenseCategories].map((row) => row.name).sort((a, b) => a.localeCompare(b))
+    },
+
     async list() {
       return [...store.expenseCategories]
         .sort((a, b) => a.name.localeCompare(b.name))

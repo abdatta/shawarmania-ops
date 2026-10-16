@@ -13,9 +13,25 @@ import {
 /** The slowest a device learns a turn when nothing nudges it (D6). */
 export const GATE_READ_INTERVAL_MS = 60_000
 
+/**
+ * Answers a device was handed rather than read: a tablet's health report
+ * brings them back with `fewer-requests` on (the-app-asks-the-server-less, D8).
+ */
+const offered = new Set<(answers: SavedAnswers) => void>()
+
+/** Hands every running refresh a fresh set of answers, as if it had read them. */
+export function offerGateAnswers(answers: SavedAnswers): void {
+  for (const listener of [...offered]) listener(answers)
+}
+
 interface Environment {
   /** The page's frozen snapshot, as it booted. */
   booted: GateSnapshot
+  /**
+   * Whether it reads every minute itself. True, as it always has, unless the
+   * minute's answers arrive on the tablet's health report instead (D8).
+   */
+  minuteRead: boolean
   save: (answers: SavedAnswers) => void
   /** The update path: reload at the first free moment (`src/pwa/apply-update.ts`). */
   apply: () => void
@@ -56,6 +72,7 @@ export function startChangeGateRefresh(
 ): () => void {
   const env: Environment = {
     booted: overrides.booted ?? bootSnapshot(),
+    minuteRead: overrides.minuteRead ?? true,
     save: overrides.save ?? ((answers) => writeSavedAnswers(localStorageOrNull(), answers)),
     apply: overrides.apply ?? recordUpdateReady,
     setInterval: overrides.setInterval ?? ((callback, ms) => window.setInterval(callback, ms)),
@@ -74,6 +91,14 @@ export function startChangeGateRefresh(
   const differs = (fresh: GateSnapshot) =>
     CHANGE_GATE_KEYS.some((key) => fresh[key] !== env.booted[key])
 
+  const absorb = (answers: SavedAnswers) => {
+    env.save(answers)
+    if (!raised && differs(snapshotFrom(answers))) {
+      raised = true
+      env.apply()
+    }
+  }
+
   const read = () => {
     if (!running) return
     if (reading) {
@@ -85,11 +110,7 @@ export function startChangeGateRefresh(
       .read()
       .then((answers) => {
         if (!running) return
-        env.save(answers)
-        if (!raised && differs(snapshotFrom(answers))) {
-          raised = true
-          env.apply()
-        }
+        absorb(answers)
       })
       .catch(() => {
         // Keep what the device has; the next trigger tries again.
@@ -114,17 +135,24 @@ export function startChangeGateRefresh(
   }
   env.document?.addEventListener('visibilitychange', onVisible)
   env.window?.addEventListener('online', read)
-  const interval = env.setInterval(() => {
-    if (!env.document || env.document.visibilityState === 'visible') read()
-  }, GATE_READ_INTERVAL_MS)
+  const interval = env.minuteRead
+    ? env.setInterval(() => {
+        if (!env.document || env.document.visibilityState === 'visible') read()
+      }, GATE_READ_INTERVAL_MS)
+    : null
   const first = env.setTimeout(read, 0)
+  const onOffered = (answers: SavedAnswers) => {
+    if (running) absorb(answers)
+  }
+  offered.add(onOffered)
 
   return () => {
     running = false
     unsubscribe()
     env.document?.removeEventListener('visibilitychange', onVisible)
     env.window?.removeEventListener('online', read)
-    env.clearInterval(interval)
+    if (interval !== null) env.clearInterval(interval)
     env.clearTimeout(first)
+    offered.delete(onOffered)
   }
 }

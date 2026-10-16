@@ -64,6 +64,7 @@ import { useOnForeground } from '@/features/attention/attention'
 import { getPartState, isRenderable } from '@/gates/registry'
 import { newUuid } from '@/lib/uuid'
 import { cn } from '@/lib/cn'
+import { MENU_REREAD_ON_SALE_AFTER_MS, mergeBursts, olderThan } from '@/lib/freshness'
 import type { ScrollLink } from '@/lib/scroll-link'
 import { declareUnsavedWork } from '@/pwa/occupancy'
 import { SessionContext } from '@/session/context'
@@ -324,6 +325,7 @@ export function BillingCounter({
    * as it did before.
    */
   const instantSaves = useChangeGate('instant-saves')
+  const fewerRequests = useChangeGate('fewer-requests')
   const kitchenMarks = useKitchenMarks()?.marks
   const [label, setLabel] = useState('')
   const [noteLine, setNoteLine] = useState<BillLineDraft | null>(null)
@@ -414,6 +416,8 @@ export function BillingCounter({
   const outletId = counterOutletId ?? session?.outletId ?? null
   const suspendedDraft = useRef<Restorable | null>(null)
   const hasMenu = useRef(false)
+  /** When the on path last asked for the menu (the-app-asks-the-server-less, D4). */
+  const menuAskedAt = useRef<number | null>(null)
   const workspaceRef = useRef<HTMLDivElement>(null)
   const resize = useRef<{ column: CounterColumn; startX: number; startWidth: number } | null>(null)
 
@@ -548,9 +552,42 @@ export function BillingCounter({
   useOnForeground(refreshVisibleData)
 
   useEffect(() => {
-    if (!outletId) return
+    if (!outletId || fewerRequests) return
     return counter.subscribeToOutletBilling(outletId, refreshVisibleData)
-  }, [counter, outletId, refreshVisibleData])
+  }, [counter, outletId, refreshVisibleData, fewerRequests])
+
+  /*
+    With `fewer-requests` on, the same notices, told apart
+    (the-app-asks-the-server-less, D4). A menu edit reloads the menu. A sale
+    refreshes the bills and the rail once for its burst of notices, and reloads
+    the menu only when it is more than two minutes old: discounts and the
+    outlet's settings have no notice of their own, and a sale is still how they
+    reach a running counter.
+  */
+  useEffect(() => {
+    if (!outletId || !fewerRequests) return
+    const reloadMenu = () => {
+      menuAskedAt.current = Date.now()
+      void refreshMenu()
+    }
+    const menuNotices = mergeBursts(reloadMenu)
+    const saleNotices = mergeBursts(() => {
+      if (olderThan(menuAskedAt.current, MENU_REREAD_ON_SALE_AFTER_MS)) reloadMenu()
+      setBillRefresh((value) => value + 1)
+      setPipelineRefresh((value) => value + 1)
+    })
+    // The first load is under way beside this, from the effect above.
+    menuAskedAt.current ??= Date.now()
+    const stop = counter.subscribeToOutletBillingTables(outletId, (table) => {
+      if (table === 'menu_categories' || table === 'menu_items') menuNotices.notice()
+      else saleNotices.notice()
+    })
+    return () => {
+      stop()
+      menuNotices.cancel()
+      saleNotices.cancel()
+    }
+  }, [counter, outletId, refreshMenu, fewerRequests])
 
   /**
    * Hold off a waiting build while an order is being composed.

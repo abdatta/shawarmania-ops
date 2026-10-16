@@ -16,6 +16,8 @@ import { audioBlocked, unlockAudio } from './tunes'
 import { useKitchenBoard, type KitchenCardView } from './use-kitchen-board'
 import { useOffscreenCards, type Offscreen } from './use-offscreen-cards'
 import { useWakeLock } from './use-wake-lock'
+import { kitchenFilterKey } from './kitchen-filter-key'
+import { useChangeGate } from '@/change-gates/context'
 
 /**
  * The kitchen tablet's whole screen once a kitchen shift is open (#70).
@@ -39,8 +41,11 @@ export function KitchenBoardScreen({ player }: { player?: TunePlayer }) {
   const [categories, setCategories] = useState<KitchenCategory[]>([])
   const [muted, setMuted] = useState(() => audioBlocked())
   useWakeLock()
+  const fewerRequests = useChangeGate('fewer-requests')
+  const filterKey = kitchenFilterKey(board?.filter)
 
   useEffect(() => {
+    if (fewerRequests) return
     let active = true
     void kitchen
       .listCategories()
@@ -51,7 +56,23 @@ export function KitchenBoardScreen({ player }: { player?: TunePlayer }) {
     return () => {
       active = false
     }
-  }, [kitchen, board?.filter.mode, board?.filter.categoryIds])
+  }, [kitchen, board?.filter.mode, board?.filter.categoryIds, fewerRequests])
+
+  // As on the dish board: read when the filter changes, not every board read
+  // (the-app-asks-the-server-less, D3).
+  useEffect(() => {
+    if (!fewerRequests || filterKey === null) return
+    let active = true
+    void kitchen
+      .listCategories()
+      .then((rows) => {
+        if (active) setCategories(rows)
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [kitchen, filterKey, fewerRequests])
 
   useEffect(() => {
     const timer = window.setInterval(() => setMuted(audioBlocked()), 2000)

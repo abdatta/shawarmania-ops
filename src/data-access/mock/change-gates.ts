@@ -90,6 +90,13 @@ const WORDS: Record<
     offMeans:
       'The counter shows an order, an edit or a payment once it has asked the server again, which takes a moment on a slow connection.',
     changeNumber: null,
+  }, // No roadmap row: a runtime efficiency change, named by its folder.
+  'fewer-requests': {
+    title: 'Fewer requests',
+    onMeans:
+      'The app skips re-reads it does not need: menus and categories when nothing changed, badges seconds after the last read, a tablet’s separate gate check.',
+    offMeans: 'Every screen re-reads exactly as it does today.',
+    changeNumber: null,
   },
 }
 
@@ -435,6 +442,10 @@ export function createMockChangeGatesAdapter(
     },
     async reportHealth() {
       // The demo's tablets are fixtures; a demo page reports nothing anywhere.
+    },
+    async reportHealthReadingGates() {
+      // Reports nothing, as above, and answers as a read does.
+      return { ...gates.snapshot() }
     },
   }
 }

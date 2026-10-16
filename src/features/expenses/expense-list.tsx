@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { LoadingList } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { Select } from '@/components/ui/select'
+import { useChangeGate } from '@/change-gates/context'
 import { useAdapters } from '@/data-access'
 import { DataActionError, type ExpenseActor, type ExpenseRecord } from '@/data-access/adapters'
 import { formatBusinessDate, formatDateTime, normalizeCategory, rupeesToPaise } from '@/domain'
@@ -106,6 +107,7 @@ export function ExpenseList({
   onChanged,
 }: ExpenseListProps) {
   const { expenses: adapter, expenseCategories: categoriesAdapter } = useAdapters()
+  const fewerRequests = useChangeGate('fewer-requests')
 
   const [categories, setCategories] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
@@ -118,6 +120,12 @@ export function ExpenseList({
 
   async function loadCategories() {
     try {
+      // The names are all a suggestion needs; `list()` also counts each
+      // category's use, one request per category (the-app-asks-the-server-less, D5).
+      if (fewerRequests) {
+        setCategories(await categoriesAdapter.names())
+        return
+      }
       const list = await categoriesAdapter.list()
       setCategories(list.map((category) => category.name))
     } catch {

@@ -12,6 +12,7 @@ import {
   type CounterShiftRequest,
   type IssuedShiftRequest,
   type LiveCounterShift,
+  type OutletBillingTable,
   type TabletKind,
 } from '../adapters'
 import { failureCode } from '../auth'
@@ -135,7 +136,8 @@ async function failureDetail(error: unknown): Promise<Record<string, unknown> | 
 
 interface SharedChannel {
   channel: RealtimeChannel
-  listeners: Set<() => void>
+  /** Each hears the table that moved; a nudge that ignores it is the same nudge. */
+  listeners: Set<(table: string) => void>
 }
 
 export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): CounterAdapter {
@@ -207,18 +209,20 @@ export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): 
   function subscribe(
     name: string,
     filters: [string, string | undefined][],
-    onChange: () => void,
+    onChange: (table: string) => void,
   ): () => void {
     let shared = channels.get(name)
     if (!shared) {
       const channel = client.channel(name)
-      const listeners = new Set<() => void>()
+      const listeners = new Set<(table: string) => void>()
       for (const [table, filter] of filters) {
         channel.on(
           'postgres_changes',
           { event: '*', schema: 'public', table, ...(filter ? { filter } : {}) },
+          // Each listener hears which table moved; most ignore it
+          // (the-app-asks-the-server-less, D4).
           () => {
-            for (const listener of [...listeners]) listener()
+            for (const listener of [...listeners]) listener(table)
           },
         )
       }
@@ -469,6 +473,23 @@ export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): 
           ['bills', `outlet_id=eq.${outletId}`],
         ],
         onChange,
+      )
+    },
+
+    subscribeToOutletBillingTables(
+      outletId: string,
+      onChange: (table: OutletBillingTable) => void,
+    ): () => void {
+      // The topic and filters above, so both readers share one channel.
+      return subscribe(
+        `counter-billing-${outletId}`,
+        [
+          ['menu_categories', `outlet_id=eq.${outletId}`],
+          ['menu_items', `outlet_id=eq.${outletId}`],
+          ['orders', `outlet_id=eq.${outletId}`],
+          ['bills', `outlet_id=eq.${outletId}`],
+        ],
+        (table) => onChange(table as OutletBillingTable),
       )
     },
 
