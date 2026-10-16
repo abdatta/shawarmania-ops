@@ -1806,9 +1806,9 @@ export type Database = {
         Row: {
           attribution_shift_ended_at: string | null
           bill_number: number
-          biller_profile_id: string
+          biller_profile_id: string | null
           business_date: string
-          counter_device_id: string
+          counter_device_id: string | null
           counter_shift_id: string | null
           created_at: string
           customer_id: string | null
@@ -1816,6 +1816,10 @@ export type Database = {
           customer_phone: string | null
           customer_tier: Database["public"]["Enums"]["customer_tier"] | null
           discount_paise: number
+          entered_at: string | null
+          entered_by: string | null
+          entry_payload_hash: string | null
+          entry_source: string
           id: string
           order_id: string | null
           ordered_at: string
@@ -1842,9 +1846,9 @@ export type Database = {
         Insert: {
           attribution_shift_ended_at?: string | null
           bill_number?: number
-          biller_profile_id: string
+          biller_profile_id?: string | null
           business_date: string
-          counter_device_id: string
+          counter_device_id?: string | null
           counter_shift_id?: string | null
           created_at?: string
           customer_id?: string | null
@@ -1852,6 +1856,10 @@ export type Database = {
           customer_phone?: string | null
           customer_tier?: Database["public"]["Enums"]["customer_tier"] | null
           discount_paise?: number
+          entered_at?: string | null
+          entered_by?: string | null
+          entry_payload_hash?: string | null
+          entry_source?: string
           id: string
           order_id?: string | null
           ordered_at?: string
@@ -1878,9 +1886,9 @@ export type Database = {
         Update: {
           attribution_shift_ended_at?: string | null
           bill_number?: number
-          biller_profile_id?: string
+          biller_profile_id?: string | null
           business_date?: string
-          counter_device_id?: string
+          counter_device_id?: string | null
           counter_shift_id?: string | null
           created_at?: string
           customer_id?: string | null
@@ -1888,6 +1896,10 @@ export type Database = {
           customer_phone?: string | null
           customer_tier?: Database["public"]["Enums"]["customer_tier"] | null
           discount_paise?: number
+          entered_at?: string | null
+          entered_by?: string | null
+          entry_payload_hash?: string | null
+          entry_source?: string
           id?: string
           order_id?: string | null
           ordered_at?: string
@@ -1938,6 +1950,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bills_entered_by_fkey"
+            columns: ["entered_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -6157,6 +6176,10 @@ export type Database = {
       record_invite_failure: {
         Args: { p_ip_hash: string; p_window?: string }
         Returns: undefined
+      }
+      record_paper_bill: {
+        Args: { p_bill_id: string; p_outlet_id: string; p_payload: Json }
+        Returns: Json
       }
       redeem_account_invite: {
         Args: { p_code_hash: string; p_ip_hash?: string; p_username: string }
