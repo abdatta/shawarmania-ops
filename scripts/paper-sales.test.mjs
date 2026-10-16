@@ -114,20 +114,20 @@ describe('paper-sales: planning bills', () => {
     })
   })
 
-  it('takes a stated price, a free dish, a bill discount, both tenders and a customer', () => {
+  it('takes a stated price, a free dish at ₹1, a bill discount, both tenders and a customer', () => {
     const [order] = plan([
-      'd1-02,kalyani,2026-10-19,20:05,Classic Chicken Shawarma*1@120;Classic Chicken Shawarma*1@120 free,50,50,20,98300 12345,Puja Visitor',
+      'd1-02,kalyani,2026-10-19,20:05,Classic Chicken Shawarma*1@120;Classic Chicken Shawarma*1 free,51,50,20,98300 12345,Puja Visitor',
     ])
-    expect(order).toMatchObject({ ok: true, totalPaise: 10_000, discountPaise: 14_000 })
+    expect(order).toMatchObject({ ok: true, totalPaise: 10_100, discountPaise: 2_000 })
     expect(order.payload).toEqual({
       businessDate: '2026-10-19',
       orderedAt: '2026-10-19T20:05:00+05:30',
       lines: [
         { menuItemId: 'classic', quantity: 1, unitPricePaise: 12_000 },
-        { menuItemId: 'classic', quantity: 1, unitPricePaise: 12_000, discountPaise: 12_000 },
+        { menuItemId: 'classic', quantity: 1, unitPricePaise: 100 },
       ],
       payments: [
-        { method: 'cash', amountPaise: 5_000 },
+        { method: 'cash', amountPaise: 5_100 },
         { method: 'upi', amountPaise: 5_000 },
       ],
       discountPaise: 2_000,
@@ -136,11 +136,20 @@ describe('paper-sales: planning bills', () => {
     })
   })
 
+  it('records an order given away entirely at ₹1 a dish, as the counter does', () => {
+    const [order] = plan(['d1-08,kalyani,2026-10-19,21:00,Classic Chicken Shawarma*2 free,2,,,,'])
+    expect(order).toMatchObject({ ok: true, totalPaise: 200, items: 2 })
+    expect(order.payload.lines).toEqual([
+      { menuItemId: 'classic', quantity: 2, unitPricePaise: 100 },
+    ])
+    expect(() => parseItems('Classic Chicken Shawarma*1@50 free')).toThrow('both priced and free')
+  })
+
   it('says why a row cannot be recorded, without stopping the others', () => {
     const plans = plan([
       'd1-03,kalyani,2026-10-19,19:40,Classic Chicken Shawarma*2,100,,,,',
       'd1-04,kalyani,2026-10-19,19:41,Falafel*1,100,,,,',
-      'd1-05,kalyani,2026-10-19,19:42,Classic Chicken Shawarma*1 free,,,,,',
+      'd1-05,kalyani,2026-10-19,19:42,Classic Chicken Shawarma*1,,,139,,',
       'd1-03,kalyani,2026-10-19,19:43,Classic Chicken Shawarma*1,139,,,,',
       'd1-06,kalyanee,2026-10-19,19:44,Classic Chicken Shawarma*1,139,,,,',
       'd1-07,kalyani,2026-10-19,19:45,Classic Chicken Shawarma*1,139,,,,',
@@ -148,7 +157,7 @@ describe('paper-sales: planning bills', () => {
     expect(plans.map((p) => (p.ok ? 'ok' : p.error))).toEqual([
       'Cash ₹100 and UPI ₹0 make ₹100, but the order comes to ₹278.',
       '"Falafel" is not on kalyani\'s menu.',
-      'It comes to nothing. An order given away entirely cannot be a bill.',
+      'The discount leaves nothing. A bill comes to at least ₹1; mark free dishes free.',
       'order_key "d1-03" appears twice.',
       'No outlet has the code "kalyanee".',
       'ok',

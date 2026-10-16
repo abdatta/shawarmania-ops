@@ -34,7 +34,8 @@
  *                  calendar date is the next day and the script works that out
  *   items          dishes separated by `;`, each `Name*quantity`, optionally
  *                  `@price` in rupees when it differs from today's menu, and
- *                  ` free` when it was given away: `Classic Chicken Shawarma*2;
+ *                  ` free` when it was given away, which bills it at ₹1 each, as
+ *                  the counter does: `Classic Chicken Shawarma*2;
  *                  Mayonnaise Chicken Shawarma*1@150; Classic Chicken Shawarma*1 free`
  *   cash, upi      rupees taken in each; blank is nothing
  *   discount       optional, rupees off the whole bill
@@ -51,6 +52,13 @@ export const PRODUCTION_REF = 'iefcidjbfnmsiqithqbj'
 
 /** Bill ids are UUIDv5 under this namespace, from `<outlet id>:<order key>`. */
 export const PAPER_BILL_NAMESPACE = '6f9b2f3e-77a1-4c5e-9d0b-0a5e7b2c7701'
+
+/**
+ * A dish given away is billed at ₹1, the way the counter already records one
+ * (owner, 2026-10-16): it stays a sale, every bill comes to at least ₹1, and an
+ * order given away entirely is still a bill.
+ */
+export const FREE_DISH_PAISE = 100
 
 // ── Parsing ────────────────────────────────────────────────────────────────
 
@@ -123,6 +131,9 @@ export function parseItems(text) {
     }
     const quantity = Number(match[2])
     if (quantity < 1) throw new Error(`"${part}" has no quantity.`)
+    if (match[3] !== undefined && match[4]) {
+      throw new Error(`"${part}" is both priced and free; a free dish is ₹1.`)
+    }
     return {
       name: match[1].trim(),
       quantity,
@@ -191,30 +202,30 @@ export function planOrders(records, outlets, menus) {
 
       const menu = menus.get(outlet.id) ?? []
       let subtotal = 0
-      let lineDiscounts = 0
       let items = 0
       const lines = parseItems(record.items).map((item) => {
         const matches = menu.filter((m) => m.name.toLowerCase() === item.name.toLowerCase())
         if (matches.length === 0) throw new Error(`"${item.name}" is not on ${outlet.code}'s menu.`)
         if (matches.length > 1) throw new Error(`"${item.name}" names two dishes on the menu.`)
         const dish = matches[0]
-        const price = item.pricePaise ?? dish.price_paise
+        const price = item.free ? FREE_DISH_PAISE : (item.pricePaise ?? dish.price_paise)
         if (price < 1) throw new Error(`"${item.name}" needs a price; mark it free instead.`)
-        const total = price * item.quantity
-        subtotal += total
+        subtotal += price * item.quantity
         items += item.quantity
-        if (item.free) lineDiscounts += total
         return {
           menuItemId: dish.id,
           quantity: item.quantity,
-          ...(item.pricePaise === null ? {} : { unitPricePaise: price }),
-          ...(item.free ? { discountPaise: total } : {}),
+          ...(price === dish.price_paise && item.pricePaise === null
+            ? {}
+            : { unitPricePaise: price }),
         }
       })
       const billDiscount = rupeesToPaise(record.discount, 'discount')
-      const raw = subtotal - lineDiscounts - billDiscount
+      const raw = subtotal - billDiscount
       if (raw < 1) {
-        throw new Error('It comes to nothing. An order given away entirely cannot be a bill.')
+        throw new Error(
+          'The discount leaves nothing. A bill comes to at least ₹1; mark free dishes free.',
+        )
       }
       const totalPaise = raw + ((100 - (raw % 100)) % 100)
       const cash = rupeesToPaise(record.cash, 'cash')
@@ -247,7 +258,7 @@ export function planOrders(records, outlets, menus) {
         items,
         cashPaise: cash,
         upiPaise: upi,
-        discountPaise: lineDiscounts + billDiscount,
+        discountPaise: billDiscount,
         totalPaise,
       }
     } catch (error) {

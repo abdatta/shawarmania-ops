@@ -794,13 +794,13 @@ the columns, in any order:
 | `outlet` | The outlet's short code, as on its Outlets page. |
 | `business_date` | `YYYY-MM-DD`, the trading day the order belongs to. |
 | `time` | `HH:MM` Kolkata. Required: the sheet's time, the UPI app's for a UPI order, otherwise a best guess. After midnight and before the cutover, the script puts it on the next calendar date itself. |
-| `items` | `Dish*quantity`, `;` between dishes. `@price` in rupees where the price charged differs from today's menu; ` free` for a dish given away inside a paid order: `Classic Chicken Shawarma*2; Classic Chicken Shawarma*1 free`. |
+| `items` | `Dish*quantity`, `;` between dishes. `@price` in rupees where the price charged differs from today's menu; ` free` for a dish given away, which bills it at ₹1 each, as the counter already does: `Classic Chicken Shawarma*2; Classic Chicken Shawarma*1 free`. |
 | `cash`, `upi` | Rupees taken in each; blank is nothing. They must add up to the order. |
 | `discount` | Optional rupees off the whole order. |
 | `phone`, `name` | Optional. A phone links the customer and earns points at that outlet; no SMS is sent. |
 
-An order given away entirely cannot be a bill (every bill is at least ₹1, as at
-the counter), so leave it out and note it.
+An order given away entirely is still a bill: mark its dishes ` free` and take
+₹1 a dish in cash, as the counter does (every bill comes to at least ₹1).
 
 **Keep the sign-in in an untracked env file**, never the service-role key:
 

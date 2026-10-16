@@ -134,11 +134,13 @@ a failure stops at one order rather than rolling back a day.
   arithmetic. The total rounds up to the rupee as at the counter. A bill discount
   is a flat amount with `source = 'biller'`; the counter's discounts carry no
   reason column, so neither does a paper bill's (Q7's "with its reason" has
-  nowhere to live). A dish given free inside a paid order is a whole-line
-  discount, stored with `discount_percent_bp = 10000`, the waiver shape the
-  counter already reads. **An order given away entirely cannot be a bill**:
+  nowhere to live). **A dish given free is billed at ₹1** (owner, 2026-10-16:
+  "that's something we already do today"): the script's ` free` states a ₹1
+  price, so a wholly free order is still a bill, of ₹1 a dish.
   `bills_total_whole_rupees` and the payment guard require at least ₹1 and one
-  payment, as at the counter, and loosening that is not this change's to do.
+  payment, as at the counter, and stay as they are. The function still accepts
+  a whole-line discount, stored with `discount_percent_bp = 10000`, for a raw
+  call that wants one; the script no longer sends it.
 - **Line items snapshot name and unit price** from the outlet's menu item named
   in the payload. The unit price defaults to the menu's current price and may be
   stated, because a sheet entered a week later may predate a price change; the

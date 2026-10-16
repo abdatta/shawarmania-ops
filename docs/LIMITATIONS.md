@@ -278,9 +278,9 @@ A sale written on paper carries the time the person entering it gave, usually
 read off the sheet or the UPI app, sometimes a best guess. The database checks
 that it falls inside the stated business day and no more. Analytics' by-hour
 charts and the drawer's intervals place a paper bill at that time; only the
-**Paper** mark in Billing history says it was not rung at a counter. An order
-given away entirely cannot be a paper bill, any more than a counter bill: every
-bill comes to at least ₹1. A paper bill earns points under the outlet's rules as
+**Paper** mark in Billing history says it was not rung at a counter. A dish
+given away is billed at ₹1, as the counter already does, because every bill
+comes to at least ₹1. A paper bill earns points under the outlet's rules as
 they stand when it is entered, not as they stood on the day of the sale.
 
 ## Deliberately deferred from v1

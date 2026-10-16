@@ -50,10 +50,10 @@ anonymous caller. No client role SHALL be able to insert a paper bill directly.
 A paper bill SHALL carry one or more lines naming dishes on its outlet's menu,
 each snapshotting the dish name and the unit price charged, the price defaulting
 to the menu's current price and stateable; cash and UPI payments summing to its
-total; and any discount, as a flat amount off the bill or as a dish given away
-within the order. Totals SHALL be integer paise, SHALL round up to the rupee and
+total; and any discount, as a flat amount off the bill or off a line. A dish
+given away SHALL be entered at ₹1, as the counter records one. Totals SHALL be integer paise, SHALL round up to the rupee and
 SHALL pass the same validation a counter bill's do; a bill SHALL come to at least
-₹1, so an order given away entirely SHALL be refused, as at the counter. The bill
+₹1, so a bill whose discounts leave nothing SHALL be refused, as at the counter. The bill
 SHALL carry a stated time, which SHALL resolve through the outlet's cutover to
 its stated business date, and that date SHALL be on or before the outlet's current
 business date. An outlet marked closed SHALL accept paper bills for days it
@@ -77,16 +77,22 @@ traded.
   business date
 - **THEN** the database refuses it
 
-#### Scenario: A dish given free inside a paid order
+#### Scenario: A dish given free
 
 - **WHEN** a written order of two dishes, one of them given away, is recorded
   with the free dish marked free
-- **THEN** the bill records both dishes, the free one as a whole-line waiver, and
-  its total is the paid dish's
+- **THEN** the bill records both dishes, the free one at ₹1, and its total is the
+  paid dish's plus ₹1
 
 #### Scenario: An order given away entirely
 
-- **WHEN** a written order whose every dish was given away is recorded
+- **WHEN** a written order whose every dish was given away is recorded with its
+  dishes marked free
+- **THEN** it is recorded as a bill of ₹1 a dish
+
+#### Scenario: Discounts that leave nothing
+
+- **WHEN** a paper bill's discounts take its total to nothing
 - **THEN** the database refuses it and records nothing
 
 ### Requirement: Recording the same written order twice records it once

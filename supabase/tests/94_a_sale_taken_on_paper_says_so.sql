@@ -161,7 +161,7 @@ select throws_ok($$ select public.record_paper_bill(gen_random_uuid(), (select k
 select throws_ok($$ select public.record_paper_bill(gen_random_uuid(), (select kal from fx),
   pg_temp.paper(jsonb_build_array(jsonb_build_object('menuItemId', (select shawarma from fx), 'quantity', 1,
       'discountPaise', (select price from fx))),
-    '[]'::jsonb)) $$, '22023', null, 'an order given away entirely cannot be a bill');
+    '[]'::jsonb)) $$, '22023', null, 'a bill whose discounts leave nothing is refused');
 select throws_ok($$ select public.record_paper_bill(gen_random_uuid(), (select kal from fx),
   pg_temp.two_shawarmas_cash() || '{"discounts": []}'::jsonb) $$, '22023', null,
   'a field a paper bill does not take is refused');

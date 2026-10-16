@@ -104,12 +104,23 @@ whether any of it is safe to use in production.
 
 ## 6. Verify and release
 
-- [ ] 6.1 `npm run format`, then lint, `format:check`, both typechecks,
+- [x] 6.1 `npm run format`, then lint, `format:check`, both typechecks,
       `npm test`, `contrast`, `build`; the database job through the types diff.
 - [ ] 6.2 Push to `stage`; read the Staging run for the browser suites. On
       staging, record a fake outlet's paper day with the script, read it on
       Overview, the Ledger, Analytics, the drawer and Billing history, and undo
-      it.
+      it. *(2026-10-16: Staging run 38876172966 green after one rerun of a job
+      that failed pulling Docker images. Rehearsed on Cafe Staging as
+      `staging.manager` with 42 written orders over 14–15 Oct, including free
+      dishes at ₹1, an order given away entirely, a split tender, after-midnight
+      times, a stated price, a discount and a phone: the dry run read ₹7,178 and
+      ₹6,953; `--commit` wrote 42 bills; a rerun wrote nothing; read back, none
+      names a tablet, biller or shift, all name the manager, the phone's receipt
+      is skipped, and each day's Ledger takings include them; `--target
+      production` against staging's URL is refused; the undo voided 42 and a
+      second undo none. Still to do: the owner looks at the cancelled Paper
+      bills in staging's Billing history, since signing in to a web page is
+      theirs.)*
 - [ ] 6.3 Owner Promote. Before the first production entry, confirm every
       device the owner uses runs the promoted build (1.2's display reads).
 - [ ] 6.4 PHASE GATE (#77, Wave F): the owner runs the script against a file of
