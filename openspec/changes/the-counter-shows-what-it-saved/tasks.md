@@ -138,6 +138,13 @@ method nothing off-path calls.
   devtools throttling, and the demo asks no network, so it looks the same either
   way. The held-route browser spec (6.1) did this on the real local stack with
   every gate on. The owner's throttled try on *Cafe Staging* (9.1) is the look.
+  *2026-10-15, a machine try that needs reading before this closes:* a scratch
+  auth-suite test (not committed) throttled the whole connection through CDP, 1.5 s
+  latency and 100/50 kbit/s, rather than holding only the `orders` and `bills`
+  reads as `instant-saves.spec.ts` does. In both themes the new order's card was
+  **not** on the rail within one second of Order (`saveNewOrder` timed out). Not yet
+  told apart: whether the save waits on the command's own round trip under latency,
+  or the scratch test's set-up. Find out before this archives.
 
 ## 7. Docs
 

@@ -160,12 +160,17 @@ One migration, dated after the newest, declaring `-- change-gate: dish-ticks`.
 - [x] 7.3 Land the change as three to five commits; with the owner's go-ahead, push
   `HEAD:stage`, fast-forward only; Staging green.
 - [x] 7.4 `npm run test:e2e:staging` against the published staging site.
-- [ ] 7.5 **Owner:** on *Cafe Staging*, turn `dish-ticks` on, then `kitchen-ready`;
+- [x] 7.5 **Owner:** on *Cafe Staging*, turn `dish-ticks` on, then `kitchen-ready`;
   run a service with the laptop as the counter and the phone as the kitchen; hear
   the handbell; turn each off and on once.
   *(Half done, read from staging 2026-10-15: the owner turned `dish-ticks` on at
   15:08:38 IST on 14 October and `kitchen-ready` eight seconds later. Neither has
   been turned off there since, so the off-and-on is still open.)*
+  *(Pulled on staging 2026-10-15 by Claude from the owner's signed-in session, at the
+  owner's request: `dish-ticks` off at 22:22:15 IST, taking `kitchen-ready` and
+  `instant-saves` with it; the *Brave Counter* followed in 7 s. All three back on by
+  22:23:31; it followed in 44 s, at its next free moment. The service and the
+  handbell were heard in production instead, through two real services (8.2–8.4).)*
 
 ## 8. Release
 
@@ -184,14 +189,17 @@ One migration, dated after the newest, declaring `-- change-gate: dish-ticks`.
 - [x] 8.3 `/release kitchen-ready` the same way.
   *(As 8.2: on at 16:41:04 IST on 14 October, 40 kitchen Readies that service; off
   with `dish-ticks` at 09:23 on 15 October and on again at 11:47.)*
-- [ ] 8.4 Real use; then archive, which refuses until the history shows each pull.
+- [x] 8.4 Real use; then archive, which refuses until the history shows each pull.
   *(Both pulls are in the history now. The service on 14 October ran build `5e2e872`.
   The build carrying `d1704ae3`'s follow-ups has not traded yet, so real use of the
   final build is the next service.)*
+  *(That service ran on 15 October on `da92417`, the final build: by 20:00 IST, 35
+  bills, 81 dish ticks and 31 kitchen Readies, no failed request from either tablet
+  and no 5xx from the server. Archived that evening on the owner's word.)*
 
 ## 9. Phase gate
 
-- [ ] 9.1 **PHASE GATE.** Roadmap #74's checkpoint — the owner approved the
+- [x] 9.1 **PHASE GATE.** Roadmap #74's checkpoint — the owner approved the
   counter's new layout, the label, the dish ticks and the notes from demo
   screenshots, and the Ready fill and handbell from an audition, before any of it
   was relaunched; the counter is the menu and a two-column order rail, with the
@@ -213,3 +221,10 @@ One migration, dated after the newest, declaring `-- change-gate: dish-ticks`.
   and kitchen as they were, with nothing it saved stranded; the counter and kitchen
   stay inside #75's request budget with both gates on; and the four-role demo
   walkthrough still walks, with a kitchen tab's Ready filling a counter tab's dish.
+  *(Closed 2026-10-15. The owner approved the layout, label, ticks, notes, Ready fill
+  and handbell before the relaunch (`review.md`). The behaviour is pinned by the unit,
+  pgTAP, RLS and both browser suites in both gate states, green in every Staging run,
+  with `request-budget.spec.ts` inside #75's budget gates on. In production both gates
+  were turned on, pulled once on 15 October, and ran through two services; idle, the
+  counter makes 2–5 requests a minute and the kitchen 3–7. `verification.md` records
+  the walk of both gate states and the four-role demo.)*
