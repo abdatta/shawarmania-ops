@@ -100,6 +100,16 @@ it('the vs line names the earlier dates, and the time they run to', () => {
       cutAt: '2026-10-08T03:28:00.000Z',
     }),
   ).toBe('vs ₹1,42,469 (2–8 Oct, until 8:58 am)')
+  // Whole rupees are dropped, not rounded, as Overview drops them.
+  expect(
+    comparedLine({
+      periods: periods.slice(0, 2),
+      totals: [1, 39_810_860],
+      metric: 'revenue',
+      cut: [false, false],
+      cutAt: null,
+    }),
+  ).toBe('vs ₹3,98,108 (2–8 Oct)')
   expect(
     comparedLine({
       periods,

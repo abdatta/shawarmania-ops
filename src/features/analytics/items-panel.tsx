@@ -583,6 +583,7 @@ function ItemTrend({
       exportName={`item-trend-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
       exportUnit={metric === 'units' ? 'items' : 'dish revenue (paise)'}
       fitTicks={!!windows}
+      dropPaise={!!windows}
     />
   )
 }

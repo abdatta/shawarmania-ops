@@ -53,6 +53,7 @@ export function TrendCard({
   exportUnit,
   children,
   fitTicks = false,
+  dropPaise = false,
 }: {
   id: string
   title: string
@@ -73,6 +74,12 @@ export function TrendCard({
   children?: ReactNode
   /** One Revenue: the chart's axis draws as many labels as fit. */
   fitTicks?: boolean
+  /**
+   * One Revenue: a revenue headline drops its paise, as Overview's does, so
+   * the two read the same rupees for the same figure (owner, 2026-10-17:
+   * ₹3,98,108.60 read ₹3,98,108 on Overview and ₹3,98,109 here).
+   */
+  dropPaise?: boolean
 }) {
   // In the address, so the choice survives a reload and a change of subject.
   const [params, setParams] = useSearchParams()
@@ -108,7 +115,10 @@ export function TrendCard({
           <CardTitle>{title}</CardTitle>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <p className="text-3xl font-bold tabular-nums" data-testid={`${id}-value`}>
-              {metricText(value, metric)}
+              {metricText(
+                dropPaise && metric === 'revenue' && value !== null ? value - (value % 100) : value,
+                metric,
+              )}
             </p>
             {trend ? (
               <>

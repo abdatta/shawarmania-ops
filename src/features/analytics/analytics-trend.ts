@@ -121,8 +121,11 @@ export function comparedLine({
           timeZone: 'Asia/Kolkata',
         }).format(new Date(cutAt))
       : null
+  // Whole rupees, dropped rather than rounded, as Overview and the headline show them.
+  const shown = (value: number | null) =>
+    metric === 'revenue' && value !== null ? value - (value % 100) : value
   if (earlier.length === 1)
-    return `vs ${metricText(totals[1] ?? null, metric)} (${earlier[0]!.label}${time ? `, until ${time}` : ''})`
+    return `vs ${metricText(shown(totals[1] ?? null), metric)} (${earlier[0]!.label}${time ? `, until ${time}` : ''})`
   return `vs ${earlier
     .map((p, index) => `${metricText(totals[index + 1] ?? null, metric, true)} (${p.label})`)
     .join(' · ')}${time ? `, each until ${time}` : ''}`

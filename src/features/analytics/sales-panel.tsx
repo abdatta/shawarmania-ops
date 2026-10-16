@@ -142,6 +142,7 @@ export function SalesPanel({
         newestFirst={grain !== 'hour'}
         exportName="sales-trends"
         fitTicks={!!windows}
+        dropPaise={!!windows}
         exportUnit={metric === 'orders' ? 'counter orders' : `${labels[metric]} (paise)`}
       >
         {metric === 'revenue' && !windows && (
