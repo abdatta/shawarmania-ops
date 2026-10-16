@@ -24,6 +24,7 @@ async function rpc(name: string, body: Record<string, unknown>) {
   if (!response.ok) throw new Error(`${name} failed: ${response.status} ${await response.text()}`)
 }
 
+/** The local database's answer for every gate it holds, retired ones too. */
 async function answers(): Promise<Map<string, boolean>> {
   const key = serviceRoleKey()
   const response = await fetch(`${SUPABASE_URL}/rest/v1/change_gates?select=key,enabled`, {
@@ -47,6 +48,17 @@ export async function turnEveryGate(state: GateState) {
       p_reason: `auth browser tests, gates ${state}`,
     })
   }
+}
+
+/**
+ * The declared gates the local database does not have at `state`, the ones
+ * `turnEveryGate(state)` would turn. Retired gates are left out the same way:
+ * only declared keys are compared.
+ */
+export async function gatesNotAt(state: GateState): Promise<string[]> {
+  const on = state === 'on'
+  const database = await answers()
+  return parentsFirst().filter((gate) => database.get(gate) !== on)
 }
 
 export default async function globalSetup() {

@@ -1,15 +1,7 @@
-import { type APIRequestContext, type Page } from '@playwright/test'
+import { type Page } from '@playwright/test'
 import { expect, test } from './test'
 
-import {
-  SUPABASE_URL,
-  TILL_ONE,
-  openTill,
-  orderCard,
-  railSettled,
-  saveNewOrder,
-  serviceRoleKey,
-} from './tills'
+import { TILL_ONE, openTill, orderCard, railSettled, saveNewOrder } from './tills'
 
 /**
  * The counter shows what it saved before the server answers
@@ -34,10 +26,10 @@ import {
  *
  * The tablet boots with every gate on and reloads into the database's answer at
  * its first free moment if that differs. A reload here empties what the tablet
- * holds while every read is held, so the database must say `instant-saves` is
- * on before the test starts. It failed on Staging from 2026-10-15 at whichever
- * step that reload landed on, because the round trips in `dish-ticks.spec.ts`
- * left it off.
+ * holds while every read is held. It failed on Staging from 2026-10-15 at
+ * whichever step that reload landed on, because the round trips in
+ * `dish-ticks.spec.ts` left `instant-saves` off; the suite's `./test` now checks
+ * before every test that no spec left a gate turned.
  */
 
 const SLOW_MS = 5_000
@@ -83,27 +75,11 @@ async function slowServer(page: Page) {
   }
 }
 
-/** Whether the local database has `instant-saves` on, as this run's tablets boot it. */
-async function gateOnInDatabase(request: APIRequestContext): Promise<boolean> {
-  const key = serviceRoleKey()
-  const response = await request.get(`${SUPABASE_URL}/rest/v1/change_gates`, {
-    headers: { apikey: key, authorization: `Bearer ${key}` },
-    params: { key: 'eq.instant-saves', select: 'enabled' },
-  })
-  expect(response.ok(), 'could not read change_gates').toBe(true)
-  const rows = (await response.json()) as { enabled: boolean }[]
-  return rows[0]?.enabled === true
-}
-
 test(
   'an order, its edit, its payment and its take-back are on screen before a slow server answers',
   { tag: '@cg-on:instant-saves' },
   async ({ browser, request }) => {
     test.slow()
-    expect(
-      await gateOnInDatabase(request),
-      'instant-saves is off in the database, so the tablet would reload into it mid-test: a spec before this one left it off',
-    ).toBe(true)
     const counter = await openTill(browser, request, TILL_ONE)
     const page = counter.page
     let server: Awaited<ReturnType<typeof slowServer>> | undefined
