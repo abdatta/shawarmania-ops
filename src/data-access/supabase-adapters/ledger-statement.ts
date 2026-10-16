@@ -3,6 +3,7 @@ import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 import {
   DELIVERY_CHANNELS,
   readMonth,
+  readMonthFigures,
   resolveBusinessDate,
   shiftBusinessDate,
   type MonthDayInput,
@@ -521,7 +522,8 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
   return {
     getDay: dayFor,
 
-    async getMonth(outletId, month, { signal } = {}) {
+    async getMonth(outletId, month, options = {}) {
+      const { signal } = options
       const [year, monthNumber] = month.split('-').map(Number)
       if (!year || !monthNumber) {
         throw new LedgerStatementActionError('bad_month', 'That is not a month this reads.')
@@ -601,10 +603,8 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
 
       // Bounded by what has actually happened, so an unfinished month does not
       // report its remaining dates as days with no sales (see `readMonth`).
-      const reading = readMonth(days, {
-        throughBusinessDate: resolveBusinessDate(new Date(), CUTOVER),
-        expectedChannels,
-      })
+      const throughBusinessDate = resolveBusinessDate(new Date(), options.cutover ?? CUTOVER)
+      const reading = readMonth(days, { throughBusinessDate, expectedChannels })
 
       const spendNames = await namesFor(
         spends.map((row) => row.recorded_by),
@@ -615,6 +615,7 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
         outletId,
         month,
         reading,
+        figures: readMonthFigures(days, reading, { throughBusinessDate }),
         spends: spends.map((row) => ({
           id: row.id,
           outletId: row.outlet_id,

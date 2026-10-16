@@ -2,6 +2,7 @@ import {
   DELIVERY_CHANNELS,
   nextOpeningPaise,
   readMonth,
+  readMonthFigures,
   resolveBusinessDate,
   shiftBusinessDate,
   type MonthDayInput,
@@ -427,18 +428,21 @@ export function createMockLedgerStatementAdapter(
         days.push(toMonthDayInput(dayFor(outletId, businessDate)))
       }
 
+      const throughBusinessDate = resolveBusinessDate(new Date(), CUTOVER)
+      // Bounded by what has actually happened — see `readMonth`.
+      const reading = readMonth(days, {
+        throughBusinessDate,
+        // Both channels, because both demo outlets trade on both. The real
+        // adapter reads `outlet_channel_restaurants` instead, because a real
+        // outlet may not sell on a channel at all — Kanchrapara does not sell
+        // on Swiggy — and the demo store does not model that mapping.
+        expectedChannels: DELIVERY_CHANNELS,
+      })
       return {
         outletId,
         month,
-        // Bounded by what has actually happened — see `readMonth`.
-        reading: readMonth(days, {
-          throughBusinessDate: resolveBusinessDate(new Date(), CUTOVER),
-          // Both channels, because both demo outlets trade on both. The real
-          // adapter reads `outlet_channel_restaurants` instead, because a real
-          // outlet may not sell on a channel at all — Kanchrapara does not sell
-          // on Swiggy — and the demo store does not model that mapping.
-          expectedChannels: DELIVERY_CHANNELS,
-        }),
+        reading,
+        figures: readMonthFigures(days, reading, { throughBusinessDate }),
         // Deliberately outside the month's operating figure, and reported here so
         // a ₹40,000 fridge is findable without remembering the date (open
         // question 2).

@@ -154,6 +154,20 @@ export const CHANGE_GATES = {
     roundTrip:
       'none: the on path changes when the app reads, never what it writes; a v2 health report writes the row a v1 report writes',
   },
+  /**
+   * #76: one meaning for revenue on Overview, the Ledger and Analytics
+   * (revenue-reads-the-same-everywhere, design D1–D9): delivery before
+   * commission, commission as a derived expense, the month through today, and a
+   * comparison with the same dates last month up to the same time. Off, each
+   * screen reads as it did before.
+   */
+  'one-revenue': {
+    kind: 'change',
+    code: 'RV',
+    change: 'revenue-reads-the-same-everywhere',
+    retireBy: '2027-01-31',
+    roundTrip: 'none: every figure is read and derived; the on path writes nothing',
+  },
 } as const satisfies Record<string, ChangeGateDeclaration>
 
 export type ChangeGateKey = keyof typeof CHANGE_GATES

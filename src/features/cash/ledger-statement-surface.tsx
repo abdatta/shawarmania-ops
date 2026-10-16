@@ -11,6 +11,7 @@ import { LoadingBlock, LoadingFigures } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { DayField, PeriodBar } from '@/components/ui/period-bar'
 import { Explain } from '@/components/ui/why'
+import { useChangeGate } from '@/change-gates/context'
 import { useAdapters } from '@/data-access'
 import {
   DataActionError,
@@ -92,6 +93,13 @@ export function LedgerStatementSurface() {
    * future business date, and a control that offers one is offering a failure.
    */
   const [today, setToday] = useState<string | null>(null)
+  /**
+   * The outlet's own day change, for One Revenue's month: the Ledger and
+   * Overview resolve "today" the same way (revenue-reads-the-same-everywhere,
+   * design D2). Off, the month resolves it at 04:00 as before.
+   */
+  const [cutover, setCutover] = useState<string | null>(null)
+  const oneRevenue = useChangeGate('one-revenue')
   const [day, setDay] = useState<LedgerStatementDay | null>(null)
   const [month, setMonth] = useState<LedgerStatementMonth | null>(null)
   const [monthKey, setMonthKey] = useState<string | null>(null)
@@ -121,6 +129,7 @@ export function LedgerStatementSurface() {
       .then((outlet) => {
         if (!active || !outlet) return
         const resolved = resolveBusinessDate(new Date(), outlet.business_day_cutover)
+        setCutover(outlet.business_day_cutover.slice(0, 5))
         const thisMonth = resolved.slice(0, 7)
         // Captured before it moves: the updaters below run later, and must see
         // the today the reader's choice was made against.
@@ -184,7 +193,13 @@ export function LedgerStatementSurface() {
     const controller = new AbortController()
     const key = `${outletId}|month|${monthKey}`
     adapter
-      .getMonth(outletId, monthKey, { signal: controller.signal })
+      .getMonth(
+        outletId,
+        monthKey,
+        oneRevenue && cutover
+          ? { signal: controller.signal, cutover }
+          : { signal: controller.signal },
+      )
       .then((loaded) => {
         if (!controller.signal.aborted) setMonth(loaded)
       })
@@ -193,7 +208,7 @@ export function LedgerStatementSurface() {
         setError({ key, message: 'Could not read that month. Try again in a moment.' })
       })
     return () => controller.abort()
-  }, [adapter, outletId, monthKey, view])
+  }, [adapter, outletId, monthKey, view, oneRevenue, cutover])
 
   async function verify() {
     if (!outletId || !businessDate) return
@@ -355,6 +370,21 @@ function DayReading({
   busy: boolean
   onVerify: () => void
 }) {
+  /*
+   * One Revenue (revenue-reads-the-same-everywhere, design D6): the day's
+   * revenue is every sale before commission, and what each platform kept is a
+   * Delivery commission line among the expenses, worked out from the channel's
+   * own figures. Off, the day reads exactly as before.
+   */
+  const oneRevenue = useChangeGate('one-revenue')
+  const commissionLines = day.revenue.channels.filter(
+    (channel) => channel.commissionPaise !== null && channel.commissionPaise !== 0,
+  )
+  const commissionPaise = commissionLines.reduce((sum, c) => sum + (c.commissionPaise ?? 0), 0)
+  const salesPaise =
+    day.revenue.cashPaise +
+    day.revenue.upiPaise +
+    day.revenue.channels.reduce((sum, channel) => sum + channel.grossPaise, 0)
   return (
     <div className="space-y-3">
       {day.changedSinceVerified.length > 0 && (
@@ -421,7 +451,11 @@ function DayReading({
             data-testid={`channel-${channel.channel}`}
           >
             <Row
-              label={`${titleCase(channel.channel)}, as stated`}
+              label={
+                oneRevenue
+                  ? `${titleCase(channel.channel)} (revenue)`
+                  : `${titleCase(channel.channel)}, as stated`
+              }
               paise={channel.grossPaise}
               tag={
                 <>
@@ -431,30 +465,67 @@ function DayReading({
               }
               testId={`channel-gross-${channel.channel}`}
             />
-            <Row
-              label="Less commission"
-              // Null is NOT KNOWN YET and renders as those words. A dash reads as
-              // "nothing here" and nought reads as "nothing was charged"; both
-              // are claims, and neither is true.
-              paise={channel.commissionPaise === null ? null : -channel.commissionPaise}
-              testId={`channel-commission-${channel.channel}`}
-            />
-            <Row
-              label={`${titleCase(channel.channel)}, actually received`}
-              paise={channel.netPaise}
-              testId={`channel-net-${channel.channel}`}
-            />
+            {oneRevenue ? (
+              <>
+                <Row
+                  quiet
+                  label={`${titleCase(channel.channel)} commission (expense)`}
+                  paise={channel.commissionPaise}
+                  testId={`channel-commission-${channel.channel}`}
+                />
+                <Row
+                  quiet
+                  label={`${titleCase(channel.channel)} received`}
+                  paise={channel.netPaise}
+                  testId={`channel-net-${channel.channel}`}
+                />
+              </>
+            ) : (
+              <>
+                <Row
+                  label="Less commission"
+                  // Null is NOT KNOWN YET and renders as those words. A dash reads as
+                  // "nothing here" and nought reads as "nothing was charged"; both
+                  // are claims, and neither is true.
+                  paise={channel.commissionPaise === null ? null : -channel.commissionPaise}
+                  testId={`channel-commission-${channel.channel}`}
+                />
+                <Row
+                  label={`${titleCase(channel.channel)}, actually received`}
+                  paise={channel.netPaise}
+                  testId={`channel-net-${channel.channel}`}
+                />
+              </>
+            )}
           </div>
         ))}
 
-        <div className="flex items-baseline justify-between border-t border-border pt-2">
-          <span className="text-sm font-bold text-content">
-            {day.revenue.isCeiling ? 'Revenue received, at most' : 'Revenue actually received'}
-          </span>
-          <Money paise={day.revenue.totalPaise} className="font-bold" data-testid="revenue-total" />
-        </div>
+        {oneRevenue ? (
+          <>
+            <div className="flex items-baseline justify-between border-t border-border pt-2">
+              <span className="text-sm font-bold text-content">Revenue</span>
+              <Money paise={salesPaise} className="font-bold" data-testid="revenue-total" />
+            </div>
+            <p className="text-xs text-content-muted" data-testid="revenue-basis">
+              Cash, UPI and each platform&rsquo;s sales, before commission. Commission is shown for
+              reference only and taken off once, in the expenses below. Of all this, only the cash
+              reached the drawer.
+            </p>
+          </>
+        ) : (
+          <div className="flex items-baseline justify-between border-t border-border pt-2">
+            <span className="text-sm font-bold text-content">
+              {day.revenue.isCeiling ? 'Revenue received, at most' : 'Revenue actually received'}
+            </span>
+            <Money
+              paise={day.revenue.totalPaise}
+              className="font-bold"
+              data-testid="revenue-total"
+            />
+          </div>
+        )}
 
-        {day.revenue.isCeiling && (
+        {!oneRevenue && day.revenue.isCeiling && (
           <p className="text-xs text-content-muted" data-testid="revenue-ceiling-note">
             One channel&rsquo;s commission is not known yet, so this is the most that can have
             arrived. It settles when the week does. Of all this, only the cash reached the drawer.
@@ -550,12 +621,22 @@ function DayReading({
         <div className="flex items-baseline justify-between gap-2">
           <h3 className="text-xs font-bold uppercase tracking-wide text-content-muted">Expenses</h3>
           <Money
-            paise={day.expenses.totalPaise}
+            paise={day.expenses.totalPaise + (oneRevenue ? commissionPaise : 0)}
             className="font-bold"
             data-testid="expenses-total"
           />
         </div>
-        {day.expenses.rows.length === 0 ? (
+        {oneRevenue &&
+          commissionLines.map((channel) => (
+            <Row
+              key={`commission-${channel.channel}`}
+              label={`${titleCase(channel.channel)} commission`}
+              paise={channel.commissionPaise}
+              hint="Delivery commission · not cash · from the platform's statement"
+              testId={`expense-commission-${channel.channel}`}
+            />
+          ))}
+        {day.expenses.rows.length === 0 && (!oneRevenue || commissionLines.length === 0) ? (
           <p className="text-xs text-content-muted">Nothing recorded.</p>
         ) : (
           day.expenses.rows.map((row) => (
@@ -646,6 +727,12 @@ function MonthReading({ month }: { month: LedgerStatementMonth }) {
   const missing = reading.datesWithoutSales.length
   /** Nothing was rung up all month: there is no profit to state, only expenses. */
   const nothingSold = reading.daysWithSales === 0
+  /*
+   * One Revenue (design D6): the same month on the shared definition, folded by
+   * `readMonthFigures` from the inputs `reading` came from. Absent off.
+   */
+  const oneRevenue = useChangeGate('one-revenue')
+  const figures = oneRevenue ? month.figures : undefined
 
   return (
     <div className="space-y-3">
@@ -714,47 +801,89 @@ function MonthReading({ month }: { month: LedgerStatementMonth }) {
             ) : (
               <div key={channel.channel} className="border-t border-border pt-2">
                 <Row
-                  label={`${channelLabel(channel.channel)}, as stated`}
+                  label={
+                    figures
+                      ? `${channelLabel(channel.channel)} (revenue)`
+                      : `${channelLabel(channel.channel)}, as stated`
+                  }
                   paise={channel.grossPaise}
                   testId={`month-${channel.channel}-gross`}
                   tag={<AsOfChip at={channel.asOfAt} testId={`month-${channel.channel}-as-of`} />}
                 />
-                <Row
-                  label={
-                    channel.undeterminedDays > 0
-                      ? `Less ${channelLabel(channel.channel)} commission, so far`
-                      : `Less ${channelLabel(channel.channel)} commission`
-                  }
-                  paise={-channel.commissionPaise}
-                  testId={`month-${channel.channel}-commission`}
-                />
-                <Row
-                  label={
-                    channel.undeterminedDays > 0
-                      ? `${channelLabel(channel.channel)}, received at most`
-                      : `${channelLabel(channel.channel)}, actually received`
-                  }
-                  paise={channel.netPaise}
-                  testId={`month-${channel.channel}-net`}
-                />
+                {figures ? (
+                  <>
+                    <Row
+                      quiet
+                      label={`${channelLabel(channel.channel)} commission (expense${channel.undeterminedDays > 0 ? ', so far' : ''})`}
+                      paise={channel.commissionPaise}
+                      testId={`month-${channel.channel}-commission`}
+                    />
+                    <Row
+                      quiet
+                      label={`${channelLabel(channel.channel)} received${channel.undeterminedDays > 0 ? ' (at most)' : ''}`}
+                      paise={channel.netPaise}
+                      testId={`month-${channel.channel}-net`}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Row
+                      label={
+                        channel.undeterminedDays > 0
+                          ? `Less ${channelLabel(channel.channel)} commission, so far`
+                          : `Less ${channelLabel(channel.channel)} commission`
+                      }
+                      paise={-channel.commissionPaise}
+                      testId={`month-${channel.channel}-commission`}
+                    />
+                    <Row
+                      label={
+                        channel.undeterminedDays > 0
+                          ? `${channelLabel(channel.channel)}, received at most`
+                          : `${channelLabel(channel.channel)}, actually received`
+                      }
+                      paise={channel.netPaise}
+                      testId={`month-${channel.channel}-net`}
+                    />
+                  </>
+                )}
               </div>
             ),
           )}
 
-          <div className="flex items-baseline justify-between border-t border-border pt-2">
-            <span className="text-sm font-bold text-content">
-              {pending ? 'Revenue received, at most' : 'Revenue actually received'}
-            </span>
-            <Money
-              paise={reading.netRevenuePaise}
-              className="font-bold"
-              data-testid="month-revenue-net"
-            />
-          </div>
-          <p className="text-xs text-content-muted">
-            Each aggregator day is reduced by the commission charged on that day, and the results
-            added up. A day charged differently therefore affects only itself.
-          </p>
+          {figures ? (
+            <>
+              <div className="flex items-baseline justify-between border-t border-border pt-2">
+                <span className="text-sm font-bold text-content">Revenue</span>
+                <Money
+                  paise={figures.revenuePaise}
+                  className="font-bold"
+                  data-testid="month-revenue-net"
+                />
+              </div>
+              <p className="text-xs text-content-muted" data-testid="month-revenue-basis">
+                Cash, UPI and each platform&rsquo;s sales, before commission. Commission is shown
+                for reference only and taken off once, in the expenses below.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="flex items-baseline justify-between border-t border-border pt-2">
+                <span className="text-sm font-bold text-content">
+                  {pending ? 'Revenue received, at most' : 'Revenue actually received'}
+                </span>
+                <Money
+                  paise={reading.netRevenuePaise}
+                  className="font-bold"
+                  data-testid="month-revenue-net"
+                />
+              </div>
+              <p className="text-xs text-content-muted">
+                Each aggregator day is reduced by the commission charged on that day, and the
+                results added up. A day charged differently therefore affects only itself.
+              </p>
+            </>
+          )}
 
           <div className="border-t border-border pt-2" data-testid="month-discounts">
             <div className="flex items-baseline justify-between">
@@ -764,12 +893,14 @@ function MonthReading({ month }: { month: LedgerStatementMonth }) {
             <p className="text-xs text-content-muted">
               {reading.discountPaise > 0
                 ? `Taken off this month’s bills. The revenue above is already net of it${
-                    pending ? ', and both figures are ceilings while a commission is waiting' : ''
+                    pending && !figures
+                      ? ', and both figures are ceilings while a commission is waiting'
+                      : ''
                   }.`
                 : 'Nothing was discounted this month.'}
             </p>
           </div>
-          {pending && (
+          {pending && !figures && (
             /*
              * The sentence that makes every figure above honest.
              *
@@ -810,14 +941,14 @@ function MonthReading({ month }: { month: LedgerStatementMonth }) {
             Manage categories
           </Link>
         </div>
-        {reading.expensesByCategory.length === 0 ? (
+        {(figures ?? reading).expensesByCategory.length === 0 ? (
           <p className="text-sm text-content-muted">
             No expenses recorded this month. Cash taken out of the drawer is not an expense and is
             not counted here.
           </p>
         ) : (
           <>
-            {reading.expensesByCategory.map((total) => (
+            {(figures ?? reading).expensesByCategory.map((total) => (
               <div key={total.category} data-testid={`month-category-${total.category}`}>
                 <div className="flex items-baseline justify-between">
                   <span className="text-sm font-semibold text-content">{total.category}</span>
@@ -848,7 +979,7 @@ function MonthReading({ month }: { month: LedgerStatementMonth }) {
             <div className="flex items-baseline justify-between border-t border-border pt-2">
               <span className="text-sm font-bold text-content">Everything spent</span>
               <Money
-                paise={reading.totalExpensesPaise}
+                paise={figures ? figures.expensesPaise : reading.totalExpensesPaise}
                 className="font-bold"
                 data-testid="month-expenses-total"
               />
@@ -858,10 +989,17 @@ function MonthReading({ month }: { month: LedgerStatementMonth }) {
               paise={reading.cashExpensesPaise}
               testId="month-expenses-cash"
             />
-            <p className="text-xs text-content-muted">
-              Aggregator commission is not here: it is already taken off the revenue above, and
-              counting it twice would understate the month.
-            </p>
+            {figures ? (
+              <p className="text-xs text-content-muted" data-testid="month-commission-basis">
+                Delivery commission is worked out from each platform&rsquo;s statement for each day.
+                It changes only when the platform restates a day, and nobody enters it.
+              </p>
+            ) : (
+              <p className="text-xs text-content-muted">
+                Aggregator commission is not here: it is already taken off the revenue above, and
+                counting it twice would understate the month.
+              </p>
+            )}
           </>
         )}
       </Card>
@@ -875,9 +1013,17 @@ function MonthReading({ month }: { month: LedgerStatementMonth }) {
         <Card className="space-y-2" data-testid="month-profit">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="text-sm font-bold text-content">
-              {pending ? 'Estimated profit, at most' : 'Estimated profit'}
+              {figures
+                ? 'Estimated profit'
+                : pending
+                  ? 'Estimated profit, at most'
+                  : 'Estimated profit'}
             </span>
-            <Money paise={reading.profitPaise ?? 0} display data-testid="month-profit-figure" />
+            <Money
+              paise={(figures ? figures.profitPaise : reading.profitPaise) ?? 0}
+              display
+              data-testid="month-profit-figure"
+            />
           </div>
           {/*
             The basis, in words, beside the figure — required of every profit
@@ -887,10 +1033,27 @@ function MonthReading({ month }: { month: LedgerStatementMonth }) {
           <p className="text-sm font-semibold text-content" data-testid="month-profit-basis">
             Cash basis operating estimate
           </p>
-          <p className="text-xs text-content-muted">
-            Revenue actually received, less everything recorded as spent. It answers whether this
-            month&rsquo;s trading covered its running costs.
-          </p>
+          {figures ? (
+            <p className="text-xs text-content-muted">
+              Revenue less everything spent, delivery commission included. It answers whether this
+              month&rsquo;s trading covered its running costs.
+            </p>
+          ) : (
+            <p className="text-xs text-content-muted">
+              Revenue actually received, less everything recorded as spent. It answers whether this
+              month&rsquo;s trading covered its running costs.
+            </p>
+          )}
+          {figures && figures.waitingDays > 0 && (
+            <p className="text-xs text-content" data-testid="month-commission-waiting">
+              <strong>
+                {figures.waitingDays === 1
+                  ? '1 day’s delivery commission is not stated yet.'
+                  : `${figures.waitingDays} days’ delivery commission is not stated yet.`}
+              </strong>{' '}
+              Profit falls by it once the platform states it.
+            </p>
+          )}
           {/*
             The note sits here as well as on revenue, and deliberately.
             Expenses on an unbilled date are real, so the month reports revenue
@@ -1186,6 +1349,7 @@ function Row({
   testId,
   hint,
   tag,
+  quiet = false,
 }: {
   label: string
   /** `null` where the figure is undetermined, which is not the same as nought. */
@@ -1194,11 +1358,18 @@ function Row({
   hint?: string | null
   /** A small outlined pill beside the label, for where a figure came from. */
   tag?: ReactNode
+  /**
+   * Smaller and indented: a figure shown for reading, not added into the total
+   * below it (One Revenue's commission and receipt under a channel's sales).
+   */
+  quiet?: boolean
 }) {
   return (
-    <div>
+    <div className={quiet ? 'pl-3' : undefined}>
       <div className="flex items-baseline justify-between gap-2">
-        <span className="inline-flex min-w-0 flex-wrap items-baseline gap-1.5 text-sm text-content-muted">
+        <span
+          className={`inline-flex min-w-0 flex-wrap items-baseline gap-1.5 ${quiet ? 'text-xs' : 'text-sm'} text-content-muted`}
+        >
           {label}
           {tag}
         </span>
@@ -1212,13 +1383,21 @@ function Row({
            * reader, which a typographic mark would not.
            */
           <span
-            className="shrink-0 whitespace-nowrap text-sm text-content-muted"
+            className={`shrink-0 whitespace-nowrap ${quiet ? 'text-xs' : 'text-sm'} text-content-muted`}
             data-testid={testId}
           >
             Not known yet
           </span>
         ) : (
-          <Money paise={amount} className="shrink-0 whitespace-nowrap" data-testid={testId} />
+          <Money
+            paise={amount}
+            className={
+              quiet
+                ? 'shrink-0 whitespace-nowrap text-xs text-content-muted'
+                : 'shrink-0 whitespace-nowrap'
+            }
+            data-testid={testId}
+          />
         )}
       </div>
       {hint && <p className="text-xs text-content-muted">{hint}</p>}

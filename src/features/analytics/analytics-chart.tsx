@@ -72,6 +72,28 @@ export function metricText(
     maximumFractionDigits: compact ? 1 : paise ? 2 : 0,
   }).format(rupees)}`
 }
+/**
+ * Evenly spaced label indices that fit the 302-unit plot without touching:
+ * the widest label at about 6.6 units a character, 11px type, plus a gap. The
+ * last label is always drawn, replacing the one before it when they would
+ * meet.
+ */
+function fittedTicks(axis: readonly string[]): number[] {
+  const length = axis.length
+  if (length <= 1) return length ? [0] : []
+  // Centred labels, so neighbours need one label's width between centres.
+  const widest = Math.max(...axis.map((label) => label.length)) * 6.6 + 8
+  const spacing = 302 / (length - 1)
+  const step = Math.max(1, Math.ceil(widest / spacing))
+  const ticks: number[] = []
+  for (let i = 0; i < length; i += step) ticks.push(i)
+  if (ticks.at(-1) !== length - 1) {
+    if (length - 1 - ticks.at(-1)! < step && ticks.length > 1) ticks.pop()
+    ticks.push(length - 1)
+  }
+  return ticks
+}
+
 export function rangeLabel(from: string, to: string) {
   const month = (d: string) =>
     new Intl.DateTimeFormat('en-GB', { month: 'short', timeZone: 'UTC' }).format(
@@ -91,6 +113,7 @@ export function AnalyticsChart({
   metric,
   axis,
   variant = 'line',
+  fitTicks = false,
 }: {
   id: string
   title: string
@@ -98,6 +121,12 @@ export function AnalyticsChart({
   metric: ChartMetric
   axis: string[]
   variant?: 'line' | 'columns'
+  /**
+   * One Revenue (owner, 2026-10-16): as many axis labels as fit without
+   * touching, evenly spaced, instead of two or four anchors, or every label
+   * whether or not they collide.
+   */
+  fitTicks?: boolean
 }) {
   const [selected, setSelected] = useState<number | null>(null)
   // Chrome rings an SVG focused by a tap as well as by Tab. Only the keyboard
@@ -118,8 +147,9 @@ export function AnalyticsChart({
   const groupWidth = series.length * barWidth + (series.length - 1) * barGap
   // Up to seven short labels (weekdays, single dates) are all drawn; longer
   // axes, and week ranges, keep a few anchors so labels never collide.
-  const ticks =
-    length <= 7 && axis.every((label) => label.length <= 6)
+  const ticks = fitTicks
+    ? fittedTicks(axis)
+    : length <= 7 && axis.every((label) => label.length <= 6)
       ? Array.from({ length }, (_, i) => i)
       : columns
         ? [
@@ -287,10 +317,24 @@ export function AnalyticsChart({
         {ticks.map((i) => (
           <text
             key={i}
-            x={columns || length === 1 ? x(i) : i === 0 ? 44 : i === length - 1 ? 346 : x(i)}
+            x={
+              fitTicks
+                ? // Centred, and nudged inside the 360-unit frame at either end.
+                  Math.min(
+                    360 - axis[i]!.length * 3.3 - 2,
+                    Math.max(axis[i]!.length * 3.3 + 2, x(i)),
+                  )
+                : columns || length === 1
+                  ? x(i)
+                  : i === 0
+                    ? 44
+                    : i === length - 1
+                      ? 346
+                      : x(i)
+            }
             y="174"
             textAnchor={
-              columns || length === 1
+              fitTicks || columns || length === 1
                 ? 'middle'
                 : i === 0
                   ? 'start'

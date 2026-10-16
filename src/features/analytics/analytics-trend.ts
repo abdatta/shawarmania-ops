@@ -1,6 +1,6 @@
 import type { AnalyticsDay, AnalyticsSeries } from '@/domain/sales-analytics-types'
 import { bucketDays, periodDays, shiftDate, totalDays } from '@/domain/sales-analytics'
-import { rangeLabel, type ChartSeries } from './analytics-chart'
+import { metricText, rangeLabel, type ChartMetric, type ChartSeries } from './analytics-chart'
 import { businessDayEnd, instantOnBusinessDay, resolveBusinessDate } from '@/domain/datetime'
 
 export const SALES_GRAINS: [string, string][] = [
@@ -37,6 +37,12 @@ export function trendView(
   to: string,
   grain: 'hour' | 'day' | 'week',
   clock?: TrendClock,
+  /**
+   * One Revenue (owner, 2026-10-16): a current one-day hour chart ends one hour
+   * after the last hour any compared day sold in, or at the ongoing hour if that
+   * is later, instead of running on through the closed hours to the cutover.
+   */
+  trimTail = false,
 ): { series: ChartSeries[]; axis: string[] } {
   const classified: ChartSeries[] = series.map((s) => ({
     ...s,
@@ -66,10 +72,60 @@ export function trendView(
     firstActive < 0
       ? 0
       : Math.min(Math.max(0, firstActive - 1), firstUnfinished < 0 ? 23 : firstUnfinished)
-  return {
-    series: ordered.map((s) => ({ ...s, points: s.points.slice(first) })),
-    axis: orderedAxis.slice(first),
+  let end = 24
+  if (trimTail) {
+    const active = (i: number) => ordered.some((s) => (s.points[i]?.value ?? 0) > 0)
+    let lastActive = -1
+    for (let i = 23; i >= 0; i -= 1)
+      if (active(i)) {
+        lastActive = i
+        break
+      }
+    const ongoing = ordered[0]?.points.findIndex((p) => p.state === 'ongoing') ?? -1
+    end = Math.min(24, Math.max(lastActive + 2, ongoing + 1, first + 1))
   }
+  return {
+    series: ordered.map((s) => ({ ...s, points: s.points.slice(first, end) })),
+    axis: orderedAxis.slice(first, end),
+  }
+}
+
+/**
+ * One Revenue's line under a trend's headline (owner, 2026-10-16): what the
+ * earlier periods came to, each with its dates, and the time of day they run to
+ * where they were cut. `vs ₹1,42,469 (9–15 Oct, until 8:58 am)`; with several,
+ * `vs 448 (1–16 Sept) · 435 (1–16 Aug), each until 8:38 am`. With no earlier
+ * period, the current period's dates.
+ */
+export function comparedLine({
+  periods,
+  totals,
+  metric,
+  cut,
+  cutAt,
+}: {
+  periods: readonly { label: string }[]
+  totals: readonly (number | null)[]
+  metric: ChartMetric
+  /** Whether each period's last date was cut, current first. */
+  cut: readonly boolean[]
+  cutAt: string | null | undefined
+}): string {
+  const earlier = periods.slice(1)
+  if (earlier.length === 0) return periods[0]?.label ?? ''
+  const time =
+    cutAt && cut.slice(1).some(Boolean)
+      ? new Intl.DateTimeFormat('en-IN', {
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZone: 'Asia/Kolkata',
+        }).format(new Date(cutAt))
+      : null
+  if (earlier.length === 1)
+    return `vs ${metricText(totals[1] ?? null, metric)} (${earlier[0]!.label}${time ? `, until ${time}` : ''})`
+  return `vs ${earlier
+    .map((p, index) => `${metricText(totals[index + 1] ?? null, metric, true)} (${p.label})`)
+    .join(' · ')}${time ? `, each until ${time}` : ''}`
 }
 
 export interface TrendPeriod {
@@ -153,6 +209,83 @@ export function periodTrend({
     series,
     axis,
     periods: windows.map(({ first, last, label, total }) => ({ first, last, label, total })),
+  }
+}
+
+/**
+ * `periodTrend` over windows chosen by the caller (revenue-reads-the-same-everywhere,
+ * design D7): Month's same dates in earlier months, which differ in length.
+ * Earlier windows align to the current one by elapsed day, as before; a date an
+ * earlier window does not reach is a gap, never a zero.
+ */
+export function alignedTrend({
+  days,
+  windows,
+  grain,
+  value,
+  cutover,
+}: {
+  days: AnalyticsDay[]
+  windows: readonly { first: string; last: string }[]
+  grain: 'day' | 'week'
+  value: (bucket: AnalyticsDay) => number | null
+  cutover?: string | undefined
+}): { series: ChartSeries[]; axis: string[]; periods: TrendPeriod[] } {
+  const { first: from, last: to } = windows[0]!
+  const current = days.filter((d) => d.date >= from && d.date <= to)
+  const baseBuckets = bucketDays(current, grain)
+  const bucketRange = new Map<string, [string, string]>()
+  for (const day of current) {
+    const key = bucketDays([day], grain)[0]!.date
+    const range = bucketRange.get(key)
+    bucketRange.set(key, range ? [range[0], day.date] : [day.date, day.date])
+  }
+  // The date in window `w` that sits where `date` sits in the current window.
+  const along = (w: { first: string }, date: string) =>
+    shiftDate(w.first, periodDays(from, date) - 1)
+  const built = windows.map((w) => {
+    const inWindow = days.filter((d) => d.date >= w.first && d.date <= w.last)
+    const buckets = new Map(
+      bucketDays(
+        inWindow.map((d) => ({ ...d, date: shiftDate(from, periodDays(w.first, d.date) - 1) })),
+        grain,
+      ).map((b) => [b.date, b]),
+    )
+    return { ...w, label: rangeLabel(w.first, w.last), total: totalDays(inWindow), buckets }
+  })
+  const series = built.map((w) => ({
+    label: w.label,
+    points: baseBuckets.map((b) => {
+      const [first, last] = bucketRange.get(b.date)!
+      const start = along(w, first)
+      const end = along(w, last) > w.last ? w.last : along(w, last)
+      const reached = start <= w.last
+      const bucket = w.buckets.get(b.date) ?? {
+        date: b.date,
+        revenue: 0,
+        orders: 0,
+        units: 0,
+        discounts: 0,
+      }
+      return {
+        label: reached ? rangeLabel(start, end) : '—',
+        value: reached ? value(bucket) : null,
+        ...(cutover && reached
+          ? {
+              interval: {
+                start: instantOnBusinessDay(start, cutover, cutover),
+                end: businessDayEnd(end, cutover),
+              },
+            }
+          : {}),
+      }
+    }),
+  }))
+  const axis = baseBuckets.map((b) => rangeLabel(...bucketRange.get(b.date)!))
+  return {
+    series,
+    axis,
+    periods: built.map(({ first, last, label, total }) => ({ first, last, label, total })),
   }
 }
 

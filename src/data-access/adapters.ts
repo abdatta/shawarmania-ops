@@ -4,6 +4,7 @@ import type {
   KitchenDishState,
   LineKind,
   MonthDayInput,
+  MonthFigures,
   MonthReading,
   OutletLoyaltySettings,
   OutletReviewAsk,
@@ -3944,6 +3945,12 @@ export interface LedgerStatementMonth {
    */
   reading: MonthReading
   /**
+   * The same month on One Revenue's definition (revenue-reads-the-same-everywhere):
+   * delivery before commission, commission among the expenses. Folded from the
+   * same day inputs as `reading`, with no extra read; shown only with the gate on.
+   */
+  figures?: MonthFigures
+  /**
    * Cash out that is deliberately outside the month's operating figure — a
    * spend. Reported so a ₹40,000 fridge is findable without touching the P&L
    * (open question 2).
@@ -4002,6 +4009,12 @@ export class LedgerStatementActionError extends DataActionError {
  */
 export interface LedgerReadOptions {
   signal?: AbortSignal
+  /**
+   * The outlet's own business-day change, `HH:MM`, for resolving the month's
+   * today. One Revenue passes it so the Ledger and Overview agree on "today";
+   * without it the month resolves today at 04:00, as before.
+   */
+  cutover?: string
 }
 
 /** What an abandoned ledger read rejects with — never a failure to report. */

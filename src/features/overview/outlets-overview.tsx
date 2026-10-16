@@ -2,6 +2,8 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Banknote,
+  Bike,
+  QrCode,
   ChartNoAxesCombined,
   ChartPie,
   Minus,
@@ -11,12 +13,21 @@ import {
   Wallet,
   type LucideIcon,
 } from 'lucide-react'
-import { useCallback, useEffect, useState, type ComponentProps, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from 'react'
 import { Link } from 'react-router'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card } from '@/components/ui/card'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
+import { useChangeGate } from '@/change-gates/context'
 import { useAdapters, type Tables } from '@/data-access'
 import { formatPaise, resolveBusinessDate } from '@/domain'
 import { outletPresence, overviewPeriod, revenueChange } from '@/domain/overview'
@@ -35,6 +46,7 @@ export function OutletsOverview() {
   const read = useCallback(() => outlets.listOutlets(), [outlets])
   const rows = useOverviewRead(read)
   const [loadingOutletCount] = useState(readOverviewOutletCountHint)
+  const oneRevenue = useChangeGate('one-revenue')
   useEffect(() => {
     if (rows.value !== undefined) rememberOverviewOutletCount(rows.value.length)
   }, [rows.value])
@@ -47,7 +59,7 @@ export function OutletsOverview() {
           day: 'numeric',
           month: 'short',
           timeZone: 'Asia/Kolkata',
-        }).format(new Date())} · Month through yesterday`}
+        }).format(new Date())} · ${oneRevenue ? 'Month to date' : 'Month through yesterday'}`}
       />
       {rows.error ? (
         <ReadError retry={rows.retry} />
@@ -61,7 +73,9 @@ export function OutletsOverview() {
               </div>
               <div className="grid grid-cols-2 [&>*:nth-child(even)]:pl-3 [&>*:nth-child(odd)]:pr-3">
                 {[0, 1, 2, 3].map((j) => (
-                  <MetricShimmer key={j} />
+                  <div key={j} className="@container min-w-0">
+                    <MetricShimmer />
+                  </div>
                 ))}
               </div>
             </Card>
@@ -70,7 +84,13 @@ export function OutletsOverview() {
       ) : rows.value.length === 0 ? (
         <p className="text-sm text-content-muted">No outlets are available to your account.</p>
       ) : (
-        rows.value.map((outlet) => <OutletCard key={outlet.id} outlet={outlet} />)
+        rows.value.map((outlet) =>
+          oneRevenue ? (
+            <OneRevenueCard key={outlet.id} outlet={outlet} />
+          ) : (
+            <OutletCard key={outlet.id} outlet={outlet} />
+          ),
+        )
       )}
       <NeedsAttention />
     </div>
@@ -359,6 +379,399 @@ function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
   )
 }
 
+/**
+ * The outlet card on One Revenue's definition (revenue-reads-the-same-everywhere,
+ * design D5). Today's revenue adds delivery imported for today; the month runs
+ * through today and always compares with the same dates last month, cut at the
+ * same time of day; expenses carry delivery commission. Nothing here qualifies
+ * a figure for missing delivery or an unstated commission. The month, today and
+ * the cut are the server's, so this card sends no date.
+ */
+function OneRevenueCard({ outlet }: { outlet: Tables<'outlets'> }) {
+  const { overview } = useAdapters()
+  const session = useSession()
+  const base = `${session.mode === 'demo' ? '/demo' : ''}/${ROLE_SEGMENTS[session.role ?? 'franchise_admin']}`
+  const [now, setNow] = useState(Date.now)
+  const refreshClock = useCallback(() => setNow(Date.now()), [])
+  useOnForeground(refreshClock)
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(timer)
+  }, [])
+  // Read again when the business date changes; the server decides what it is.
+  const today = resolveBusinessDate(new Date(now), outlet.business_day_cutover)
+  const todayRead = useCallback(
+    () => overview.today(outlet.id),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `today` re-reads at the day's change
+    [overview, outlet.id, today],
+  )
+  const monthRead = useCallback(
+    () => overview.month(outlet.id),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `today` re-reads at the day's change
+    [overview, outlet.id, today],
+  )
+  const drawerRead = useCallback(() => overview.drawer(outlet.id), [overview, outlet.id])
+  const tabletsRead = useCallback(() => overview.tablets(outlet.id), [overview, outlet.id])
+  const sales = useOverviewRead(todayRead)
+  const month = useOverviewRead(monthRead)
+  const drawer = useOverviewRead(drawerRead)
+  const tablets = useOverviewRead(tabletsRead)
+  const rereadTablets = tablets.retry
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') rereadTablets()
+    }, 60_000)
+    return () => clearInterval(timer)
+  }, [rereadTablets])
+  const status = tablets.value === undefined ? null : outletPresence(tablets.value, now)
+  const source = (path: string) => `${base}/${path}?outlet=${encodeURIComponent(outlet.id)}`
+  const m = month.value
+  const monthName = m
+    ? new Intl.DateTimeFormat('en-IN', { month: 'long', timeZone: 'Asia/Kolkata' }).format(
+        new Date(`${m.month}-01T12:00:00+05:30`),
+      )
+    : ''
+  const ledger = m ? `${source('ledger')}&view=month&month=${m.month}` : source('ledger')
+  const change =
+    m && m.previous.hasSales ? revenueChange(m.revenuePaise, m.previous.revenuePaise) : null
+  const compared = m ? comparedRange(m.previous.from, m.previous.through) : ''
+  const cutWords = m?.previous.cutAt
+    ? `, to ${new Intl.DateTimeFormat('en-IN', {
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone: 'Asia/Kolkata',
+      }).format(new Date(m.previous.cutAt))}`
+    : ''
+  const todayTotal = sales.value
+    ? sales.value.cashPaise + sales.value.upiPaise + sales.value.deliveryPaise
+    : 0
+  return (
+    <Card
+      className="overflow-hidden bg-gradient-to-br from-surface-raised/30 to-surface !px-3 !py-0"
+      data-testid={`outlet-card-${outlet.id}`}
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-border px-1 py-2.5">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="rounded-xl bg-primary/10 p-2.5 text-accent-text">
+            <Store size={26} aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <h2 className="truncate text-[1.0625rem] font-bold leading-6">{outlet.name}</h2>
+            <p className="truncate text-sm leading-5 text-content-muted">{outlet.location_label}</p>
+          </div>
+        </div>
+        <Link
+          to={`${base}/outlets/${outlet.id}`}
+          data-testid={`open-outlet-${outlet.id}`}
+          className="flex min-h-12 shrink-0 items-center rounded-xl text-sm font-semibold focus-visible:focus-ring"
+          aria-label={
+            status === 'partial' ? 'Online, some tablets offline. View outlet' : undefined
+          }
+        >
+          {tablets.error ? (
+            'Status unavailable'
+          ) : status === null ? (
+            <Shimmer className="h-9 w-20 !rounded-xl" />
+          ) : (
+            <span className="flex items-center gap-2.5 rounded-xl border border-border px-3.5 py-2">
+              {status === 'offline' ? 'Offline' : 'Online'}
+              <span
+                aria-hidden
+                className={`h-2.5 w-2.5 rounded-full ${status === 'offline' ? 'bg-danger' : status === 'partial' ? 'bg-warning' : 'bg-success'}`}
+              />
+            </span>
+          )}
+        </Link>
+      </div>
+      <div className="grid grid-cols-2 divide-x divide-border">
+        <Metric
+          label="Today's revenue"
+          to={source('ledger')}
+          loading={sales.value === undefined}
+          error={sales.error}
+          retry={sales.retry}
+        >
+          {sales.value && (
+            <>
+              <MetricValue icon={Banknote} tone="primary">
+                <OverviewMoney paise={todayTotal} data-testid={`sales-${outlet.id}`} />
+              </MetricValue>
+              <TenderLine
+                outletId={outlet.id}
+                cashPaise={sales.value.cashPaise}
+                upiPaise={sales.value.upiPaise}
+                deliveryPaise={sales.value.deliveryPaise}
+              />
+            </>
+          )}
+        </Metric>
+        <Metric
+          label="Drawer cash · expected"
+          to={source('drawer')}
+          loading={drawer.value === undefined}
+          error={drawer.error}
+          retry={drawer.retry}
+        >
+          {drawer.value && (
+            <>
+              <MetricValue icon={Wallet} tone="primary">
+                {drawer.value.expectedPaise === null ? (
+                  <p className="text-sm leading-7">Not counted yet</p>
+                ) : (
+                  <OverviewMoney
+                    paise={drawer.value.expectedPaise}
+                    data-testid={`cash-${outlet.id}`}
+                  />
+                )}
+              </MetricValue>
+              <Subtext
+                title={`Last left ${drawer.value.leftPaise === null ? '—' : formatPaise(drawer.value.leftPaise)} · Cash spent since the last count ${formatPaise(drawer.value.spentPaise)}`}
+              >
+                Left{' '}
+                {drawer.value.leftPaise === null ? (
+                  '—'
+                ) : (
+                  <SupportingMoney paise={drawer.value.leftPaise} />
+                )}{' '}
+                · Spent <SupportingMoney paise={drawer.value.spentPaise} />
+              </Subtext>
+            </>
+          )}
+        </Metric>
+      </div>
+      <div className="grid grid-cols-2 divide-x divide-border border-t border-border">
+        <Metric
+          label={m ? `${monthName} revenue` : 'Month revenue'}
+          title={`${monthName} revenue · month to date`}
+          to={ledger}
+          loading={m === undefined}
+          error={month.error}
+          retry={month.retry}
+        >
+          {m && (
+            <>
+              <MetricValue
+                icon={
+                  change === null
+                    ? ChartNoAxesCombined
+                    : change > 0
+                      ? TrendingUp
+                      : change < 0
+                        ? TrendingDown
+                        : Minus
+                }
+                tone={
+                  change === null || change === 0 ? 'primary' : change > 0 ? 'success' : 'danger'
+                }
+              >
+                <OverviewMoney paise={m.revenuePaise} data-testid={`revenue-${outlet.id}`} />
+              </MetricValue>
+              <Subtext title={`Compared with ${compared}${cutWords}`}>
+                {change === null ? (
+                  <span data-testid={`comparison-${outlet.id}`}>No sales {compared}</span>
+                ) : (
+                  <span
+                    className="flex items-center gap-1"
+                    data-testid={`comparison-${outlet.id}`}
+                    aria-label={`${change < 0 ? 'Down' : change > 0 ? 'Up' : 'Level'} ${Math.abs(change).toFixed(1)}% against ${compared}${cutWords}`}
+                  >
+                    {change < 0 ? (
+                      <ArrowDownRight size={13} aria-hidden />
+                    ) : change === 0 ? (
+                      <Minus size={13} aria-hidden />
+                    ) : (
+                      <ArrowUpRight size={13} aria-hidden />
+                    )}
+                    <span className="font-bold">{Math.abs(change).toFixed(1)}%</span> vs {compared}
+                  </span>
+                )}
+              </Subtext>
+            </>
+          )}
+        </Metric>
+        <Metric
+          label={m ? `${monthName} P&L · est.` : 'P&L · est.'}
+          title={`${monthName} estimated operating P&L · month to date · delivery commission included`}
+          to={ledger}
+          loading={m === undefined}
+          error={month.error}
+          retry={month.retry}
+        >
+          {m && (
+            <>
+              <MetricValue
+                icon={
+                  m.profitPaise === null
+                    ? ChartPie
+                    : m.profitPaise > 0
+                      ? TrendingUp
+                      : m.profitPaise < 0
+                        ? TrendingDown
+                        : Minus
+                }
+                tone={
+                  m.profitPaise === null || m.profitPaise === 0
+                    ? 'primary'
+                    : m.profitPaise > 0
+                      ? 'success'
+                      : 'danger'
+                }
+              >
+                {m.profitPaise === null ? (
+                  <p className="text-sm leading-7">No sales recorded</p>
+                ) : (
+                  <OverviewMoney paise={m.profitPaise} data-testid={`profit-${outlet.id}`} />
+                )}
+              </MetricValue>
+              <Subtext
+                title={`Expenses ${formatPaise(m.expensesPaise)}, of which delivery commission ${formatPaise(m.commissionPaise)} · Percentage is operating margin`}
+              >
+                Expenses <SupportingMoney paise={m.expensesPaise} />
+                {m.profitPaise !== null && m.revenuePaise > 0 && (
+                  <>
+                    <span> · </span>
+                    <span className="font-bold">
+                      {((m.profitPaise / m.revenuePaise) * 100).toFixed(1)}%
+                    </span>
+                  </>
+                )}
+              </Subtext>
+            </>
+          )}
+        </Metric>
+      </div>
+    </Card>
+  )
+}
+
+/**
+ * Today's Cash · UPI · Delivery in the longest form that fits one line (owner,
+ * 2026-10-16). Words where there is room; then delivery becomes a bike, then UPI
+ * a phone, then cash a note, in that order; and only when even the icons do
+ * not fit, two lines in words, breaking between the counter's tenders and
+ * delivery.
+ * Every form is measured, hidden, against the cell's real width, so it adapts
+ * to any screen; the title and labels keep exact figures and words.
+ */
+function TenderLine({
+  outletId,
+  cashPaise,
+  upiPaise,
+  deliveryPaise,
+}: {
+  outletId: string
+  cashPaise: number
+  upiPaise: number
+  deliveryPaise: number
+}) {
+  const cash = (icon: boolean) => (
+    <span className="inline-flex items-center gap-0.5 whitespace-nowrap">
+      {icon ? <Banknote size={13} aria-label="Cash" /> : 'Cash'}
+      <SupportingMoney paise={cashPaise} />
+    </span>
+  )
+  const upi = (icon: boolean) => (
+    <span className="inline-flex items-center gap-0.5 whitespace-nowrap">
+      {icon ? <QrCode size={13} aria-label="UPI" /> : 'UPI'}
+      <SupportingMoney paise={upiPaise} />
+    </span>
+  )
+  // Only the shown copy carries the test id; the measured ones are never read.
+  const delivery = (icon: boolean, shown = true) => (
+    <span
+      className="inline-flex items-center gap-0.5 whitespace-nowrap"
+      {...(shown ? { 'data-testid': `delivery-${outletId}` } : {})}
+    >
+      {icon ? <Bike size={13} aria-label="Delivery" /> : 'Delivery'}
+      <SupportingMoney paise={deliveryPaise} />
+    </span>
+  )
+  const dot = <span aria-hidden>·</span>
+  // Shortened in the order the owner chose: delivery, then UPI, then cash. If
+  // none fits, two lines in words.
+  const forms = [
+    [false, false, false],
+    [false, false, true],
+    [false, true, true],
+    [true, true, true],
+  ] as const
+  const line = ([c, u, d]: readonly [boolean, boolean, boolean], shown = true) => (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap">
+      {cash(c)}
+      {dot}
+      {upi(u)}
+      {dot}
+      {delivery(d, shown)}
+    </span>
+  )
+  const box = useRef<HTMLDivElement>(null)
+  const measures = useRef<(HTMLSpanElement | null)[]>([])
+  const [chosen, setChosen] = useState(0)
+  useLayoutEffect(() => {
+    const element = box.current
+    if (!element) return
+    const choose = () => {
+      const width = element.clientWidth
+      const fits = measures.current.findIndex((m) => !!m && m.scrollWidth <= width)
+      setChosen(fits < 0 ? forms.length : fits)
+    }
+    choose()
+    // Without a ResizeObserver the first measurement stands.
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(choose)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [cashPaise, upiPaise, deliveryPaise, forms.length])
+  return (
+    <div
+      ref={box}
+      title={`Cash ${formatPaise(cashPaise)} · UPI ${formatPaise(upiPaise)} · Delivery ${formatPaise(deliveryPaise)}`}
+      data-testid="metric-subtext"
+      // A flex box, so an icon line is exactly one line tall: inline boxes
+      // would add the text's strut beneath the icons.
+      className="relative mt-0.5 flex text-[0.8125rem] leading-[1.125rem] text-content-muted"
+    >
+      {/* Every one-line form, measured and never seen. */}
+      <div aria-hidden className="invisible absolute left-0 top-0 h-0 overflow-hidden">
+        {forms.map((form, index) => (
+          <span
+            key={index}
+            ref={(element) => {
+              measures.current[index] = element
+            }}
+            className="block w-max"
+          >
+            {line(form, false)}
+          </span>
+        ))}
+      </div>
+      {chosen < forms.length ? (
+        line(forms[chosen]!)
+      ) : (
+        // Two lines leave room for words again: the counter's tenders, then
+        // delivery, with no separator left hanging at a line's end.
+        <span className="flex flex-col">
+          <span className="flex items-center gap-1 whitespace-nowrap">
+            {cash(false)}
+            {dot}
+            {upi(false)}
+          </span>
+          <span className="flex">{delivery(false)}</span>
+        </span>
+      )}
+    </div>
+  )
+}
+
+/** `1–15 Sep`: the dates a month is compared with. */
+function comparedRange(from: string, through: string): string {
+  const name = new Intl.DateTimeFormat('en-IN', {
+    month: 'short',
+    timeZone: 'Asia/Kolkata',
+  }).format(new Date(`${from}T12:00:00+05:30`))
+  return `${Number(from.slice(8))}–${Number(through.slice(8))} ${name}`
+}
+
 /** Overview alone drops paise; accounting and source pages keep the exact amount. */
 function OverviewMoney({ paise, ...props }: ComponentProps<typeof Money>) {
   return (
@@ -421,7 +834,7 @@ function MetricValue({
     </div>
   )
 }
-function MetricShimmer() {
+function MetricShimmer({ lines = 1 }: { lines?: number }) {
   return (
     <div className="min-w-0 py-1.5">
       <Shimmer className="mb-0.5 h-[1.125rem] w-28 max-w-full" />
@@ -429,7 +842,12 @@ function MetricShimmer() {
         <Shimmer className="h-6 w-24 max-w-full" />
         <Shimmer className="h-9 w-9 shrink-0 !rounded-lg" />
       </div>
-      <Shimmer className="mt-0.5 h-[1.125rem] w-28 max-w-full" />
+      {Array.from({ length: lines }, (_, line) => (
+        <Shimmer
+          key={line}
+          className={`mt-0.5 h-[1.125rem] w-28 max-w-full ${line > 0 ? '@min-[13rem]:hidden' : ''}`}
+        />
+      ))}
     </div>
   )
 }
@@ -454,6 +872,7 @@ function Metric({
   loading,
   error,
   retry,
+  lines,
 }: {
   label: string
   title?: string
@@ -462,6 +881,8 @@ function Metric({
   loading: boolean
   error?: boolean
   retry: () => void
+  /** Subtext lines the shimmer reserves; one unless the loaded cell has more. */
+  lines?: number
 }) {
   if (error)
     return (
@@ -472,8 +893,8 @@ function Metric({
     )
   if (loading)
     return (
-      <LoadingRegion label={label} className="min-w-0 first:pr-3 last:pl-3">
-        <MetricShimmer />
+      <LoadingRegion label={label} className="@container min-w-0 first:pr-3 last:pl-3">
+        <MetricShimmer {...(lines ? { lines } : {})} />
       </LoadingRegion>
     )
   return (

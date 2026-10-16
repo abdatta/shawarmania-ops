@@ -90,6 +90,14 @@ const WORDS: Record<
     offMeans: 'Every screen re-reads exactly as it does today.',
     changeNumber: null,
   },
+  'one-revenue': {
+    title: 'One revenue',
+    onMeans:
+      'Overview, the Ledger and Analytics count revenue the same way: every sale before commission, commission as an expense, the month through today, and always a comparison with the same dates last month.',
+    offMeans:
+      'Overview counts the month through yesterday with delivery after commission, the Ledger counts delivery after commission, and Analytics offers the last 30 days.',
+    changeNumber: 76,
+  },
 }
 
 /**

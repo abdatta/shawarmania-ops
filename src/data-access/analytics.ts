@@ -11,6 +11,7 @@ export type {
   AnalyticsSeries,
   AnalyticsSnapshot,
   AnalyticsSubject,
+  AnalyticsTotal,
 } from '@/domain/sales-analytics-types'
 
 export interface AnalyticsAdapter {
@@ -18,7 +19,17 @@ export interface AnalyticsAdapter {
     outletId: string,
     from: string,
     to: string,
-    options?: { view?: 'items' | 'sales'; periods?: number },
+    options?: {
+      view?: 'items' | 'sales'
+      periods?: number
+      /**
+       * One Revenue's Sales read only: how earlier windows align, and whether
+       * their last date is cut at the time it is now. The server decides the
+       * cut; the client only asks for it.
+       */
+      align?: 'equal' | 'month'
+      cut?: boolean
+    },
   ): Promise<AnalyticsSnapshot>
   /** One subject's daily units and revenue across `periods` equal windows ending `to`. */
   series(
@@ -27,6 +38,8 @@ export interface AnalyticsAdapter {
     to: string,
     periods: number,
     subject: AnalyticsSubject,
+    /** One Revenue only: cut earlier windows at the time it is now. */
+    options?: { cut?: boolean },
   ): Promise<AnalyticsSeries>
 }
 
@@ -74,6 +87,25 @@ export function analyticsSnapshot(value: unknown): AnalyticsSnapshot {
         throw new Error('Invalid analytics response')
     }
   }
+  // One Revenue's read adds each window's totals and the cut; fail closed on
+  // those too, and leave them absent when the old read is asked.
+  const { totals, cutAt } = record
+  if (totals !== undefined) {
+    if (
+      !Array.isArray(totals) ||
+      totals.length > 4 ||
+      totals.some(
+        (t) =>
+          !t ||
+          typeof t !== 'object' ||
+          ['period', 'counter', 'delivery', 'orders'].some(
+            (k) => !Number.isSafeInteger((t as Record<string, unknown>)[k]),
+          ),
+      ) ||
+      (cutAt !== null && cutAt !== undefined && typeof cutAt !== 'string')
+    )
+      throw new Error('Invalid analytics response')
+  }
   return value as AnalyticsSnapshot
 }
 
@@ -97,5 +129,25 @@ export function analyticsSeries(value: unknown): AnalyticsSeries {
     hourUnits.length > 4 * 24
   )
     throw new Error('Invalid analytics response')
-  return { from, units, revenue, hourUnits, hourRevenue }
+  const { totals, cutAt } = value as Record<string, unknown>
+  const cutTotals =
+    Array.isArray(totals) &&
+    totals.length <= 4 &&
+    totals.every(
+      (t) =>
+        !!t &&
+        typeof t === 'object' &&
+        Number.isSafeInteger((t as Record<string, unknown>).units) &&
+        Number.isSafeInteger((t as Record<string, unknown>).revenue),
+    )
+      ? (totals as { units: number; revenue: number }[])
+      : undefined
+  return {
+    from,
+    units,
+    revenue,
+    hourUnits,
+    hourRevenue,
+    ...(cutTotals ? { totals: cutTotals, cutAt: typeof cutAt === 'string' ? cutAt : null } : {}),
+  }
 }

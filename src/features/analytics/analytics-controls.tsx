@@ -15,6 +15,7 @@ export function AnalyticsControls({
   from,
   to,
   onChange,
+  windowsOf,
 }: {
   grain: string
   grains: [string, string][]
@@ -24,6 +25,8 @@ export function AnalyticsControls({
   from: string
   to: string
   onChange: (values: Record<string, string>) => void
+  /** One Revenue's compared windows for a count, when they are not equal ranges. */
+  windowsOf?: ((count: number) => { first: string; last: string }[]) | undefined
 }) {
   return (
     <div className="flex gap-2">
@@ -44,6 +47,7 @@ export function AnalyticsControls({
         from={from}
         to={to}
         onChange={(value) => onChange({ periods: String(value) })}
+        windowsOf={windowsOf}
       />
     </div>
   )
@@ -54,11 +58,13 @@ function PeriodComparison({
   from,
   to,
   onChange,
+  windowsOf,
 }: {
   periods: number
   from: string
   to: string
   onChange: (value: number) => void
+  windowsOf?: ((count: number) => { first: string; last: string }[]) | undefined
 }) {
   const [open, setOpen] = useState(false)
   const valid = validAnalyticsDate(from) && validAnalyticsDate(to) && to >= from
@@ -82,7 +88,11 @@ function PeriodComparison({
         </span>
       </Button>
       <FormSheet open={open} onClose={() => setOpen(false)} title="Compare periods">
-        <p className="mb-3 text-xs text-content-muted">Current range + earlier equal ranges</p>
+        <p className="mb-3 text-xs text-content-muted">
+          {windowsOf
+            ? 'Current range + the same dates in earlier months'
+            : 'Current range + earlier equal ranges'}
+        </p>
         <div className="grid gap-2">
           {[1, 2, 3, 4].map((count) => (
             <Button
@@ -99,8 +109,11 @@ function PeriodComparison({
               <span>{count === 1 ? 'Current only' : `${count} periods`}</span>
               {valid && (
                 <span className="text-xs font-normal">
-                  {Array.from({ length: count }, (_, period) =>
-                    rangeLabel(shiftDate(from, -period * span), shiftDate(to, -period * span)),
+                  {(windowsOf
+                    ? windowsOf(count).map((w) => rangeLabel(w.first, w.last))
+                    : Array.from({ length: count }, (_, period) =>
+                        rangeLabel(shiftDate(from, -period * span), shiftDate(to, -period * span)),
+                      )
                   ).join(' · ')}
                 </span>
               )}

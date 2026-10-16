@@ -5952,6 +5952,7 @@ export type Database = {
         Args: { p_from: string; p_outlet_id: string; p_through: string }
         Returns: number
       }
+      overview_month: { Args: { p_outlet_id: string }; Returns: Json }
       overview_revenue: {
         Args: { p_from: string; p_outlet_id: string; p_through: string }
         Returns: Json
@@ -5960,6 +5961,7 @@ export type Database = {
         Args: { p_from: string; p_outlet_id: string; p_through: string }
         Returns: Json
       }
+      overview_today: { Args: { p_outlet_id: string }; Returns: Json }
       pay_billing_now: {
         Args: {
           p_command_id?: string
@@ -6258,6 +6260,32 @@ export type Database = {
       }
       retire_expense_category: { Args: { p_name: string }; Returns: undefined }
       retire_menu_item: { Args: { p_item_id: string }; Returns: undefined }
+      revenue_compared_windows: {
+        Args: {
+          p_align: string
+          p_cut: string
+          p_from: string
+          p_outlet_id: string
+          p_periods: number
+          p_to: string
+        }
+        Returns: {
+          cut_at: string
+          period: number
+          w_first: string
+          w_last: string
+        }[]
+      }
+      revenue_figures: {
+        Args: {
+          p_count_last_delivery?: boolean
+          p_cut_at?: string
+          p_from: string
+          p_outlet_id: string
+          p_through: string
+        }
+        Returns: Json
+      }
       review_billing_attribution: {
         Args: {
           p_bill_id: string
@@ -6327,6 +6355,30 @@ export type Database = {
           p_outlet_id: string
           p_periods?: number
           p_to: string
+        }
+        Returns: Json
+      }
+      sales_analytics_series_v2: {
+        Args: {
+          p_category?: string
+          p_cut?: string
+          p_from: string
+          p_item?: string
+          p_outlet_id: string
+          p_periods?: number
+          p_to: string
+        }
+        Returns: Json
+      }
+      sales_analytics_v2: {
+        Args: {
+          p_align?: string
+          p_cut?: string
+          p_from: string
+          p_outlet_id: string
+          p_periods?: number
+          p_to: string
+          p_view?: string
         }
         Returns: Json
       }

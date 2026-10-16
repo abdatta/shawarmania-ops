@@ -52,6 +52,7 @@ export function TrendCard({
   exportName,
   exportUnit,
   children,
+  fitTicks = false,
 }: {
   id: string
   title: string
@@ -70,6 +71,8 @@ export function TrendCard({
   exportName: string
   exportUnit: string
   children?: ReactNode
+  /** One Revenue: the chart's axis draws as many labels as fit. */
+  fitTicks?: boolean
 }) {
   // In the address, so the choice survives a reload and a change of subject.
   const [params, setParams] = useSearchParams()
@@ -159,6 +162,7 @@ export function TrendCard({
           metric={metric}
           series={series}
           axis={axis}
+          fitTicks={fitTicks}
         />
       ) : (
         <div className="mt-3">

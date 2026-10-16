@@ -1031,6 +1031,15 @@ export function createDemoStore(
     )
     .filter((row): row is Tables<'aggregator_channel_days'> => row !== null)
 
+  // A platform charge on a day with no orders, as Zomato posted at Kalyani Cafe
+  // on 1 October 2026: no sales and a negative receipt. One Revenue counts it as
+  // ₹0 of revenue and the whole charge as delivery commission
+  // (revenue-reads-the-same-everywhere, design D1).
+  aggregatorChannelDays.push({
+    ...figureFor(DEMO_OUTLET_ID, 5, 9_000, 0, 61_107)!,
+    channel: 'swiggy',
+  })
+
   if (options.matureHistory) {
     const revenueByDay = new Map<string, number>()
     // Delivery history stops before the rehearsed days, whose imports (revised,

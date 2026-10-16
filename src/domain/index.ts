@@ -73,6 +73,18 @@ export {
   type MonthReading,
 } from './ledger-month'
 export {
+  commissionOf,
+  comparisonWindow,
+  cutInstant,
+  DELIVERY_COMMISSION,
+  monthToDate,
+  readMonthFigures,
+  windowsFor,
+  type ComparedWindow,
+  type MonthFigures,
+  type RevenueFigures,
+} from './revenue-figures'
+export {
   describeCutover,
   earliestOffered,
   formatBusinessDate,

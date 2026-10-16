@@ -1,6 +1,102 @@
 import type { AnalyticsAdapter, AnalyticsItem, AnalyticsSnapshot } from '../analytics'
 import type { DemoStore } from './store'
 import { periodDays, shiftDate } from '@/domain/sales-analytics'
+import { cutInstant, windowsFor } from '@/domain/revenue-figures'
+import { outletFixtures } from './fixtures/outlets'
+
+const hourFormat = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Kolkata',
+  hour: '2-digit',
+  hourCycle: 'h23',
+})
+
+/**
+ * One Revenue's Sales read (revenue-reads-the-same-everywhere, design D7), as
+ * `sales_analytics_v2` answers it: windows aligned `equal` or by `month`, the
+ * period taken from window membership, and each window's comparison totals with
+ * its last date cut at the time it is now where the current window ends today.
+ * Days, hours and delivery stay whole.
+ */
+function readSalesAligned(
+  store: DemoStore,
+  outletId: string,
+  from: string,
+  to: string,
+  periods: number,
+  align: 'equal' | 'month',
+  cut: boolean,
+): AnalyticsSnapshot {
+  const today = store.today
+  const cutover = (
+    outletFixtures.find((o) => o.id === outletId)?.business_day_cutover ?? '04:00:00'
+  ).slice(0, 5)
+  const windows = windowsFor(from, to, periods, align, today).map((w) => ({
+    ...w,
+    cutAt: cut && w.cut ? cutInstant(w.last, today, Date.now(), cutover) : null,
+  }))
+  const start = windows.at(-1)!.first
+  const windowOf = (date: string) => windows.findIndex((w) => date >= w.first && date <= w.last)
+  const result: AnalyticsSnapshot = {
+    days: [],
+    items: [],
+    categories: [],
+    hours: [],
+    delivery: [],
+    totals: windows.map((_, period) => ({ period, counter: 0, delivery: 0, orders: 0 })),
+    cutAt: windows[1]?.cutAt ?? null,
+  }
+  for (let date = start; date <= to; date = shiftDate(date, 1))
+    result.days.push({ date, revenue: 0, orders: 0, units: 0, discounts: 0 })
+  const days = new Map(result.days.map((day) => [day.date, day]))
+  const units = new Map<string, number>()
+  for (const line of store.billItems)
+    if (line.kind === 'item')
+      units.set(line.bill_id, (units.get(line.bill_id) ?? 0) + line.quantity)
+  for (const bill of store.bills) {
+    if (bill.outlet_id !== outletId || bill.status !== 'settled') continue
+    const day = days.get(bill.business_date)
+    if (!day) continue
+    day.revenue += bill.total_paise
+    day.orders++
+    day.discounts += bill.discount_paise
+    day.units += units.get(bill.id) ?? 0
+    const period = windowOf(bill.business_date)
+    if (period < 0) continue
+    const hour = Number(hourFormat.format(new Date(bill.ordered_at)))
+    let h = result.hours.find((x) => x.hour === hour && x.period === period)
+    if (!h) {
+      h = { period, hour, orders: 0, revenue: 0 }
+      result.hours.push(h)
+    }
+    h.orders++
+    h.revenue += bill.total_paise
+    const window = windows[period]!
+    if (window.cutAt && bill.business_date === window.last && bill.ordered_at >= window.cutAt)
+      continue
+    result.totals![period]!.counter += bill.total_paise
+    result.totals![period]!.orders++
+  }
+  const delivery = store.aggregatorChannelDays.filter(
+    (d) => d.outlet_id === outletId && d.business_date >= start && d.business_date <= to,
+  )
+  const todayHasDelivery = delivery.some((d) => d.business_date === today)
+  for (const d of delivery) {
+    result.delivery.push({
+      date: d.business_date,
+      channel: d.channel,
+      revenue: d.revenue_paise,
+      provisional: d.settlement_state !== 'settled',
+    })
+    const period = windowOf(d.business_date)
+    if (period < 0) continue
+    const window = windows[period]!
+    // A cut date's delivery counts only once today's has arrived (design D3).
+    if (window.cutAt && d.business_date === window.last && !todayHasDelivery) continue
+    result.totals![period]!.delivery += d.revenue_paise
+  }
+  result.hours.sort((a, b) => a.hour - b.hour)
+  return result
+}
 
 export function createMockAnalyticsAdapter(
   store: DemoStore,
@@ -17,8 +113,21 @@ export function createMockAnalyticsAdapter(
     return { span, start: shiftDate(from, -(periods - 1) * span) }
   }
   return {
-    async series(outletId, from, to, periods, subject) {
+    async series(outletId, from, to, periods, subject, options) {
       authorise(outletId)
+      // One Revenue's comparison totals, cut where the range ends today.
+      const cutover = (
+        outletFixtures.find((o) => o.id === outletId)?.business_day_cutover ?? '04:00:00'
+      ).slice(0, 5)
+      const compared = options
+        ? windowsFor(from, to, periods, 'equal', store.today).map((w) => ({
+            ...w,
+            cutAt:
+              options.cut && w.cut ? cutInstant(w.last, store.today, Date.now(), cutover) : null,
+          }))
+        : null
+      const totals = compared?.map(() => ({ units: 0, revenue: 0 }))
+      const billCounted = new Map<string, number>()
       const { start } = window(from, to, periods)
       const dayIndex = new Map<string, number>()
       for (let date = start; date <= to; date = shiftDate(date, 1))
@@ -39,6 +148,14 @@ export function createMockAnalyticsAdapter(
         const day = dayIndex.get(bill.business_date)
         if (bill.outlet_id !== outletId || bill.status !== 'settled' || day === undefined) continue
         billDay.set(bill.id, day)
+        if (compared) {
+          const index = compared.findIndex(
+            (w) => bill.business_date >= w.first && bill.business_date <= w.last,
+          )
+          const w = compared[index]
+          if (w && !(w.cutAt && bill.business_date === w.last && bill.ordered_at >= w.cutAt))
+            billCounted.set(bill.id, index)
+        }
         // Window 0 is the current one, as the server numbers them.
         const period = Math.floor((periodDays(bill.business_date, to) - 1) / span)
         billHour.set(bill.id, period * 24 + Number(hourFormat.format(new Date(bill.ordered_at))))
@@ -55,14 +172,39 @@ export function createMockAnalyticsAdapter(
           continue
         units[day]! += line.quantity
         revenue[day]! += line.line_total_paise - line.discount_paise
+        const counted = billCounted.get(line.bill_id)
+        if (totals && counted !== undefined) {
+          totals[counted]!.units += line.quantity
+          totals[counted]!.revenue += line.line_total_paise - line.discount_paise
+        }
         const slot = billHour.get(line.bill_id)!
         hourUnits[slot]! += line.quantity
         hourRevenue[slot]! += line.line_total_paise - line.discount_paise
       }
-      return { from: start, units, revenue, hourUnits, hourRevenue }
+      return {
+        from: start,
+        units,
+        revenue,
+        hourUnits,
+        hourRevenue,
+        ...(totals ? { totals, cutAt: compared?.[1]?.cutAt ?? null } : {}),
+      }
     },
     async read(outletId, from, to, options) {
       authorise(outletId)
+      if (options?.align && options.view === 'sales') {
+        const periods = options.periods ?? 2
+        window(from, to, periods)
+        return readSalesAligned(
+          store,
+          outletId,
+          from,
+          to,
+          periods,
+          options.align,
+          options.cut ?? false,
+        )
+      }
       const result: AnalyticsSnapshot = {
         days: [],
         items: [],
@@ -93,6 +235,18 @@ export function createMockAnalyticsAdapter(
       }
       const periods = options?.periods ?? 2
       const { span, start } = window(from, to, periods)
+      // One Revenue's Items read: earlier windows' dish figures count only up
+      // to the time it is now on their matched date (design D3).
+      const cutover = (
+        outletFixtures.find((o) => o.id === outletId)?.business_day_cutover ?? '04:00:00'
+      ).slice(0, 5)
+      const cutWindows = options?.cut
+        ? windowsFor(from, to, periods, 'equal', store.today).map((w) =>
+            w.cut
+              ? { last: w.last, at: cutInstant(w.last, store.today, Date.now(), cutover) }
+              : null,
+          )
+        : null
       for (const item of items.values()) {
         item.periodUnits = Array<number>(periods).fill(0)
         item.periodRevenue = Array<number>(periods).fill(0)
@@ -165,11 +319,16 @@ export function createMockAnalyticsAdapter(
           // Window 0 is the current one, as the server numbers them.
           const windowIndex = Math.floor((periodDays(bill.business_date, to) - 1) / span)
           const lineRevenue = line.line_total_paise - line.discount_paise
+          const cutOff = cutWindows?.[windowIndex]
+          const beyondCut =
+            !!cutOff && bill.business_date === cutOff.last && bill.ordered_at >= cutOff.at
           const lineCategory = categoryRow(line.category_name ?? 'Uncategorised')
-          row.periodUnits[windowIndex]! += line.quantity
-          row.periodRevenue[windowIndex]! += lineRevenue
-          lineCategory.periodUnits[windowIndex]! += line.quantity
-          lineCategory.periodRevenue[windowIndex]! += lineRevenue
+          if (!beyondCut) {
+            row.periodUnits[windowIndex]! += line.quantity
+            row.periodRevenue[windowIndex]! += lineRevenue
+            lineCategory.periodUnits[windowIndex]! += line.quantity
+            lineCategory.periodRevenue[windowIndex]! += lineRevenue
+          }
           if (bill.business_date >= from) {
             row.units += line.quantity
             row.revenue += line.line_total_paise - line.discount_paise
@@ -179,7 +338,7 @@ export function createMockAnalyticsAdapter(
             mix.revenue += line.line_total_paise - line.discount_paise
             mix.units += line.quantity
             if (!seen.has(key)) row.orders++
-          } else if (bill.business_date >= priorStart) {
+          } else if (bill.business_date >= priorStart && !beyondCut) {
             row.previousUnits += line.quantity
             row.previousRevenue += line.line_total_paise - line.discount_paise
             const mix = categoryRow(line.category_name ?? 'Uncategorised')

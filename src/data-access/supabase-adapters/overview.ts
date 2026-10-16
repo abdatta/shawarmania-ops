@@ -1,6 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '../database.types'
-import type { OverviewAdapter, OverviewDrawer, OverviewRevenue, OverviewSales } from '../overview'
+import type {
+  OverviewAdapter,
+  OverviewDrawer,
+  OverviewMonth,
+  OverviewRevenue,
+  OverviewSales,
+  OverviewToday,
+} from '../overview'
 
 export function createSupabaseOverviewAdapter(client: SupabaseClient<Database>): OverviewAdapter {
   return {
@@ -45,6 +52,16 @@ export function createSupabaseOverviewAdapter(client: SupabaseClient<Database>):
         .not('session_proven_at', 'is', null)
       if (error) throw error
       return (data ?? []).map((row) => row.last_seen_at)
+    },
+    async today(outletId) {
+      const { data, error } = await client.rpc('overview_today', { p_outlet_id: outletId })
+      if (error) throw error
+      return data as unknown as OverviewToday
+    },
+    async month(outletId) {
+      const { data, error } = await client.rpc('overview_month', { p_outlet_id: outletId })
+      if (error) throw error
+      return data as unknown as OverviewMonth
     },
   }
 }

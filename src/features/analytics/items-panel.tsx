@@ -27,9 +27,11 @@ import {
   HOURS,
   hourTrend,
   periodTrend,
+  comparedLine,
   seriesDays,
 } from './analytics-trend'
 import { TrendCard } from './analytics-trend-card'
+import type { ComparedWindow } from '@/domain/revenue-figures'
 
 type ItemMetric = 'units' | 'revenue'
 
@@ -52,6 +54,7 @@ export function ItemsPanel({
   periods,
   subject,
   onSubject,
+  windows,
 }: {
   data: AnalyticsSnapshot
   outletId: string
@@ -63,6 +66,11 @@ export function ItemsPanel({
   periods: number
   subject: AnalyticsSubject
   onSubject: (subject: AnalyticsSubject) => void
+  /**
+   * One Revenue's compared windows (revenue-reads-the-same-everywhere): with
+   * them the headline compares cut totals and says what they came to.
+   */
+  windows?: ComparedWindow[] | undefined
 }) {
   const [search, setSearch] = useState('')
   const [view, setView] = useState('all')
@@ -144,6 +152,7 @@ export function ItemsPanel({
           periods={periods}
           subject={subject}
           onSubject={onSubject}
+          windows={windows}
         />
       </div>
       {!orders && (
@@ -426,6 +435,7 @@ function ItemTrend({
   periods,
   subject,
   onSubject,
+  windows,
 }: {
   data: AnalyticsSnapshot
   outletId: string
@@ -437,10 +447,16 @@ function ItemTrend({
   periods: number
   subject: AnalyticsSubject
   onSubject: (subject: AnalyticsSubject) => void
+  /**
+   * One Revenue's compared windows (revenue-reads-the-same-everywhere): with
+   * them the headline compares cut totals and says what they came to.
+   */
+  windows?: ComparedWindow[] | undefined
 }) {
   const { analytics } = useAdapters()
   const [cache, setCache] = useState(() => new Map<string, AnalyticsSeries>())
-  const key = `${outletId}:${from}:${to}:${periods}:${subjectKey(subject)}`
+  const cut = windows?.some((w) => w.cut) ?? false
+  const key = `${outletId}:${from}:${to}:${periods}:${subjectKey(subject)}${windows ? `:${cut}` : ''}`
   const [failed, setFailed] = useState<string | null>(null)
   const [retry, setRetry] = useState(0)
   const series = cache.get(key) ?? null
@@ -449,7 +465,7 @@ function ItemTrend({
     if (cached) return
     let alive = true
     analytics
-      .series(outletId, from, to, periods, subject)
+      .series(outletId, from, to, periods, subject, windows ? { cut } : undefined)
       .then((next) => {
         if (alive) setCache((previous) => new Map(previous).set(key, next))
       })
@@ -527,8 +543,12 @@ function ItemTrend({
     to,
     grain,
     clock,
+    !!windows,
   )
-  const totals = trend.periods.map((p) => (metric === 'units' ? p.total.units : p.total.revenue))
+  const totals =
+    windows && series.totals
+      ? series.totals.map((t) => (metric === 'units' ? t.units : t.revenue))
+      : trend.periods.map((p) => (metric === 'units' ? p.total.units : p.total.revenue))
   return (
     <TrendCard
       id="items-trend"
@@ -537,11 +557,23 @@ function ItemTrend({
       totals={totals}
       days={periodDays(from, to)}
       caption={
-        hourly
-          ? 'Counter bills by Kolkata order hour, totals across the range'
-          : metric === 'units'
-            ? 'Counter bills · delivery has no dish detail'
-            : 'Line totals less line discounts · counter only'
+        windows ? (
+          <span data-testid="items-trend-compared">
+            {comparedLine({
+              periods: trend.periods,
+              totals,
+              metric,
+              cut: windows.map((w) => w.cut),
+              cutAt: series.cutAt,
+            })}
+          </span>
+        ) : hourly ? (
+          'Counter bills by Kolkata order hour, totals across the range'
+        ) : metric === 'units' ? (
+          'Counter bills · delivery has no dish detail'
+        ) : (
+          'Line totals less line discounts · counter only'
+        )
       }
       subject={picker}
       series={view.series}
@@ -550,6 +582,7 @@ function ItemTrend({
       newestFirst={!hourly}
       exportName={`item-trend-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
       exportUnit={metric === 'units' ? 'items' : 'dish revenue (paise)'}
+      fitTicks={!!windows}
     />
   )
 }

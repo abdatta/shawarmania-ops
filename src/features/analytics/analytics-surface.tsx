@@ -7,10 +7,12 @@ import { Card } from '@/components/ui/card'
 import { Chip } from '@/components/ui/chip'
 import { Explain } from '@/components/ui/why'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
+import { useChangeGate } from '@/change-gates/context'
 import { useAdapters } from '@/data-access'
 import type { AnalyticsSnapshot, AnalyticsSubject } from '@/data-access/analytics'
 import { resolveBusinessDate } from '@/domain'
 import { validAnalyticsDate, periodDays, shiftDate } from '@/domain/sales-analytics'
+import { windowsFor } from '@/domain/revenue-figures'
 import { useOutletScope } from '@/features/outlet-scope'
 import { AnalyticsRange } from './analytics-range'
 import { ItemsPanel } from './items-panel'
@@ -46,6 +48,14 @@ function OutletAnalytics({
 }) {
   const { analytics, outlets } = useAdapters()
   const [params, setParams] = useSearchParams()
+  // One Revenue (revenue-reads-the-same-everywhere, design D7) changes Sales
+  // only: the Month shortcut, month-aligned windows, and comparisons cut at the
+  // time it is now. Items is left exactly as it was.
+  const gateOn = useChangeGate('one-revenue')
+  const oneRevenue = gateOn && kind === 'trends'
+  // Items keeps its range and read, and gains only the "vs" line (owner,
+  // 2026-10-16: every comparison chart reads the same way).
+  const itemsCompared = gateOn && kind === 'items'
   const [cutover, setCutover] = useState<string | null>(null)
   const now = useAnalyticsClock(cutover)
   const today = cutover ? resolveBusinessDate(new Date(now), cutover) : null
@@ -72,7 +82,10 @@ function OutletAnalytics({
   const [loaded, setLoaded] = useState<{ key: string; data: AnalyticsSnapshot } | null>(null)
   // Items always reads its previous period, for each dish's change with Compare off.
   const readPeriods = Math.max(kind === 'items' ? 2 : 1, Math.floor(periods))
-  const readKey = `${outletId}:${from}:${to}:${kind}:${readPeriods}`
+  const align = oneRevenue && params.get('align') === 'month' ? 'month' : 'equal'
+  const cut = oneRevenue && today !== null && to === today
+  const itemsCut = itemsCompared && today !== null && to === today
+  const readKey = `${outletId}:${from}:${to}:${kind}:${readPeriods}${oneRevenue ? `:${align}:${cut}` : itemsCompared ? `:cut:${itemsCut}` : ''}`
   const data = loaded?.key === readKey ? loaded.data : null
   const [error, setError] = useState(false)
   const [retry, setRetry] = useState(0)
@@ -98,10 +111,16 @@ function OutletAnalytics({
     let alive = true
     if (!outletId || !valid || !ready) return
     void analytics
-      .read(outletId, from, to, {
-        view: kind === 'items' ? 'items' : 'sales',
-        periods: readPeriods,
-      })
+      .read(
+        outletId,
+        from,
+        to,
+        oneRevenue
+          ? { view: 'sales', periods: readPeriods, align, cut }
+          : itemsCompared
+            ? { view: 'items', periods: readPeriods, align: 'equal', cut: itemsCut }
+            : { view: kind === 'items' ? 'items' : 'sales', periods: readPeriods },
+      )
       .then((next) => {
         if (alive) {
           setLoaded({ key: readKey, data: next })
@@ -114,6 +133,7 @@ function OutletAnalytics({
     return () => {
       alive = false
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `readKey` carries align and cut
   }, [analytics, outletId, from, to, valid, ready, retry, readKey, kind, readPeriods])
   function change(values: Record<string, string>) {
     if ('from' in values || 'to' in values) {
@@ -143,14 +163,22 @@ function OutletAnalytics({
                   Settled counter bills synced to the server. Open and voided orders are excluded;
                   bills still on an offline tablet arrive after sync.
                 </p>
-                <p>
-                  Equal adjacent ranges, using the outlet’s Kolkata business dates. The previous
-                  range is{' '}
-                  {valid
-                    ? `${shiftDate(from, -periodDays(from, to))} to ${shiftDate(from, -1)}`
-                    : 'available after choosing dates'}
-                  .
-                </p>
+                {oneRevenue && align === 'month' ? (
+                  <p>
+                    Month compares the same dates in earlier months, using the outlet’s Kolkata
+                    business dates. Where the range ends today, earlier periods count up to the same
+                    time of day.
+                  </p>
+                ) : (
+                  <p>
+                    Equal adjacent ranges, using the outlet’s Kolkata business dates. The previous
+                    range is{' '}
+                    {valid
+                      ? `${shiftDate(from, -periodDays(from, to))} to ${shiftDate(from, -1)}`
+                      : 'available after choosing dates'}
+                    .{oneRevenue && cut ? ' It counts up to the same time of day as now.' : ''}
+                  </p>
+                )}
                 <p>
                   Dish revenue uses captured line prices and line discounts; it excludes bill-level
                   discounts, tax, rounding and packaging. Dish and category shares use all items
@@ -169,7 +197,13 @@ function OutletAnalytics({
           </Explain>
         }
       />
-      <AnalyticsRange from={from} to={to} today={today} onChange={(next) => change(next)} />
+      <AnalyticsRange
+        from={from}
+        to={to}
+        today={today}
+        onChange={(next) => change(next)}
+        month={oneRevenue ? { selected: align === 'month' } : null}
+      />
       <AnalyticsControls
         grain={grain}
         grains={kind === 'items' ? ITEM_GRAINS : SALES_GRAINS}
@@ -179,6 +213,11 @@ function OutletAnalytics({
         from={from}
         to={to}
         onChange={change}
+        windowsOf={
+          oneRevenue && align === 'month' && today && valid
+            ? (count) => windowsFor(from, to, count, 'month', today)
+            : undefined
+        }
       />
       {today && !valid && (
         <p role="alert" className="text-sm text-danger">
@@ -215,6 +254,11 @@ function OutletAnalytics({
           metric={itemMetric}
           periods={Math.floor(periods)}
           subject={subject}
+          windows={
+            itemsCompared && today && valid
+              ? windowsFor(from, to, Math.floor(periods), 'equal', today)
+              : undefined
+          }
           onSubject={(next) =>
             change({
               dish: next.kind === 'item' ? next.key : '',
@@ -231,6 +275,11 @@ function OutletAnalytics({
           grain={grain}
           metric={metric}
           periods={Math.floor(periods)}
+          windows={
+            oneRevenue && today && valid
+              ? windowsFor(from, to, Math.floor(periods), align, today)
+              : undefined
+          }
         />
       )}
     </div>

@@ -14,10 +14,51 @@ export interface OverviewDrawer {
   leftPaise: number | null
   spentPaise: number
 }
+/**
+ * Today's revenue on the one definition (revenue-reads-the-same-everywhere):
+ * counter tenders and delivery sales imported for today, before commission.
+ */
+export interface OverviewToday {
+  cashPaise: number
+  upiPaise: number
+  deliveryPaise: number
+}
+/** The window a month is compared with, cut at the time it is now where it ends today. */
+export interface OverviewComparison {
+  from: string
+  through: string
+  /** The instant the window's last date was cut at; null when it counts whole. */
+  cutAt: string | null
+  revenuePaise: number
+  hasSales: boolean
+}
+/** The month to date, decided by the server's clock and the outlet's cutover. */
+export interface OverviewMonth {
+  month: string
+  from: string
+  through: string
+  revenuePaise: number
+  cashPaise: number
+  upiPaise: number
+  deliveryPaise: number
+  commissionPaise: number
+  waitingDays: number
+  recordedExpensesPaise: number
+  /** Recorded expenses plus commission. */
+  expensesPaise: number
+  /** Null where nothing was sold in the month. */
+  profitPaise: number | null
+  hasSales: boolean
+  previous: OverviewComparison
+}
 export interface OverviewAdapter {
   sales(outletId: string, date: string): Promise<OverviewSales>
   revenue(outletId: string, from: string, through: string): Promise<OverviewRevenue>
   expenses(outletId: string, from: string, through: string): Promise<number>
   drawer(outletId: string): Promise<OverviewDrawer>
   tablets(outletId: string): Promise<readonly (string | null)[]>
+  /** One Revenue's today: no date is sent, the server decides it. */
+  today(outletId: string): Promise<OverviewToday>
+  /** One Revenue's month to date and its comparison, in one read. */
+  month(outletId: string): Promise<OverviewMonth>
 }

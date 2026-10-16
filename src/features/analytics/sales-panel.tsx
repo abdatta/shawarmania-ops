@@ -9,9 +9,12 @@ import {
   totalDays,
   type SalesMetric,
 } from '@/domain/sales-analytics'
+import type { ComparedWindow } from '@/domain/revenue-figures'
 import { AnalyticsChart, type ChartSeries } from './analytics-chart'
 import {
   activeHours,
+  alignedTrend,
+  comparedLine,
   trendView,
   HOURS,
   hourTrend,
@@ -30,6 +33,7 @@ export function SalesPanel({
   grain,
   metric,
   periods,
+  windows,
 }: {
   data: AnalyticsSnapshot
   from: string
@@ -38,19 +42,33 @@ export function SalesPanel({
   grain: 'hour' | 'day' | 'week'
   metric: SalesMetric
   periods: number
+  /**
+   * One Revenue's compared windows (revenue-reads-the-same-everywhere, design
+   * D7). With them the trend aligns Month's unequal windows and the headline
+   * compares the snapshot's cut totals; without them, everything is as before.
+   */
+  windows?: ComparedWindow[] | undefined
 }) {
   const span = periodDays(from, to)
   const recorded = analyticsRevenueDays(data, true)
   // Revenue counts delivery gross; Orders and AOV only have counter bills.
-  const trend = periodTrend({
-    days: metric === 'revenue' ? recorded : data.days,
-    from,
-    to,
-    periods,
-    grain: grain === 'hour' ? 'day' : grain,
-    value: (b) => salesValue(b.revenue, b.orders, metric),
-    cutover: clock?.cutover,
-  })
+  const trend = windows
+    ? alignedTrend({
+        days: metric === 'revenue' ? recorded : data.days,
+        windows,
+        grain: grain === 'hour' ? 'day' : grain,
+        value: (b) => salesValue(b.revenue, b.orders, metric),
+        cutover: clock?.cutover,
+      })
+    : periodTrend({
+        days: metric === 'revenue' ? recorded : data.days,
+        from,
+        to,
+        periods,
+        grain: grain === 'hour' ? 'day' : grain,
+        value: (b) => salesValue(b.revenue, b.orders, metric),
+        cutover: clock?.cutover,
+      })
   const hours = HOURS
   const hourSeries = hourTrend(
     trend.periods,
@@ -76,10 +94,26 @@ export function SalesPanel({
     to,
     grain,
     clock,
+    !!windows,
   )
   const hourlyTitle =
     metric === 'aov' ? 'Average bill by hour' : `Hourly average ${labels[metric].toLowerCase()}`
-  const totals = trend.periods.map((p) => salesValue(p.total.revenue, p.total.orders, metric))
+  const totals =
+    windows && data.totals
+      ? data.totals.map((t) =>
+          salesValue(metric === 'revenue' ? t.counter + t.delivery : t.counter, t.orders, metric),
+        )
+      : trend.periods.map((p) => salesValue(p.total.revenue, p.total.orders, metric))
+  // One Revenue's line under the headline: what the earlier periods came to.
+  const compared = windows
+    ? comparedLine({
+        periods: trend.periods,
+        totals,
+        metric,
+        cut: windows.map((w) => w.cut),
+        cutAt: data.cutAt,
+      })
+    : null
   const provisional = data.delivery.filter(
     (d) => d.date >= from && d.date <= to && d.provisional,
   ).length
@@ -92,20 +126,25 @@ export function SalesPanel({
         totals={totals}
         days={span}
         caption={
-          grain === 'hour'
-            ? 'Counter bills by Kolkata clock hour, totals across the range'
-            : metric === 'revenue'
-              ? 'Counter + delivery'
-              : 'Counter bills only'
+          compared !== null ? (
+            <span data-testid="sales-trend-compared">{compared}</span>
+          ) : grain === 'hour' ? (
+            'Counter bills by Kolkata clock hour, totals across the range'
+          ) : metric === 'revenue' ? (
+            'Counter + delivery'
+          ) : (
+            'Counter bills only'
+          )
         }
         series={view.series}
         axis={view.axis}
         rowHeader={grain === 'hour' ? 'Hour' : grain === 'day' ? 'Day' : 'Week'}
         newestFirst={grain !== 'hour'}
         exportName="sales-trends"
+        fitTicks={!!windows}
         exportUnit={metric === 'orders' ? 'counter orders' : `${labels[metric]} (paise)`}
       >
-        {metric === 'revenue' && (
+        {metric === 'revenue' && !windows && (
           <Explain
             label="Delivery coverage"
             className="mt-2 min-h-11"
@@ -133,7 +172,8 @@ export function SalesPanel({
       <Card>
         <CardTitle>{hourlyTitle}</CardTitle>
         <p className="mt-1 text-xs text-content-muted">
-          {metric === 'aov' ? 'AOV' : 'Per day'} · Counter only · Kolkata
+          {metric === 'aov' ? 'AOV' : 'Per day'}
+          {windows ? '' : ' · Counter only'} · Kolkata
         </p>
         <AnalyticsChart
           key={`${from}:${to}:${metric}:${periods}`}
@@ -143,6 +183,7 @@ export function SalesPanel({
           series={hourlyPattern.series}
           metric={metric}
           axis={hourlyPattern.axis}
+          fitTicks={!!windows}
         />
       </Card>
     </>
