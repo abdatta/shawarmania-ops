@@ -13,7 +13,6 @@ import { CounterDeviceContext } from '@/session/counter-context'
 import { KitchenMarksProvider } from '@/features/billing/kitchen-marks'
 import { useKitchenMarks } from '@/features/billing/kitchen-marks-state'
 import { useDishKitchenBoard } from '@/features/kitchen/use-dish-kitchen-board'
-import { ChangeGatesForTest } from '@/test/change-gates'
 import { renderHook } from '@testing-library/react'
 import { ALL_OFF_LOYALTY_SETTINGS, ALL_OFF_SERVICE_SETTINGS } from '@/domain'
 
@@ -277,11 +276,9 @@ it('queues a fresh counter Ready read behind an older response', async () => {
           shift: null,
         }}
       >
-        <ChangeGatesForTest on={{ 'dish-ticks': true }}>
-          <KitchenMarksProvider>
-            <Capture />
-          </KitchenMarksProvider>
-        </ChangeGatesForTest>
+        <KitchenMarksProvider>
+          <Capture />
+        </KitchenMarksProvider>
       </CounterDeviceContext.Provider>
     </AdaptersContext.Provider>,
   )

@@ -99,47 +99,6 @@ export const CHANGE_GATES = {
       'none: a health report is overwritten every minute and no other path reads what it writes',
   },
   /**
-   * #74 relaunched (each-dish-is-ticked-off, design R1): the two-column counter,
-   * labels, dish notes and each dish ticked off on its own, with the kitchen
-   * seeing only the food it still owes. Off is the counter and kitchen as they
-   * were before #74.
-   */
-  'dish-ticks': {
-    kind: 'change',
-    code: 'DT',
-    change: 'each-dish-is-ticked-off',
-    retireBy: '2026-12-15',
-    roundTrip: 'tested',
-  },
-  /**
-   * The kitchen's Done, and on the counter the dish's orange fill and two rings
-   * of the handbell (design R1, R6). Runs only while `dish-ticks` is on: its
-   * whole effect on the counter is on a dish row only the ticks draw.
-   */
-  'kitchen-ready': {
-    kind: 'change',
-    code: 'KR',
-    change: 'each-dish-is-ticked-off',
-    dependsOn: ['dish-ticks'],
-    retireBy: '2026-12-15',
-    roundTrip: 'tested',
-  },
-  /**
-   * The counter draws an order, an edit or a payment from the tablet's own
-   * record the moment it is saved, instead of waiting for the server's re-read
-   * (the-counter-shows-what-it-saved, design D1–D6). Built for the counter #74
-   * runs, so it runs only while both of #74's gates are on (D7).
-   */
-  'instant-saves': {
-    kind: 'change',
-    code: 'IS',
-    change: 'the-counter-shows-what-it-saved',
-    dependsOn: ['dish-ticks', 'kitchen-ready'],
-    retireBy: '2027-01-15',
-    roundTrip:
-      'none: the on path persists nothing; it draws the tablet’s own queue and cache sooner, and every save is the same command with the gate on or off',
-  },
-  /**
    * The app skips re-reads it does not need (the-app-asks-the-server-less,
    * design D1–D8): the kitchen's categories, the counter's menu on every sale,
    * the expense list's per-category counts, badges on every return to the
@@ -184,6 +143,12 @@ export const CHANGE_GATE_KEYS = Object.keys(CHANGE_GATES) as ChangeGateKey[]
 export const RETIRED_CHANGE_GATES: readonly string[] = [
   // retire-outside-tap-closes: a tap outside a pop-up always closes it.
   'outside-tap-closes',
+  // retire-dish-ticks, with the two gates that depended on it: the counter is
+  // the menu and a two-column rail, each dish is ticked off on its own, the
+  // kitchen marks food Done, and the counter draws its own saves at once.
+  'instant-saves',
+  'kitchen-ready',
+  'dish-ticks',
 ]
 
 export function isChangeGateKey(key: string): key is ChangeGateKey {

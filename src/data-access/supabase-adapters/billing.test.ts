@@ -517,9 +517,7 @@ describe('the live tablet acceptance boundary', () => {
   })
 
   it('keeps dish ticks, labels and notes across an offline reopen and queues their dependencies', async () => {
-    const billing = createSupabaseBillingAdapter(offlineClient(), session, undefined, {
-      dishes: true,
-    })
+    const billing = createSupabaseBillingAdapter(offlineClient(), session, undefined)
     const created = await billing.saveOrder({
       ...orderInput,
       label: 'Red shirt',
@@ -529,9 +527,7 @@ describe('the live tablet acceptance boundary', () => {
     await billing.markOrderLinesPrepared!(crypto.randomUUID(), created.id, [
       { id: lineId, prepared: true },
     ])
-    const reopened = createSupabaseBillingAdapter(offlineClient(), session, undefined, {
-      dishes: true,
-    })
+    const reopened = createSupabaseBillingAdapter(offlineClient(), session, undefined)
     await expect(reopened.listOpenOrders(session.device.outletId)).resolves.toMatchObject([
       {
         id: created.id,
@@ -556,22 +552,6 @@ describe('the live tablet acceptance boundary', () => {
       label: 'Red shirt',
       lines: [{ note: 'No sauce' }],
     })
-    database.close()
-  })
-
-  it('writes an order command exactly as before with the dish ticks off: no variant, label or note', async () => {
-    const billing = createSupabaseBillingAdapter(offlineClient(), session)
-    await billing.saveOrder({
-      ...orderInput,
-      label: 'Red shirt',
-      lines: [{ ...draft.lines[0]!, note: 'No sauce' }],
-    })
-    const database = new BillingDeliveryDatabase()
-    const row = (await database.envelopes.toArray()).find((r) => r.type === 'create_order')!
-    expect(Object.keys(row.command)).not.toContain('variant')
-    const payload = row.command.payload as unknown as { lines: object[] }
-    expect(payload).not.toHaveProperty('label')
-    expect(payload.lines[0]).not.toHaveProperty('note')
     database.close()
   })
 
@@ -1011,7 +991,7 @@ describe('the live tablet acceptance boundary', () => {
 
   it('uses missing-response evidence to show the queue stopped sending immediately', async () => {
     const rpc = vi.fn(async (name: string) =>
-      name === 'create_billing_order'
+      name === 'create_billing_order_v2'
         ? { data: null, error: new Error('no response'), status: 0 }
         : { data: null, error: null, status: 200 },
     )
@@ -1025,7 +1005,7 @@ describe('the live tablet acceptance boundary', () => {
 
   it('keeps removed-tablet evidence but refuses more work after the server says it was removed', async () => {
     const rpc = vi.fn(async (name: string) =>
-      name === 'create_billing_order'
+      name === 'create_billing_order_v2'
         ? {
             data: { status: 'removed_tablet', commandId: orderInput.clientId },
             error: null,
@@ -1917,7 +1897,7 @@ describe('a read that began before a dish tick', () => {
       reads++
       if (reads === 2) await stalled
     })
-    const billing = createSupabaseBillingAdapter(client, session, undefined, { dishes: true })
+    const billing = createSupabaseBillingAdapter(client, session, undefined)
     const store = new BillingDeliveryStore(new BillingDeliveryDatabase())
     await billing.listOpenOrders('outlet-1')
 
@@ -1949,7 +1929,6 @@ describe('a peek draws what the tablet holds, with no request', () => {
       { rpc: vi.fn(), from } as unknown as SupabaseClient<Database>,
       session,
       undefined,
-      { dishes: true },
     )
     expect(await billing.peekOpenOrders('outlet-1')).toBeNull()
     expect(await billing.peekShiftHistory('shift-1')).toBeNull()
@@ -1963,7 +1942,7 @@ describe('a peek draws what the tablet holds, with no request', () => {
       reads++
       if (reads > 1) await held
     })
-    const billing = createSupabaseBillingAdapter(client, session, undefined, { dishes: true })
+    const billing = createSupabaseBillingAdapter(client, session, undefined)
     await billing.listOpenOrders('outlet-1')
     void billing.listOpenOrders('outlet-1')
 
@@ -2002,9 +1981,7 @@ describe('a peek draws what the tablet holds, with no request', () => {
   })
 
   it('is what the read returns when the server fails', async () => {
-    const billing = createSupabaseBillingAdapter(offlineClient(), session, undefined, {
-      dishes: true,
-    })
+    const billing = createSupabaseBillingAdapter(offlineClient(), session, undefined)
     await billing.listOpenOrders('outlet-1')
     await billing.saveOrder(orderInput)
     const peeked = await billing.peekOpenOrders('outlet-1')
@@ -2013,9 +1990,7 @@ describe('a peek draws what the tablet holds, with no request', () => {
   })
 
   it('draws a payment, its correction and a take-back in the shift’s bills', async () => {
-    const billing = createSupabaseBillingAdapter(emptyReadableClient(), session, undefined, {
-      dishes: true,
-    })
+    const billing = createSupabaseBillingAdapter(emptyReadableClient(), session, undefined)
     const store = new BillingDeliveryStore(new BillingDeliveryDatabase())
     await billing.listShiftHistory('shift-1')
     await billing.listOpenOrders('outlet-1')

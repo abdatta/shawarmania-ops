@@ -1,7 +1,6 @@
 import { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { ReceiptText } from 'lucide-react'
 
-import { useChangeGate } from '@/change-gates/context'
 import { EmptyState } from '@/components/layout/empty-state'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { useAdapters } from '@/data-access'
@@ -19,29 +18,27 @@ import { CounterDeviceContext } from '@/session/counter-context'
 
 import { CancelOrderDialog } from './cancel-order-dialog'
 import { OpenOrdersHeading } from './open-orders-surface'
-import { captureCardFlight, flyCapturedCardToDestination, useFlip, waitForElement } from './flip'
+import { useFlip } from './flip'
 import { PipelineCard } from './pipeline-card'
 import { OrderCheckoutDialog, type CheckoutOrderRevision } from './order-checkout-dialog'
 import { RailScrollChip, useRailClipping } from './rail-scroll-chip'
 import { useCounterState } from './use-counter-state'
-import { OfflineFillHint } from './offline-fill-hint'
 import { useKitchenMarks } from './kitchen-marks-state'
 import { useMasonryRail } from './use-masonry-rail'
 import { useReadyRinger } from './use-ready-ringer'
 
 /**
- * The dish ticks' rail (each-dish-is-ticked-off, design D1, D6, R5, R6;
- * `dish-ticks`). Today's rail is `OpenOrdersSurface`, which a counter runs with
- * the gate off; this one is that rail laid out in two free-flowing columns, its
- * cards ticking each dish, and — with `kitchen-ready` on — filling a Ready dish
- * and ringing the handbell when one arrives.
+ * The counter's rail (each-dish-is-ticked-off, design D1, D6, R5, R6). It is
+ * `OpenOrdersSurface`, which the standalone Open orders page still draws, laid
+ * out in two free-flowing columns, its cards ticking each dish, filling a Ready
+ * dish and ringing the handbell when one arrives.
  *
  * **It reads nothing on a timer** (design R5). The first launch re-read this
  * rail every ten seconds, after a one-second loop before that; both are gone.
  * It reads on its own writes, the outlet's billing events and the foreground,
- * as today's rail does, one read at a time with one trailing read kept.
+ * as the standalone rail does, one read at a time with one trailing read kept.
  *
- * Today's account of the rail, which still holds:
+ * The standalone rail's account, which still holds:
  *
  * The outlet's unfinished work as **one list**, newest order first.
  *
@@ -91,7 +88,7 @@ export function DishOpenOrdersSurface({
   refreshKey?: number
   /**
    * Bumped by a save on this tablet that the rail should show — an order, an
-   * edit, a take-back from Bills — with `instant-saves` on. Distinct from
+   * edit, a take-back from Bills. Distinct from
    * `refreshKey`, which the outlet's change notices and the foreground bump too
    * (the-counter-shows-what-it-saved, design D3).
    */
@@ -111,9 +108,6 @@ export function DishOpenOrdersSurface({
   checkoutSettings?: Pick<OutletMenu, 'service' | 'loyalty'>
 } = {}) {
   const { billing } = useAdapters()
-  /** Always two columns: this is the dish ticks' rail. */
-  const twoColumns = true
-  const readyOn = useChangeGate('kitchen-ready')
   const session = useContext(SessionContext)
   const counterDevice = useContext(CounterDeviceContext)
   const { shift } = useCounterState()
@@ -179,8 +173,7 @@ export function DishOpenOrdersSurface({
   }, [load, refreshKey])
 
   /*
-    A save on this tablet, with `instant-saves` on (the-counter-shows-what-it-
-    saved, design D3, D4). The rail draws what the tablet holds — the order just
+    A save on this tablet (the-counter-shows-what-it-saved, design D3, D4). The rail draws what the tablet holds — the order just
     taken, the edit just made, the order a take-back reopened — and then asks
     the server, once, as the save always did.
 
@@ -190,9 +183,8 @@ export function DishOpenOrdersSurface({
     dropping reads as it went could, on a busy outlet with a weak connection,
     keep the server's answer from ever landing.
   */
-  const instantSaves = useChangeGate('instant-saves')
   useEffect(() => {
-    if (!instantSaves || ownSaveKey === 0) return
+    if (ownSaveKey === 0) return
     let current = true
     queue.invalidate()
     void (async () => {
@@ -224,7 +216,7 @@ export function DishOpenOrdersSurface({
   }, [ownSaveKey])
 
   // The handbell and the bells that swing with it, from the reads above (R6).
-  const swinging = useReadyRinger(orders, marks, readyOn)
+  const swinging = useReadyRinger(orders, marks)
 
   /** Each order's ticks still being saved on this tablet, in tap order. */
   const tickQueues = useRef(new Map<string, Promise<void>>())
@@ -305,11 +297,6 @@ export function DishOpenOrdersSurface({
 
   function recordPayment(payments: PaymentAllocation[], revision: CheckoutOrderRevision | null) {
     if (!paying) return
-    // A settlement replaces an order id with a bill id. Capture the whole
-    // ticket before the refresh removes it, so the visual identity survives
-    // the cross-column handoff instead of leaving a separate amount badge.
-    const source = document.querySelector<HTMLElement>(`[data-flip-id="${paying.id}"]`)
-    const flight = source && !twoColumns ? captureCardFlight(source) : null
     void act(async () => {
       let updated = paying
       if (revision) {
@@ -336,13 +323,6 @@ export function DishOpenOrdersSurface({
           ),
       )
       return bill
-    }).then((bill) => {
-      if (!bill || typeof bill !== 'object' || !('id' in bill)) return
-      if (!flight) return
-      void waitForElement(`[data-testid="shift-bill-${String(bill.id)}"]`).then((destination) => {
-        if (!destination) return
-        flyCapturedCardToDestination(flight, destination)
-      })
     })
   }
 
@@ -360,7 +340,7 @@ export function DishOpenOrdersSurface({
   // is shared even when the other order is filtered out of view.
   const shared = sharedTables(orders ?? [])
   const listed = (orders ?? [])
-    .filter((order) => (twoColumns || order.id !== editingOrderId) && order.status !== 'cancelled')
+    .filter((order) => order.status !== 'cancelled')
     /*
       Sorted here rather than taken on trust from the adapter. Newest-first is
       this surface's promise, and the two adapters did not agree about it: the
@@ -374,12 +354,12 @@ export function DishOpenOrdersSurface({
       return byTime !== 0 ? byTime : right.id.localeCompare(left.id)
     })
 
-  // The settlement flight is the only motion left. With no sections to move
-  // between, the hook measures no movement when a fact is merely recorded.
+  // With no sections to move between, the hook measures no movement when a
+  // fact is merely recorded; a card that leaves fades.
   const flipRootRef = useRef<HTMLElement | null>(null)
   const scrollerRef = useRef<HTMLUListElement | null>(null)
-  useMasonryRail(scrollerRef, twoColumns, orders)
-  useFlip(flipRootRef, [orders], twoColumns)
+  useMasonryRail(scrollerRef, true, orders)
+  useFlip(flipRootRef, [orders], true)
   const clipping = useRailClipping(scrollerRef, [listed.length, orders])
   const scrollRailTo = (edge: 'top' | 'bottom') => {
     const scroller = scrollerRef.current
@@ -412,23 +392,14 @@ export function DishOpenOrdersSurface({
       since the customer button (36px) set the header's height.
     */
     return (
-      <LoadingRegion label="the pipeline" className={twoColumns ? 'flex gap-2' : 'space-y-1'}>
-        {twoColumns ? (
-          [0, 1].map((column) => (
-            <div key={column} className="flex-1 space-y-2">
-              {[0, 1, 2].map((row) => (
-                <Shimmer key={row} className={column === row ? 'h-32' : 'h-24'} />
-              ))}
-            </div>
-          ))
-        ) : (
-          <>
-            <OfflineFillHint />
-            <Shimmer className="h-[98px]" />
-            <Shimmer className="h-[98px]" />
-            <Shimmer className="h-[98px]" />
-          </>
-        )}
+      <LoadingRegion label="the pipeline" className="flex gap-2">
+        {[0, 1].map((column) => (
+          <div key={column} className="flex-1 space-y-2">
+            {[0, 1, 2].map((row) => (
+              <Shimmer key={row} className={column === row ? 'h-32' : 'h-24'} />
+            ))}
+          </div>
+        ))}
       </LoadingRegion>
     )
   }
@@ -488,7 +459,6 @@ export function DishOpenOrdersSurface({
                 className={order.id === editingOrderId ? 'invisible' : undefined}
                 // The scroll chip names a Ready order out of sight (D9).
                 data-ready-order={
-                  readyOn &&
                   order.lines.some(
                     (line) =>
                       (marks?.readyQuantities?.[order.id]?.[line.orderLineId ?? ''] ??
@@ -511,7 +481,6 @@ export function DishOpenOrdersSurface({
                 <PipelineCard
                   order={order}
                   dishTicks
-                  readyOn={readyOn}
                   bellsRinging={swinging.has(order.id)}
                   readyQuantities={marks?.readyQuantities?.[order.id] ?? {}}
                   onTickLine={(lineId: string, prepared: boolean) =>

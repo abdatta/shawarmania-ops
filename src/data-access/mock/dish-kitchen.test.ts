@@ -5,14 +5,14 @@ import { DEMO_KITCHEN_DEVICE_ID, DEMO_KITCHEN_LABEL } from './kitchen'
 import { kitchenCardState } from '@/domain'
 
 /**
- * The dish ticks' demo kitchen (each-dish-is-ticked-off; `dishTicks: 'on'`): the
+ * The dish ticks' demo kitchen (each-dish-is-ticked-off; `dishWalkthrough: true`): the
  * counter's kitchen read (#72) by the rules
  * `counter_kitchen_marks()` follows: the demo kitchen is on shift, carries what
  * its board carries, and has answered an order when its card is quiet — or when
  * the counter ticked it Prepared.
  */
 function setup() {
-  const data = createDemoData({ dishTicks: 'on' })
+  const data = createDemoData({ dishWalkthrough: true })
   const adapters = createMockAdapters('biller', data)
   const byNumber = (n: number) => data.store.orders.find((order) => order.order_number === n)!
   return { data, kitchen: adapters.kitchen, byNumber }

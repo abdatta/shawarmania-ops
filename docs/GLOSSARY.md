@@ -58,10 +58,10 @@ wherever a bill counts. Entered only by command, through the paper-sales script
 Short-lived working state for food being prepared. It is editable only while
 open and belongs to the tablet that created it. Full payment converts it to an
 immutable bill; cancellation keeps attributed history and consumes no bill number.
-Its preparation is finished by the counter's **Prepared** tick or, for a paid
-order nobody ticked, by the **day change** at the cutover ending its payment's
-business day (#69). With `dish-ticks` on, the counter finishes it by
-[ticking](#tick) every dish.
+Its preparation is finished by the counter [ticking](#tick) every dish (#74) or,
+for a paid order nobody ticked, by the **day change** at the cutover ending its
+payment's business day (#69). The standalone Open orders page still ticks a whole
+order **Prepared**.
 
 ### Order number
 
@@ -165,7 +165,7 @@ A kitchen's acknowledgement of a card that is alerting — new, edited or cancel
 
 ### Label
 
-*(#74, `dish-ticks`.)* A few optional letters typed at the top of the composer — a name, "red shirt" — that headline an order's card on the counter and nowhere else. Not a customer: it never touches the customer's name or phone, though at payment it is offered as the name for a number with none. Thrown away, in the database, when the order leaves the rail; on no receipt, bill, report or export, and never shown to a kitchen. Held in `order_labels`.
+*(#74.)* A few optional letters typed at the top of the composer — a name, "red shirt" — that headline an order's card on the counter and nowhere else. Not a customer: it never touches the customer's name or phone, though at payment it is offered as the name for a number with none. Thrown away, in the database, when the order leaves the rail; on no receipt, bill, report or export, and never shown to a kitchen. Held in `order_labels`.
 
 ### Note
 
@@ -181,7 +181,7 @@ A kitchen's acknowledgement of a card that is alerting — new, edited or cancel
 
 ### Ready / Done
 
-*(#74, `kitchen-ready`.)* The kitchen's record that it has made food: **Done** is the control on the kitchen's ticket and **Ready** is what the counter sees, the dish row filling orange with the handbell and the order's swinging bell. Append-only and undoable; Ready never ticks anything, and handover at the counter is a tick.
+*(#74.)* The kitchen's record that it has made food: **Done** is the control on the kitchen's ticket and **Ready** is what the counter sees, the dish row filling orange with the handbell and the order's swinging bell. Append-only and undoable; Ready never ticks anything, and handover at the counter is a tick.
 
 ### Avg to ready / Avg handover
 

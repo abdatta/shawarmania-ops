@@ -28,21 +28,11 @@ function memoryStorage() {
   }
 }
 
-const own = (gates: ReturnType<typeof createDemoChangeGates>, key: string) =>
-  gates.summaries().find((gate) => gate.key === key)?.enabled
-
 describe('the demo’s change gates', () => {
   it('start with every gate on, the declared ones in the snapshot', () => {
     const gates = createDemoChangeGates({ storage: memoryStorage() })
     for (const key of CHANGE_GATE_KEYS) expect(gates.snapshot()[key]).toBe(true)
     expect(gates.summaries().every((gate) => gate.enabled)).toBe(true)
-  })
-
-  it('show one gate dependent on another', () => {
-    const gates = createDemoChangeGates({ storage: memoryStorage() })
-    expect(gates.summaries().find((gate) => gate.key === 'kitchen-ready')?.dependsOn).toEqual([
-      'dish-ticks',
-    ])
   })
 
   it('record a turn in the snapshot, the history and this tab’s storage', () => {
@@ -65,31 +55,6 @@ describe('the demo’s change gates', () => {
     const reloaded = createDemoChangeGates({ storage })
     expect(reloaded.snapshot().probe).toBe(false)
     expect(reloaded.history('probe')[0]).toMatchObject({ enabled: false })
-  })
-
-  it('turn off the gates depending on a gate when it turns off, each as its own turn', () => {
-    const gates = createDemoChangeGates({ storage: memoryStorage() })
-    gates.turn('dish-ticks', false, 'Counter freezing')
-    expect(own(gates, 'dish-ticks')).toBe(false)
-    expect(own(gates, 'kitchen-ready')).toBe(false)
-    expect(gates.history('kitchen-ready')[0]).toMatchObject({
-      enabled: false,
-      reason: 'Turned off with Dish ticks',
-    })
-  })
-
-  it('refuse to turn a gate on while a gate it depends on is off', () => {
-    const gates = createDemoChangeGates({ storage: memoryStorage() })
-    gates.turn('dish-ticks', false, null)
-    expect(() => gates.turn('kitchen-ready', true, null)).toThrow(
-      'Turn on Dish ticks first: Kitchen Ready is dependent on it.',
-    )
-    gates.turn('dish-ticks', true, null)
-    // Turning the dependency back on does not bring the dependent with it: that
-    // is a turn of its own.
-    expect(own(gates, 'kitchen-ready')).toBe(false)
-    gates.turn('kitchen-ready', true, null)
-    expect(own(gates, 'kitchen-ready')).toBe(true)
   })
 
   it('forget every turn on reset, back to everything on', () => {

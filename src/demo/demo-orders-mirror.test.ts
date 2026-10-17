@@ -26,15 +26,8 @@ afterEach(() => {
 it('publishes a local Undo before adopting an incoming counter snapshot', async () => {
   vi.useFakeTimers()
   vi.stubGlobal('BroadcastChannel', Channel)
-  const cook = createDemoData({ dishTicks: 'on' })
-  const stopCook = mirrorDemoOrders(
-    cook.store,
-    cook.kitchen,
-    0,
-    () => {},
-    'kitchen',
-    () => true,
-  )
+  const cook = createDemoData({ dishWalkthrough: true })
+  const stopCook = mirrorDemoOrders(cook.store, cook.kitchen, 0, () => {}, 'kitchen')
   const channel = Channel.opened[0]!
   channel.deliver({ type: 'hello', epoch: 0 })
   const snapshot = channel.sent.at(-1) as Record<string, unknown>
@@ -54,24 +47,10 @@ it('publishes a local Undo before adopting an incoming counter snapshot', async 
 it('stale snapshots cannot erase Ready, undo Undo, revert counter ticks or overwrite an order', async () => {
   vi.useFakeTimers()
   vi.stubGlobal('BroadcastChannel', Channel)
-  const counter = createDemoData({ dishTicks: 'on' })
-  const cook = createDemoData({ dishTicks: 'on' })
-  const stopCounter = mirrorDemoOrders(
-    counter.store,
-    counter.kitchen,
-    0,
-    () => {},
-    'counter',
-    () => true,
-  )
-  const stopCook = mirrorDemoOrders(
-    cook.store,
-    cook.kitchen,
-    0,
-    () => {},
-    'kitchen',
-    () => true,
-  )
+  const counter = createDemoData({ dishWalkthrough: true })
+  const cook = createDemoData({ dishWalkthrough: true })
+  const stopCounter = mirrorDemoOrders(counter.store, counter.kitchen, 0, () => {}, 'counter')
+  const stopCook = mirrorDemoOrders(cook.store, cook.kitchen, 0, () => {}, 'kitchen')
   const [counterChannel, cookChannel] = Channel.opened
   counterChannel!.deliver({ type: 'hello', epoch: 0 })
   const staleCounter = counterChannel!.sent.at(-1)
@@ -104,24 +83,4 @@ it('stale snapshots cannot erase Ready, undo Undo, revert counter ticks or overw
   expect(counter.store.dishWorkflow!.readies.find((row) => row.id === ready.id)?.undone).toBe(true)
   stopCounter()
   stopCook()
-})
-
-it('with the dish ticks off, mirrors orders and the kitchen as it did before: no writer, no dish records', async () => {
-  vi.useFakeTimers()
-  vi.stubGlobal('BroadcastChannel', Channel)
-  const tab = createDemoData()
-  const stop = mirrorDemoOrders(tab.store, tab.kitchen, 0, () => {})
-  const channel = Channel.opened[0]!
-  channel.deliver({ type: 'hello', epoch: 0 })
-  const snapshot = channel.sent.at(-1) as Record<string, unknown>
-  expect(snapshot).toMatchObject({ type: 'orders' })
-  expect(snapshot).not.toHaveProperty('writer')
-  expect(snapshot).not.toHaveProperty('dishWorkflow')
-  expect(snapshot.kitchen).not.toHaveProperty('stationAcks')
-  // An incoming frame replaces this tab's orders wholesale, as before.
-  const incoming = structuredClone(snapshot) as { orders: { id: string }[] }
-  incoming.orders = incoming.orders.slice(1)
-  channel.deliver(incoming)
-  expect(tab.store.orders).toHaveLength(incoming.orders.length)
-  stop()
 })

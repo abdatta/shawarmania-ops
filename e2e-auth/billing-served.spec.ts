@@ -1,9 +1,8 @@
-import { type APIRequestContext, type Locator, type Page } from '@playwright/test'
+import { type APIRequestContext, type Page } from '@playwright/test'
 import { expect, test } from './test'
 
 import { MAX_BILLING_RETRY_MS } from '../src/outbox/drain'
 import {
-  AFTER_LOCAL_ACCEPTANCE_MS,
   LOCAL_ANON_KEY,
   OUTLET_KALYANI,
   PASSWORD,
@@ -38,8 +37,6 @@ import {
  */
 
 const GOLD_CUSTOMER = '80000000-0000-4000-a000-000000000001'
-const GOLD_PHONE_DIGITS = '9000000001'
-const GOLD_PHONE = '+919000000001'
 /**
  * How long a reconnected till may take to drain what it queued: the outbox's
  * longest retry delay, then room to deliver the chain waiting behind it.
@@ -130,23 +127,6 @@ async function ordersWhere(
   return (await response.json()) as ServedOrder[]
 }
 
-async function billFor(request: APIRequestContext, token: string, orderId: string) {
-  const response = await request.get(`${SUPABASE_URL}/rest/v1/bills`, {
-    headers: { apikey: LOCAL_ANON_KEY, authorization: `Bearer ${token}` },
-    params: {
-      select: 'service_type,table_number,discount_paise,bill_items(kind,quantity,discount_paise)',
-      order_id: `eq.${orderId}`,
-    },
-  })
-  expect(response.ok()).toBe(true)
-  return (await response.json()) as {
-    service_type: string | null
-    table_number: number | null
-    discount_paise: number
-    bill_items: { kind: string; quantity: number; discount_paise: number }[]
-  }[]
-}
-
 /**
  * Unique per run, not per file. An online till that is handed a number an
  * earlier run saved finds that customer and rings the order under the old name,
@@ -200,46 +180,6 @@ function cardsAt(page: Page, text: string) {
     .getByTestId('counter-activity-rail')
     .locator('[data-testid^="open-order-"]')
     .filter({ hasText: text })
-}
-
-/**
- * Cards this till rang and has not yet sent, which carry no order number.
- *
- * For an order no run-unique text can find. The gold member is the seed's one
- * customer, so "Takeaway" also matches a member takeaway an earlier, failed run
- * left on the server, and a rerun without a reset found two of them. Anything
- * the server already holds has a number, so this run's offline work is exactly
- * the unnumbered cards.
- */
-function unsentCardsAt(page: Page, text: string) {
-  return page
-    .getByTestId('counter-activity-rail')
-    .locator('[data-testid^="open-order-local-"]')
-    .filter({ hasText: text })
-}
-
-/** Pay an open order from its card, as a biller does. */
-async function payCard(page: Page, cards: Locator) {
-  const paid = cards.getByRole('button', {
-    name: 'Paid',
-    exact: true,
-    pressed: false,
-  })
-  await expect(paid).toBeVisible({ timeout: OFFLINE_READ_MS })
-  await paid.click()
-  const payment = page.getByRole('dialog', { name: 'Record payment' })
-  await payment.getByRole('button', { name: 'Cash', exact: true }).click()
-  await payment.getByRole('button', { name: 'Paid', exact: true }).click()
-  await expect(page.locator('dialog[open]')).toHaveCount(0)
-}
-
-/**
- * Mark a paid order prepared, which takes it off the rail into the shift's
- * bills, so a rerun's rail holds only its own work.
- */
-async function serveCard(card: Locator) {
-  await card.getByRole('button', { name: 'Prepared', exact: true, pressed: false }).click()
-  await expect(card).toHaveCount(0, { timeout: OFFLINE_READ_MS })
 }
 
 /**
@@ -297,156 +237,6 @@ test.afterAll(async ({ request }) => {
   })
   await setKalyaniGold(request, false)
 })
-
-test(
-  'orders rung offline with a table, bags and a waiver each settle exactly once, carrying them',
-  { tag: '@cg-off:dish-ticks' },
-  async ({ browser, request }) => {
-    test.setTimeout(240_000)
-    const run = Date.now().toString(36)
-    const tableCustomer = `E2E table ${run}`
-    const bagsCustomer = `E2E bags ${run}`
-    const token = await accessToken(request, 'admin.kalyani')
-    const { context, page } = await openTill(browser, request, TILL_ONE)
-
-    try {
-      // The choices reached the counter with its menu: both types are asked.
-      const startedAt = new Date(Date.now() - 1_000).toISOString()
-      await addShawarma(page)
-      await expect(page.getByTestId('service-chip-dine_in')).toBeVisible()
-      await expect(page.getByTestId('service-chip-takeaway')).toBeVisible()
-
-      // The member is looked up while the tablet can still reach the directory,
-      // so it knows them as gold when the network goes.
-      await page.getByTestId('customer-row').click()
-      const customer = page.getByRole('dialog', { name: 'Customer' })
-      for (const digit of GOLD_PHONE_DIGITS) {
-        await customer.getByRole('button', { name: digit, exact: true }).click()
-      }
-      await expect(customer.getByTestId('customer-match')).toBeVisible()
-      await customer.getByTestId('customer-confirm').click()
-      await expect(customer).toHaveCount(0)
-      // The customer is answered; where the food goes is still owed.
-      await expect(page.getByTestId('save-order')).toBeDisabled()
-
-      await context.setOffline(true)
-
-      // 1. The member's takeaway: two bags, both waived. Paid at once, while it
-      //    is the only takeaway on the rail waiting for its money.
-      await page.getByTestId('service-chip-takeaway').click()
-      await page.getByRole('button', { name: 'One more Packaging' }).click()
-      await expect(page.getByTestId('bill-quantity-packaging')).toHaveText('2')
-      await expect(page.getByTestId('bill-line-packaging')).toHaveAttribute('data-waived', 'true')
-      await saveOrder(page)
-      await payCard(page, unsentCardsAt(page, 'Takeaway'))
-      await serveCard(unsentCardsAt(page, 'Takeaway'))
-
-      // 2. Dine-in at table 3.
-      await addShawarma(page)
-      await identifyNew(page, tableCustomer)
-      await page.getByTestId('service-chip-dine_in').click()
-      await keyTable(page, '3')
-      await expect(page.getByTestId('service-chip-dine_in')).toHaveText('Table 3')
-      const tableOrder = await saveOrder(page)
-
-      // 3. A takeaway with two bags, charged.
-      await addShawarma(page)
-      await identifyNew(page, bagsCustomer)
-      await page.getByTestId('service-chip-takeaway').click()
-      await page.getByRole('button', { name: 'One more Packaging' }).click()
-      const bagsOrder = await saveOrder(page)
-
-      // Revise one: a second shawarma at table 3, still offline. Found by this
-      // run's order, not by the table, which an earlier run may still hold. The
-      // reference leads with the order and the table follows it.
-      const table = orderCard(page, tableOrder)
-      await expect(table).toHaveCount(1, { timeout: OFFLINE_READ_MS })
-      await table.getByRole('button', { name: /^More actions for .+ · Table 3$/ }).click()
-      await table.getByRole('menuitem', { name: 'Edit' }).click()
-      await addShawarma(page)
-      await page.getByTestId('editing-order-pin').getByTestId('save-order').click()
-      await expect(page.getByTestId('editing-order-pin')).toHaveCount(0)
-
-      // The second payment, still offline.
-      await payCard(page, orderCard(page, bagsOrder))
-      await serveCard(orderCard(page, bagsOrder))
-      await page.waitForTimeout(AFTER_LOCAL_ACCEPTANCE_MS)
-
-      // Nothing has reached the server yet.
-      expect(await ordersWhere(request, token, { customer_name: `eq.${tableCustomer}` })).toEqual(
-        [],
-      )
-
-      // Back online: everything drains, once.
-      await context.setOffline(false)
-      await page.reload()
-      await expect(page.getByTestId('menu-grid')).toBeVisible()
-      await expect(page.getByTestId('sync-indicator').first()).toHaveAttribute(
-        'data-sync',
-        'synced',
-        {
-          timeout: DRAIN_MS,
-        },
-      )
-
-      const atTable = await ordersWhere(request, token, { customer_name: `eq.${tableCustomer}` })
-      expect(atTable).toHaveLength(1)
-      expect(atTable[0]).toMatchObject({
-        status: 'open',
-        service_type: 'dine_in',
-        table_number: 3,
-      })
-      expect(atTable[0]!.order_items).toEqual([
-        expect.objectContaining({ kind: 'item', quantity: 2 }),
-      ])
-
-      const bags = await ordersWhere(request, token, { customer_name: `eq.${bagsCustomer}` })
-      expect(bags).toHaveLength(1)
-      expect(bags[0]).toMatchObject({
-        status: 'paid',
-        service_type: 'takeaway',
-        table_number: null,
-      })
-      expect(bags[0]!.order_items).toContainEqual(
-        expect.objectContaining({
-          kind: 'packaging',
-          quantity: 2,
-          unit_price_paise: 500,
-          discount_paise: 0,
-        }),
-      )
-
-      const member = await ordersWhere(request, token, {
-        customer_phone: `eq.${GOLD_PHONE}`,
-        service_type: 'eq.takeaway',
-        ordered_at: `gte.${startedAt}`,
-      })
-      expect(member).toHaveLength(1)
-      expect(member[0]).toMatchObject({ status: 'paid', discount_paise: 1000 })
-      expect(member[0]!.order_items).toContainEqual(
-        expect.objectContaining({
-          kind: 'packaging',
-          quantity: 2,
-          discount_paise: 1000,
-          discount_percent_bp: 10_000,
-        }),
-      )
-
-      // The bills copied the facts, the waiver included.
-      const [memberBill] = await billFor(request, token, member[0]!.id)
-      expect(memberBill).toMatchObject({ service_type: 'takeaway', discount_paise: 1000 })
-      expect(memberBill!.bill_items).toContainEqual(
-        expect.objectContaining({ kind: 'packaging', quantity: 2, discount_paise: 1000 }),
-      )
-      const [bagsBill] = await billFor(request, token, bags[0]!.id)
-      expect(bagsBill).toMatchObject({ service_type: 'takeaway', table_number: null })
-
-      await cancelCard(page, tableOrder)
-    } finally {
-      await context.close()
-    }
-  },
-)
 
 test('two tills seat one table while one is offline, and both orders say so', async ({
   browser,

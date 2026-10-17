@@ -10,14 +10,12 @@ import type { CounterDeviceSession } from '@/session/counter-session'
 import { ChangeGatesForTest, describeChangeGate } from '@/test/change-gates'
 
 import { DishKitchenBoardScreen } from './dish-kitchen-board-screen'
-import { KitchenBoardScreen } from './kitchen-board-screen'
 import { kitchenFilterKey } from './kitchen-filter-key'
 import type { TunePlayer } from './ringer'
 
 /**
  * The kitchen reads its category names when its filter changes, not beside
- * every board read (the-app-asks-the-server-less, D3). Both boards, because the
- * gate does not depend on `dish-ticks`.
+ * every board read (the-app-asks-the-server-less, D3).
  */
 
 const silent: TunePlayer = { play: () => 50, stop() {} }
@@ -72,41 +70,33 @@ it('keys a filter the same however its ids are ordered', () => {
 })
 
 describeChangeGate('fewer-requests', (on) => {
-  for (const dishTicks of [true, false]) {
-    it(`${on ? 'does not re-read' : 're-reads'} the categories when the ${dishTicks ? 'dish' : 'old'} board is read again`, async () => {
-      const data = createDemoData({ dishTicks: dishTicks ? 'on' : 'off' })
-      const adapters = createMockAdapters('biller', data)
-      const categories = vi.spyOn(adapters.kitchen, 'listCategories')
-      const boardReads = vi.spyOn(adapters.kitchen, dishTicks ? 'readDishBoard' : 'readBoard')
-      render(
-        <ChangeGatesForTest
-          on={{ 'dish-ticks': dishTicks, 'kitchen-ready': dishTicks, 'fewer-requests': on }}
-        >
-          <CounterDeviceContext.Provider value={session}>
-            <AdaptersContext.Provider value={adapters}>
-              {dishTicks ? (
-                <DishKitchenBoardScreen player={silent} />
-              ) : (
-                <KitchenBoardScreen player={silent} />
-              )}
-            </AdaptersContext.Provider>
-          </CounterDeviceContext.Provider>
-        </ChangeGatesForTest>,
-      )
+  it(`${on ? 'does not re-read' : 're-reads'} the categories when the board is read again`, async () => {
+    const data = createDemoData({ dishWalkthrough: true })
+    const adapters = createMockAdapters('biller', data)
+    const categories = vi.spyOn(adapters.kitchen, 'listCategories')
+    const boardReads = vi.spyOn(adapters.kitchen, 'readDishBoard')
+    render(
+      <ChangeGatesForTest on={{ 'fewer-requests': on }}>
+        <CounterDeviceContext.Provider value={session}>
+          <AdaptersContext.Provider value={adapters}>
+            <DishKitchenBoardScreen player={silent} />
+          </AdaptersContext.Provider>
+        </CounterDeviceContext.Provider>
+      </ChangeGatesForTest>,
+    )
 
-      await screen.findAllByTestId(/^kitchen-card-/)
-      await waitFor(() => expect(categories).toHaveBeenCalled())
-      const readsBefore = boardReads.mock.calls.length
-      const categoryReadsBefore = categories.mock.calls.length
+    await screen.findAllByTestId(/^kitchen-card-/)
+    await waitFor(() => expect(categories).toHaveBeenCalled())
+    const readsBefore = boardReads.mock.calls.length
+    const categoryReadsBefore = categories.mock.calls.length
 
-      act(() => ringUpOrder(data, 901))
-      await screen.findByTestId('kitchen-card-901', {}, { timeout: 3000 })
-      await waitFor(() => expect(boardReads.mock.calls.length).toBeGreaterThan(readsBefore))
-      // Let any effect the new board would set off run.
-      await act(() => new Promise((resolve) => window.setTimeout(resolve, 50)))
+    act(() => ringUpOrder(data, 901))
+    await screen.findByTestId('kitchen-card-901', {}, { timeout: 3000 })
+    await waitFor(() => expect(boardReads.mock.calls.length).toBeGreaterThan(readsBefore))
+    // Let any effect the new board would set off run.
+    await act(() => new Promise((resolve) => window.setTimeout(resolve, 50)))
 
-      if (on) expect(categories.mock.calls.length).toBe(categoryReadsBefore)
-      else expect(categories.mock.calls.length).toBeGreaterThan(categoryReadsBefore)
-    })
-  }
+    if (on) expect(categories.mock.calls.length).toBe(categoryReadsBefore)
+    else expect(categories.mock.calls.length).toBeGreaterThan(categoryReadsBefore)
+  })
 })

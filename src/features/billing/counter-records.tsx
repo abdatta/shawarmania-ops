@@ -5,7 +5,7 @@ import { MyShiftSurface } from './my-shift-surface'
 
 /**
  * Bills this shift and Expenses, side by side below the till
- * (each-dish-is-ticked-off, design D1; `dish-ticks` only).
+ * (each-dish-is-ticked-off, design D1).
  *
  * Expenses sit under the menu and Bills under the two-column rail, at the same
  * widths, sharing the till's sideways scroll on a narrow screen. The row fills
@@ -34,7 +34,7 @@ export function CounterRecords({
   scrollLink?: ScrollLink | undefined
   asOf?: string | undefined
   refreshKey?: number
-  /** The till's own saves for Bills, with `instant-saves` on (the-counter-shows-what-it-saved). */
+  /** The till's own saves for Bills (the-counter-shows-what-it-saved). */
   ownSaveKey?: number
   /** Bills' own saves, handed up for the rail. */
   onOwnSave?: (() => void) | undefined

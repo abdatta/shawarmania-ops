@@ -89,15 +89,12 @@ type OrderReadRow = Tables<'orders'> & {
   canceller: { full_name: string } | { full_name: string }[] | null
 }
 
-/** An order with its lines, discounts and people, as the counter reads one. */
-const ORDER_SELECT =
-  '*, order_items(*), order_discounts(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name)'
-
 /**
- * The same, with each line's tick and the order's label embedded: one request,
- * as before, with two to-one embeds (each-dish-is-ticked-off, design D8, R8).
+ * An order with its lines, discounts and people, as the counter reads one, with
+ * each line's tick and the order's label embedded: one request, with two to-one
+ * embeds (each-dish-is-ticked-off, design D8, R8).
  */
-const DISH_ORDER_SELECT =
+const ORDER_SELECT =
   '*, order_items(*, order_line_preparations(quantity), order_line_additions(added_at)), order_labels(label), order_discounts(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name)'
 
 type BillReadRow = Tables<'bills'> & {
@@ -284,17 +281,12 @@ function lineDrafts(lines: readonly BillingLineSnapshot[]): BillLineDraft[] {
 }
 
 /**
- * An order as the server holds it. `dishes` is the dish ticks' read
- * (each-dish-is-ticked-off, design D8, R4, R8): each line's note and how much of
- * it the counter has ticked — every item line of an order already prepared,
- * which the old path's whole-order tick and the day change record on the order
- * alone — and the label from its own table. Off, the order is read as before.
+ * An order as the server holds it (each-dish-is-ticked-off, design D8, R4, R8):
+ * each line's note and how much of it the counter has ticked — every item line
+ * of an order already prepared, which a whole-order tick and the day change
+ * record on the order alone — and the label from its own table.
  */
-function orderView(
-  row: OrderReadRow,
-  historicalDeviceLabel: string | null,
-  dishes = false,
-): BillingOrder {
+function orderView(row: OrderReadRow, historicalDeviceLabel: string | null): BillingOrder {
   return {
     id: row.id,
     outletId: row.outlet_id,
@@ -303,7 +295,7 @@ function orderView(
     businessDate: row.business_date,
     orderedAt: row.ordered_at,
     preparedAt: row.prepared_at,
-    ...(dishes ? { label: joined(row.order_labels ?? null)?.label ?? null } : {}),
+    label: joined(row.order_labels ?? null)?.label ?? null,
     status: row.status,
     creatorId: row.created_by,
     creatorName: joined(row.creator)?.full_name ?? 'Counter operator',
@@ -315,19 +307,17 @@ function orderView(
     customerTier: row.customer_tier,
     serviceType: row.service_type,
     tableNumber: row.table_number,
-    lines: dishes
-      ? row.order_items.map((item) => ({
-          ...orderLineView(item),
-          note: item.note ?? null,
-          preparedQuantity:
-            row.prepared_at !== null && item.kind === 'item'
-              ? item.quantity
-              : (joined(item.order_line_preparations ?? null)?.quantity ?? 0),
-          ...(joined(item.order_line_additions ?? null)
-            ? { addedAt: joined(item.order_line_additions ?? null)!.added_at }
-            : {}),
-        }))
-      : row.order_items.map(orderLineView),
+    lines: row.order_items.map((item) => ({
+      ...orderLineView(item),
+      note: item.note ?? null,
+      preparedQuantity:
+        row.prepared_at !== null && item.kind === 'item'
+          ? item.quantity
+          : (joined(item.order_line_preparations ?? null)?.quantity ?? 0),
+      ...(joined(item.order_line_additions ?? null)
+        ? { addedAt: joined(item.order_line_additions ?? null)!.added_at }
+        : {}),
+    })),
     discounts: (row.order_discounts ?? []).map((discount) => ({
       source: discount.source,
       basis: discount.basis,
@@ -538,10 +528,10 @@ function shiftHistoryOf(bills: BillingBill[]): ShiftBillingHistory {
 }
 
 /**
- * Each line as the command carries it, its kind included (#60). A dish ticks'
- * order line also carries its note, under the identity the composer gave it
- * (each-dish-is-ticked-off); off, a line is exactly what it was, key for key,
- * because its hash is computed over it.
+ * Each line as the command carries it, its kind included (#60). An order
+ * command's line (`dishes`) also carries its note, under the identity the
+ * composer gave it (each-dish-is-ticked-off); a direct payment's line is
+ * exactly what it was, key for key, because its hash is computed over it.
  */
 function lineSnapshots(lines: readonly BillLineDraft[], dishes = false): BillingLineSnapshot[] {
   return lines.map((line) => ({
@@ -604,22 +594,21 @@ function orderPayload(
     | 'tableNumber'
     | 'label'
   >,
-  /** The dish ticks' order: a label key and each line's note (each-dish-is-ticked-off). */
-  dishes = false,
 ): OrderContentPayload {
   const { lines } = input
   const discounts = input.discounts ?? []
   const totals = billTotals(lines, { discountPaise: discountTotalPaise(lines, discounts) })
   return {
     orderId,
-    ...(dishes ? { label: input.label?.trim() || null } : {}),
+    // A label key and each line's note (each-dish-is-ticked-off).
+    label: input.label?.trim() || null,
     businessDate,
     customerId: input.customerId ?? null,
     customerName: input.customerName?.trim() || null,
     customerPhone: input.customerPhone?.trim() || null,
     ...totals,
     pricingMode: 'no_tax',
-    lines: lineSnapshots(lines, dishes),
+    lines: lineSnapshots(lines, true),
     discounts: discountSnapshots(discounts),
     ...serviceFacts(input),
   }
@@ -725,22 +714,11 @@ export function createSupabaseBillingAdapter(
   client: SupabaseClient<Database>,
   counterSession: CounterDeviceSession | null = null,
   resumeCoordinator?: CounterResumeCoordinator,
-  options: {
-    /**
-     * The page's boot answer for `dish-ticks` (each-dish-is-ticked-off, design
-     * R7), decided once as the Supabase client decides `tablet-health`. On, the
-     * order read embeds labels and ticks and the order commands carry labels,
-     * notes and `variant: 'dishes'`. Off, every read and command is today's,
-     * request for request and byte for byte.
-     */
-    dishes?: boolean
-  } = {},
 ): BillingAdapter {
-  const dishes = options.dishes ?? false
   const commands = createSupabaseBillingCommandAdapter(client)
   const orderCache = new Map<string, BillingOrder>()
   /*
-    When this tablet last wrote each order, on the dish path. A read that began
+    When this tablet last wrote each order. A read that began
     before a write must not put its older rows back over it: the write's
     envelope may be delivered and gone by the time the read lands, and the next
     tick on that order is then projected from rows that never saw the first —
@@ -749,7 +727,7 @@ export function createSupabaseBillingAdapter(
   let localWrites = 0
   const writtenLocally = new Map<string, number>()
   const wroteLocally = (orderId: string) => {
-    if (dishes) writtenLocally.set(orderId, ++localWrites)
+    writtenLocally.set(orderId, ++localWrites)
   }
   const localBillCache = new Map<string, BillingBill>()
   const database = counterSession ? new BillingDeliveryDatabase() : null
@@ -1042,14 +1020,12 @@ export function createSupabaseBillingAdapter(
             overlaid.set(envelope.command.payload.orderId, {
               ...current,
               preparedAt: envelope.command.payload.prepared ? envelope.command.createdAt : null,
-              // The dish ticks read a prepared order's dishes as ticked (R4).
-              ...(dishes && {
-                lines: current.lines.map((line) => ({
-                  ...line,
-                  preparedQuantity:
-                    line.kind === 'packaging' ? 0 : payload.prepared ? line.quantity : 0,
-                })),
-              }),
+              // A prepared order's dishes read as ticked (R4).
+              lines: current.lines.map((line) => ({
+                ...line,
+                preparedQuantity:
+                  line.kind === 'packaging' ? 0 : payload.prepared ? line.quantity : 0,
+              })),
             })
           }
           break
@@ -1166,7 +1142,7 @@ export function createSupabaseBillingAdapter(
 
     let query = client
       .from('orders')
-      .select(dishes ? DISH_ORDER_SELECT : ORDER_SELECT)
+      .select(ORDER_SELECT)
       .eq('outlet_id', outletId)
       .order('ordered_at', { ascending: false })
     // The server is asked for the rail, plus whatever a pending command is
@@ -1191,7 +1167,7 @@ export function createSupabaseBillingAdapter(
         'order',
         rows.map((row) => row.id),
       )
-      orders = rows.map((row) => orderView(row, labels.get(row.id) ?? null, dishes))
+      orders = rows.map((row) => orderView(row, labels.get(row.id) ?? null))
       if (pipelineOnly) resumeCoordinator?.notePipeline(outletId, orders)
       for (const [id, cached] of orderCache) {
         if (cached.outletId === outletId && !newer(id)) orderCache.delete(id)
@@ -1226,14 +1202,10 @@ export function createSupabaseBillingAdapter(
   ): BillingOrder[] {
     let orders = local ? projectOrders(rows, local) : rows
 
-    if (dishes) {
-      orders = orders.map((order) =>
-        newer(order.id) ? (orderCache.get(order.id) ?? order) : order,
-      )
-      for (const [id, cached] of orderCache) {
-        if (newer(id) && cached.outletId === outletId && !orders.some((order) => order.id === id))
-          orders.push(cached)
-      }
+    orders = orders.map((order) => (newer(order.id) ? (orderCache.get(order.id) ?? order) : order))
+    for (const [id, cached] of orderCache) {
+      if (newer(id) && cached.outletId === outletId && !orders.some((order) => order.id === id))
+        orders.push(cached)
     }
 
     for (const order of orders) orderCache.set(order.id, order)
@@ -1253,14 +1225,14 @@ export function createSupabaseBillingAdapter(
     const since = localWrites
     const { data, error } = await client
       .from('orders')
-      .select(dishes ? DISH_ORDER_SELECT : ORDER_SELECT)
+      .select(ORDER_SELECT)
       .eq('id', orderId)
       .maybeSingle()
     if (error) throw actionError(error, 'Could not load that order.')
     if (!data) return null
     const row = data as unknown as OrderReadRow
     const labels = await deviceLabelsFor('order', [row.id])
-    const order = orderView(row, labels.get(row.id) ?? null, dishes)
+    const order = orderView(row, labels.get(row.id) ?? null)
     if ((writtenLocally.get(order.id) ?? 0) > since) return orderCache.get(order.id) ?? order
     orderCache.set(order.id, order)
     return order
@@ -2027,9 +1999,9 @@ export function createSupabaseBillingAdapter(
         shiftId: shift.id,
         type: 'create_order',
         createdAt: new Date().toISOString(),
-        payload: orderPayload(input.clientId, input.businessDate, input, dishes),
+        payload: orderPayload(input.clientId, input.businessDate, input),
         // To `create_billing_order_v2` however long it waits (design R3).
-        ...(dishes ? { variant: 'dishes' as const } : {}),
+        variant: 'dishes',
       })
       await accept(command, input.outletId, input.businessDate, input.clientId)
       const localOrder: BillingOrder = {
@@ -2040,7 +2012,7 @@ export function createSupabaseBillingAdapter(
         businessDate: input.businessDate,
         orderedAt: command.createdAt,
         preparedAt: null,
-        ...(dishes ? { label: input.label?.trim() || null } : {}),
+        label: input.label?.trim() || null,
         status: 'open',
         creatorId: shift.personId,
         creatorName: 'Counter operator',
@@ -2082,24 +2054,24 @@ export function createSupabaseBillingAdapter(
         shiftId: shift.id,
         type: 'revise_order',
         createdAt: new Date().toISOString(),
-        payload: orderPayload(orderId, existing.businessDate, input, dishes),
+        payload: orderPayload(orderId, existing.businessDate, input),
         // To `revise_billing_order_v2` however long it waits (design R3).
-        ...(dishes ? { variant: 'dishes' as const } : {}),
+        variant: 'dishes',
       })
       await accept(command, existing.outletId, existing.businessDate, orderId)
       const revisedTotals = billTotals(input.lines, {
         discountPaise: discountTotalPaise(input.lines, input.discounts ?? []),
       })
-      const dishLines = dishes
-        ? reviseDishLines(existing.lines, lineDrafts(command.payload.lines), command.createdAt)
-        : null
+      const dishLines = reviseDishLines(
+        existing.lines,
+        lineDrafts(command.payload.lines),
+        command.createdAt,
+      )
       const revised = {
         ...existing,
         ...input,
-        lines: dishLines ?? lineDrafts(command.payload.lines),
-        ...(dishLines && {
-          preparedAt: allDishesTicked(dishLines) ? existing.preparedAt : null,
-        }),
+        lines: dishLines,
+        preparedAt: allDishesTicked(dishLines) ? existing.preparedAt : null,
         discounts: [...(input.discounts ?? [])],
         roundingPaise: revisedTotals.roundingPaise,
         totalPaise: revisedTotals.totalPaise,
@@ -2304,13 +2276,11 @@ export function createSupabaseBillingAdapter(
       const updated: BillingOrder = {
         ...existing,
         preparedAt: prepared ? command.createdAt : null,
-        // The dish ticks read a prepared order's dishes as ticked (design R4).
-        ...(dishes && {
-          lines: existing.lines.map((line) => ({
-            ...line,
-            preparedQuantity: line.kind === 'packaging' ? 0 : prepared ? line.quantity : 0,
-          })),
-        }),
+        // A prepared order's dishes read as ticked (design R4).
+        lines: existing.lines.map((line) => ({
+          ...line,
+          preparedQuantity: line.kind === 'packaging' ? 0 : prepared ? line.quantity : 0,
+        })),
       }
       orderCache.set(orderId, updated)
       wroteLocally(orderId)

@@ -24,7 +24,6 @@ import { createSupabaseInsightsAdapter } from './oversight'
 import { createSupabaseChangeGatesAdapter } from './change-gates'
 import type { CounterDeviceSession } from '@/session/counter-session'
 import { CounterResumeCoordinator } from '@/outbox'
-import { bootSnapshot } from '@/change-gates/snapshot'
 
 /**
  * The real-adapter factory the real session tree provides. The demo tree must
@@ -64,12 +63,7 @@ export function createSupabaseAdapters(
     // Real tablet sessions receive the durable local-first settlement path;
     // personal sessions receive the same authorised manager reads and writes
     // without opening a local queue.
-    // The dish ticks are decided once for the page, from the answers it booted
-    // with (each-dish-is-ticked-off, design R7): off, the counter's reads and
-    // commands are exactly today's.
-    billing: createSupabaseBillingAdapter(client, counterSession, resumeCoordinator, {
-      dishes: bootSnapshot()['dish-ticks'],
-    }),
+    billing: createSupabaseBillingAdapter(client, counterSession, resumeCoordinator),
     // Real from the day it ships, like the customer directory and for the same
     // reason: the tablets, the handshake and the shift are what #9 is, and a
     // stub would leave the boundary untested by the only screens that use it.

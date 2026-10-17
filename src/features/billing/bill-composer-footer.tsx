@@ -46,7 +46,6 @@ export function BillComposerFooter({
   service,
   serviceOwed = false,
   collectCustomerDetails = true,
-  shortSave = false,
 }: {
   lines: BillLineDraft[]
   /** What the biller decided, or null while they have decided nothing. */
@@ -73,11 +72,6 @@ export function BillComposerFooter({
    */
   serviceOwed?: boolean
   collectCustomerDetails?: boolean
-  /**
-   * The composer laid over the rail is half its old width, so its edit button
-   * reads *Save*, on one line (each-dish-is-ticked-off, `dish-ticks` only).
-   */
-  shortSave?: boolean
 }) {
   const totals = billTotals(lines, { discountPaise: discountTotalPaise })
 
@@ -114,13 +108,15 @@ export function BillComposerFooter({
       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
         <Button
           size="control"
-          className={shortSave ? 'w-full whitespace-nowrap text-lg' : 'w-full text-lg'}
+          className="w-full whitespace-nowrap text-lg"
           disabled={!canPay}
           data-testid="save-order"
           onClick={onSaveOrder}
         >
           {editing ? <Check aria-hidden size={18} /> : <ListPlus aria-hidden size={18} />}
-          {editing ? (shortSave ? 'Save' : 'Save changes') : 'Order'}
+          {/* The composer laid over the rail is half the rail's width, so the
+              edit button reads *Save*, on one line (each-dish-is-ticked-off). */}
+          {editing ? 'Save' : 'Order'}
         </Button>
         {editing ? (
           <Button

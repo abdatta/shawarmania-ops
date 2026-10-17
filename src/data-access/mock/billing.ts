@@ -1,4 +1,4 @@
-import { readyQuantity, workflowLines } from './dish-workflow'
+import { emptyDishWorkflow, readyQuantity, workflowLines } from './dish-workflow'
 import {
   AWAITING_ORDER_NUMBER,
   isAwaitingOrderNumber,
@@ -164,20 +164,21 @@ export function createMockBillingAdapter(
    */
   loyalty?: DemoLoyaltyHooks,
   /**
-   * Whether the demo runs the dish ticks now (each-dish-is-ticked-off, design
-   * R7). Asked on each call, because a demo turn takes effect at once while the
-   * demo's data stays. A test of billing alone leaves it off.
-   */
-  dishTicksOn: () => boolean = () => false,
-  /**
    * The demo kitchens' acknowledgements, for the Stats tab's Seen
    * (billing-day-at-a-glance). They live with the demo kitchen, not the store;
    * a test of billing alone has none.
    */
   kitchenAcks: () => readonly { orderId: string }[] = () => [],
 ): BillingAdapter {
-  /** The dish records, only while the dish ticks run; off, reads and revisions are as before #74. */
-  const dish = () => (dishTicksOn() ? store.dishWorkflow : undefined)
+  /**
+   * The dish records (each-dish-is-ticked-off). A store that was never seeded
+   * with the walkthrough starts with none, and gets an empty set here so every
+   * read and revision has somewhere to look.
+   */
+  const dish = () => {
+    if (!store.dishWorkflow) emptyDishWorkflow(store)
+    return store.dishWorkflow!
+  }
   const listeners = new Set<() => void>()
   const paymentCorrections = new Map<string, PaymentAllocation[][]>()
   const attributionReviews = new Map<string, BillingAttributionReview>()
@@ -438,14 +439,10 @@ export function createMockBillingAdapter(
   function orderView(row: Tables<'orders'>): BillingOrder {
     return {
       id: row.id,
-      ...(dish()
-        ? {
-            label:
-              row.status === 'cancelled' || (row.status === 'paid' && preparedAtOf(row))
-                ? null
-                : (dish()!.labels[row.id] ?? null),
-          }
-        : {}),
+      label:
+        row.status === 'cancelled' || (row.status === 'paid' && preparedAtOf(row))
+          ? null
+          : (dish().labels[row.id] ?? null),
       outletId: row.outlet_id,
       deviceId: row.device_id,
       orderNumber: row.order_number,
@@ -467,12 +464,10 @@ export function createMockBillingAdapter(
       customerTier: row.customer_tier,
       serviceType: row.service_type,
       tableNumber: row.table_number,
-      lines: dish()
-        ? workflowLines(
-            store,
-            store.orderItems.filter((line) => line.order_id === row.id).map(lineView),
-          )
-        : store.orderItems.filter((line) => line.order_id === row.id).map(lineView),
+      lines: workflowLines(
+        store,
+        store.orderItems.filter((line) => line.order_id === row.id).map(lineView),
+      ),
       discounts: (store.orderDiscounts.get(row.id) ?? []).map((discount) => ({ ...discount })),
       roundingPaise: row.rounding_paise,
       totalPaise: row.total_paise,
@@ -680,31 +675,25 @@ export function createMockBillingAdapter(
     discounts: readonly BillDiscountDraft[] = [],
   ) {
     const oldLines = store.orderItems.filter((line) => line.order_id === orderId)
-    if (store.dishWorkflow) {
-      // Only the dish ticks write a note; the old revision leaves notes alone,
-      // as `revise_billing_order` does (design R4).
-      const notes = dish()
-      if (notes) {
-        for (const line of lines) {
-          const id = line.orderLineId ?? line.workflowLineId
-          if (!id) continue
-          const old = oldLines.find((item) => item.id === id)
-          const locked =
-            (notes.preparations[id] ?? 0) > 0 || (old && readyQuantity(store, id, old.quantity) > 0)
-          if (!locked) notes.notes[id] = line.note?.trim() || null
-          // A line this edit adds is marked, as the database's trigger does.
-          if (!old && line.kind !== 'packaging') {
-            notes.additions ??= {}
-            notes.additions[id] = new Date().toISOString()
-          }
-        }
+    const records = dish()
+    for (const line of lines) {
+      const id = line.orderLineId ?? line.workflowLineId
+      if (!id) continue
+      const old = oldLines.find((item) => item.id === id)
+      const locked =
+        (records.preparations[id] ?? 0) > 0 || (old && readyQuantity(store, id, old.quantity) > 0)
+      if (!locked) records.notes[id] = line.note?.trim() || null
+      // A line this edit adds is marked, as the database's trigger does.
+      if (!old && line.kind !== 'packaging') {
+        records.additions ??= {}
+        records.additions[id] = new Date().toISOString()
       }
-      for (const old of oldLines)
-        if (!lines.some((line) => (line.orderLineId ?? line.workflowLineId) === old.id)) {
-          delete store.dishWorkflow.notes[old.id]
-          delete store.dishWorkflow.preparations[old.id]
-        }
     }
+    for (const old of oldLines)
+      if (!lines.some((line) => (line.orderLineId ?? line.workflowLineId) === old.id)) {
+        delete records.notes[old.id]
+        delete records.preparations[old.id]
+      }
     store.orderItems = store.orderItems.filter((line) => line.order_id !== orderId)
     lines.forEach((line) => {
       store.orderItems.push({
@@ -1062,10 +1051,9 @@ export function createMockBillingAdapter(
     row.service_type = service.serviceType
     row.table_number = service.tableNumber
     replaceOrderLines(row.id, record.input.lines, record.input.discounts ?? [])
-    // The dish ticks' revision unprepares an order left with an unticked dish (D6).
+    // A revision unprepares an order left with an unticked dish (D6).
     const ticks = dish()
     if (
-      ticks &&
       record.input.lines.some(
         (line) =>
           line.kind !== 'packaging' &&
@@ -1462,7 +1450,7 @@ export function createMockBillingAdapter(
     // { ascending: false })` returns. They disagreed until #55, and a demo that
     // hands back a different order from the server teaches the wrong rail.
     return [...overlaid.values()]
-      .map((order) => (dish() ? { ...order, lines: workflowLines(store, order.lines) } : order))
+      .map((order) => ({ ...order, lines: workflowLines(store, order.lines) }))
       .sort((a, b) => b.orderedAt.localeCompare(a.orderedAt))
   }
 

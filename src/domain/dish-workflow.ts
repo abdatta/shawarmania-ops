@@ -1,12 +1,10 @@
 /**
- * The dish ticks' own rules (each-dish-is-ticked-off; `dish-ticks` and
- * `kitchen-ready`).
+ * The dish ticks' own rules (each-dish-is-ticked-off).
  *
- * **Nothing here is shared with the off path.** The first launch edited shared
- * helpers in place — the counter's line key, the kitchen's line comparison, its
- * wait tones — which changed the counter and kitchen with no gate between them
- * and today (design R7). Each rule the on path needs that differs from today's is
- * its own function here, and the old one keeps its body.
+ * The first launch edited shared helpers in place — the counter's line key, the
+ * kitchen's line comparison, its wait tones — which changed the counter and
+ * kitchen with no gate between them and the old screens (design R7). So each rule
+ * the dish ticks needed that differed from the old one is its own function here.
  */
 
 import { isPackagingLine, PACKAGING_LINE_KEY } from './service'
@@ -39,9 +37,9 @@ export function dishOwed(quantity: number, ready = 0, ticked = 0): number {
 }
 
 /**
- * What a composer line's controls call it by on the on path: its own identity,
- * so two lines of one dish — one with a note, one locked — are two lines. The
- * off path keys by menu item (`lineKey` in `./service`).
+ * What a composer line's controls call it by: its own identity, so two lines of
+ * one dish — one with a note, one locked — are two lines. `lineKey` in
+ * `./service` keys by menu item.
  */
 export function dishLineKey(line: {
   kind?: LineKind | null | undefined

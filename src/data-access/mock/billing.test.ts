@@ -74,7 +74,7 @@ describe('mock billing adapter', () => {
   it('projects a dish tick on an unsent order immediately and keeps it after delivery', async () => {
     const store = createDemoStore()
     seedDishWorkflow(store)
-    const adapter = createMockBillingAdapter(store, undefined, undefined, () => true)
+    const adapter = createMockBillingAdapter(store)
     const unsubscribe = adapter.subscribeCounter(() => {})
     setOnline(false)
     const id = crypto.randomUUID()
@@ -529,7 +529,7 @@ describe('mock billing adapter', () => {
     ])
     // The manager can only void a delivered bill, so the payment lands first.
     await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
-    const beforeLines = structuredClone(paid.lines)
+    const beforeLines = structuredClone((await manager.getBill(paid.id))!.lines)
     const voided = await manager.voidBill(paid.id, 'Wrong item rung')
 
     expect(corrected).toMatchObject({

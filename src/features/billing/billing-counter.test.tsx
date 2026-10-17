@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -20,11 +21,11 @@ import { createMockMenuAdapter } from '@/data-access/mock/menu'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
-import { layOutAnchoredMenu } from '@/test/anchored-layout'
 
 import { ALL_OFF_SERVICE_SETTINGS, type OutletServiceSettings } from '@/domain'
 
 import { BillingCounter } from './billing-counter'
+import { CounterRecords } from './counter-records'
 
 /**
  * The counter, from the biller's side. Everything here is about the two things
@@ -71,12 +72,38 @@ function renderCounter(
       <MemoryRouter>
         <SessionContext.Provider value={billerSession}>
           <AdaptersContext.Provider value={adapters}>
-            <BillingCounter />
+            <Till />
           </AdaptersContext.Provider>
         </SessionContext.Provider>
       </MemoryRouter>,
     ),
   }
+}
+
+/**
+ * The till and the records row below it, handing their saves and refreshes to
+ * each other as the counter's shell does: Bills this shift lives in the records
+ * row (each-dish-is-ticked-off, design D1).
+ */
+function Till() {
+  const [billRefresh, setBillRefresh] = useState(0)
+  const [billOwnSave, setBillOwnSave] = useState(0)
+  const [railOwnSave, setRailOwnSave] = useState(0)
+  return (
+    <>
+      <BillingCounter
+        onBillRefresh={setBillRefresh}
+        onBillOwnSave={setBillOwnSave}
+        railOwnSave={railOwnSave}
+      />
+      <CounterRecords
+        expenses={<p>Counter expenses</p>}
+        refreshKey={billRefresh}
+        ownSaveKey={billOwnSave}
+        onOwnSave={() => setRailOwnSave((value) => value + 1)}
+      />
+    </>
+  )
 }
 
 beforeEach(() => {
@@ -145,38 +172,6 @@ async function recordPaid(person: ReturnType<typeof user>, method = 'Cash') {
 }
 
 describe('BillingCounter', () => {
-  it('orders and edits without a customer decision, then offers Skip only when payment asks', async () => {
-    const person = user()
-    const { adapters } = renderCounter()
-    const save = vi.spyOn(adapters.billing, 'saveOrder')
-    const revise = vi.spyOn(adapters.billing, 'reviseOrder')
-    const pay = vi.spyOn(adapters.billing, 'payOrder')
-    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    expect(screen.getByTestId('customer-row')).toHaveTextContent('Enter Customer Info')
-    await person.click(screen.getByTestId('save-order'))
-    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
-    expect(save.mock.calls[0]![0]).toMatchObject({ customerPhone: '', customerName: '' })
-    const rail = screen.getByTestId('counter-activity-rail')
-    let card = await within(rail).findByTestId(/^open-order-local-/)
-    await person.click(within(card).getByRole('button', { name: /More actions/ }))
-    await person.click(screen.getByRole('menuitem', { name: /Edit/ }))
-    await person.click(screen.getByRole('button', { name: 'One more Classic Chicken Shawarma' }))
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
-    await person.click(screen.getByRole('button', { name: 'Save changes' }))
-    await waitFor(() => expect(revise).toHaveBeenCalledTimes(1))
-    expect(revise.mock.calls[0]![1]).toMatchObject({ customerPhone: '', customerName: '' })
-    card = await within(rail).findByTestId(/^open-order-local-/)
-    await person.click(within(card).getByRole('button', { name: /^Paid/ }))
-    const question = await screen.findByRole('dialog', { name: 'Receipt and points' })
-    expect(pay).not.toHaveBeenCalled()
-    await person.click(within(question).getByTestId('customer-skip'))
-    const payment = screen.getByRole('dialog', { name: 'Record payment' })
-    await person.click(within(payment).getByRole('button', { name: 'Cash' }))
-    await person.click(within(payment).getByRole('button', { name: 'Paid' }))
-    await waitFor(() => expect(pay).toHaveBeenCalledTimes(1))
-    expect(pay.mock.calls[0]![1]).toEqual([{ method: 'cash', amountPaise: 27000 }])
-    expect(revise).toHaveBeenCalledTimes(1)
-  })
   it('retains the customer and benefits on an existing order while collection is off', async () => {
     const person = user()
     renderCounter(createMockAdapters('biller'), {
@@ -190,45 +185,6 @@ describe('BillingCounter', () => {
     expect(within(tender).queryByRole('button', { name: /^Change$/ })).toBeNull()
     expect(within(tender).queryByRole('button', { name: 'Add number' })).toBeNull()
     expect(screen.queryByRole('dialog', { name: 'Receipt and points' })).toBeNull()
-  })
-  it('does not ask for customer details when the outlet switches collection off, including order editing and payment', async () => {
-    const person = user()
-    const { adapters } = renderCounter(createMockAdapters('biller'), {
-      serving: { ...ALL_OFF_SERVICE_SETTINGS, collectCustomerDetails: false },
-    })
-    const settleBill = vi.spyOn(adapters.billing, 'settleBill')
-    const save = vi.spyOn(adapters.billing, 'saveOrder')
-    const revise = vi.spyOn(adapters.billing, 'reviseOrder')
-    const pay = vi.spyOn(adapters.billing, 'payOrder')
-    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    expect(screen.queryByTestId('customer-row')).toBeNull()
-    expect(screen.getByTestId('save-order')).toBeEnabled()
-    await recordPaid(person)
-    expect(settleBill.mock.calls[0]![0]).toMatchObject({ customerPhone: '', customerName: '' })
-    await person.click(screen.getByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.click(screen.getByTestId('save-order'))
-    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
-    const rail = screen.getByTestId('counter-activity-rail')
-    let card = await within(rail).findByTestId(/^open-order-local-/)
-    await person.click(within(card).getByRole('button', { name: /More actions/ }))
-    await person.click(screen.getByRole('menuitem', { name: /Edit/ }))
-    expect(screen.queryByTestId('customer-row')).toBeNull()
-    await person.click(screen.getByRole('button', { name: 'Save changes' }))
-    await waitFor(() => expect(revise).toHaveBeenCalledTimes(1))
-    card = await within(rail).findByTestId(/^open-order-local-/)
-    // A dropped connection must not hold payment behind a second settings read.
-    const extraMenuRead = vi
-      .spyOn(adapters.menu, 'readOutletMenu')
-      .mockImplementation(() => new Promise(() => {}))
-    await person.click(within(card).getByRole('button', { name: /^Paid/ }))
-    const tender = await screen.findByRole('dialog', { name: 'Record payment' })
-    expect(screen.queryByRole('dialog', { name: 'Receipt and points' })).toBeNull()
-    expect(screen.queryByTestId('checkout-customer')).toBeNull()
-    expect(extraMenuRead).not.toHaveBeenCalled()
-    await person.click(within(tender).getByRole('button', { name: 'Cash' }))
-    await person.click(within(tender).getByRole('button', { name: 'Paid' }))
-    await waitFor(() => expect(pay).toHaveBeenCalledTimes(1))
-    expect(revise).toHaveBeenCalledTimes(1)
   })
   it('asks for the receipt number at Paid, preserves dismissal, and settles the payment-time customer', async () => {
     const person = user()
@@ -329,54 +285,6 @@ describe('BillingCounter', () => {
     await waitFor(() => expect(pay).toHaveBeenCalledTimes(2))
     expect(pay.mock.calls[1]![0]).toBe(revise.mock.calls[0]![0])
     expect(revise).toHaveBeenCalledTimes(1)
-  })
-
-  it('keeps independently resized counter columns in this browser and never shrinks the menu below a column', async () => {
-    const person = user()
-    renderCounter()
-
-    const workspace = await screen.findByTestId('counter-workspace')
-    const billResize = screen.getByTestId('resize-current-bill-column')
-    const activityResize = screen.getByTestId('resize-activity-column')
-
-    expect(workspace.style.getPropertyValue('--counter-bill-width')).toBe('352px')
-    expect(workspace.style.getPropertyValue('--counter-activity-width')).toBe('352px')
-
-    billResize.focus()
-    await person.keyboard('{ArrowLeft}')
-    expect(workspace.style.getPropertyValue('--counter-bill-width')).toBe('368px')
-    expect(workspace.style.getPropertyValue('--counter-activity-width')).toBe('352px')
-
-    activityResize.focus()
-    await person.keyboard('{ArrowLeft}')
-    expect(workspace.style.getPropertyValue('--counter-activity-width')).toBe('368px')
-    expect(JSON.parse(localStorage.getItem('shawarmania.counter-column-widths')!)).toEqual({
-      bill: 368,
-      activity: 368,
-    })
-    expect(billResize).toHaveAttribute('aria-valuemin', '352')
-    expect(activityResize).toHaveAttribute('aria-valuemin', '352')
-  })
-
-  it('stops a divider at the point where expanding it would shrink another column below minimum', async () => {
-    localStorage.clear()
-    const person = user()
-    renderCounter()
-
-    const workspace = await screen.findByTestId('counter-workspace')
-    // Three 22rem tracks plus two `gap-3` gaps exactly fill this viewport.
-    Object.defineProperty(workspace, 'clientWidth', { configurable: true, value: 1080 })
-
-    const billResize = screen.getByTestId('resize-current-bill-column')
-    const activityResize = screen.getByTestId('resize-activity-column')
-
-    billResize.focus()
-    await person.keyboard('{ArrowLeft}')
-    activityResize.focus()
-    await person.keyboard('{ArrowLeft}')
-
-    expect(workspace.style.getPropertyValue('--counter-bill-width')).toBe('352px')
-    expect(workspace.style.getPropertyValue('--counter-activity-width')).toBe('352px')
   })
 
   it('re-reads the menu on foreground without a working subscription and preserves captured prices', async () => {
@@ -626,35 +534,6 @@ describe('BillingCounter', () => {
     ])
   })
 
-  it('keeps the pipeline in the rail and the money in the middle column', async () => {
-    const person = user()
-    renderCounter()
-
-    // The rail is the pipeline: one list, no headings, no divider and no band.
-    const rail = await screen.findByTestId('counter-activity-rail')
-    expect(within(rail).getByTestId('pipeline-list')).toBeInTheDocument()
-    expect(within(rail).queryByTestId('pipeline-preparing')).not.toBeInTheDocument()
-    expect(within(rail).queryByTestId('pipeline-unpaid-prepared')).not.toBeInTheDocument()
-    expect(within(rail).queryByText('Prepared · awaiting money')).not.toBeInTheDocument()
-    expect(within(rail).queryByRole('heading')).not.toBeInTheDocument()
-
-    // The middle column hosts Bills this shift: totals on top, expandable
-    // collapsed bills beneath.
-    expect(screen.getByRole('heading', { name: 'Bills this shift' })).toBeInTheDocument()
-    expect(screen.getByTestId('shift-total-cash')).toHaveTextContent('Cash')
-    expect(screen.getByTestId('shift-total-upi')).toHaveTextContent('UPI')
-
-    const disclosure = screen.getByTestId('bill-column').querySelector('details')
-    expect(disclosure).not.toBeNull()
-    const summary = disclosure?.querySelector('summary')
-    expect(summary).not.toBeNull()
-    await person.click(summary as HTMLElement)
-    expect(disclosure).toHaveAttribute('open')
-    expect(within(disclosure as HTMLElement).getByTestId(/^shift-bill-detail-/)).toHaveTextContent(
-      /×/,
-    )
-  })
-
   it('scrolls the shift column beneath pinned totals, with attention first', async () => {
     renderCounter()
     await screen.findByRole('heading', { name: 'Bills this shift' })
@@ -681,89 +560,6 @@ describe('BillingCounter', () => {
     const attention = screen.getByRole('heading', { name: /needs attention/i })
     const firstBill = within(body!).getAllByText(/^Bill \d+$/)[0]!
     expect(attention.compareDocumentPosition(firstBill)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
-  })
-
-  it('ticks the Paid box in place rather than renaming the control', async () => {
-    const person = user()
-    renderCounter()
-
-    const preparing = await screen.findByTestId('open-order-105')
-    const paid = within(preparing).getByRole('button', { name: 'Paid' })
-    expect(paid).toHaveAttribute('aria-pressed', 'false')
-    await person.click(paid)
-    await skipPaymentCustomerIfAsked(person)
-    const dialog = screen.getByRole('dialog', { name: 'Record payment' })
-    await person.click(within(dialog).getByRole('button', { name: 'Cash' }))
-    await person.click(within(dialog).getByRole('button', { name: 'Paid' }))
-
-    await waitFor(() => expect(preparing).toHaveAttribute('data-paid', 'true'))
-    /*
-      The same control, in the same place, wearing the same word — only the box
-      is ticked now. Nothing renamed itself to Un-pay, and there is no separate
-      PAID badge, because a ticked box already says it.
-    */
-    await waitFor(() =>
-      expect(within(preparing).getByRole('button', { name: 'Paid' })).toHaveAttribute(
-        'aria-pressed',
-        'true',
-      ),
-    )
-    expect(within(preparing).queryByRole('button', { name: 'Un-pay' })).not.toBeInTheDocument()
-    expect(within(preparing).queryByText('PAID')).not.toBeInTheDocument()
-    // And Prepared is untouched in place and wording by the payment landing.
-    expect(within(preparing).getByRole('button', { name: 'Prepared' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    )
-
-    const layout = layOutAnchoredMenu({
-      isTrigger: (element) =>
-        element.querySelector(':scope > button[aria-label^="More actions"]') !== null,
-      trigger: { top: 120, left: 284, width: 36, height: 36 },
-      panel: { width: 176, height: 100 },
-    })
-    // No wait: an unprepared order's payment has no deadline, so the card knows
-    // the take-back is available without first measuring a clock.
-    await person.click(
-      within(preparing).getByRole('button', { name: /^More actions for Order .105$/ }),
-    )
-    const menu = within(preparing).getByRole('menu')
-    // Above its trigger, with its right edge on the trigger's.
-    expect(menu).toHaveStyle({ position: 'fixed', top: '16px', left: '144px' })
-    expect(within(menu).queryByRole('menuitem', { name: 'Un-pay' })).not.toBeInTheDocument()
-    expect(within(menu).getByRole('menuitem', { name: 'Cancel after paid' })).toBeVisible()
-    layout.mockRestore()
-  })
-
-  it('opens the composer over the bills column on the first tap and gives way again', async () => {
-    const person = user()
-    renderCounter()
-
-    // Before anything is tapped there is nothing to compose, so the middle
-    // column shows the money list and offers no settle control at all.
-    expect(screen.queryByTestId('settle')).not.toBeInTheDocument()
-    expect(await screen.findByRole('heading', { name: 'Bills this shift' })).toBeInTheDocument()
-
-    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    expect(screen.getByTestId(`bill-line-${MENU_ITEM_CLASSIC_ID}`)).toBeInTheDocument()
-    // Payment collects its customer decision before tender.
-    expect(screen.getByTestId('settle')).toBeEnabled()
-  })
-
-  it('lands a settled bill in Bills this shift with no inserted confirmation bar', async () => {
-    const person = user()
-    renderCounter()
-
-    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await recordPaid(person)
-
-    // No info bar: the panel giving way to Bills this shift, with the new
-    // bill queued in it, is the whole acknowledgement.
-    expect(screen.queryByTestId('settled-confirmation')).not.toBeInTheDocument()
-    expect(await screen.findByRole('heading', { name: 'Bills this shift' })).toBeInTheDocument()
-    await waitFor(() => {
-      expect(screen.getByTestId('bill-column').querySelector('details')).not.toBeNull()
-    })
   })
 
   it('keeps the complete payment form until durable local acceptance commits', async () => {
@@ -903,45 +699,6 @@ describe('BillingCounter', () => {
     }
   })
 
-  it('saves food-first work into the rail under a local reference, numbered at delivery', async () => {
-    const person = user()
-    const { adapters } = renderCounter()
-    const saveOrder = vi.spyOn(adapters.billing, 'saveOrder')
-
-    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.click(screen.getByRole('button', { name: 'Mayonnaise Chicken Shawarma' }))
-    await identifyCustomer(person, '9000000999', 'Asha')
-    await person.click(screen.getByTestId('save-order'))
-
-    expect(saveOrder).toHaveBeenCalledWith(expect.objectContaining({ lines: expect.any(Array) }))
-    const rail = await screen.findByTestId('counter-activity-rail')
-    // Before delivery the card shows the SHAPE of the number that is coming and
-    // nothing that could be read as one. A token stood here once, and the number
-    // replacing it read as the order changing identity.
-    const clientId = (saveOrder.mock.calls[0]![0] as { clientId: string }).clientId
-    const saved = await within(rail).findByTestId(`open-order-local-${clientId}`)
-    // The customer is behind the card's customer button, not printed on it.
-    expect(within(saved).getByRole('button', { name: /^Customer for / })).toBeInTheDocument()
-    expect(saved.querySelector('.animate-pulse')).toBeInTheDocument()
-    expect(saved).not.toHaveTextContent(/#\d/)
-    expect(within(saved).getByText('Classic Chicken Shawarma')).toBeInTheDocument()
-    expect(within(saved).getByText('Mayonnaise Chicken Shawarma')).toBeInTheDocument()
-    // No age: the list is newest first already.
-    expect(saved).not.toHaveTextContent(/\bnow\b/)
-    expect(within(saved).queryByText('Demo Biller')).not.toBeInTheDocument()
-    expect(saved).toHaveTextContent('₹290')
-
-    // Delivered, it has left the queue and carries its permanent daily number.
-    await vi.advanceTimersByTimeAsync(500)
-    const delivered = await within(rail).findByTestId('open-order-106')
-    expect(within(delivered).getByText(/^#\s*106$/)).toBeInTheDocument()
-    expect(delivered.querySelector('.animate-pulse')).toBeNull()
-
-    expect(screen.queryByTestId('saved-order-confirmation')).not.toBeInTheDocument()
-    // The composer gave way: the middle column is the money list again.
-    expect(screen.getByRole('heading', { name: 'Bills this shift' })).toBeInTheDocument()
-  })
-
   it('shows another creator while omitting the current shift holder', async () => {
     // The card's age line is relative only while the order shares the clock's
     // calendar date, and the seed stamps its own "today" from the clock it
@@ -1020,149 +777,6 @@ describe('BillingCounter', () => {
     const added = lines.find((line) => line.menuItemId === MENU_ITEM_MAYO_ID)
     expect(added).toBeDefined()
     expect(added!.orderLineId).toBeUndefined()
-  })
-
-  it('edits every order field in the composer and restores the suspended draft', async () => {
-    const person = user()
-    const { adapters } = renderCounter()
-    const reviseOrder = vi.spyOn(adapters.billing, 'reviseOrder')
-
-    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await skipCustomer(person)
-
-    const rail = await screen.findByTestId('counter-activity-rail')
-    const openOrder = await within(rail).findByTestId('open-order-104')
-    // Uncommon actions live behind the kebab; Edit is one of them.
-    await person.click(
-      within(openOrder).getByRole('button', { name: /^More actions for Order .104$/ }),
-    )
-    await person.click(within(openOrder).getByRole('menuitem', { name: 'Edit' }))
-
-    const editHeading = screen.getByRole('heading', { name: /Editing order/ })
-    expect(editHeading).toHaveTextContent('104')
-
-    // The mode is unmistakable: the panel is marked as editing, the order's own
-    // card is docked to it carrying the composer's controls, and that order is no
-    // longer offered as an ordinary card that could be paid or edited again.
-    expect(screen.getByTestId('bill-panel')).toHaveAttribute('data-editing')
-    const pin = within(rail).getByTestId('editing-order-pin')
-    // A pattern rather than a literal: `scripts/check-no-hex.mjs` reads a hash
-    // followed by three hex digits as a colour outside the brand layer.
-    expect(pin).toHaveTextContent(/Order\s*#\s*104/)
-    expect(within(rail).queryByTestId('open-order-104')).not.toBeInTheDocument()
-
-    // The footer moved rather than being copied. Two of it would mean two Save
-    // changes buttons and two fields sharing one id.
-    expect(within(pin).getByTestId('save-order')).toBeInTheDocument()
-    expect(within(pin).getByTestId('cancel-edit')).toBeInTheDocument()
-    // The customer row does NOT move with it: it stays in the panel, where it
-    // sits while composing, so it is never somewhere new on the way back in.
-    expect(within(pin).queryByTestId('customer-row')).toBeNull()
-    expect(within(screen.getByTestId('bill-panel')).getByTestId('customer-row')).toBeInTheDocument()
-    expect(within(screen.getByTestId('bill-panel')).queryByTestId('save-order')).toBeNull()
-    expect(screen.getAllByTestId('customer-row')).toHaveLength(1)
-    // The items are the composer's job; the card does not show a second copy.
-    expect(within(pin).queryByRole('list', { name: /Items for order/ })).toBeNull()
-    // And one total, at the top of the card.
-    expect(within(pin).queryByTestId('bill-total')).toBeNull()
-
-    expect(screen.getByTestId(`bill-quantity-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('2')
-    // The saved order's own decision comes back onto the row. Every order rung
-    // before this change carries a name and no number, and the row has to say
-    // which half is missing without implying the name identifies anybody.
-    expect(screen.getByTestId('customer-row')).toHaveTextContent('Demo Customer · no number')
-
-    await person.click(screen.getByRole('button', { name: 'Mayonnaise Chicken Shawarma' }))
-    await identifyCustomer(person, '9000000222', 'Updated customer')
-    await person.click(screen.getByTestId('save-order'))
-
-    await waitFor(() => expect(reviseOrder).toHaveBeenCalledTimes(1))
-    expect(reviseOrder).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        customerName: 'Updated customer',
-        customerPhone: '+919000000222',
-        lines: expect.arrayContaining([
-          expect.objectContaining({ menuItemId: MENU_ITEM_MAYO_ID, quantity: 1 }),
-        ]),
-      }),
-    )
-    expect(screen.getByRole('heading', { name: 'Current bill' })).toBeInTheDocument()
-    expect(screen.getByTestId('bill-panel')).not.toHaveAttribute('data-editing')
-    expect(within(rail).queryByTestId('editing-order-pin')).not.toBeInTheDocument()
-    // And the footer is back in the panel, still just the one.
-    expect(within(screen.getByTestId('bill-panel')).getByTestId('save-order')).toBeInTheDocument()
-    expect(screen.getByTestId('customer-row')).toHaveTextContent('Skipped Customer Info')
-    expect(screen.getByTestId(`bill-quantity-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('1')
-    expect(screen.queryByTestId(`bill-line-${MENU_ITEM_MAYO_ID}`)).not.toBeInTheDocument()
-
-    const updated = await within(rail).findByTestId('open-order-104')
-    await person.click(
-      await within(updated).findByRole('button', { name: /^Customer for Order .104$/ }),
-    )
-    const details = await screen.findByRole('dialog', { name: /^Customer for Order .104$/ })
-    await waitFor(() => expect(details).toHaveTextContent('Updated customer'))
-    await person.click(within(details).getByRole('button', { name: 'Done' }))
-    expect(within(updated).getByText('Mayonnaise Chicken Shawarma')).toBeInTheDocument()
-
-    await person.click(
-      within(updated).getByRole('button', { name: /^More actions for Order .104$/ }),
-    )
-    await person.click(within(updated).getByRole('menuitem', { name: 'Edit' }))
-    await person.click(screen.getByRole('button', { name: 'One more Classic Chicken Shawarma' }))
-    await person.click(screen.getByTestId('cancel-edit'))
-    expect(screen.getByTestId('customer-row')).toHaveTextContent('Skipped Customer Info')
-    expect(screen.getByTestId(`bill-quantity-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('1')
-  })
-
-  it('saves a customer chosen from the card at once, and closing the dialog abandons the edit', async () => {
-    const person = user()
-    const { adapters } = renderCounter()
-    const reviseOrder = vi.spyOn(adapters.billing, 'reviseOrder')
-    const rail = await screen.findByTestId('counter-activity-rail')
-
-    // The card's customer button, then Change customer: the edit opens with
-    // the customer dialog already up.
-    async function openFromCard() {
-      const card = await within(rail).findByTestId('open-order-104')
-      await person.click(within(card).getByRole('button', { name: /^Customer for Order .104/ }))
-      const details = await screen.findByRole('dialog', { name: /^Customer for Order .104/ })
-      await person.click(within(details).getByRole('button', { name: 'Change customer' }))
-      return screen.findByRole('dialog', { name: 'Customer' })
-    }
-    const docked = () => within(rail).queryByTestId('editing-order-pin')
-
-    // Closing without deciding leaves the order as it was and the counter
-    // out of edit mode.
-    let dialog = await openFromCard()
-    expect(docked()).toBeInTheDocument()
-    await person.click(within(dialog).getByRole('button', { name: 'Close without deciding' }))
-    expect(docked()).not.toBeInTheDocument()
-    expect(reviseOrder).not.toHaveBeenCalled()
-
-    // Use saves the order: no Save changes.
-    dialog = await openFromCard()
-    for (const digit of '9000000333') {
-      await person.click(within(dialog).getByRole('button', { name: digit }))
-    }
-    await person.type(await within(dialog).findByPlaceholderText(/name/i), 'Card customer')
-    await person.click(within(dialog).getByTestId('customer-confirm'))
-    await waitFor(() => expect(reviseOrder).toHaveBeenCalledTimes(1))
-    expect(reviseOrder).toHaveBeenLastCalledWith(
-      expect.any(String),
-      expect.objectContaining({ customerName: 'Card customer', customerPhone: '+919000000333' }),
-    )
-    await waitFor(() => expect(docked()).not.toBeInTheDocument())
-
-    // Skip takes the customer off, also at once.
-    dialog = await openFromCard()
-    await person.click(within(dialog).getByTestId('customer-skip'))
-    await waitFor(() => expect(reviseOrder).toHaveBeenCalledTimes(2))
-    expect(reviseOrder).toHaveBeenLastCalledWith(
-      expect.any(String),
-      expect.objectContaining({ customerName: '', customerPhone: '' }),
-    )
-    await waitFor(() => expect(docked()).not.toBeInTheDocument())
   })
 
   it('resolves a saved number to its saved name, and puts that on the row', async () => {

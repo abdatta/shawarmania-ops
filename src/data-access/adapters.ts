@@ -1324,17 +1324,16 @@ export interface CounterShift {
  */
 export interface BillLineDraft {
   /**
-   * The dish ticks (each-dish-is-ticked-off; `dish-ticks` only). Absent on every
-   * line the off path builds or reads: a new line's identity before it is saved,
-   * its note, and how much of it the counter has ticked and the kitchens marked
-   * Ready.
+   * Each dish's own facts (each-dish-is-ticked-off): a new line's identity
+   * before it is saved, its note, and how much of it the counter has ticked and
+   * the kitchens marked Ready. Absent on a direct payment's lines and on a bill.
    */
   workflowLineId?: string
   note?: string | null
   preparedQuantity?: number
   readyQuantity?: number
   /**
-   * When an edit added this line to its order (design R12; `dish-ticks`):
+   * When an edit added this line to its order (design R12):
    * absent for the lines an order was created with. The rail sets each edit's
    * lines below a divider.
    */
@@ -1867,10 +1866,9 @@ export interface BillingAdapter {
    */
   markOrderPrepared(orderId: string, prepared: boolean): Promise<BillingOrder>
   /**
-   * Tick or untick dishes on this tablet's own order (each-dish-is-ticked-off,
-   * `dish-ticks` only): a durable, idempotent outbox command, queued with the
-   * dish ticks' variant so it reaches `prepare_order_lines_v2` whatever the gate
-   * says by the time it is delivered (design R3).
+   * Tick or untick dishes on this tablet's own order (each-dish-is-ticked-off):
+   * a durable, idempotent outbox command, queued with the `dishes` variant so it
+   * reaches `prepare_order_lines_v2` (design R3).
    */
   markOrderLinesPrepared(
     id: string,
@@ -1915,7 +1913,7 @@ export interface BillingAdapter {
   /**
    * How many orders `listManagerOpenOrders` would list, without reading them:
    * the billing history's tab count while the orders themselves are not shown
-   * (each-dish-is-ticked-off, design R11; `dish-ticks`). With a business date,
+   * (each-dish-is-ticked-off, design R11). With a business date,
    * only that day's (billing-day-at-a-glance, design D2).
    */
   countManagerOpenOrders(outletId: string, businessDate?: string): Promise<number>
@@ -2286,21 +2284,20 @@ export type KitchenAcknowledgeOutcome = 'accepted' | 'stale'
 export interface KitchenAdapter {
   /** The review demo can walk both kitchen stations. */
   setDemoStation?(station: number): void
-  readBoard(): Promise<KitchenBoard>
   /**
-   * The dish ticks' board (each-dish-is-ticked-off, design D7; `dish-ticks`
-   * only): notes, only the food still owed, each Done receipt as its own card,
-   * and a later ticket's number. Never a label.
+   * The board (each-dish-is-ticked-off, design D7): notes, only the food still
+   * owed, each Done receipt as its own card, and a later ticket's number. Never
+   * a label.
    */
   readDishBoard(): Promise<KitchenBoard>
-  /** ACK on the dish ticks' board: it records the full lines, notes included (R4). */
+  /** ACK: it records the full lines, notes included (R4). */
   acknowledgeDish(input: {
     id: string
     orderId: string
     kind: KitchenAlertKind
     orderVersion: string
   }): Promise<KitchenAcknowledgeOutcome>
-  /** Done: the lines and quantities the cook was shown (D5; `kitchen-ready` only). */
+  /** Done: the lines and quantities the cook was shown (D5). */
   ready(input: {
     id: string
     orderId: string
@@ -2311,19 +2308,16 @@ export interface KitchenAdapter {
   listCategories(): Promise<KitchenCategory[]>
   /** Saves the filter and the sort together, as the one sheet on the tablet does. */
   /**
-   * The counter's read of its kitchens' answers (#72). Needs a live **counter**
-   * shift; a kitchen shift is refused. Paired with `subscribe`, whose pulse also
-   * fires on an ACK, a filter change and a kitchen shift starting or ending.
-   */
-  readCounterMarks(): Promise<KitchenMarks>
-  /**
-   * The dish ticks' read of the kitchens (D8; `dish-ticks` only): the same
-   * answers, plus each kitchen's slot and each dish's ready quantity.
+   * The counter's read of its kitchens (#72, each-dish-is-ticked-off D8): each
+   * kitchen's answers, its slot and each dish's ready quantity. Needs a live
+   * **counter** shift; a kitchen shift is refused. Paired with `subscribe`,
+   * whose pulse also fires on an ACK, a filter change and a kitchen shift
+   * starting or ending.
    */
   readDishMarks(): Promise<KitchenMarks>
   /**
    * The same read for an outlet's owner and franchise admins, for the Orders
-   * tab (each-dish-is-ticked-off, design R11; `dish-ticks` only). Read when
+   * tab (each-dish-is-ticked-off, design R11). Read when
    * the tab opens, never on a timer.
    */
   readManagerDishMarks(outletId: string): Promise<KitchenMarks>
@@ -2332,12 +2326,6 @@ export interface KitchenAdapter {
     categoryIds: readonly string[],
     sort: KitchenSort,
   ): Promise<void>
-  acknowledge(input: {
-    id: string
-    orderId: string
-    kind: KitchenAlertKind
-    orderVersion: string
-  }): Promise<KitchenAcknowledgeOutcome>
   /**
    * Be told the outlet's orders moved. A nudge only, like the counter's: the
    * screen also re-reads on a timer and on foreground. `onStatus` reports

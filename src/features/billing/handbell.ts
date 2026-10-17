@@ -1,6 +1,6 @@
 /**
  * The counter's one sound: a handbell when the kitchen marks food Ready
- * (each-dish-is-ticked-off, design R6; `kitchen-ready` only).
+ * (each-dish-is-ticked-off, design R6).
  *
  * **The sound is the owner's choice, by ear** (2026-10-12): *Handbell, option
  * 3* from the audition, "a quick alternating bell sound". Its numbers are the

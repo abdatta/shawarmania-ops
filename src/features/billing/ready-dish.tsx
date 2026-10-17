@@ -5,10 +5,10 @@ import { cn } from '@/lib/cn'
 
 /**
  * One dish on a rail card, ticked off on its own (each-dish-is-ticked-off,
- * design D6, D9, R6; `dish-ticks`).
+ * design D6, D9, R6).
  *
  * Three looks. **Waiting**: a gray checkbox beside the quantity and the name.
- * **Ready** (`kitchen-ready`, when a kitchen has marked more of it Ready than
+ * **Ready** (when a kitchen has marked more of it Ready than
  * the counter has ticked): the whole row fills with the orange accent, its text
  * inverted, the checkbox kept gray on it (owner, 2026-10-14), and a light band
  * crosses it until it is ticked (owner, 2026-10-12). **Ticked**: orange text and a filled
@@ -17,19 +17,16 @@ import { cn } from '@/lib/cn'
 export function ReadyDish({
   line,
   readyQuantity,
-  readyOn,
   interactive,
   onTick,
 }: {
   line: BillLineDraft
   readyQuantity: number
-  /** `kitchen-ready`: off, a dish the kitchen marked Ready reads as waiting. */
-  readyOn: boolean
   interactive: boolean
   onTick: () => void
 }) {
   const ticked = (line.preparedQuantity ?? 0) >= line.quantity
-  const ready = readyOn && !ticked && readyQuantity > (line.preparedQuantity ?? 0)
+  const ready = !ticked && readyQuantity > (line.preparedQuantity ?? 0)
   const contents = (
     <>
       <span

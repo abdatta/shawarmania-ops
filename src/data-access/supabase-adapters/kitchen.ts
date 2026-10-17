@@ -106,7 +106,7 @@ export function parseKitchenBoard(value: Json): KitchenBoard {
   }
 }
 
-// ── The dish ticks' board and marks (each-dish-is-ticked-off; `dish-ticks`) ──
+// ── The board and marks with notes and ticks (each-dish-is-ticked-off) ──
 
 type DishLineJson = LineJson & { note?: string | null }
 
@@ -196,12 +196,6 @@ const MESSAGES: Record<string, string> = {
 
 export function createSupabaseKitchenAdapter(client: SupabaseClient<Database>): KitchenAdapter {
   return {
-    async readBoard(): Promise<KitchenBoard> {
-      const { data, error } = await client.rpc('kitchen_board')
-      if (error) throw error
-      return parseKitchenBoard(data)
-    },
-
     async listCategories(): Promise<KitchenCategory[]> {
       const { data, error } = await client
         .from('menu_categories')
@@ -210,23 +204,6 @@ export function createSupabaseKitchenAdapter(client: SupabaseClient<Database>): 
         .order('name')
       if (error) throw error
       return (data ?? []).map((row) => ({ id: row.id, name: row.name, isActive: row.is_active }))
-    },
-
-    async readCounterMarks(): Promise<KitchenMarks> {
-      const { data, error } = await client.rpc('counter_kitchen_marks')
-      if (error) throw error
-      const marks = data as unknown as {
-        kitchens: { id: string; label: string }[] | null
-        orders: { orderId: string; marks: (KitchenAnswer | null)[] }[] | null
-        kitchenTablets: number | null
-      }
-      return {
-        kitchens: marks.kitchens ?? [],
-        orders: Object.fromEntries(
-          (marks.orders ?? []).map((order) => [order.orderId, order.marks]),
-        ),
-        kitchenTablets: marks.kitchenTablets ?? 0,
-      }
     },
 
     async setFilter(mode, categoryIds, sort): Promise<void> {
@@ -240,21 +217,6 @@ export function createSupabaseKitchenAdapter(client: SupabaseClient<Database>): 
         const code = String(data)
         throw new DataActionError(code, MESSAGES[code] ?? 'The filter could not be saved.')
       }
-    },
-
-    async acknowledge(input): Promise<KitchenAcknowledgeOutcome> {
-      const { data, error } = await client.rpc('kitchen_acknowledge', {
-        p_id: input.id,
-        p_order_id: input.orderId,
-        p_kind: input.kind,
-        p_order_version: input.orderVersion,
-      })
-      if (error) throw error
-      const status = (data as { status?: string } | null)?.status
-      if (status === 'accepted') return 'accepted'
-      if (status === 'stale') return 'stale'
-      const code = status ?? 'invalid'
-      throw new DataActionError(code, MESSAGES[code] ?? 'The acknowledgement did not land.')
     },
 
     async readDishBoard(): Promise<KitchenBoard> {

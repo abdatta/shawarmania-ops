@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { useChangeGate } from '@/change-gates/context'
 import { BuildVersion } from '@/components/build-version'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
@@ -46,12 +45,6 @@ export function CounterShell({
   onShiftChanged: () => void
 }) {
   const device = useCounterDevice()
-  /**
-   * The dish ticks (each-dish-is-ticked-off, design R1): the till becomes the
-   * menu and a two-column rail, and Bills and Expenses sit side by side below
-   * it. Off, everything here is the counter as it was before #74.
-   */
-  const dishWorkflow = useChangeGate('dish-ticks')
   const { counter } = useAdapters()
   /**
    * The outgoing operator has stepped away and somebody else is taking the
@@ -75,9 +68,8 @@ export function CounterShell({
   const [scrollLink] = useState(createScrollLink)
   const [billRefresh, setBillRefresh] = useState(0)
   /*
-    The till's and Bills' own saves, each handed to the other with
-    `instant-saves` on (the-counter-shows-what-it-saved, design D3). Both stay
-    0 with it off: nothing below bumps them then.
+    The till's and Bills' own saves, each handed to the other
+    (the-counter-shows-what-it-saved, design D3).
   */
   const [billOwnSave, setBillOwnSave] = useState(0)
   const [railOwnSave, setRailOwnSave] = useState(0)
@@ -118,20 +110,8 @@ export function CounterShell({
 
   return (
     <KitchenMarksProvider>
-      <div
-        className={
-          dishWorkflow
-            ? 'min-h-dvh overflow-clip bg-canvas p-4 text-content'
-            : 'min-h-dvh bg-canvas p-4 text-content'
-        }
-      >
-        <div
-          className={
-            dishWorkflow
-              ? 'mx-auto flex max-w-[100rem] flex-col gap-4'
-              : 'mx-auto max-w-[100rem] space-y-4'
-          }
-        >
+      <div className="min-h-dvh overflow-clip bg-canvas p-4 text-content">
+        <div className="mx-auto flex max-w-[100rem] flex-col gap-4">
           {resume && (
             <div
               role="status"
@@ -191,33 +171,26 @@ export function CounterShell({
             </div>
           </header>
 
-          {dishWorkflow ? (
-            <>
-              <BillingPanel
-                onRailWidthChange={setRailWidth}
-                scrollLink={scrollLink}
-                onBillRefresh={setBillRefresh}
-                onBillOwnSave={setBillOwnSave}
-                railOwnSave={railOwnSave}
-              />
-              <CounterRecords
-                expenses={<CounterExpenses shift={shift} />}
-                railWidth={railWidth}
-                scrollLink={scrollLink}
-                asOf={resume?.lastSuccessfulReadAt}
-                refreshKey={billRefresh}
-                ownSaveKey={billOwnSave}
-                onOwnSave={() => setRailOwnSave((value) => value + 1)}
-              />
-            </>
-          ) : (
-            <>
-              <BillingPanel />
-              <CounterExpenses shift={shift} />
-            </>
-          )}
-          {/* Below Expenses, at the foot of the scroll: it takes no room from the
-              till above it. */}
+          {/* The till, then Bills and Expenses side by side below it
+              (each-dish-is-ticked-off, design R1). */}
+          <BillingPanel
+            onRailWidthChange={setRailWidth}
+            scrollLink={scrollLink}
+            onBillRefresh={setBillRefresh}
+            onBillOwnSave={setBillOwnSave}
+            railOwnSave={railOwnSave}
+          />
+          <CounterRecords
+            expenses={<CounterExpenses shift={shift} />}
+            railWidth={railWidth}
+            scrollLink={scrollLink}
+            asOf={resume?.lastSuccessfulReadAt}
+            refreshKey={billRefresh}
+            ownSaveKey={billOwnSave}
+            onOwnSave={() => setRailOwnSave((value) => value + 1)}
+          />
+          {/* Below the records row, at the foot of the scroll: it takes no room
+              from the till above it. */}
           <BuildVersion className="pb-2 text-center" />
           <FinishDaySheet
             open={finishOpen}

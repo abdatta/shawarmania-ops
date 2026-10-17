@@ -5,7 +5,6 @@ import {
   createSupabaseKitchenAdapter,
   parseDishKitchenBoard,
   parseDishKitchenMarks,
-  parseKitchenBoard,
 } from './kitchen'
 
 /** One board order as `kitchen_board_v2()` returns it: a Done receipt on a later ticket. */
@@ -87,7 +86,7 @@ describe('live kitchen dish contract', () => {
     expect(board.orders[0]).not.toHaveProperty('readyId')
   })
 
-  it('reads the dish board and marks through the _v2 functions, and the old ones through the old', async () => {
+  it('reads the board and marks through the _v2 functions', async () => {
     const rpc = vi.fn(async (name: string) => ({
       data: name.startsWith('counter_kitchen_marks') ? marksJson : receiptBoard,
       error: null,
@@ -100,26 +99,14 @@ describe('live kitchen dish contract', () => {
       'kitchen_board_v2',
       'counter_kitchen_marks_v2',
     ])
-
-    rpc.mockClear()
-    await kitchen.readBoard()
-    await kitchen.readCounterMarks()
-    expect(rpc.mock.calls.map(([name]) => name)).toEqual(['kitchen_board', 'counter_kitchen_marks'])
   })
 
-  it('acknowledges through kitchen_acknowledge_v2 for the dish path and kitchen_acknowledge for the old', async () => {
+  it('acknowledges through kitchen_acknowledge_v2', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: { status: 'accepted' }, error: null })
     const kitchen = adapterWith(rpc)
     const input = { id: 'ack', orderId: 'order', kind: 'new' as const, orderVersion: 'v1' }
     await expect(kitchen.acknowledgeDish(input)).resolves.toBe('accepted')
     expect(rpc).toHaveBeenLastCalledWith('kitchen_acknowledge_v2', {
-      p_id: 'ack',
-      p_order_id: 'order',
-      p_kind: 'new',
-      p_order_version: 'v1',
-    })
-    await expect(kitchen.acknowledge(input)).resolves.toBe('accepted')
-    expect(rpc).toHaveBeenLastCalledWith('kitchen_acknowledge', {
       p_id: 'ack',
       p_order_id: 'order',
       p_kind: 'new',
@@ -162,23 +149,5 @@ describe('live kitchen dish contract', () => {
       readyQuantities: {},
       dishStates: {},
     })
-  })
-})
-
-describe('live kitchen off path', () => {
-  it('reads the board as it was: no notes, no tickets, no receipts', () => {
-    const board = parseKitchenBoard(receiptBoard)
-    expect(board.orders[0]).not.toHaveProperty('readyId')
-    expect(board.orders[0]).not.toHaveProperty('sourceOrderId')
-    expect(board.orders[0]).not.toHaveProperty('ticketNumber')
-    expect(board.orders[0]!.lines[0]).not.toHaveProperty('note')
-  })
-
-  it('reads the counter marks as they were: no Ready quantities, no kitchen slots', async () => {
-    const rpc = vi.fn().mockResolvedValue({ data: marksJson, error: null })
-    const marks = await adapterWith(rpc).readCounterMarks()
-    expect(marks.orders).toEqual({ order: ['seen', 'waiting'] })
-    expect(marks).not.toHaveProperty('readyQuantities')
-    expect(marks).not.toHaveProperty('dishStates')
   })
 })

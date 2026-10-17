@@ -4,8 +4,10 @@
 
 ## What happens
 
-Run `e2e-auth/billing-offline.spec.ts` or `e2e-auth/billing-two-tablets.spec.ts`
-a second time without a `db reset`, and each fails, though nothing is broken.
+Run `e2e-auth/billing-offline.spec.ts` a second time without a `db reset`, and
+it fails, though nothing is broken. (`e2e-auth/billing-two-tablets.spec.ts` had
+the same fault; it ran only the counter from before #74 and was deleted with
+that counter on 2026-10-17, `retire-dish-ticks`.)
 
 - **The offline spec numbers its new customers from a fixed range.** A rerun
   types a phone number an earlier run already saved. The online till finds that

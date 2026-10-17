@@ -1,6 +1,5 @@
 import { useState, type ComponentProps } from 'react'
 
-import { useChangeGate } from '@/change-gates/context'
 import { Button } from '@/components/ui/button'
 import { MemberMark } from '@/components/ui/member-mark'
 import { Money } from '@/components/ui/money'
@@ -42,8 +41,6 @@ function OpenCheckoutDialog({
   points,
   ...payment
 }: CheckoutDialogProps) {
-  // With the dish ticks on, the phone reads as every other surface writes it.
-  const plusNinetyOne = useChangeGate('dish-ticks')
   const [step, setStep] = useState<'customer' | 'tender' | 'points'>(() =>
     !collectCustomerDetails || customer?.kind === 'identified' ? 'tender' : 'customer',
   )
@@ -100,10 +97,8 @@ function OpenCheckoutDialog({
                     <p className="flex items-center gap-2 font-bold">
                       {customer.name || 'Customer'} {customer.tier === 'gold' && <MemberMark />}
                     </p>
-                    <p>
-                      {plusNinetyOne && '+91 '}
-                      {formatIndianPhone(customer.phone)}
-                    </p>
+                    {/* The phone reads as every other surface writes it. */}
+                    <p>+91 {formatIndianPhone(customer.phone)}</p>
                     <p className="text-xs text-content-muted">Receipt SMS after payment syncs.</p>
                   </>
                 ) : (

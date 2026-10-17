@@ -12,15 +12,13 @@ import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { ALL_OFF_SERVICE_SETTINGS, type OutletServiceSettings } from '@/domain'
 import { SessionContext } from '@/session/context'
 import { deriveSessionScope, type Session } from '@/session/session'
-import { ChangeGatesForTest, describeChangeGate } from '@/test/change-gates'
 
 import { BillingCounter } from './billing-counter'
 import { CounterRecords } from './counter-records'
 
 /**
  * The counter shows what it saved before the server answers
- * (the-counter-shows-what-it-saved). Every test runs the counter #74 runs —
- * dish ticks and Ready on — and varies only `instant-saves` (design D7).
+ * (the-counter-shows-what-it-saved).
  *
  * The server is held back by holding the adapter's two reads that ask it:
  * `listOpenOrders` and `listShiftHistory`. Each takes its answer when it is
@@ -105,11 +103,10 @@ function Till() {
   )
 }
 
-function renderTill(
-  on: boolean,
-  { serving = ALL_OFF_SERVICE_SETTINGS }: { serving?: OutletServiceSettings } = {},
-) {
-  const demo = createMockAdapters('biller', createDemoData({ dishTicks: 'on' }))
+function renderTill({
+  serving = ALL_OFF_SERVICE_SETTINGS,
+}: { serving?: OutletServiceSettings } = {}) {
+  const demo = createMockAdapters('biller', createDemoData({ dishWalkthrough: true }))
   const menu = demo.menu
   const server = heldServer({
     ...demo,
@@ -123,13 +120,11 @@ function renderTill(
   })
   render(
     <MemoryRouter>
-      <ChangeGatesForTest on={{ 'dish-ticks': true, 'kitchen-ready': true, 'instant-saves': on }}>
-        <SessionContext.Provider value={billerSession}>
-          <AdaptersContext.Provider value={server.adapters}>
-            <Till />
-          </AdaptersContext.Provider>
-        </SessionContext.Provider>
-      </ChangeGatesForTest>
+      <SessionContext.Provider value={billerSession}>
+        <AdaptersContext.Provider value={server.adapters}>
+          <Till />
+        </AdaptersContext.Provider>
+      </SessionContext.Provider>
     </MemoryRouter>,
   )
   return server
@@ -178,271 +173,234 @@ async function pay(person: ReturnType<typeof user>) {
   await person.click(within(dialog).getByRole('button', { name: 'Paid' }))
 }
 
-describeChangeGate('instant-saves', (on) => {
-  it(
-    on
-      ? 'puts an order on the rail before the server answers'
-      : 'puts an order on the rail when the server answers',
-    async () => {
-      const person = user()
-      const server = renderTill(on)
-      await settled()
-      const saveOrder = vi.spyOn(server.adapters.billing, 'saveOrder')
+it('puts an order on the rail before the server answers', async () => {
+  const person = user()
+  const server = renderTill()
+  await settled()
+  const saveOrder = vi.spyOn(server.adapters.billing, 'saveOrder')
 
-      server.set('hold')
-      await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-      await person.click(screen.getByTestId('save-order'))
-      await waitFor(() => expect(saveOrder).toHaveBeenCalledTimes(1))
-      const orderId = saveOrder.mock.calls[0]![0].clientId
-      await aMoment()
+  server.set('hold')
+  await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+  await person.click(screen.getByTestId('save-order'))
+  await waitFor(() => expect(saveOrder).toHaveBeenCalledTimes(1))
+  const orderId = saveOrder.mock.calls[0]![0].clientId
+  await aMoment()
 
-      if (on) {
-        const card = await within(rail()).findByTestId(`open-order-local-${orderId}`)
-        expect(within(card).getByText('Classic Chicken Shawarma')).toBeInTheDocument()
-        // The shape of the number, and nothing that reads as one.
-        expect(card).not.toHaveTextContent(/#\d/)
-        // As usable as any other: its dish can be ticked at once.
-        expect(within(card).getByRole('button', { name: /^Tick/ })).toBeEnabled()
-      } else {
-        expect(cardFor(orderId)).toBeNull()
-      }
+  const card = await within(rail()).findByTestId(`open-order-local-${orderId}`)
+  expect(within(card).getByText('Classic Chicken Shawarma')).toBeInTheDocument()
+  // The shape of the number, and nothing that reads as one.
+  expect(card).not.toHaveTextContent(/#\d/)
+  // As usable as any other: its dish can be ticked at once.
+  expect(within(card).getByRole('button', { name: /^Tick/ })).toBeEnabled()
 
-      server.release()
-      await waitFor(() => expect(cardFor(orderId)).not.toBeNull())
-    },
+  server.release()
+  await waitFor(() => expect(cardFor(orderId)).not.toBeNull())
+})
+
+it('redraws an edited card before the server answers', async () => {
+  const person = user()
+  const server = renderTill()
+  await settled()
+  const openOrder = within(rail()).getByTestId('open-order-104')
+  expect(within(openOrder).queryByText('Mayonnaise Chicken Shawarma')).toBeNull()
+
+  await person.click(
+    within(openOrder).getByRole('button', { name: /^More actions for Order .104$/ }),
   )
+  await person.click(within(openOrder).getByRole('menuitem', { name: 'Edit' }))
+  await person.click(screen.getByRole('button', { name: 'Mayonnaise Chicken Shawarma' }))
+  server.set('hold')
+  await person.click(screen.getByTestId('save-order'))
+  await aMoment()
 
-  it(
-    on
-      ? 'redraws an edited card before the server answers'
-      : 'redraws an edited card when the server answers',
-    async () => {
-      const person = user()
-      const server = renderTill(on)
-      await settled()
-      const openOrder = within(rail()).getByTestId('open-order-104')
-      expect(within(openOrder).queryByText('Mayonnaise Chicken Shawarma')).toBeNull()
+  const mayo = () =>
+    within(within(rail()).getByTestId('open-order-104')).queryByText('Mayonnaise Chicken Shawarma')
+  await waitFor(() => expect(mayo()).not.toBeNull())
 
-      await person.click(
-        within(openOrder).getByRole('button', { name: /^More actions for Order .104$/ }),
-      )
-      await person.click(within(openOrder).getByRole('menuitem', { name: 'Edit' }))
-      await person.click(screen.getByRole('button', { name: 'Mayonnaise Chicken Shawarma' }))
-      server.set('hold')
-      await person.click(screen.getByTestId('save-order'))
-      await aMoment()
+  server.release()
+  await waitFor(() => expect(mayo()).not.toBeNull())
+})
 
-      const mayo = () =>
-        within(within(rail()).getByTestId('open-order-104')).queryByText(
-          'Mayonnaise Chicken Shawarma',
-        )
-      if (on) await waitFor(() => expect(mayo()).not.toBeNull())
-      else expect(mayo()).toBeNull()
+it('puts a Pay now bill in Bills before the server answers', async () => {
+  const person = user()
+  const server = renderTill()
+  await settled()
+  const settleBill = vi.spyOn(server.adapters.billing, 'settleBill')
 
-      server.release()
-      await waitFor(() => expect(mayo()).not.toBeNull())
-    },
+  server.set('hold')
+  await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+  await person.click(screen.getByTestId('settle'))
+  await pay(person)
+  await waitFor(() => expect(settleBill).toHaveBeenCalledTimes(1))
+  const billId = settleBill.mock.calls[0]![0].clientId
+  await aMoment()
+
+  const row = () => within(bills()).queryByTestId(`shift-bill-${billId}`)
+  await waitFor(() => expect(row()).not.toBeNull())
+
+  server.release()
+  await waitFor(() => expect(row()).not.toBeNull())
+})
+
+it('marks a table busy from a just-saved order before the server answers', async () => {
+  const person = user()
+  const server = renderTill({ serving: SERVING })
+  await settled()
+  const tableDialog = () => screen.getByRole('dialog', { name: 'Which table' })
+
+  await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+  await person.click(screen.getByTestId('service-chip-dine_in'))
+  await person.click(within(tableDialog()).getByRole('button', { name: '7' }))
+  await person.click(within(tableDialog()).getByTestId('table-confirm'))
+  await person.click(screen.getByTestId('customer-row'))
+  await person.click(
+    within(screen.getByRole('dialog', { name: 'Customer' })).getByTestId('customer-skip'),
   )
+  server.set('hold')
+  await person.click(screen.getByTestId('save-order'))
+  await aMoment()
 
-  it(
-    on
-      ? 'puts a Pay now bill in Bills before the server answers'
-      : 'puts a Pay now bill in Bills when the server answers',
-    async () => {
-      const person = user()
-      const server = renderTill(on)
-      await settled()
-      const settleBill = vi.spyOn(server.adapters.billing, 'settleBill')
+  await person.click(await screen.findByTestId(`tile-${MENU_ITEM_MAYO_ID}`))
+  await person.click(screen.getByTestId('service-chip-dine_in'))
+  await person.click(within(tableDialog()).getByRole('button', { name: '7' }))
+  await aMoment()
 
-      server.set('hold')
-      await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-      await person.click(screen.getByTestId('settle'))
-      await pay(person)
-      await waitFor(() => expect(settleBill).toHaveBeenCalledTimes(1))
-      const billId = settleBill.mock.calls[0]![0].clientId
-      await aMoment()
+  const busy = () => within(tableDialog()).queryByTestId('table-busy')
+  await waitFor(() => expect(busy()).not.toBeNull())
 
-      const row = () => within(bills()).queryByTestId(`shift-bill-${billId}`)
-      if (on) await waitFor(() => expect(row()).not.toBeNull())
-      else expect(row()).toBeNull()
+  server.release()
+  await waitFor(() => expect(busy()).not.toBeNull())
+})
 
-      server.release()
-      await waitFor(() => expect(row()).not.toBeNull())
-    },
+it('keeps a just-saved order on the rail when an older read lands after it', async () => {
+  const person = user()
+  const server = renderTill()
+  await settled()
+  const saveOrder = vi.spyOn(server.adapters.billing, 'saveOrder')
+
+  // A read goes out before the save, as one does on a return to the
+  // foreground, and is held until after the order is drawn.
+  server.set('hold')
+  act(() => {
+    document.dispatchEvent(new Event('visibilitychange'))
+  })
+  await aMoment()
+  await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+  await person.click(screen.getByTestId('save-order'))
+  await waitFor(() => expect(saveOrder).toHaveBeenCalledTimes(1))
+  const orderId = saveOrder.mock.calls[0]![0].clientId
+  await waitFor(() => expect(cardFor(orderId)).not.toBeNull())
+
+  // The older read lands, while the read the save asked for is still out.
+  server.answerHeld()
+  await aMoment()
+  await aMoment()
+  expect(cardFor(orderId)).not.toBeNull()
+  server.release()
+  await aMoment()
+  expect(cardFor(orderId)).not.toBeNull()
+})
+
+it('takes a payment back from Bills and the order is back on the rail at once', async () => {
+  const person = user()
+  const server = renderTill()
+  await settled()
+  const saveOrder = vi.spyOn(server.adapters.billing, 'saveOrder')
+  const payOrder = vi.spyOn(server.adapters.billing, 'payOrder')
+
+  await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+  await person.click(screen.getByTestId('save-order'))
+  await waitFor(() => expect(saveOrder).toHaveBeenCalledTimes(1))
+  const orderId = saveOrder.mock.calls[0]![0].clientId
+  await waitFor(() => expect(cardFor(orderId)).not.toBeNull())
+  // Every dish handed over, then paid: the ticket leaves the rail for Bills.
+  await person.click(within(cardFor(orderId)!).getByRole('button', { name: /^Tick/ }))
+  await person.click(within(cardFor(orderId)!).getByRole('button', { name: /^Paid/ }))
+  await pay(person)
+  await waitFor(() => expect(payOrder).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(cardFor(orderId)).toBeNull())
+  const billId = (await payOrder.mock.results[0]!.value)!.id
+  // Delivered, as a payment taken minutes ago has been.
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2_000)
+  })
+  const row = await within(bills()).findByTestId(`shift-bill-${billId}`)
+
+  server.set('hold')
+  await person.click(row.querySelector('summary')!)
+  await person.click(within(row).getByRole('button', { name: 'Take the payment back' }))
+  const dialog = screen.getByRole('dialog', { name: /^Take back the payment for/ })
+  await person.type(
+    within(dialog).getByPlaceholderText('Why is this payment coming back?'),
+    'Wrong order',
   )
+  await person.click(within(dialog).getByRole('button', { name: 'Take it back' }))
+  await aMoment()
 
-  it(
-    on
-      ? 'marks a table busy from a just-saved order before the server answers'
-      : 'marks a table busy only once the server answers',
-    async () => {
-      const person = user()
-      const server = renderTill(on, { serving: SERVING })
-      await settled()
-      const tableDialog = () => screen.getByRole('dialog', { name: 'Which table' })
+  await waitFor(() => expect(cardFor(orderId)).not.toBeNull())
+  expect(within(bills()).queryByTestId(`shift-bill-${billId}`)).toBeNull()
+  expect(screen.getByText('The payment was taken back and the order reopened.')).toBeInTheDocument()
+  server.release()
+})
 
-      await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-      await person.click(screen.getByTestId('service-chip-dine_in'))
-      await person.click(within(tableDialog()).getByRole('button', { name: '7' }))
-      await person.click(within(tableDialog()).getByTestId('table-confirm'))
-      await person.click(screen.getByTestId('customer-row'))
-      await person.click(
-        within(screen.getByRole('dialog', { name: 'Customer' })).getByTestId('customer-skip'),
-      )
-      server.set('hold')
-      await person.click(screen.getByTestId('save-order'))
-      await aMoment()
+it('does not call a saved take-back a failure when the read after it fails', async () => {
+  const person = user()
+  const server = renderTill()
+  await settled()
+  const saveOrder = vi.spyOn(server.adapters.billing, 'saveOrder')
+  const payOrder = vi.spyOn(server.adapters.billing, 'payOrder')
 
-      await person.click(await screen.findByTestId(`tile-${MENU_ITEM_MAYO_ID}`))
-      await person.click(screen.getByTestId('service-chip-dine_in'))
-      await person.click(within(tableDialog()).getByRole('button', { name: '7' }))
-      await aMoment()
+  await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+  await person.click(screen.getByTestId('save-order'))
+  await waitFor(() => expect(saveOrder).toHaveBeenCalledTimes(1))
+  const orderId = saveOrder.mock.calls[0]![0].clientId
+  await waitFor(() => expect(cardFor(orderId)).not.toBeNull())
+  // Every dish handed over, then paid: the ticket leaves the rail for Bills.
+  await person.click(within(cardFor(orderId)!).getByRole('button', { name: /^Tick/ }))
+  await person.click(within(cardFor(orderId)!).getByRole('button', { name: /^Paid/ }))
+  await pay(person)
+  await waitFor(() => expect(payOrder).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(cardFor(orderId)).toBeNull())
+  const billId = (await payOrder.mock.results[0]!.value)!.id
+  // Delivered, as a payment taken minutes ago has been.
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2_000)
+  })
+  const row = await within(bills()).findByTestId(`shift-bill-${billId}`)
 
-      const busy = () => within(tableDialog()).queryByTestId('table-busy')
-      if (on) await waitFor(() => expect(busy()).not.toBeNull())
-      else expect(busy()).toBeNull()
-
-      server.release()
-      await waitFor(() => expect(busy()).not.toBeNull())
-    },
+  server.set('fail')
+  await person.click(row.querySelector('summary')!)
+  await person.click(within(row).getByRole('button', { name: 'Take the payment back' }))
+  const dialog = screen.getByRole('dialog', { name: /^Take back the payment for/ })
+  await person.type(
+    within(dialog).getByPlaceholderText('Why is this payment coming back?'),
+    'Wrong order',
   )
+  await person.click(within(dialog).getByRole('button', { name: 'Take it back' }))
+  await aMoment()
+  await aMoment()
 
-  if (!on) return
+  expect(screen.getByText('The payment was taken back and the order reopened.')).toBeInTheDocument()
+  expect(screen.queryByText('That item could not be resolved.')).toBeNull()
+  expect(screen.queryByText('Could not load this shift.')).toBeNull()
+})
 
-  it('keeps a just-saved order on the rail when an older read lands after it', async () => {
-    const person = user()
-    const server = renderTill(on)
-    await settled()
-    const saveOrder = vi.spyOn(server.adapters.billing, 'saveOrder')
+it('keeps the shift’s bills on screen when a read of them fails', async () => {
+  const person = user()
+  const server = renderTill()
+  await settled()
+  const before = bills().querySelectorAll('details').length
 
-    // A read goes out before the save, as one does on a return to the
-    // foreground, and is held until after the order is drawn.
-    server.set('hold')
-    act(() => {
-      document.dispatchEvent(new Event('visibilitychange'))
-    })
-    await aMoment()
-    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.click(screen.getByTestId('save-order'))
-    await waitFor(() => expect(saveOrder).toHaveBeenCalledTimes(1))
-    const orderId = saveOrder.mock.calls[0]![0].clientId
-    await waitFor(() => expect(cardFor(orderId)).not.toBeNull())
-
-    // The older read lands, while the read the save asked for is still out.
-    server.answerHeld()
-    await aMoment()
-    await aMoment()
-    expect(cardFor(orderId)).not.toBeNull()
-    server.release()
-    await aMoment()
-    expect(cardFor(orderId)).not.toBeNull()
+  server.set('fail')
+  await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+  await person.click(screen.getByTestId('settle'))
+  await pay(person)
+  await aMoment()
+  act(() => {
+    document.dispatchEvent(new Event('visibilitychange'))
   })
+  await aMoment()
 
-  it('takes a payment back from Bills and the order is back on the rail at once', async () => {
-    const person = user()
-    const server = renderTill(on)
-    await settled()
-    const saveOrder = vi.spyOn(server.adapters.billing, 'saveOrder')
-    const payOrder = vi.spyOn(server.adapters.billing, 'payOrder')
-
-    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.click(screen.getByTestId('save-order'))
-    await waitFor(() => expect(saveOrder).toHaveBeenCalledTimes(1))
-    const orderId = saveOrder.mock.calls[0]![0].clientId
-    await waitFor(() => expect(cardFor(orderId)).not.toBeNull())
-    // Every dish handed over, then paid: the ticket leaves the rail for Bills.
-    await person.click(within(cardFor(orderId)!).getByRole('button', { name: /^Tick/ }))
-    await person.click(within(cardFor(orderId)!).getByRole('button', { name: /^Paid/ }))
-    await pay(person)
-    await waitFor(() => expect(payOrder).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(cardFor(orderId)).toBeNull())
-    const billId = (await payOrder.mock.results[0]!.value)!.id
-    // Delivered, as a payment taken minutes ago has been.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_000)
-    })
-    const row = await within(bills()).findByTestId(`shift-bill-${billId}`)
-
-    server.set('hold')
-    await person.click(row.querySelector('summary')!)
-    await person.click(within(row).getByRole('button', { name: 'Take the payment back' }))
-    const dialog = screen.getByRole('dialog', { name: /^Take back the payment for/ })
-    await person.type(
-      within(dialog).getByPlaceholderText('Why is this payment coming back?'),
-      'Wrong order',
-    )
-    await person.click(within(dialog).getByRole('button', { name: 'Take it back' }))
-    await aMoment()
-
-    await waitFor(() => expect(cardFor(orderId)).not.toBeNull())
-    expect(within(bills()).queryByTestId(`shift-bill-${billId}`)).toBeNull()
-    expect(
-      screen.getByText('The payment was taken back and the order reopened.'),
-    ).toBeInTheDocument()
-    server.release()
-  })
-
-  it('does not call a saved take-back a failure when the read after it fails', async () => {
-    const person = user()
-    const server = renderTill(on)
-    await settled()
-    const saveOrder = vi.spyOn(server.adapters.billing, 'saveOrder')
-    const payOrder = vi.spyOn(server.adapters.billing, 'payOrder')
-
-    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.click(screen.getByTestId('save-order'))
-    await waitFor(() => expect(saveOrder).toHaveBeenCalledTimes(1))
-    const orderId = saveOrder.mock.calls[0]![0].clientId
-    await waitFor(() => expect(cardFor(orderId)).not.toBeNull())
-    // Every dish handed over, then paid: the ticket leaves the rail for Bills.
-    await person.click(within(cardFor(orderId)!).getByRole('button', { name: /^Tick/ }))
-    await person.click(within(cardFor(orderId)!).getByRole('button', { name: /^Paid/ }))
-    await pay(person)
-    await waitFor(() => expect(payOrder).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(cardFor(orderId)).toBeNull())
-    const billId = (await payOrder.mock.results[0]!.value)!.id
-    // Delivered, as a payment taken minutes ago has been.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_000)
-    })
-    const row = await within(bills()).findByTestId(`shift-bill-${billId}`)
-
-    server.set('fail')
-    await person.click(row.querySelector('summary')!)
-    await person.click(within(row).getByRole('button', { name: 'Take the payment back' }))
-    const dialog = screen.getByRole('dialog', { name: /^Take back the payment for/ })
-    await person.type(
-      within(dialog).getByPlaceholderText('Why is this payment coming back?'),
-      'Wrong order',
-    )
-    await person.click(within(dialog).getByRole('button', { name: 'Take it back' }))
-    await aMoment()
-    await aMoment()
-
-    expect(
-      screen.getByText('The payment was taken back and the order reopened.'),
-    ).toBeInTheDocument()
-    expect(screen.queryByText('That item could not be resolved.')).toBeNull()
-    expect(screen.queryByText('Could not load this shift.')).toBeNull()
-  })
-
-  it('keeps the shift’s bills on screen when a read of them fails', async () => {
-    const person = user()
-    const server = renderTill(on)
-    await settled()
-    const before = bills().querySelectorAll('details').length
-
-    server.set('fail')
-    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.click(screen.getByTestId('settle'))
-    await pay(person)
-    await aMoment()
-    act(() => {
-      document.dispatchEvent(new Event('visibilitychange'))
-    })
-    await aMoment()
-
-    await waitFor(() => expect(bills().querySelectorAll('details').length).toBe(before + 1))
-    expect(screen.queryByText('Could not load this shift.')).toBeNull()
-  })
+  await waitFor(() => expect(bills().querySelectorAll('details').length).toBe(before + 1))
+  expect(screen.queryByText('Could not load this shift.')).toBeNull()
 })

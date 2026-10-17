@@ -27,7 +27,6 @@ import { ALL_OFF_SERVICE_SETTINGS, type OutletServiceSettings } from '@/domain'
 
 import { BillingCounter } from './billing-counter'
 import { CounterRecords } from './counter-records'
-import { ChangeGatesForTest } from '@/test/change-gates'
 
 /**
  * The counter, from the biller's side. Everything here is about the two things
@@ -54,7 +53,7 @@ const billerSession: Session = {
  */
 /** The demo with the dish ticks on: the walkthrough's records are seeded. */
 function dishAdapters() {
-  return createMockAdapters('biller', createDemoData({ dishTicks: 'on' }))
+  return createMockAdapters('biller', createDemoData({ dishWalkthrough: true }))
 }
 
 /** A store carrying the dish records, for a billing adapter that runs the dish ticks. */
@@ -65,7 +64,7 @@ function dishStore() {
 }
 
 function dishBilling(store: ReturnType<typeof createDemoStore>) {
-  return createMockBillingAdapter(store, undefined, undefined, () => true)
+  return createMockBillingAdapter(store)
 }
 
 function renderCounter(
@@ -88,14 +87,12 @@ function renderCounter(
     adapters,
     ...render(
       <MemoryRouter>
-        <ChangeGatesForTest on={{ 'dish-ticks': true }}>
-          <SessionContext.Provider value={billerSession}>
-            <AdaptersContext.Provider value={adapters}>
-              <BillingCounter />
-              <CounterRecords expenses={<p>Counter expenses</p>} />
-            </AdaptersContext.Provider>
-          </SessionContext.Provider>
-        </ChangeGatesForTest>
+        <SessionContext.Provider value={billerSession}>
+          <AdaptersContext.Provider value={adapters}>
+            <BillingCounter />
+            <CounterRecords expenses={<p>Counter expenses</p>} />
+          </AdaptersContext.Provider>
+        </SessionContext.Provider>
       </MemoryRouter>,
     ),
   }
@@ -358,25 +355,19 @@ describe('BillingCounter with the dish ticks on', () => {
     renderCounter()
 
     const workspace = await screen.findByTestId('counter-workspace')
-    const billResize = screen.getByTestId('resize-current-bill-column')
     const activityResize = screen.getByTestId('resize-activity-column')
 
-    expect(workspace.style.getPropertyValue('--counter-bill-width')).toBe('352px')
-    expect(workspace.style.getPropertyValue('--counter-activity-width')).toBe('352px')
-
-    expect(billResize).not.toBeVisible()
+    expect(screen.queryByTestId('resize-current-bill-column')).toBeNull()
     expect(activityResize).toHaveAccessibleName('Resize order rail')
-    expect(workspace.style.getPropertyValue('--counter-bill-width')).toBe('352px')
-    expect(workspace.style.getPropertyValue('--counter-activity-width')).toBe('352px')
+    expect(workspace.style.getPropertyValue('--counter-rail-width')).toBe('704px')
 
     activityResize.focus()
     await person.keyboard('{ArrowLeft}')
-    expect(workspace.style.getPropertyValue('--counter-activity-width')).toBe('368px')
+    expect(workspace.style.getPropertyValue('--counter-rail-width')).toBe('720px')
     expect(JSON.parse(localStorage.getItem('shawarmania.counter-column-widths')!)).toEqual({
       bill: 352,
       activity: 368,
     })
-    expect(billResize).toHaveAttribute('aria-valuemin', '352')
     expect(activityResize).toHaveAttribute('aria-valuemin', '352')
   })
 
@@ -386,19 +377,15 @@ describe('BillingCounter with the dish ticks on', () => {
     renderCounter()
 
     const workspace = await screen.findByTestId('counter-workspace')
-    // Three 22rem tracks plus two `gap-3` gaps exactly fill this viewport.
+    // The menu's 22rem and a two-22rem rail, with room for two gaps, fill this
+    // viewport exactly.
     Object.defineProperty(workspace, 'clientWidth', { configurable: true, value: 1080 })
 
-    const billResize = screen.getByTestId('resize-current-bill-column')
     const activityResize = screen.getByTestId('resize-activity-column')
-
-    billResize.focus()
-    await person.keyboard('{ArrowLeft}')
     activityResize.focus()
     await person.keyboard('{ArrowLeft}')
 
-    expect(workspace.style.getPropertyValue('--counter-bill-width')).toBe('352px')
-    expect(workspace.style.getPropertyValue('--counter-activity-width')).toBe('352px')
+    expect(workspace.style.getPropertyValue('--counter-rail-width')).toBe('704px')
   })
 
   it('re-reads the menu on foreground without a working subscription and preserves captured prices', async () => {

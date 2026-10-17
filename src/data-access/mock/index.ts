@@ -80,36 +80,24 @@ export interface DemoData {
    * owner stays turned at the counter.
    */
   changeGates: DemoChangeGates
-  /**
-   * Whether the mocks run the dish ticks now (each-dish-is-ticked-off, design
-   * R7): the demo's own answer, asked each time; or fixed, for a test.
-   */
-  dishTicks: () => boolean
 }
 
 export function createDemoData(
   options: {
     matureHistory?: boolean
     /**
-     * Where the mocks take the dish ticks' answer from. `demo` is the demo's own
-     * Change gates page — every gate on until the walkthrough turns one off — and
-     * its walkthrough is seeded only if it starts on. A test is `off` unless it
-     * says otherwise: a component rendered without a gate snapshot runs the old
-     * path, and its mocks must agree.
+     * Seed the dish walkthrough (each-dish-is-ticked-off): a labelled order,
+     * noted dishes, a Ready side and a ticket after it. It reshapes some fixture
+     * orders and adds four, so the demo asks for it and a test only when it
+     * reads them; every other test starts with empty dish records.
      */
-    dishTicks?: 'demo' | 'on' | 'off'
+    dishWalkthrough?: boolean
   } = {},
 ): DemoData {
-  const { dishTicks = 'off', ...storeOptions } = options
+  const { dishWalkthrough = false, ...storeOptions } = options
   const store = createDemoStore({ billingLifecycle: true, ...storeOptions })
   const changeGates = createDemoChangeGates()
-  const answer =
-    dishTicks === 'demo'
-      ? () => changeGates.snapshot()['dish-ticks']
-      : dishTicks === 'on'
-        ? () => true
-        : () => false
-  if (answer()) seedDishWorkflow(store)
+  if (dishWalkthrough) seedDishWorkflow(store)
   else emptyDishWorkflow(store)
   return {
     accounts: createDemoAccounts(),
@@ -121,7 +109,6 @@ export function createDemoData(
     counter: createDemoCounter(),
     kitchen: createDemoKitchen(),
     changeGates,
-    dishTicks: answer,
   }
 }
 
@@ -240,8 +227,6 @@ export function createMockAdapters(
       },
       // The demo's stand-in for the ledger triggers on `bills` (#62, D6, D11).
       createDemoLoyaltyHooks(data.customers, store),
-      // Asked each call: a demo turn takes effect at once.
-      data.dishTicks,
       () => [...data.kitchen.acks, ...Object.values(data.kitchen.stationAcks ?? {}).flat()],
     ),
     // The role scopes the tablet list as `counter_devices_select` will, and the

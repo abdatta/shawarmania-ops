@@ -16,10 +16,9 @@ import { RINGS_PER_ALERT, type RingState } from './ringer'
 import { type ReadyPhase } from './use-kitchen-ready'
 
 /**
- * One ticket on the dish ticks' board (each-dish-is-ticked-off, design D7, D9;
- * `dish-ticks`). Today's card is `KitchenCard`; this one adds a dish's note
- * under it, a later ticket's *#N · n*, the compact age ring, and — when the
- * board passes `onReady`, which it does only with `kitchen-ready` on — Done
+ * One ticket on the kitchen's board (each-dish-is-ticked-off, design D7, D9).
+ * It is the first card (#70) with a dish's note under it, a later ticket's
+ * *#N · n*, the compact age ring, and — when the board passes `onReady` — Done
  * beside the timer and the collapsed gray receipt it leaves.
  *
  * What follows is the first card's account, and still holds:

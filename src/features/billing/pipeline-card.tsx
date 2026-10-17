@@ -61,7 +61,6 @@ import { StateToggle } from './state-toggle'
 export function PipelineCard({
   order,
   dishTicks = false,
-  readyOn = false,
   bellsRinging = false,
   readyQuantities = {},
   onTickLine,
@@ -88,8 +87,6 @@ export function PipelineCard({
 }: {
   order: BillingOrder
   dishTicks?: boolean
-  /** `kitchen-ready`: a Ready dish fills orange, and its kitchen's slot shows the Ready bell. */
-  readyOn?: boolean
   /** The handbell is ringing for this order: its Ready bell swings (design R6). */
   bellsRinging?: boolean
   readyQuantities?: Record<string, number>
@@ -548,7 +545,6 @@ export function PipelineCard({
                       : []),
                     ...round.map(({ line, index }) => (
                       <ReadyDish
-                        readyOn={readyOn}
                         key={line.orderLineId ?? index}
                         line={line}
                         readyQuantity={
@@ -602,7 +598,6 @@ export function PipelineCard({
               <DishKitchenStatus
                 labels={kitchenLabels}
                 ringing={bellsRinging}
-                readyOn={readyOn}
                 states={
                   kitchenStates ??
                   kitchenAnswers.map((answer) =>
@@ -751,14 +746,13 @@ export function PipelineCard({
 
 /**
  * Each carrying kitchen's slot on a dish ticks' card (each-dish-is-ticked-off,
- * design D7, D9, R6; `dish-ticks`): a gray tick when its food is sent, an
+ * design D7, D9, R6): a gray tick when its food is sent, an
  * orange double tick once it has pressed ACK, a bell while it has Ready food
  * the counter has not handed over, and nothing once its food is ticked. One
  * kitchen changing never moves another's slot.
  *
  * The Ready bell is still, and swings only while the handbell rings for this
- * order (owner, 2026-10-12): two rings, then it stops. With `kitchen-ready`
- * off a kitchen's Ready food reads as acknowledged, which it is (R4).
+ * order (owner, 2026-10-12): two rings, then it stops.
  */
 /**
  * The Ready bell, swinging while the handbell's order rings (design R6). When
@@ -798,18 +792,15 @@ function DishKitchenStatus({
   states,
   labels,
   ringing,
-  readyOn,
 }: {
   states: readonly (KitchenDishState | null)[]
   labels: readonly string[]
   ringing: boolean
-  readyOn: boolean
 }) {
   return (
     <div className="flex flex-col items-center gap-1">
-      {states.map((raw, index) => {
-        const state = raw === 'ready' && !readyOn ? 'acknowledged' : raw
-        return state === null ? null : (
+      {states.map((state, index) =>
+        state === null ? null : (
           <span
             key={index}
             role={state === 'handed_over' ? undefined : 'img'}
@@ -836,8 +827,8 @@ function DishKitchenStatus({
               <Check aria-hidden size={18} strokeWidth={2.25} />
             ) : null}
           </span>
-        )
-      })}
+        ),
+      )}
     </div>
   )
 }

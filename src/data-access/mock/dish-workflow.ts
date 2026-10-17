@@ -54,8 +54,8 @@ export function workflowLines(store: DemoStore, lines: BillLineDraft[]): BillLin
 }
 
 /**
- * The demo's dish records, empty: what a demo started with the dish ticks off
- * carries, so turning them on mid-walkthrough has somewhere to write.
+ * The demo's dish records, empty: what a store not seeded with the walkthrough
+ * carries, so every read and revision has somewhere to look.
  */
 export function emptyDishWorkflow(store: DemoStore): void {
   store.dishWorkflow = { labels: {}, notes: {}, preparations: {}, readies: [], commands: [] }
@@ -65,8 +65,7 @@ export function emptyDishWorkflow(store: DemoStore): void {
  * The dish ticks' walkthrough (each-dish-is-ticked-off): a labelled order, noted
  * dishes, a two-kitchen order with one side Ready, a ticket after Ready and a
  * paid order still cooking. It reshapes some fixture orders and adds four, so it
- * is seeded only for a demo that starts with the dish ticks on; a demo started
- * with them off is the demo as it was before #74.
+ * is seeded for the demo and for a test that reads it, and no other.
  */
 export function seedDishWorkflow(store: DemoStore): void {
   emptyDishWorkflow(store)

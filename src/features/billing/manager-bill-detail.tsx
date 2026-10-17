@@ -1,7 +1,6 @@
 import { Ban, ChevronDown, Clock3, ReceiptText, UserRound } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 
-import { useChangeGate } from '@/change-gates/context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { MemberMark } from '@/components/ui/member-mark'
@@ -133,8 +132,6 @@ export function ManagerBillDetail({
     reason?: string | null,
   ) => Promise<unknown>
 }) {
-  // With the dish ticks on, the phone reads as every other surface writes it.
-  const plusNinetyOne = useChangeGate('dish-ticks')
   const detailId = `bill-detail-${bill.id}`
   const cancellationActor =
     bill.voidedBy?.id === currentUserId ? 'You' : (bill.voidedBy?.name ?? 'someone')
@@ -302,9 +299,7 @@ export function ManagerBillDetail({
               </Fact>
               <Fact label="Customer phone">
                 {bill.customerPhone
-                  ? plusNinetyOne
-                    ? `+91 ${formatIndianPhone(bill.customerPhone)}`
-                    : bill.customerPhone
+                  ? `+91 ${formatIndianPhone(bill.customerPhone)}`
                   : 'Not provided'}
               </Fact>
               {bill.receiptDelivery && (

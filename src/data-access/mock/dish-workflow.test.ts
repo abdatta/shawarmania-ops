@@ -5,7 +5,7 @@ import { kitchenCardState } from '@/domain'
 
 describe('demo kitchen dish tickets', () => {
   it('Ready is idempotent; extra food becomes ticket 2; Undo restores the acknowledgement', async () => {
-    const data = createDemoData({ dishTicks: 'on' })
+    const data = createDemoData({ dishWalkthrough: true })
     const kitchen = createMockKitchenAdapter(data.store, data.kitchen)
     const card = (await kitchen.readDishBoard()).orders.find((order) => order.orderNumber === 105)!
     expect(card).not.toHaveProperty('label')
@@ -48,7 +48,7 @@ describe('demo kitchen dish tickets', () => {
   })
 
   it('hides Done after handover, restores it on untick, and permits later Undo without erasing handover', async () => {
-    const data = createDemoData({ dishTicks: 'on' })
+    const data = createDemoData({ dishWalkthrough: true })
     const kitchen = createMockKitchenAdapter(data.store, data.kitchen)
     const card = (await kitchen.readDishBoard()).orders.find((order) => order.orderNumber === 105)!
     const ready = {
@@ -81,7 +81,7 @@ describe('demo kitchen dish tickets', () => {
   })
 
   it('two stations owe only their own dishes', async () => {
-    const data = createDemoData({ dishTicks: 'on' })
+    const data = createDemoData({ dishWalkthrough: true })
     const kitchen = createMockKitchenAdapter(data.store, data.kitchen)
     const mixed = data.store.orders.find((order) => order.order_number === 97)!
     expect((await kitchen.readDishBoard()).orders.some((order) => order.id === mixed.id)).toBe(
@@ -97,7 +97,7 @@ describe('demo kitchen dish tickets', () => {
   })
 
   it('keeps each kitchen indicator independent through ACK, Ready, handover and Undo', async () => {
-    const data = createDemoData({ dishTicks: 'on' })
+    const data = createDemoData({ dishWalkthrough: true })
     const kitchen = createMockKitchenAdapter(data.store, data.kitchen)
     const mixed = data.store.orders.find((order) => order.order_number === 97)!
     const states = async () => (await kitchen.readDishMarks()).dishStates?.[mixed.id]
@@ -133,7 +133,7 @@ describe('demo kitchen dish tickets', () => {
 })
 
 it('allocates handover to earlier Done receipts before newer tickets', async () => {
-  const data = createDemoData({ dishTicks: 'on' })
+  const data = createDemoData({ dishWalkthrough: true })
   const kitchen = createMockKitchenAdapter(data.store, data.kitchen)
   const card = (await kitchen.readDishBoard()).orders.find((order) => order.orderNumber === 105)!
   const line = data.store.orderItems.find((item) => item.id === card.lines[0]!.id)!

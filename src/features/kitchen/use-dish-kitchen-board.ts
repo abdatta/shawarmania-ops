@@ -16,11 +16,10 @@ import { createRinger, SILENT, type Ringer, type RingState, type TunePlayer } fr
 import { createTunePlayer } from './tunes'
 
 /**
- * The dish ticks' kitchen board, kept live (each-dish-is-ticked-off, design D7,
- * R5; `dish-ticks`). The old board is `useKitchenBoard`.
+ * The kitchen board, kept live (each-dish-is-ticked-off, design D7, R5).
  *
- * The same three triggers as the old board re-read it, and none is load-bearing
- * alone: the outlet's pulse (a nudge, never the data), a re-read every twenty
+ * The same three triggers as the first board (#70) re-read it, and none is
+ * load-bearing alone: the outlet's pulse (a nudge, never the data), a re-read every twenty
  * seconds while the screen is visible, and the return to the foreground. One
  * difference, kept from the first launch's repair: a read asked for while one
  * is in flight runs once after it instead of being dropped, so a Done's own

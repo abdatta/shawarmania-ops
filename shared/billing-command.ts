@@ -222,13 +222,14 @@ export interface BillingCommandPayloads {
  * A change gate cannot reach the outbox (a-release-can-be-switched-off, D7), and
  * a command's type cannot change meaning, so a path that needs new server
  * functions says so on the command itself when it queues it. The command keeps
- * it for its whole life: one queued while a gate was on reaches the functions it
- * was written for after the gate turns off, which stay published while the gate
- * exists. Absent on every command the off path writes, which therefore stays
- * byte-for-byte what it was. Envelope metadata, never part of the payload or its
- * hash.
+ * it for its whole life, so it reaches the functions it was written for however
+ * long it waits. Absent on a command a build from before #74 queued, and on a
+ * direct payment, which therefore stay byte-for-byte what they were; those go to
+ * the functions their type names, which stay published until the contract
+ * migration of `retire-dish-ticks`. Envelope metadata, never part of the payload
+ * or its hash.
  *
- * - `dishes` — the dish ticks' `_v2` functions (`dish-ticks`).
+ * - `dishes` — the dish ticks' `_v2` functions (each-dish-is-ticked-off).
  */
 export type BillingCommandVariant = 'dishes'
 

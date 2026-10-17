@@ -158,8 +158,8 @@ offered for payment again. Those guards key on projected state and never on
 command history, because taking a payment back reopens an order precisely so it
 can be paid a second time.
 
-**With `instant-saves` on, the counter draws its own saves from its own record
-first.** A save is durable on the tablet in milliseconds, so the screen does not
+**The counter draws its own saves from its own record first**
+(the-counter-shows-what-it-saved). A save is durable on the tablet in milliseconds, so the screen does not
 wait for the server to say what the tablet already knows. The billing adapter has
 two reads that ask no network: `peekOpenOrders` is the half of the pipeline read
 that does not ask the server, run over the rows the tablet holds, which is the
@@ -258,15 +258,15 @@ A tablet keeps running the change-gate answers it loaded with (see [Releases](RE
 
 ### Dish ticks, offline
 
-With `dish-ticks` off the outbox carries exactly the commands described above. With it on, three things join them (#74).
+Since #74 three things join the commands described above.
 
 - **`prepare_order_lines` is a command like any other.** A dish tick or untick is a durable, client-UUID, idempotent envelope, drained in order on the same dependency chain as that order's revisions and payment. The tick shows at once from the outbox's optimistic state, survives a reload and an offline reopen, and a tick for a line removed meanwhile is accepted and changes nothing. A label and a dish note ride the existing create and revise envelopes as optional keys, so a command queued without them stays valid.
-- **A command's `variant` says which functions it was written for.** The on path's adapter stamps an optional `variant: 'dishes'` on an envelope as it accepts it, and the off path never does. The function a command is delivered to is chosen from its type and variant: `create_order`, `revise_order` and `prepare_order_lines` with the variant go to their `_v2` functions, and everything else, and every envelope without the field, goes where it has always gone. The command *type* cannot change, because `billing_commands.command_type` is a check constraint on an existing table, so the variant is the route. It is envelope metadata, outside the payload, so the payload hash and the server's replay check are untouched, and an off-path envelope is byte for byte what it was before. **A command keeps its variant for its whole life**, so work queued while the gate was on is delivered to `_v2` after it turns off, to the functions it was written for, which stay published while the gate exists. The outbox still reads no gate: it reads the command.
+- **A command's `variant` says which functions it was written for.** The counter's adapter stamps `variant: 'dishes'` on every create, revise and tick envelope as it accepts it. The function a command is delivered to is chosen from its type and variant: `create_order`, `revise_order` and `prepare_order_lines` with the variant go to their `_v2` functions, and everything else, and every envelope without the field — one queued by a build from before #74 — goes where it has always gone. The command *type* cannot change, because `billing_commands.command_type` is a check constraint on an existing table, so the variant is the route. It is envelope metadata, outside the payload, so the payload hash and the server's replay check are untouched, and an envelope without it is byte for byte what it was before. **A command keeps its variant for its whole life**, so work queued by an older build is delivered to the functions it was written for, which stay published until the contract migration of `retire-dish-ticks`. The outbox still reads no gate: it reads the command.
 - **Ready and Undo are online-only kitchen actions**, like ACK. A failed one keeps the earlier state and says so. The counter fills a dish only from a read it has made: offline it shows the last readiness it read and rings only for a Ready it reads arriving.
 
-The on path adds no read on a timer. The counter re-reads the rail after its own writes, its kitchen marks on mount, after a rail reload and on the kitchen pulse (Realtime), and both on a return to the foreground or the network — the reads the off path makes, and no others.
+Nothing here reads on a timer. The counter re-reads the rail after its own writes, its kitchen marks on mount, after a rail reload and on the kitchen pulse (Realtime), and both on a return to the foreground or the network.
 
-A whole-order Prepared queued while the gate was off and delivered while it is on marks the order prepared without tick rows; the on path reads every dish of a prepared order as ticked ([Data Model](DATA_MODEL.md#dish-ticks-74)).
+A whole-order Prepared — from the standalone Open orders page, or queued by a build from before #74 — marks the order prepared without tick rows; the counter reads every dish of a prepared order as ticked ([Data Model](DATA_MODEL.md#dish-ticks-74)).
 
 ## Moving a tablet between outlets
 

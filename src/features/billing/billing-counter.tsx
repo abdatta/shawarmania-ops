@@ -63,7 +63,6 @@ import { addDish, dishLineKey, dishLocked, noteDish } from '@/domain/dish-workfl
 import { useOnForeground } from '@/features/attention/attention'
 import { getPartState, isRenderable } from '@/gates/registry'
 import { newUuid } from '@/lib/uuid'
-import { cn } from '@/lib/cn'
 import { MENU_REREAD_ON_SALE_AFTER_MS, mergeBursts, olderThan } from '@/lib/freshness'
 import type { ScrollLink } from '@/lib/scroll-link'
 import { declareUnsavedWork } from '@/pwa/occupancy'
@@ -81,7 +80,6 @@ import { BillPanel } from './bill-panel'
 import { CounterActivityRail } from './counter-activity-rail'
 import { EditingOrderPin } from './editing-order-pin'
 import { MenuGrid } from './menu-grid'
-import { MyShiftSurface } from './my-shift-surface'
 import { CheckoutDialog } from './checkout-dialog'
 import { ServiceChips } from './service-chips'
 import { TableDialog, type BusyTable } from './table-dialog'
@@ -92,12 +90,13 @@ import { useKitchenMarks } from './kitchen-marks-state'
 /**
  * The billing counter — the screen this whole product is for.
  *
- * Three columns, always, none of which scrolls the page: the whole menu at left,
- * the current bill in the middle, and one continuous Open orders + Bills this
- * shift rail at right. Each column scrolls its own content. **Nothing rearranges
- * on a narrow screen** — the workspace scrolls sideways instead, because the
- * three columns are the counter, and a biller who loses one of them to a tab has
- * to go looking for the order they were about to take money for.
+ * Two tracks, none of which scrolls the page: the whole menu at left and the
+ * two-column order rail at right, with the current bill laid over the rail's
+ * left half while one is being composed (each-dish-is-ticked-off, design R7).
+ * Bills this shift sits in the records row below (`CounterRecords`). Each
+ * column scrolls its own content. **Nothing rearranges on a narrow screen** —
+ * the workspace scrolls sideways instead, because a biller who loses the rail
+ * to a tab has to go looking for the order they were about to take money for.
  *
  * Food-first is the default. **Order** saves the preparation so the kitchen can
  * start, and the money is taken on handover, from the rail. **Paid** is the
@@ -106,8 +105,8 @@ import { useKitchenMarks } from './kitchen-marks-state'
  *
  * **A direct payment waits only for durable local acceptance.** The panel clears
  * after IndexedDB commits, never after a network response, and no confirmation
- * bar is inserted — the panel giving way to Bills this shift, with the new bill
- * queued in it, is the signal. The next customer never waits for delivery.
+ * bar is inserted — the panel giving way, with the new bill queued in Bills this
+ * shift, is the signal. The next customer never waits for delivery.
  * Tender corrections remain available with the bill in Bills this shift for
  * five minutes.
  *
@@ -290,21 +289,20 @@ export function BillingCounter({
   railOwnSave = 0,
 }: {
   outletId?: string
-  /** The dish ticks' records row sits under the rail at its width. */
+  /** The records row sits under the rail at its width. */
   onRailWidthChange?: ((width: number) => void) | undefined
-  /** The till and the records row below it scroll sideways together. */
-  /** Scrolls sideways with the records row below (dish ticks; `createScrollLink`). */
+  /** Scrolls sideways with the records row below (`createScrollLink`). */
   scrollLink?: ScrollLink | undefined
   /**
-   * The dish ticks moved Bills this shift out from the till to the records row,
-   * so the till hands up the refresh it would have given its middle column: on
-   * its own writes, the outlet's billing events and the foreground (design R5).
+   * Bills this shift lives in the records row, so the till hands up the refresh
+   * it would otherwise give it: on the outlet's billing events and the
+   * foreground (each-dish-is-ticked-off, design R5).
    */
   onBillRefresh?: ((refresh: number) => void) | undefined
   /**
-   * With `instant-saves` on, the till's own saves that Bills this shift should
-   * show at once — Pay now, and the rail's payments — handed up beside
-   * `onBillRefresh` (the-counter-shows-what-it-saved, design D3).
+   * The till's own saves that Bills this shift should show at once — Pay now,
+   * and the rail's payments — handed up beside `onBillRefresh`
+   * (the-counter-shows-what-it-saved, design D3).
    */
   onBillOwnSave?: ((save: number) => void) | undefined
   /** The Bills panel's own saves, handed down for the rail to show (design D3). */
@@ -312,19 +310,6 @@ export function BillingCounter({
 } = {}) {
   const session = useContext(SessionContext)
   const counterDevice = useContext(CounterDeviceContext)
-  /**
-   * The dish ticks (each-dish-is-ticked-off, design R1, R7): the menu and a
-   * two-column rail with the composer laid over it, labels, dish notes and
-   * locked lines. Off, every branch below is the counter as it was before #74.
-   */
-  const dishWorkflow = useChangeGate('dish-ticks')
-  /**
-   * The till shows what it saved before the server answers
-   * (the-counter-shows-what-it-saved). On, the till's own saves bump the
-   * own-save keys below in place of the refresh keys; off, every save refreshes
-   * as it did before.
-   */
-  const instantSaves = useChangeGate('instant-saves')
   const fewerRequests = useChangeGate('fewer-requests')
   const kitchenMarks = useKitchenMarks()?.marks
   const [label, setLabel] = useState('')
@@ -404,7 +389,7 @@ export function BillingCounter({
   */
   const [savedOrderKey, setSavedOrderKey] = useState(0)
   /*
-    This tablet's own saves, with `instant-saves` on (design D3): each surface
+    This tablet's own saves (the-counter-shows-what-it-saved, D3): each surface
     draws what the tablet holds and then asks the server once. Kept apart from
     the refresh keys, which the outlet's change notices bump too.
   */
@@ -422,18 +407,18 @@ export function BillingCounter({
   const resize = useRef<{ column: CounterColumn; startX: number; startWidth: number } | null>(null)
 
   useEffect(() => {
-    if (dishWorkflow) onRailWidthChange?.(columnWidths.bill + columnWidths.activity)
-  }, [dishWorkflow, columnWidths.bill, columnWidths.activity, onRailWidthChange])
+    onRailWidthChange?.(columnWidths.bill + columnWidths.activity)
+  }, [columnWidths.bill, columnWidths.activity, onRailWidthChange])
   useEffect(() => {
-    if (!dishWorkflow || !scrollLink || !workspaceRef.current) return
+    if (!scrollLink || !workspaceRef.current) return
     return scrollLink.attach(workspaceRef.current)
-  }, [dishWorkflow, scrollLink])
+  }, [scrollLink])
   useEffect(() => {
-    if (dishWorkflow) onBillRefresh?.(billRefresh)
-  }, [dishWorkflow, billRefresh, onBillRefresh])
+    onBillRefresh?.(billRefresh)
+  }, [billRefresh, onBillRefresh])
   useEffect(() => {
-    if (instantSaves && billSave > 0) onBillOwnSave?.(billSave)
-  }, [instantSaves, billSave, onBillOwnSave])
+    if (billSave > 0) onBillOwnSave?.(billSave)
+  }, [billSave, onBillOwnSave])
 
   const resizeColumn = useCallback((column: CounterColumn, requestedWidth: number) => {
     setColumnWidths((current) => {
@@ -627,18 +612,15 @@ export function BillingCounter({
     [customers],
   )
 
-  // With the dish ticks a dish can be on several lines (a note, a locked line),
-  // so its menu tile counts them all.
+  // A dish can be on several lines (a note, a locked line), so its menu tile
+  // counts them all.
   const quantities = useMemo(
     () =>
-      dishWorkflow
-        ? lines.reduce(
-            (map, line) =>
-              map.set(line.menuItemId, (map.get(line.menuItemId) ?? 0) + line.quantity),
-            new Map<string, number>(),
-          )
-        : new Map(lines.map((line) => [line.menuItemId, line.quantity])),
-    [dishWorkflow, lines],
+      lines.reduce(
+        (map, line) => map.set(line.menuItemId, (map.get(line.menuItemId) ?? 0) + line.quantity),
+        new Map<string, number>(),
+      ),
+    [lines],
   )
 
   const discountRules = useMemo<MenuDiscountRule[]>(
@@ -671,20 +653,19 @@ export function BillingCounter({
    * and settle carries. The item lines alone are only ever the menu's business.
    */
   const billLines = useMemo<BillLineDraft[]>(() => {
-    const items =
-      dishWorkflow && editingOrder
-        ? lines.map((line) => ({
-            ...line,
-            readyQuantity:
-              kitchenMarks?.readyQuantities?.[editingOrder.id]?.[line.orderLineId ?? ''] ??
-              line.readyQuantity ??
-              0,
-          }))
-        : lines
+    const items = editingOrder
+      ? lines.map((line) => ({
+          ...line,
+          readyQuantity:
+            kitchenMarks?.readyQuantities?.[editingOrder.id]?.[line.orderLineId ?? ''] ??
+            line.readyQuantity ??
+            0,
+        }))
+      : lines
     return packaging === null
       ? items
       : [...items, packagingLine(packaging, packagingWaived(serviceSettings, knownTier))]
-  }, [dishWorkflow, editingOrder, kitchenMarks, lines, packaging, serviceSettings, knownTier])
+  }, [editingOrder, kitchenMarks, lines, packaging, serviceSettings, knownTier])
 
   /**
    * What each bill-level discount comes to, against this order as it stands.
@@ -815,63 +796,38 @@ export function BillingCounter({
         )
       }
       setLines((current) => {
-        if (dishWorkflow) {
-          const captured = menuLineDiscount(
-            { categoryId: item.category_id, unitPricePaise: item.price_paise, quantity: 1 },
-            discountRules,
-          )
-          return addDish(
-            current.map((line) =>
-              editingOrder
-                ? {
-                    ...line,
-                    readyQuantity:
-                      kitchenMarks?.readyQuantities?.[editingOrder.id]?.[line.orderLineId ?? ''] ??
-                      line.readyQuantity ??
-                      0,
-                  }
-                : line,
-            ),
-            {
-              workflowLineId: newUuid(),
-              menuItemId: item.id,
-              itemName: item.name,
-              unitPricePaise: item.price_paise,
-              quantity: 1,
-              ...captured,
-              categoryName: categoryNameById.get(item.category_id) ?? null,
-            },
-          ).map((line) => {
-            const old = current.find((candidate) => dishLineKey(candidate) === dishLineKey(line))
-            return old && old.quantity !== line.quantity ? withQuantity(old, line.quantity) : line
-          })
-        }
-        const existing = current.find((line) => line.menuItemId === item.id)
-        if (existing) {
-          return current.map((line) =>
-            line.menuItemId === item.id ? { ...line, quantity: line.quantity + 1 } : line,
-          )
-        }
         const captured = menuLineDiscount(
           { categoryId: item.category_id, unitPricePaise: item.price_paise, quantity: 1 },
           discountRules,
         )
-        return [
-          ...current,
+        return addDish(
+          current.map((line) =>
+            editingOrder
+              ? {
+                  ...line,
+                  readyQuantity:
+                    kitchenMarks?.readyQuantities?.[editingOrder.id]?.[line.orderLineId ?? ''] ??
+                    line.readyQuantity ??
+                    0,
+                }
+              : line,
+          ),
           {
+            workflowLineId: newUuid(),
             menuItemId: item.id,
             itemName: item.name,
             unitPricePaise: item.price_paise,
             quantity: 1,
-            discountPaise: captured.discountPaise,
-            discountPercentBp: captured.discountPercentBp,
+            ...captured,
             categoryName: categoryNameById.get(item.category_id) ?? null,
           },
-        ]
+        ).map((line) => {
+          const old = current.find((candidate) => dishLineKey(candidate) === dishLineKey(line))
+          return old && old.quantity !== line.quantity ? withQuantity(old, line.quantity) : line
+        })
       })
     },
     [
-      dishWorkflow,
       kitchenMarks,
       settling,
       discountRules,
@@ -924,7 +880,7 @@ export function BillingCounter({
       }
       const locked = (line: BillLineDraft) =>
         dishLocked(billLines.find((item) => dishLineKey(item) === dishLineKey(line)) ?? line)
-      const stepped = dishWorkflow ? lines.find((line) => dishLineKey(line) === key) : undefined
+      const stepped = lines.find((line) => dishLineKey(line) === key)
       let next: BillLineDraft[]
       if (stepped) {
         /*
@@ -977,7 +933,7 @@ export function BillingCounter({
         return
       }
       next = lines.flatMap((line) => {
-        if ((dishWorkflow ? dishLineKey(line) : line.menuItemId) !== key) return [line]
+        if (dishLineKey(line) !== key) return [line]
         const quantity = line.quantity + delta
         // Below one there is no line: taking the last one off is how a line is
         // removed, so there is no separate delete to hunt for.
@@ -1002,7 +958,6 @@ export function BillingCounter({
       if (next.length === 0 && editingOrder === null) resetBillContext()
     },
     [
-      dishWorkflow,
       billLines,
       menu,
       discountRules,
@@ -1112,7 +1067,7 @@ export function BillingCounter({
     setError(null)
     try {
       await billing.saveOrder({
-        ...(dishWorkflow ? { label: label.trim() || null } : {}),
+        label: label.trim() || null,
         clientId: newUuid(),
         outletId,
         shiftId: shift.id,
@@ -1125,8 +1080,7 @@ export function BillingCounter({
         tableNumber: serviceType === 'dine_in' ? tableNumber : null,
       })
       clearPanel()
-      if (instantSaves) setRailSave((value) => value + 1)
-      else setPipelineRefresh((value) => value + 1)
+      setRailSave((value) => value + 1)
       setSavedOrderKey((value) => value + 1)
     } catch (cause) {
       setError(cause instanceof DataActionError ? cause.message : 'That order could not be saved.')
@@ -1150,7 +1104,7 @@ export function BillingCounter({
   async function reviseEditedOrder(order: BillingOrder) {
     try {
       await billing.reviseOrder(order.id, {
-        ...(dishWorkflow ? { label: label.trim() || null } : {}),
+        label: label.trim() || null,
         lines: billLines,
         discounts: billDiscounts,
         customerId: null,
@@ -1159,8 +1113,7 @@ export function BillingCounter({
         tableNumber: serviceType === 'dine_in' ? tableNumber : null,
       })
       leaveOrderEdit()
-      if (instantSaves) setRailSave((value) => value + 1)
-      else setPipelineRefresh((value) => value + 1)
+      setRailSave((value) => value + 1)
     } catch (cause) {
       setError(
         cause instanceof DataActionError ? cause.message : 'That order could not be updated.',
@@ -1219,8 +1172,7 @@ export function BillingCounter({
       })
       setPaymentDialogOpen(false)
       clearPanel()
-      if (instantSaves) setBillSave((value) => value + 1)
-      else setBillRefresh((value) => value + 1)
+      setBillSave((value) => value + 1)
     } catch (cause) {
       setError(
         cause instanceof DataActionError
@@ -1258,28 +1210,21 @@ export function BillingCounter({
     // What the tablet already holds marks the busy tables at once, and the
     // server's read below corrects it (the-counter-shows-what-it-saved, D6).
     // Dropped if the server's answer is already in.
-    if (instantSaves) {
-      let answered = false
-      void billing
-        .peekOpenOrders(outletId)
-        .then((held) => {
-          if (held && !answered) setTableOrders(held)
-        })
-        .catch(() => undefined)
-      void billing
-        .listOpenOrders(outletId)
-        .then((orders) => {
-          answered = true
-          setTableOrders(orders)
-        })
-        // A failed read keeps what the peek drew rather than emptying it.
-        .catch(() => undefined)
-      return
-    }
+    let answered = false
+    void billing
+      .peekOpenOrders(outletId)
+      .then((held) => {
+        if (held && !answered) setTableOrders(held)
+      })
+      .catch(() => undefined)
     void billing
       .listOpenOrders(outletId)
-      .then(setTableOrders)
-      .catch(() => setTableOrders([]))
+      .then((orders) => {
+        answered = true
+        setTableOrders(orders)
+      })
+      // A failed read keeps what the peek drew rather than emptying it.
+      .catch(() => undefined)
   }
 
   const thisDeviceId = counterDevice?.device.deviceId ?? null
@@ -1348,7 +1293,6 @@ export function BillingCounter({
         setPaymentDialogOpen(true)
       }}
       onSaveOrder={editingOrder ? saveEditedOrder : saveOrder}
-      shortSave={dishWorkflow}
       discountTotalPaise={totals.discountPaise}
       onCancelEdit={leaveOrderEdit}
       serviceOwed={serviceChoiceRequired(serviceSettings, serviceType)}
@@ -1357,30 +1301,24 @@ export function BillingCounter({
 
   return (
     /*
-      Three columns, always. The menu receives the slack but never falls below its
-      touch-safe minimum; the current bill and activity rail each own a resize
-      control that changes only their respective track.
+      The menu and the order rail, with the composer laid over the rail's left
+      half while an order is on it (each-dish-is-ticked-off, design R7). The
+      menu receives the slack but never falls below its touch-safe minimum; the
+      rail owns the one resize control.
 
-      Below three columns' worth of viewport this **scrolls sideways** rather than
-      rearranging itself. A counter that reflows is a counter whose controls move
-      while somebody is reaching for them, and 22rem is about a phone's width, so
-      the narrow case ends up as three swipeable panels rather than as a
-      compromise. `overflow-y-hidden` keeps that to one axis: each column still
-      scrolls its own content, and the page never scrolls sideways as a whole.
+      Below the two tracks' worth of viewport this **scrolls sideways** rather
+      than rearranging itself. A counter that reflows is a counter whose controls
+      move while somebody is reaching for them. `overflow-y-hidden` keeps that to
+      one axis: each column still scrolls its own content, and the page never
+      scrolls sideways as a whole.
     */
     <div
       data-testid="counter-workspace"
       ref={workspaceRef}
-      className={
-        dishWorkflow
-          ? 'grid h-full min-h-0 grid-cols-[minmax(22rem,1fr)_var(--counter-rail-width)] gap-3 overflow-x-auto overflow-y-hidden'
-          : 'grid h-full min-h-0 grid-cols-[minmax(22rem,1fr)_var(--counter-bill-width)_var(--counter-activity-width)] gap-3 overflow-x-auto overflow-y-hidden'
-      }
+      className="grid h-full min-h-0 grid-cols-[minmax(22rem,1fr)_var(--counter-rail-width)] gap-3 overflow-x-auto overflow-y-hidden"
       style={
         {
           '--counter-rail-width': `${columnWidths.bill + columnWidths.activity}px`,
-          '--counter-bill-width': `${columnWidths.bill}px`,
-          '--counter-activity-width': `${columnWidths.activity}px`,
         } as CSSProperties
       }
     >
@@ -1391,12 +1329,7 @@ export function BillingCounter({
         touch. The workspace's sideways scroll keeps its bar, the one sign on a
         desktop that a column sits off to the right.
       */}
-      <div
-        className={cn(
-          'no-scrollbar @container min-h-0 overflow-y-auto',
-          dishWorkflow && '[contain:layout_paint]',
-        )}
-      >
+      <div className="no-scrollbar @container min-h-0 overflow-y-auto [contain:layout_paint]">
         {resume && (
           <p className="mb-2 text-xs font-semibold text-content-muted" data-testid="menu-as-of">
             Menu as of {new Date(resume.lastSuccessfulReadAt).toLocaleString()}
@@ -1435,13 +1368,7 @@ export function BillingCounter({
             {[6, 3].map((tiles, section) => (
               <div key={section}>
                 <Shimmer className="mb-1.5 h-4 w-24" />
-                <div
-                  className={
-                    dishWorkflow
-                      ? 'grid grid-cols-2 gap-2 @xl:grid-cols-3 @3xl:grid-cols-4'
-                      : 'grid grid-cols-2 gap-2 @md:grid-cols-3 @2xl:grid-cols-4'
-                  }
-                >
+                <div className="grid grid-cols-2 gap-2 @xl:grid-cols-3 @3xl:grid-cols-4">
                   {Array.from({ length: tiles }, (_, tile) => (
                     <Shimmer key={tile} className="h-20" />
                   ))}
@@ -1450,76 +1377,47 @@ export function BillingCounter({
             ))}
           </LoadingRegion>
         ) : (
-          <MenuGrid menu={menu} quantities={quantities} onAdd={addItem} dishReview={dishWorkflow} />
+          <MenuGrid menu={menu} quantities={quantities} onAdd={addItem} />
         )}
       </div>
 
       <div
-        className={
-          dishWorkflow
-            ? `relative col-start-2 row-start-1 z-10 flex min-h-0 w-[calc((100%-0.75rem)/2)] flex-col gap-2 bg-surface shadow-xl ${lines.length > 0 || editingOrder ? '' : 'invisible pointer-events-none'}`
-            : 'relative flex min-h-0 flex-col gap-2'
-        }
+        className={`relative col-start-2 row-start-1 z-10 flex min-h-0 w-[calc((100%-0.75rem)/2)] flex-col gap-2 bg-surface shadow-xl ${lines.length > 0 || editingOrder ? '' : 'invisible pointer-events-none'}`}
         data-testid="bill-column"
       >
-        <div
-          role="separator"
-          hidden={dishWorkflow}
-          aria-label="Resize current bill column"
-          aria-orientation="vertical"
-          aria-valuemin={counterColumnMinWidth()}
-          aria-valuenow={columnWidths.bill}
-          aria-valuetext={`${columnWidths.bill}px`}
-          aria-controls="bill-panel"
-          data-column="bill"
-          data-testid="resize-current-bill-column"
-          tabIndex={0}
-          onPointerDown={(event) => beginColumnResize('bill', event)}
-          onPointerMove={moveColumnResize}
-          onPointerUp={endColumnResize}
-          onPointerCancel={endColumnResize}
-          onKeyDown={(event) => resizeColumnWithKeyboard('bill', event)}
-          className="absolute -left-2.5 top-0 z-20 h-full w-5 cursor-col-resize touch-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
-        />
         {/*
-          The middle column is Bills this shift by default, and the composer is
-          a mode over it (design D5): composition starts on the first item tap,
-          ends on save, settle or cancel-edit, and the money list it serves is
-          what shows through in between. An order opened for edit borrows the
-          same mode.
+          The composer is laid over the rail's left half: composition starts on
+          the first item tap and ends on save, settle or cancel-edit. An order
+          opened for edit borrows the same mode.
         */}
-        {lines.length > 0 || editingOrder ? (
+        {(lines.length > 0 || editingOrder) && (
           <>
             <BillPanel
               lines={billLines}
-              {...(dishWorkflow
-                ? {
-                    labelField: (
-                      <div className="border-b border-border px-3 py-2">
-                        <label htmlFor="order-label" className="sr-only">
-                          Order label · optional
-                        </label>
-                        <input
-                          id="order-label"
-                          value={label}
-                          maxLength={24}
-                          onChange={(event) => setLabel(event.target.value)}
-                          placeholder="Order Label"
-                          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-content focus-visible:focus-ring"
-                        />
-                        {label.trim() && railLabels.includes(label.trim().toLocaleLowerCase()) && (
-                          <p role="status" className="mt-1 text-xs text-warning">
-                            Another order is labelled {label.trim()}.
-                          </p>
-                        )}
-                      </div>
-                    ),
-                    onNote: (line: BillLineDraft, made: number) => {
-                      setNoteLine(line)
-                      setNoteMade(made)
-                    },
-                  }
-                : {})}
+              labelField={
+                <div className="border-b border-border px-3 py-2">
+                  <label htmlFor="order-label" className="sr-only">
+                    Order label · optional
+                  </label>
+                  <input
+                    id="order-label"
+                    value={label}
+                    maxLength={24}
+                    onChange={(event) => setLabel(event.target.value)}
+                    placeholder="Order Label"
+                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-content focus-visible:focus-ring"
+                  />
+                  {label.trim() && railLabels.includes(label.trim().toLocaleLowerCase()) && (
+                    <p role="status" className="mt-1 text-xs text-warning">
+                      Another order is labelled {label.trim()}.
+                    </p>
+                  )}
+                </div>
+              }
+              onNote={(line: BillLineDraft, made: number) => {
+                setNoteLine(line)
+                setNoteMade(made)
+              }}
               onChangeQuantity={changeQuantity}
               packagingFlat={serviceSettings.packagingMode === 'per_order'}
               discountRows={
@@ -1661,26 +1559,13 @@ export function BillingCounter({
               }}
             />
           </>
-        ) : dishWorkflow ? null : (
-          <MyShiftSurface
-            embedded
-            {...(resume ? { asOf: resume.lastSuccessfulReadAt } : {})}
-            refreshKey={billRefresh}
-            onActivityChanged={() => setPipelineRefresh((value) => value + 1)}
-          />
         )}
       </div>
 
-      <div
-        className={
-          dishWorkflow
-            ? 'relative col-start-2 row-start-1 flex min-h-0 flex-col [&>aside]:min-h-0 [&>aside]:flex-1'
-            : 'relative min-h-0 [&>aside]:h-full'
-        }
-      >
+      <div className="relative col-start-2 row-start-1 flex min-h-0 flex-col [&>aside]:min-h-0 [&>aside]:flex-1">
         <div
           role="separator"
-          aria-label={dishWorkflow ? 'Resize order rail' : 'Resize activity column'}
+          aria-label="Resize order rail"
           aria-orientation="vertical"
           aria-valuemin={counterColumnMinWidth()}
           aria-valuenow={columnWidths.activity}
@@ -1697,7 +1582,6 @@ export function BillingCounter({
           className="absolute -left-2.5 top-0 z-20 h-full w-5 cursor-col-resize touch-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
         />
         <CounterActivityRail
-          twoColumns={dishWorkflow}
           checkoutSettings={{ service: serviceSettings, loyalty: loyaltySettings }}
           {...(resume ? { asOf: resume.lastSuccessfulReadAt } : {})}
           refreshKey={pipelineRefresh}
@@ -1707,9 +1591,7 @@ export function BillingCounter({
           editingOrder={editingOrder}
           onEditOrder={beginOrderEdit}
           onSetOrderCustomer={beginOrderCustomerEdit}
-          onActivityChanged={() =>
-            instantSaves ? setBillSave((value) => value + 1) : setBillRefresh((value) => value + 1)
-          }
+          onActivityChanged={() => setBillSave((value) => value + 1)}
           pin={
             editingOrder && (
               <EditingOrderPin
@@ -1725,7 +1607,7 @@ export function BillingCounter({
         />
       </div>
 
-      {dishWorkflow && noteLine && (
+      {noteLine && (
         <DishNoteSheet
           key={dishLineKey(noteLine)}
           line={noteLine}
@@ -1777,7 +1659,7 @@ export function BillingCounter({
         />
       )}
       <CustomerDialog
-        suggestedName={dishWorkflow ? label : ''}
+        suggestedName={label}
         open={customerDialogOpen}
         selection={customer}
         lookup={lookupCustomer}
@@ -1845,7 +1727,7 @@ export function BillingCounter({
       )}
 
       <CheckoutDialog
-        suggestedName={dishWorkflow ? label : ''}
+        suggestedName={label}
         open={paymentDialogOpen}
         collectCustomerDetails={serviceSettings.collectCustomerDetails ?? true}
         customer={customer}

@@ -1,4 +1,4 @@
-import { readyQuantity } from './dish-workflow'
+import { emptyDishWorkflow, readyQuantity } from './dish-workflow'
 import { dishOwed } from '@/domain/dish-workflow'
 import type {
   KitchenAcknowledgement,
@@ -10,12 +10,7 @@ import type {
   KitchenOrder,
   KitchenSort,
 } from '../adapters'
-import {
-  dishKitchenCardState,
-  kitchenCardState,
-  type KitchenAnswer,
-  type KitchenDishState,
-} from '@/domain'
+import { dishKitchenCardState, type KitchenAnswer, type KitchenDishState } from '@/domain'
 import type { Tables } from '../database.types'
 import { DEMO_OUTLET_ID, type DemoStore } from './store'
 
@@ -79,34 +74,33 @@ export function createMockKitchenAdapter(
     )
   }
   /**
-   * The dish ticks' records, only when the caller is on the dish ticks' path
-   * (each-dish-is-ticked-off, design R7). The demo always carries them; with
-   * `dish-ticks` off the old methods ask for nothing, and read as before #74.
+   * The dish records (each-dish-is-ticked-off). A store never seeded with the
+   * walkthrough gets an empty set, so every read has somewhere to look.
    */
-  function dishes(on: boolean) {
-    return on ? store.dishWorkflow : undefined
+  function dishes() {
+    if (!store.dishWorkflow) emptyDishWorkflow(store)
+    return store.dishWorkflow!
   }
-  function carriedByKitchen(item: Tables<'order_items'>, on: boolean): boolean {
+  function carriedByKitchen(item: Tables<'order_items'>): boolean {
     const categoryId =
       store.menuItems.find((menu) => menu.id === item.menu_item_id)?.category_id ?? null
     const mainCourse =
       store.menuCategories.find((category) => category.id === categoryId)?.name === 'Main Course'
     return (
       visible(categoryId, kitchen.filter) &&
-      (!dishes(on) || ((kitchen.station ?? 1) === 1 ? !mainCourse : mainCourse))
+      ((kitchen.station ?? 1) === 1 ? !mainCourse : mainCourse)
     )
   }
   /**
-   * The lines this kitchen shows. On the dish ticks' path they carry notes, and
-   * by default only the food still owed; `owedOnly: false` is the full snapshot
-   * an acknowledgement records (design R4).
+   * The lines this kitchen shows. They carry notes, and by default only the food
+   * still owed; `owedOnly: false` is the full snapshot an acknowledgement
+   * records (design R4).
    */
   function lineSplit(
     order: Tables<'orders'>,
-    on: boolean,
     owedOnly = true,
   ): { shown: KitchenLine[]; other: number } {
-    const workflow = dishes(on)
+    const workflow = dishes()
     const shown: KitchenLine[] = []
     let other = 0
     for (const item of store.orderItems) {
@@ -115,23 +109,22 @@ export function createMockKitchenAdapter(
         store.menuItems.find((candidate) => candidate.id === item.menu_item_id)?.category_id ?? null
       const mainCourse =
         store.menuCategories.find((category) => category.id === categoryId)?.name === 'Main Course'
-      const stationVisible = !workflow || ((kitchen.station ?? 1) === 1 ? !mainCourse : mainCourse)
+      const stationVisible = (kitchen.station ?? 1) === 1 ? !mainCourse : mainCourse
       if (visible(categoryId, kitchen.filter) && stationVisible) {
-        const owed =
-          workflow && owedOnly
-            ? dishOwed(
-                item.quantity,
-                readyQuantity(store, item.id, item.quantity),
-                workflow.preparations[item.id] ?? 0,
-              )
-            : item.quantity
+        const owed = owedOnly
+          ? dishOwed(
+              item.quantity,
+              readyQuantity(store, item.id, item.quantity),
+              workflow.preparations[item.id] ?? 0,
+            )
+          : item.quantity
         if (owed <= 0) continue
         shown.push({
           id: item.id,
           menuItemId: item.menu_item_id,
           itemName: item.item_name,
           quantity: owed,
-          ...(workflow ? { note: workflow.notes[item.id] ?? null } : {}),
+          note: workflow.notes[item.id] ?? null,
         })
       } else {
         other += 1
@@ -142,30 +135,20 @@ export function createMockKitchenAdapter(
   }
 
   /**
-   * The kitchen's latest acknowledgement. On the dish ticks' path, only one made
-   * after its latest Ready counts, and its full snapshot is read as owed now —
+   * The kitchen's latest acknowledgement. Only one made after its latest Ready
+   * counts, and its full snapshot is read as owed now —
    * less what the counter has ticked and the kitchens marked Ready since — so
    * a tick after an ACK stays silent, as `kitchen_ticket_v2` reads it.
    */
-  function latestAck(orderId: string, on: boolean): StoredAck | null {
-    const workflow = dishes(on)
+  function latestAck(orderId: string): StoredAck | null {
+    const workflow = dishes()
     let latest: StoredAck | null = null
-    const cutoff = workflow ? activeReadies(orderId).at(-1)?.at : undefined
+    const cutoff = activeReadies(orderId).at(-1)?.at
     for (const ack of kitchen.acks) {
       if (cutoff && ack.ackedAt <= cutoff) continue
       if (ack.orderId === orderId && (!latest || ack.ackedAt >= latest.ackedAt)) latest = ack
     }
     if (!latest) return null
-    if (!workflow) {
-      return {
-        ...latest,
-        lines: latest.lines.filter((line) => {
-          const categoryId =
-            store.menuItems.find((item) => item.id === line.menuItemId)?.category_id ?? null
-          return visible(categoryId, kitchen.filter)
-        }),
-      }
-    }
     return {
       ...latest,
       lines: latest.lines
@@ -185,8 +168,8 @@ export function createMockKitchenAdapter(
     }
   }
 
-  function board(on: boolean): KitchenBoard {
-    const workflow = dishes(on)
+  function board(): KitchenBoard {
+    const workflow = dishes()
     const orders: KitchenOrder[] = store.orders
       .filter(
         (order) =>
@@ -196,16 +179,12 @@ export function createMockKitchenAdapter(
             (order.status === 'cancelled' && order.business_date === store.today)),
       )
       .map((order) => {
-        const { shown, other } = lineSplit(order, on)
-        const ack = latestAck(order.id, on)
+        const { shown, other } = lineSplit(order)
+        const ack = latestAck(order.id)
         return {
           id: order.id,
           orderNumber: order.order_number,
-          ...(workflow
-            ? {
-                ticketNumber: activeReadies(order.id).length + 1,
-              }
-            : {}),
+          ticketNumber: activeReadies(order.id).length + 1,
           serviceType: order.service_type,
           tableNumber: order.table_number,
           orderedAt: order.ordered_at,
@@ -214,16 +193,15 @@ export function createMockKitchenAdapter(
           cancelledAt: order.cancelled_at,
           lines: shown,
           otherItemCount: other,
-          acknowledged: workflow
-            ? ack !== null &&
-              kitchen.acks.some(
-                (a) =>
-                  a.orderId === order.id &&
-                  a.kind === 'new' &&
-                  (!activeReadies(order.id).at(-1)?.at ||
-                    a.ackedAt > activeReadies(order.id).at(-1)!.at),
-              )
-            : kitchen.acks.some((a) => a.orderId === order.id && a.kind === 'new'),
+          acknowledged:
+            ack !== null &&
+            kitchen.acks.some(
+              (a) =>
+                a.orderId === order.id &&
+                a.kind === 'new' &&
+                (!activeReadies(order.id).at(-1)?.at ||
+                  a.ackedAt > activeReadies(order.id).at(-1)!.at),
+            ),
           latestAck: ack
             ? {
                 kind: ack.kind,
@@ -243,7 +221,7 @@ export function createMockKitchenAdapter(
             (order.status === 'cancelled' || order.lines.length === 0)
           ),
       )
-    if (workflow) {
+    {
       for (const order of store.orders) {
         if (
           order.outlet_id !== DEMO_OUTLET_ID ||
@@ -300,16 +278,12 @@ export function createMockKitchenAdapter(
         })
       }
     }
-    if (workflow) {
-      orders.sort(
-        (a, b) =>
-          a.orderedAt.localeCompare(b.orderedAt) ||
-          (a.ticketNumber ?? 1) - (b.ticketNumber ?? 1) ||
-          a.id.localeCompare(b.id),
-      )
-    } else {
-      orders.sort((a, b) => a.orderedAt.localeCompare(b.orderedAt) || a.id.localeCompare(b.id))
-    }
+    orders.sort(
+      (a, b) =>
+        a.orderedAt.localeCompare(b.orderedAt) ||
+        (a.ticketNumber ?? 1) - (b.ticketNumber ?? 1) ||
+        a.id.localeCompare(b.id),
+    )
     return {
       readAt: now().toISOString(),
       filterChangedAt: kitchen.filterChangedAt,
@@ -348,9 +322,9 @@ export function createMockKitchenAdapter(
    * would, and has answered it when its card there is quiet — or when the
    * counter has ticked it Prepared, because then the food is made.
    */
-  function singleCounterMarks(on: boolean): KitchenMarks {
-    const workflow = dishes(on)
-    const cards = new Map(board(on).orders.map((order) => [order.id, order]))
+  function singleCounterMarks(): KitchenMarks {
+    const workflow = dishes()
+    const cards = new Map(board().orders.map((order) => [order.id, order]))
     const orders: Record<string, (KitchenAnswer | null)[]> = {}
     const dishStates: Record<string, (KitchenDishState | null)[]> = {}
     for (const order of store.orders) {
@@ -361,47 +335,42 @@ export function createMockKitchenAdapter(
       let answer: KitchenAnswer | null = null
       if (order.prepared_at !== null) {
         // The board leaves out a prepared order, so ask the lines directly.
-        const { shown } = lineSplit(order, on)
-        const ack = latestAck(order.id, on)
+        const { shown } = lineSplit(order)
+        const ack = latestAck(order.id)
         const carried =
-          (workflow &&
-            store.orderItems.some(
-              (line) =>
-                line.order_id === order.id &&
-                line.kind === 'item' &&
-                visible(
-                  store.menuItems.find((item) => item.id === line.menu_item_id)?.category_id ??
-                    null,
-                  kitchen.filter,
-                ) &&
-                ((kitchen.station ?? 1) === 2
-                  ? store.menuCategories.find(
-                      (category) =>
-                        category.id ===
-                        store.menuItems.find((item) => item.id === line.menu_item_id)?.category_id,
-                    )?.name === 'Main Course'
-                  : store.menuCategories.find(
-                      (category) =>
-                        category.id ===
-                        store.menuItems.find((item) => item.id === line.menu_item_id)?.category_id,
-                    )?.name !== 'Main Course'),
-            )) ||
+          store.orderItems.some(
+            (line) =>
+              line.order_id === order.id &&
+              line.kind === 'item' &&
+              visible(
+                store.menuItems.find((item) => item.id === line.menu_item_id)?.category_id ?? null,
+                kitchen.filter,
+              ) &&
+              ((kitchen.station ?? 1) === 2
+                ? store.menuCategories.find(
+                    (category) =>
+                      category.id ===
+                      store.menuItems.find((item) => item.id === line.menu_item_id)?.category_id,
+                  )?.name === 'Main Course'
+                : store.menuCategories.find(
+                    (category) =>
+                      category.id ===
+                      store.menuItems.find((item) => item.id === line.menu_item_id)?.category_id,
+                  )?.name !== 'Main Course'),
+          ) ||
           shown.length > 0 ||
           ((ack?.lines.length ?? 0) > 0 &&
             !(ack?.kind === 'cancel' && ack.orderVersion === version(order)))
         answer = carried ? 'seen' : null
       } else {
         const card = cards.get(order.id)
-        if (card)
-          answer =
-            (on ? dishKitchenCardState : kitchenCardState)(card) === 'quiet' ? 'seen' : 'waiting'
-        else if (workflow && activeReadies(order.id).length > 0) answer = 'seen'
+        if (card) answer = dishKitchenCardState(card) === 'quiet' ? 'seen' : 'waiting'
+        else if (activeReadies(order.id).length > 0) answer = 'seen'
       }
       if (answer) orders[order.id] = [answer]
-      if (workflow) {
+      {
         const carried = store.orderItems.filter(
-          (item) =>
-            item.order_id === order.id && item.kind === 'item' && carriedByKitchen(item, on),
+          (item) => item.order_id === order.id && item.kind === 'item' && carriedByKitchen(item),
         )
         if (carried.length) {
           const owed = carried.filter(
@@ -423,7 +392,7 @@ export function createMockKitchenAdapter(
               ) > (workflow.preparations[item.id] ?? 0),
           )
           const acknowledged =
-            answer === 'seen' || latestAck(order.id, on)?.orderVersion === version(order)
+            answer === 'seen' || latestAck(order.id)?.orderVersion === version(order)
           dishStates[order.id] = [
             owed.length === 0
               ? 'handed_over'
@@ -437,32 +406,27 @@ export function createMockKitchenAdapter(
       }
     }
     return {
-      ...(workflow
-        ? {
-            dishStates,
-            readyQuantities: Object.fromEntries(
-              store.orders
-                .filter((order) => order.outlet_id === DEMO_OUTLET_ID)
-                .map((order) => [
-                  order.id,
-                  Object.fromEntries(
-                    store.orderItems
-                      .filter((line) => line.order_id === order.id && line.kind === 'item')
-                      .map((line) => [line.id, readyQuantity(store, line.id, line.quantity)]),
-                  ),
-                ]),
+      dishStates,
+      readyQuantities: Object.fromEntries(
+        store.orders
+          .filter((order) => order.outlet_id === DEMO_OUTLET_ID)
+          .map((order) => [
+            order.id,
+            Object.fromEntries(
+              store.orderItems
+                .filter((line) => line.order_id === order.id && line.kind === 'item')
+                .map((line) => [line.id, readyQuantity(store, line.id, line.quantity)]),
             ),
-          }
-        : {}),
+          ]),
+      ),
       kitchens: [{ id: DEMO_KITCHEN_DEVICE_ID, label: DEMO_KITCHEN_LABEL }],
       orders,
       kitchenTablets: 1,
     }
   }
 
-  /** Off, the one demo kitchen as before #74; on, its two stations side by side. */
-  function counterMarks(on: boolean): KitchenMarks {
-    if (!dishes(on)) return singleCounterMarks(false)
+  /** The demo's two kitchen stations, side by side. */
+  function counterMarks(): KitchenMarks {
     const station = kitchen.station ?? 1
     const acks = kitchen.acks
     kitchen.stationAcks ??= {}
@@ -470,10 +434,10 @@ export function createMockKitchenAdapter(
     try {
       kitchen.station = 1
       kitchen.acks = kitchen.stationAcks[1] ?? []
-      const first = singleCounterMarks(true)
+      const first = singleCounterMarks()
       kitchen.station = 2
       kitchen.acks = kitchen.stationAcks[2] ?? []
-      const second = singleCounterMarks(true)
+      const second = singleCounterMarks()
       const ids = new Set([...Object.keys(first.orders), ...Object.keys(second.orders)])
       return {
         ...first,
@@ -503,10 +467,9 @@ export function createMockKitchenAdapter(
     }
   }
 
-  /** An acknowledgement, recorded as the real ones are: old lines, or full lines with notes (R4). */
+  /** An acknowledgement, recorded as the real ones are: full lines with notes (R4). */
   function acknowledgeWith(
-    input: Parameters<KitchenAdapter['acknowledge']>[0],
-    on: boolean,
+    input: Parameters<KitchenAdapter['acknowledgeDish']>[0],
   ): 'accepted' | 'stale' {
     const order = store.orders.find((candidate) => candidate.id === input.orderId)
     if (!order) throw new Error('That order is not on this board.')
@@ -517,13 +480,11 @@ export function createMockKitchenAdapter(
       orderId: input.orderId,
       kind: input.kind,
       orderVersion: input.orderVersion,
-      lines: lineSplit(order, on, false).shown,
+      lines: lineSplit(order, false).shown,
       ackedAt: now().toISOString(),
     })
-    if (dishes(on)) {
-      kitchen.stationAcks ??= {}
-      kitchen.stationAcks[kitchen.station ?? 1] = kitchen.acks
-    }
+    kitchen.stationAcks ??= {}
+    kitchen.stationAcks[kitchen.station ?? 1] = kitchen.acks
     return 'accepted'
   }
 
@@ -543,7 +504,7 @@ export function createMockKitchenAdapter(
       )
       if (!order || order.status === 'cancelled' || (order.status === 'paid' && order.prepared_at))
         throw new Error('That ticket is finished.')
-      const shown = lineSplit(order, true).shown
+      const shown = lineSplit(order).shown
       if (
         input.lines.length === 0 ||
         input.lines.some(
@@ -558,17 +519,14 @@ export function createMockKitchenAdapter(
       if (
         !kitchen.acks.some((ack) => ack.orderId === order.id && ack.orderVersion === version(order))
       ) {
-        acknowledgeWith(
-          {
-            id: crypto.randomUUID(),
-            orderId: order.id,
-            kind: kitchen.acks.some((ack) => ack.orderId === order.id && ack.kind === 'new')
-              ? 'edit'
-              : 'new',
-            orderVersion: version(order),
-          },
-          true,
-        )
+        acknowledgeWith({
+          id: crypto.randomUUID(),
+          orderId: order.id,
+          kind: kitchen.acks.some((ack) => ack.orderId === order.id && ack.kind === 'new')
+            ? 'edit'
+            : 'new',
+          orderVersion: version(order),
+        })
       }
       workflow.readies.push({
         ...input,
@@ -588,21 +546,17 @@ export function createMockKitchenAdapter(
       ready.undone = true
       workflow.commands.push(id)
     },
-    async readBoard() {
-      return board(false)
-    },
-
     async readDishBoard() {
-      return board(true)
+      return board()
     },
 
     async readDishMarks() {
-      return counterMarks(true)
+      return counterMarks()
     },
 
     async readManagerDishMarks(outletId) {
       // What the counter reads, for the one outlet asked about.
-      const marks = counterMarks(true)
+      const marks = counterMarks()
       const here = new Set(
         store.orders.filter((order) => order.outlet_id === outletId).map((order) => order.id),
       )
@@ -635,7 +589,7 @@ export function createMockKitchenAdapter(
     },
 
     async acknowledgeDish(input) {
-      return acknowledgeWith(input, true)
+      return acknowledgeWith(input)
     },
 
     async listCategories() {
@@ -649,18 +603,10 @@ export function createMockKitchenAdapter(
         }))
     },
 
-    async readCounterMarks() {
-      return counterMarks(false)
-    },
-
     async setFilter(mode, categoryIds, sort) {
       kitchen.filter = { mode, categoryIds: [...new Set(categoryIds)] }
       kitchen.filterChangedAt = now().toISOString()
       kitchen.sort = sort
-    },
-
-    async acknowledge(input) {
-      return acknowledgeWith(input, false)
     },
 
     /**

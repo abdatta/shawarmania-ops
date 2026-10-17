@@ -5,7 +5,6 @@ import { Chip, type ChipTone } from '@/components/ui/chip'
 import { MemberMark } from '@/components/ui/member-mark'
 import { Money } from '@/components/ui/money'
 import type { BillingOrder, KitchenMarks } from '@/data-access/adapters'
-import { useChangeGate } from '@/change-gates/context'
 import {
   dishAge,
   formatDayTime,
@@ -16,8 +15,8 @@ import {
 import { formatIndianPhone } from '../../../shared/phone'
 
 /**
- * An open order on the owner's Orders tab, with the dish ticks on
- * (each-dish-is-ticked-off, design R11; `dish-ticks`).
+ * An open order on the owner's Orders tab (each-dish-is-ticked-off, design
+ * R11).
  *
  * The owner reads this away from the outlet, so it says what the counter's
  * card shows, in words where the counter has room only for icons: paid or not,
@@ -42,7 +41,6 @@ export function DishOpenOrderSummary({
   /** Opens the page's cancellation; absent while it is open. */
   onCancel?: () => void
 }) {
-  const readyOn = useChangeGate('kitchen-ready')
   const readyQuantities = marks?.readyQuantities?.[order.id] ?? {}
   const acked = new Set(marks?.ackedLines?.[order.id] ?? [])
   const kitchens = (marks?.kitchens ?? [])
@@ -89,7 +87,7 @@ export function DishOpenOrderSummary({
           <Chip data-testid={`manager-order-paid-${order.orderNumber}`}>Not paid</Chip>
         )}
         {kitchens.map(({ kitchen, state }) => {
-          const shown = KITCHEN[state === 'ready' && !readyOn ? 'acknowledged' : state]
+          const shown = KITCHEN[state]
           return (
             <Chip
               key={kitchen.id}
@@ -110,7 +108,7 @@ export function DishOpenOrderSummary({
           const dish: DishShown =
             prepared >= line.quantity
               ? DISH.handed
-              : readyOn && ready > prepared
+              : ready > prepared
                 ? DISH.done
                 : acked.has(line.orderLineId ?? '')
                   ? DISH.acknowledged

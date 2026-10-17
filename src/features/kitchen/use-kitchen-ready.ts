@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { KitchenAdapter } from '@/data-access/adapters'
-import type { KitchenCardView } from './use-kitchen-board'
+import type { KitchenCardView } from './use-dish-kitchen-board'
 
 export const KITCHEN_READY_EXIT_MS = 320
 export const KITCHEN_READY_GAP_MS = 180

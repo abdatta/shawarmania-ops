@@ -19,7 +19,7 @@ export const AUTH_SHARDS: readonly (readonly string[])[] = [
   // the gates-off run of this shard is the request budget alone.
   ['request-budget.spec.ts', 'fewer-requests.spec.ts'],
   ['billing-served.spec.ts'],
-  ['billing-offline.spec.ts', 'kitchen-tablet.spec.ts'],
+  ['billing-offline.spec.ts', 'dish-ticks.spec.ts'],
 ]
 
 /** The named shards, then the one running everything else. */

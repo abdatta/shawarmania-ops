@@ -13,15 +13,13 @@ const line = {
 
 it('fills a Ready dish orange, keeps its checkbox gray, and clears on handover', () => {
   const tick = vi.fn()
-  const { rerender } = render(
-    <ReadyDish line={line} readyQuantity={2} readyOn interactive onTick={tick} />,
-  )
+  const { rerender } = render(<ReadyDish line={line} readyQuantity={2} interactive onTick={tick} />)
   const row = screen.getByRole('button', { name: 'Tick 2 Shawarma' })
   expect(row).toHaveClass('dish-ready-fill')
   expect(row.closest('li')).toHaveAttribute('data-ready', 'true')
   expect(screen.getByTestId('dish-checkbox')).toHaveClass('border-content-muted', 'bg-surface')
 
-  rerender(<ReadyDish line={line} readyQuantity={0} readyOn interactive onTick={tick} />)
+  rerender(<ReadyDish line={line} readyQuantity={0} interactive onTick={tick} />)
   expect(row).not.toHaveClass('dish-ready-fill')
   expect(row).toHaveClass('text-content')
   expect(screen.getByTestId('dish-checkbox')).not.toHaveClass('bg-surface')
@@ -30,7 +28,6 @@ it('fills a Ready dish orange, keeps its checkbox gray, and clears on handover',
     <ReadyDish
       line={{ ...line, preparedQuantity: 2 }}
       readyQuantity={2}
-      readyOn
       interactive
       onTick={tick}
     />,
@@ -41,13 +38,6 @@ it('fills a Ready dish orange, keeps its checkbox gray, and clears on handover',
   expect(screen.getByTestId('dish-quantity')).toHaveTextContent('2')
   expect(screen.getByTestId('dish-checkbox').querySelector('svg')).not.toBeNull()
   expect(document.querySelector('audio')).toBeNull()
-})
-
-it('reads a Ready dish as waiting while kitchen-ready is off', () => {
-  render(<ReadyDish line={line} readyQuantity={2} readyOn={false} interactive onTick={vi.fn()} />)
-  const row = screen.getByRole('button', { name: 'Tick 2 Shawarma' })
-  expect(row).not.toHaveClass('dish-ready-fill')
-  expect(row.closest('li')).not.toHaveAttribute('data-ready')
 })
 
 it('ticks one dish rather than the whole order', async () => {
@@ -62,7 +52,6 @@ it('ticks one dish rather than the whole order', async () => {
         note: 'No sauce',
       }}
       readyQuantity={0}
-      readyOn
       interactive
       onTick={tick}
     />,

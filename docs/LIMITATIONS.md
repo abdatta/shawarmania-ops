@@ -440,8 +440,8 @@ a one-tap job rather than a browser-menu one.
 
 ### A slow connection still holds four things
 
-With `instant-saves` on, the counter shows its own saves without waiting for the
-server (see [Offline And Sync](OFFLINE_AND_SYNC.md#rules-that-make-this-safe)).
+The counter shows its own saves without waiting for the server
+(the-counter-shows-what-it-saved) (see [Offline And Sync](OFFLINE_AND_SYNC.md#rules-that-make-this-safe)).
 Four waits on a slow connection remain, found while tracing it and each its own
 change if wanted:
 

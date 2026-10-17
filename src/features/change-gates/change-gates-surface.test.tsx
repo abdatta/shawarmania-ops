@@ -46,19 +46,13 @@ function renderAt(path: string, role: Role = 'super_admin') {
 const rowOf = (key: string) => screen.getByTestId(`open-gate-${key}`)
 
 describe('the Change gates list', () => {
-  it('lists every gate after the gates it depends on, naming them by code', async () => {
+  it('lists every gate with its code and state', async () => {
     const user = userEvent.setup()
     renderAt('/owner/change-gates')
 
     const list = await screen.findByTestId('change-gate-list')
-    const order = within(list)
-      .getAllByRole('link')
-      .map((link) => link.getAttribute('data-testid'))
-    expect(order.indexOf('open-gate-dish-ticks')).toBeLessThan(
-      order.indexOf('open-gate-kitchen-ready'),
-    )
     expect(within(rowOf('probe')).getByTestId('gate-code')).toHaveTextContent('PB')
-    expect(screen.getByTestId('depends-kitchen-ready')).toHaveTextContent('Dependent on DT')
+    // No declared gate depends on another since the dish ticks retired.
     expect(screen.queryByTestId('depends-probe')).not.toBeInTheDocument()
     expect(
       within(list)
@@ -125,41 +119,6 @@ describe('a change gate’s own page', () => {
     const newest = within(screen.getByTestId('gate-history')).getAllByRole('listitem')[0]
     expect(newest).toHaveTextContent('Off')
     expect(newest).toHaveTextContent('Comparing the two')
-  })
-
-  it('lists the gates that need it, and says turning it off takes them too', async () => {
-    const user = userEvent.setup()
-    renderAt('/owner/change-gates/dish-ticks')
-    await screen.findByTestId('gate-dish-ticks')
-    expect(
-      within(screen.getByTestId('gate-needed-by')).getByTestId('open-gate-kitchen-ready'),
-    ).toBeInTheDocument()
-
-    await user.click(screen.getByTestId('turn-gate'))
-    expect(await screen.findByTestId('turn-also-off')).toHaveTextContent(
-      'This also turns off Kitchen Ready, Instant saves, which depend on it.',
-    )
-  })
-
-  it('holds a gate off while a gate it depends on is off, and links to that gate', async () => {
-    const user = userEvent.setup()
-    renderAt('/owner/change-gates/dish-ticks')
-    await screen.findByTestId('gate-dish-ticks')
-    await user.click(screen.getByTestId('turn-gate'))
-    await user.click(screen.getByTestId('confirm-turn-submit'))
-    await waitFor(() => expect(screen.getByTestId('gate-since')).toHaveTextContent(/^Off/))
-
-    await user.click(
-      within(screen.getByTestId('gate-needed-by')).getByTestId('open-gate-kitchen-ready'),
-    )
-    await screen.findByTestId('gate-kitchen-ready')
-    expect(
-      within(screen.getByTestId('gate-dependencies')).getByTestId('open-gate-dish-ticks'),
-    ).toBeInTheDocument()
-    expect(screen.getByTestId('turn-gate')).toBeDisabled()
-    expect(screen.getByTestId('gate-blocked')).toHaveTextContent(
-      'Turn on Dish ticks first: this is dependent on it.',
-    )
   })
 
   it('opens each time with an empty reason', async () => {

@@ -235,6 +235,8 @@ Every pairing of a build with the schema must work.
 
 #74 reached the counters on 12 October as a change with no switch and froze them. It returned behind two gates, and is the worked example of everything above.
 
+**Both gates are retired** (`retire-dish-ticks`, 17 October 2026), with `instant-saves`, which depended on them: the counter and kitchen below are the only ones there are, and the app has no Off for them. Their rows read on until the contract migrations. What follows is kept as the example of a gated release, in the tense it was written.
+
 | Gate | Code | Depends on | On | Off |
 |---|---|---|---|---|
 | `dish-ticks` | DT | — | The counter is the menu and a two-column rail with Bills and Expenses below; orders take a label, dishes take notes, each dish is ticked off on its own, and the kitchen sees only the food it still owes. | The counter and kitchen as they were before #74: three columns, one Prepared tick per order, no labels or notes. |
@@ -324,7 +326,7 @@ If the owner's phone cannot load the app, the same turn from the Supabase
 dashboard's SQL editor, which runs as the database owner:
 
 ```sql
-select public.change_gate_force('dish-ticks', false, 'Counter frozen; turned off from the dashboard');
+select public.change_gate_force('fewer-requests', false, 'Counter frozen; turned off from the dashboard');
 ```
 
 It records the turn in the history as an operator turn, with no person.

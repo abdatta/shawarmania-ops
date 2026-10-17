@@ -20,7 +20,6 @@ test('the demo’s Change gates opens from its address, and nothing links to it'
   await page.goto('demo/owner/change-gates')
   await expect(page.getByTestId('change-gate-list')).toBeVisible()
   await expect(page.getByTestId('open-gate-probe')).toContainText('Probe')
-  await expect(page.getByTestId('depends-kitchen-ready')).toContainText('Dependent on DT')
   await expect(page.getByRole('link', { name: 'Change gates', exact: true })).toHaveCount(0)
 })
 
@@ -93,22 +92,6 @@ test(
     await page.getByRole('button', { name: 'Discard and start again' }).click()
     await expect(page.getByTestId('gate-since')).toContainText(/^On/)
     expect(await codeAfterOpening()).toMatch(/·PB-TH(-[A-Z]{2})*$/)
-  },
-)
-
-test(
-  'turning a gate off turns off the gates that depend on it',
-  { tag: ['@cg-on:dish-ticks', '@cg-on:kitchen-ready'] },
-  async ({ page }) => {
-    await page.goto('demo/owner/change-gates/dish-ticks')
-    await page.getByTestId('turn-gate').click()
-    await expect(page.getByTestId('turn-also-off')).toContainText('Kitchen Ready')
-    await page.getByTestId('confirm-turn-submit').click()
-    await expect(page.getByTestId('gate-since')).toContainText(/^Off/)
-
-    await page.goto('demo/owner/change-gates/kitchen-ready')
-    await expect(page.getByTestId('gate-since')).toContainText(/^Off/)
-    await expect(page.getByTestId('turn-gate')).toBeDisabled()
   },
 )
 

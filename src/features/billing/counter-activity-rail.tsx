@@ -8,20 +8,12 @@ import { CounterActivity } from './counter-activity'
  * The outlet's pipeline, in one continuous rail: one list of every unfinished
  * order, newest first, whole-outlet scope.
  *
- * While the composer holds a saved order, the rail says so without a word of
- * explanation: it takes the same accent outline as the panel, the order under
- * edit leaves the ordinary lists, and its card slides out of the rail's own margin
- * to dock against the composer's column — left corners flattened, left border
- * dropped — so the two become one accent-outlined piece of work rather than two
- * panels that happen to be adjacent.
- *
- * The docked card sits **outside** the list's scroller, in a region of the rail
- * that never scrolls at all: scrolling the pipeline cannot move it. That is also
- * why neither this rail nor the list's wrapper clips overflow — a card that has
- * to cross the gap cannot live in a box that clips at the gap.
+ * While the composer holds a saved order, the rail pins it over its right
+ * column, beside the composer laid over its left (each-dish-is-ticked-off,
+ * design R7). The pinned card sits **outside** the list's scroller, so
+ * scrolling the pipeline cannot move it.
  */
 export function CounterActivityRail({
-  twoColumns = false,
   refreshKey,
   ownSaveKey = 0,
   savedOrderKey = 0,
@@ -34,10 +26,9 @@ export function CounterActivityRail({
   asOf,
   checkoutSettings,
 }: {
-  twoColumns?: boolean
   refreshKey: number
   /**
-   * Bumped by this tablet's own saves, with `instant-saves` on: the rail draws
+   * Bumped by this tablet's own saves: the rail draws
    * what the tablet holds, then asks the server (the-counter-shows-what-it-saved).
    */
   ownSaveKey?: number
@@ -68,11 +59,7 @@ export function CounterActivityRail({
         as well would sweep this shift's bills and every other open order into the
         same highlight, which says the opposite of what the highlight is for.
       */
-      className={
-        twoColumns
-          ? 'relative flex min-h-0 flex-col rounded-xl border border-border bg-surface'
-          : 'flex min-h-0 flex-col rounded-xl border border-border bg-surface'
-      }
+      className="relative flex min-h-0 flex-col rounded-xl border border-border bg-surface"
     >
       {asOf && (
         <p
@@ -83,35 +70,15 @@ export function CounterActivityRail({
         </p>
       )}
       {/*
-        Pulled `--dock-overhang` past the rail's left border and given it straight
-        back as padding, so the content sits exactly where it always did while the
-        docked card keeps its reach across the gap.
-
-        This wrapper no longer scrolls: the list inside it scrolls its own
-        orders (see OpenOrdersSurface), and the docked card above it lives in
-        what is now an unmoving region by construction rather than by stickiness.
+        This wrapper does not scroll: the list inside it scrolls its own orders
+        (see DishOpenOrdersSurface), and the pinned card lives above it in a
+        region that never moves.
       */}
-      <div
-        style={{
-          marginLeft: twoColumns ? 0 : 'calc(var(--dock-overhang) * -1)',
-          paddingLeft: twoColumns ? '0.75rem' : 'calc(0.75rem + var(--dock-overhang))',
-        }}
-        className="flex min-h-0 flex-1 flex-col py-2 pr-3"
-      >
+      <div className="flex min-h-0 flex-1 flex-col px-3 py-2">
         {editing && (
-          <div
-            style={{ marginLeft: twoColumns ? 0 : 'calc(var(--dock-reach) * -1)' }}
-            className={
-              twoColumns
-                ? 'absolute right-3 top-2 z-20 w-[calc((100%-2.25rem)/2)]'
-                : 'z-10 my-2 shrink-0 animate-[dock-in_200ms_ease-out] motion-reduce:animate-none'
-            }
-          >
-            {pin}
-          </div>
+          <div className="absolute right-3 top-2 z-20 w-[calc((100%-2.25rem)/2)]">{pin}</div>
         )}
         <CounterActivity
-          twoColumns={twoColumns}
           refreshKey={refreshKey}
           ownSaveKey={ownSaveKey}
           savedOrderKey={savedOrderKey}

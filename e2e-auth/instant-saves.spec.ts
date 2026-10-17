@@ -12,9 +12,7 @@ import { TILL_ONE, openTill, orderCard, railSettled, saveNewOrder } from './till
  * the end. The functions are the commands themselves (`create_billing_order_v2`,
  * `pay_billing_order` and the rest) and the reads that ride with a re-read (the
  * till labels). Each save must be on screen within one second, so nothing here
- * can pass by waiting the server out. `@cg-on:instant-saves` because with the
- * gate off each of these waits for the held read, which is the behaviour this
- * change turns off.
+ * can pass by waiting the server out.
  *
  * The outbox sends a command about two seconds after it is saved, and the
  * steps below take less than that, so the test waits for the order's command to
@@ -75,94 +73,93 @@ async function slowServer(page: Page) {
   }
 }
 
-test(
-  'an order, its edit, its payment and its take-back are on screen before a slow server answers',
-  { tag: '@cg-on:instant-saves' },
-  async ({ browser, request }) => {
-    test.slow()
-    const counter = await openTill(browser, request, TILL_ONE)
-    const page = counter.page
-    let server: Awaited<ReturnType<typeof slowServer>> | undefined
-    try {
-      await railSettled(page)
-      const bills = page.getByRole('region', { name: 'Bills this shift' })
-      await expect(bills).toBeVisible()
-      server = await slowServer(page)
-      const { held, restore } = server
+test('an order, its edit, its payment and its take-back are on screen before a slow server answers', async ({
+  browser,
+  request,
+}) => {
+  test.slow()
+  const counter = await openTill(browser, request, TILL_ONE)
+  const page = counter.page
+  let server: Awaited<ReturnType<typeof slowServer>> | undefined
+  try {
+    await railSettled(page)
+    const bills = page.getByRole('region', { name: 'Bills this shift' })
+    await expect(bills).toBeVisible()
+    server = await slowServer(page)
+    const { held, restore } = server
 
-      // Order: on the rail at once, numberless until the server numbers it.
-      await page.getByRole('button', { name: CLASSIC, exact: true }).click()
-      await page.getByRole('button', { name: 'Enter Customer Info', exact: true }).click()
-      await page
-        .getByRole('dialog', { name: 'Customer' })
-        .getByRole('button', { name: 'Skip', exact: true })
-        .click()
-      const id = await saveNewOrder(
-        page,
-        async () => {
-          await page.getByRole('button', { name: 'Order', exact: true }).click()
-        },
-        AT_ONCE,
-      )
-      const card = orderCard(page, id)
-      await expect(card).toContainText(CLASSIC, AT_ONCE)
+    // Order: on the rail at once, numberless until the server numbers it.
+    await page.getByRole('button', { name: CLASSIC, exact: true }).click()
+    await page.getByRole('button', { name: 'Enter Customer Info', exact: true }).click()
+    await page
+      .getByRole('dialog', { name: 'Customer' })
+      .getByRole('button', { name: 'Skip', exact: true })
+      .click()
+    const id = await saveNewOrder(
+      page,
+      async () => {
+        await page.getByRole('button', { name: 'Order', exact: true }).click()
+      },
+      AT_ONCE,
+    )
+    const card = orderCard(page, id)
+    await expect(card).toContainText(CLASSIC, AT_ONCE)
 
-      // The order's command is on its way and the server has not answered it.
-      await expect.poll(() => held.get('create_billing_order_v2') ?? 0).toBeGreaterThan(0)
+    // The order's command is on its way and the server has not answered it.
+    await expect.poll(() => held.get('create_billing_order_v2') ?? 0).toBeGreaterThan(0)
 
-      // Save changes, before the server has numbered it: the new dish at once.
-      await card.getByRole('button', { name: /^More actions for / }).click()
-      await card.getByRole('menuitem', { name: 'Edit', exact: true }).click()
-      await page.getByRole('button', { name: MAYONNAISE, exact: true }).click()
-      await page.getByTestId('save-order').click()
-      await expect(card).toContainText(MAYONNAISE, AT_ONCE)
+    // Save changes, before the server has numbered it: the new dish at once.
+    await card.getByRole('button', { name: /^More actions for / }).click()
+    await card.getByRole('menuitem', { name: 'Edit', exact: true }).click()
+    await page.getByRole('button', { name: MAYONNAISE, exact: true }).click()
+    await page.getByTestId('save-order').click()
+    await expect(card).toContainText(MAYONNAISE, AT_ONCE)
 
-      // Every dish handed over, then paid: the ticket is in Bills at once.
-      const billsBefore = await bills.locator('details').count()
-      // A ticked dish's button becomes Untick, so the first Tick left each time.
-      const ticks = card.getByRole('button', { name: /^Tick / })
-      for (let left = await ticks.count(); left > 0; left -= 1) {
-        await ticks.first().click()
-        await expect(ticks).toHaveCount(left - 1, AT_ONCE)
-      }
-      await card.getByRole('button', { name: 'Paid', exact: true }).click()
-      const receipt = page.getByRole('dialog', { name: 'Receipt and points' })
-      const payment = page.getByRole('dialog', { name: 'Record payment' })
-      await expect(receipt.or(payment)).toBeVisible()
-      if (await receipt.isVisible())
-        await receipt.getByRole('button', { name: 'Skip', exact: true }).click()
-      await payment.getByRole('button', { name: 'Cash', exact: true }).click()
-      await payment.getByRole('button', { name: 'Paid', exact: true }).click()
-      await expect(payment).toHaveCount(0)
-      await expect(card).toHaveCount(0, AT_ONCE)
-      await expect(bills.locator('details')).toHaveCount(billsBefore + 1, AT_ONCE)
-
-      // Taken back from Bills: the order is back on the rail at once.
-      const row = bills.locator('details').first()
-      await row.locator('summary').click()
-      await row.getByRole('button', { name: 'Take the payment back', exact: true }).click()
-      const takeBack = page.getByRole('dialog', { name: /^Take back the payment for/ })
-      await takeBack.getByPlaceholder('Why is this payment coming back?').fill('Wrong order')
-      await takeBack.getByRole('button', { name: 'Take it back', exact: true }).click()
-      await expect(
-        page.getByText('The payment was taken back and the order reopened.'),
-      ).toBeVisible(AT_ONCE)
-      await expect(orderCard(page, id)).toBeVisible(AT_ONCE)
-      await expect(bills.locator('details')).toHaveCount(billsBefore, AT_ONCE)
-
-      // All of that while the server had still not answered the order's command.
-      expect(held.get('create_billing_order_v2')).toBeGreaterThan(0)
-
-      // The server, once it answers, numbers the order where it already stands.
-      await restore()
-      await expect(orderCard(page, id).getByTestId(/^order-reference-/)).toHaveText(/^#\s*\d+$/, {
-        timeout: 30_000,
-      })
-    } finally {
-      // A held request left waiting keeps the context from closing until the
-      // test times out, so a failure would read as the 270 s timeout.
-      await server?.restore()
-      await counter.context.close()
+    // Every dish handed over, then paid: the ticket is in Bills at once.
+    const billsBefore = await bills.locator('details').count()
+    // A ticked dish's button becomes Untick, so the first Tick left each time.
+    const ticks = card.getByRole('button', { name: /^Tick / })
+    for (let left = await ticks.count(); left > 0; left -= 1) {
+      await ticks.first().click()
+      await expect(ticks).toHaveCount(left - 1, AT_ONCE)
     }
-  },
-)
+    await card.getByRole('button', { name: 'Paid', exact: true }).click()
+    const receipt = page.getByRole('dialog', { name: 'Receipt and points' })
+    const payment = page.getByRole('dialog', { name: 'Record payment' })
+    await expect(receipt.or(payment)).toBeVisible()
+    if (await receipt.isVisible())
+      await receipt.getByRole('button', { name: 'Skip', exact: true }).click()
+    await payment.getByRole('button', { name: 'Cash', exact: true }).click()
+    await payment.getByRole('button', { name: 'Paid', exact: true }).click()
+    await expect(payment).toHaveCount(0)
+    await expect(card).toHaveCount(0, AT_ONCE)
+    await expect(bills.locator('details')).toHaveCount(billsBefore + 1, AT_ONCE)
+
+    // Taken back from Bills: the order is back on the rail at once.
+    const row = bills.locator('details').first()
+    await row.locator('summary').click()
+    await row.getByRole('button', { name: 'Take the payment back', exact: true }).click()
+    const takeBack = page.getByRole('dialog', { name: /^Take back the payment for/ })
+    await takeBack.getByPlaceholder('Why is this payment coming back?').fill('Wrong order')
+    await takeBack.getByRole('button', { name: 'Take it back', exact: true }).click()
+    await expect(page.getByText('The payment was taken back and the order reopened.')).toBeVisible(
+      AT_ONCE,
+    )
+    await expect(orderCard(page, id)).toBeVisible(AT_ONCE)
+    await expect(bills.locator('details')).toHaveCount(billsBefore, AT_ONCE)
+
+    // All of that while the server had still not answered the order's command.
+    expect(held.get('create_billing_order_v2')).toBeGreaterThan(0)
+
+    // The server, once it answers, numbers the order where it already stands.
+    await restore()
+    await expect(orderCard(page, id).getByTestId(/^order-reference-/)).toHaveText(/^#\s*\d+$/, {
+      timeout: 30_000,
+    })
+  } finally {
+    // A held request left waiting keeps the context from closing until the
+    // test times out, so a failure would read as the 270 s timeout.
+    await server?.restore()
+    await counter.context.close()
+  }
+})

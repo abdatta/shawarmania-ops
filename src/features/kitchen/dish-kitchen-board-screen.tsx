@@ -22,24 +22,20 @@ import { useKitchenMasonry } from './use-kitchen-masonry'
 import { kitchenFilterKey } from './kitchen-filter-key'
 
 /**
- * The kitchen tablet's screen with the dish ticks on (each-dish-is-ticked-off,
- * design D7, D9; `dish-ticks`). The old screen, `KitchenBoardScreen`, is what
- * a kitchen runs with them off.
+ * The kitchen tablet's screen (each-dish-is-ticked-off, design D7, D9).
  *
  * The board is `kitchen_board_v2`: notes on lines, only the food still owed,
- * in free-flowing columns. With `kitchen-ready` on too, each card has Done
- * beside its timer, a Done ticket collapses to a gray receipt that stays until
- * the counter hands its food over, and Undo is there until then. With it off,
- * the kitchen has ACK only, and receipts are not drawn.
+ * in free-flowing columns. Each card has Done beside its timer, a Done ticket
+ * collapses to a gray receipt that stays until the counter hands its food
+ * over, and Undo is there until then.
  *
- * As on the old screen, the Filter button is labelled with the filter in force,
+ * As on the first kitchen screen (#70), the Filter button is labelled with the filter in force,
  * a pointer floats over the board while a card awaiting ACK is out of sight, and
  * two alerts cannot be dismissed: **out of sync** and **sound off**.
  */
 export function DishKitchenBoardScreen({ player }: { player?: TunePlayer }) {
   const device = useCounterDevice()
   const { kitchen } = useAdapters()
-  const readyOn = useChangeGate('kitchen-ready')
   const { board, cards, stale, clock, read, acknowledge, silence } = useDishKitchenBoard({
     outletId: device.device.outletId,
     ...(player ? { player } : {}),
@@ -102,12 +98,10 @@ export function DishKitchenBoardScreen({ player }: { player?: TunePlayer }) {
   const now = new Date(clock)
 
   // Cards arrive oldest first; the tablet's own setting may turn them round.
-  // Done receipts are Ready's: with `kitchen-ready` off the food is made and
-  // off the board, and nothing is drawn for it (design R4).
-  const baseOrdered = useMemo(() => {
-    const shown = readyOn ? cards : cards.filter((card) => !card.order.readyId)
-    return board?.sort === 'newest_first' ? [...shown].reverse() : shown
-  }, [board?.sort, cards, readyOn])
+  const baseOrdered = useMemo(
+    () => (board?.sort === 'newest_first' ? [...cards].reverse() : cards),
+    [board?.sort, cards],
+  )
   const ready = useKitchenReady(kitchen, read, baseOrdered)
   /*
     Hold a departing Done ticket in its original slot through the fade and gap.
@@ -199,11 +193,9 @@ export function DishKitchenBoardScreen({ player }: { player?: TunePlayer }) {
               <option value={2}>Kitchen 2 · Main course</option>
             </select>
           </label>
-          {readyOn && (
-            <span className="text-xs text-content-muted">
-              Done tickets stay until counter handover. Expand a ticket to undo Done.
-            </span>
-          )}
+          <span className="text-xs text-content-muted">
+            Done tickets stay until counter handover. Expand a ticket to undo Done.
+          </span>
         </div>
       )}
       {ready.error && (
@@ -223,7 +215,7 @@ export function DishKitchenBoardScreen({ player }: { player?: TunePlayer }) {
                   <Shimmer className="h-12 w-24" />
                   <div className="flex items-center gap-2">
                     <Shimmer className="size-14 rounded-full" />
-                    {readyOn && <Shimmer className="size-14 rounded-full" />}
+                    <Shimmer className="size-14 rounded-full" />
                   </div>
                 </div>
                 <Shimmer className="h-6 w-24" />
@@ -251,18 +243,14 @@ export function DishKitchenBoardScreen({ player }: { player?: TunePlayer }) {
                 {...(ready.pending.has(card.order.id)
                   ? { readyPhase: ready.pending.get(card.order.id)!.phase }
                   : {})}
-                {...(readyOn
-                  ? {
-                      onReady: () => {
-                        silence(card.order.id)
-                        ready.toggle(
-                          card,
-                          position,
-                          ordered.map((slot) => slot.order.id),
-                        )
-                      },
-                    }
-                  : {})}
+                onReady={() => {
+                  silence(card.order.id)
+                  ready.toggle(
+                    card,
+                    position,
+                    ordered.map((slot) => slot.order.id),
+                  )
+                }}
                 onAcknowledge={() => void acknowledge(card.order)}
               />
             ))}

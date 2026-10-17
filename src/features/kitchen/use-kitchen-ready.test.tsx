@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { createDemoData, createMockAdapters } from '@/data-access/mock'
 import type { KitchenOrder } from '@/data-access/adapters'
-import type { KitchenCardView } from './use-kitchen-board'
+import type { KitchenCardView } from './use-dish-kitchen-board'
 import {
   KITCHEN_READY_EXIT_MS,
   KITCHEN_READY_GAP_MS,
@@ -18,7 +18,7 @@ const view = (order: KitchenOrder): KitchenCardView => ({
   rings: { left: 0, sounding: false },
 })
 async function setup() {
-  const { kitchen } = createMockAdapters('biller', createDemoData({ dishTicks: 'on' }))
+  const { kitchen } = createMockAdapters('biller', createDemoData({ dishWalkthrough: true }))
   const card = view(
     (await kitchen.readDishBoard()).orders.find((order) => order.orderNumber === 105)!,
   )

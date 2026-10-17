@@ -13,7 +13,7 @@ const filter = '2026-10-10T10:00:01.000Z'
 const nextRead = '2026-10-10T10:00:02.000Z'
 
 async function setup() {
-  const adapters = createMockAdapters('biller', createDemoData({ dishTicks: 'on' }))
+  const adapters = createMockAdapters('biller', createDemoData({ dishWalkthrough: true }))
   const source = await adapters.kitchen.readDishBoard()
   const old = {
     ...source.orders.find((order) => order.status === 'open')!,

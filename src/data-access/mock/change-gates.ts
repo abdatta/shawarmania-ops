@@ -60,29 +60,6 @@ const WORDS: Record<
     offMeans: 'Tablets report nothing new.',
     changeNumber: 75,
   },
-  'dish-ticks': {
-    title: 'Dish ticks',
-    onMeans:
-      'The counter is the menu and a two-column rail with Bills and Expenses below; orders take a label, dishes take notes, each dish is ticked off on its own, and the kitchen sees only the food it still owes.',
-    offMeans:
-      'The counter and kitchen as they were before #74: three columns, one Prepared tick per order, no labels or notes.',
-    changeNumber: 74,
-  },
-  'kitchen-ready': {
-    title: 'Kitchen Ready',
-    onMeans:
-      "The kitchen marks its food Done; on the counter those dishes fill orange and the order's bell swings to two rings of the handbell.",
-    offMeans: 'The kitchen has ACK only, as before #74.',
-    changeNumber: 74,
-  },
-  'instant-saves': {
-    title: 'Instant saves',
-    onMeans:
-      'The counter shows an order, an edit or a payment the moment the tablet has saved it, and checks with the server afterwards.',
-    offMeans:
-      'The counter shows an order, an edit or a payment once it has asked the server again, which takes a moment on a slow connection.',
-    changeNumber: null,
-  }, // No roadmap row: a runtime efficiency change, named by its folder.
   'fewer-requests': {
     title: 'Fewer requests',
     onMeans:
@@ -192,22 +169,6 @@ export function createDemoChangeGates(
    */
   const events: ChangeGateEvent[] = [
     ...turns,
-    {
-      key: 'kitchen-ready',
-      enabled: true,
-      at: ago(2 * HOUR),
-      byName: owner,
-      reason: null,
-      source: 'app',
-    },
-    {
-      key: 'dish-ticks',
-      enabled: true,
-      at: ago(3 * HOUR),
-      byName: owner,
-      reason: 'Quiet hour, first try',
-      source: 'app',
-    },
     {
       key: 'probe',
       enabled: true,

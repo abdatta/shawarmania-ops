@@ -6,11 +6,9 @@ import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
-import { MemberMark } from '@/components/ui/member-mark'
 import { Modal } from '@/components/ui/modal'
 import { Money } from '@/components/ui/money'
 import { DayField, PeriodBar } from '@/components/ui/period-bar'
-import { useChangeGate } from '@/change-gates/context'
 import { useAdapters } from '@/data-access'
 import {
   BILLING_PAYMENT_METHODS,
@@ -23,13 +21,7 @@ import {
   type CounterBiller,
   type KitchenMarks,
 } from '@/data-access/adapters'
-import {
-  carryPeriod,
-  earliestOffered,
-  formatDayTime,
-  resolveBusinessDate,
-  shiftBusinessDate,
-} from '@/domain'
+import { carryPeriod, earliestOffered, resolveBusinessDate, shiftBusinessDate } from '@/domain'
 import { useOutletScope } from '@/features/outlet-scope'
 import { useSession } from '@/session/context'
 
@@ -110,13 +102,12 @@ export function ManagerBillingHistory() {
   const { billing, outlets: outletsAdapter, kitchen } = useAdapters()
   const session = useSession()
   /*
-    With the dish ticks on (each-dish-is-ticked-off, design R11) an open order
-    says what the counter's card says, and the Orders tab reads for itself: the
-    page counts the open orders when it opens, and the orders and their
-    kitchens' answers are read each time the tab is chosen — so switching to it
-    is how the owner sees the latest — never on a timer and never live.
+    An open order says what the counter's card says (each-dish-is-ticked-off,
+    design R11), and the Orders tab reads for itself: the page counts the open
+    orders when it opens, and the orders and their kitchens' answers are read
+    each time the tab is chosen — so switching to it is how the owner sees the
+    latest — never on a timer and never live.
   */
-  const dishWorkflow = useChangeGate('dish-ticks')
   const [marks, setMarks] = useState<KitchenMarks | null>(null)
   const [readAt, setReadAt] = useState(() => new Date())
   const [openCount, setOpenCount] = useState<number | null>(null)
@@ -268,18 +259,16 @@ export function ManagerBillingHistory() {
       // parameters stay on the adapter for the counter, and this surface passes
       // neither: every bill of the day is listed, and each says for itself
       // whether it was paid or cancelled and what it was paid with.
-      const [nextBills, nextOrders, nextDiagnostics, nextBillers, nextCount] = await Promise.all([
+      const [nextBills, nextDiagnostics, nextBillers, nextCount] = await Promise.all([
         billing.listManagerHistory({ outletId, businessDate, status: 'all', paymentMethod: 'all' }),
-        // On the dish path the orders are the Orders tab's to read; the page
-        // only counts them for the tab's label.
-        dishWorkflow ? null : billing.listManagerOpenOrders(outletId),
+        // The orders are the Orders tab's to read; the page only counts them
+        // for the tab's label.
         billing.listDeliveryDiagnostics(outletId),
         billing.listBillers(outletId),
-        dishWorkflow ? billing.countManagerOpenOrders(outletId, businessDate) : null,
+        billing.countManagerOpenOrders(outletId, businessDate),
       ])
       setBills(nextBills)
-      if (nextOrders) setOrders(nextOrders)
-      if (nextCount !== null) setOpenCount(nextCount)
+      setOpenCount(nextCount)
       setDiagnostics(nextDiagnostics)
       setBillers(nextBillers)
       setSelectedId((current) =>
@@ -292,23 +281,23 @@ export function ManagerBillingHistory() {
     } finally {
       setLoading(false)
     }
-  }, [billing, businessDate, outletId, dishWorkflow])
+  }, [billing, businessDate, outletId])
 
   useEffect(() => {
     void Promise.resolve().then(load)
   }, [load])
 
   // Choosing the Orders tab reads it afresh, and so does a new outlet or day
-  // while it is open (dish path).
+  // while it is open.
   // A read for an outlet or day no longer shown is dropped when it lands.
   useEffect(() => {
-    if (!dishWorkflow || view !== 'orders') return
+    if (view !== 'orders') return
     let current = true
     void Promise.resolve().then(() => loadOrders(() => current))
     return () => {
       current = false
     }
-  }, [dishWorkflow, view, loadOrders, businessDate])
+  }, [view, loadOrders, businessDate])
 
   // Choosing Stats reads the chosen day's figures, and so does a new outlet or
   // day while it is open. A read for a day no longer shown is dropped.
@@ -344,7 +333,7 @@ export function ManagerBillingHistory() {
       if (!keepBillOpen) setSelectedId(null)
       await load()
       // A cancellation on the Orders tab leaves it showing the orders as they now are.
-      if (dishWorkflow && view === 'orders') await loadOrders()
+      if (view === 'orders') await loadOrders()
     } catch (cause) {
       setMessage(
         cause instanceof DataActionError ? cause.message : 'That action could not be completed.',
@@ -373,7 +362,7 @@ export function ManagerBillingHistory() {
   const chooseView = (next: View) => {
     // Choosing another tab reads it in the effect above; the one already open,
     // tapped again, is read again here.
-    if (dishWorkflow && next === 'orders' && view === 'orders') void loadOrders()
+    if (next === 'orders' && view === 'orders') void loadOrders()
     setView(next)
     setSelectedId(null)
     setCancellingId(null)
@@ -540,7 +529,7 @@ export function ManagerBillingHistory() {
             [
               'orders',
               `Open orders (${
-                !dishWorkflow || (view === 'orders' && ordersOutlet === outletId)
+                view === 'orders' && ordersOutlet === outletId
                   ? dayOrders.length
                   : (openCount ?? '…')
               })`,
@@ -702,7 +691,7 @@ export function ManagerBillingHistory() {
           )}
         </div>
       ) : view === 'orders' ? (
-        dishWorkflow && ordersOutlet !== outletId ? (
+        ordersOutlet !== outletId ? (
           <LoadingRegion label="open orders" className="space-y-2">
             <Shimmer className="h-40 rounded-xl" />
             <Shimmer className="h-40 rounded-xl" />
@@ -741,102 +730,17 @@ export function ManagerBillingHistory() {
                             data-testid={`manager-open-order-${order.orderNumber}`}
                             className="rounded-xl border border-border bg-surface p-3"
                           >
-                            {dishWorkflow ? (
-                              <DishOpenOrderSummary
-                                order={order}
-                                marks={marks}
-                                now={readAt}
-                                {...(!cancellingOrder && {
-                                  onCancel: () => {
-                                    setCancellingOrderId(order.id)
-                                    setReason('')
-                                  },
-                                })}
-                              />
-                            ) : (
-                              <>
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <p className="text-xl font-black text-content">
-                                      Order {order.orderNumber}
-                                    </p>
-                                    <p className="mt-1 text-xs text-content-muted">
-                                      {formatDayTime(order.orderedAt)} · created by{' '}
-                                      {order.creatorName}
-                                    </p>
-                                  </div>
-                                  <Money paise={order.totalPaise} display className="shrink-0" />
-                                </div>
-
-                                <section className="mt-3 rounded-xl border border-border bg-surface p-3">
-                                  <h3 className="text-sm font-black text-content">Order items</h3>
-                                  <ul className="mt-2 divide-y divide-border">
-                                    {order.lines.map((line, index) => (
-                                      <li
-                                        key={`${line.menuItemId}-${index}`}
-                                        className="grid grid-cols-[1fr_auto] gap-x-3 py-2 first:pt-0 last:pb-0"
-                                      >
-                                        <div className="min-w-0">
-                                          <p className="font-semibold leading-tight text-content">
-                                            {line.itemName}
-                                          </p>
-                                          <p className="mt-1 text-xs text-content-muted">
-                                            {line.quantity} × <Money paise={line.unitPricePaise} />{' '}
-                                            each
-                                          </p>
-                                        </div>
-                                        <Money
-                                          paise={line.unitPricePaise * line.quantity}
-                                          className="self-center font-bold"
-                                        />
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </section>
-
-                                <section className="mt-3 rounded-xl border border-border bg-surface p-3">
-                                  <h3 className="text-sm font-black text-content">
-                                    Customer details
-                                  </h3>
-                                  <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2">
-                                    <div>
-                                      <dt className="text-xs font-semibold text-content-muted">
-                                        Customer name
-                                      </dt>
-                                      <dd className="mt-0.5 flex items-center gap-1.5 text-sm font-semibold text-content">
-                                        <span className="min-w-0 break-words">
-                                          {order.customerName || 'Not provided'}
-                                        </span>
-                                        {order.customerTier === 'gold' && <MemberMark />}
-                                      </dd>
-                                    </div>
-                                    <div>
-                                      <dt className="text-xs font-semibold text-content-muted">
-                                        Customer phone
-                                      </dt>
-                                      <dd className="mt-0.5 break-words text-sm font-semibold text-content">
-                                        {order.customerPhone || 'Not provided'}
-                                      </dd>
-                                    </div>
-                                  </dl>
-                                </section>
-                              </>
-                            )}
-
-                            {!dishWorkflow && !cancellingOrder && (
-                              <div className="mt-3 border-t border-border pt-3">
-                                <Button
-                                  variant="secondary"
-                                  className="text-danger"
-                                  onClick={() => {
-                                    setCancellingOrderId(order.id)
-                                    setReason('')
-                                  }}
-                                >
-                                  Cancel this order
-                                </Button>
-                              </div>
-                            )}
+                            <DishOpenOrderSummary
+                              order={order}
+                              marks={marks}
+                              now={readAt}
+                              {...(!cancellingOrder && {
+                                onCancel: () => {
+                                  setCancellingOrderId(order.id)
+                                  setReason('')
+                                },
+                              })}
+                            />
                             <Modal
                               open={cancellingOrder}
                               onClose={() => {

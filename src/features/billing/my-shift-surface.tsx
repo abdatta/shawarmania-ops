@@ -5,7 +5,6 @@ import { EmptyState } from '@/components/layout/empty-state'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
-import { useChangeGate } from '@/change-gates/context'
 import { useAdapters } from '@/data-access'
 import {
   DataActionError,
@@ -36,8 +35,8 @@ export function MyShiftSurface({
 }: {
   embedded?: boolean
   /**
-   * In the dish ticks' records row below the till (each-dish-is-ticked-off,
-   * `dish-ticks` only): a taller loading shape for the taller panel, and one
+   * In the records row below the till (each-dish-is-ticked-off): a taller
+   * loading shape for the taller panel, and one
    * read at a time with one trailing read kept, so a burst of refreshes makes
    * two reads rather than a pile of them (design R5).
    */
@@ -45,7 +44,7 @@ export function MyShiftSurface({
   refreshKey?: number
   /**
    * Bumped by the till's own saves that Bills should show at once — Pay now, a
-   * payment from the rail — with `instant-saves` on, in the records row only
+   * payment from the rail — in the records row only
    * (the-counter-shows-what-it-saved, design D3).
    */
   ownSaveKey?: number
@@ -104,10 +103,11 @@ export function MyShiftSurface({
 
   /*
     The records row shows what the tablet saved before the server answers
-    (the-counter-shows-what-it-saved, design D3–D5). Off, or outside the
-    records row, every read and message below is as it was.
+    (the-counter-shows-what-it-saved, design D3–D5). Outside the records row —
+    the standalone Bills this shift page — every read and message below is the
+    plain one.
   */
-  const instant = useChangeGate('instant-saves') && records
+  const instant = records
   const historyShown = useRef(false)
   useEffect(() => {
     historyShown.current = history !== null

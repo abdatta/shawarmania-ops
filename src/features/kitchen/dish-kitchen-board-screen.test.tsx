@@ -7,7 +7,6 @@ import type { KitchenAlertKind } from '@/data-access/adapters'
 import { createDemoData, createMockAdapters } from '@/data-access/mock'
 import { DEMO_KITCHEN_DEVICE_ID, DEMO_KITCHEN_SHIFT_ID } from '@/data-access/mock/kitchen'
 import { DEMO_OUTLET_ID } from '@/data-access/mock/store'
-import { ChangeGatesForTest, describeChangeGate } from '@/test/change-gates'
 import { CounterDeviceContext } from '@/session/counter-context'
 import type { CounterDeviceSession } from '@/session/counter-session'
 
@@ -45,18 +44,16 @@ const session: CounterDeviceSession = {
   },
 }
 
-function renderBoard(readyOn = true) {
-  const data = createDemoData({ dishTicks: 'on' })
+function renderBoard() {
+  const data = createDemoData({ dishWalkthrough: true })
   const adapters = createMockAdapters('biller', data)
   const { player, played } = fakePlayer()
   render(
-    <ChangeGatesForTest on={{ 'dish-ticks': true, 'kitchen-ready': readyOn }}>
-      <CounterDeviceContext.Provider value={session}>
-        <AdaptersContext.Provider value={adapters}>
-          <DishKitchenBoardScreen player={player} />
-        </AdaptersContext.Provider>
-      </CounterDeviceContext.Provider>
-    </ChangeGatesForTest>,
+    <CounterDeviceContext.Provider value={session}>
+      <AdaptersContext.Provider value={adapters}>
+        <DishKitchenBoardScreen player={player} />
+      </AdaptersContext.Provider>
+    </CounterDeviceContext.Provider>,
   )
   return { data, played }
 }
@@ -164,12 +161,12 @@ describe('the kitchen board', () => {
   })
 })
 
-describeChangeGate('kitchen-ready', (on) => {
+describe('Done', () => {
   afterEach(() => new Promise((resolve) => window.setTimeout(resolve, 350)))
 
-  it(on ? 'offers Done on an acknowledged card' : 'offers ACK only, and never Done', async () => {
+  it('offers Done on an acknowledged card', async () => {
     const user = userEvent.setup()
-    const { data } = renderBoard(on)
+    const { data } = renderBoard()
     act(() => ringUpOrder(data, 900))
     const card = await screen.findByTestId('kitchen-card-900', {}, { timeout: 3000 })
     await user.click(within(card).getByRole('button', { name: 'ACK order 900' }))
@@ -179,7 +176,6 @@ describeChangeGate('kitchen-ready', (on) => {
     const done = within(screen.getByTestId('kitchen-card-900')).queryByRole('button', {
       name: 'Ready order 900',
     })
-    if (on) expect(done).toBeEnabled()
-    else expect(done).toBeNull()
+    expect(done).toBeEnabled()
   })
 })

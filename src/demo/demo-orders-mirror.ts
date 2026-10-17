@@ -46,18 +46,8 @@ type Message =
       }
     }
 
+/** A note, a tick or a Ready is a change worth sending. */
 function signature(store: DemoStore, kitchen: DemoKitchen): string {
-  return JSON.stringify([
-    store.orders.map((o) => [o.id, o.status, o.changed_at, o.prepared_at, o.cancelled_at]),
-    store.orderItems.length,
-    kitchen.acks.length,
-    kitchen.filter,
-    kitchen.filterChangedAt,
-  ])
-}
-
-/** With the dish ticks on: a note, a tick or a Ready is a change worth sending. */
-function dishSignature(store: DemoStore, kitchen: DemoKitchen): string {
   return JSON.stringify([
     store.orders.map((o) => [o.id, o.status, o.changed_at, o.prepared_at, o.cancelled_at]),
     store.orderItems,
@@ -83,30 +73,14 @@ export function mirrorDemoOrders(
   startedAt: number,
   onReset: (epoch: number) => void,
   writer: 'counter' | 'kitchen' = 'counter',
-  /** The demo's own `dish-ticks` answer, asked each time: a demo turn takes effect at once. */
-  dishTicks: () => boolean = () => false,
 ): () => void {
   if (typeof BroadcastChannel === 'undefined') return () => undefined
   const channel = new BroadcastChannel(CHANNEL)
   let epoch = startedAt
-  const sign = () => (dishTicks() ? dishSignature : signature)(store, kitchen)
+  const sign = () => signature(store, kitchen)
   let last = sign()
 
-  const sendOrders = () =>
-    channel.postMessage({
-      type: 'orders',
-      epoch,
-      orders: store.orders,
-      orderItems: store.orderItems,
-      kitchen: {
-        acks: kitchen.acks,
-        filter: kitchen.filter,
-        filterChangedAt: kitchen.filterChangedAt,
-      },
-    } satisfies Message)
-
   const send = () => {
-    if (!dishTicks()) return sendOrders()
     if (store.dishWorkflow) {
       kitchen.stationAcks ??= {}
       kitchen.stationAcks[kitchen.station ?? 1] = kitchen.acks
@@ -138,21 +112,6 @@ export function mirrorDemoOrders(
       return
     }
     if (message.epoch < epoch) return
-    if (!dishTicks()) {
-      // A tab that opened after the last reset joins the demo the others hold.
-      epoch = message.epoch
-      store.orders.splice(0, store.orders.length, ...message.orders)
-      store.orderItems.splice(0, store.orderItems.length, ...message.orderItems)
-      // A tab still on an older build sends no kitchen; keep this tab's.
-      if (message.kitchen) {
-        kitchen.acks.splice(0, kitchen.acks.length, ...message.kitchen.acks)
-        kitchen.filter = message.kitchen.filter
-        kitchen.filterChangedAt = message.kitchen.filterChangedAt ?? null
-      }
-      // Adopted, not authored: remembering it stops this tab echoing it back.
-      last = sign()
-      return
-    }
     // Do not let an incoming frame hide an action authored since our last scan.
     // Publish that action first; Ready/Undo merge monotonically at the other tab.
     if (sign() !== last) {

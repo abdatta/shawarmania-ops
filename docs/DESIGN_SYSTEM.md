@@ -118,7 +118,7 @@ Values the ops portal needs that the marketing site has no equivalent for. They 
 | `--color-danger` | `#b91c1c` | |
 | `--color-warning` | `#b45309` | Deep enough to carry white text |
 | `--color-on-warning` | `#ffffff` | |
-| `--color-dish-ready` | `#c2410c` | The counter's Ready dish row fill (#74) — the primary, as a role of its own so it can part from it. Used only with `dish-ticks` and `kitchen-ready` on |
+| `--color-dish-ready` | `#c2410c` | The counter's Ready dish row fill (#74) — the primary, as a role of its own so it can part from it |
 | `--color-on-dish-ready` | `#ffffff` | Dish name, quantity and checkbox on that fill; the primary button's pair, already validated |
 | `--dish-ready-shine` | white at 55% | The band that crosses a Ready row; decoration, not gated. The same in both themes |
 | `--color-danger-critical` | `#991b1b` | The kitchen's age ring from forty minutes, darker than `--color-danger` so the step from twenty to forty reads |
@@ -260,9 +260,9 @@ Analytics comparison series use semantic `--primary`, `--chart-previous`, `--cha
 
 ## The counter's dish rows and Ready *(#74)*
 
-With `dish-ticks` off, the pipeline card is the one under *A checkbox in a button states a fact*: two toggle buttons, Prepared and Paid. With it on, the card's dishes carry the state instead (see [Screens](SCREENS.md#the-counter-with-dish-ticks-on)).
+On the counter's rail the card's dishes carry the preparation state, in place of the Prepared toggle the card under *A checkbox in a button states a fact* has on the standalone Open orders page (see [Screens](SCREENS.md#the-counter-s-rail-and-its-dishes)).
 
-- **A dish row has three states**, told apart by more than colour. Waiting: gray text, an empty 15px checkbox. Ticked: orange text, a filled checkbox with a check, and no filled row. Ready, with `kitchen-ready` on: the whole row filled. The checkbox is fixed at 15px — smaller than the 17px Paid box and unchanged when a note or wrapping makes the row taller — and the quantity is always a separate visible element. Rows are 6px apart with vertically centred contents; they show a hand cursor and a faint shadow on mouse hover, and look the same on touch. Tokens for the checkbox and the ticked text are semantic and contrast-validated in both themes.
+- **A dish row has three states**, told apart by more than colour. Waiting: gray text, an empty 15px checkbox. Ticked: orange text, a filled checkbox with a check, and no filled row. Ready: the whole row filled. The checkbox is fixed at 15px — smaller than the 17px Paid box and unchanged when a note or wrapping makes the row taller — and the quantity is always a separate visible element. Rows are 6px apart with vertically centred contents; they show a hand cursor and a faint shadow on mouse hover, and look the same on touch. Tokens for the checkbox and the ticked text are semantic and contrast-validated in both themes.
 - **The Ready fill** is `--color-dish-ready` behind `--color-on-dish-ready`, whole-row, with the checkbox drawn on it in gray. It is a fill because the biller misses a quiet cue while dealing with a customer, and it has to read from across a counter in both themes.
 - **The shine** is the menu page's offer-banner shine, in CSS alone: a 105-degree band, transparent to `--dish-ready-shine` at the middle and back, crossing the row left to right over 2.4 seconds with a 1.2 second delay, repeating until the dish is ticked.
 - **The bell swings** only while a Ready is being announced: a short rocking about a point near the top of the bell, 440 ms a swing, for about nine seconds, and it is still at every other time. The handbell is synthesised in the browser: a four-strike figure played twice, about three seconds; it is the counter's only sound.

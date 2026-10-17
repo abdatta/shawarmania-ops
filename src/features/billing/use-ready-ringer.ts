@@ -14,7 +14,7 @@ const NOBODY: ReadonlySet<string> = new Set()
 
 /**
  * The counter's handbell, driven by its own reads (each-dish-is-ticked-off,
- * design R6; `kitchen-ready` only). Returns the orders whose bell is swinging.
+ * design R6). Returns the orders whose bell is swinging.
  *
  * It listens to nothing but what the rail and the kitchen marks already read:
  * no timer, no request of its own. A tap anywhere on the counter unlocks the
@@ -25,7 +25,6 @@ const NOBODY: ReadonlySet<string> = new Set()
 export function useReadyRinger(
   orders: readonly BillingOrder[] | null,
   marks: KitchenMarks | null,
-  on: boolean,
   /** Injected in tests; the real handbell otherwise. */
   player?: HandbellPlayer,
 ): ReadonlySet<string> {
@@ -36,7 +35,6 @@ export function useReadyRinger(
   // would otherwise dispose the only ringer and leave the counter silent. A new
   // ringer has read nothing, so its first read rings nothing either.
   useEffect(() => {
-    if (!on) return
     const current = createReadyRinger(player ?? createHandbellPlayer())
     const unsubscribe = current.subscribe(() => setSwinging(new Set(current.swinging())))
     ringer.current = current
@@ -46,14 +44,13 @@ export function useReadyRinger(
       ringer.current = null
       setSwinging(NOBODY)
     }
-  }, [on, player])
+  }, [player])
 
   useEffect(() => {
-    if (!on) return
     const unlock = () => unlockHandbell()
     window.addEventListener('pointerdown', unlock)
     return () => window.removeEventListener('pointerdown', unlock)
-  }, [on])
+  }, [])
 
   /** Per order, each dish's food the kitchen marked Ready and the food the counter ticked. */
   const read = useMemo(() => {
@@ -78,8 +75,8 @@ export function useReadyRinger(
   }, [orders, marks])
 
   useEffect(() => {
-    if (on && read) ringer.current?.absorb(read)
-  }, [on, read])
+    if (read) ringer.current?.absorb(read)
+  }, [read])
 
-  return on ? swinging : NOBODY
+  return swinging
 }
