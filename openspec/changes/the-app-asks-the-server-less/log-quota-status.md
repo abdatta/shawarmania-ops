@@ -71,13 +71,17 @@ database and 402 responses, any of which stops the counter.
   Both production tablets, *Shawarma Kitchen* and *Kalyani Counter 2*, ran
   build `f0b4c7c` with the gate on through that day's service: about 2
   requests a minute idle, no failures.
+- **2026-10-16**: we replied to leizerbeam on #50925, approved by the owner,
+  [in his sub-thread](https://github.com/supabase/supabase/discussions/50925#discussioncomment-18990245):
+  the verbosity control would solve it for us on diarmidmackenzie's three
+  conditions, with our numbers (96% `edge_logs`, ~1.5 GB a month after our
+  ~30% cut, preflights ~9%) and a link to #51817.
 
 ## Open items
 
-- **Reply to leizerbeam on #50925**, under his comment, saying the verbosity
-  control would solve it for us on diarmidmackenzie's three conditions, with
-  our numbers and a link to #51817. Drafted on 2026-10-16 and awaiting the
-  owner's approval; not posted.
+- **leizerbeam's answer on #50925**: whether the verbosity control reaches the
+  Free plan, and before enforcement. If three weeks pass with nothing, a short,
+  friendly follow-up in the same sub-thread, approved by the owner first.
 - **A person on the support ticket.** Supabase owes us an answer to the two
   questions. Nudge politely in the same thread if two weeks pass with nothing.
 - **Measure `fewer-requests` in production.** On since 16 October, mid-cycle.
@@ -95,7 +99,8 @@ database and 402 responses, any of which stops the counter.
 
 - A scheduled task, `supabase-logs-followup`, runs each Monday on the owner's
   PC, in the Claude desktop app, until 31 December 2026. It reads the ticket
-  thread and both GitHub threads, reports what changed, and drafts a nudge when
+  thread and both GitHub threads, including the replies nested under each
+  comment (where leizerbeam's answer and ours are), reports what changed, and drafts a nudge when
   one is due. It never sends or posts; every message goes out only after the
   owner approves it. It lives outside this repository, so another machine or
   account does not have it; anyone resuming elsewhere checks the threads by hand.
