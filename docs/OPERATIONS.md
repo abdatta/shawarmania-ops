@@ -1532,6 +1532,11 @@ So:
 - Do not re-run a wide query to look at it again, and never poll the logs
   endpoint from a script. Anything continuous belongs in a log drain.
 
+**Whether to stay on Free** is an open decision until 31 December 2026: what
+has been asked of Supabase, what they have said, and what is still owed are
+kept in `openspec/changes/the-app-asks-the-server-less/log-quota-status.md`
+(or that change's folder under `archive/` once it archives).
+
 ### Attributing an egress spike
 
 Reported 2026-09-21: 2.75 GB in one cycle against a 51 MB database and seven

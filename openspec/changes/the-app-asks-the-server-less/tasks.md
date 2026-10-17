@@ -42,4 +42,4 @@
 
 ## 7. PHASE GATE
 
-- [ ] 7.1 No roadmap row, so no roadmap checkpoint: a green Staging run on the pushed commit, then the owner turns `fewer-requests` on in staging and in production after a Promote, and watches a full billing cycle's log ingestion on the Usage page against this cycle's ~2 GB pace. Archive waits for that cycle.
+- [ ] 7.1 No roadmap row, so no roadmap checkpoint: a green Staging run on the pushed commit, then the owner turns `fewer-requests` on in staging and in production after a Promote, and watches a full billing cycle's log ingestion on the Usage page against this cycle's ~2 GB pace. Archive waits for that cycle. *(Turned on in staging and, after Promote `8951e81a`, in production on 2026-10-16 at 07:11 UTC; both production tablets ran it through service with no failures. The first full cycle with it on is 27 October to 27 November.)* Where the wider decision stands — the request to Supabase and the owner's 31 December deadline for staying on Free — is in `log-quota-status.md`, beside this file.
