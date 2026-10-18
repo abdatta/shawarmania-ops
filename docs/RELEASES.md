@@ -481,6 +481,12 @@ retirement build or later for a week, a migration declaring
 `-- release: contract <key>` drops what only the off path used, keeps the `_v2`
 names, and sets the row's `retired_at`.
 
+**Between the two halves**, the row is still live and older builds still read it,
+so it must stay as it is. The Change gates page on the retirement build lists such
+a gate under **Retired · waiting for cleanup**, below the gates in use, with its
+state and no way to turn it (`a-retired-gate-waits-below`). The contract migration
+takes it off the page.
+
 ## What is not here yet
 
 No automatic gate-off from tablet health, no trying a change on one device, and

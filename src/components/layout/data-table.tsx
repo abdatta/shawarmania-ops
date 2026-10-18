@@ -13,6 +13,11 @@ export type DataTableColumn<T> =
       id: string
       header: ReactNode
       align?: 'left' | 'right'
+      /**
+       * As narrow as its widest cell, leaving the spare width to the other
+       * columns — so two tables with the same columns line up whatever their rows say.
+       */
+      shrink?: boolean
       cell: (row: T) => ReactNode
     }
   | {
@@ -68,6 +73,7 @@ export function DataTable<T>({
                 className={cn(
                   'border-b border-border px-3 py-2 font-semibold',
                   (isMoneyColumn(column) || column.align === 'right') && 'text-right',
+                  !isMoneyColumn(column) && column.shrink && 'w-px whitespace-nowrap',
                 )}
               >
                 {column.header}
@@ -87,6 +93,7 @@ export function DataTable<T>({
                   className={cn(
                     'px-3',
                     (isMoneyColumn(column) || column.align === 'right') && 'text-right',
+                    !isMoneyColumn(column) && column.shrink && 'w-px whitespace-nowrap',
                   )}
                 >
                   {isMoneyColumn(column) ? <Money paise={column.paise(row)} /> : column.cell(row)}

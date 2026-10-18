@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import type { ChangeGateSummary } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createDemoData, createMockAdapters } from '@/data-access/mock'
 import {
@@ -27,8 +28,19 @@ import { ChangeGatePage, ChangeGatesSurface } from './change-gates-surface'
 
 afterEach(() => window.sessionStorage.clear())
 
-function renderAt(path: string, role: Role = 'super_admin') {
+function renderAt(
+  path: string,
+  role: Role = 'super_admin',
+  { alsoListed = [] }: { alsoListed?: ChangeGateSummary[] } = {},
+) {
   const adapters = createMockAdapters(role, createDemoData())
+  if (alsoListed.length > 0) {
+    const overview = adapters.changeGates.overview.bind(adapters.changeGates)
+    adapters.changeGates.overview = async () => {
+      const read = await overview()
+      return { ...read, gates: [...alsoListed, ...read.gates] }
+    }
+  }
   return render(
     <MemoryRouter initialEntries={[path]}>
       <SessionContext.Provider value={demoSessionFor(role)}>
@@ -44,6 +56,40 @@ function renderAt(path: string, role: Role = 'super_admin') {
 }
 
 const rowOf = (key: string) => screen.getByTestId(`open-gate-${key}`)
+
+/**
+ * Rows the database still lists after this build tombstoned their keys — the
+ * week between a retirement and its contract migration (a-retired-gate-waits-below).
+ * Listed before the gates in use, as their rows are older, so the page has to
+ * move them.
+ */
+function waitingRow(
+  key: string,
+  code: string,
+  title: string,
+  dependsOn: string[] = [],
+  enabled = true,
+): ChangeGateSummary {
+  return {
+    key,
+    code,
+    kind: 'change',
+    title,
+    onMeans: `${title} on.`,
+    offMeans: `${title} off.`,
+    changeName: 'each-dish-is-ticked-off',
+    changeNumber: 74,
+    dependsOn,
+    enabled,
+    changedAt: '2026-10-15T06:00:00.000Z',
+    changedByName: 'Abhishek Datta',
+  }
+}
+const WAITING = [
+  waitingRow('kitchen-ready', 'KR', 'Kitchen Ready', ['dish-ticks']),
+  waitingRow('dish-ticks', 'DT', 'Dish ticks'),
+  waitingRow('outside-tap-closes', 'OT', 'Tap outside closes pop-ups', [], false),
+]
 
 describe('the Change gates list', () => {
   it('lists every gate with its code and state', async () => {
@@ -62,6 +108,43 @@ describe('the Change gates list', () => {
 
     await user.click(rowOf('probe'))
     expect(await screen.findByTestId('gate-probe')).toBeInTheDocument()
+  })
+
+  it('has no retired section while no listed gate is retired', async () => {
+    renderAt('/owner/change-gates')
+    await screen.findByTestId('change-gate-list')
+    expect(screen.queryByTestId('retired-gate-list')).not.toBeInTheDocument()
+    expect(screen.queryByText('Retired · waiting for cleanup')).not.toBeInTheDocument()
+  })
+
+  it('moves a gate this build retired below the gates in use, where it opens nothing', async () => {
+    renderAt('/owner/change-gates', 'super_admin', { alsoListed: WAITING })
+
+    const inUse = await screen.findByTestId('change-gate-list')
+    const retired = screen.getByTestId('retired-gate-list')
+    expect(within(inUse).queryByText('Dish ticks')).not.toBeInTheDocument()
+    expect(within(inUse).getByText('Probe')).toBeInTheDocument()
+    expect(inUse.compareDocumentPosition(retired) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(
+      screen.getByRole('heading', { name: 'Retired · waiting for cleanup' }),
+    ).toBeInTheDocument()
+
+    // Its own dependency order, its code and its state — Off is worth seeing.
+    const rows = within(retired).getAllByTestId(/^retired-gate-/)
+    expect(rows.map((row) => row.dataset.testid)).toEqual([
+      'retired-gate-dish-ticks',
+      'retired-gate-kitchen-ready',
+      'retired-gate-outside-tap-closes',
+    ])
+    expect(within(rows[0]!).getByTestId('gate-code')).toHaveTextContent('DT')
+    expect(
+      within(retired)
+        .getAllByTestId('gate-state')
+        .map((cell) => cell.textContent),
+    ).toEqual(['On', 'On', 'Off'])
+
+    expect(within(retired).queryAllByRole('link')).toHaveLength(0)
+    expect(screen.queryByTestId('open-gate-dish-ticks')).not.toBeInTheDocument()
   })
 
   it('says why it cannot list gates for anybody but the owner', async () => {
@@ -131,6 +214,18 @@ describe('a change gate’s own page', () => {
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     await user.click(screen.getByTestId('turn-gate'))
     expect(screen.getByTestId('turn-reason')).toHaveValue('')
+  })
+
+  it('offers no switch on a retired gate’s page, and still shows its tablets', async () => {
+    renderAt('/owner/change-gates/kitchen-ready', 'super_admin', { alsoListed: WAITING })
+    const page = await screen.findByTestId('gate-kitchen-ready')
+
+    expect(screen.getByTestId('gate-retired')).toHaveTextContent('Retired · waiting for cleanup')
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('turn-gate')).not.toBeInTheDocument()
+    expect(screen.getByTestId('gate-since')).toHaveTextContent(/^On · since/)
+    expect(within(screen.getByTestId('gate-dependencies')).queryAllByRole('link')).toHaveLength(0)
+    expect(within(page).getByTestId(`tablet-${DEMO_COUNTER_DEVICE_ID}`)).toBeInTheDocument()
   })
 
   it('says plainly when there is no such gate', async () => {

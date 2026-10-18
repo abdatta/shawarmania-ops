@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { ConfirmTurn } from './confirm-turn'
 import { dependentsOn, inDependencyOrder } from './order'
 import { tabletState, type TabletState } from './tablet-state'
+import { RETIRED_CHANGE_GATES } from '@/change-gates/gates'
 import { BuildVersion } from '@/components/build-version'
 import { DataTable, type DataTableColumn } from '@/components/layout/data-table'
 import { EmptyState } from '@/components/layout/empty-state'
@@ -34,6 +35,11 @@ import { cn } from '@/lib/cn'
  * **Read from the adapter, never from the build's own declarations** (D4): an
  * owner's phone still on an older build must list, and be able to turn off, a
  * gate a newer build added.
+ *
+ * A gate this build has tombstoned whose row is still live — between a
+ * retirement and its contract migration — waits in its own section below and
+ * does not open (a-retired-gate-waits-below). A tombstone is about the code, so
+ * the build carrying it is the authority on it.
  */
 export function ChangeGatesSurface() {
   const { changeGates } = useAdapters()
@@ -56,7 +62,16 @@ export function ChangeGatesSurface() {
     }
   }, [changeGates])
 
-  const ordered = useMemo(() => (gates === null ? null : inDependencyOrder(gates)), [gates])
+  const sections = useMemo(
+    () =>
+      gates === null
+        ? null
+        : {
+            inUse: inDependencyOrder(gates.filter((gate) => !isRetired(gate.key))),
+            retired: inDependencyOrder(gates.filter((gate) => isRetired(gate.key))),
+          },
+    [gates],
+  )
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -72,7 +87,7 @@ export function ChangeGatesSurface() {
         </p>
       )}
 
-      {ordered === null ? (
+      {sections === null ? (
         error ? null : (
           <LoadingTable
             label="change gates"
@@ -82,19 +97,30 @@ export function ChangeGatesSurface() {
           />
         )
       ) : (
-        <div data-testid="change-gate-list">
-          <GateTable
-            gates={ordered}
-            all={gates ?? []}
-            to={(gate) => gate.key}
-            empty={
-              <EmptyState
-                icon={ToggleRight}
-                title="No change is gated. A change that alters how a screen behaves arrives here, off, until you turn it on."
-              />
-            }
-          />
-        </div>
+        <>
+          <div data-testid="change-gate-list">
+            <GateTable
+              gates={sections.inUse}
+              all={gates ?? []}
+              to={(gate) => gate.key}
+              empty={
+                <EmptyState
+                  icon={ToggleRight}
+                  title="No change is gated. A change that alters how a screen behaves arrives here, off, until you turn it on."
+                />
+              }
+            />
+          </div>
+          {sections.retired.length > 0 && (
+            <div className="mt-8">
+              <Section id="retired-gates" title={RETIRED_WORDS}>
+                <div data-testid="retired-gate-list">
+                  <GateTable gates={sections.retired} all={gates ?? []} to={(gate) => gate.key} />
+                </div>
+              </Section>
+            </div>
+          )}
+        </>
       )}
 
       <BuildVersion className="mt-10 text-center" />
@@ -124,46 +150,76 @@ function GateTable({
     {
       id: 'gate',
       header: 'Change gate',
-      cell: (gate) => (
+      cell: (gate) => {
+        const retired = isRetired(gate.key)
+        const words = (
+          <>
+            <span className="flex items-center gap-2">
+              <span
+                className={cn('font-semibold', retired ? 'text-content-muted' : 'text-content')}
+              >
+                {gate.title}
+              </span>
+              <GateCode code={gate.code} />
+            </span>
+            <span className="block text-xs text-content-muted">{changeLabel(gate)}</span>
+            {gate.dependsOn.length > 0 && (
+              <span
+                className="mt-1 flex flex-wrap items-center gap-1 text-xs text-content-muted"
+                data-testid={`depends-${gate.key}`}
+              >
+                Dependent on{' '}
+                {gate.dependsOn.map((key) => (
+                  <Fragment key={key}>
+                    <GateCode code={codeOf(key)} />{' '}
+                  </Fragment>
+                ))}
+              </span>
+            )}
+          </>
+        )
+        // A retired gate's row opens nothing: its page is where a gate is turned.
+        if (retired) {
+          return (
+            <div className="py-2" data-testid={`retired-gate-${gate.key}`}>
+              {words}
+            </div>
+          )
+        }
         // One link stretched over its row, as Outlets does: the whole row is one
         // tap, and a screen reader meets one link named for the gate.
-        <Link
-          to={to(gate)}
-          relative="path"
-          data-testid={`open-gate-${gate.key}`}
-          className="block py-2 after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:focus-ring"
-        >
-          <span className="flex items-center gap-2">
-            <span className="font-semibold text-content">{gate.title}</span>
-            <GateCode code={gate.code} />
-          </span>
-          <span className="block text-xs text-content-muted">{changeLabel(gate)}</span>
-          {gate.dependsOn.length > 0 && (
-            <span
-              className="mt-1 flex flex-wrap items-center gap-1 text-xs text-content-muted"
-              data-testid={`depends-${gate.key}`}
-            >
-              Dependent on{' '}
-              {gate.dependsOn.map((key) => (
-                <Fragment key={key}>
-                  <GateCode code={codeOf(key)} />{' '}
-                </Fragment>
-              ))}
-            </span>
-          )}
-        </Link>
-      ),
+        return (
+          <Link
+            to={to(gate)}
+            relative="path"
+            data-testid={`open-gate-${gate.key}`}
+            className="block py-2 after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:focus-ring"
+          >
+            {words}
+          </Link>
+        )
+      },
     },
     {
       id: 'state',
       header: 'Status',
-      cell: (gate) => <GateState enabled={gate.enabled} />,
+      shrink: true,
+      cell: (gate) => <GateState enabled={gate.enabled} muted={isRetired(gate.key)} />,
     },
     {
       id: 'open',
       header: <span className="sr-only">Open the change gate</span>,
       align: 'right',
-      cell: () => <ChevronRight aria-hidden size={16} className="inline text-content-muted" />,
+      shrink: true,
+      // A retired row keeps the chevron's width, so its Status lines up with the
+      // gates in use above.
+      cell: (gate) => (
+        <ChevronRight
+          aria-hidden
+          size={16}
+          className={cn('inline text-content-muted', isRetired(gate.key) && 'invisible')}
+        />
+      ),
     },
   ]
   return (
@@ -171,7 +227,7 @@ function GateTable({
       columns={columns}
       rows={gates}
       rowKey={(gate) => gate.key}
-      rowClassName={() => 'relative hover:bg-surface-raised'}
+      rowClassName={(gate) => (isRetired(gate.key) ? '' : 'relative hover:bg-surface-raised')}
       empty={empty ?? null}
     />
   )
@@ -233,6 +289,7 @@ export function ChangeGatePage() {
   const neededBy = gate ? all.filter((g) => g.dependsOn.includes(gate.key)) : []
   const alsoOff = gate ? dependentsOn(gate.key, all) : []
   const waitingFor = gate && !gate.enabled ? dependencies.filter((g) => !g.enabled) : []
+  const retired = gate ? isRetired(gate.key) : false
 
   async function turn(reason: string | null) {
     if (!gate) return
@@ -276,18 +333,32 @@ export function ChangeGatePage() {
       ) : (
         <div className="space-y-6" data-testid={`gate-${gate.key}`}>
           <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-raised py-1 pl-3 pr-1">
+            <div
+              className={cn(
+                'flex rounded-lg bg-surface-raised',
+                retired
+                  ? 'flex-col gap-0.5 px-3 py-2'
+                  : 'items-center justify-between gap-3 py-1 pl-3 pr-1',
+              )}
+            >
               <p className="text-sm" data-testid="gate-since">
                 <span className="font-semibold text-content">{gate.enabled ? 'On' : 'Off'}</span>
                 <span className="text-content-muted">{sinceWords(gate)}</span>
               </p>
-              <Switch
-                checked={gate.enabled}
-                onChange={() => setConfirming(true)}
-                label={`${gate.enabled ? 'Turn off' : 'Turn on'} ${gate.title}`}
-                disabled={busy || waitingFor.length > 0}
-                testId="turn-gate"
-              />
+              {retired ? (
+                // No switch: the row stays as it is until its contract migration.
+                <p className="text-sm font-semibold text-content-muted" data-testid="gate-retired">
+                  {RETIRED_WORDS}
+                </p>
+              ) : (
+                <Switch
+                  checked={gate.enabled}
+                  onChange={() => setConfirming(true)}
+                  label={`${gate.enabled ? 'Turn off' : 'Turn on'} ${gate.title}`}
+                  disabled={busy || waitingFor.length > 0}
+                  testId="turn-gate"
+                />
+              )}
             </div>
             {waitingFor.length > 0 && (
               <p className="text-sm text-content-muted" data-testid="gate-blocked">
@@ -331,7 +402,7 @@ export function ChangeGatePage() {
         </div>
       )}
 
-      {gate && (
+      {gate && !retired && (
         <ConfirmTurn
           open={confirming}
           title={gate.title}
@@ -352,9 +423,12 @@ export function ChangeGatePage() {
  * A chosen setting reads as plain words, never as a dot (the owner's
  * conventions, 2026-09-26): dots on this app mean live readings.
  */
-function GateState({ enabled }: { enabled: boolean }) {
+function GateState({ enabled, muted = false }: { enabled: boolean; muted?: boolean }) {
   return enabled ? (
-    <span className="font-semibold text-content" data-testid="gate-state">
+    <span
+      className={cn('font-semibold', muted ? 'text-content-muted' : 'text-content')}
+      data-testid="gate-state"
+    >
       On
     </span>
   ) : (
@@ -363,6 +437,16 @@ function GateState({ enabled }: { enabled: boolean }) {
     </span>
   )
 }
+
+/**
+ * Retired in this build's code, its row still live until the retirement's
+ * contract migration (a-retired-gate-waits-below).
+ */
+function isRetired(key: string): boolean {
+  return RETIRED_CHANGE_GATES.includes(key)
+}
+
+const RETIRED_WORDS = 'Retired · waiting for cleanup'
 
 /** The gate's code, as the build stamp lists it. */
 function GateCode({ code }: { code: string }) {
