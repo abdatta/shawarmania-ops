@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters } from '@/data-access/mock'
@@ -62,15 +62,19 @@ function renderHistory(adapters = createMockAdapters('franchise_admin')) {
 describe('manager billing history at a two-till outlet', () => {
   it('names the till on a bill, and counts each bill exactly once', async () => {
     const adapters = createMockAdapters('franchise_admin')
-    const real = adapters.billing.listManagerHistory.bind(adapters.billing)
-    adapters.billing.listManagerHistory = async (filters) => {
+    const real = adapters.billing.listManagerBillRows.bind(adapters.billing)
+    adapters.billing.listManagerBillRows = async (...args) => {
       // The same bills, relabelled onto two tills. Relabelling rather than
       // inventing keeps every other figure on the screen the demo's own, so a
       // duplicate would have to come from the rendering rather than the fixture.
-      return (await real(filters)).map((bill, index) => ({
-        ...bill,
-        tillLabel: index % 2 === 0 ? 'Counter tablet' : 'Takeaway counter',
-      }))
+      const page = await real(...args)
+      return {
+        ...page,
+        rows: page.rows.map((row, index) => ({
+          ...row,
+          tillLabel: index % 2 === 0 ? 'Counter tablet' : 'Takeaway counter',
+        })),
+      }
     }
 
     renderHistory(adapters)
@@ -90,9 +94,11 @@ describe('manager billing history at a two-till outlet', () => {
     // A single-till outlet, and a bill still draining locally, both carry no
     // label. Neither may be rendered as a guess.
     const adapters = createMockAdapters('franchise_admin')
-    const real = adapters.billing.listManagerHistory.bind(adapters.billing)
-    adapters.billing.listManagerHistory = async (filters) =>
-      (await real(filters)).map((bill) => ({ ...bill, tillLabel: null }))
+    const real = adapters.billing.listManagerBillRows.bind(adapters.billing)
+    adapters.billing.listManagerBillRows = async (...args) => {
+      const page = await real(...args)
+      return { ...page, rows: page.rows.map((row) => ({ ...row, tillLabel: null })) }
+    }
 
     renderHistory(adapters)
     const list = await screen.findByTestId('manager-bill-list')
@@ -268,21 +274,13 @@ describe('the Stats tab carries its own problem count', () => {
     const adapters = createMockAdapters('franchise_admin')
 
     // Delivered activity, and nothing needing a person. A count of zero would
-    // say the tab is empty, which is false: the delivered rows are listed there.
+    // say the tab is empty, which is false: the chip and the figures are there.
+    const real = adapters.billing.readDayNumbers.bind(adapters.billing)
     renderHistory({
       ...adapters,
       billing: {
         ...adapters.billing,
-        listDeliveryDiagnostics: async () => [
-          {
-            reference: 'c0000000-0000-4000-a000-000000000001',
-            commandType: 'pay_now',
-            resultCategory: 'accepted',
-            receivedAt: new Date().toISOString(),
-            ageMs: 0,
-            orderNumber: null,
-          },
-        ],
+        readDayNumbers: async (...args) => ({ ...(await real(...args)), refusals: [] }),
       },
     })
 
@@ -400,9 +398,7 @@ describe('open orders follow the day', () => {
 
     await screen.findByTestId('manager-bill-list')
     const today = screen.getByTestId('billing-history-day-picker').getAttribute('value')!
-    const open = (await adapters.billing.listManagerOpenOrders(OUTLET_KALYANI_ID)).filter(
-      (order) => order.businessDate === today,
-    )
+    const open = await adapters.billing.listManagerOpenOrders(OUTLET_KALYANI_ID, today)
     expect(open.length).toBeGreaterThan(0)
     // Unpaid only: an order already paid is revenue, not money still to come.
     const unpaid = open
@@ -425,34 +421,40 @@ describe('the Stats tab reads the chosen day', () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters('franchise_admin')
     const asked: string[] = []
+    const real = adapters.billing.readDayNumbers.bind(adapters.billing)
     renderHistory({
       ...adapters,
       billing: {
         ...adapters.billing,
-        readDayStats: async (_outletId, businessDate) => {
+        readDayNumbers: async (outletId, businessDate) => {
           asked.push(businessDate)
           return {
-            placed: 142,
-            updated: 18,
-            cancelled: 3,
-            paid: 136,
-            seen: 139,
-            ready: 137,
-            toReadySeconds: 400,
-            handoverSeconds: null,
-            billsCancelled: 1,
-            cancelledAfterPaid: 2,
-            paymentUndone: 4,
-            paymentChanged: 1,
+            ...(await real(outletId, businessDate)),
+            stats: {
+              placed: 142,
+              updated: 18,
+              cancelled: 3,
+              paid: 136,
+              seen: 139,
+              ready: 137,
+              toReadySeconds: 400,
+              handoverSeconds: null,
+              billsCancelled: 1,
+              cancelledAfterPaid: 2,
+              paymentUndone: 4,
+              paymentChanged: 1,
+            },
           }
         },
       },
     })
 
     await screen.findByTestId('manager-bill-list')
-    // Nothing is read for Stats until it is chosen.
-    expect(asked).toHaveLength(0)
+    // The figures came with the day's one read, so choosing Stats reads nothing
+    // (billing-history-reads-what-it-shows, design D2).
+    expect(asked).toHaveLength(1)
     await user.click(screen.getByRole('tab', { name: /^Stats/ }))
+    expect(asked).toHaveLength(1)
 
     const stats = await screen.findByTestId('day-stats')
     for (const group of ['Counter', 'Kitchen', 'Bills'])
@@ -487,7 +489,9 @@ describe('the Bills filter', () => {
     await user.click(screen.getByRole('button', { name: 'Done' }))
 
     expect(screen.getByTestId('bill-filter-summary')).toHaveTextContent('UPI · Amount, highest')
-    const shown = within(screen.getByTestId('manager-bill-list')).getAllByRole('button', {
+    // The server answers the filter, so the list is read again for it.
+    await screen.findByRole('tab', { name: /^Bills \(\d+\/\d+\)$/ })
+    const shown = within(await screen.findByTestId('manager-bill-list')).getAllByRole('button', {
       name: /^Bill \d+/,
     })
     expect(shown.length).toBeLessThan(all)
@@ -501,6 +505,11 @@ describe('the Bills filter', () => {
 
     await user.click(screen.getByTestId('bill-filter-clear'))
     expect(screen.getByRole('tab', { name: `Bills (${all})` })).toBeVisible()
+    expect(
+      within(await screen.findByTestId('manager-bill-list')).getAllByRole('button', {
+        name: /^Bill \d+/,
+      }),
+    ).toHaveLength(all)
     expect(screen.getByTestId('bill-filter-summary')).toHaveTextContent('Filter')
   })
 
@@ -515,12 +524,200 @@ describe('the Bills filter', () => {
     await user.click(screen.getByRole('button', { name: 'Cancelled after paid' }))
     await user.click(screen.getByRole('button', { name: 'Done' }))
 
-    expect(screen.getByText('No bills match')).toBeVisible()
+    expect(await screen.findByText('No bills match')).toBeVisible()
     await user.click(screen.getAllByRole('button', { name: 'Clear' }).at(-1)!)
     expect(
       within(await screen.findByTestId('manager-bill-list')).getAllByRole('button', {
         name: /^Bill \d+/,
       }),
     ).toHaveLength(all)
+  })
+})
+
+/**
+ * billing-history-reads-what-it-shows: the page reads what it shows — a page of
+ * rows the server sorted and filtered, the day's figures in one read, a bill's
+ * detail once — and a cancellation changes its row in place.
+ */
+describe('Billing history reads what it shows', () => {
+  /** Every read the page makes, counted by name, over the demo's own answers. */
+  function counted(adapters = createMockAdapters('franchise_admin')) {
+    const calls = { rows: 0, day: 0, detail: [] as string[], orders: 0 }
+    const billing = adapters.billing
+    const rows = billing.listManagerBillRows.bind(billing)
+    const day = billing.readDayNumbers.bind(billing)
+    const detail = billing.readManagerBillDetail.bind(billing)
+    const orders = billing.listManagerOpenOrders.bind(billing)
+    billing.listManagerBillRows = async (...args) => {
+      calls.rows += 1
+      return rows(...args)
+    }
+    billing.readDayNumbers = async (...args) => {
+      calls.day += 1
+      return day(...args)
+    }
+    billing.readManagerBillDetail = async (row) => {
+      calls.detail.push(row.id)
+      return detail(row)
+    }
+    billing.listManagerOpenOrders = async (...args) => {
+      calls.orders += 1
+      return orders(...args)
+    }
+    return { adapters, calls }
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('opens with one page of rows and one read of the day, and a filter reads only rows', async () => {
+    const user = userEvent.setup()
+    const { adapters, calls } = counted()
+    renderHistory(adapters)
+
+    await screen.findByTestId('manager-bill-list')
+    expect(calls).toMatchObject({ rows: 1, day: 1, orders: 0 })
+
+    await user.click(screen.getByRole('button', { name: 'Filter' }))
+    await user.click(screen.getByRole('button', { name: 'UPI' }))
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    await screen.findByRole('tab', { name: /^Bills \(\d+\/\d+\)$/ })
+
+    expect(calls.rows).toBeGreaterThan(1)
+    expect(calls.day).toBe(1)
+  })
+
+  it('takes the day’s figures from the day’s read, not from the rows', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+    const real = adapters.billing.readDayNumbers.bind(adapters.billing)
+    adapters.billing.readDayNumbers = async (...args) => ({
+      ...(await real(...args)),
+      cashPaise: 1_234_500,
+      upiPaise: 100,
+      settledBills: 2,
+    })
+    renderHistory(adapters)
+
+    await screen.findByTestId('manager-bill-list')
+    expect(screen.getByTestId('billing-total-cash')).toHaveTextContent(formatPaise(1_234_500))
+    expect(screen.getByTestId('billing-total-average')).toHaveTextContent(
+      formatPaise(averageBillPaise(1_234_600, 2)),
+    )
+  })
+
+  it('reads the next page as the reader nears the end, after the last row', async () => {
+    let reach: (() => void) | null = null
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(callback: (entries: { isIntersecting: boolean }[]) => void) {
+          reach = () => callback([{ isIntersecting: true }])
+        }
+        observe() {}
+        disconnect() {}
+      },
+    )
+    const adapters = createMockAdapters('franchise_admin')
+    const real = adapters.billing.listManagerBillRows.bind(adapters.billing)
+    const afters: unknown[] = []
+    adapters.billing.listManagerBillRows = async (outletId, businessDate, filter, options) => {
+      afters.push(options?.after ?? null)
+      // Two at a time, so the demo day needs more than one page.
+      return real(outletId, businessDate, filter, { ...options, limit: 2 })
+    }
+    renderHistory(adapters)
+
+    const list = await screen.findByTestId('manager-bill-list')
+    expect(within(list).getAllByRole('button', { name: /^Bill \d+/ })).toHaveLength(2)
+    expect(screen.getByTestId('manager-bill-list-more')).toBeInTheDocument()
+
+    reach!()
+    await vi.waitFor(() =>
+      expect(within(list).getAllByRole('button', { name: /^Bill \d+/ })).toHaveLength(4),
+    )
+    expect(afters[0]).toBeNull()
+    expect(afters[1]).toEqual(expect.objectContaining({ n: expect.any(Number) }))
+    const ids = within(list)
+      .getAllByRole('listitem')
+      .map((item) => item.dataset.testid)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('reads a bill’s detail once, whatever is opened and closed in between', async () => {
+    const user = userEvent.setup()
+    const { adapters, calls } = counted()
+    renderHistory(adapters)
+
+    const list = await screen.findByTestId('manager-bill-list')
+    const [first, second] = within(list).getAllByRole('button', { name: /^Bill \d+/ })
+    await user.click(first!)
+    expect(await screen.findAllByText(/Order items/i)).not.toHaveLength(0)
+    await user.click(first!)
+    await user.click(second!)
+    await user.click(first!)
+
+    expect(calls.detail).toHaveLength(2)
+    expect(new Set(calls.detail).size).toBe(2)
+    // Reopened from memory: no loading state over it.
+    expect(screen.queryByRole('status', { name: /the bill/ })).not.toBeInTheDocument()
+  })
+
+  it('cancels a bill in place: no list read, no shimmer, the figures read again', async () => {
+    const user = userEvent.setup()
+    const { adapters, calls } = counted()
+    renderHistory(adapters)
+
+    const list = await screen.findByTestId('manager-bill-list')
+    const [first] = within(list).getAllByRole('button', { name: /^Bill \d+Paid/ })
+    const billNumber = /^Bill (\d+)/.exec(first!.textContent ?? '')![1]!
+    await user.click(first!)
+    await user.click(await screen.findByRole('button', { name: 'Cancel this bill' }))
+    await user.type(
+      screen.getByRole('textbox', { name: `Cancellation reason for bill ${billNumber}` }),
+      'Duplicate',
+    )
+    const rowsBefore = calls.rows
+    const dayBefore = calls.day
+    await user.click(screen.getByRole('button', { name: 'Cancel bill' }))
+
+    await vi.waitFor(() =>
+      expect(
+        within(list).getByRole('button', { name: new RegExp(`^Bill ${billNumber}Cancelled`) }),
+      ).toBeVisible(),
+    )
+    expect(screen.getByTestId('manager-bill-list')).toBe(list)
+    expect(calls.rows).toBe(rowsBefore)
+    await vi.waitFor(() => expect(calls.day).toBe(dayBefore + 1))
+  })
+
+  it('reads the day and its rows again on coming back after two minutes, and not before', async () => {
+    const { adapters, calls } = counted()
+    renderHistory(adapters)
+    await screen.findByTestId('manager-bill-list')
+    const start = Date.now()
+    const now = vi.spyOn(Date, 'now')
+
+    now.mockReturnValue(start + 60_000)
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(calls).toMatchObject({ rows: 1, day: 1 })
+
+    now.mockReturnValue(start + 3 * 60_000)
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.waitFor(() => expect(calls).toMatchObject({ rows: 2, day: 2 }))
+    expect(screen.getByTestId('manager-bill-list')).toBeInTheDocument()
+  })
+
+  it('reads the chosen day’s open orders when the tab is chosen, and nothing for Stats', async () => {
+    const user = userEvent.setup()
+    const { adapters, calls } = counted()
+    renderHistory(adapters)
+    await screen.findByTestId('manager-bill-list')
+
+    await user.click(screen.getByRole('tab', { name: /^Stats/ }))
+    expect(calls).toMatchObject({ rows: 1, day: 1, orders: 0 })
+    await user.click(screen.getByRole('tab', { name: /^Open orders/ }))
+    await vi.waitFor(() => expect(calls.orders).toBe(1))
   })
 })

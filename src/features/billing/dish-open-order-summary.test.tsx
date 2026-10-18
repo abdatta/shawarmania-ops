@@ -34,7 +34,7 @@ it('counts the open orders on opening, and reads them and the kitchens each time
   const adapters = createMockAdapters('franchise_admin', createDemoData({ dishWalkthrough: true }))
   const kitchens = vi.spyOn(adapters.kitchen, 'readManagerDishMarks')
   const list = vi.spyOn(adapters.billing, 'listManagerOpenOrders')
-  const count = vi.spyOn(adapters.billing, 'countManagerOpenOrders')
+  const count = vi.spyOn(adapters.billing, 'readDayNumbers')
   render(
     <MemoryRouter>
       <SessionContext.Provider value={managerSession()}>
@@ -45,7 +45,7 @@ it('counts the open orders on opening, and reads them and the kitchens each time
     </MemoryRouter>,
   )
   const tab = await screen.findByRole('tab', { name: /Open orders \(\d+\)/ })
-  // Opening the page counts the open orders and reads none of them.
+  // Opening the page counts the open orders, in the day's one read, and reads none of them.
   expect(count).toHaveBeenCalledOnce()
   expect(list).not.toHaveBeenCalled()
   expect(kitchens).not.toHaveBeenCalled()

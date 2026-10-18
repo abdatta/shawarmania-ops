@@ -13,10 +13,11 @@ import { useAdapters } from '@/data-access'
 import {
   BILLING_PAYMENT_METHODS,
   DataActionError,
+  MANAGER_BILL_ROWS_PAGE_SIZE,
   type BillingBill,
+  type BillingBillRow,
   type BillingAttributionOutcome,
-  type BillingDayStats,
-  type BillingDeliveryDiagnostic,
+  type BillingDayNumbers,
   type BillingOrder,
   type CounterBiller,
   type KitchenMarks,
@@ -26,20 +27,18 @@ import { useOutletScope } from '@/features/outlet-scope'
 import { useSession } from '@/session/context'
 
 import {
-  applyBillFilter,
   billFilterSummary,
-  dayTablets,
   DEFAULT_BILL_FILTER,
   isDefaultBillFilter,
   type BillFilter,
 } from './bill-filter'
 import { BillFilterSheet } from './bill-filter-sheet'
-import { averageBillPaise, combinedTakingsPaise, paymentTotalPaise } from './day-totals'
+import { averageBillPaise, combinedTakingsPaise } from './day-totals'
 import { ManagerBillDetail } from './manager-bill-detail'
 import { BillDetailTransition, DETAIL_TRANSITION_MS, ManagerBillSummary } from './manager-bill-row'
 import { DishOpenOrderSummary } from './dish-open-order-summary'
 import { ManagerDayStats, ManagerDayStatsShimmer } from './manager-day-stats'
-import { countSyncProblems, ManagerSyncStatus } from './manager-sync-status'
+import { ManagerSyncStatus } from './manager-sync-status'
 import { PaymentTotalCards } from './payment-total-cards'
 
 /**
@@ -74,7 +73,24 @@ function splitPipeline(orders: readonly BillingOrder[]): {
 
 type View = 'bills' | 'orders' | 'stats'
 
+/**
+ * How long the page may have been away before coming back reads it again: the
+ * delivery badges' rule (the-app-asks-the-server-less), kept here so the two
+ * agree (billing-history-reads-what-it-shows, design D6).
+ */
+const RETURN_REREAD_MS = 2 * 60_000
+
 const ORDER_CANCELLATION_REASONS = ['Duplicate order', 'Mistaken entry'] as const
+
+/** An opened bill's detail on its way: its first read, and only its first. */
+function BillDetailShimmer() {
+  return (
+    <LoadingRegion label="the bill" className="space-y-2 pt-2">
+      <Shimmer className="h-24 w-full rounded-xl" />
+      <Shimmer className="h-16 w-full rounded-xl" />
+    </LoadingRegion>
+  )
+}
 
 function BillingHistoryShimmer() {
   return (
@@ -103,16 +119,14 @@ export function ManagerBillingHistory() {
   const session = useSession()
   /*
     An open order says what the counter's card says (each-dish-is-ticked-off,
-    design R11), and the Orders tab reads for itself: the page counts the open
-    orders when it opens, and the orders and their kitchens' answers are read
-    each time the tab is chosen — so switching to it is how the owner sees the
-    latest — never on a timer and never live.
+    design R11), and the Orders tab reads for itself: the orders and their
+    kitchens' answers are read each time the tab is chosen — so switching to it
+    is how the owner sees the latest — never on a timer and never live.
   */
   const [marks, setMarks] = useState<KitchenMarks | null>(null)
   const [readAt, setReadAt] = useState(() => new Date())
-  const [openCount, setOpenCount] = useState<number | null>(null)
-  /** The outlet the listed open orders are of; another means not read yet. */
-  const [ordersOutlet, setOrdersOutlet] = useState<string | null>(null)
+  /** The outlet-day the listed open orders are of; another means not read yet. */
+  const [ordersKey, setOrdersKey] = useState<string | null>(null)
   // Which outlet, asked the way every other outlet-scoped surface asks it: chips
   // in the header, remembered between surfaces, conferring nothing.
   const { outletId, selector: outletSelector } = useOutletScope()
@@ -136,9 +150,28 @@ export function ManagerBillingHistory() {
    */
   const [chosenDay, setChosenDay] = useState<{ day: string; today: string } | null>(null)
   const [view, setView] = useState<View>('bills')
-  const [bills, setBills] = useState<BillingBill[]>([])
+  /**
+   * The rows read so far, the read they answer, and how many the filter keeps
+   * across every page (billing-history-reads-what-it-shows, design D1). A key
+   * other than the page's current one means the first page is still on its way.
+   */
+  const [list, setList] = useState<{
+    key: string
+    rows: BillingBillRow[]
+    matching: number
+  } | null>(null)
+  const [moreLoading, setMoreLoading] = useState(false)
+  /** The day in numbers and the outlet-day it is of (design D2). */
+  const [day, setDay] = useState<{ key: string; value: BillingDayNumbers } | null>(null)
+  /**
+   * Each opened bill's whole detail, read once and kept until the page is left
+   * (design D3) — collapsing it, opening another and coming back reads nothing.
+   * Never stored.
+   */
+  const [details, setDetails] = useState<ReadonlyMap<string, BillingBill | 'failed'>>(
+    () => new Map(),
+  )
   const [orders, setOrders] = useState<BillingOrder[]>([])
-  const [diagnostics, setDiagnostics] = useState<BillingDeliveryDiagnostic[]>([])
   const [billers, setBillers] = useState<CounterBiller[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [closingIds, setClosingIds] = useState<string[]>([])
@@ -146,53 +179,53 @@ export function ManagerBillingHistory() {
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null)
   const [reason, setReason] = useState('')
   const [message, setMessage] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
   /*
     The Bills tab's sort and filter (billing-day-at-a-glance, design D4). Kept
     while the day or outlet changes — the reader is asking the same question of
-    another day — and gone when they leave the page. Never stored.
+    another day — and gone when they leave the page. Never stored. The server
+    applies it; a change reads the list again from its first page.
   */
   const [filter, setFilter] = useState<BillFilter>(DEFAULT_BILL_FILTER)
   const [filterOpen, setFilterOpen] = useState(false)
-  /** The Stats tab's figures, and the outlet-day they are of; another means not read yet. */
-  const [stats, setStats] = useState<{ key: string; value: BillingDayStats } | null>(null)
-  const [statsFailed, setStatsFailed] = useState<string | null>(null)
   const closingTimers = useRef<number[]>([])
   const anchorFrame = useRef<number | null>(null)
+  const sentinel = useRef<HTMLDivElement | null>(null)
+  /** Which list and day reads are the latest: an older one landing late is dropped. */
+  const listRead = useRef(0)
+  const dayRead = useRef(0)
+  /** When the page last read its day and rows, for the two-minute return rule. */
+  const lastRead = useRef(0)
   // Empty until this outlet's own today has landed, which is what holds the day
   // bar behind its silhouette and the reads behind their guard.
   const today = resolvedToday?.outletId === outletId ? resolvedToday.day : ''
   const businessDate = today && carryPeriod(chosenDay?.day ?? null, chosenDay?.today ?? null, today)
   // The control that calls this is only rendered once the outlet's today has
   // landed, so the day is always chosen against a real today.
-  const setDate = (day: string) => setChosenDay({ day, today })
-  // Paid bills only, and derived rather than read again: the list is every bill
-  // of this outlet-day, so the settled ones are already in hand. Cancelled bills
-  // are listed but take part in no figure.
-  const paidBills = bills.filter((bill) => bill.status !== 'void')
+  const setDate = (next: string) => setChosenDay({ day: next, today })
+  const dayKey = `${outletId}|${businessDate}`
+  const listKey = `${dayKey}|${JSON.stringify(filter)}`
+  const dayNumbers = day?.key === dayKey ? day.value : null
+  const rows = list?.key === listKey ? list.rows : null
+  const matching = list?.key === listKey ? list.matching : 0
+  // The day's figures, from the shared revenue definition rather than a sum of
+  // the rows in hand (design D2): the list is only ever a page of the day.
   const methodTotals = BILLING_PAYMENT_METHODS.map((paymentMethod) => ({
     method: paymentMethod,
-    totalPaise: paymentTotalPaise(paidBills, paymentMethod),
+    totalPaise:
+      paymentMethod === 'cash' ? (dayNumbers?.cashPaise ?? 0) : (dayNumbers?.upiPaise ?? 0),
   }))
   const takingsPaise = combinedTakingsPaise(methodTotals)
-  // What the Bills tab lists: the filter narrows and orders the day's bills,
-  // and touches none of the figures above, which stay the day's.
-  const visibleBills = applyBillFilter(bills, filter)
   const filtering = !isDefaultBillFilter(filter)
-  // Open orders follow the day bar (design D2). Filtered here rather than in the
-  // adapter's read, which the counter shares.
-  const dayOrders = orders.filter((order) => order.businessDate === businessDate)
+  // Open orders are read for the day bar's day (design D5), so the list is the day's.
+  const dayOrders = ordersKey === dayKey ? orders : []
   const unpaidPaise = dayOrders
     .filter((order) => order.status === 'open')
     .reduce((sum, order) => sum + order.totalPaise, 0)
-  const statsKey = `${outletId}|${businessDate}`
-  // The refusals waiting behind the Status tab, named on the tab itself. Its two
+  // The refusals behind the Stats tab, named on the tab itself. Its two
   // neighbours already carry their counts, so a tab that says nothing reads as a
   // tab with nothing in it — which is how the first production refusal went
-  // unread. Counted from the same function the panel lists, and shown only when
-  // it is non-zero: this tab always has contents, so a zero would say the one
-  // thing that is not true of it.
-  const syncProblemCount = countSyncProblems(diagnostics)
+  // unread. The same list the chip shows, and shown only when it is non-zero.
+  const syncProblemCount = dayNumbers?.refusals.length ?? 0
 
   useEffect(
     () => () => {
@@ -224,13 +257,14 @@ export function ManagerBillingHistory() {
     }
   }, [outletId, outletsAdapter])
 
-  // The Orders tab's own read, on the dish path.
+  // The Orders tab's own read: the day's orders and their kitchens' answers,
+  // asked for together (design D5).
   const loadOrders = useCallback(
     async (isCurrent: () => boolean = () => true) => {
-      if (!outletId) return
+      if (!outletId || !businessDate) return
       try {
         const [nextOrders, nextMarks] = await Promise.all([
-          billing.listManagerOpenOrders(outletId),
+          billing.listManagerOpenOrders(outletId, businessDate),
           // The orders still list if the kitchens cannot be read.
           kitchen.readManagerDishMarks(outletId).catch(() => null),
         ])
@@ -238,58 +272,121 @@ export function ManagerBillingHistory() {
         setOrders(nextOrders)
         setMarks(nextMarks)
         setReadAt(new Date())
-        // No count here: these are every day's open orders, and the tab counts
-        // the chosen day's — from the list itself while it is open, and from the
-        // page's own day-scoped count otherwise.
-        setOrdersOutlet(outletId)
+        setOrdersKey(`${outletId}|${businessDate}`)
       } catch (cause) {
         if (!isCurrent()) return
         setMessage(cause instanceof DataActionError ? cause.message : 'Could not load open orders.')
       }
     },
-    [billing, kitchen, outletId],
+    [billing, kitchen, outletId, businessDate],
   )
 
-  const load = useCallback(async () => {
-    await Promise.resolve()
+  /** The day in numbers: on opening, on a new day, and quietly after a change. */
+  const loadDay = useCallback(async () => {
     if (!outletId || !businessDate) return
-    setLoading(true)
+    const key = `${outletId}|${businessDate}`
+    const read = ++dayRead.current
     try {
-      // One read of the whole outlet-day. The status and payment-method
-      // parameters stay on the adapter for the counter, and this surface passes
-      // neither: every bill of the day is listed, and each says for itself
-      // whether it was paid or cancelled and what it was paid with.
-      const [nextBills, nextDiagnostics, nextBillers, nextCount] = await Promise.all([
-        billing.listManagerHistory({ outletId, businessDate, status: 'all', paymentMethod: 'all' }),
-        // The orders are the Orders tab's to read; the page only counts them
-        // for the tab's label.
-        billing.listDeliveryDiagnostics(outletId),
-        billing.listBillers(outletId),
-        billing.countManagerOpenOrders(outletId, businessDate),
-      ])
-      setBills(nextBills)
-      setOpenCount(nextCount)
-      setDiagnostics(nextDiagnostics)
-      setBillers(nextBillers)
-      setSelectedId((current) =>
-        current && nextBills.some((bill) => bill.id === current) ? current : null,
+      const value = await billing.readDayNumbers(outletId, businessDate)
+      if (read !== dayRead.current) return
+      setDay({ key, value })
+      lastRead.current = Date.now()
+    } catch (cause) {
+      if (read !== dayRead.current) return
+      setMessage(
+        cause instanceof DataActionError ? cause.message : 'Could not load the day’s figures.',
+      )
+    }
+  }, [billing, businessDate, outletId])
+
+  /**
+   * The list from its first page, or — `count` — as many rows as are already
+   * shown, quietly, read a hundred at a time (design D6).
+   */
+  const loadRows = useCallback(
+    async (count = MANAGER_BILL_ROWS_PAGE_SIZE) => {
+      if (!outletId || !businessDate) return
+      const key = `${outletId}|${businessDate}|${JSON.stringify(filter)}`
+      const read = ++listRead.current
+      try {
+        let page = await billing.listManagerBillRows(outletId, businessDate, filter, {
+          limit: Math.min(count, 100),
+        })
+        let next = page.rows
+        while (next.length < count && page.rows.length === 100 && next.length < page.matching) {
+          page = await billing.listManagerBillRows(outletId, businessDate, filter, {
+            after: next.at(-1)!.cursor,
+            limit: Math.min(count - next.length, 100),
+          })
+          next = [...next, ...page.rows]
+        }
+        if (read !== listRead.current) return
+        setList({ key, rows: next, matching: page.matching })
+        setSelectedId((current) =>
+          current && next.some((row) => row.id === current) ? current : null,
+        )
+        lastRead.current = Date.now()
+      } catch (cause) {
+        if (read !== listRead.current) return
+        setMessage(
+          cause instanceof DataActionError ? cause.message : 'Could not load billing history.',
+        )
+      }
+    },
+    [billing, businessDate, filter, outletId],
+  )
+
+  /** The next page, when the reader nears the end of what is shown (design D7). */
+  const loadMore = useCallback(async () => {
+    if (!outletId || !businessDate || !rows || moreLoading || rows.length >= matching) return
+    const key = listKey
+    const read = listRead.current
+    setMoreLoading(true)
+    try {
+      const page = await billing.listManagerBillRows(outletId, businessDate, filter, {
+        after: rows.at(-1)!.cursor,
+      })
+      if (read !== listRead.current) return
+      setList((current) =>
+        current?.key === key
+          ? { key, rows: [...current.rows, ...page.rows], matching: page.matching }
+          : current,
       )
     } catch (cause) {
       setMessage(
         cause instanceof DataActionError ? cause.message : 'Could not load billing history.',
       )
     } finally {
-      setLoading(false)
+      setMoreLoading(false)
     }
-  }, [billing, businessDate, outletId])
+  }, [billing, businessDate, filter, listKey, matching, moreLoading, outletId, rows])
+
+  // A new outlet or day reads the day in numbers; the rows follow the filter
+  // too, so a filter change reads them and nothing else.
+  useEffect(() => {
+    void Promise.resolve().then(loadDay)
+  }, [loadDay])
 
   useEffect(() => {
-    void Promise.resolve().then(load)
-  }, [load])
+    void Promise.resolve().then(() => loadRows())
+  }, [loadRows])
+
+  useEffect(() => {
+    if (!outletId) return
+    let active = true
+    billing
+      .listBillers(outletId)
+      .then((next) => {
+        if (active) setBillers(next)
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [billing, outletId])
 
   // Choosing the Orders tab reads it afresh, and so does a new outlet or day
-  // while it is open.
-  // A read for an outlet or day no longer shown is dropped when it lands.
+  // while it is open. A read for an outlet or day no longer shown is dropped.
   useEffect(() => {
     if (view !== 'orders') return
     let current = true
@@ -297,43 +394,88 @@ export function ManagerBillingHistory() {
     return () => {
       current = false
     }
-  }, [view, loadOrders, businessDate])
+  }, [view, loadOrders])
 
-  // Choosing Stats reads the chosen day's figures, and so does a new outlet or
-  // day while it is open. A read for a day no longer shown is dropped.
+  // The next page is asked for while about ten rows are still below the
+  // screen, so a steady scroll does not meet the end (design D7).
   useEffect(() => {
-    if (view !== 'stats' || !outletId || !businessDate) return
-    let current = true
-    const key = `${outletId}|${businessDate}`
-    void Promise.resolve()
-      .then(() => billing.readDayStats(outletId, businessDate))
-      .then((value) => {
-        if (!current) return
-        setStats({ key, value })
-        setStatsFailed(null)
-      })
-      .catch((cause: unknown) => {
-        if (current)
-          setStatsFailed(
-            cause instanceof DataActionError ? cause.message : 'Could not load the day’s stats.',
-          )
-      })
-    return () => {
-      current = false
-    }
-  }, [billing, view, outletId, businessDate])
+    const node = sentinel.current
+    if (!node || !rows || rows.length >= matching) return
+    if (typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) void loadMore()
+      },
+      { rootMargin: '0px 0px 800px 0px' },
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [loadMore, matching, rows])
 
-  const mutate = async (operation: () => Promise<unknown>, keepBillOpen = false) => {
+  // Coming back after more than two minutes away reads the day and the rows
+  // already shown again, quietly, as the delivery badges do (design D6).
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      if (lastRead.current === 0 || Date.now() - lastRead.current <= RETURN_REREAD_MS) return
+      void loadDay()
+      void loadRows(Math.max(rows?.length ?? 0, MANAGER_BILL_ROWS_PAGE_SIZE))
+      if (view === 'orders') void loadOrders()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [loadDay, loadOrders, loadRows, rows, view])
+
+  /** A bill as it now is, laid over its row and its detail in place (design D4). */
+  const patchBill = (bill: BillingBill) => {
+    setDetails((current) => new Map(current).set(bill.id, bill))
+    setList((current) =>
+      current
+        ? {
+            ...current,
+            rows: current.rows.map((row) =>
+              row.id === bill.id
+                ? {
+                    ...row,
+                    status: bill.status,
+                    voidKind: bill.voidKind,
+                    paymentMethod: bill.paymentMethod,
+                    payments: bill.payments,
+                    paymentRevision: bill.paymentRevision,
+                  }
+                : row,
+            ),
+          }
+        : current,
+    )
+  }
+
+  const cancelBill = async (billId: string) => {
     try {
       setMessage(null)
-      await operation()
+      patchBill(await billing.voidBill(billId, reason))
       setReason('')
       setCancellingId(null)
+      // The strip, AOV and Stats moved; the list did not.
+      void loadDay()
+    } catch (cause) {
+      setMessage(
+        cause instanceof DataActionError ? cause.message : 'That action could not be completed.',
+      )
+    }
+  }
+
+  const cancelOrder = async (orderId: string) => {
+    try {
+      setMessage(null)
+      await billing.managerCancelOrder(orderId, reason)
+      setReason('')
       setCancellingOrderId(null)
-      if (!keepBillOpen) setSelectedId(null)
-      await load()
-      // A cancellation on the Orders tab leaves it showing the orders as they now are.
-      if (view === 'orders') await loadOrders()
+      // A paid order still cooking becomes a bill cancelled after payment, so
+      // the Bills rows and the figures are read again too, quietly.
+      await loadOrders()
+      void loadDay()
+      void loadRows(Math.max(rows?.length ?? 0, MANAGER_BILL_ROWS_PAGE_SIZE))
     } catch (cause) {
       setMessage(
         cause instanceof DataActionError ? cause.message : 'That action could not be completed.',
@@ -349,8 +491,14 @@ export function ManagerBillingHistory() {
   ) => {
     try {
       setMessage(null)
-      await billing.reviewAttribution(billId, outcome, resolvedOperatorId, reviewReason)
-      await load()
+      const review = await billing.reviewAttribution(
+        billId,
+        outcome,
+        resolvedOperatorId,
+        reviewReason,
+      )
+      const bill = details.get(billId)
+      if (bill && bill !== 'failed') patchBill({ ...bill, attributionReview: review })
     } catch (cause) {
       setMessage(
         cause instanceof DataActionError ? cause.message : 'That review could not be recorded.',
@@ -359,9 +507,23 @@ export function ManagerBillingHistory() {
     }
   }
 
+  /** The detail behind a row, read the first time it is opened (design D3). */
+  const readDetail = (row: BillingBillRow) => {
+    setDetails((current) => {
+      const next = new Map(current)
+      next.delete(row.id)
+      return next
+    })
+    billing
+      .readManagerBillDetail(row)
+      .then((bill) => setDetails((current) => new Map(current).set(row.id, bill ?? 'failed')))
+      .catch(() => setDetails((current) => new Map(current).set(row.id, 'failed')))
+  }
+
   const chooseView = (next: View) => {
     // Choosing another tab reads it in the effect above; the one already open,
-    // tapped again, is read again here.
+    // tapped again, is read again here. Stats reads nothing: its figures came
+    // with the day's (design D2).
     if (next === 'orders' && view === 'orders') void loadOrders()
     setView(next)
     setSelectedId(null)
@@ -416,10 +578,12 @@ export function ManagerBillingHistory() {
       closeDetail(billId)
       setSelectedId(null)
     } else {
-      const currentIndex = selectedId
-        ? visibleBills.findIndex((bill) => bill.id === selectedId)
-        : -1
-      const nextIndex = visibleBills.findIndex((bill) => bill.id === billId)
+      const shown = rows ?? []
+      const currentIndex = selectedId ? shown.findIndex((row) => row.id === selectedId) : -1
+      const nextIndex = shown.findIndex((row) => row.id === billId)
+      const row = shown[nextIndex]
+      const detail = details.get(billId)
+      if (row && (detail === undefined || detail === 'failed')) readDetail(row)
       if (selectedId) closeDetail(selectedId)
       if (currentIndex >= 0 && nextIndex > currentIndex) anchorSummaryDuringSwap(billId)
       setSelectedId(billId)
@@ -473,18 +637,19 @@ export function ManagerBillingHistory() {
         The surface is opened to answer one question — what did this day take —
         and the answer used to be two taps away, behind a tab named after tablet
         sync. It is the same four figures over the same paid bills; only their
-        address changed. Four across rather than two by two because a wrapped
+        address changed. They come from the day's own read, by the revenue
+        definition Overview and the Ledger use, never from the rows in hand,
+        which are only ever a page of the day (billing-history-reads-what-it-shows). Four across rather than two by two because a wrapped
         row makes the reader work out which card belongs to which line, and
         because a strip this size can sit above the tabs without pushing the
         list off a phone.
 
-        `loading` rather than `today === ''`: the figures are derived from bills,
-        so they are only true once the day's read has landed, and rendering the
+        Held behind their shimmer until the day's read has landed: and rendering the
         cards a moment early would show a real ₹0 that is about to change. The
         silhouette is the strip's own height, so the tabs do not move under a
         finger already on its way to them.
       */}
-      {loading ? (
+      {dayNumbers === null ? (
         <LoadingRegion label="the day’s totals">
           <div className="grid grid-cols-4 gap-2">
             {[0, 1, 2, 3].map((card) => (
@@ -506,7 +671,7 @@ export function ManagerBillingHistory() {
               { label: 'Total', paise: takingsPaise, testId: 'billing-total-combined' },
               {
                 label: 'AOV',
-                paise: averageBillPaise(takingsPaise, paidBills.length),
+                paise: averageBillPaise(takingsPaise, dayNumbers.settledBills),
                 testId: 'billing-total-average',
               },
             ]}
@@ -519,9 +684,11 @@ export function ManagerBillingHistory() {
           [
             [
               'bills',
-              filtering && visibleBills.length !== bills.length
-                ? `Bills (${visibleBills.length}/${bills.length})`
-                : `Bills (${bills.length})`,
+              dayNumbers === null
+                ? 'Bills (…)'
+                : filtering && rows !== null && matching !== dayNumbers.bills
+                  ? `Bills (${matching}/${dayNumbers.bills})`
+                  : `Bills (${dayNumbers.bills})`,
             ],
             // The count is the whole board — both bands — under the plain name
             // this page has always used; the band names live in the sections.
@@ -529,9 +696,9 @@ export function ManagerBillingHistory() {
             [
               'orders',
               `Open orders (${
-                view === 'orders' && ordersOutlet === outletId
+                view === 'orders' && ordersKey === dayKey
                   ? dayOrders.length
-                  : (openCount ?? '…')
+                  : (dayNumbers?.openOrders ?? '…')
               })`,
             ],
             // A refusal keeps its count on the tab, in red, so it reads as a
@@ -573,11 +740,9 @@ export function ManagerBillingHistory() {
         </p>
       )}
 
-      {loading ? (
-        <BillingHistoryShimmer />
-      ) : view === 'bills' ? (
+      {view === 'bills' ? (
         <div className="space-y-2">
-          {bills.length > 0 && (
+          {(dayNumbers?.bills ?? 0) > 0 && (
             <div className="flex items-center justify-end gap-2">
               {filtering && (
                 <Button
@@ -607,14 +772,18 @@ export function ManagerBillingHistory() {
             <BillFilterSheet
               open
               filter={filter}
-              tablets={dayTablets(bills)}
+              tablets={dayNumbers?.tablets ?? []}
               onChange={setFilter}
               onClose={() => setFilterOpen(false)}
             />
           )}
-          {bills.length === 0 ? (
+          {/* The first page, and every filter change, read the list afresh
+              behind its shimmer; the owner accepted the moment it takes. */}
+          {rows === null ? (
+            <BillingHistoryShimmer />
+          ) : rows.length === 0 && !filtering ? (
             <EmptyState icon={ReceiptText} title="No bills on this day." />
-          ) : visibleBills.length === 0 ? (
+          ) : rows.length === 0 ? (
             <div className="space-y-3">
               <EmptyState icon={ReceiptText} title="No bills match" />
               <div className="flex justify-center">
@@ -628,70 +797,89 @@ export function ManagerBillingHistory() {
               </div>
             </div>
           ) : (
-            <ul className="space-y-2" data-testid="manager-bill-list">
-              {visibleBills.map((bill) => {
-                const expanded = bill.id === selectedId
-                const showingDetail = expanded || closingIds.includes(bill.id)
-                return (
-                  <li key={bill.id} data-testid={`manager-bill-${bill.id}`}>
-                    <ManagerBillSummary
-                      bill={bill}
-                      expanded={expanded}
-                      showingDetail={showingDetail}
-                      onToggle={() => selectBill(bill.id)}
-                    />
-                    {showingDetail && (
-                      <BillDetailTransition open={expanded}>
-                        <ManagerBillDetail
-                          bill={bill}
-                          currentUserId={session.userId}
-                          cancelling={cancellingId === bill.id}
-                          reason={reason}
-                          onReasonChange={setReason}
-                          onStartCancelling={() => {
-                            setCancellingId(bill.id)
-                            setReason('')
-                          }}
-                          onKeepBill={() => {
-                            setCancellingId(null)
-                            setReason('')
-                          }}
-                          onConfirmCancellation={() =>
-                            void mutate(() => billing.voidBill(bill.id, reason), true)
-                          }
-                          eligibleBillers={billers}
-                          onReviewAttribution={(outcome, resolvedOperatorId, reviewReason) =>
-                            reviewAttribution(bill.id, outcome, resolvedOperatorId, reviewReason)
-                          }
-                        />
-                      </BillDetailTransition>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
+            <>
+              <ul className="space-y-2" data-testid="manager-bill-list">
+                {rows.map((row) => {
+                  const expanded = row.id === selectedId
+                  const showingDetail = expanded || closingIds.includes(row.id)
+                  const detail = details.get(row.id)
+                  return (
+                    <li key={row.id} data-testid={`manager-bill-${row.id}`}>
+                      <ManagerBillSummary
+                        bill={row}
+                        expanded={expanded}
+                        showingDetail={showingDetail}
+                        onToggle={() => selectBill(row.id)}
+                      />
+                      {showingDetail && (
+                        <BillDetailTransition open={expanded}>
+                          {detail === undefined ? (
+                            <BillDetailShimmer />
+                          ) : detail === 'failed' ? (
+                            <p
+                              role="status"
+                              className="rounded-lg border border-border bg-surface p-3 text-sm font-semibold text-content"
+                            >
+                              Could not load this bill. Close it and open it again to retry.
+                            </p>
+                          ) : (
+                            <ManagerBillDetail
+                              bill={detail}
+                              currentUserId={session.userId}
+                              cancelling={cancellingId === row.id}
+                              reason={reason}
+                              onReasonChange={setReason}
+                              onStartCancelling={() => {
+                                setCancellingId(row.id)
+                                setReason('')
+                              }}
+                              onKeepBill={() => {
+                                setCancellingId(null)
+                                setReason('')
+                              }}
+                              onConfirmCancellation={() => void cancelBill(row.id)}
+                              eligibleBillers={billers}
+                              onReviewAttribution={(outcome, resolvedOperatorId, reviewReason) =>
+                                reviewAttribution(row.id, outcome, resolvedOperatorId, reviewReason)
+                              }
+                            />
+                          )}
+                        </BillDetailTransition>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+              {rows.length < matching && (
+                <div ref={sentinel} data-testid="manager-bill-list-more">
+                  {moreLoading && (
+                    <LoadingRegion label="more bills">
+                      <Shimmer className="h-20 w-full rounded-xl" />
+                    </LoadingRegion>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
       ) : view === 'stats' ? (
-        // The tablets' sync, which speaks for now, then the chosen day's figures
-        // (billing-day-at-a-glance, design D3).
-        <div className="space-y-3">
-          <ManagerSyncStatus diagnostics={diagnostics} />
-          {stats?.key === statsKey ? (
-            <ManagerDayStats stats={stats.value} />
-          ) : statsFailed ? (
-            <p
-              role="status"
-              className="rounded-lg border border-border bg-surface p-3 text-sm font-semibold text-content"
-            >
-              {statsFailed}
-            </p>
-          ) : (
-            <ManagerDayStatsShimmer />
-          )}
-        </div>
+        // The tablets' sync — its age speaks for now, its problems are the chosen
+        // day's — then the chosen day's figures, all from the day's one read
+        // (billing-history-reads-what-it-shows, design D2), so choosing the tab
+        // reads nothing.
+        dayNumbers === null ? (
+          <ManagerDayStatsShimmer />
+        ) : (
+          <div className="space-y-3">
+            <ManagerSyncStatus
+              problems={dayNumbers.refusals}
+              newestAt={dayNumbers.newestCommandAt}
+            />
+            <ManagerDayStats stats={dayNumbers.stats} />
+          </div>
+        )
       ) : view === 'orders' ? (
-        ordersOutlet !== outletId ? (
+        ordersKey !== dayKey ? (
           <LoadingRegion label="open orders" className="space-y-2">
             <Shimmer className="h-40 rounded-xl" />
             <Shimmer className="h-40 rounded-xl" />
@@ -799,9 +987,7 @@ export function ManagerBillingHistory() {
                                   variant="danger"
                                   size="control"
                                   disabled={!reason.trim()}
-                                  onClick={() =>
-                                    void mutate(() => billing.managerCancelOrder(order.id, reason))
-                                  }
+                                  onClick={() => void cancelOrder(order.id)}
                                 >
                                   Cancel order
                                 </Button>

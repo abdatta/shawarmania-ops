@@ -3,8 +3,6 @@ import { AlertTriangle } from 'lucide-react'
 import type { BillingDeliveryDiagnostic } from '@/data-access/adapters'
 import { formatDayTime, isCorrectableRefusal } from '@/domain'
 
-const ROUTINE_RESULTS = new Set(['accepted', 'replay', 'applied', 'corrected', 'discarded'])
-
 const ACTION_LABELS: Record<string, string> = {
   pay_now: 'Bills paid',
   pay_order: 'Orders paid',
@@ -28,31 +26,6 @@ function actionLabel(commandType: string) {
   )
 }
 
-function isSyncProblem(item: BillingDeliveryDiagnostic) {
-  return !ROUTINE_RESULTS.has(item.resultCategory)
-}
-
-/**
- * The refusals, as the panel lists them and as its tab counts them.
- *
- * One function rather than a predicate each side reapplies, because the tab's
- * number is only worth trusting if it is the length of exactly what opening the
- * tab shows. Derived apart, the two agree until somebody edits one of them.
- *
- * Deliberately not an attention badge: that spec reserves those for
- * work the reader can act on, and a manager cannot clear a refusal from this
- * screen.
- */
-export function syncProblems(
-  diagnostics: readonly BillingDeliveryDiagnostic[],
-): BillingDeliveryDiagnostic[] {
-  return diagnostics.filter(isSyncProblem)
-}
-
-export function countSyncProblems(diagnostics: readonly BillingDeliveryDiagnostic[]): number {
-  return syncProblems(diagnostics).length
-}
-
 /** How long ago, in the fewest words that are still exact enough to act on. */
 export function syncAge(receivedAt: string, now: Date): string {
   const minutes = Math.floor(Math.max(0, now.getTime() - Date.parse(receivedAt)) / 60_000)
@@ -63,25 +36,26 @@ export function syncAge(receivedAt: string, now: Date): string {
 }
 
 /**
- * The tablets' latest delivery, as one chip above the day's Stats
- * (billing-day-at-a-glance, design D3). It is a reading of now, not of the
- * chosen day, so it ignores the date: the newest received command's age, or
- * the refusals waiting, each listed beneath in plain words. The grouped counts
- * and the technical details it replaced were never read (owner, 2026-10-16).
+ * The tablets' sync, as one chip above the day's Stats (billing-day-at-a-glance,
+ * design D3): the newest received command's age, which is a reading of now and
+ * ignores the date, or the chosen day's refusals, each listed beneath in plain
+ * words. Both come from the day's one read, so the Stats tab's red count is the
+ * length of exactly this list (billing-history-reads-what-it-shows, design D2).
+ * The grouped counts and the technical details it replaced were never read
+ * (owner, 2026-10-16).
+ *
+ * Deliberately not an attention badge: that spec reserves those for work the
+ * reader can act on, and a manager cannot clear a refusal from this screen.
  */
 export function ManagerSyncStatus({
-  diagnostics,
+  problems,
+  newestAt: newest,
   now = new Date(),
 }: {
-  diagnostics: readonly BillingDeliveryDiagnostic[]
+  problems: readonly BillingDeliveryDiagnostic[]
+  newestAt: string | null
   now?: Date
 }) {
-  const problems = syncProblems(diagnostics)
-  const newest = diagnostics.reduce<string | null>(
-    (latest, item) => (latest === null || item.receivedAt > latest ? item.receivedAt : latest),
-    null,
-  )
-
   return (
     <section className="space-y-2" aria-label="Tablet sync">
       <p
