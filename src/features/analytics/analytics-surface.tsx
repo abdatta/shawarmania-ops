@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useContext, useEffect, useState, type ReactNode } from 'react'
 import { Info } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { PageHeader } from '@/components/layout/page-header'
@@ -14,10 +14,12 @@ import { resolveBusinessDate } from '@/domain'
 import { validAnalyticsDate, periodDays, shiftDate } from '@/domain/sales-analytics'
 import { windowsFor } from '@/domain/revenue-figures'
 import { useOutletScope } from '@/features/outlet-scope'
+import { SessionContext } from '@/session/context'
 import { AnalyticsRange } from './analytics-range'
 import { ItemsPanel } from './items-panel'
 import { AnalyticsControls } from './analytics-controls'
 import { ITEM_GRAINS, ITEM_METRICS, SALES_GRAINS, SALES_METRICS } from './analytics-trend'
+import { readRememberedRange, rememberRange, shortcutOf, shortcutRange } from './remembered-choices'
 import { SalesPanel } from './sales-panel'
 import { useAnalyticsClock } from './use-analytics-clock'
 
@@ -61,10 +63,23 @@ function OutletAnalytics({
   const today = cutover ? resolveBusinessDate(new Date(now), cutover) : null
   const ready = today !== null
   const clock = cutover ? { now, cutover } : undefined
-  const from = params.get('from') ?? (today ? shiftDate(today, -6) : '')
+  // With no dates in the address, the page opens on the shortcut last chosen
+  // on it (each-analytics-page-remembers-its-range-and-view, design D2).
+  const session = useContext(SessionContext)
+  const page = kind === 'items' ? 'items' : 'sales'
+  const remembered = readRememberedRange(session, page)
+  const opening =
+    !params.get('from') && today && remembered ? shortcutRange(remembered, today, oneRevenue) : null
+  const from = params.get('from') ?? (today ? (opening?.from ?? shiftDate(today, -6)) : '')
   const to = params.get('to') ?? today ?? ''
   const grain =
-    params.get('grain') === 'week' ? 'week' : params.get('grain') === 'hour' ? 'hour' : 'day'
+    params.get('grain') === 'week'
+      ? 'week'
+      : params.get('grain') === 'hour'
+        ? 'hour'
+        : params.get('grain')
+          ? 'day'
+          : (opening?.grain ?? 'day')
   const metric =
     params.get('metric') === 'orders'
       ? 'orders'
@@ -82,7 +97,10 @@ function OutletAnalytics({
   const [loaded, setLoaded] = useState<{ key: string; data: AnalyticsSnapshot } | null>(null)
   // Items always reads its previous period, for each dish's change with Compare off.
   const readPeriods = Math.max(kind === 'items' ? 2 : 1, Math.floor(periods))
-  const align = oneRevenue && params.get('align') === 'month' ? 'month' : 'equal'
+  const align =
+    oneRevenue && (params.get('align') === 'month' || (!params.get('align') && opening?.month))
+      ? 'month'
+      : 'equal'
   const cut = oneRevenue && today !== null && to === today
   const itemsCut = itemsCompared && today !== null && to === today
   const readKey = `${outletId}:${from}:${to}:${kind}:${readPeriods}${oneRevenue ? `:${align}:${cut}` : itemsCompared ? `:cut:${itemsCut}` : ''}`
@@ -139,6 +157,16 @@ function OutletAnalytics({
     if ('from' in values || 'to' in values) {
       setError(false)
       setRetry((n) => n + 1)
+      // Only a range a shortcut produces is remembered; a hand-picked one is a one-off.
+      const shortcut =
+        today &&
+        shortcutOf(
+          values.from ?? from,
+          values.to ?? to,
+          today,
+          oneRevenue && ('align' in values ? values.align === 'month' : align === 'month'),
+        )
+      if (shortcut) rememberRange(session, page, shortcut)
     }
     setParams((previous) => {
       const next = new URLSearchParams(previous)

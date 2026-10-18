@@ -552,6 +552,7 @@ function ItemTrend({
   return (
     <TrendCard
       id="items-trend"
+      page="items"
       title={metric === 'units' ? 'Items sold' : 'Dish revenue'}
       metric={metric}
       totals={totals}

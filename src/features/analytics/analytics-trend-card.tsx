@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useContext, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router'
 import { ChartLine, Download, Table2, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,13 @@ import {
   type ChartSeries,
 } from './analytics-chart'
 import { cumulativeSeries } from './analytics-trend'
+import {
+  readRememberedView,
+  rememberView,
+  type AnalyticsPage,
+  type TrendView,
+} from './remembered-choices'
+import { SessionContext } from '@/session/context'
 import { download } from './analytics-utils'
 import { ChangeChip, TrendChip, UsualChip } from './analytics-widgets'
 import { periodUnit, usualRange } from '@/domain/sales-analytics'
@@ -32,8 +39,6 @@ function VersusUsual({ current, earlier }: { current: number; earlier: number[] 
   )
 }
 
-type Show = 'chart' | 'cumulative' | 'table'
-
 /**
  * One trend, three readings: the chart, the same chart as running totals (a
  * running average on AOV), or a table holding every figure the chart draws —
@@ -43,6 +48,7 @@ type Show = 'chart' | 'cumulative' | 'table'
  */
 export function TrendCard({
   id,
+  page,
   title,
   metric,
   totals,
@@ -60,6 +66,8 @@ export function TrendCard({
   dropPaise = false,
 }: {
   id: string
+  /** Which page's remembered view this card opens on and keeps. */
+  page: AnalyticsPage
   title: string
   metric: ChartMetric
   /** Each compared period's total, current first. */
@@ -85,11 +93,14 @@ export function TrendCard({
    */
   dropPaise?: boolean
 }) {
-  // In the address, so the choice survives a reload and a change of subject.
+  // In the address, so the choice survives a reload and a change of subject;
+  // without one, the page's last choice for this person.
   const [params, setParams] = useSearchParams()
-  const shown = params.get('show')
-  const show: Show = shown === 'table' || shown === 'cumulative' ? shown : 'chart'
-  const setShow = (next: Show) =>
+  const session = useContext(SessionContext)
+  const shown = params.get('show') ?? readRememberedView(session, page)
+  const show: TrendView = shown === 'table' || shown === 'cumulative' ? shown : 'chart'
+  const setShow = (next: TrendView) => {
+    rememberView(session, page, next)
     setParams(
       (previous) => {
         const updated = new URLSearchParams(previous)
@@ -99,6 +110,7 @@ export function TrendCard({
       },
       { replace: true },
     )
+  }
   const rows = axis.map((label, index) => ({ label, index }))
   if (newestFirst) rows.reverse()
   const cell = (period: number, index: number) => series[period]?.points[index]?.value ?? null

@@ -597,6 +597,44 @@ for (const theme of ['light', 'dark']) {
   })
 }
 
+test('each analytics page reopens on its own last date shortcut and view', async ({
+  page,
+}, testInfo) => {
+  await page.clock.install({ time: new Date('2026-10-10T18:30:00+05:30') })
+  const { errors, backendRequests } = await openAnalytics(
+    page,
+    testInfo,
+    'light',
+    'demo/owner/analytics/items',
+  )
+  const shortcut = (name: string) => page.getByRole('button', { name, exact: true })
+  await expect(shortcut('Last 7 days')).toHaveAttribute('aria-pressed', 'true')
+  await shortcut('Last 1 day').click()
+  await expect(shortcut('Last 1 day')).toHaveAttribute('aria-pressed', 'true')
+  await shortcut('Table').click()
+  await expect(page.getByTestId('items-trend-table')).toBeVisible()
+  // Sales keeps its own choices: still the week, as a chart.
+  await page.getByRole('link', { name: 'Sales', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Sales', exact: true })).toBeVisible()
+  await expect(shortcut('Last 7 days')).toHaveAttribute('aria-pressed', 'true')
+  await expect(shortcut('Chart')).toHaveAttribute('aria-pressed', 'true')
+  await shortcut('Cumulative').click()
+  // Back on Items from the navigation, which names neither: the day, by hour, as a table.
+  await page.getByRole('link', { name: 'Items', exact: true }).click()
+  await expect(shortcut('Last 1 day')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('button', { name: /^Group by: Hour/ })).toBeVisible()
+  await expect(page.getByTestId('items-trend-table')).toBeVisible()
+  // Opening the app again keeps them too.
+  await page.goto('demo/owner/analytics/items')
+  await expect(shortcut('Last 1 day')).toHaveAttribute('aria-pressed', 'true')
+  await expect(shortcut('Table')).toHaveAttribute('aria-pressed', 'true')
+  await page.goto('demo/owner/analytics/sales')
+  await expect(shortcut('Last 7 days')).toHaveAttribute('aria-pressed', 'true')
+  await expect(shortcut('Cumulative')).toHaveAttribute('aria-pressed', 'true')
+  expect(errors).toEqual([])
+  expect(backendRequests).toEqual([])
+})
+
 test('analytics routes are absent for staff', async ({ page }) => {
   await page.goto('demo/staff/analytics/items')
   await expect(page.getByRole('heading', { name: 'Dishes', exact: true })).toHaveCount(0)

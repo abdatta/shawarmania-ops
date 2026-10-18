@@ -129,6 +129,7 @@ export function SalesPanel({
     <>
       <TrendCard
         id="sales-trend"
+        page="sales"
         title={labels[metric]}
         metric={metric}
         totals={totals}
