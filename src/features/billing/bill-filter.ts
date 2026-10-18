@@ -1,4 +1,13 @@
-import type { BillingBill } from '@/data-access/adapters'
+import type {
+  BillCustomer,
+  BillFilter,
+  BillingBill,
+  BillKind,
+  BillService,
+  BillSort,
+  BillTender,
+  BillTrait,
+} from '@/data-access/adapters'
 
 /**
  * The Bills tab's sort and filter (billing-day-at-a-glance, design D4).
@@ -10,25 +19,21 @@ import type { BillingBill } from '@/data-access/adapters'
  * groups they narrow; an empty group does not filter. Customer is one choice,
  * because its options overlap (Gold is a kind of With number) and contradict
  * (Without and Gold).
+ *
+ * The server applies the filter to Billing history's list
+ * (`billing_history_bills`, billing-history-reads-what-it-shows); what is here
+ * is the words, and the reference the demo adapter and the tests hold the
+ * server to.
  */
-export type BillSort = 'paid' | 'ordered' | 'amount' | 'wait'
-export type BillKind = 'paid' | 'cancelled' | 'cancelled_after_paid' | 'payment_undone'
-export type BillTender = 'cash' | 'upi' | 'mixed'
-export type BillCustomer = 'all' | 'with_number' | 'without' | 'gold'
-export type BillService = 'dine_in' | 'takeaway'
-export type BillTrait = 'discount' | 'payment_changed' | 'receipt_failed'
-
-export interface BillFilter {
-  sort: BillSort
-  /** Newest, highest or longest first: the order the reader reaches for. */
-  descending: boolean
-  kinds: readonly BillKind[]
-  tenders: readonly BillTender[]
-  customer: BillCustomer
-  services: readonly BillService[]
-  traits: readonly BillTrait[]
-  tablets: readonly string[]
-}
+export type {
+  BillCustomer,
+  BillFilter,
+  BillKind,
+  BillService,
+  BillSort,
+  BillTender,
+  BillTrait,
+} from '@/data-access/adapters'
 
 /** Today's list: every bill, newest payment first. */
 export const DEFAULT_BILL_FILTER: BillFilter = {
@@ -143,7 +148,8 @@ export function matchesBillFilter(bill: BillingBill, filter: BillFilter): boolea
   )
 }
 
-function sortKey(bill: BillingBill, sort: BillSort): number {
+/** A bill's place in a sort, the number the demo's page cursor carries. */
+export function sortKey(bill: BillingBill, sort: BillSort): number {
   switch (sort) {
     case 'paid':
       return Date.parse(bill.paidAt)

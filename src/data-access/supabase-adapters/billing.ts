@@ -14,6 +14,8 @@ import {
   BILLING_PAYMENT_METHODS,
   BillingActionError,
   CUSTOMER_BILLS_PAGE_SIZE,
+  MANAGER_BILL_ROWS_PAGE_SIZE,
+  type BillingBillRow,
   type BillingBillSummary,
   type BillDraft,
   type BillDiscountDraft,
@@ -25,7 +27,6 @@ import {
   type BillingBill,
   type BillingCommandAdapter,
   type BillingDayStats,
-  type BillingDeliveryDiagnostic,
   type BillingOrder,
   type CounterState,
   type CustomerTier,
@@ -34,7 +35,7 @@ import {
   type ServiceFacts,
   type ShiftBillingHistory,
 } from '../adapters'
-import type { Database, Tables } from '../database.types'
+import type { Database, Json, Tables } from '../database.types'
 import {
   AWAITING_ORDER_NUMBER,
   billTotals,
@@ -151,6 +152,69 @@ type EffectivePaymentRow = {
   method: PaymentAllocation['method']
   amount_paise: number
   revision: number
+}
+
+/** A row of `billing_history_bills` (billing-history-reads-what-it-shows, design D1). */
+type BillRowRead = {
+  id: string
+  bill_number: number
+  status: BillingBill['status']
+  void_kind: string | null
+  paid_at: string
+  ordered_at: string
+  total_paise: number
+  tender: BillingBill['paymentMethod']
+  payments: EffectivePaymentRow[]
+  payment_revision: number
+  biller_name: string | null
+  till_label: string | null
+  entry_source: string
+  recorded_after_shift_end: boolean
+  cursor: { k: number; n: number }
+}
+
+/** `billing_day_numbers`, as it answers (design D2). */
+type DayNumbersRead = {
+  cashPaise: number
+  upiPaise: number
+  settledBills: number
+  bills: number
+  stats: BillingDayStats
+  refusals: {
+    id: string
+    command_type: string
+    result_category: string
+    received_at: string
+    order_number: number | null
+  }[]
+  newestCommandAt: string | null
+  openOrders: number
+  unpaidPaise: number
+  tablets: string[]
+}
+
+function billRowView(row: BillRowRead): BillingBillRow {
+  return {
+    id: row.id,
+    billNumber: row.bill_number,
+    status: row.status,
+    voidKind: row.void_kind,
+    recordedAfterShiftEnd: row.recorded_after_shift_end,
+    paymentMethod: row.tender,
+    paidAt: row.paid_at,
+    orderedAt: row.ordered_at,
+    // As a bill's detail names a missing biller (`billView`).
+    billerName: row.biller_name ?? 'Counter operator',
+    tillLabel: row.till_label,
+    entrySource: row.entry_source === 'paper' ? 'paper' : 'counter',
+    totalPaise: row.total_paise,
+    payments: row.payments.map((payment) => ({
+      method: payment.method,
+      amountPaise: payment.amount_paise,
+    })),
+    paymentRevision: row.payment_revision,
+    cursor: row.cursor,
+  }
 }
 
 function allDishesTicked(lines: readonly BillLineDraft[]): boolean {
@@ -2400,36 +2464,71 @@ export function createSupabaseBillingAdapter(
       return shiftHistoryOf(bills)
     },
 
-    async listManagerHistory(filters) {
-      // One outlet-day: its payments and till labels are asked for by outlet and
-      // date, alongside the bills rather than one round trip after them
-      // (the-ledger-reads-fast-and-keeps-its-place, design D15).
-      //
-      // Started here, with `.then`, rather than handed on as a builder: a
-      // supabase-js query is not sent until something awaits it, and handing
-      // the bare builder to `readBills` meant it went out only after the bills
-      // came back — which on production made the screen slower, not faster.
-      const dayExtras =
-        filters.outletId && filters.businessDate
-          ? client
-              .rpc('billing_history_day_extras', {
-                p_outlet_id: filters.outletId,
-                p_business_date: filters.businessDate,
-              })
-              .then((response) => response)
-          : undefined
-      let bills = await readBills({
-        ...(dayExtras && { dayExtras }),
-        outletId: filters.outletId,
-        ...(filters.businessDate && { businessDate: filters.businessDate }),
-        ...(filters.status && filters.status !== 'all' && { status: filters.status }),
+    async listManagerBillRows(outletId, businessDate, filter, options) {
+      // One page of what the folded cards print, sorted and filtered by the
+      // server over the whole day (billing-history-reads-what-it-shows, D1).
+      const { data, error } = await client.rpc('billing_history_bills', {
+        p_outlet_id: outletId,
+        p_business_date: businessDate,
+        p_filter: filter as unknown as Json,
+        p_limit: options?.limit ?? MANAGER_BILL_ROWS_PAGE_SIZE,
+        ...(options?.after ? { p_after: options.after as unknown as Json } : {}),
       })
-      if (filters.paymentMethod && filters.paymentMethod !== 'all') {
-        bills = bills.filter((bill) =>
-          bill.payments.some((payment) => payment.method === filters.paymentMethod),
-        )
+      if (error) throw actionError(error, 'Could not load billing history.')
+      const page = data as unknown as { rows: BillRowRead[]; matching: number }
+      return { rows: page.rows.map(billRowView), matching: page.matching }
+    },
+
+    async readManagerBillDetail(row) {
+      // The row already holds the bill's effective payments and its tablet, so
+      // the one request here is the bill's own read; `readBills` would otherwise
+      // wait for it and then ask for both (design D3).
+      const effective: EffectivePaymentRow[] = row.payments.map((payment) => ({
+        bill_id: row.id,
+        outlet_id: '',
+        method: payment.method,
+        amount_paise: payment.amountPaise,
+        revision: row.paymentRevision,
+      }))
+      const labels = row.tillLabel ? [{ event_id: row.id, label: row.tillLabel }] : []
+      return (
+        (
+          await readBills({
+            id: row.id,
+            limit: 1,
+            dayExtras: Promise.resolve({ data: { payments: effective, labels }, error: null }),
+          })
+        )[0] ?? null
+      )
+    },
+
+    async readDayNumbers(outletId, businessDate) {
+      const { data, error } = await client.rpc('billing_day_numbers', {
+        p_outlet_id: outletId,
+        p_business_date: businessDate,
+      })
+      if (error) throw actionError(error, 'Could not load the day’s figures.')
+      const day = data as unknown as DayNumbersRead
+      const now = Date.now()
+      return {
+        cashPaise: day.cashPaise,
+        upiPaise: day.upiPaise,
+        settledBills: day.settledBills,
+        bills: day.bills,
+        stats: day.stats,
+        refusals: day.refusals.map((refusal) => ({
+          reference: refusal.id,
+          commandType: refusal.command_type,
+          resultCategory: refusal.result_category,
+          receivedAt: refusal.received_at,
+          ageMs: Math.max(0, now - Date.parse(refusal.received_at)),
+          orderNumber: refusal.order_number,
+        })),
+        newestCommandAt: day.newestCommandAt,
+        openOrders: day.openOrders,
+        unpaidPaise: day.unpaidPaise,
+        tablets: day.tablets,
       }
-      return bills
     },
 
     async listCustomerBills(outletId, customerId, offset) {
@@ -2511,20 +2610,20 @@ export function createSupabaseBillingAdapter(
       return bill
     },
 
-    listManagerOpenOrders(outletId) {
-      return readOrders(outletId, true)
-    },
-
-    async countManagerOpenOrders(outletId, businessDate) {
-      // The pipeline's own predicate, counted by the server: no rows travel.
-      let query = client
+    async listManagerOpenOrders(outletId, businessDate) {
+      // A manager's own read, not the counter's `readOrders`: one outlet-day,
+      // no outbox overlay (only a tablet has one), and no till names, which the
+      // Orders card never shows — the round trip the tab used to wait for
+      // after its orders (billing-history-reads-what-it-shows, design D5).
+      const { data, error } = await client
         .from('orders')
-        .select('id', { count: 'exact', head: true })
+        .select(ORDER_SELECT)
         .eq('outlet_id', outletId)
-      if (businessDate) query = query.eq('business_date', businessDate)
-      const { count, error } = await query.or(pipelineFilter(null)!)
-      if (error) throw actionError(error, 'Could not count open orders.')
-      return count ?? 0
+        .eq('business_date', businessDate)
+        .or(pipelineFilter(null)!)
+        .order('ordered_at', { ascending: false })
+      if (error) throw actionError(error, 'Could not load open orders.')
+      return (data as unknown as OrderReadRow[]).map((row) => orderView(row, null))
     },
 
     async managerCancelOrder(orderId, reason) {
@@ -2672,33 +2771,6 @@ export function createSupabaseBillingAdapter(
         resolvedBy: shift.personId,
         discardReason: reason.trim(),
       }
-    },
-
-    async listDeliveryDiagnostics(outletId): Promise<BillingDeliveryDiagnostic[]> {
-      const { data, error } = await client
-        .from('billing_commands')
-        .select('id, command_type, result_category, received_at, result')
-        .eq('outlet_id', outletId)
-        .order('received_at', { ascending: false })
-        .limit(100)
-      if (error) throw actionError(error, 'Could not load delivery diagnostics.')
-      return (data ?? []).map((row) => ({
-        reference: row.id,
-        commandType: row.command_type,
-        resultCategory: row.result_category,
-        receivedAt: row.received_at,
-        ageMs: Math.max(0, Date.now() - Date.parse(row.received_at)),
-        orderNumber: refusedOrderNumber(row.result),
-      }))
-    },
-
-    async readDayStats(outletId, businessDate): Promise<BillingDayStats> {
-      const { data, error } = await client.rpc('billing_day_stats', {
-        p_outlet_id: outletId,
-        p_business_date: businessDate,
-      })
-      if (error) throw actionError(error, 'Could not load the day’s stats.')
-      return data as unknown as BillingDayStats
     },
   }
 }

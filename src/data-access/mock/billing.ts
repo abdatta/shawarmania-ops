@@ -12,11 +12,15 @@ import {
   isTableNumber,
   ticketEditDeadlineMs,
 } from '@/domain'
+// The filter's one definition, which the server's list is held to (billing-history-reads-what-it-shows).
+import { applyBillFilter, dayTablets, sortKey } from '@/features/billing/bill-filter'
 import { demoReceiptToken, receiptLink } from '@/lib/receipt-link'
 
 import {
   BillingActionError,
   CUSTOMER_BILLS_PAGE_SIZE,
+  MANAGER_BILL_ROWS_PAGE_SIZE,
+  ROUTINE_COMMAND_RESULTS,
   BILLING_PAYMENT_METHODS,
   type BillDraft,
   type BillDiscountDraft,
@@ -1620,6 +1624,68 @@ export function createMockBillingAdapter(
     }
   }
 
+  /** One outlet-day's bills as the demo shows them, newest payment first. */
+  function dayBills(outletId: string, businessDate: string): BillingBill[] {
+    return store.bills
+      .filter((bill) => bill.outlet_id === outletId && bill.business_date === businessDate)
+      .sort((a, b) => b.paid_at.localeCompare(a.paid_at))
+      .map(billView)
+  }
+  // The database's definitions (design D3) over the demo's own rows. The demo
+  // keeps no log of revisions, so an order it changed stands for one revised.
+  function dayStats(outletId: string, businessDate: string): BillingDayStats {
+    const orders = store.orders.filter(
+      (order) => order.outlet_id === outletId && order.business_date === businessDate,
+    )
+    const ids = new Set(orders.map((order) => order.id))
+    const lastReady = new Map<string, number>()
+    for (const ready of store.dishWorkflow?.readies ?? []) {
+      if (ready.undone || !ids.has(ready.orderId)) continue
+      const at = Date.parse(ready.at)
+      lastReady.set(ready.orderId, Math.max(at, lastReady.get(ready.orderId) ?? at))
+    }
+    const toReady: number[] = []
+    const handover: number[] = []
+    for (const order of orders) {
+      const at = lastReady.get(order.id)
+      if (at === undefined || order.prepared_source === 'day_change') continue
+      const ordered = Date.parse(order.ordered_at)
+      if (at >= ordered) toReady.push((at - ordered) / 1000)
+      if (order.prepared_source === 'counter' && order.prepared_at) {
+        const prepared = Date.parse(order.prepared_at)
+        if (prepared >= at) handover.push((prepared - at) / 1000)
+      }
+    }
+    const mean = (values: number[]) =>
+      values.length === 0
+        ? null
+        : Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
+    const bills = store.bills.filter(
+      (bill) => bill.outlet_id === outletId && bill.business_date === businessDate,
+    )
+    return {
+      placed: orders.length,
+      updated: orders.filter((order) => order.changed_at !== null).length,
+      cancelled: orders.filter((order) => order.status === 'cancelled').length,
+      paid: orders.filter((order) => order.status === 'paid').length,
+      seen: new Set(
+        kitchenAcks()
+          .map((ack) => ack.orderId)
+          .filter((id) => ids.has(id)),
+      ).size,
+      ready: lastReady.size,
+      toReadySeconds: mean(toReady),
+      handoverSeconds: mean(handover),
+      billsCancelled: bills.filter(
+        (bill) => bill.status === 'void' && (bill.void_kind ?? 'manager_void') === 'manager_void',
+      ).length,
+      cancelledAfterPaid: bills.filter((bill) => bill.void_kind === 'cancelled_after_paid').length,
+      paymentUndone: bills.filter((bill) => bill.void_kind === 'counter_unpay').length,
+      paymentChanged: bills.filter((bill) => (paymentCorrections.get(bill.id)?.length ?? 0) > 0)
+        .length,
+    }
+  }
+
   const adapter: BillingAdapter = {
     advanceDemoPaymentClock(milliseconds) {
       paymentClockOffsetMs += Math.max(0, milliseconds)
@@ -2362,22 +2428,110 @@ export function createMockBillingAdapter(
       return { bills, totals }
     },
 
-    async listManagerHistory(filters) {
-      requireManager(filters.outletId)
-      return store.bills
-        .filter((bill) => bill.outlet_id === filters.outletId)
-        .filter((bill) => !filters.businessDate || bill.business_date === filters.businessDate)
-        .filter(
-          (bill) => !filters.status || filters.status === 'all' || bill.status === filters.status,
+    // `billing_history_bills`'s answer over the demo's own bills
+    // (billing-history-reads-what-it-shows, design D12): the filter as
+    // `bill-filter.ts` defines it, then the cursor.
+    async listManagerBillRows(outletId, businessDate, filter, options) {
+      requireManager(outletId)
+      const matching = applyBillFilter(dayBills(outletId, businessDate), filter)
+      const after = options?.after ?? null
+      const sign = filter.descending ? -1 : 1
+      const start =
+        after === null
+          ? 0
+          : matching.findIndex(
+              (bill) =>
+                sign * (sortKey(bill, filter.sort) - after.k) > 0 ||
+                (sortKey(bill, filter.sort) === after.k && sign * (bill.billNumber - after.n) > 0),
+            )
+      const limit = Math.min(Math.max(options?.limit ?? MANAGER_BILL_ROWS_PAGE_SIZE, 1), 100)
+      return {
+        rows:
+          start < 0
+            ? []
+            : matching.slice(start, start + limit).map((bill) => ({
+                id: bill.id,
+                billNumber: bill.billNumber,
+                status: bill.status,
+                voidKind: bill.voidKind,
+                recordedAfterShiftEnd: bill.recordedAfterShiftEnd ?? false,
+                paymentMethod: bill.paymentMethod,
+                paidAt: bill.paidAt,
+                orderedAt: bill.orderedAt,
+                billerName: bill.billerName,
+                tillLabel: bill.tillLabel,
+                entrySource: bill.entrySource ?? 'counter',
+                totalPaise: bill.totalPaise,
+                payments: bill.payments,
+                paymentRevision: bill.paymentRevision,
+                cursor: { k: sortKey(bill, filter.sort), n: bill.billNumber },
+              })),
+        matching: matching.length,
+      }
+    },
+
+    async readManagerBillDetail(row) {
+      return adapter.getBill(row.id)
+    },
+
+    // `billing_day_numbers` over the demo's rows (design D12): cash and UPI as
+    // `revenue_figures` counts them — settled bills, each tender's per-bill sum
+    // floored at zero — and the refusals of the outlet-day the command arrived on.
+    async readDayNumbers(outletId, businessDate) {
+      requireManager(outletId)
+      const bills = dayBills(outletId, businessDate)
+      const settled = bills.filter((bill) => bill.status === 'settled')
+      const tender = (method: PaymentAllocation['method']) =>
+        settled.reduce(
+          (sum, bill) =>
+            sum +
+            Math.max(
+              0,
+              bill.payments
+                .filter((payment) => payment.method === method)
+                .reduce((total, payment) => total + payment.amountPaise, 0),
+            ),
+          0,
         )
-        .sort((a, b) => b.paid_at.localeCompare(a.paid_at))
-        .map(billView)
-        .filter(
-          (bill) =>
-            !filters.paymentMethod ||
-            filters.paymentMethod === 'all' ||
-            bill.payments.some((payment) => payment.method === filters.paymentMethod),
-        )
+      const cutover =
+        outletFixtures.find((outlet) => outlet.id === outletId)?.business_day_cutover ?? '04:00'
+      const commands = store.billingCommands.filter((command) => command.outlet_id === outletId)
+      const orders = projectedOrders(outletId)
+        .filter(inPipeline)
+        .filter((order) => order.businessDate === businessDate)
+      const now = Date.now()
+      return {
+        cashPaise: tender('cash'),
+        upiPaise: tender('upi'),
+        settledBills: settled.length,
+        bills: bills.length,
+        stats: dayStats(outletId, businessDate),
+        refusals: commands
+          .filter(
+            (command) =>
+              !ROUTINE_COMMAND_RESULTS.has(command.result_category) &&
+              resolveBusinessDate(command.received_at, cutover) === businessDate,
+          )
+          .sort((left, right) => right.received_at.localeCompare(left.received_at))
+          .map((command) => ({
+            reference: command.id,
+            commandType: command.command_type,
+            resultCategory: command.result_category,
+            receivedAt: command.received_at,
+            ageMs: Math.max(0, now - Date.parse(command.received_at)),
+            orderNumber: mockRefusedOrderNumber(command.result),
+          })),
+        newestCommandAt: commands.reduce<string | null>(
+          (latest, command) =>
+            latest === null || command.received_at > latest ? command.received_at : latest,
+          null,
+        ),
+        openOrders: orders.length,
+        unpaidPaise: orders
+          .filter((order) => order.status === 'open')
+          .reduce((sum, order) => sum + order.totalPaise, 0),
+        tablets: dayTablets(bills),
+      }
     },
 
     async listCustomerBills(outletId, customerId, offset) {
@@ -2449,16 +2603,11 @@ export function createMockBillingAdapter(
       return billView(row)
     },
 
-    async listManagerOpenOrders(outletId) {
-      requireManager(outletId)
-      return projectedOrders(outletId).filter(inPipeline)
-    },
-
-    async countManagerOpenOrders(outletId, businessDate) {
+    async listManagerOpenOrders(outletId, businessDate) {
       requireManager(outletId)
       return projectedOrders(outletId)
         .filter(inPipeline)
-        .filter((order) => !businessDate || order.businessDate === businessDate).length
+        .filter((order) => order.businessDate === businessDate)
     },
 
     async managerCancelOrder(orderId, reason) {
@@ -2552,79 +2701,6 @@ export function createMockBillingAdapter(
       }
       attention.set(reference, updated)
       return updated
-    },
-
-    async listDeliveryDiagnostics(outletId) {
-      requireManager(outletId)
-      return store.billingCommands
-        .filter(
-          (command) => command.outlet_id === outletId && command.result_category !== 'applied',
-        )
-        .map((command) => ({
-          reference: command.id,
-          commandType: command.command_type,
-          resultCategory: command.result_category,
-          receivedAt: command.received_at,
-          ageMs: Math.max(0, Date.now() - new Date(command.received_at).getTime()),
-          orderNumber: mockRefusedOrderNumber(command.result),
-        }))
-    },
-
-    // The database's definitions (design D3) over the demo's own rows. The demo
-    // keeps no log of revisions, so an order it changed stands for one revised.
-    async readDayStats(outletId, businessDate): Promise<BillingDayStats> {
-      requireManager(outletId)
-      const orders = store.orders.filter(
-        (order) => order.outlet_id === outletId && order.business_date === businessDate,
-      )
-      const ids = new Set(orders.map((order) => order.id))
-      const lastReady = new Map<string, number>()
-      for (const ready of store.dishWorkflow?.readies ?? []) {
-        if (ready.undone || !ids.has(ready.orderId)) continue
-        const at = Date.parse(ready.at)
-        lastReady.set(ready.orderId, Math.max(at, lastReady.get(ready.orderId) ?? at))
-      }
-      const toReady: number[] = []
-      const handover: number[] = []
-      for (const order of orders) {
-        const at = lastReady.get(order.id)
-        if (at === undefined || order.prepared_source === 'day_change') continue
-        const ordered = Date.parse(order.ordered_at)
-        if (at >= ordered) toReady.push((at - ordered) / 1000)
-        if (order.prepared_source === 'counter' && order.prepared_at) {
-          const prepared = Date.parse(order.prepared_at)
-          if (prepared >= at) handover.push((prepared - at) / 1000)
-        }
-      }
-      const mean = (values: number[]) =>
-        values.length === 0
-          ? null
-          : Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
-      const bills = store.bills.filter(
-        (bill) => bill.outlet_id === outletId && bill.business_date === businessDate,
-      )
-      return {
-        placed: orders.length,
-        updated: orders.filter((order) => order.changed_at !== null).length,
-        cancelled: orders.filter((order) => order.status === 'cancelled').length,
-        paid: orders.filter((order) => order.status === 'paid').length,
-        seen: new Set(
-          kitchenAcks()
-            .map((ack) => ack.orderId)
-            .filter((id) => ids.has(id)),
-        ).size,
-        ready: lastReady.size,
-        toReadySeconds: mean(toReady),
-        handoverSeconds: mean(handover),
-        billsCancelled: bills.filter(
-          (bill) => bill.status === 'void' && (bill.void_kind ?? 'manager_void') === 'manager_void',
-        ).length,
-        cancelledAfterPaid: bills.filter((bill) => bill.void_kind === 'cancelled_after_paid')
-          .length,
-        paymentUndone: bills.filter((bill) => bill.void_kind === 'counter_unpay').length,
-        paymentChanged: bills.filter((bill) => (paymentCorrections.get(bill.id)?.length ?? 0) > 0)
-          .length,
-      }
     },
   }
   return adapter

@@ -6,7 +6,7 @@ import { AWAITING_ORDER_NUMBER } from '@/domain'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { CUSTOMER_BILLS_PAGE_SIZE } from '../adapters'
+import { CUSTOMER_BILLS_PAGE_SIZE, MANAGER_BILL_ROWS_PAGE_SIZE } from '../adapters'
 import type { BillDraft, BillingOrder, PaymentMethod } from '../adapters'
 import type { Database } from '../database.types'
 import {
@@ -179,6 +179,7 @@ function managerHistoryClient(
         return query
       },
       eq: () => query,
+      limit: () => query,
       order: () => Promise.resolve({ data: [bill], error: null }),
     }
     return query
@@ -195,6 +196,7 @@ function managerHistoryClient(
     } as unknown as SupabaseClient<Database>,
     selected,
     rpc,
+    from,
   }
 }
 
@@ -206,7 +208,7 @@ describe('the live tablet acceptance boundary', () => {
     const { client, selected, rpc } = managerHistoryClient()
     const billing = createSupabaseBillingAdapter(client)
 
-    await expect(billing.listManagerHistory({ outletId: 'outlet-1' })).resolves.toMatchObject([
+    await expect(billing.getBill('bill-1').then((bill) => [bill])).resolves.toMatchObject([
       {
         id: 'bill-1',
         billerName: 'Demo Biller',
@@ -234,7 +236,7 @@ describe('the live tablet acceptance boundary', () => {
     })
     const billing = createSupabaseBillingAdapter(client)
 
-    const [bill] = await billing.listManagerHistory({ outletId: 'outlet-1' })
+    const bill = await billing.getBill('bill-1')
     expect(bill).toMatchObject({
       entrySource: 'paper',
       enteredByName: 'Demo Manager',
@@ -249,67 +251,44 @@ describe('the live tablet acceptance boundary', () => {
    * object rather than an array. Treating it as an array threw at read time and
    * emptied the whole surface, so these three cases pin the shape.
    */
-  it('asks for one day’s payments and till labels alongside its bills, not after them', async () => {
-    const { client, rpc } = managerHistoryClient()
-    // A supabase-js query goes out only when something awaits it, so the mock
-    // is lazy in the same way: `sent` flips when the request is actually made.
-    let sent = false
-    rpc.mockImplementation(((name: string) =>
-      name === 'billing_history_day_extras'
-        ? {
-            then: (resolve: (value: unknown) => unknown) => {
-              sent = true
-              return Promise.resolve({
-                data: {
-                  payments: [
-                    {
-                      bill_id: 'bill-1',
-                      outlet_id: 'outlet-1',
-                      method: 'cash',
-                      amount_paise: 13900,
-                      revision: 0,
-                    },
-                  ],
-                  labels: [{ event_id: 'bill-1', label: 'Historical counter name' }],
-                },
-                error: null,
-              }).then(resolve)
-            },
-          }
-        : Promise.resolve({ data: [], error: null })) as never)
-    // The bills answer only when the test says so.
-    let answerBills!: () => void
-    const billsAnswered = new Promise<void>((resolve) => {
-      answerBills = resolve
-    })
-    const from = client.from.bind(client)
-    ;(client as unknown as { from: unknown }).from = (table: string) => {
-      const query = from(table as never) as unknown as Record<string, unknown>
-      if (table !== 'bills') return query
-      const order = query['order'] as () => Promise<unknown>
-      query['order'] = () => billsAnswered.then(() => order())
-      return query
-    }
+  it('opens a listed row with one request: its payments and tablet are the row’s', async () => {
+    const { client, rpc, from } = managerHistoryClient()
     const billing = createSupabaseBillingAdapter(client)
 
-    const history = billing.listManagerHistory({
-      outletId: 'outlet-1',
-      businessDate: '2026-09-22',
+    const bill = await billing.readManagerBillDetail({
+      id: 'bill-1',
+      billNumber: 42,
+      status: 'settled',
+      voidKind: null,
+      recordedAfterShiftEnd: false,
+      paymentMethod: 'mixed',
+      paidAt: '2026-08-11T12:05:00.000Z',
+      orderedAt: '2026-08-11T12:00:00.000Z',
+      billerName: 'Demo Biller',
+      tillLabel: 'Historical counter name',
+      entrySource: 'counter',
+      totalPaise: 13_900,
+      payments: [
+        { method: 'cash', amountPaise: 3_900 },
+        { method: 'upi', amountPaise: 10_000 },
+      ],
+      paymentRevision: 1,
+      cursor: { k: 1, n: 42 },
     })
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    // Sent before the bills came back: that is the whole point of the read
-    // (the-ledger-reads-fast-and-keeps-its-place, design D15).
-    expect(sent).toBe(true)
-    answerBills()
 
-    await expect(history).resolves.toMatchObject([
-      { id: 'bill-1', tillLabel: 'Historical counter name' },
-    ])
-    expect(rpc).toHaveBeenCalledOnce()
-    expect(rpc).toHaveBeenCalledWith('billing_history_day_extras', {
-      p_outlet_id: 'outlet-1',
-      p_business_date: '2026-09-22',
+    expect(bill).toMatchObject({
+      id: 'bill-1',
+      tillLabel: 'Historical counter name',
+      paymentMethod: 'mixed',
+      paymentRevision: 1,
+      payments: [
+        { method: 'cash', amountPaise: 3_900 },
+        { method: 'upi', amountPaise: 10_000 },
+      ],
     })
+    // The bill's own read, and nothing after it (billing-history-reads-what-it-shows, D3).
+    expect(from.mock.calls.map(([table]) => table)).toEqual(['bills'])
+    expect(rpc).not.toHaveBeenCalled()
   })
 
   it('resolves a receipt link from the to-one embed PostgREST actually returns', async () => {
@@ -319,7 +298,7 @@ describe('the live tablet acceptance boundary', () => {
     // Built from `RECEIPT_BASE_URL` rather than written out, because the base is
     // configurable -- pointing a local `.env` at a Worker for browsing must not
     // turn this red. The claim here is that the token becomes a link at all.
-    await expect(billing.listManagerHistory({ outletId: 'outlet-1' })).resolves.toMatchObject([
+    await expect(billing.getBill('bill-1').then((bill) => [bill])).resolves.toMatchObject([
       { receiptUrl: `${RECEIPT_BASE_URL}/bill?t=Ab3-_x9QzT` },
     ])
     expect(selected[0]).toContain('bill_public_links(token, revoked_at)')
@@ -333,7 +312,7 @@ describe('the live tablet acceptance boundary', () => {
       },
     ])
     const billing = createSupabaseBillingAdapter(client)
-    await expect(billing.listManagerHistory({ outletId: 'outlet-1' })).resolves.toMatchObject([
+    await expect(billing.getBill('bill-1').then((bill) => [bill])).resolves.toMatchObject([
       { receiptDelivery: { state: 'unknown', failureCode: 'submission_unknown' } },
     ])
     expect(selected[0]).toContain('bill_receipt_deliveries(state, failure_code)')
@@ -347,7 +326,7 @@ describe('the live tablet acceptance boundary', () => {
     })
     const billing = createSupabaseBillingAdapter(client)
 
-    await expect(billing.listManagerHistory({ outletId: 'outlet-1' })).resolves.toMatchObject([
+    await expect(billing.getBill('bill-1').then((bill) => [bill])).resolves.toMatchObject([
       { receiptUrl: null },
     ])
   })
@@ -356,7 +335,7 @@ describe('the live tablet acceptance boundary', () => {
     const { client } = managerHistoryClient(null)
     const billing = createSupabaseBillingAdapter(client)
 
-    await expect(billing.listManagerHistory({ outletId: 'outlet-1' })).resolves.toMatchObject([
+    await expect(billing.getBill('bill-1').then((bill) => [bill])).resolves.toMatchObject([
       { receiptUrl: null },
     ])
   })
@@ -2029,5 +2008,205 @@ describe('a peek draws what the tablet holds, with no request', () => {
       (await billing.peekOpenOrders('outlet-1'))?.find((order) => order.id === orderInput.clientId)
         ?.status,
     ).toBe('open')
+  })
+})
+
+describe('Billing history’s reads (billing-history-reads-what-it-shows)', () => {
+  const filter = {
+    sort: 'amount' as const,
+    descending: false,
+    kinds: ['paid' as const],
+    tenders: [],
+    customer: 'all' as const,
+    services: [],
+    traits: [],
+    tablets: ['Till A'],
+  }
+
+  it('asks the server for a page of rows with the filter and the cursor, and maps them', async () => {
+    const rpc = vi.fn(async () => ({
+      data: {
+        rows: [
+          {
+            id: 'bill-1',
+            bill_number: 7,
+            status: 'settled',
+            void_kind: null,
+            paid_at: '2026-10-17T07:00:00Z',
+            ordered_at: '2026-10-17T06:55:00Z',
+            total_paise: 25_000,
+            tender: 'mixed',
+            payments: [
+              {
+                bill_id: 'bill-1',
+                outlet_id: 'o',
+                method: 'cash',
+                amount_paise: 5_000,
+                revision: 0,
+              },
+              {
+                bill_id: 'bill-1',
+                outlet_id: 'o',
+                method: 'upi',
+                amount_paise: 20_000,
+                revision: 0,
+              },
+            ],
+            payment_revision: 0,
+            biller_name: null,
+            till_label: 'Till A',
+            entry_source: 'counter',
+            recorded_after_shift_end: false,
+            cursor: { k: 25_000, n: 7 },
+          },
+        ],
+        matching: 31,
+      },
+      error: null,
+    }))
+    const billing = createSupabaseBillingAdapter(clientWithRpc(rpc))
+
+    const page = await billing.listManagerBillRows('outlet-1', '2026-10-17', filter, {
+      after: { k: 20_000, n: 3 },
+    })
+
+    expect(rpc).toHaveBeenCalledWith('billing_history_bills', {
+      p_outlet_id: 'outlet-1',
+      p_business_date: '2026-10-17',
+      p_filter: filter,
+      p_limit: MANAGER_BILL_ROWS_PAGE_SIZE,
+      p_after: { k: 20_000, n: 3 },
+    })
+    expect(page).toEqual({
+      matching: 31,
+      rows: [
+        {
+          id: 'bill-1',
+          billNumber: 7,
+          status: 'settled',
+          voidKind: null,
+          recordedAfterShiftEnd: false,
+          paymentMethod: 'mixed',
+          paidAt: '2026-10-17T07:00:00Z',
+          orderedAt: '2026-10-17T06:55:00Z',
+          billerName: 'Counter operator',
+          tillLabel: 'Till A',
+          entrySource: 'counter',
+          totalPaise: 25_000,
+          payments: [
+            { method: 'cash', amountPaise: 5_000 },
+            { method: 'upi', amountPaise: 20_000 },
+          ],
+          paymentRevision: 0,
+          cursor: { k: 25_000, n: 7 },
+        },
+      ],
+    })
+  })
+
+  it('sends no cursor for the first page', async () => {
+    const rpc = vi.fn(async () => ({ data: { rows: [], matching: 0 }, error: null }))
+    const billing = createSupabaseBillingAdapter(clientWithRpc(rpc))
+    await billing.listManagerBillRows('outlet-1', '2026-10-17', filter, { limit: 12 })
+    expect(rpc).toHaveBeenCalledWith('billing_history_bills', {
+      p_outlet_id: 'outlet-1',
+      p_business_date: '2026-10-17',
+      p_filter: filter,
+      p_limit: 12,
+    })
+  })
+
+  it('reads the day in numbers, its refusals as diagnostics', async () => {
+    const stats = {
+      placed: 1,
+      updated: 0,
+      cancelled: 0,
+      paid: 1,
+      seen: 1,
+      ready: 1,
+      toReadySeconds: 60,
+      handoverSeconds: null,
+      billsCancelled: 0,
+      cancelledAfterPaid: 0,
+      paymentUndone: 0,
+      paymentChanged: 0,
+    }
+    const rpc = vi.fn(async () => ({
+      data: {
+        cashPaise: 1_000,
+        upiPaise: 2_000,
+        settledBills: 2,
+        bills: 3,
+        stats,
+        refusals: [
+          {
+            id: 'command-1',
+            command_type: 'revise_order',
+            result_category: 'order_not_open',
+            received_at: '2026-10-17T07:00:00Z',
+            order_number: 77,
+          },
+        ],
+        newestCommandAt: '2026-10-18T07:00:00Z',
+        openOrders: 4,
+        unpaidPaise: 900,
+        tablets: ['Till A'],
+      },
+      error: null,
+    }))
+    const billing = createSupabaseBillingAdapter(clientWithRpc(rpc))
+
+    const day = await billing.readDayNumbers('outlet-1', '2026-10-17')
+    expect(rpc).toHaveBeenCalledWith('billing_day_numbers', {
+      p_outlet_id: 'outlet-1',
+      p_business_date: '2026-10-17',
+    })
+    expect(day).toMatchObject({
+      cashPaise: 1_000,
+      upiPaise: 2_000,
+      settledBills: 2,
+      bills: 3,
+      stats,
+      newestCommandAt: '2026-10-18T07:00:00Z',
+      openOrders: 4,
+      unpaidPaise: 900,
+      tablets: ['Till A'],
+    })
+    expect(day.refusals).toEqual([
+      expect.objectContaining({
+        reference: 'command-1',
+        commandType: 'revise_order',
+        resultCategory: 'order_not_open',
+        receivedAt: '2026-10-17T07:00:00Z',
+        orderNumber: 77,
+      }),
+    ])
+  })
+
+  it('reads one day’s open orders with no till names after them', async () => {
+    const filters: [string, unknown][] = []
+    const query = {
+      select: () => query,
+      eq: (column: string, value: unknown) => {
+        filters.push([column, value])
+        return query
+      },
+      or: (value: string) => {
+        filters.push(['or', value])
+        return query
+      },
+      order: () => Promise.resolve({ data: [], error: null }),
+    }
+    const rpc = vi.fn()
+    const client = { from: vi.fn(() => query), rpc } as unknown as SupabaseClient<Database>
+    const billing = createSupabaseBillingAdapter(client)
+
+    await expect(billing.listManagerOpenOrders('outlet-1', '2026-10-17')).resolves.toEqual([])
+    expect(filters).toEqual([
+      ['outlet_id', 'outlet-1'],
+      ['business_date', '2026-10-17'],
+      ['or', 'status.eq.open,and(status.eq.paid,prepared_at.is.null)'],
+    ])
+    expect(rpc).not.toHaveBeenCalled()
   })
 })

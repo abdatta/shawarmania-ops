@@ -1711,6 +1711,82 @@ export type BillingBillSummary = Pick<
 >
 
 /**
+ * The Bills tab's sort and filter (billing-day-at-a-glance, design D4), as the
+ * server applies it (billing-history-reads-what-it-shows, design D1). Within a
+ * group choices widen; across groups they narrow; an empty group does not
+ * filter. `bill-filter.ts` holds the words and the reference implementation.
+ */
+export type BillSort = 'paid' | 'ordered' | 'amount' | 'wait'
+export type BillKind = 'paid' | 'cancelled' | 'cancelled_after_paid' | 'payment_undone'
+export type BillTender = 'cash' | 'upi' | 'mixed'
+export type BillCustomer = 'all' | 'with_number' | 'without' | 'gold'
+export type BillService = 'dine_in' | 'takeaway'
+export type BillTrait = 'discount' | 'payment_changed' | 'receipt_failed'
+
+export interface BillFilter {
+  sort: BillSort
+  /** Newest, highest or longest first: the order the reader reaches for. */
+  descending: boolean
+  kinds: readonly BillKind[]
+  tenders: readonly BillTender[]
+  customer: BillCustomer
+  services: readonly BillService[]
+  traits: readonly BillTrait[]
+  tablets: readonly string[]
+}
+
+/**
+ * Where the next page of rows starts: the last row's sort key and bill number
+ * (billing-history-reads-what-it-shows, design D1). Opaque to a surface.
+ */
+export interface BillingRowCursor {
+  k: number
+  n: number
+}
+
+/**
+ * A bill as Billing history's list holds it: what its folded card prints, and
+ * what its detail needs from the list so opening it costs one read — its
+ * effective payments and order time. No customer name or phone.
+ */
+export type BillingBillRow = BillingBillSummary &
+  Pick<BillingBill, 'orderedAt' | 'paymentRevision' | 'payments'> & {
+    cursor: BillingRowCursor
+  }
+
+export interface BillingBillRowPage {
+  rows: BillingBillRow[]
+  /** How many bills of the outlet-day the filter keeps, across every page. */
+  matching: number
+}
+
+/** Rows per page of Billing history: a phone's screenful and a margin. */
+export const MANAGER_BILL_ROWS_PAGE_SIZE = 30
+
+/**
+ * Everything Billing history shows about one outlet-day as a figure, in one read
+ * (billing-history-reads-what-it-shows, design D2). Cash and UPI are #76's
+ * revenue definition, the one Overview and the Ledger read.
+ */
+export interface BillingDayNumbers {
+  cashPaise: number
+  upiPaise: number
+  /** AOV's divisor. */
+  settledBills: number
+  /** Every bill of the day, whatever its state: the Bills tab's total. */
+  bills: number
+  stats: BillingDayStats
+  /** The day's refused commands, newest first: the sync problems. */
+  refusals: BillingDeliveryDiagnostic[]
+  /** The outlet's newest received command, whatever day: the chip's age. */
+  newestCommandAt: string | null
+  openOrders: number
+  unpaidPaise: number
+  /** The day's billing tablets by name, for the Filter sheet. */
+  tablets: string[]
+}
+
+/**
  * One page of a customer's bills at one outlet (the-card-lists-every-bill),
  * as summaries. `next` is where the following page starts, or null at the end.
  */
@@ -1749,6 +1825,18 @@ export interface BillingDayStats {
   paymentUndone: number
   paymentChanged: number
 }
+
+/**
+ * The command results that are not a sync problem. Every other result is a
+ * refusal, and `billing_day_numbers` lists it by the same rule.
+ */
+export const ROUTINE_COMMAND_RESULTS: ReadonlySet<string> = new Set([
+  'accepted',
+  'replay',
+  'applied',
+  'corrected',
+  'discarded',
+])
 
 /** Non-identifying delivery metadata safe to show on a manager phone. */
 export interface BillingDeliveryDiagnostic {
@@ -1896,7 +1984,25 @@ export interface BillingAdapter {
    * this shift on this page and no resume record.
    */
   peekShiftHistory(shiftId: string): Promise<ShiftBillingHistory | null>
-  listManagerHistory(filters: BillingHistoryFilters): Promise<BillingBill[]>
+  /**
+   * One page of an outlet-day's bills for Billing history, sorted and filtered
+   * by the server over the whole day (billing-history-reads-what-it-shows,
+   * design D1). `after` is the last row's cursor; `limit` defaults to
+   * `MANAGER_BILL_ROWS_PAGE_SIZE` and is capped at 100.
+   */
+  listManagerBillRows(
+    outletId: string,
+    businessDate: string,
+    filter: BillFilter,
+    options?: { after?: BillingRowCursor | null; limit?: number },
+  ): Promise<BillingBillRowPage>
+  /** The outlet-day's figures, sync and open orders in one read (design D2). */
+  readDayNumbers(outletId: string, businessDate: string): Promise<BillingDayNumbers>
+  /**
+   * A listed row's whole bill, in one request: its payments and tablet are the
+   * row's own, so only the rest is read (design D3).
+   */
+  readManagerBillDetail(row: BillingBillRow): Promise<BillingBill | null>
   /**
    * One customer's bills at one outlet, newest first, one page of summaries
    * from `offset` (the-card-lists-every-bill): the history on their Customers
@@ -1909,14 +2015,12 @@ export interface BillingAdapter {
   listCustomerBills(outletId: string, customerId: string, offset: number): Promise<CustomerBillPage>
   getBill(billId: string): Promise<BillingBill | null>
   voidBill(billId: string, reason: string): Promise<BillingBill>
-  listManagerOpenOrders(outletId: string): Promise<BillingOrder[]>
   /**
-   * How many orders `listManagerOpenOrders` would list, without reading them:
-   * the billing history's tab count while the orders themselves are not shown
-   * (each-dish-is-ticked-off, design R11). With a business date,
-   * only that day's (billing-day-at-a-glance, design D2).
+   * One outlet-day's open orders for Billing history: open, or paid and not yet
+   * prepared. A manager's own read, with no tablet overlay and no till names
+   * (billing-history-reads-what-it-shows, design D5).
    */
-  countManagerOpenOrders(outletId: string, businessDate?: string): Promise<number>
+  listManagerOpenOrders(outletId: string, businessDate: string): Promise<BillingOrder[]>
   managerCancelOrder(orderId: string, reason: string): Promise<BillingOrder>
   reviewAttribution(
     billId: string,
@@ -1927,9 +2031,6 @@ export interface BillingAdapter {
   listAttention(): Promise<BillingAttentionItem[]>
   correctAttention(reference: string, correctionId: string): Promise<BillingAttentionItem>
   discardAttention(reference: string, reason: string): Promise<BillingAttentionItem>
-  listDeliveryDiagnostics(outletId: string): Promise<BillingDeliveryDiagnostic[]>
-  /** The Stats tab's figures for one outlet-day, in one read (billing-day-at-a-glance). */
-  readDayStats(outletId: string, businessDate: string): Promise<BillingDayStats>
   /** Demo-only clock control; live adapters deliberately omit it. */
   advanceDemoPaymentClock?(milliseconds: number): void
 }

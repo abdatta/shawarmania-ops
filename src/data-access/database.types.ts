@@ -5063,6 +5063,10 @@ export type Database = {
         Args: { p_payload: Json }
         Returns: boolean
       }
+      billing_day_numbers: {
+        Args: { p_business_date: string; p_outlet_id: string }
+        Returns: Json
+      }
       billing_day_readiness: {
         Args: { p_business_date: string; p_outlet_id: string }
         Returns: Json
@@ -5110,6 +5114,16 @@ export type Database = {
           p_command_id: string
           p_payment_business_date?: string
           p_result: Json
+        }
+        Returns: Json
+      }
+      billing_history_bills: {
+        Args: {
+          p_after?: Json
+          p_business_date: string
+          p_filter?: Json
+          p_limit?: number
+          p_outlet_id: string
         }
         Returns: Json
       }

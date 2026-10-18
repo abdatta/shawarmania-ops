@@ -30,8 +30,12 @@ function demo(role: 'super_admin' | 'biller' = 'biller') {
 describe('the demo counter shift', () => {
   it('keeps historical bill labels when a tablet is renamed', async () => {
     const { data, adapters } = demo('super_admin')
-    const before = await adapters.billing.listManagerHistory({ outletId: DEMO_OUTLET_ID })
-    const labelledBill = before.find((bill) => bill.tillLabel === 'Counter tablet')
+    const before = await Promise.all(
+      data.store.bills
+        .filter((bill) => bill.outlet_id === DEMO_OUTLET_ID)
+        .map((bill) => adapters.billing.getBill(bill.id)),
+    )
+    const labelledBill = before.find((bill) => bill?.tillLabel === 'Counter tablet')
     expect(labelledBill).toBeDefined()
 
     const intervalsBefore = data.store.counterDeviceHistory.length
@@ -45,10 +49,10 @@ describe('the demo counter shift', () => {
     const liveShift = (await adapters.counter.listLiveShifts()).find(
       (shift) => shift.deviceId === DEMO_COUNTER_DEVICE_ID,
     )
-    const after = await adapters.billing.listManagerHistory({ outletId: DEMO_OUTLET_ID })
+    const after = await adapters.billing.getBill(labelledBill!.id)
     expect(current?.label).toBe('Kalyani Counter 2')
     expect(liveShift?.deviceLabel).toBe('Kalyani Counter 2')
-    expect(after.find((bill) => bill.id === labelledBill!.id)?.tillLabel).toBe('Counter tablet')
+    expect(after?.tillLabel).toBe('Counter tablet')
     expect(data.store.counterDeviceHistory).toHaveLength(intervalsBefore + 1)
 
     // Saving an unchanged form is deliberately not a new historical identity.

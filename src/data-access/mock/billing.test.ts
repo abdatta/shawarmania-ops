@@ -15,7 +15,9 @@ import { seedDishWorkflow } from './dish-workflow'
 import { DEMO_OPEN_SHIFT_ID } from './fixtures/billing'
 import { MENU_ITEM_CLASSIC_ID, MENU_ITEM_MAYO_ID } from './fixtures/menu'
 import { personaFixtures } from './fixtures/personas'
+import { outletFixtures } from './fixtures/outlets'
 import { createDemoStore, DEMO_OUTLET_ID, type DemoStore } from './store'
+import { applyBillFilter, DEFAULT_BILL_FILTER } from '@/features/billing/bill-filter'
 
 /**
  * The mock counter has one job beyond looking right: to behave the way
@@ -600,12 +602,14 @@ describe('mock billing adapter', () => {
       outletIds: [DEMO_OUTLET_ID],
     })
 
-    const history = await manager.listManagerHistory({ outletId: DEMO_OUTLET_ID })
-    expect(history.length).toBeGreaterThan(0)
-    expect(history[0]?.billerName).toMatch(/^Demo /)
-    await expect(manager.listManagerHistory({ outletId: 'another-outlet' })).rejects.toThrow(
-      /not manage/,
-    )
+    const day = store.bills[0]!.business_date
+    const history = await manager.listManagerBillRows(DEMO_OUTLET_ID, day, DEFAULT_BILL_FILTER)
+    expect(history.rows.length).toBeGreaterThan(0)
+    expect(history.rows[0]?.billerName).toMatch(/^Demo /)
+    await expect(
+      manager.listManagerBillRows('another-outlet', day, DEFAULT_BILL_FILTER),
+    ).rejects.toThrow(/not manage/)
+    await expect(manager.readDayNumbers('another-outlet', day)).rejects.toThrow(/not manage/)
   })
 
   it('keeps needs-attention resolution on the originating tablet and diagnostics read-only', async () => {
@@ -626,10 +630,18 @@ describe('mock billing adapter', () => {
     expect(corrected.linkedCorrectionId).not.toBe(corrected.reference)
     expect(corrected.refusedTrace).toMatch(/server refused/)
 
-    const diagnostics = await manager.listDeliveryDiagnostics(DEMO_OUTLET_ID)
-    expect(diagnostics[0]).toEqual(expect.objectContaining({ reference: item!.reference }))
-    expect(diagnostics[0]).not.toHaveProperty('refusedTrace')
-    expect(diagnostics[0]).not.toHaveProperty('customerPhone')
+    // The refusal is listed under the business day it arrived on.
+    const command = store.billingCommands.find((candidate) => candidate.id === item!.reference)!
+    const cutover = outletFixtures.find(
+      (outlet) => outlet.id === DEMO_OUTLET_ID,
+    )!.business_day_cutover
+    const { refusals } = await manager.readDayNumbers(
+      DEMO_OUTLET_ID,
+      resolveBusinessDate(command.received_at, cutover),
+    )
+    expect(refusals[0]).toEqual(expect.objectContaining({ reference: item!.reference }))
+    expect(refusals[0]).not.toHaveProperty('refusedTrace')
+    expect(refusals[0]).not.toHaveProperty('customerPhone')
     await expect(manager.correctAttention(item!.reference, 'different')).rejects.toThrow(
       /originating tablet/,
     )
@@ -1198,5 +1210,105 @@ describe('the demo’s peeks', () => {
     expect(await adapter.peekShiftHistory(DEMO_OPEN_SHIFT_ID)).toEqual(
       await adapter.listShiftHistory(DEMO_OPEN_SHIFT_ID),
     )
+  })
+})
+
+describe('the demo’s Billing history reads (billing-history-reads-what-it-shows)', () => {
+  function manager(store: DemoStore) {
+    return createMockBillingAdapter(store, {
+      role: 'franchise_admin',
+      userId: personaFixtures.franchise_admin.profile.id,
+      outletIds: [DEMO_OUTLET_ID],
+    })
+  }
+
+  /** The busiest demo day, and its bills in full, as the reference reads them. */
+  async function busiestDay(store: DemoStore, adapter: ReturnType<typeof manager>) {
+    const counts = new Map<string, number>()
+    for (const bill of store.bills.filter((candidate) => candidate.outlet_id === DEMO_OUTLET_ID))
+      counts.set(bill.business_date, (counts.get(bill.business_date) ?? 0) + 1)
+    const [day] = [...counts.entries()].sort((left, right) => right[1] - left[1])[0]!
+    const bills = await Promise.all(
+      store.bills
+        .filter((bill) => bill.outlet_id === DEMO_OUTLET_ID && bill.business_date === day)
+        .map((bill) => adapter.getBill(bill.id)),
+    )
+    return { day, bills: bills.filter((bill) => bill !== null) }
+  }
+
+  async function walk(
+    adapter: ReturnType<typeof manager>,
+    day: string,
+    filter: typeof DEFAULT_BILL_FILTER,
+    limit: number,
+  ) {
+    const ids: string[] = []
+    let after = null
+    for (;;) {
+      const page = await adapter.listManagerBillRows(DEMO_OUTLET_ID, day, filter, { after, limit })
+      if (page.rows.length === 0) return ids
+      ids.push(...page.rows.map((row) => row.id))
+      after = page.rows.at(-1)!.cursor
+    }
+  }
+
+  it('pages through the day in the filter’s order, each bill once', async () => {
+    const store = createDemoStore()
+    const adapter = manager(store)
+    const { day, bills } = await busiestDay(store, adapter)
+    expect(bills.length).toBeGreaterThan(2)
+    for (const filter of [
+      DEFAULT_BILL_FILTER,
+      { ...DEFAULT_BILL_FILTER, sort: 'amount' as const, descending: false },
+      { ...DEFAULT_BILL_FILTER, sort: 'wait' as const },
+      { ...DEFAULT_BILL_FILTER, kinds: ['paid' as const], tenders: ['cash' as const] },
+    ]) {
+      const expected = applyBillFilter(bills, filter).map((bill) => bill.id)
+      expect(await walk(adapter, day, filter, 2)).toEqual(expected)
+      const first = await adapter.listManagerBillRows(DEMO_OUTLET_ID, day, filter)
+      expect(first.matching).toBe(expected.length)
+    }
+  })
+
+  it('carries no customer in a row, and opens a row into the whole bill', async () => {
+    const store = createDemoStore()
+    const adapter = manager(store)
+    const { day } = await busiestDay(store, adapter)
+    const { rows } = await adapter.listManagerBillRows(DEMO_OUTLET_ID, day, DEFAULT_BILL_FILTER)
+    for (const row of rows) {
+      expect(row).not.toHaveProperty('customerPhone')
+      expect(row).not.toHaveProperty('customerName')
+    }
+    const detail = await adapter.readManagerBillDetail(rows[0]!)
+    expect(detail?.id).toBe(rows[0]!.id)
+    expect(detail?.lines.length).toBeGreaterThan(0)
+  })
+
+  it('reads the day’s figures as the database defines them', async () => {
+    const store = createDemoStore()
+    const adapter = manager(store)
+    const { day, bills } = await busiestDay(store, adapter)
+    const numbers = await adapter.readDayNumbers(DEMO_OUTLET_ID, day)
+    const settled = bills.filter((bill) => bill.status === 'settled')
+    const sum = (method: 'cash' | 'upi') =>
+      settled.reduce(
+        (total, bill) =>
+          total +
+          Math.max(
+            0,
+            bill.payments
+              .filter((payment) => payment.method === method)
+              .reduce((amount, payment) => amount + payment.amountPaise, 0),
+          ),
+        0,
+      )
+    expect(numbers.cashPaise).toBe(sum('cash'))
+    expect(numbers.upiPaise).toBe(sum('upi'))
+    expect(numbers.settledBills).toBe(settled.length)
+    expect(numbers.bills).toBe(bills.length)
+    expect(numbers.openOrders).toBe(
+      (await adapter.listManagerOpenOrders(DEMO_OUTLET_ID, day)).length,
+    )
+    expect(numbers.stats.placed).toBeGreaterThanOrEqual(0)
   })
 })
