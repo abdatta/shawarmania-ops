@@ -35,7 +35,16 @@ and task checkboxes as the source of truth.
    change, so its retirement (the `retire-gate` workflow) is the primary
    recommendation, with the date. Lint fails fourteen days after it. A gate
    marked `selfTest` (the `probe`) has no `retireBy` and is never due: it is
-   the gate system's own test switch.
+   the gate system's own test switch. **Then gate cleanups that are ready:**
+   every key in `RETIRED_CHANGE_GATES` with no migration declaring
+   `-- release: contract <key>` has its database half pending. Run the
+   `retire-gate` readiness check (§2: every registered device on the
+   retirement build or later, three services since its Deploy, no person's
+   screen still carrying the off path) for each. A ready one makes its contract
+   migration the primary recommendation, after any due retirement; one not
+   ready gets a line under **Gate cleanups** saying what it waits on. Without
+   production read access, say the check could not run rather than calling it
+   ready. Gates that retired together share one line.
 6. Read the recommended change's proposal and derive its pre-flight checklist,
    including:
    - First workflow action.
@@ -78,6 +87,10 @@ line and omit empty optional sections.
 
 | Change | Roadmap model | One-line note |
 |---|---|---|
+
+## Gate cleanups
+
+- <retired keys -> ready, or what it waits on>
 
 ## Waiting on you
 

@@ -21,6 +21,8 @@ Answer three questions from the live state of the repo: **what change to do next
 
 3a. **Gates due for retirement come first.** Read `src/change-gates/gates.ts` (or run `npm run lint:change-gates`, which warns from the date). Every `kind: 'change'` gate whose `retireBy` has passed or falls within seven days is work due before any new change: make its retirement — the `retire-gate` workflow — the Do next, and say the date. A gate left past its date is dead code with a switch on it, and lint fails fourteen days after. A gate marked `selfTest` (the `probe`) has no `retireBy` and is never due: it is the gate system's own test switch.
 
+3b. **Then gate cleanups that are ready.** Every key in `RETIRED_CHANGE_GATES` with no migration declaring `-- release: contract <key>` under `supabase/migrations/` has its database half still pending. Run the `retire-gate` readiness check (§2: every registered device on the retirement build or later, three services since its Deploy, no person's screen still carrying the off path) for each. A ready one makes its contract migration the Do next, after any due retirement; one not ready gets a line under **Gate cleanups** saying what it waits on: the device not yet on the build, or the services still to trade. Without production read access, say the check could not run rather than calling it ready. Gates that retired together share one line.
+
 4. **Recommend.** Lead with ONE primary recommendation — the earliest-wave unblocked change that advances the critical path (`data-model-and-tenancy` → `demo-mode-and-app-shell` → `attendance`, then the billing chain `counter-devices-and-offline` → `billing-live` → `cash-is-counted-not-closed` → `retire-the-manual-ledger`). Then list genuinely parallel options separately so the user can multi-track — `ui-billing-counter` (#6) and `ui-outlet-operations` (#7) are fully parallel, as are #4 and the Wave C UI work. If a change is in progress with open non-gate tasks, recommend finishing it before opening a new one.
 
 5. **State the model.** Read the recommended change's Model cell (also echoed in its proposal banner). Tell the user to start the working session on that model before running `/opsx:propose` or implementing, and mention the rationale in one clause. **Opus is the default**; Fable marks the six changes where irreversible design judgment concentrates, and Sonnet marks the four that are purely mechanical. If a Sonnet change turns out to involve a real decision, say so — that means it was mis-scoped and should move to Opus rather than being pushed through.
@@ -56,6 +58,9 @@ Answer three questions from the live state of the repo: **what change to do next
 
    | Change | Model | One-line note |
    |---|---|---|
+
+   ## Gate cleanups
+   - <retired keys → ready, or what it waits on; omit section if none pending>
 
    ## Waiting on you
    - <gate-only items: change → exact gate task, one line each>

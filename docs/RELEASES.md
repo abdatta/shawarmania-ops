@@ -134,7 +134,7 @@ by the command and not by a gate ([the worked example](#a-commands-variant-reach
 | 8 | Live with it | Real use. Trouble: off, fix behind the same gate, deploy, on again. | — |
 | 9 | Archive | Specs merge, docs land, the retirement change is seeded. | the archive workflow |
 | 10 | Retire | The off path and the toggle points go; the key moves to `RETIRED_CHANGE_GATES`; `@cg-off:` tests go and `@cg-on:` tags come off. | `lint:change-gates` (expiry) |
-| 11 | Contract | A week after every tablet runs a build without the off path, a migration declaring `-- release: contract <key>` drops what only the off path used and retires the row. | `lint:migrations`; the `retire-gate` workflow's telemetry check |
+| 11 | Contract | Once every registered tablet runs a build without the off path and the counter has traded three services on it, a migration declaring `-- release: contract <key>` rewrites the database's own reads of the key, drops what only the off path used and retires the row. | `lint:migrations`; the `retire-gate` workflow's readiness check |
 
 **Expiry and the cap.** Every `change` gate carries `retireBy`; lint warns from
 that date and fails fourteen days after. At most five `change` gates that depend
@@ -476,10 +476,17 @@ The `retire-gate` workflow, in two halves. **Code first**: a retirement change
 keeps every toggle point's on branch and deletes the rest, moves the key to
 `RETIRED_CHANGE_GATES`, deletes `@cg-off:` and `@cg-round-trip:` tests and drops
 the `@cg-on:` tags. It needs no gate and no migration; it changes no behaviour.
-**Database a week later**: once every tablet's health report has shown the
-retirement build or later for a week, a migration declaring
-`-- release: contract <key>` drops what only the off path used, keeps the `_v2`
-names, and sets the row's `retired_at`.
+**Database three services later**: once every registered tablet, counter and
+kitchen, reports the retirement build or later, and the counter has traded three
+services since the Deploy that published it, a migration declaring
+`-- release: contract <key>` first rewrites every database function, policy,
+trigger or view that still reads the key to keep only its on branch, then drops
+what only the off path used, keeps the `_v2` names, and sets the row's
+`retired_at`. A registered tablet that has not reported holds it back: silence is
+not evidence. Three services is how long a Republish to a build from before the
+retirement stays possible (owner, 2026-10-18); after the contract, Republish is
+safe only to a build that contains the retirement. The agent runs this check, and
+`/next-change` lists every cleanup still pending with what it waits on.
 
 **Between the two halves**, the row is still live and older builds still read it,
 so it must stay as it is. The Change gates page on the retirement build lists such

@@ -454,7 +454,7 @@ A **gate code** is a change gate's two characters — capitals or digits, at lea
 
 ### Expand / contract
 
-The two halves of changing anything a published build uses. **Expand**: add the new shape beside the old — a new column, a `name_v2` function — so every published build keeps working; every ordinary migration only expands. **Contract**: remove the old shape once no published build uses it, in a migration declaring `-- release: contract <key>`, a week after every tablet has updated.
+The two halves of changing anything a published build uses. **Expand**: add the new shape beside the old — a new column, a `name_v2` function — so every published build keeps working; every ordinary migration only expands. **Contract**: remove the old shape once no published build uses it, in a migration declaring `-- release: contract <key>`, once every registered tablet runs a build without it and the counter has traded three services on that build.
 
 ### Retire
 
