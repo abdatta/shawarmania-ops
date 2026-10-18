@@ -29,6 +29,9 @@ already exists in both adapters.
   details and grouped counts removed (D3).
 - [x] 2.3 The Bills Filter button and sheet: sort, order words, the six filter
   groups, the summary label, Clear, `Bills (shown/total)`, No bills match (D4).
+- [x] 2.3a The filter rides the tab row where it fits and wraps right-aligned
+  where it does not; a bare icon with nothing in force (D4, amended
+  2026-10-18). A unit test pins the shared row and the icon-only label.
 - [x] 2.4 Unit tests: every sort key and direction over bills of every state;
   each filter group, OR within and AND across; Customer's name-only bill as
   Without; the Tablet group hidden on a one-tablet day; figures unchanged by a

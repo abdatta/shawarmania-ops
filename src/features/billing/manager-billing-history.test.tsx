@@ -510,7 +510,31 @@ describe('the Bills filter', () => {
         name: /^Bill \d+/,
       }),
     ).toHaveLength(all)
-    expect(screen.getByTestId('bill-filter-summary')).toHaveTextContent('Filter')
+    expect(screen.queryByTestId('bill-filter-summary')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Filter' })).toBeVisible()
+  })
+
+  it('rides the tab row, a bare icon until something is in force', async () => {
+    const user = userEvent.setup()
+    renderHistory()
+    await screen.findByTestId('manager-bill-list')
+
+    // One wrapping row holds the tabs and the filter: a wide phone fits both,
+    // a narrow one drops the filter to a right-aligned line of its own.
+    const row = screen.getByTestId('billing-views-row')
+    const tabs = within(row).getByRole('tablist', { name: 'Billing history views' })
+    const button = within(row).getByRole('button', { name: 'Filter' })
+    expect(tabs).not.toContainElement(button)
+    expect(button.textContent).toBe('')
+
+    await user.click(button)
+    await user.click(screen.getByRole('button', { name: 'UPI' }))
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    expect(within(row).getByRole('button', { name: 'Filter: UPI' })).toHaveTextContent('UPI')
+    expect(within(row).getByTestId('bill-filter-clear')).toBeVisible()
+
+    await user.click(within(tabs).getByRole('tab', { name: /^Stats/ }))
+    expect(within(row).queryByRole('button', { name: /^Filter/ })).toBeNull()
   })
 
   it('says when nothing matches, and Clear brings every bill back', async () => {

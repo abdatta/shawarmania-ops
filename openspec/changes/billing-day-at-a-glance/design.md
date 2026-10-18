@@ -149,6 +149,16 @@ pattern, one button rather than three, because three would crowd a phone row
 and the kitchen already teaches this one. The button's label is the summary of
 what is in force; **Clear** beside it resets everything.
 
+*Amended 2026-10-18 [owner, on staging].* The button and Clear ride the tab row,
+right-aligned, in one wrapping row with the tabs: where both fit they share a
+line, and where they do not the filter drops to a line of its own, still
+right-aligned — the browser decides, nothing is measured. With nothing in force
+the button is the bare `SlidersHorizontal` icon, square, named *Filter* to a
+screen reader, because the word made the row about 440px wide and most phones
+are narrower; with a filter set it carries the summary as before, and a long one
+truncates rather than scrolling the page. Kept as a word with the icon was
+refused: it fits wider screens only.
+
 Choices apply as they are tapped; the sheet's one button is **Done**. (The
 kitchen's sheet saves to the tablet's record and needs Save and Cancel; this one
 saves nothing.)

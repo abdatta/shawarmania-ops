@@ -679,56 +679,93 @@ export function ManagerBillingHistory() {
         </section>
       )}
 
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Billing history views">
-        {(
-          [
+      {/* The tabs and the Bills filter share one wrapping row: where both fit
+          the filter rides beside Stats, and where they do not it drops to a
+          line of its own, right-aligned either way. */}
+      <div className="flex flex-wrap items-center gap-2" data-testid="billing-views-row">
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Billing history views">
+          {(
             [
-              'bills',
-              dayNumbers === null
-                ? 'Bills (…)'
-                : filtering && rows !== null && matching !== dayNumbers.bills
-                  ? `Bills (${matching}/${dayNumbers.bills})`
-                  : `Bills (${dayNumbers.bills})`,
-            ],
-            // The count is the whole board — both bands — under the plain name
-            // this page has always used; the band names live in the sections.
-            // It is the chosen day's, as the list is.
-            [
-              'orders',
-              `Open orders (${
-                view === 'orders' && ordersKey === dayKey
-                  ? dayOrders.length
-                  : (dayNumbers?.openOrders ?? '…')
-              })`,
-            ],
-            // A refusal keeps its count on the tab, in red, so it reads as a
-            // warning rather than as a number of stats.
-            [
-              'stats',
-              syncProblemCount > 0 ? (
-                <>
-                  Stats {/* Red on the plain tab; the chosen tab's fill keeps its own colour. */}
-                  <span className={view === 'stats' ? undefined : 'text-danger'}>
-                    ({syncProblemCount})
-                  </span>
-                </>
-              ) : (
-                'Stats'
-              ),
-            ],
-          ] as const
-        ).map(([id, label]) => (
-          <Button
-            key={id}
-            variant={view === id ? 'primary' : 'secondary'}
-            size="phone"
-            role="tab"
-            aria-selected={view === id}
-            onClick={() => chooseView(id)}
-          >
-            {label}
-          </Button>
-        ))}
+              [
+                'bills',
+                dayNumbers === null
+                  ? 'Bills (…)'
+                  : filtering && rows !== null && matching !== dayNumbers.bills
+                    ? `Bills (${matching}/${dayNumbers.bills})`
+                    : `Bills (${dayNumbers.bills})`,
+              ],
+              // The count is the whole board — both bands — under the plain name
+              // this page has always used; the band names live in the sections.
+              // It is the chosen day's, as the list is.
+              [
+                'orders',
+                `Open orders (${
+                  view === 'orders' && ordersKey === dayKey
+                    ? dayOrders.length
+                    : (dayNumbers?.openOrders ?? '…')
+                })`,
+              ],
+              // A refusal keeps its count on the tab, in red, so it reads as a
+              // warning rather than as a number of stats.
+              [
+                'stats',
+                syncProblemCount > 0 ? (
+                  <>
+                    Stats {/* Red on the plain tab; the chosen tab's fill keeps its own colour. */}
+                    <span className={view === 'stats' ? undefined : 'text-danger'}>
+                      ({syncProblemCount})
+                    </span>
+                  </>
+                ) : (
+                  'Stats'
+                ),
+              ],
+            ] as const
+          ).map(([id, label]) => (
+            <Button
+              key={id}
+              variant={view === id ? 'primary' : 'secondary'}
+              size="phone"
+              role="tab"
+              aria-selected={view === id}
+              onClick={() => chooseView(id)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+        {view === 'bills' && (dayNumbers?.bills ?? 0) > 0 && (
+          <div className="ml-auto flex min-w-0 max-w-full items-center gap-2">
+            {filtering && (
+              <Button
+                variant="ghost"
+                size="phone"
+                onClick={() => setFilter(DEFAULT_BILL_FILTER)}
+                data-testid="bill-filter-clear"
+                className="shrink-0"
+              >
+                Clear
+              </Button>
+            )}
+            {/* What is in force is the button's own label, as on the kitchen;
+              with nothing in force it is the bare icon, so the row fits a phone. */}
+            <button
+              type="button"
+              onClick={() => setFilterOpen(true)}
+              aria-label={filtering ? `Filter: ${billFilterSummary(filter)}` : 'Filter'}
+              className={`inline-flex h-[var(--size-control-phone)] min-w-0 items-center gap-2 rounded-xl border-2 border-border font-bold text-content focus-visible:focus-ring ${
+                filtering ? 'px-4' : 'w-[var(--size-control-phone)] shrink-0 justify-center'
+              }`}
+            >
+              <SlidersHorizontal aria-hidden size={20} className="shrink-0" />
+              {filtering && (
+                <span data-testid="bill-filter-summary" className="truncate">
+                  {billFilterSummary(filter)}
+                </span>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {message && (
@@ -742,32 +779,6 @@ export function ManagerBillingHistory() {
 
       {view === 'bills' ? (
         <div className="space-y-2">
-          {(dayNumbers?.bills ?? 0) > 0 && (
-            <div className="flex items-center justify-end gap-2">
-              {filtering && (
-                <Button
-                  variant="ghost"
-                  size="phone"
-                  onClick={() => setFilter(DEFAULT_BILL_FILTER)}
-                  data-testid="bill-filter-clear"
-                >
-                  Clear
-                </Button>
-              )}
-              {/* What is in force is the button's own label, as on the kitchen. */}
-              <button
-                type="button"
-                onClick={() => setFilterOpen(true)}
-                aria-label={filtering ? `Filter: ${billFilterSummary(filter)}` : 'Filter'}
-                className="inline-flex min-h-12 min-w-0 max-w-[75%] items-center gap-2 rounded-xl border-2 border-border px-4 font-bold text-content focus-visible:focus-ring"
-              >
-                <SlidersHorizontal aria-hidden size={20} className="shrink-0" />
-                <span data-testid="bill-filter-summary" className="truncate">
-                  {filtering ? billFilterSummary(filter) : 'Filter'}
-                </span>
-              </button>
-            </div>
-          )}
           {filterOpen && (
             <BillFilterSheet
               open
