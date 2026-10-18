@@ -533,6 +533,70 @@ for (const theme of ['light', 'dark']) {
   )
 }
 
+/** The leading whole number of a figure such as `1,204 · so far`. */
+const count = (text: string | null) => Number((text ?? '').replace(/,/g, '').match(/^\d+/)?.[0])
+
+for (const theme of ['light', 'dark']) {
+  test(`the trend reads as a running total on Items and Sales in ${theme}`, async ({
+    page,
+  }, testInfo) => {
+    await page.clock.install({ time: new Date('2026-10-10T18:30:00+05:30') })
+    const { errors, backendRequests } = await openAnalytics(
+      page,
+      testInfo,
+      theme,
+      'demo/owner/analytics/items',
+    )
+    for (const route of ['items', 'sales']) {
+      if (route === 'sales') {
+        await page.getByRole('link', { name: 'Sales', exact: true }).click()
+        await chooseMeasure(page, 'Orders')
+      }
+      const card = page.getByTestId(`${route}-trend-card`)
+      const trend = page.getByTestId(`${route}-trend`)
+      await card.getByRole('button', { name: 'Cumulative', exact: true }).click()
+      await expect(page).toHaveURL(/[?&]show=cumulative/)
+      await page.reload()
+      await expect(card.getByRole('button', { name: 'Cumulative', exact: true })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+      await expect(trend.getByRole('group', { name: /, running total chart/ })).toBeVisible()
+      // Every period's line only climbs: no point sits lower than the one before it.
+      const heights = await trend
+        .getByTestId('chart-series')
+        .evaluateAll((groups) =>
+          groups.map((group) =>
+            [...group.querySelectorAll('circle')].map((dot) => Number(dot.getAttribute('cy'))),
+          ),
+        )
+      expect(heights.length).toBeGreaterThan(1)
+      for (const line of heights) expect(line).toEqual([...line].sort((a, b) => b - a))
+      await trend.getByRole('group').focus()
+      await trend.getByRole('group').press('End')
+      const running = count(
+        await trend.getByTestId('chart-details').locator('p.font-bold').first().textContent(),
+      )
+      await card.screenshot({ path: testInfo.outputPath(`cumulative-${route}-${theme}.png`) })
+      // The table is still one row per bucket, and the current period's rows add up to the line's end.
+      await card.getByRole('button', { name: 'Table', exact: true }).click()
+      const rows = page.getByTestId(`${route}-trend-table`).locator('tbody tr')
+      await expect(rows.first()).toBeVisible()
+      const cells = await rows.evaluateAll((rows) =>
+        rows.map((row) => row.querySelector('td')!.textContent),
+      )
+      expect(cells.length).toBeGreaterThan(1)
+      expect(running).toBe(cells.reduce((sum, cell) => sum + count(cell), 0))
+      await card.getByRole('button', { name: 'Cumulative', exact: true }).click()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(
+        false,
+      )
+    }
+    expect(errors).toEqual([])
+    expect(backendRequests).toEqual([])
+  })
+}
+
 test('analytics routes are absent for staff', async ({ page }) => {
   await page.goto('demo/staff/analytics/items')
   await expect(page.getByRole('heading', { name: 'Dishes', exact: true })).toHaveCount(0)

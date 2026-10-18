@@ -151,6 +151,7 @@ export function periodTrend({
   grain,
   value,
   cutover,
+  bills = false,
 }: {
   days: AnalyticsDay[]
   from: string
@@ -159,6 +160,8 @@ export function periodTrend({
   grain: 'day' | 'week'
   value: (bucket: AnalyticsDay) => number | null
   cutover?: string | undefined
+  /** AOV: each point carries its bucket's revenue and bills, for a running average. */
+  bills?: boolean
 }): { series: ChartSeries[]; axis: string[]; periods: TrendPeriod[] } {
   const span = periodDays(from, to)
   const current = days.filter((d) => d.date >= from && d.date <= to)
@@ -196,6 +199,7 @@ export function periodTrend({
       return {
         label: rangeLabel(shiftDate(first, -period * span), shiftDate(last, -period * span)),
         value: value(bucket),
+        ...(bills ? { bills: { revenue: bucket.revenue, orders: bucket.orders } } : {}),
         ...(cutover
           ? {
               interval: {
@@ -227,12 +231,15 @@ export function alignedTrend({
   grain,
   value,
   cutover,
+  bills = false,
 }: {
   days: AnalyticsDay[]
   windows: readonly { first: string; last: string }[]
   grain: 'day' | 'week'
   value: (bucket: AnalyticsDay) => number | null
   cutover?: string | undefined
+  /** AOV: each point carries its bucket's revenue and bills, for a running average. */
+  bills?: boolean
 }): { series: ChartSeries[]; axis: string[]; periods: TrendPeriod[] } {
   const { first: from, last: to } = windows[0]!
   const current = days.filter((d) => d.date >= from && d.date <= to)
@@ -273,6 +280,7 @@ export function alignedTrend({
       return {
         label: reached ? rangeLabel(start, end) : '—',
         value: reached ? value(bucket) : null,
+        ...(bills && reached ? { bills: { revenue: bucket.revenue, orders: bucket.orders } } : {}),
         ...(cutover && reached
           ? {
               interval: {
@@ -299,6 +307,8 @@ export function hourTrend(
   periods: TrendPeriod[],
   value: (period: number, hour: number) => number | null,
   cutover?: string,
+  /** AOV: each hour's counter revenue and bills, for a running average. */
+  bills?: (period: number, hour: number) => { revenue: number; orders: number },
 ): ChartSeries[] {
   return periods.map((p, period) => ({
     label: p.label,
@@ -309,6 +319,7 @@ export function hourTrend(
       return {
         label: `${p.label} · ${label}${split && p.first === p.last ? ' · cutoff hour (two parts)' : ''}`,
         value: value(period, hour),
+        ...(bills ? { bills: bills(period, hour) } : {}),
         ...(cutover && p.first === p.last
           ? {
               interval: {
@@ -353,4 +364,35 @@ export function activeHours(series: ChartSeries[], axis: string[]) {
     series: series.map((s) => ({ ...s, points: s.points.slice(first, last + 1) })),
     axis: axis.slice(first, last + 1),
   }
+}
+
+/**
+ * Each series as running figures, in the order the chart draws them: every
+ * point is the period's total from its first bucket through that one. A point
+ * carrying bills is a running AOV, total revenue over total bills, held across
+ * a bucket without bills; a null with no bills is a window that does not reach
+ * this far, and stays a gap. An interval that has not started has no figure
+ * yet. Labels, intervals and states are kept.
+ */
+export function cumulativeSeries(series: ChartSeries[]): ChartSeries[] {
+  return series.map((s) => {
+    let total = 0
+    let revenue = 0
+    let orders = 0
+    return {
+      ...s,
+      points: s.points.map((point) => {
+        if (point.bills) {
+          revenue += point.bills.revenue
+          orders += point.bills.orders
+        } else if (point.value === null) return point
+        else total += point.value
+        if (point.state === 'future') return { ...point, value: null }
+        return {
+          ...point,
+          value: point.bills ? (orders ? Math.round(revenue / orders) : null) : total,
+        }
+      }),
+    }
+  })
 }

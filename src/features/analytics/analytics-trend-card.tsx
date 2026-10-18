@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useSearchParams } from 'react-router'
-import { ChartLine, Download, Table2 } from 'lucide-react'
+import { ChartLine, Download, Table2, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
 import {
@@ -11,6 +11,7 @@ import {
   type ChartMetric,
   type ChartSeries,
 } from './analytics-chart'
+import { cumulativeSeries } from './analytics-trend'
 import { download } from './analytics-utils'
 import { ChangeChip, TrendChip, UsualChip } from './analytics-widgets'
 import { periodUnit, usualRange } from '@/domain/sales-analytics'
@@ -31,10 +32,13 @@ function VersusUsual({ current, earlier }: { current: number; earlier: number[] 
   )
 }
 
+type Show = 'chart' | 'cumulative' | 'table'
+
 /**
- * One trend, two readings: the chart, or a table holding every figure the chart
- * draws — every bucket of every compared period, exact to the paisa — and its
- * CSV. Against one earlier period it shows the change; against two or three it
+ * One trend, three readings: the chart, the same chart as running totals (a
+ * running average on AOV), or a table holding every figure the chart draws —
+ * every bucket of every compared period, exact to the paisa — and its CSV.
+ * Against one earlier period it shows the change; against two or three it
  * shows where the periods are heading and whether this one is usual.
  */
 export function TrendCard({
@@ -83,13 +87,14 @@ export function TrendCard({
 }) {
   // In the address, so the choice survives a reload and a change of subject.
   const [params, setParams] = useSearchParams()
-  const show = params.get('show') === 'table' ? 'table' : 'chart'
-  const setShow = (next: 'chart' | 'table') =>
+  const shown = params.get('show')
+  const show: Show = shown === 'table' || shown === 'cumulative' ? shown : 'chart'
+  const setShow = (next: Show) =>
     setParams(
       (previous) => {
         const updated = new URLSearchParams(previous)
-        if (next === 'table') updated.set('show', 'table')
-        else updated.delete('show')
+        if (next === 'chart') updated.delete('show')
+        else updated.set('show', next)
         return updated
       },
       { replace: true },
@@ -140,6 +145,7 @@ export function TrendCard({
           {(
             [
               ['chart', 'Chart', ChartLine],
+              ['cumulative', 'Cumulative', TrendingUp],
               ['table', 'Table', Table2],
             ] as const
           ).map(([key, label, Icon]) => (
@@ -164,13 +170,17 @@ export function TrendCard({
         </p>
       )}
       <p className="mt-1 text-xs text-content-muted">{caption}</p>
-      {show === 'chart' ? (
+      {show !== 'table' ? (
         <AnalyticsChart
-          key={`${metric}:${series.length}:${axis[0]}:${axis.length}`}
+          key={`${show}:${metric}:${series.length}:${axis[0]}:${axis.length}`}
           id={id}
-          title={title}
+          title={
+            show === 'cumulative'
+              ? `${title}, ${metric === 'aov' ? 'running average' : 'running total'}`
+              : title
+          }
           metric={metric}
-          series={series}
+          series={show === 'cumulative' ? cumulativeSeries(series) : series}
           axis={axis}
           fitTicks={fitTicks}
         />

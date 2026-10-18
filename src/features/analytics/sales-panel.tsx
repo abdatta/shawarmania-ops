@@ -59,6 +59,7 @@ export function SalesPanel({
         grain: grain === 'hour' ? 'day' : grain,
         value: (b) => salesValue(b.revenue, b.orders, metric),
         cutover: clock?.cutover,
+        bills: metric === 'aov',
       })
     : periodTrend({
         days: metric === 'revenue' ? recorded : data.days,
@@ -68,6 +69,7 @@ export function SalesPanel({
         grain: grain === 'hour' ? 'day' : grain,
         value: (b) => salesValue(b.revenue, b.orders, metric),
         cutover: clock?.cutover,
+        bills: metric === 'aov',
       })
   const hours = HOURS
   const hourSeries = hourTrend(
@@ -77,6 +79,12 @@ export function SalesPanel({
       return salesValue(row?.revenue ?? 0, row?.orders ?? 0, metric)
     },
     clock?.cutover,
+    metric === 'aov'
+      ? (period, hour) => {
+          const row = data.hours.find((h) => h.period === period && h.hour === hour)
+          return { revenue: row?.revenue ?? 0, orders: row?.orders ?? 0 }
+        }
+      : undefined,
   )
   const hourlyAverages: ChartSeries[] = hourSeries.map((series) => ({
     ...series,

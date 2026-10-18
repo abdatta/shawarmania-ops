@@ -9,6 +9,8 @@ export interface ChartPoint {
   /** Selected instants, independent of the recorded value and its display label. */
   interval?: { start: string; end: string }
   state?: 'completed' | 'ongoing' | 'future'
+  /** AOV only: the counter revenue and bill count behind the average, so a running AOV adds bills, not averages. */
+  bills?: { revenue: number; orders: number }
 }
 export function pointStatus(point: ChartPoint | undefined) {
   return point?.state === 'ongoing'
