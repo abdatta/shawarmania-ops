@@ -633,6 +633,9 @@ describe('Billing history reads what it shows', () => {
     expect(within(list).getAllByRole('button', { name: /^Bill \d+/ })).toHaveLength(2)
     expect(screen.getByTestId('manager-bill-list-more')).toBeInTheDocument()
 
+    // The page watches its end from an effect after the rows render; on a slow
+    // runner the rows can be on screen a moment before it does.
+    await vi.waitFor(() => expect(reach).toBeTypeOf('function'))
     reach!()
     await vi.waitFor(() =>
       expect(within(list).getAllByRole('button', { name: /^Bill \d+/ })).toHaveLength(4),
