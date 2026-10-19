@@ -95,7 +95,7 @@ adapters.
   dark — a long day scrolled to its end, each filter group, a sort change, open
   and reopen a bill, cancel a bill mid-list, Stats, Open orders, a past day — with
   no console errors, and the requests counted per moment against design D8.
-- [ ] 4.2 The quick gates (`format`, `lint`, `format:check`, both typechecks,
+- [x] 4.2 The quick gates (`format`, `lint`, `format:check`, both typechecks,
   `npm test`, `contrast`, `build`) and the DB job (`test:db`, `test:rls`, the
   types diff); then push to `stage` and read the Staging run for the browser
   suites. *(Local, 2026-10-18: every quick gate green — `npm test` 246 files,
@@ -105,12 +105,33 @@ adapters.
   ledger-timing and dish-ticks green; the rls and realtime configs failed 72
   tests, every one a 503 from the local Edge runtime ("failed to determine
   entrypoint" — it is mounted on another checkout), none touching this change.
-  Not pushed: waiting on the owner.)*
-- [ ] 4.3 On staging after it publishes, and in production after a Promote: open
+  Pushed to `stage`; Staging run 39161828809 on `e4cdc7f4` failed one unit
+  test, the paging spec reaching for its observer before the page attached it;
+  fixed in `ba357e5c`, whose run 39162735925 passed every job and published.)*
+- [x] 4.3 On staging after it publishes, and in production after a Promote: open
   Billing history in the owner's browser and count requests and round trips per
   moment against D8, and read the edge logs for the two new functions' times
   against today's full bills read (290–610 ms India, 770–1,500 ms US at 85–125
-  bills).
+  bills). *(Staging, 2026-10-18, the owner's Edge from the US, Cafe Staging,
+  build `index-CxyKrUya`: open the page 5 requests in one round trip, ~610 ms;
+  change to a 48-bill day 2 requests, one round trip, first 30 rows at ~360 ms
+  and the figures at ~820 ms; the next page 1 request, all 48 at ~370 ms, none
+  repeated; a filter 1 request, ~370 ms; a bill's first open 1 request, ~540 ms;
+  reopening it 0 requests, 11 ms; Stats 0 requests; Open orders 2 requests in
+  one round trip, ~440 ms. Every moment as D8 says.)* *(Production, 2026-10-19
+  02:13–02:20 UTC, minutes after the Promote of `0b06e731`, the owner's Edge from
+  the US, Kalyani Cafe, build `index-_3UJNUaL`, read-only: open the page 5
+  requests in one round trip, ~830 ms; change to 18 October (136 bills) 2
+  requests in one round trip, ~1 s the first time and 430–500 ms for the rows,
+  340–420 ms for the figures on three repeats; each next page 1 request, 430–500
+  ms, all 136 shown once; a filter 1 request, ~445 ms (`Bills (80/136)`); a
+  bill's first open 1 request, ~590 ms; reopening it 0 requests, 7 ms; Stats 0
+  requests, 10 ms; Open orders 2 requests in one round trip, ~450 ms. Edge
+  `origin_time` from the US: rows 270–575 ms and figures 280–330 ms warm on a
+  136-bill day, against 770–1,500 ms for the old full read at 85–125 bills; only
+  the first call or two after the deploy took 700–960 ms. The strip arriving
+  after the list, seen on staging, was the same cold start: warm, the figures
+  land first. India's times come with the outlet's own use, under 5.2.)*
 
 ## 5. Close
 
