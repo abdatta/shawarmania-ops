@@ -51,7 +51,7 @@ function AttentionPage({ page, base }: { page: Surface; base: string }) {
   return (
     <li>
       <Link
-        to={page.path ? `${base}/${page.path}` : base}
+        to={(attention.path ?? page.path) ? `${base}/${attention.path ?? page.path}` : base}
         className="flex min-h-11 items-center gap-3 rounded-lg bg-surface-raised px-3 py-2 text-sm focus-visible:focus-ring"
         data-testid={`overview-attention-${page.nav!.attention}`}
       >

@@ -59,6 +59,8 @@ export type AttentionSourceId =
   // lives in Swiggy's rows, read through Swiggy's adapter instance, so one
   // channel's resolution can neither create nor clear the other's badge.
   | 'swiggy-needs-you'
+  // Fixed costs with a month that ended unpaid (fixed-costs-are-spread-over-the-month).
+  | 'fixed-costs-unpaid'
 
 /**
  * The navigation groups — **headings with surfaces under them, and no surface
@@ -318,8 +320,33 @@ const defs = {
   'owner-expenses': {
     role: 'super_admin',
     path: 'ledger/expenses',
-    nav: { label: 'Expenses', icon: Wallet, order: 3, group: 'finances' },
+    nav: {
+      label: 'Expenses',
+      icon: Wallet,
+      order: 3,
+      group: 'finances',
+      // Fixed costs with a month that ended unpaid: the Fixed tab is here
+      // (fixed-costs-are-spread-over-the-month). It counts nothing, and asks
+      // nothing, while that tab is not shown.
+      attention: 'fixed-costs-unpaid',
+    },
     state: 'live',
+  },
+  /**
+   * An outlet's fixed costs: salaries, rent, utilities, carried over every month
+   * and paid as ordinary expenses (fixed-costs-are-spread-over-the-month).
+   *
+   * **No navigation entry of its own** (owner, 2026-10-19): it is the **Fixed**
+   * tab of the one Expenses entry, beside **Daily**, because both tell one
+   * money-out story and the Finances bar is full. This entry is what the tab and
+   * a fixed cost's own page are gated by: owner and manager only, as the
+   * database's policies are, and `demo` until the owner approves its screens
+   * (tasks §6), so the live Expenses page shows no tab until then.
+   */
+  'owner-fixed-costs': {
+    role: 'super_admin',
+    path: 'ledger/fixed-costs',
+    state: 'demo',
   },
   'owner-expense-categories': {
     role: 'super_admin',
@@ -553,8 +580,23 @@ const defs = {
   'admin-ledger-expenses': {
     role: 'franchise_admin',
     path: 'ledger/expenses',
-    nav: { label: 'Expenses', icon: Wallet, order: 3, group: 'finances' },
+    nav: {
+      label: 'Expenses',
+      icon: Wallet,
+      order: 3,
+      group: 'finances',
+      // Fixed costs with a month that ended unpaid: the Fixed tab is here
+      // (fixed-costs-are-spread-over-the-month). It counts nothing, and asks
+      // nothing, while that tab is not shown.
+      attention: 'fixed-costs-unpaid',
+    },
     state: 'live',
+  },
+  /** The manager's counterpart to `owner-fixed-costs`, the same component. */
+  'admin-fixed-costs': {
+    role: 'franchise_admin',
+    path: 'ledger/fixed-costs',
+    state: 'demo',
   },
   /**
    * This outlet's people — accounts and staff list in one surface, because

@@ -3127,6 +3127,8 @@ export interface DataAdapters {
   customerDirectory: CustomerDirectoryAdapter
   expenses: ExpensesAdapter
   expenseCategories: ExpenseCategoriesAdapter
+  /** An outlet's fixed costs and what pays them (#79). */
+  fixedCosts: import('./fixed-costs').FixedCostsAdapter
   insights: InsightsAdapter
   addressLookup: AddressLookupAdapter
   /** The drawer as a continuous balance, observed at instants (#11). */
@@ -4088,7 +4090,10 @@ export interface LedgerStatementMonth {
  * `LedgerStatementDay` and must reduce it identically; the fold itself is
  * `readMonth` in the domain layer, which cannot import this file.
  */
-export function toMonthDayInput(day: LedgerStatementDay): MonthDayInput {
+export function toMonthDayInput(
+  day: LedgerStatementDay,
+  options: { withExpenseIds?: boolean } = {},
+): MonthDayInput {
   return {
     businessDate: day.businessDate,
     cashPaise: day.revenue.cashPaise,
@@ -4110,6 +4115,9 @@ export function toMonthDayInput(day: LedgerStatementDay): MonthDayInput {
       note: row.label === row.category ? null : row.label,
       amountPaise: row.paise,
       isCash: row.isCash,
+      // Only where a reader asks for it (fixed-costs-are-spread-over-the-month):
+      // `ledger_month_inputs` carries no id, and its parity test compares whole objects.
+      ...(options.withExpenseIds ? { expenseId: row.id } : {}),
     })),
     drawerState: day.drawer.state,
   }

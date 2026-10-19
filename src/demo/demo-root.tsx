@@ -106,7 +106,7 @@ export function DemoRoot() {
    * Only a reset replaces it.
    */
   const data = useMemo(
-    () => createDemoData({ matureHistory: true, dishWalkthrough: true }),
+    () => createDemoData({ matureHistory: true, dishWalkthrough: true, fixedCosts: true }),
     // resetCount is the point of this dependency: a fresh dataset is exactly
     // what a reset is.
     // eslint-disable-next-line react-hooks/exhaustive-deps

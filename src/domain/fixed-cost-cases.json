@@ -1,0 +1,135 @@
+{
+  "monthCost": [
+    {
+      "name": "a whole month carries over",
+      "startsOn": "2026-10-01",
+      "stopsOn": null,
+      "amounts": [
+        {
+          "fromMonth": "2026-10-01",
+          "amountPaise": 1000000
+        }
+      ],
+      "settlements": [],
+      "month": "2026-11-01",
+      "costPaise": 1000000
+    },
+    {
+      "name": "joining on the 20th of a 30-day month costs 11 of its days, rounded down",
+      "startsOn": "2026-11-20",
+      "stopsOn": null,
+      "amounts": [
+        {
+          "fromMonth": "2026-11-01",
+          "amountPaise": 1000000
+        }
+      ],
+      "settlements": [],
+      "month": "2026-11-01",
+      "costPaise": 366666
+    },
+    {
+      "name": "leaving on the 12th of a 31-day month costs 12 of its days",
+      "startsOn": "2026-10-01",
+      "stopsOn": "2026-12-12",
+      "amounts": [
+        {
+          "fromMonth": "2026-10-01",
+          "amountPaise": 3100000
+        }
+      ],
+      "settlements": [],
+      "month": "2026-12-01",
+      "costPaise": 1200000
+    },
+    {
+      "name": "a month after the stop costs nothing",
+      "startsOn": "2026-10-01",
+      "stopsOn": "2026-12-12",
+      "amounts": [
+        {
+          "fromMonth": "2026-10-01",
+          "amountPaise": 3100000
+        }
+      ],
+      "settlements": [],
+      "month": "2027-01-01",
+      "costPaise": 0
+    },
+    {
+      "name": "a raise applies from its month, not before",
+      "startsOn": "2026-10-01",
+      "stopsOn": null,
+      "amounts": [
+        {
+          "fromMonth": "2026-10-01",
+          "amountPaise": 1000000
+        },
+        {
+          "fromMonth": "2026-12-01",
+          "amountPaise": 1200000
+        }
+      ],
+      "settlements": [],
+      "month": "2026-11-01",
+      "costPaise": 1000000
+    },
+    {
+      "name": "the latest unvoided settlement is the month's cost",
+      "startsOn": "2026-10-01",
+      "stopsOn": null,
+      "amounts": [
+        {
+          "fromMonth": "2026-10-01",
+          "amountPaise": 1000000
+        }
+      ],
+      "settlements": [
+        {
+          "month": "2026-10-01",
+          "amountPaise": 800000,
+          "voided": false
+        },
+        {
+          "month": "2026-10-01",
+          "amountPaise": 900000,
+          "voided": true
+        }
+      ],
+      "month": "2026-10-01",
+      "costPaise": 800000
+    }
+  ],
+  "proRata": [
+    {
+      "name": "Kalyani Cafe on 18 October, nothing paid",
+      "today": "2026-10-18",
+      "pnlPaise": 18936800,
+      "monthlyPaise": 32270000,
+      "paidPaise": 0,
+      "unpaidPaise": 18737419,
+      "proRataPnlPaise": 199381,
+      "shortOfCoveringPaise": 13333200
+    },
+    {
+      "name": "a salary paid in full on the 20th charges nothing more",
+      "today": "2026-11-20",
+      "pnlPaise": 5000000,
+      "monthlyPaise": 1000000,
+      "paidPaise": 1000000,
+      "unpaidPaise": 0,
+      "proRataPnlPaise": 5000000,
+      "shortOfCoveringPaise": 0
+    },
+    {
+      "name": "an advance of 3,000 on the 10th leaves the rest of the share to date",
+      "today": "2026-11-15",
+      "pnlPaise": 5000000,
+      "monthlyPaise": 1000000,
+      "paidPaise": 300000,
+      "unpaidPaise": 200000,
+      "proRataPnlPaise": 4800000,
+      "shortOfCoveringPaise": 0
+    }
+  ]
+}

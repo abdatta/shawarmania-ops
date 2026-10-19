@@ -1,6 +1,8 @@
 import { Settings2 } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
+import { FixedChip, ProRataCard } from '@/features/fixed-costs/ledger-fixed-costs'
+import { useFixedMarks, useOutletFixedCosts } from '@/features/fixed-costs/use-fixed-costs'
 
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
@@ -632,7 +634,7 @@ function DayReading({
               key={`commission-${channel.channel}`}
               label={`${titleCase(channel.channel)} commission`}
               paise={channel.commissionPaise}
-              hint="Delivery commission · not cash · from the platform's statement"
+              hint="Delivery commission · not from drawer · from the platform's statement"
               testId={`expense-commission-${channel.channel}`}
             />
           ))}
@@ -644,7 +646,11 @@ function DayReading({
               key={row.id}
               label={row.label}
               paise={row.paise}
-              hint={[row.isCash ? 'cash' : 'not cash', row.recordedByName, formatTime(row.instant)]
+              hint={[
+                row.isCash ? 'drawer cash' : 'not from drawer',
+                row.recordedByName,
+                formatTime(row.instant),
+              ]
                 .filter(Boolean)
                 .join(' · ')}
               testId={`expense-${row.id}`}
@@ -733,6 +739,10 @@ function MonthReading({ month }: { month: LedgerStatementMonth }) {
    */
   const oneRevenue = useChangeGate('one-revenue')
   const figures = oneRevenue ? month.figures : undefined
+  // Pro-rata P&L and the Fixed chip (fixed-costs-are-spread-over-the-month): read
+  // only with `pro-rata-pnl` on, and built on One Revenue's figures.
+  const fixed = useOutletFixedCosts(month.outletId, figures !== undefined)
+  const marks = useFixedMarks(fixed)
 
   return (
     <div className="space-y-3">
@@ -959,19 +969,32 @@ function MonthReading({ month }: { month: LedgerStatementMonth }) {
                   optional note adds detail such as quantity.
                 */}
                 <ul className="mt-0.5 space-y-0.5">
-                  {total.lines.map((line, index) => (
-                    <li
-                      key={`${line.businessDate}-${index}`}
-                      className="flex items-baseline justify-between gap-2 text-xs text-content-muted"
-                    >
-                      <span className="min-w-0">
-                        {formatBusinessDate(line.businessDate)}
-                        {line.note ? ` — ${line.note}` : ''}
-                        {line.isCash ? '' : ' (not cash)'}
-                      </span>
-                      <Money paise={line.amountPaise} className="shrink-0" />
-                    </li>
-                  ))}
+                  {total.lines.map((line, index) => {
+                    const mark = line.expenseId ? marks.get(line.expenseId) : undefined
+                    return (
+                      <li
+                        key={`${line.businessDate}-${index}`}
+                        className="flex items-baseline justify-between gap-2 text-xs text-content-muted"
+                      >
+                        {mark ? (
+                          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                            {formatBusinessDate(line.businessDate)} — {mark.label}
+                            <FixedChip
+                              paidOn={mark.paidOn}
+                              testId={`month-fixed-${line.expenseId}`}
+                            />
+                          </span>
+                        ) : (
+                          <span className="min-w-0">
+                            {formatBusinessDate(line.businessDate)}
+                            {line.note ? ` — ${line.note}` : ''}
+                            {line.isCash ? '' : ' (not from drawer)'}
+                          </span>
+                        )}
+                        <Money paise={line.amountPaise} className="shrink-0" />
+                      </li>
+                    )
+                  })}
                 </ul>
               </div>
             ))}
@@ -1072,6 +1095,16 @@ function MonthReading({ month }: { month: LedgerStatementMonth }) {
             Stock is not valued here either, so there is no consumption-basis figure to offer.
           </p>
         </Card>
+      )}
+
+      {figures && fixed && figures.profitPaise !== null && (
+        <ProRataCard
+          month={month.month}
+          pnlPaise={figures.profitPaise}
+          reading={fixed}
+          fixedCostsPath="fixed-costs"
+          search={`?outlet=${encodeURIComponent(month.outletId)}`}
+        />
       )}
 
       {/*

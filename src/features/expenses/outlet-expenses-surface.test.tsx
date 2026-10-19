@@ -201,7 +201,7 @@ describe('the outlet expenses surface', () => {
 
       await userEvent.click(await screen.findByTestId('add-ledger-expense'))
       expect(screen.queryByTestId('expense-is-cash')).not.toBeInTheDocument()
-      expect(screen.getByTestId('expense-cash-only')).toHaveTextContent('Cash, out of the drawer')
+      expect(screen.getByTestId('expense-cash-only')).toHaveTextContent('Drawer cash')
 
       await userEvent.type(screen.getByRole('combobox', { name: 'Expense category' }), 'Gas')
       await userEvent.type(screen.getByTestId('expense-amount'), '900')

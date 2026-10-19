@@ -3145,6 +3145,255 @@ export type Database = {
           },
         ]
       }
+      fixed_cost_amounts: {
+        Row: {
+          amount_paise: number
+          created_at: string
+          created_by: string
+          fixed_cost_id: string
+          fixed_cost_payment_id: string | null
+          from_month: string
+          id: string
+          outlet_id: string
+          voided_at: string | null
+          voided_by: string | null
+        }
+        Insert: {
+          amount_paise: number
+          created_at?: string
+          created_by?: string
+          fixed_cost_id: string
+          fixed_cost_payment_id?: string | null
+          from_month: string
+          id?: string
+          outlet_id: string
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Update: {
+          amount_paise?: number
+          created_at?: string
+          created_by?: string
+          fixed_cost_id?: string
+          fixed_cost_payment_id?: string | null
+          from_month?: string
+          id?: string
+          outlet_id?: string
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fixed_cost_amounts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixed_cost_amounts_fixed_cost"
+            columns: ["fixed_cost_id", "outlet_id"]
+            isOneToOne: false
+            referencedRelation: "fixed_costs"
+            referencedColumns: ["id", "outlet_id"]
+          },
+          {
+            foreignKeyName: "fixed_cost_amounts_fixed_cost_payment_id_fkey"
+            columns: ["fixed_cost_payment_id"]
+            isOneToOne: false
+            referencedRelation: "fixed_cost_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixed_cost_amounts_voided_by_fkey"
+            columns: ["voided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fixed_cost_payments: {
+        Row: {
+          created_at: string
+          created_by: string
+          expense_id: string
+          fixed_cost_id: string
+          id: string
+          outlet_id: string
+          paid_on: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string
+          expense_id: string
+          fixed_cost_id: string
+          id?: string
+          outlet_id: string
+          paid_on: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          expense_id?: string
+          fixed_cost_id?: string
+          id?: string
+          outlet_id?: string
+          paid_on?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fixed_cost_payments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixed_cost_payments_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: true
+            referencedRelation: "effective_expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixed_cost_payments_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: true
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixed_cost_payments_fixed_cost"
+            columns: ["fixed_cost_id", "outlet_id"]
+            isOneToOne: false
+            referencedRelation: "fixed_costs"
+            referencedColumns: ["id", "outlet_id"]
+          },
+        ]
+      }
+      fixed_cost_settlements: {
+        Row: {
+          amount_paise: number
+          created_at: string
+          created_by: string
+          fixed_cost_id: string
+          fixed_cost_payment_id: string | null
+          id: string
+          month: string
+          outlet_id: string
+          voided_at: string | null
+          voided_by: string | null
+        }
+        Insert: {
+          amount_paise: number
+          created_at?: string
+          created_by?: string
+          fixed_cost_id: string
+          fixed_cost_payment_id?: string | null
+          id?: string
+          month: string
+          outlet_id: string
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Update: {
+          amount_paise?: number
+          created_at?: string
+          created_by?: string
+          fixed_cost_id?: string
+          fixed_cost_payment_id?: string | null
+          id?: string
+          month?: string
+          outlet_id?: string
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fixed_cost_settlements_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixed_cost_settlements_fixed_cost"
+            columns: ["fixed_cost_id", "outlet_id"]
+            isOneToOne: false
+            referencedRelation: "fixed_costs"
+            referencedColumns: ["id", "outlet_id"]
+          },
+          {
+            foreignKeyName: "fixed_cost_settlements_fixed_cost_payment_id_fkey"
+            columns: ["fixed_cost_payment_id"]
+            isOneToOne: false
+            referencedRelation: "fixed_cost_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixed_cost_settlements_voided_by_fkey"
+            columns: ["voided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fixed_costs: {
+        Row: {
+          category: string
+          created_at: string
+          created_by: string
+          id: string
+          name: string
+          note: string | null
+          outlet_id: string
+          starts_on: string
+          stops_on: string | null
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          name: string
+          note?: string | null
+          outlet_id: string
+          starts_on: string
+          stops_on?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          name?: string
+          note?: string | null
+          outlet_id?: string
+          starts_on?: string
+          stops_on?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fixed_costs_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixed_costs_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inventory_items: {
         Row: {
           current_quantity: number

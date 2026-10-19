@@ -19,6 +19,9 @@ import { DataActionError, type ExpenseActor, type ExpenseRecord } from '@/data-a
 import { formatBusinessDate, formatDateTime, normalizeCategory, rupeesToPaise } from '@/domain'
 
 import { Field } from './field'
+import { FixedChip } from '@/features/fixed-costs/ledger-fixed-costs'
+import type { FixedMark } from '@/features/fixed-costs/use-fixed-costs'
+import { FixedPaymentActions, FixedPaymentNoteHint } from '@/features/fixed-costs/fixed-payment-row'
 
 /**
  * The shared expense list and entry form, used by the outlet screen, counter and
@@ -71,6 +74,12 @@ export interface ExpenseListProps {
   heading?: string | null
   emptyTitle: string
   onChanged: () => Promise<void> | void
+  /**
+   * Fixed-cost payments among the rows, by expense id, from their links
+   * (fixed-costs-are-spread-over-the-month). Passed only for an owner or a
+   * manager with `pro-rata-pnl` on; a row is never marked by what it says.
+   */
+  fixedMarks?: ReadonlyMap<string, FixedMark> | undefined
 }
 
 interface ExpenseDraft {
@@ -105,6 +114,7 @@ export function ExpenseList({
   heading = 'Expenses',
   emptyTitle,
   onChanged,
+  fixedMarks,
 }: ExpenseListProps) {
   const { expenses: adapter, expenseCategories: categoriesAdapter } = useAdapters()
   const fewerRequests = useChangeGate('fewer-requests')
@@ -114,6 +124,11 @@ export function ExpenseList({
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<ExpenseRecord | null>(null)
+  /**
+   * A fixed-cost payment is changed on its fixed cost's page, where Undo takes
+   * back what its answer recorded too (owner, 2026-10-19). Here only its note.
+   */
+  const editingMark: FixedMark | null = editing ? (fixedMarks?.get(editing.id) ?? null) : null
   const [draft, setDraft] = useState<ExpenseDraft>(() => blankExpense(viewer.mayTouchAnyRow))
   const [withdrawing, setWithdrawing] = useState<ExpenseRecord | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -172,6 +187,28 @@ export function ExpenseList({
   async function submit(event: FormEvent) {
     event.preventDefault()
     setError(null)
+
+    if (editing && editingMark) {
+      setBusy(true)
+      try {
+        const own = draft.note.trim()
+        await adapter.updateExpense(editing.id, {
+          note: own ? `${editingMark.name} · ${own}` : editingMark.name,
+        })
+        setOpen(false)
+        setEditing(null)
+        await onChanged()
+      } catch (cause) {
+        setError(
+          cause instanceof DataActionError
+            ? cause.message
+            : 'That did not save. Try again in a moment.',
+        )
+      } finally {
+        setBusy(false)
+      }
+      return
+    }
 
     const rupees = Number(draft.amount.trim())
     if (draft.amount.trim() === '' || !Number.isFinite(rupees) || rupees <= 0) {
@@ -341,7 +378,13 @@ export function ExpenseList({
                         ) : (
                           <>
                             <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-content">
-                              {expense.category}
+                              {fixedMarks?.get(expense.id)?.label ?? expense.category}
+                              {fixedMarks?.has(expense.id) && (
+                                <FixedChip
+                                  paidOn={fixedMarks.get(expense.id)?.paidOn}
+                                  testId={`expense-fixed-${expense.id}`}
+                                />
+                              )}
                               {/*
                                 **A queued expense says which it is**, in the
                                 counter's existing vocabulary. `Not sent yet` is
@@ -384,7 +427,7 @@ export function ExpenseList({
                                 </span>
                               ) : (
                                 <span className="text-xs font-normal text-content-muted">
-                                  Not cash
+                                  Not from drawer
                                 </span>
                               )}
                               {/*
@@ -422,17 +465,26 @@ export function ExpenseList({
                               the only thing here the category does not already
                               say.
                             */}
-                            {(expense.note || showDates) && (
-                              <span className="mt-0.5 block text-xs text-content-muted">
-                                {expense.note}
-                                {expense.note && showDates && ' · '}
-                                {showDates && (
-                                  <span data-testid={`ledger-expense-date-${expense.id}`}>
-                                    {formatBusinessDate(expense.businessDate)}
+                            {(() => {
+                              // A fixed-cost payment's description is its fixed cost's
+                              // name, which the row already reads; only its own note is
+                              // left to say.
+                              const mark = fixedMarks?.get(expense.id)
+                              const note = mark ? mark.note : expense.note
+                              return (
+                                (note || showDates) && (
+                                  <span className="mt-0.5 block text-xs text-content-muted">
+                                    {note}
+                                    {note && showDates && ' · '}
+                                    {showDates && (
+                                      <span data-testid={`ledger-expense-date-${expense.id}`}>
+                                        {formatBusinessDate(expense.businessDate)}
+                                      </span>
+                                    )}
                                   </span>
-                                )}
-                              </span>
-                            )}
+                                )
+                              )
+                            })()}
                           </>
                         )}
                       </span>
@@ -480,7 +532,25 @@ export function ExpenseList({
                           ]}
                         />
                       )}
-                      {changeable && (
+                      {changeable && fixedMarks?.has(expense.id) && (
+                        <FixedPaymentActions
+                          mark={fixedMarks.get(expense.id)!}
+                          expenseId={expense.id}
+                          label={`Actions for ${expense.category}`}
+                          onEditNote={() => {
+                            setError(null)
+                            setEditing(expense)
+                            setDraft({
+                              category: expense.category,
+                              amount: String(expense.amountPaise / 100),
+                              isCash: expense.isCash,
+                              note: fixedMarks.get(expense.id)?.note ?? '',
+                            })
+                            setOpen(true)
+                          }}
+                        />
+                      )}
+                      {changeable && !fixedMarks?.has(expense.id) && (
                         <RowActionsMenu
                           compact
                           align="start"
@@ -554,7 +624,7 @@ export function ExpenseList({
                           <div className="flex justify-between gap-3">
                             <dt>Paid with</dt>
                             <dd className="text-right">
-                              {expense.isCash ? 'Cash, out of the drawer' : 'Not cash'}
+                              {expense.isCash ? 'Drawer cash' : 'UPI / bank or collected cash'}
                             </dd>
                           </div>
                           {expense.note && (
@@ -634,7 +704,7 @@ export function ExpenseList({
           setOpen(false)
           setEditing(null)
         }}
-        title={editing ? 'Edit expense' : 'Add expense'}
+        title={editingMark ? 'Edit note' : editing ? 'Edit expense' : 'Add expense'}
         error={error}
         footer={
           <button
@@ -648,65 +718,82 @@ export function ExpenseList({
         }
       >
         <form id="ledger-expense-form" onSubmit={submit} className="space-y-4" noValidate>
-          <Field label="Category" id="expense-category">
-            <CategoryInput
-              id="expense-category"
-              label="Expense category"
-              value={draft.category}
-              suggestions={categories}
-              testId="expense-category"
-              onChange={(category) => setDraft({ ...draft, category })}
-            />
-          </Field>
-
-          <Field label="Note (optional)" id="expense-description">
-            <Input
-              id="expense-description"
-              value={draft.note}
-              placeholder="e.g. 10 kg from Nadia Poultry"
-              data-testid="expense-description"
-              onChange={(event) => setDraft({ ...draft, note: event.target.value })}
-            />
-          </Field>
-
-          <Field label="Amount (₹)" id="expense-amount">
-            <Input
-              id="expense-amount"
-              required
-              inputMode="decimal"
-              value={draft.amount}
-              placeholder="e.g. 2400"
-              data-testid="expense-amount"
-              onChange={(event) => setDraft({ ...draft, amount: event.target.value })}
-            />
-          </Field>
-
-          {viewer.mayTouchAnyRow ? (
-            <Field label="Paid with" id="expense-is-cash">
-              <Select
-                id="expense-is-cash"
-                required
-                value={draft.isCash === null ? '' : draft.isCash ? 'cash' : 'other'}
-                data-testid="expense-is-cash"
-                onChange={(event) => setDraft({ ...draft, isCash: event.target.value === 'cash' })}
-              >
-                <option value="" disabled>
-                  Choose…
-                </option>
-                <option value="cash">Cash, out of the drawer</option>
-                <option value="other">Anything else — UPI, transfer, cheque</option>
-              </Select>
-              <p className="text-xs text-content-muted">
-                Only cash reaches the day&rsquo;s count. Everything else is still an expense.
-              </p>
-            </Field>
+          {editingMark ? (
+            <>
+              <FixedPaymentNoteHint mark={editingMark} />
+              <Field label="Note (optional)" id="expense-description">
+                <Input
+                  id="expense-description"
+                  value={draft.note}
+                  data-testid="expense-description"
+                  onChange={(event) => setDraft({ ...draft, note: event.target.value })}
+                />
+              </Field>
+            </>
           ) : (
-            // No field: what staff record is what left the drawer, and the
-            // database refuses anything else.
-            <p className="text-xs text-content-muted" data-testid="expense-cash-only">
-              Cash, out of the drawer. Anything paid another way is for a manager or the owner to
-              record.
-            </p>
+            <>
+              <Field label="Category" id="expense-category">
+                <CategoryInput
+                  id="expense-category"
+                  label="Expense category"
+                  value={draft.category}
+                  suggestions={categories}
+                  testId="expense-category"
+                  onChange={(category) => setDraft({ ...draft, category })}
+                />
+              </Field>
+
+              <Field label="Note (optional)" id="expense-description">
+                <Input
+                  id="expense-description"
+                  value={draft.note}
+                  placeholder="e.g. 10 kg from Nadia Poultry"
+                  data-testid="expense-description"
+                  onChange={(event) => setDraft({ ...draft, note: event.target.value })}
+                />
+              </Field>
+
+              <Field label="Amount (₹)" id="expense-amount">
+                <Input
+                  id="expense-amount"
+                  required
+                  inputMode="decimal"
+                  value={draft.amount}
+                  placeholder="e.g. 2400"
+                  data-testid="expense-amount"
+                  onChange={(event) => setDraft({ ...draft, amount: event.target.value })}
+                />
+              </Field>
+
+              {viewer.mayTouchAnyRow ? (
+                <Field label="Paid with" id="expense-is-cash">
+                  <Select
+                    id="expense-is-cash"
+                    required
+                    value={draft.isCash === null ? '' : draft.isCash ? 'cash' : 'other'}
+                    data-testid="expense-is-cash"
+                    onChange={(event) =>
+                      setDraft({ ...draft, isCash: event.target.value === 'cash' })
+                    }
+                  >
+                    <option value="" disabled>
+                      Choose…
+                    </option>
+                    <option value="cash">Drawer cash</option>
+                    <option value="other">UPI / bank or collected cash</option>
+                  </Select>
+                  <p className="text-xs text-content-muted">
+                    Only cash reaches the day&rsquo;s count. Everything else is still an expense.
+                  </p>
+                </Field>
+              ) : (
+                // No field: what staff record is what left the drawer, and the
+                // database refuses anything else.
+                <p className="text-xs text-content-muted" data-testid="expense-cash-only">
+                  Drawer cash. Anything paid another way is for a manager or the owner to record.
+                </p>
+              )}
+            </>
           )}
         </form>
       </FormSheet>

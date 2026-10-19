@@ -96,7 +96,8 @@ describe('demo reset', () => {
     // rebuilt here — and the dataset beneath them must not be, or *"record it as
     // the manager, read it as the owner"* would show an empty list.
     await user.click(screen.getByRole('link', { name: 'Owner' }))
-    await user.click(screen.getAllByRole('link', { name: 'Expenses' })[0]!)
+    // The entry's name carries its badge when a fixed cost is unpaid.
+    await user.click(screen.getAllByRole('link', { name: /^Expenses/ })[0]!)
 
     await waitFor(() =>
       expect(screen.getByTestId('ledger-expense-list')).toHaveTextContent(

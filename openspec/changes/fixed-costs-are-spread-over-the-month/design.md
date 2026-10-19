@@ -42,17 +42,31 @@ conversation does not survive it.
    monthly amount.
 8. **Once paid, only the remaining balance is spread.** A payment enters P&L at
    once.
-9. **Pro-rata P&L is a current-moment figure.** Past days and months read P&L
+9. **P&L (Pro-rata) is a current-moment figure.** Past days and months read P&L
    from recorded expenses alone.
 10. **Salaries go out on the 31st or on the 1st or 2nd.** A payment for last
     month counts in last month by default, switchable, and the day it was paid
     is still recorded. A month that ends unpaid raises an alert on Overview.
-11. **The names.** *P&L* for the ordinary figure; **Pro-rata P&L** for the new
-    one (D8).
+11. **The names.** *P&L* for the ordinary figure; **P&L (Pro-rata)** for the new
+    one, with no day count beside it (D8).
 12. **The expense row** reads *Nayan (Salary)* with a **Fixed** chip like the
     Cash chip, and the chip cannot be faked by typing.
 13. **The demo first.** The owner approves the screens from the demo before
     anything is wired live.
+14. **Both views, P&L (Pro-rata) leading.** Asked why the whole month's fixed
+    costs are not taken off from day 1, the owner kept the pro-rata figure as the
+    headline and added the full-dues view as a finish line beside Covered: P&L
+    (Pro-rata) answers "are we making money at this pace"; *Short of covering
+    October* answers "how far are we from covering the month" (forked session,
+    2026-10-19, "yes pls pass it on").
+15. **One Expenses entry, Daily | Fixed.** Merged rather than a separate Fixed
+    costs entry: both tell one money-out story (is rent an expense or a fixed
+    cost?), the Finances bar is at five entries
+    (`openspec/todos/navigation-outgrows-a-flat-list.md`), and Expenses is thin
+    for owners today. Tabs rather than one scroll, because Daily is one day under
+    its date stepper and Fixed is the month and what is owed; on one scroll the
+    stepper would read as controlling both. After Pay, *Recorded on 31 Oct ·
+    View* (forked session, 2026-10-19, "send it").
 
 ## What was measured before deciding
 
@@ -178,7 +192,7 @@ nothing to choose.
 
 **Pay** opens a sheet on the fixed cost's page:
 
-- **Amount**, on the on-screen pad (keys marked `data-keypad-key`).
+- **Amount**, typed as the Expenses form takes one (mirroring that form, not a new pad).
 - **Paid on**: today unless changed, never in the future.
 - **Counts in**: shown only when an earlier month still has a balance and the
   payment is not cash. It defaults to **the last day of the latest such month**
@@ -231,7 +245,7 @@ zero, it offers **Clear ₹X** (a settlement of the last month at its cost plus 
 excess) or **Keep it**. P&L is unaffected either way: the advance entered P&L
 when it was paid.
 
-## D6. Pro-rata P&L, in integer paise
+## D6. P&L (Pro-rata), in integer paise
 
 For the current month C, read at the outlet's business date T:
 
@@ -242,7 +256,7 @@ covered(f) = what coverage (D4) puts against C: payments counted in C and
 unpaid(f)  = max(0, spread(f) − covered(f))
 
 P&L          = revenue − recorded expenses − commission        (#76, unchanged)
-Pro-rata P&L = P&L − Σ unpaid(f)
+P&L (Pro-rata) = P&L − Σ unpaid(f)
 ```
 
 Today counts as a whole day: today's rent is owed today. The floor is per fixed
@@ -253,15 +267,15 @@ cost before summing, and spread is cost exactly on the last active day.
   that moment, not 20/30 of it.
 - **An advance paid last month** lowers this month's `unpaid` and was in last
   month's P&L. Nothing counts twice.
-- **A balance owed from an earlier month** is not in Pro-rata P&L. It is that
+- **A balance owed from an earlier month** is not in P&L (Pro-rata). It is that
   month's cost, and the payment that clears it counts in that month by default
   (D5); until then it is under Needs attention (D7). Counting it here as well
   would charge it twice the moment it is paid and back-dated.
-- **A past month has no Pro-rata P&L** (decision 9). It reads P&L from recorded
+- **A past month has no P&L (Pro-rata)** (decision 9). It reads P&L from recorded
   expenses, which hold every fixed-cost payment on the date it counts in.
 
 Kalyani Cafe's 18 October, had the placeholders been fixed costs instead: P&L
-₹1,89,368; unpaid ₹3,22,700 × 18/31 = ₹1,87,374; Pro-rata P&L **₹1,994**. A case
+₹1,89,368; unpaid ₹3,22,700 × 18/31 = ₹1,87,374; P&L (Pro-rata) **₹1,994**. A case
 in the shared table.
 
 **Covered** = `max(0, revenue − expenses that are not fixed-cost payments −
@@ -269,19 +283,30 @@ commission)` ÷ the month's fixed costs in full, capped at 100%: how much of wha
 this month will cost in fixed costs its trading has earned so far. **Still to
 pay** = Σ max(0, cost(f, C) − covered(f)).
 
-**A month with no active fixed cost** shows P&L alone: no Pro-rata P&L, no
+**Short of covering {Month}** = `max(0, the month's fixed costs in full −
+max(0, P&L + fixed-cost payments counted this month through today))`: the
+uncovered part of the quantity Covered measures, in integer paise
+(`shortOfCoveringPaise`). Kalyani Cafe's 18 October: ₹3,22,700 − ₹1,89,368 =
+**₹1,33,332**. It disappears once Covered reaches 100%, which the owner's
+less-text convention prefers to a line saying *Covered*.
+
+**A month with no active fixed cost** shows P&L alone: no P&L (Pro-rata), no
 covered bar, no fixed costs group.
 
 ## D7. Unpaid months need attention
 
-A new attention source, `fixed-costs-unpaid`, on the Fixed costs navigation
-entry: the number of fixed costs with an unpaid month that has ended (D4). It
+A new attention source, `fixed-costs-unpaid`, on the Expenses navigation
+entry, opening the Fixed tab: the number of fixed costs with an unpaid month that has ended (D4). It
 appears in **Needs attention** on Overview as *Fixed costs: 3 unpaid from
 October* (or *from September and October*), and as the entry's badge. It is a
 count of things waiting on the reader, which is what `attention-badges` allows a
 badge to be. It reads one function, `fixed_costs_unpaid()`, which counts across
 the outlets the reader may see, owner and manager only. It refreshes with the
-other sources and never on the counter, which holds no such entry.
+other sources and never on the counter, which holds no such entry. Where the
+Fixed tab is not shown (staff, or the live app before the owner approves it) it
+asks the server nothing and badges nothing. An attention may now name the path
+Needs attention opens (`Attention.path`), so this one lands on the tab rather
+than on Daily.
 
 ## D8. The words
 
@@ -294,11 +319,11 @@ other sources and never on the counter, which holds no such entry.
 | *P&L after dues* | **Refused by the owner**: reads as all the dues, not the share owed so far. |
 | *Amortized*, *Normalized*, *Adjusted* | Wrong meaning, misleading, and vague. |
 | *Spread P&L* | The runner-up. |
-| **P&L · Pro-rata P&L** | **Chosen.** *Pro-rata* is the word an Indian salary already uses for a part month, and the screen always says how far through the month it is: *Pro-rata P&L · 18 of 31 days*. |
+| **P&L · P&L (Pro-rata)** | **Chosen.** *Pro-rata* is the word an Indian salary already uses for a part month. The owner first took *Pro-rata P&L* with *18 of 31 days* beside it, then, seeing the demo tile, asked for **October P&L (Pro-rata)** with no day count and the tile's usual Expenses line (2026-10-19). |
 
 Each figure carries its basis in one short line, as `profit-estimates` requires:
 *Costs counted on the date recorded* under P&L, *This month's fixed costs
-charged to today* under Pro-rata P&L. Verbs: **Add**, **Pay**, **Edit**,
+charged to today* under P&L (Pro-rata). Verbs: **Add**, **Pay**, **Edit**,
 **Drop**, **Undo**, **Stop**. Balance states: **To pay**, **All clear**,
 **Paid ahead**. Categories: **Salary**, **Rent**, **Utility**, **Other**.
 
@@ -308,8 +333,17 @@ All four are built in the demo first and approved by the owner before any is
 wired live (decision 13). These are the starting shapes, in the owner's
 conventions; the demo round decides.
 
-**Fixed costs** (`ledger/fixed-costs`, Finances, between Expenses and the
-Ledger), owner and manager, with the outlet picker Expenses has. A list in Team's
+**Expenses, Daily | Fixed** (decision 15). Two addresses under the one Expenses
+entry: Daily at `ledger/expenses`, Fixed at `ledger/fixed-costs`, a segmented
+control of two links drawn like the Ledger's One day | The month, so Back, a
+badge and Needs attention each land on the tab they mean. The tabs show only for
+the owner and a manager, and only while the `owner-fixed-costs` /
+`admin-fixed-costs` surface is renderable; those entries have no navigation of
+their own and are what holds the tab back until approval. Staff and the counter
+keep the page byte for byte. Daily accepts `?date=`, for the owner and a
+manager, so *Recorded on 31 Oct · View* opens that day.
+
+**Fixed**, owner and manager, with the outlet picker Expenses has. A list in Team's
 shape: name, category, this month's cost, and the balance in a Status column
 drawn like Team's (plain words, no dots). A total row: this month's fixed costs
 and what is still to pay. **Add** opens the five fields. Stopped fixed costs sit
@@ -323,7 +357,7 @@ newest first: *₹20,000 · paid 2 Nov · counted in October*, each opening its
 expense. **Pay** on the right of the Payments label. **Stop** red-outlined and
 centred at the foot.
 
-**The pay sheet**: amount pad, Paid on, Counts in (when it applies), Paid with,
+**The pay sheet**: amount, Paid on, Counts in (when it applies), Paid with,
 note, then the three choices as one group of buttons with the default chosen,
 each saying its effect in a few words. The figures under them update as the
 amount is typed.
@@ -332,17 +366,20 @@ amount is typed.
 month lines: the row reads the fixed cost's own name and category, *Nayan
 (Salary)*, or *Rent* where they are one word, from the link, not from the row's
 text, with **Fixed** beside it drawn like **Cash**, and *paid 2 Nov* where the
-payment counts in another day. The Expenses page reads the links for the day it
-shows with one more request, made only for the owner and a manager. The counter
+payment counts in another day. The Expenses page and the Ledger read the
+outlet's fixed costs with one more request, made alongside their own and only
+for the owner and a manager with the gate on. The counter
 and staff never read links (RLS), and their rows read as today.
 
 **Overview's P&L tile** (with `one-revenue` and this gate on): *{Month}
-Pro-rata P&L*, the figure, and *18 of 31 days · P&L ₹1.89L* beneath it in compact
-notation; the margin moves to the tooltip. An outlet with no fixed cost this
-month keeps #76's tile. The shimmer is reshaped to the new subtext in the same
-change.
+P&L (Pro-rata)*, the figure, and beneath it the tile's own line, *Expenses ₹X ·
+margin*, where Expenses includes the unpaid share of fixed costs so that revenue
+less expenses is the figure shown (owner, 2026-10-19). An outlet with no fixed cost this
+month keeps #76's tile. The tile keeps its shape, so its shimmer is unchanged.
 
-**The Ledger's current month**: the block in the proposal's sketch, then a
+**The Ledger's current month**: the block in the proposal's sketch, with *Short
+of covering {Month}* under the Covered bar until trading covers the month (D6),
+then a
 *Fixed costs* group, each fixed cost with its cost this month, what is paid and
 what is still owed, linking to its page. The category breakdown keeps every
 expense, fixed-cost payments included, so it still adds up to recorded
@@ -364,14 +401,13 @@ turning the gate, and pull it without losing anything.
 **Round trip, tested** (`@cg-round-trip:pro-rata-pnl`): with the gate on, add a
 fixed cost and pay part of it; turn the gate off; the Ledger's month and Overview
 read as before, the payment among recorded expenses with no chip; turn it on; the
-chip returns and Pro-rata P&L charges only the unpaid share.
+chip returns and P&L (Pro-rata) charges only the unpaid share.
 
 ## Version skew
 
 - **The four tables** are new. No published build reads them.
 - **`create_fixed_cost`, `record_fixed_cost_payment`, `settle_fixed_cost_month`,
-  `fixed_cost_month_cost`, `fixed_costs_month`, `fixed_cost_payment_marks`,
-  `fixed_costs_unpaid`** are new.
+  `fixed_cost_month_cost`, `fixed_costs_list`, `fixed_costs_unpaid`** are new.
 - **`overview_month_v2`** is new: `overview_month`'s object with a `fixedCosts`
   member added. `overview_month` is untouched, and #76's path and every published
   build keep calling it.
@@ -399,9 +435,8 @@ are insert-only.
 `create_fixed_cost` (a fixed cost and its first amount, one transaction) and
 `settle_fixed_cost_month` are `security invoker`. `record_fixed_cost_payment` is
 `security invoker` with its own authority check (D5). The reads
-(`fixed_costs_month`, `fixed_cost_payment_marks`, `overview_month_v2`,
-`fixed_costs_unpaid`) are `security definer` with `search_path = ''`, and the
-three that take an outlet begin with `overview_assert_outlet`, the check
+(`fixed_costs_list`, `overview_month_v2`, `fixed_costs_unpaid`) are `security
+definer` with `search_path = ''`, and the two that take an outlet begin with `overview_assert_outlet`, the check
 `overview_month` makes, so they admit exactly its readers. `fixed_costs_unpaid`
 filters by the same membership. `fixed_cost_month_cost` is granted to no role.
 
@@ -428,7 +463,7 @@ salaries, one paid half in a mid-month advance, one paid a month ahead, one who
 joined on the 20th; electricity settled higher last month; and garbage. Last
 month ends with one salary unpaid, so Needs attention shows it, and the Ledger's
 current month carries both P&Ls. The demo's trading days are filled out enough
-that Pro-rata P&L reads as a shop that trades, which also closes the gap
+that P&L (Pro-rata) reads as a shop that trades, which also closes the gap
 `openspec/todos/the-demo-month-reads-as-a-loss.md` records for the Ledger's month.
 
 ## Release
@@ -447,7 +482,7 @@ change no existing rows (tasks §11).
   into a rewrite of past rows.
 - **Entering the month's fixed costs on the 1st**, as the owners did on the 19th.
   Moves the cliff to the start of the month.
-- **Pro-rata P&L kept for past days and months.** The owner chose a
+- **P&L (Pro-rata) kept for past days and months.** The owner chose a
   current-moment figure (decision 9). A history of it would need every past day's
   view of which payments existed then, for a number nobody asked to look back at.
 - **Fixed-cost payments outside `expenses`.** A cash payment would be invisible to
@@ -463,3 +498,174 @@ change no existing rows (tasks §11).
 - **Taking next month's amount from this month's payment automatically.** An
   overtime month would become everyone's new salary. The amount changes only by
   Edit or by choosing *new monthly amount*.
+
+## The owner's demo round
+
+**2026-10-19, first look (Overview, watched in the browser pane while built).**
+The tile read *October Pro-rata P&L · 19 of 31 days · P&L ₹3.8L*. The owner asked
+for **"October P&L (Pro-rata)"**, no day count, and the line the tile already
+shows, *Expenses ₹X · margin*. Made: the Expenses figure includes the unpaid
+share of fixed costs so that revenue less expenses is the headline, and the
+margin is the Pro-rata figure's. The Ledger card took the same name and lost its
+day count too.
+
+The full round (list, a fixed cost's page, the pay sheet, Needs attention, the
+Ledger's months, the Expenses chip) is pending (tasks §6).
+
+**2026-10-19, the Fixed tab and a fixed cost's page.** Asked what *October* and
+*To pay ₹49,900* meant, which mixed this month with everything owed, the owner
+asked for labels that each say one thing, and for *this month* over the month's
+name. Made:
+
+- **Tiles, on the list and on a fixed cost's page: This month · Paid · Left to
+  pay**, "this month" said once, in the first (owner: the rest is understood).
+  *Paid* is paid **for** this month, an earlier advance included. Money owed from
+  months that ended is its own line, **Overdue from September ₹3,300**, never
+  folded into Left to pay. Paid ahead is its own tile on the page. The Ledger
+  card's *Still to pay* became *Left to pay*, the same figure.
+- **Rows**: the column is *This month*; the status says this month (*₹8,000
+  left*, *Paid*) with *₹3,300 overdue* or *₹5,000 ahead* beneath it in small
+  type (\`thisMonthStatus\`). The words are captions; the figures lead.
+- **Pay on every row** (owner: a salary day is ten payments one after another,
+  and opening each person is a detour). The sheet opens with what is owed filled
+  in, so an exact payment is Pay, Paid with, Save. Paid with still starts
+  unchosen, as #65 requires. The row's arrow went, because Pay sits at its end and
+  the row still opens the page.
+- **Edit in the title row**, a primary button like Add, editing every field:
+  name, category, monthly amount (with *This month* or *Next month* when it
+  changes), start date and note. A start moved before the first monthly amount
+  carries that amount back to it. The migration's guard now lets the start date
+  change; the outlet and the author stay fixed.
+
+**2026-10-19, one column.** The owner found *This month* and *Status* two columns
+for one question and asked for a single one that says the total, what is paid and
+what is overdue. Made: **This month** reads *₹4,000 of ₹12,000 paid* (paid in
+bold) over a thin bar, *₹10,000 paid* with a full bar once paid; *+ ₹3,300
+overdue from Sept* in amber and *+ ₹5,000 ahead* in grey on their own line
+beneath, never inside this month's bar. The table is *Fixed cost | This month |
+Pay*.
+
+**2026-10-19, the pay sheet.** The owner found it confusing: choosing *Counts in*
+at the bottom changed the choices at the top, nothing said why that mattered,
+and *Keep pending* / *Drop* were bookkeeping words. Reworked (supersedes D5's
+three choices and its "owed through the month it counts in"):
+
+- **Nothing lower down changes anything above it.** What is owed is reckoned at
+  today and stated first, fixed: *Owes ₹12,300 · ₹3,300 from Sept + ₹9,000 for
+  Oct* (\`payOwed\`). The amount starts at the usual payment: an overdue month if
+  there is one (salaries paid on the 1st or 2nd), else what is left of this month.
+- **A different amount asks why** (owner: "paying an amount different from what
+  is due should require some kind of a note"), with everyday reasons that are
+  the expense's note and decide what it does (\`pay-reasons.ts\`): more than
+  everything owed: *Advance*, *Bonus*, *Overtime*, *Raise*, *Other* (rent and
+  bills: *Paid ahead*, *Bigger bill*, *New monthly amount*, *Other*); less than an
+  ended month owes: *Paying the rest later*, *Days off* (or *Smaller bill*),
+  *Other*; part of this month: *Advance on this month's salary* (or *Part
+  payment*), *Other*. *Other* must be written. The usual amount asks nothing.
+- **Counts in became Shows in**, at the foot, only when an earlier month is owed
+  and it is not cash, worded with its reason: *September's figures — late pay for
+  September: its P&L carries it* or *October's figures — counted on the day it
+  was paid* (\`showsInDefault\`). It changes nothing above it.
+
+**2026-10-19, Exact · Less · More, and "we pay".** Under the amount, a switch of
+**Exact · Less · More**, Exact chosen at the start, so paying anything but the
+amount due is a visible choice and a slip of the thumb is not a payment (owner).
+Typing a different figure moves the switch; Less and More take the reader up to
+the amount with it selected, never changing it; Exact puts the due figure back.
+It replaces the line that said *₹2,000 more than owed*: the reasons beneath ask
+only *Why?*. The owner also asked for *pay* over *cost* in what people read about
+salaries and rent: *From November, we pay ₹14,000 a month*, *In November we pay
+only for the days from 20 Nov*, *In December we pay ₹12,000, then nothing more*.
+
+**2026-10-19, figures in every reason.** Each reason names its amounts so the
+choice can be checked before Save (owner): *Advance: November owes ₹10,000
+instead of ₹12,000*; *Bonus / overtime* (one answer, owner: "I don't really care
+which one it is"): *₹2,000 extra, one time, just October*; *Raise: From November,
+we pay ₹14,000 a month*; *Paying the rest later: ₹1,300 of September still to
+pay*; *Days off: September settles at ₹2,000; the other ₹1,300 is not owed*;
+*Advance on this month's salary: ₹1,000 now, ₹7,000 later*. And the switch can
+no longer claim Less or More for the amount due: leaving the amount unchanged
+puts it back on Exact.
+
+**2026-10-19, paying less mirrors paying more.** The owner asked for the "less"
+side to parallel the "more" side, with practical examples. Now: *Paying the rest
+later* (as an advance is), **Leave / fine** (one time, as Bonus / overtime is: days
+off without pay, coming late, breakage, a drawer someone was answerable for),
+**Pay cut** (from the next month, as Raise is; rent and bills: *Smaller bill /
+discount*, *New monthly amount*), and *Other*. They are offered for this month
+too, not only for a month that ended, since any amount but the one due now asks
+why; a pay cut is not offered for a prorated month. The domain gained \`cut\`
+(settle the month and set the amount from the next). **Other** opens inside its
+own card to say what it was, required, and the optional note at the foot goes
+while Other is chosen. The row's Pay became a small outlined pill (owner: six
+full buttons stacked read as clutter), orange where something is owed, quiet
+where the month is paid, with a thumb-sized hit area.
+
+**2026-10-19, drawer cash and collected cash.** The business sometimes pays in
+cash that is not the drawer's, from the collected stack. Only drawer cash moves the
+drawer's expected cash, as it always has; the words now say so everywhere they
+appear, not only on the pay sheet (owner): *Paid with* reads **Drawer cash** or
+**UPI / bank or collected cash** on the pay sheet and on the everyday Expenses
+form, staff's line reads *Drawer cash*, and a non-drawer row reads **Not from
+drawer** on Expenses and the Ledger (it read *Not cash*, which a collected-cash
+payment is not). This is copy on live surfaces, the counter's expense list among
+them, and changes no behaviour; \`docs/SCREENS.md\` takes the words at §10.
+
+**2026-10-19, a refused Save points at its field.** "Just a message is very
+annoying" (owner): a refused Save now outlines the field responsible in the
+danger colour, puts its message right under it instead of at the foot of the
+sheet, scrolls to it only when it is out of view, focuses it where it takes
+input, and shakes it once (a pulse under reduced motion). Changing the field
+clears it. It is a design-system piece, \`useFieldAttention\` and
+\`<AttentionField>\` in \`src/components/ui/\`: the outline is its own layer a
+little outside the field, so nothing moves, and the shake runs through the Web
+Animations API so React's class list is left alone. This change uses it in the
+pay, add and edit sheets; the rest of the app's forms are live, some on the
+counter, and take it in a change of their own.
+
+**2026-10-19, the eight answers.** Settled with the owner, every month by its
+name (correct for a month already over, where "this month" is not):
+
+- **Why more?** *Includes advance from November* (November owes ₹10,000 instead of
+  ₹12,000) · *Includes one-time bonus* (₹2,000 of it is bonus, just October) ·
+  *Permanent pay raise* (From November, we pay ₹14,000 a month) · *Other*.
+  "Includes", because only part of the payment is the advance or the bonus.
+- **Why less?** *Advance from October* (₹1,800 now, ₹6,200 of October later), or
+  *Paying the rest later* when the month is already over (paid late, not early) ·
+  *That's all for October* (leave, a fine) · *Permanent pay cut* (From November, we
+  pay ₹5,800 a month) · *Other*.
+
+Rent and bills: *Includes one-time extra*, *Permanent new amount*, and *That's
+all* hinting a smaller bill or a discount.
+
+**2026-10-19, no bar.** Part payments are occasional, so the row's bar went
+(owner): *₹4,000 of ₹12,000 paid* says it. *+ ₹5,000 ahead* reads green, as
+*+ ₹3,300 overdue from Sept* reads amber.
+
+**2026-10-19, the row's Pay.** It sat above the phone's bottom bar when a row
+scrolled under it, because it carried a z-index of its own; now \`relative\`
+with none, above its row's link and under the bar. It keeps its size and round
+shape and takes the app's own button fills (owner): primary orange where
+something is owed, the secondary fill where the month is paid, plainly a
+button for paying ahead.
+
+**2026-10-19, Undo a payment.** Asked how a payment recorded wrong is put
+right (owner). Each payment on a fixed cost's page has its own **Undo**, which
+withdraws the expense *and* takes back what its answer recorded: the month it
+settled reopens, and a new monthly amount it set is voided, so the amount
+before it is back. The settlement and the amount carry the payment's id
+(`fixed_cost_payment_id`), and an amount row is voidable like a settlement;
+nothing is deleted. The confirmation names each effect: *This withdraws the
+₹12,000 paid 2 Oct, reopens September and puts November back to ₹12,000 a
+month. The expense stays on its day, struck through. Then pay again with the
+right answer.* Then pay again; there is no editing a payment in place, so its
+answer can never disagree with its amount.
+
+On the Expenses page a fixed-cost payment offers only **Edit note** and
+**Change on {name}'s page**, never Withdraw: withdrawing it there would leave
+its settlement and its new amount behind. The note form says the amount, the
+day and how it was paid change by undoing it there, and keeps the fixed cost's
+name in front of the note.
+
+**2026-10-19, approved.** The owner approved the demo's UI as it stands, with
+Undo, and asked for the full build to follow (§7 on).

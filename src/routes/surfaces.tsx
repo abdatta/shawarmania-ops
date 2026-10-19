@@ -12,6 +12,7 @@ import { CustomersSurface } from '@/features/customers/customers-surface'
 import { LedgerStatementSurface } from '@/features/cash/ledger-statement-surface'
 import { ExpenseCategoriesSurface } from '@/features/expense-categories/expense-categories-surface'
 import { OutletExpensesSurface } from '@/features/expenses/outlet-expenses-surface'
+import { FixedCostPage, FixedCostsSurface } from '@/features/fixed-costs/fixed-costs-surface'
 import { OutletDayView } from '@/features/insights/outlet-day-view'
 import { MenuSurface } from '@/features/menu/menu-surface'
 import { OutletPage, OutletsSurface } from '@/features/outlets/outlets-surface'
@@ -201,6 +202,24 @@ export const roleSurfaceRoutes: RouteObject[] = [
     element: (
       <GatedSurface path="ledger/expenses">
         <OutletExpensesSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    // An outlet's fixed costs, and one fixed cost's own page opened from a row,
+    // gated against the list's path as an outlet's page is.
+    path: 'ledger/fixed-costs',
+    element: (
+      <GatedSurface path="ledger/fixed-costs">
+        <FixedCostsSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    path: 'ledger/fixed-costs/:fixedCostId',
+    element: (
+      <GatedSurface path="ledger/fixed-costs">
+        <FixedCostPage />
       </GatedSurface>
     ),
   },

@@ -425,7 +425,7 @@ export function createMockLedgerStatementAdapter(
       const days: MonthDayInput[] = []
       for (let dayNumber = 1; dayNumber <= daysInMonth; dayNumber += 1) {
         const businessDate = `${month}-${String(dayNumber).padStart(2, '0')}`
-        days.push(toMonthDayInput(dayFor(outletId, businessDate)))
+        days.push(toMonthDayInput(dayFor(outletId, businessDate), { withExpenseIds: true }))
       }
 
       const throughBusinessDate = resolveBusinessDate(new Date(), CUTOVER)

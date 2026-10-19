@@ -1,3 +1,5 @@
+import type { ProRataReading } from '@/domain/fixed-costs'
+
 /** Small, independently requested Home readings. Money is always integer paise. */
 export interface OverviewSales {
   cashPaise: number
@@ -55,6 +57,12 @@ export interface OverviewMonth {
   profitPaise: number | null
   hasSales: boolean
   previous: OverviewComparison
+  /**
+   * This month's fixed costs read at today (fixed-costs-are-spread-over-the-month):
+   * what Pro-rata P&L charges. Absent from a read that predates it, and null
+   * where the outlet has no fixed cost this month.
+   */
+  fixedCosts?: ProRataReading | null
 }
 export interface OverviewAdapter {
   sales(outletId: string, date: string): Promise<OverviewSales>

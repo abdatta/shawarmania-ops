@@ -11,18 +11,17 @@ included on the date each counts in, plus delivery commission, as defined by
 `business-figures`, with the basis named on screen wherever a profit figure
 appears.
 
-**The current month SHALL also offer Pro-rata P&L, and no other period SHALL.**
+**The current month SHALL also offer P&L (Pro-rata), and no other period SHALL.**
 Where the outlet has at least one fixed cost active in the current month,
-Overview and the Ledger's current month SHALL show, beside P&L, **Pro-rata P&L**:
+Overview and the Ledger's current month SHALL show, beside P&L, **P&L (Pro-rata)**:
 P&L less, for each fixed cost, the part of this month's cost owed up to today
-and not yet covered by a payment, and SHALL say how far through the month it is
-(*18 of 31 days*). A balance owed from an earlier month SHALL NOT enter it. A past
-day or month SHALL offer P&L alone, from recorded expenses, and no Pro-rata P&L
+and not yet covered by a payment. A balance owed from an earlier month SHALL NOT enter it. A past
+day or month SHALL offer P&L alone, from recorded expenses, and no P&L (Pro-rata)
 SHALL be offered or stored for it. A current month with no active fixed cost SHALL
 offer P&L alone.
 
 The figure SHALL be computed from the promoted expense record and from bills and
-sourced aggregator channel days, and Pro-rata P&L additionally from the outlet's
+sourced aggregator channel days, and P&L (Pro-rata) additionally from the outlet's
 fixed costs. No notebook table SHALL appear in the chain, and the archived
 notebook rows SHALL remain unreachable.
 
@@ -57,30 +56,30 @@ beside the figure rather than only beside the revenue total.
 #### Scenario: The basis is named
 
 - **WHEN** any profit figure is shown
-- **THEN** it is labelled P&L or Pro-rata P&L, with its basis in words beside it
+- **THEN** it is labelled P&L or P&L (Pro-rata), with its basis in words beside it
 
-#### Scenario: Pro-rata P&L on the 18th
+#### Scenario: P&L (Pro-rata) on the 18th
 
-- **WHEN** it is 18 October, P&L is ₹1,89,368, and ₹3,22,700 of this month's
-  fixed costs is entirely unpaid
-- **THEN** Pro-rata P&L reads ₹1,994, *18 of 31 days*
+- **WHEN** it is 18 October, P&L is ₹1,89,368, and one fixed cost of ₹3,22,700 for
+  this month is entirely unpaid
+- **THEN** P&L (Pro-rata) reads ₹1,993.81
 
 #### Scenario: A salary paid in full mid-month
 
 - **WHEN** a ₹10,000 salary is paid in full on the 20th of a 30-day month
-- **THEN** P&L carries ₹10,000 for it from that moment and Pro-rata P&L charges
+- **THEN** P&L carries ₹10,000 for it from that moment and P&L (Pro-rata) charges
   nothing more for it this month
 
 #### Scenario: Last month's balance stays out of this month
 
 - **WHEN** it is 1 November and a salary's October is unpaid
-- **THEN** November's Pro-rata P&L does not include October's balance, and Needs
+- **THEN** November's P&L (Pro-rata) does not include October's balance, and Needs
   attention names it
 
 #### Scenario: A past month reads P&L only
 
 - **WHEN** the Ledger shows September, which had fixed costs
-- **THEN** it shows P&L from September's recorded expenses and no Pro-rata P&L
+- **THEN** it shows P&L from September's recorded expenses and no P&L (Pro-rata)
 
 #### Scenario: A month with an unstated commission
 

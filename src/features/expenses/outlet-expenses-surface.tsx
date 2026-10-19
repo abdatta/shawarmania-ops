@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router'
 
 import { PageHeader } from '@/components/layout/page-header'
 import { Card } from '@/components/ui/card'
@@ -9,6 +10,9 @@ import { useAdapters } from '@/data-access'
 import type { ExpenseRecord } from '@/data-access/adapters'
 import { carryPeriod, earliestOffered, resolveBusinessDate, shiftBusinessDate } from '@/domain'
 import { ExpenseList } from '@/features/expenses/expense-list'
+import { ExpenseTabs } from '@/features/fixed-costs/expense-tabs'
+import { useFixedMarks, useOutletFixedCosts } from '@/features/fixed-costs/use-fixed-costs'
+import { useFixedTabAvailable } from '@/features/fixed-costs/use-fixed-tab'
 import { useOutletScope } from '@/features/outlet-scope'
 import { useSession } from '@/session/context'
 import { holdsRole } from '@/session/session'
@@ -80,6 +84,18 @@ export function OutletExpensesSurface() {
   // app_outlets_for('franchise_admin')`: policy and control ask one question.
   const fullReach = holdsRole(session, 'super_admin') || managed
   const shape = fullReach ? FULL_REACH_SHAPE : STAFF_SHAPE
+  // The Fixed chip (fixed-costs-are-spread-over-the-month): read only for the
+  // owner and a manager, with `pro-rata-pnl` on. Staff make no request for it.
+  const fixedMarks = useFixedMarks(useOutletFixedCosts(outletId, fullReach), outletId)
+  // Daily | Fixed (owner, 2026-10-19): only for the owner and a manager, and only
+  // once the Fixed tab's surface is shown. Staff and the counter see this page
+  // exactly as before.
+  const fixedTabAvailable = useFixedTabAvailable()
+  const showTabs = fullReach && fixedTabAvailable
+  // A payment's "Recorded on 31 Oct · View" opens that day (`?date=`), for the
+  // owner and a manager; staff keep their two days.
+  const [address] = useSearchParams()
+  const askedDate = fullReach ? address.get('date') : null
 
   const [dayContext, setDayContext] = useState<{
     outletId: string
@@ -134,11 +150,10 @@ export function OutletExpensesSurface() {
         setDayContext((current) => ({
           outletId,
           today: resolved,
-          businessDate: carryPeriod(
-            current?.businessDate ?? null,
-            current?.today ?? null,
-            resolved,
-          ),
+          businessDate:
+            !current && askedDate && /^d{4}-d{2}-d{2}$/.test(askedDate) && askedDate <= resolved
+              ? askedDate
+              : carryPeriod(current?.businessDate ?? null, current?.today ?? null, resolved),
         }))
         setErrorResult(null)
       })
@@ -154,6 +169,9 @@ export function OutletExpensesSurface() {
     return () => {
       active = false
     }
+    // `askedDate` is read once, for the first day shown: stepping away from it is
+    // the reader's, and must not be undone by the address.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outlets, outletId])
 
   useEffect(() => {
@@ -203,6 +221,7 @@ export function OutletExpensesSurface() {
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader scope={outletSelector} title="Expenses" subtitle={shape.subtitle} />
+      {showTabs && <ExpenseTabs current="daily" />}
 
       {error && (
         <p
@@ -268,6 +287,7 @@ export function OutletExpensesSurface() {
               : 'Nothing was recorded for this day.'
           }
           onChanged={() => load(businessDates)}
+          fixedMarks={fullReach ? fixedMarks : undefined}
         />
       )}
 

@@ -194,6 +194,16 @@ export interface DemoStore {
   expenseCategories: Tables<'expense_categories'>[]
   /** Owner curation history. */
   expenseCategoryOperations: Tables<'expense_category_operations'>[]
+  /**
+   * An outlet's fixed costs and what pays them (fixed-costs-are-spread-over-the-month).
+   * Owned by the fixed-costs adapter. Empty unless the demo seeds them
+   * (`createDemoData({ fixedCosts: true })`), so the figures every other test
+   * asserts are the figures they always were.
+   */
+  fixedCosts: Tables<'fixed_costs'>[]
+  fixedCostAmounts: Tables<'fixed_cost_amounts'>[]
+  fixedCostSettlements: Tables<'fixed_cost_settlements'>[]
+  fixedCostPayments: Tables<'fixed_cost_payments'>[]
   /** What was in the drawer when the day started. `cash-is-counted-not-closed`
    *  (#11) replaces this with a per-outlet opening anchor, after which every
    *  opening is the previous observation's carry-forward. */
@@ -1500,6 +1510,10 @@ export function createDemoStore(
     expenses,
     expenseCategories,
     expenseCategoryOperations,
+    fixedCosts: [],
+    fixedCostAmounts: [],
+    fixedCostSettlements: [],
+    fixedCostPayments: [],
     openingCashPaise: OPENING_CASH_PAISE,
     aggregatorChannelDays,
     drawerObservations,

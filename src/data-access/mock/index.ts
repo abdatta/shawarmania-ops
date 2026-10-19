@@ -18,6 +18,7 @@ import {
 } from './customers'
 import { createMockExpensesAdapter } from './expenses'
 import { createMockExpenseCategoriesAdapter } from './expense-categories'
+import { createMockFixedCostsAdapter, seedDemoFixedCosts } from './fixed-costs'
 import { createMockInsightsAdapter } from './insights'
 import { createDemoKitchen, createMockKitchenAdapter, type DemoKitchen } from './kitchen'
 import { createMockOverviewAdapter } from './overview'
@@ -92,13 +93,20 @@ export function createDemoData(
      * reads them; every other test starts with empty dish records.
      */
     dishWalkthrough?: boolean
+    /**
+     * Seed the demo outlet's fixed costs (fixed-costs-are-spread-over-the-month).
+     * Their payments are expenses, so the demo asks for them and a test only
+     * when it reads them; every other test's figures stay what they were.
+     */
+    fixedCosts?: boolean
   } = {},
 ): DemoData {
-  const { dishWalkthrough = false, ...storeOptions } = options
+  const { dishWalkthrough = false, fixedCosts = false, ...storeOptions } = options
   const store = createDemoStore({ billingLifecycle: true, ...storeOptions })
   const changeGates = createDemoChangeGates()
   if (dishWalkthrough) seedDishWorkflow(store)
   else emptyDishWorkflow(store)
+  if (fixedCosts) seedDemoFixedCosts(store)
   return {
     accounts: createDemoAccounts(),
     store,
@@ -270,6 +278,12 @@ export function createMockAdapters(
       assignedOutlets(persona.assignments),
     ),
     expenseCategories: createMockExpenseCategoriesAdapter(store, role),
+    fixedCosts: createMockFixedCostsAdapter(
+      store,
+      role,
+      persona.profile.id,
+      role === 'super_admin' ? null : outletsForRole(persona.assignments, 'franchise_admin'),
+    ),
     // Both enforce the boundary the RLS policies will: only the Super Admin
     // reads across outlets, and asking for somebody else's returns nothing.
     insights: createMockInsightsAdapter(store, attendance, role, session),

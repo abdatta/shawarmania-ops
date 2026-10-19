@@ -10,7 +10,7 @@
 > asks what to do with any difference, and keeps when it was paid apart from the
 > month it counts in; a month that ends with a fixed cost unpaid is named under
 > Needs attention until it is paid or dropped; Overview and the Ledger's current
-> month show **Pro-rata P&L**, which charges the unpaid share of this month's
+> month show **P&L (Pro-rata)**, which charges the unpaid share of this month's
 > fixed costs up to today, beside **P&L**; every past month reads P&L from
 > recorded expenses alone; only the owner and the outlet's manager read any of
 > it; and with the gate off every figure reads exactly as it does today.
@@ -49,11 +49,14 @@ next month. Today none of that is tracked anywhere but in someone's head.
 
 ## What changes
 
-### A Fixed costs page
+### Fixed costs, a tab of Expenses
 
-Under **Finances**, beside Expenses and the Ledger, for the owner and the
-outlet's manager. A list in the same shape as Team, one row per fixed cost, each
-opening its own page.
+**One Expenses entry with two tabs, Daily | Fixed**, for the owner and the
+outlet's manager (owner, 2026-10-19), drawn like the Ledger's One day | The
+month. **Daily** is the Expenses page as it is, with the Fixed chip on payments.
+**Fixed** is a list in the same shape as Team, one row per fixed cost, each
+opening its own page. Staff and the counter see Expenses exactly as today, with
+no tabs and no extra request.
 
 - **Adding one** asks for a **name** (*Nayan*, *Kalyani shop*), a **category**
   (**Salary**, **Rent**, **Utility** or **Other**), the **monthly amount**, a
@@ -108,7 +111,10 @@ chip beside it, drawn like the Cash chip: **Rent** alone where the name and
 category are the same word. The chip comes from the payment's link to its fixed
 cost, which only Pay creates. Typing *[fixed]* into an ordinary expense produces
 those words and no chip. Correcting or withdrawing the expense on the Expenses
-page corrects the fixed cost's balance.
+page corrects the fixed cost's balance. After Pay, the
+fixed cost's page says where the expense went, *Recorded on 31 Oct · View*, and
+View opens that day on the Daily tab: a salary paid on the 2nd counts on the 31st,
+so it is not on the day the reader would look for it.
 
 ### A month it counts in, and the day it was paid
 
@@ -127,20 +133,19 @@ in the month it was paid.
 ### Unpaid fixed costs need attention
 
 Once a month is over, every fixed cost with a balance still owed for it is named
-under **Needs attention** on Overview, and the Fixed costs entry carries a badge
-with the count: *Fixed costs: 3 unpaid from October*. It opens the list, where
-each one is a tap from Pay. It clears when the balance is paid, or dropped.
+under **Needs attention** on Overview, and the Expenses entry carries a badge
+with the count: *Fixed costs: 3 unpaid from October*. It opens the Fixed tab,
+where each one is a tap from Pay. It clears when the balance is paid, or dropped.
 
-### Pro-rata P&L, for now only
+### P&L (Pro-rata), for now only
 
 - **P&L** stays what it is today: revenue less every expense recorded, fixed-cost
   payments included, on the date each counts in. **Every past month reads P&L
   only**, from what was paid and nothing promised.
-- **Pro-rata P&L** is the current month's P&L **as of now**, less the part of
+- **P&L (Pro-rata)** is the current month's P&L **as of now**, less the part of
   this month's fixed costs that is owed so far and not yet paid. For each fixed
   cost, the share owed so far is this month's cost × days so far ÷ days in the
-  month; once paid, the payment is in P&L and stops being spread. It always
-  shows how far through the month it is: *Pro-rata P&L · 18 of 31 days*.
+  month; once paid, the payment is in P&L and stops being spread.
 - A balance owed from an earlier month is not in it. It belongs to that month,
   and lands there when paid; until then it is under Needs attention.
 - When every fixed cost of the month is paid, the two figures are equal.
@@ -153,23 +158,25 @@ Expenses                              −₹4,76,100
 P&L                                    ₹1,89,400
 
 Fixed costs owed so far, unpaid       −₹1,87,400
-Pro-rata P&L · 18 of 31 days             ₹2,000
+P&L (Pro-rata)                           ₹2,000
 
 Fixed costs this month   ₹3,22,700
 Covered                  59%     ▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░
+Short of covering October          ₹1,33,332
 Still to pay             ₹3,22,700
 ```
 
 followed by each fixed cost with its month's cost, what is paid and what is
 owed, linking to its page. A past month reads P&L only, as today.
 
-**Overview's P&L tile** leads with Pro-rata P&L and shows P&L on a smaller line
-beneath it. An outlet with no fixed cost this month shows P&L alone, as today.
+**Overview's P&L tile** reads *October P&L (Pro-rata)*, the figure, and beneath
+it the line it has today, *Expenses ₹X · margin*, with the unpaid share of fixed
+costs among the expenses so that the two still add up (owner, 2026-10-19). An outlet with no fixed cost this month shows P&L alone, as today.
 
 ## Change gate
 
 - **`pro-rata-pnl`** (*PR*), depends on **`one-revenue`**
-  - **On:** Overview and the Ledger's current month show Pro-rata P&L, which
+  - **On:** Overview and the Ledger's current month show P&L (Pro-rata), which
     charges the unpaid share of this month's fixed costs up to today, beside P&L.
   - **Off:** Overview and the Ledger show one P&L that counts every cost on the
     date it was recorded.
@@ -192,7 +199,7 @@ off-path code reads. A browser test proves the round trip (design D10).
   it. The 2026-07-28 decision to keep payroll out stands; this reverses only the
   part of it that kept salary amounts out (design D1).
 - **Linking a salary to a team account.** Refused by the owner, 2026-10-19.
-- **Pro-rata P&L for any past day or month.** It is a figure for now. A past
+- **P&L (Pro-rata) for any past day or month.** It is a figure for now. A past
   month is P&L from recorded expenses (owner, 2026-10-19).
 - **Splitting one payment across several fixed costs**, or **recording money
   given back**. A returned advance is a negative drawer movement if it was cash,
@@ -204,7 +211,7 @@ off-path code reads. A browser test proves the round trip (design D10).
   (owner, 2026-10-01); nothing else is.
 - **A daily sales target** ("you need ₹X a day"). For the owner to ask for after
   using the covered bar.
-- **Pro-rata P&L on Analytics** or on the Ledger's day view.
+- **P&L (Pro-rata) on Analytics** or on the Ledger's day view.
 - **Rewriting the placeholder expenses** entered on 19 October. They are real
   rows; the owners withdraw them on the Expenses page when the fixed costs
   replace them (tasks §11).
@@ -221,11 +228,11 @@ off-path code reads. A browser test proves the round trip (design D10).
 
 ### Modified
 
-- `profit-estimates`: the current month offers Pro-rata P&L beside P&L, named
+- `profit-estimates`: the current month offers P&L (Pro-rata) beside P&L, named
   wherever it appears; past months offer P&L alone.
 - `ledger-statement`: the current month reads both, the covered bar and the
   month's fixed costs; a fixed-cost payment carries its chip and paid-on date.
-- `outlets-overview`: the P&L tile leads with Pro-rata P&L where the month has a
+- `outlets-overview`: the P&L tile leads with P&L (Pro-rata) where the month has a
   fixed cost.
 - `outlet-expenses`: a fixed-cost payment reads as its name and category with a
   Fixed chip that no typed expense can carry.
@@ -249,7 +256,7 @@ off-path code reads. A browser test proves the round trip (design D10).
   payroll* stays, and stops saying no salary is stored anywhere.
 - [`docs/LIMITATIONS.md`](../../../docs/LIMITATIONS.md): *Payroll is out of
   scope* rewritten to match; one payment pays one fixed cost; no money given
-  back; Pro-rata P&L is a figure for now.
+  back; P&L (Pro-rata) is a figure for now.
 - [`docs/DATA_MODEL.md`](../../../docs/DATA_MODEL.md): the four tables, the
   balance, the month a payment counts in, and the read functions.
 - [`docs/SCREENS.md`](../../../docs/SCREENS.md): Fixed costs, a fixed cost's
@@ -260,6 +267,6 @@ off-path code reads. A browser test proves the round trip (design D10).
 - [`docs/SECURITY_AND_PRIVACY.md`](../../../docs/SECURITY_AND_PRIVACY.md): salary
   amounts, who reads them, and the one route by which staff see a payment.
 - [`docs/GLOSSARY.md`](../../../docs/GLOSSARY.md): **Fixed cost**, **Paid
-  ahead**, **Counts in**, **Pro-rata P&L**.
+  ahead**, **Counts in**, **P&L (Pro-rata)**.
 - [`docs/DEMO_MODE.md`](../../../docs/DEMO_MODE.md): the demo outlet's fixed
   costs.

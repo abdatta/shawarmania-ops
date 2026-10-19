@@ -127,6 +127,22 @@ export const CHANGE_GATES = {
     retireBy: '2027-01-31',
     roundTrip: 'none: every figure is read and derived; the on path writes nothing',
   },
+  /**
+   * #79: Pro-rata P&L beside P&L on Overview and the Ledger's current month,
+   * charging the unpaid share of this month's fixed costs up to today, and the
+   * Fixed chip on a fixed-cost payment (fixed-costs-are-spread-over-the-month,
+   * design D6–D10). Built on `one-revenue`'s figures, so it runs only with it.
+   * The Fixed costs page is a surface, not behind this gate: its payments are
+   * expense rows every figure already reads. Off, the figures read as before.
+   */
+  'pro-rata-pnl': {
+    kind: 'change',
+    code: 'PR',
+    change: 'fixed-costs-are-spread-over-the-month',
+    dependsOn: ['one-revenue'],
+    retireBy: '2027-02-28',
+    roundTrip: 'tested',
+  },
 } as const satisfies Record<string, ChangeGateDeclaration>
 
 export type ChangeGateKey = keyof typeof CHANGE_GATES

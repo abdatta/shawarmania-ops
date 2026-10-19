@@ -75,6 +75,14 @@ const WORDS: Record<
       'Overview counts the month through yesterday with delivery after commission, the Ledger counts delivery after commission, and Analytics offers the last 30 days.',
     changeNumber: 76,
   },
+  'pro-rata-pnl': {
+    title: 'Pro-rata P&L',
+    onMeans:
+      'Overview and the Ledger’s current month show Pro-rata P&L, which charges the unpaid share of this month’s fixed costs up to today, beside P&L.',
+    offMeans:
+      'Overview and the Ledger show one P&L that counts every cost on the date it was recorded.',
+    changeNumber: 79,
+  },
 }
 
 /**

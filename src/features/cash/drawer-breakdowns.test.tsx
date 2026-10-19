@@ -283,7 +283,7 @@ describe('Cash Expenses opens the expense list, by business date', () => {
     )
 
     const group = await screen.findByTestId('expenses-day-2026-08-29')
-    expect(group.textContent).toMatch(/not cash/i)
+    expect(group.textContent).toMatch(/not from drawer/i)
 
     // ₹220, from the grouped reader — the ₹5,000 that did not come from the
     // drawer is on screen and in no total.

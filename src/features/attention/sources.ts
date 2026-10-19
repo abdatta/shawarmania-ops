@@ -5,6 +5,7 @@ import {
   useSwiggyAttention,
   useZomatoAttention,
 } from '@/features/aggregator-sync/needs-you-count'
+import { useFixedCostsUnpaidAttention } from '@/features/fixed-costs/attention'
 import type { AttentionSourceId } from '@/gates/registry'
 
 import type { AttentionSource } from './attention'
@@ -26,4 +27,5 @@ export const ATTENTION_SOURCES: Record<AttentionSourceId, AttentionSource> = {
   'delivery-needs-you': useDeliveryAttention,
   'zomato-needs-you': useZomatoAttention,
   'swiggy-needs-you': useSwiggyAttention,
+  'fixed-costs-unpaid': useFixedCostsUnpaidAttention,
 }

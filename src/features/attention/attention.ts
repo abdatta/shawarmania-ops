@@ -32,6 +32,12 @@ export interface Attention {
   label: string
   /** Concise page summary; otherwise the page name and label are used. */
   summaryLabel?: string
+  /**
+   * Where Needs attention opens, when it is not the entry's own page: a tab
+   * under it, as fixed costs are the Fixed tab of Expenses. Relative to the
+   * role's prefix, like a surface's path.
+   */
+  path?: string
 }
 
 /** A hook a surface offers so the shell can badge it without knowing why. */

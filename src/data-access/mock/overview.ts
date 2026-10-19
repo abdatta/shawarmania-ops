@@ -11,6 +11,8 @@ import { toMonthDayInput } from '../adapters'
 import type { OverviewAdapter, OverviewComparison } from '../overview'
 import { outletFixtures } from './fixtures/outlets'
 import type { DemoStore } from './store'
+import { readProRata } from '@/domain/fixed-costs'
+import { demoOutletFixedCosts } from './fixed-costs'
 import type { DemoCounter } from './counter'
 import { createMockCashDrawerAdapter } from './cash-drawer'
 import { createMockLedgerStatementAdapter } from './ledger-statement'
@@ -29,6 +31,10 @@ export function createMockOverviewAdapter(
   function check(outletId: string) {
     if (allowed && !allowed.includes(outletId))
       throw new Error('Overview is not available at this outlet')
+  }
+  function proRataOf(outletId: string, today: string) {
+    const reading = readProRata(demoOutletFixedCosts(store, outletId), today)
+    return reading.lines.length > 0 ? reading : null
   }
   return {
     async sales(outletId, date) {
@@ -155,6 +161,7 @@ export function createMockOverviewAdapter(
         profitPaise: figures.profitPaise,
         hasSales: figures.profitPaise !== null,
         previous,
+        fixedCosts: proRataOf(outletId, today),
       }
     },
   }

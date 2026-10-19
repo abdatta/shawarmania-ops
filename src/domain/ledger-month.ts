@@ -54,6 +54,8 @@ export interface MonthExpenseLine {
   note: string | null
   amountPaise: number
   isCash: boolean
+  /** The expense row, where the reader has it: what a Fixed chip is matched by. */
+  expenseId?: string
 }
 
 /** One business date, reduced to only what the month needs from it. */

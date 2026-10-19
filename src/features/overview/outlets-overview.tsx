@@ -31,6 +31,7 @@ import { useChangeGate } from '@/change-gates/context'
 import { useAdapters, type Tables } from '@/data-access'
 import { formatPaise, resolveBusinessDate } from '@/domain'
 import { outletPresence, overviewPeriod, revenueChange } from '@/domain/overview'
+import { proRataPnl } from '@/domain/fixed-costs'
 import { NeedsAttention } from '@/features/attention/needs-attention'
 import { useOnForeground } from '@/features/attention/attention'
 import { useSession } from '@/session/context'
@@ -389,6 +390,10 @@ function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
  */
 function OneRevenueCard({ outlet }: { outlet: Tables<'outlets'> }) {
   const { overview } = useAdapters()
+  // P&L (Pro-rata) (fixed-costs-are-spread-over-the-month, design D9): where the
+  // outlet has fixed costs this month, the tile charges the unpaid share of them
+  // to date, and its Expenses line includes that share so the two still add up.
+  const proRataGate = useChangeGate('pro-rata-pnl')
   const session = useSession()
   const base = `${session.mode === 'demo' ? '/demo' : ''}/${ROLE_SEGMENTS[session.role ?? 'franchise_admin']}`
   const [now, setNow] = useState(Date.now)
@@ -445,6 +450,10 @@ function OneRevenueCard({ outlet }: { outlet: Tables<'outlets'> }) {
   const todayTotal = sales.value
     ? sales.value.cashPaise + sales.value.upiPaise + sales.value.deliveryPaise
     : 0
+  const fixedCosts = proRataGate ? (m?.fixedCosts ?? null) : null
+  const proRata =
+    fixedCosts && m && m.profitPaise !== null ? proRataPnl(m.profitPaise, fixedCosts) : null
+  const shownProfit = proRata ?? m?.profitPaise ?? null
   return (
     <Card
       className="overflow-hidden bg-gradient-to-br from-surface-raised/30 to-surface !px-3 !py-0"
@@ -598,8 +607,18 @@ function OneRevenueCard({ outlet }: { outlet: Tables<'outlets'> }) {
           )}
         </Metric>
         <Metric
-          label={m ? `${monthName} P&L · est.` : 'P&L · est.'}
-          title={`${monthName} estimated operating P&L · month to date · delivery commission included`}
+          label={
+            m
+              ? proRata !== null
+                ? `${monthName} P&L (Pro-rata)`
+                : `${monthName} P&L · est.`
+              : 'P&L · est.'
+          }
+          title={
+            proRata !== null && fixedCosts
+              ? `${monthName} P&L (Pro-rata) · this month's fixed costs charged to today`
+              : `${monthName} estimated operating P&L · month to date · delivery commission included`
+          }
           to={ledger}
           loading={m === undefined}
           error={month.error}
@@ -609,41 +628,60 @@ function OneRevenueCard({ outlet }: { outlet: Tables<'outlets'> }) {
             <>
               <MetricValue
                 icon={
-                  m.profitPaise === null
+                  shownProfit === null
                     ? ChartPie
-                    : m.profitPaise > 0
+                    : shownProfit > 0
                       ? TrendingUp
-                      : m.profitPaise < 0
+                      : shownProfit < 0
                         ? TrendingDown
                         : Minus
                 }
                 tone={
-                  m.profitPaise === null || m.profitPaise === 0
+                  shownProfit === null || shownProfit === 0
                     ? 'primary'
-                    : m.profitPaise > 0
+                    : shownProfit > 0
                       ? 'success'
                       : 'danger'
                 }
               >
-                {m.profitPaise === null ? (
+                {shownProfit === null ? (
                   <p className="text-sm leading-7">No sales recorded</p>
                 ) : (
-                  <OverviewMoney paise={m.profitPaise} data-testid={`profit-${outlet.id}`} />
+                  <OverviewMoney paise={shownProfit} data-testid={`profit-${outlet.id}`} />
                 )}
               </MetricValue>
-              <Subtext
-                title={`Expenses ${formatPaise(m.expensesPaise)}, of which delivery commission ${formatPaise(m.commissionPaise)} · Percentage is operating margin`}
-              >
-                Expenses <SupportingMoney paise={m.expensesPaise} />
-                {m.profitPaise !== null && m.revenuePaise > 0 && (
-                  <>
-                    <span> · </span>
-                    <span className="font-bold">
-                      {((m.profitPaise / m.revenuePaise) * 100).toFixed(1)}%
-                    </span>
-                  </>
-                )}
-              </Subtext>
+              {proRata !== null && fixedCosts && m.profitPaise !== null ? (
+                <Subtext
+                  title={`Expenses ${formatPaise(m.expensesPaise + fixedCosts.unpaidPaise)}, of which fixed costs owed to date and unpaid ${formatPaise(fixedCosts.unpaidPaise)} · Percentage is operating margin`}
+                >
+                  Expenses{' '}
+                  <span data-testid={`pro-rata-expenses-${outlet.id}`}>
+                    <SupportingMoney paise={m.expensesPaise + fixedCosts.unpaidPaise} />
+                  </span>
+                  {m.revenuePaise > 0 && (
+                    <>
+                      <span> · </span>
+                      <span className="font-bold">
+                        {((proRata / m.revenuePaise) * 100).toFixed(1)}%
+                      </span>
+                    </>
+                  )}
+                </Subtext>
+              ) : (
+                <Subtext
+                  title={`Expenses ${formatPaise(m.expensesPaise)}, of which delivery commission ${formatPaise(m.commissionPaise)} · Percentage is operating margin`}
+                >
+                  Expenses <SupportingMoney paise={m.expensesPaise} />
+                  {m.profitPaise !== null && m.revenuePaise > 0 && (
+                    <>
+                      <span> · </span>
+                      <span className="font-bold">
+                        {((m.profitPaise / m.revenuePaise) * 100).toFixed(1)}%
+                      </span>
+                    </>
+                  )}
+                </Subtext>
+              )}
             </>
           )}
         </Metric>

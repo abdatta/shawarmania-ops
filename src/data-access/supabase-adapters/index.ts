@@ -15,6 +15,7 @@ import { createSupabaseKitchenAdapter } from './kitchen'
 import { createSupabaseCustomersAdapter } from './customers'
 import { createSupabaseExpenseCategoriesAdapter } from './expense-categories'
 import { createSupabaseExpensesAdapter } from './expenses'
+import { createSupabaseFixedCostsAdapter } from './fixed-costs'
 import { createSupabaseLedgerStatementAdapter } from './ledger-statement'
 import { createSupabaseMenuAdapter } from './menu'
 import { createSupabaseOverviewAdapter } from './overview'
@@ -80,6 +81,7 @@ export function createSupabaseAdapters(
     customerDirectory: createSupabaseCustomerDirectoryAdapter(client),
     expenses: createSupabaseExpensesAdapter(client, counterSession),
     expenseCategories: createSupabaseExpenseCategoriesAdapter(client),
+    fixedCosts: createSupabaseFixedCostsAdapter(client),
     // Legacy outlet-day insights remain unavailable in live mode. Overview
     // reads its own compact financial adapter above.
     insights: createSupabaseInsightsAdapter(),
