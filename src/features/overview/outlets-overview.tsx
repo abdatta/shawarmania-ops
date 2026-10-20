@@ -411,9 +411,9 @@ function OneRevenueCard({ outlet }: { outlet: Tables<'outlets'> }) {
     [overview, outlet.id, today],
   )
   const monthRead = useCallback(
-    () => overview.month(outlet.id),
+    () => overview.month(outlet.id, { fixedCosts: proRataGate }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `today` re-reads at the day's change
-    [overview, outlet.id, today],
+    [overview, outlet.id, today, proRataGate],
   )
   const drawerRead = useCallback(() => overview.drawer(outlet.id), [overview, outlet.id])
   const tabletsRead = useCallback(() => overview.tablets(outlet.id), [overview, outlet.id])

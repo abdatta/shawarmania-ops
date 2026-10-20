@@ -340,13 +340,14 @@ const defs = {
    * tab of the one Expenses entry, beside **Daily**, because both tell one
    * money-out story and the Finances bar is full. This entry is what the tab and
    * a fixed cost's own page are gated by: owner and manager only, as the
-   * database's policies are, and `demo` until the owner approves its screens
-   * (tasks §6), so the live Expenses page shows no tab until then.
+   * database's policies are. `live` since the owner approved its screens in the
+   * demo (2026-10-19); it changes no existing figure, so it is not behind
+   * `pro-rata-pnl`, which gates only the figures that read it.
    */
   'owner-fixed-costs': {
     role: 'super_admin',
     path: 'ledger/fixed-costs',
-    state: 'demo',
+    state: 'live',
   },
   'owner-expense-categories': {
     role: 'super_admin',
@@ -596,7 +597,7 @@ const defs = {
   'admin-fixed-costs': {
     role: 'franchise_admin',
     path: 'ledger/fixed-costs',
-    state: 'demo',
+    state: 'live',
   },
   /**
    * This outlet's people — accounts and staff list in one surface, because

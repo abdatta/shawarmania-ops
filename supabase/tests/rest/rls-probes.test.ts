@@ -394,6 +394,28 @@ describe('a Franchise Admin session, hand-crafting requests for the other outlet
     },
   )
 
+  // fixed-costs-are-spread-over-the-month (#79): salaries are the owner's and
+  // each outlet's manager's. A crafted read of the other outlet's fixed costs is
+  // refused by the read itself, and its four tables answer nothing.
+  it.each([
+    'fixed_costs',
+    'fixed_cost_amounts',
+    'fixed_cost_settlements',
+    'fixed_cost_payments',
+  ] as const)('an explicit other-outlet filter on %s returns zero rows', async (table) => {
+    const { data, error } = await fa.from(table).select('id').eq('outlet_id', OUTLETS.kanchrapara)
+    expect(error).toBeNull()
+    expect(data).toEqual([])
+  })
+
+  it('a crafted fixed-costs list of the other outlet is refused', async () => {
+    const { data, error } = await fa.rpc('fixed_costs_list', {
+      p_outlet_id: OUTLETS.kanchrapara,
+    })
+    expect(data).toBeNull()
+    expect(error?.code).toBe('42501')
+  })
+
   it('an unfiltered bills read returns only own-outlet rows', async () => {
     const { data, error } = await fa.from('bills').select('outlet_id')
     expect(error).toBeNull()
@@ -1430,5 +1452,34 @@ describe('a tablet reading the other tills at its outlet', () => {
     // Reading a label is not holding one. Renaming stays an admin act through
     // `rename_counter_device`, and the table grants the counter no write at all.
     expect(error).not.toBeNull()
+  })
+})
+
+/**
+ * fixed-costs-are-spread-over-the-month (#79): staff and the counter read no
+ * salary and pay none. Each probe is refused before anything is written, so it
+ * leaves the seed as it found it.
+ */
+describe('fixed costs, for staff and the counter', () => {
+  it.each([
+    ['a Biller', PERSONAS.billerKalyani.email],
+    ['a counter device', PERSONAS.deviceKalyani.email],
+    ['an Employee', PERSONAS.employeeKalyani.email],
+  ])('%s is refused its own outlet’s fixed costs and cannot pay one', async (_who, email) => {
+    const client = (await session(email)).client
+    const list = await client.rpc('fixed_costs_list', { p_outlet_id: OUTLETS.kalyani })
+    expect(list.error?.code).toBe('42501')
+    const pay = await client.rpc('record_fixed_cost_payment', {
+      p_id: crypto.randomUUID(),
+      p_fixed_cost_id: crypto.randomUUID(),
+      p_amount_paise: 100,
+      p_paid_on: '2026-10-01',
+      p_counts_in: '2026-10-01',
+      p_is_cash: true,
+    })
+    expect(pay.error?.code).toBe('42501')
+    const unpaid = await client.rpc('fixed_costs_unpaid')
+    expect(unpaid.error).toBeNull()
+    expect(unpaid.data).toEqual({ count: 0, months: [] })
   })
 })

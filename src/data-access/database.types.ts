@@ -5432,6 +5432,14 @@ export type Database = {
         }
         Returns: Json
       }
+      change_fixed_cost_amount: {
+        Args: {
+          p_amount_paise: number
+          p_fixed_cost_id: string
+          p_from_month: string
+        }
+        Returns: undefined
+      }
       change_gate_apply: {
         Args: {
           p_by: string
@@ -5559,6 +5567,17 @@ export type Database = {
           p_shift_id?: string
         }
         Returns: Json
+      }
+      create_fixed_cost: {
+        Args: {
+          p_category: string
+          p_monthly_paise: number
+          p_name: string
+          p_note: string
+          p_outlet_id: string
+          p_starts_on: string
+        }
+        Returns: string
       }
       create_menu_item_with_category: {
         Args: {
@@ -5988,6 +6007,33 @@ export type Database = {
         Args: { p_now?: string }
         Returns: number
       }
+      fixed_cost_is_prorated: {
+        Args: { p_fixed_cost_id: string; p_month: string }
+        Returns: boolean
+      }
+      fixed_cost_month_cost: {
+        Args: { p_fixed_cost_id: string; p_month: string }
+        Returns: number
+      }
+      fixed_cost_months: {
+        Args: { p_fixed_cost_id: string; p_through: string }
+        Returns: {
+          cost_paise: number
+          cumulative_paise: number
+          month: string
+        }[]
+      }
+      fixed_cost_paid_paise: {
+        Args: { p_fixed_cost_id: string; p_on_or_before: string }
+        Returns: number
+      }
+      fixed_costs_assert_outlet: {
+        Args: { p_outlet_id: string }
+        Returns: undefined
+      }
+      fixed_costs_list: { Args: { p_outlet_id: string }; Returns: Json }
+      fixed_costs_today: { Args: { p_outlet_id: string }; Returns: string }
+      fixed_costs_unpaid: { Args: never; Returns: Json }
       fold_expense_category: { Args: { p_value: string }; Returns: string }
       forget_aggregator_session: {
         Args: { p_channel: string }
@@ -6239,6 +6285,7 @@ export type Database = {
         Returns: number
       }
       overview_month: { Args: { p_outlet_id: string }; Returns: Json }
+      overview_month_v2: { Args: { p_outlet_id: string }; Returns: Json }
       overview_revenue: {
         Args: { p_from: string; p_outlet_id: string; p_through: string }
         Returns: Json
@@ -6440,6 +6487,19 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      record_fixed_cost_payment: {
+        Args: {
+          p_amount_paise: number
+          p_choice?: string
+          p_counts_in: string
+          p_fixed_cost_id: string
+          p_id: string
+          p_is_cash: boolean
+          p_note?: string
+          p_paid_on: string
+        }
+        Returns: string
       }
       record_invite_failure: {
         Args: { p_ip_hash: string; p_window?: string }
@@ -6889,6 +6949,26 @@ export type Database = {
         Args: { p_email: string; p_profile_id: string }
         Returns: undefined
       }
+      settle_fixed_cost_month: {
+        Args: {
+          p_amount_paise: number
+          p_fixed_cost_id: string
+          p_month: string
+        }
+        Returns: undefined
+      }
+      stop_fixed_cost: {
+        Args: {
+          p_clear_ahead: boolean
+          p_fixed_cost_id: string
+          p_stops_on: string
+        }
+        Returns: undefined
+      }
+      undo_fixed_cost_payment: {
+        Args: { p_fixed_cost_id: string; p_payment_id: string }
+        Returns: undefined
+      }
       unpay_billing_order: {
         Args: {
           p_command_id?: string
@@ -6899,6 +6979,16 @@ export type Database = {
           p_shift_id?: string
         }
         Returns: Json
+      }
+      update_fixed_cost: {
+        Args: {
+          p_category: string
+          p_fixed_cost_id: string
+          p_name: string
+          p_note: string
+          p_starts_on: string
+        }
+        Returns: undefined
       }
       update_menu_item_with_category: {
         Args: {

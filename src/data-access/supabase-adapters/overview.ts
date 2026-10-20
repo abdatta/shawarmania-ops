@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { readProRata } from '@/domain/fixed-costs'
 import type { Database } from '../database.types'
+import type { FixedCostsReading } from '../fixed-costs'
 import type {
   OverviewAdapter,
   OverviewDrawer,
@@ -58,10 +60,21 @@ export function createSupabaseOverviewAdapter(client: SupabaseClient<Database>):
       if (error) throw error
       return data as unknown as OverviewToday
     },
-    async month(outletId) {
-      const { data, error } = await client.rpc('overview_month', { p_outlet_id: outletId })
+    async month(outletId, options) {
+      if (!options?.fixedCosts) {
+        const { data, error } = await client.rpc('overview_month', { p_outlet_id: outletId })
+        if (error) throw error
+        return data as unknown as OverviewMonth
+      }
+      // The same read with the outlet's fixed costs beside it, folded here by the
+      // one copy of the rules the other screens fold with.
+      const { data, error } = await client.rpc('overview_month_v2', { p_outlet_id: outletId })
       if (error) throw error
-      return data as unknown as OverviewMonth
+      const { fixedCosts, ...month } = data as unknown as Omit<OverviewMonth, 'fixedCosts'> & {
+        fixedCosts: FixedCostsReading
+      }
+      const reading = readProRata(fixedCosts.costs, fixedCosts.today)
+      return { ...month, fixedCosts: reading.lines.length > 0 ? reading : null }
     },
   }
 }

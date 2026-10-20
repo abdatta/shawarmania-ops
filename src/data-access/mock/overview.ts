@@ -103,7 +103,7 @@ export function createMockOverviewAdapter(
           .reduce((sum, o) => sum + o.total_paise, 0),
       }
     },
-    async month(outletId) {
+    async month(outletId, options) {
       check(outletId)
       const today = store.today
       const period = monthToDate(today)
@@ -161,7 +161,7 @@ export function createMockOverviewAdapter(
         profitPaise: figures.profitPaise,
         hasSales: figures.profitPaise !== null,
         previous,
-        fixedCosts: proRataOf(outletId, today),
+        ...(options?.fixedCosts ? { fixedCosts: proRataOf(outletId, today) } : {}),
       }
     },
   }
