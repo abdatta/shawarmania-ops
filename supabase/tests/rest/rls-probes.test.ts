@@ -1480,6 +1480,7 @@ describe('fixed costs, for staff and the counter', () => {
     expect(pay.error?.code).toBe('42501')
     const unpaid = await client.rpc('fixed_costs_unpaid')
     expect(unpaid.error).toBeNull()
-    expect(unpaid.data).toEqual({ count: 0, months: [] })
+    // Nothing owed and nothing named: no amount, no category, no outlet's date.
+    expect(unpaid.data).toEqual({ count: 0, months: [], paise: 0, categories: {}, today: null })
   })
 })
