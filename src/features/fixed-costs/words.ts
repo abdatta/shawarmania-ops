@@ -3,6 +3,7 @@
 import type { FixedCostsUnpaid } from '@/data-access/fixed-costs'
 import { addMonths, monthOf, type FixedCostCategory } from '@/domain/fixed-costs'
 import { formatPaise } from '@/domain/money'
+import type { AttentionTone } from '@/features/attention/tone'
 
 const MONTH = new Intl.DateTimeFormat('en-IN', { month: 'long', timeZone: 'Asia/Kolkata' })
 const SHORT = new Intl.DateTimeFormat('en-IN', {
@@ -64,17 +65,15 @@ export function overdueWords(
 export const PAY_DAYS_END = 5
 
 /**
- * Amber in the days last month is normally paid in, the 1st to the 5th; red from
+ * `due` (amber) in the days last month is normally paid in, the 1st to the 5th; `late` (the app's orange) from
  * the 6th, or as soon as anything older than last month is still owed (owner,
  * 2026-10-20). An alert that is loud on the 1st cries wolf on every payday.
  */
-export function overdueTone(
-  unpaid: Pick<FixedCostsUnpaid, 'months' | 'today'>,
-): 'warning' | 'danger' {
-  if (!unpaid.today) return 'warning'
+export function overdueTone(unpaid: Pick<FixedCostsUnpaid, 'months' | 'today'>): AttentionTone {
+  if (!unpaid.today) return 'due'
   const last = addMonths(monthOf(unpaid.today), -1)
-  if (unpaid.months.some((month) => month < last)) return 'danger'
-  return Number(unpaid.today.slice(8, 10)) > PAY_DAYS_END ? 'danger' : 'warning'
+  if (unpaid.months.some((month) => month < last)) return 'late'
+  return Number(unpaid.today.slice(8, 10)) > PAY_DAYS_END ? 'late' : 'due'
 }
 
 /** Months named, joined with "and": `September and October`. */

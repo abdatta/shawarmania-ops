@@ -71,7 +71,7 @@ test('last month’s salary is paid now, counted in last month, and Needs attent
     'data-testid',
     'overview-attention-fixed-costs-unpaid',
   )
-  await expect(attention).toHaveAttribute('data-tone', /^(warning|danger)$/)
+  await expect(attention).toHaveAttribute('data-tone', /^(due|late)$/)
   await attention.click()
   await expect(page).toHaveURL(/ledger\/fixed-costs/)
 

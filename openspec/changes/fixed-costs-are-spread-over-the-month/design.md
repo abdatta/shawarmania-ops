@@ -710,6 +710,11 @@ usual amber. The row itself keeps a highlight, in the app's own orange tint
 other row's Pay is the outlined one (owner, the same day), so a filled Pay means
 "this one is late".
 
+**The same day, no red at all.** Late money on Overview turned from red to the
+app's own orange: red read as out of the theme even there (owner). Amber for the
+first five days, orange from the 6th: both warm, and still the loudest row. The
+tones are named `due` and `late`, not for a colour.
+
 ## Built live (§7–§10), 2026-10-20
 
 What the live build decided where the design above left room, or differs from it:

@@ -51,8 +51,8 @@ function pinned(page: Surface): boolean {
 /** The row's fill and its icon's, by how loudly the source asks. */
 const TONE = {
   plain: { row: 'bg-surface-raised', icon: 'bg-primary/10 text-accent-text' },
-  warning: { row: `${TONE_SURFACE.warning} font-semibold`, icon: TONE_ICON.warning },
-  danger: { row: `${TONE_SURFACE.danger} font-semibold`, icon: TONE_ICON.danger },
+  due: { row: `${TONE_SURFACE.due} font-semibold`, icon: TONE_ICON.due },
+  late: { row: `${TONE_SURFACE.late} font-semibold`, icon: TONE_ICON.late },
 } as const
 
 function AttentionPage({ page, base }: { page: Surface; base: string }) {

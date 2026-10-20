@@ -534,13 +534,11 @@ describe('money owed in Needs attention (owner, 2026-10-20)', () => {
     )
   })
 
-  it('is amber in the days last month is paid in, and red from the 6th or once older months are owed', () => {
-    expect(overdueTone({ months: ['2026-10-01'], today: '2026-11-01' })).toBe('warning')
-    expect(overdueTone({ months: ['2026-10-01'], today: '2026-11-05' })).toBe('warning')
-    expect(overdueTone({ months: ['2026-10-01'], today: '2026-11-06' })).toBe('danger')
-    expect(overdueTone({ months: ['2026-09-01', '2026-10-01'], today: '2026-11-02' })).toBe(
-      'danger',
-    )
+  it('is due in the days last month is paid in, and late from the 6th or once older months are owed', () => {
+    expect(overdueTone({ months: ['2026-10-01'], today: '2026-11-01' })).toBe('due')
+    expect(overdueTone({ months: ['2026-10-01'], today: '2026-11-05' })).toBe('due')
+    expect(overdueTone({ months: ['2026-10-01'], today: '2026-11-06' })).toBe('late')
+    expect(overdueTone({ months: ['2026-09-01', '2026-10-01'], today: '2026-11-02' })).toBe('late')
   })
 
   it('lists it first, tinted, above attendance, which stays plain', async () => {
@@ -549,7 +547,7 @@ describe('money owed in Needs attention (owner, 2026-10-20)', () => {
     renderWith(false, <NeedsAttention />, adapters)
     const money = await screen.findByTestId('overview-attention-fixed-costs-unpaid')
     expect(money).toHaveTextContent('₹57,300 overdue · 3 salaries, 1 rent · from October')
-    expect(money).toHaveAttribute('data-tone', 'warning')
+    expect(money).toHaveAttribute('data-tone', 'due')
     const attendance = await screen.findByTestId('overview-attention-attendance-waiting')
     expect(attendance).toHaveAttribute('data-tone', 'plain')
     const rows = screen.getAllByTestId(/^overview-attention-/)
@@ -573,9 +571,9 @@ it('leads the Fixed tab with what is overdue, named, and badges the tab as every
   expect(screen.getByTestId('fixed-costs-overdue')).toHaveTextContent(
     'Overdue from September · Priyanka',
   )
-  // The app's own badge, inverted on the selected tab; amber and red are Overview's.
+  // The app's own badge, inverted on the selected tab; the due and late tones are Overview's.
   const badge = await screen.findByTestId('expense-tab-fixed-owed')
   expect(badge).toHaveTextContent('1')
   expect(badge).toHaveClass('bg-on-primary')
-  expect(screen.queryByText((_, node) => node?.getAttribute('data-tone') === 'danger')).toBeNull()
+  expect(screen.queryByText((_, node) => node?.getAttribute('data-tone') === 'late')).toBeNull()
 })

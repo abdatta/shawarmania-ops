@@ -152,7 +152,7 @@ Needs attention for the owner and the outlet's manager, and as the Expenses
 entry's badge, and SHALL clear when each is paid or dropped. The line SHALL lead
 with the amount left unpaid, then each category with its count, then the months,
 and SHALL be listed before every other row. It SHALL be tinted amber from the 1st
-to the 5th of the month and red from the 6th, or as soon as a month older than the
+to the 5th of the month and in the app's own orange from the 6th, or as soon as a month older than the
 last is unpaid; every other row stays untinted.
 
 #### Scenario: Salaries not recorded by the 1st
@@ -163,7 +163,7 @@ last is unpaid; every other row stays untinted.
 #### Scenario: Still unpaid on the 6th
 
 - **WHEN** it is 6 November and the same is still unpaid
-- **THEN** the row is red
+- **THEN** the row is in the app's own orange
 
 #### Scenario: Paid on the 2nd
 

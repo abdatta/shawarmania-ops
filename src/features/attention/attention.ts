@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 
 import { useChangeGate } from '@/change-gates/context'
 import { FOREGROUND_REREAD_AFTER_MS, olderThan } from '@/lib/freshness'
+import type { AttentionTone } from './tone'
 
 /**
  * The attention mechanism: how a surface tells the rest of the app that
@@ -40,10 +41,10 @@ export interface Attention {
   path?: string
   /**
    * How loudly the row reads in Needs attention: plain, `warning` (amber) or
-   * `danger` (red). Only money owed uses it (owner, 2026-10-20): an alert that
+   * `late` (the app's orange). Only money owed uses it (owner, 2026-10-20): an alert that
    * looks like every other is one a manager learns to scroll past.
    */
-  tone?: 'warning' | 'danger'
+  tone?: AttentionTone
 }
 
 /** A hook a surface offers so the shell can badge it without knowing why. */
