@@ -61,20 +61,23 @@ export function createSupabaseOverviewAdapter(client: SupabaseClient<Database>):
       return data as unknown as OverviewToday
     },
     async month(outletId, options) {
-      if (!options?.fixedCosts) {
-        const { data, error } = await client.rpc('overview_month', { p_outlet_id: outletId })
-        if (error) throw error
-        return data as unknown as OverviewMonth
-      }
-      // The same read with the outlet's fixed costs beside it, folded here by the
-      // one copy of the rules the other screens fold with.
-      const { data, error } = await client.rpc('overview_month_v2', { p_outlet_id: outletId })
-      if (error) throw error
-      const { fixedCosts, ...month } = data as unknown as Omit<OverviewMonth, 'fixedCosts'> & {
-        fixedCosts: FixedCostsReading
-      }
-      const reading = readProRata(fixedCosts.costs, fixedCosts.today)
-      return { ...month, fixedCosts: reading.lines.length > 0 ? reading : null }
+      // `overview_month` exactly as #76 reads it, and with `pro-rata-pnl` on the
+      // outlet's fixed costs beside it, at the same time, folded by the one copy
+      // of the rules the other screens fold with.
+      const [month, fixedCosts] = await Promise.all([
+        client.rpc('overview_month', { p_outlet_id: outletId }),
+        options?.fixedCosts
+          ? client.rpc('fixed_costs_list', { p_outlet_id: outletId })
+          : Promise.resolve(null),
+      ])
+      if (month.error) throw month.error
+      const figures = month.data as unknown as OverviewMonth
+      if (!fixedCosts) return figures
+      // Unread, the tile is #76's: P&L, which is true without them.
+      if (fixedCosts.error || !fixedCosts.data) return { ...figures, fixedCosts: null }
+      const listed = fixedCosts.data as unknown as FixedCostsReading
+      const reading = readProRata(listed.costs, listed.today)
+      return { ...figures, fixedCosts: reading.lines.length > 0 ? reading : null }
     },
   }
 }

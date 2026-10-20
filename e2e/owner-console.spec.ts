@@ -170,8 +170,12 @@ for (const viewport of [
         ),
       ).toBe(true)
       if (viewport.name === 'phone') {
+        // Waiting work starts above the bar. The first row, not a named one: the
+        // demo waits on more than one thing since fixed costs (#79), and the list
+        // runs on below the fold like the rest of the page.
         const bottom = await page
-          .getByTestId('overview-attention-attendance-waiting')
+          .locator('[data-testid^="overview-attention-"]')
+          .first()
           .evaluate((node) => node.getBoundingClientRect().bottom)
         const navTop = await page
           .locator('nav')

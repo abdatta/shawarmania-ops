@@ -1325,9 +1325,9 @@ for anyone. Writes go through functions that take the outlet from the fixed cost
 `record_fixed_cost_payment` writes the expense under the caller's own policy and
 `expense_guard`, the link and what its answer records in one transaction,
 recomputing the answer from what is owed and refusing one the pay sheet would not
-offer. Reads: `fixed_costs_list` (everything the screens fold, one request),
-`fixed_costs_unpaid` (Needs attention) and `overview_month_v2`
-(`overview_month` with the outlet's fixed costs beside it).
+offer. Reads: `fixed_costs_list` (everything the screens fold, one request; Overview
+asks it beside `overview_month` while *Pro-rata P&L* is on) and
+`fixed_costs_unpaid` (Needs attention).
 
 ## The archived notebook
 

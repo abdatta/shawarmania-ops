@@ -875,21 +875,6 @@ begin
                             from short), '[]'::jsonb)));
 end $$;
 
--- `overview_month` with the outlet's fixed costs beside it, in the same read
--- (design D9): what Overview folds into P&L (Pro-rata) when `pro-rata-pnl` is
--- on. `overview_month` is untouched; #76's path keeps calling it.
-create function public.overview_month_v2(p_outlet_id uuid)
-returns jsonb
-language plpgsql
-stable
-security definer
-set search_path = ''
-as $$
-begin
-  return public.overview_month(p_outlet_id)
-         || jsonb_build_object('fixedCosts', public.fixed_costs_list(p_outlet_id));
-end $$;
-
 revoke all on function
   public.fixed_costs_assert_outlet(uuid),
   public.fixed_cost_month_cost(uuid, date),
@@ -903,8 +888,7 @@ revoke all on function
   public.record_fixed_cost_payment(uuid, uuid, bigint, date, date, boolean, text, text),
   public.undo_fixed_cost_payment(uuid, uuid),
   public.fixed_costs_list(uuid),
-  public.fixed_costs_unpaid(),
-  public.overview_month_v2(uuid)
+  public.fixed_costs_unpaid()
   from public, anon;
 grant execute on function
   public.fixed_costs_assert_outlet(uuid),
@@ -919,6 +903,5 @@ grant execute on function
   public.record_fixed_cost_payment(uuid, uuid, bigint, date, date, boolean, text, text),
   public.undo_fixed_cost_payment(uuid, uuid),
   public.fixed_costs_list(uuid),
-  public.fixed_costs_unpaid(),
-  public.overview_month_v2(uuid)
+  public.fixed_costs_unpaid()
   to authenticated;

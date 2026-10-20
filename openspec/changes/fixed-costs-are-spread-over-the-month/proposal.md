@@ -242,10 +242,10 @@ off-path code reads. A browser test proves the round trip (design D10).
 - **Database**: four new outlet-scoped tables (fixed costs, monthly amounts,
   month changes, payment links), each with its policy and isolation test; three
   new write functions (add, pay, change a month) and two reads (an outlet's
-  fixed costs for a month, and `overview_month_v2`); the gate's `change_gates`
+  fixed costs, and the unpaid count); the gate's `change_gates`
   row, off. No existing table, view, policy or function changes.
-- **Overview**: the same reads per outlet, the month read becoming its v2; one
-  attention read for owners and managers.
+- **Overview**: with the gate on, one more read per outlet, its fixed costs, asked
+  beside the month; one attention read for owners and managers.
 - **Ledger and Expenses**: one more read alongside the existing one, so a month
   still settles in two round trips.
 - **Counter and kitchen**: none. The request budget does not move.

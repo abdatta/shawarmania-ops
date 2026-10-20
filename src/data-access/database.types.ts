@@ -6285,7 +6285,6 @@ export type Database = {
         Returns: number
       }
       overview_month: { Args: { p_outlet_id: string }; Returns: Json }
-      overview_month_v2: { Args: { p_outlet_id: string }; Returns: Json }
       overview_revenue: {
         Args: { p_from: string; p_outlet_id: string; p_through: string }
         Returns: Json

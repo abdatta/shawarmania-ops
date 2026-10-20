@@ -408,9 +408,9 @@ chip returns and P&L (Pro-rata) charges only the unpaid share.
 - **The four tables** are new. No published build reads them.
 - **`create_fixed_cost`, `record_fixed_cost_payment`, `settle_fixed_cost_month`,
   `fixed_cost_month_cost`, `fixed_costs_list`, `fixed_costs_unpaid`** are new.
-- **`overview_month_v2`** is new: `overview_month`'s object with a `fixedCosts`
-  member added. `overview_month` is untouched, and #76's path and every published
-  build keep calling it.
+- **`overview_month` is untouched**, and every path keeps calling it; with the
+  gate on, Overview asks `fixed_costs_list` beside it (*Built live*, below,
+  says why there is no `overview_month_v2`).
 - **`expenses`, `effective_expenses`, their policies and triggers** are
   untouched. A payment is a row the existing policy admits, written as the
   Expenses form writes one, so a build published before this change reads it as
@@ -435,8 +435,8 @@ are insert-only.
 `create_fixed_cost` (a fixed cost and its first amount, one transaction) and
 `settle_fixed_cost_month` are `security invoker`. `record_fixed_cost_payment` is
 `security invoker` with its own authority check (D5). The reads
-(`fixed_costs_list`, `overview_month_v2`, `fixed_costs_unpaid`) are `security
-definer` with `search_path = ''`, and the two that take an outlet begin with `overview_assert_outlet`, the check
+(`fixed_costs_list`, `fixed_costs_unpaid`) are `security
+definer` with `search_path = ''`, and the one that takes an outlet begins with `overview_assert_outlet`, the check
 `overview_month` makes, so they admit exactly its readers. `fixed_costs_unpaid`
 filters by the same membership. `fixed_cost_month_cost` is granted to no role.
 
@@ -676,9 +676,16 @@ What the live build decided where the design above left room, or differs from it
 
 - **The screens fold, the server lists.** `fixed_costs_list` returns the raw
   facts, and every figure is folded by `src/domain/fixed-costs.ts`, as in the
-  demo. `overview_month_v2` is `overview_month` with that list beside it as
-  `fixedCosts`; the adapter folds it with `readProRata`, so Overview's figure is
-  the Ledger's by construction. Still one request per card.
+  demo. Overview folds the same list with `readProRata`, so its figure is the
+  Ledger's by construction.
+- **No `overview_month_v2`.** The first build replaced `overview_month` with a v2
+  carrying the list, one request per card. Staging's first run refused it: with
+  every gate on, One Revenue's own browser tests wait for, delay and answer
+  `overview_month` itself, and a test may only be tagged out by a later gate,
+  never rewritten, so those tests would have stopped running anywhere. Overview
+  now asks `overview_month` exactly as #76 does and `fixed_costs_list` beside it,
+  at the same time: one more request per card while the gate is on, on owner and
+  manager phones only. An unread list leaves #76's tile, which is true without it.
 - **The SQL copy is what the pay function needs**, no more:
   `fixed_cost_month_cost`, the months with their running total, what was paid by
   a day, and whether a month is prorated. They are `security invoker` and

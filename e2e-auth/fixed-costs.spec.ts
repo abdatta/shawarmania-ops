@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test'
+import type { APIRequestContext, Page } from '@playwright/test'
 
 import { SAVED_ANSWERS_KEY } from '../src/change-gates/snapshot'
 import { expect, test } from './test'
@@ -7,12 +7,17 @@ import { LOCAL_ANON_KEY, PASSWORD, SUPABASE_URL, serviceRoleKey } from './tills'
 /**
  * Fixed costs over the real transport (fixed-costs-are-spread-over-the-month):
  * a fixed cost added and paid in part by the owner, its payment an expense the
- * Fixed chip marks; P&L (Pro-rata) read through `overview_month_v2`; and the
- * gate's round trip (design D10): turned off, Overview asks `overview_month`
- * again and the payment is an ordinary expense; turned back on, the chip and
- * P&L (Pro-rata) return, charging only the unpaid share. A manager is refused
- * the other outlet's fixed costs, and a Biller reads a cash payment as the cash
- * expense it is, with no chip.
+ * Fixed chip marks; P&L (Pro-rata) read from the outlet's fixed costs, asked
+ * beside `overview_month`; and the gate's round trip (design D10): turned off,
+ * Overview asks `overview_month` alone and the payment is an ordinary expense;
+ * turned back on, the chip and P&L (Pro-rata) return, charging only the unpaid
+ * share. A manager is refused the other outlet's fixed costs, and a Biller
+ * reads a cash payment as the cash expense it is, with no chip.
+ *
+ * Nothing here can be deleted, and the specs after this one share the stack, so
+ * each test retires what it added: its payments undone, and the fixed cost moved
+ * to last month at nothing and stopped there. Kalyani is left with no fixed cost
+ * this month, nothing unpaid, and its drawer as it was.
  */
 
 const KAL = '00000000-0000-4000-a000-000000000001'
@@ -55,6 +60,64 @@ async function rebootWith(page: Page, enabled: boolean) {
 /** A name of its own each run: the local stack is shared, and nothing here is deleted. */
 const unique = () => `Auth ${Date.now().toString(36)}`
 
+async function ownerRpc(request: APIRequestContext) {
+  const signedIn = await request.post(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    headers: { apikey: LOCAL_ANON_KEY },
+    data: { email: 'owner@login.shawarmania.invalid', password: PASSWORD },
+  })
+  expect(signedIn.ok()).toBe(true)
+  const { access_token: token } = (await signedIn.json()) as { access_token: string }
+  return async (name: string, body: Record<string, unknown>) => {
+    const response = await request.post(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
+      headers: { apikey: LOCAL_ANON_KEY, authorization: `Bearer ${token}` },
+      data: body,
+    })
+    expect(response.ok(), `${name}: ${await response.text()}`).toBe(true)
+    return response.status() === 204 ? null : ((await response.json()) as unknown)
+  }
+}
+
+interface Listed {
+  today: string
+  costs: { id: string; name: string; category: string; payments: { id: string }[] }[]
+}
+
+/** Undo its payments, then move it to last month at nothing and stop it there. */
+async function retire(request: APIRequestContext, names: string[]) {
+  if (names.length === 0) return
+  const rpc = await ownerRpc(request)
+  const listed = (await rpc('fixed_costs_list', { p_outlet_id: KAL })) as Listed
+  const [year, month] = listed.today.split('-').map(Number) as [number, number]
+  const lastMonth = new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 10)
+  const lastDay = new Date(Date.UTC(year, month - 1, 0)).toISOString().slice(0, 10)
+  for (const cost of listed.costs.filter((c) => names.includes(c.name))) {
+    for (const payment of cost.payments)
+      await rpc('undo_fixed_cost_payment', { p_fixed_cost_id: cost.id, p_payment_id: payment.id })
+    await rpc('update_fixed_cost', {
+      p_fixed_cost_id: cost.id,
+      p_name: cost.name,
+      p_category: cost.category,
+      p_starts_on: lastMonth,
+      p_note: '',
+    })
+    await rpc('change_fixed_cost_amount', {
+      p_fixed_cost_id: cost.id,
+      p_from_month: lastMonth,
+      p_amount_paise: 0,
+    })
+    await rpc('stop_fixed_cost', {
+      p_fixed_cost_id: cost.id,
+      p_stops_on: lastDay,
+      p_clear_ahead: false,
+    })
+  }
+}
+
+const added: string[] = []
+test.afterEach(async ({ request }) => {
+  await retire(request, added.splice(0))
+})
+
 async function addAndPayPart(page: Page, name: string, isCash = false) {
   await page.goto(`owner/ledger/fixed-costs?outlet=${KAL}`)
   await page.getByRole('button', { name: 'Add a fixed cost' }).click()
@@ -83,34 +146,45 @@ test(
   async ({ page }) => {
     await signIn(page, 'owner')
     const name = unique()
+    added.push(name)
     await addAndPayPart(page, name)
 
     try {
-      // On: Overview asks one read with the fixed costs beside it.
-      const v2 = page.waitForResponse(
-        (r) => r.url().endsWith('/rpc/overview_month_v2') && r.status() === 200,
+      // On: Overview asks its month as before, and the fixed costs beside it.
+      const month = page.waitForResponse(
+        (r) => r.url().endsWith('/rpc/overview_month') && r.status() === 200,
+      )
+      const listed = page.waitForResponse(
+        (r) =>
+          r.url().endsWith('/rpc/fixed_costs_list') &&
+          r.request().postDataJSON()?.p_outlet_id === KAL &&
+          r.status() === 200,
       )
       await page.goto('owner')
-      const month = await (await v2).json()
-      expect(
-        (month.fixedCosts.costs as { name: string }[]).some((cost) => cost.name === name),
-      ).toBe(true)
+      await month
+      const costs = ((await (await listed).json()) as Listed).costs
+      expect(costs.some((cost) => cost.name === name)).toBe(true)
       await expect(page.getByTestId(`outlet-card-${KAL}`)).toContainText('P&L (Pro-rata)')
 
       await page.goto(`owner/ledger/expenses?outlet=${KAL}`)
       const chip = page.locator('[data-testid^="expense-fixed-"]').filter({ hasText: 'Fixed' })
       await expect(chip.first()).toBeVisible()
 
-      // Off: the old read, and the payment an ordinary expense.
+      // Off: the month alone, and the payment an ordinary expense.
       await forceGate(false)
-      const v1 = page.waitForResponse(
+      await page.goto('owner')
+      const asked: string[] = []
+      page.on('request', (r) => {
+        if (r.url().includes('/rpc/')) asked.push(r.url().split('/rpc/')[1]!)
+      })
+      const alone = page.waitForResponse(
         (r) => r.url().endsWith('/rpc/overview_month') && r.status() === 200,
       )
-      await page.goto('owner')
       await rebootWith(page, false)
-      await v1
+      await alone
       await expect(page.getByTestId(`outlet-card-${KAL}`)).toBeVisible()
       await expect(page.getByTestId(`outlet-card-${KAL}`)).not.toContainText('Pro-rata')
+      expect(asked).not.toContain('fixed_costs_list')
       await page.goto(`owner/ledger/expenses?outlet=${KAL}`)
       await expect(page.getByText(name).first()).toBeVisible()
       await expect(page.locator('[data-testid^="expense-fixed-"]')).toHaveCount(0)
@@ -152,6 +226,7 @@ test('a Biller reads a cash payment as a cash expense, with no chip', async ({ b
   const ownerPage = await owner.newPage()
   await signIn(ownerPage, 'owner')
   const name = unique()
+  added.push(name)
   await addAndPayPart(ownerPage, name, true)
   await owner.close()
 

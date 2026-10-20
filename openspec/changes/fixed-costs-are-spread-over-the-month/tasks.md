@@ -134,14 +134,14 @@ object is new.
   idempotency on `p_id`, the server's recomputation of the choice),
   `fixed_costs_list` (an outlet's fixed costs with their amounts, settlements
   and effective payments, and its business date, in one read: what
-  `FixedCostsAdapter.list` returns), `fixed_costs_unpaid` and `overview_month_v2`, each with the grants of *RLS and authority*.
+  `FixedCostsAdapter.list` returns), `fixed_costs_unpaid`, each with the grants of *RLS and authority*.
   `npm run lint:migrations`.
 - [x] 7.2 pgTAP: the shared case table against `fixed_cost_month_cost` and the
   balance; a payment counted in last month landing in that month's P&L; a cash
   payment forced to the day paid and moving the drawer's expected cash; a retried
   payment written once; a choice the server computes differently refused; a typed
-  lookalike unmarked; `overview_month_v2` equal to `overview_month` plus its
-  fixed costs.
+  lookalike unmarked; the list carrying only effective payments. (No
+  `overview_month_v2`: design, *Built live*.)
 - [x] 7.3 **Isolation, one test per table** (`fixed_costs`, `fixed_cost_amounts`,
   `fixed_cost_settlements`, `fixed_cost_payments`) **and per read**: another
   outlet's Franchise Admin refused by a crafted request; a Biller, an Employee,

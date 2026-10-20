@@ -308,14 +308,6 @@ select is(
   public.fixed_costs_list(:'KAL')->>'today', pg_temp.today(:'KAL')::text,
   'the list says the outlet''s business date');
 
-select is(
-  public.overview_month_v2(:'KAL') - 'fixedCosts',
-  public.overview_month(:'KAL'),
-  'overview_month_v2 is overview_month with the fixed costs beside it');
-select is(
-  public.overview_month_v2(:'KAL')->'fixedCosts',
-  public.fixed_costs_list(:'KAL'),
-  'and those are the list');
 
 -- Needs attention: an ended month left short.
 select lives_ok(
@@ -395,9 +387,6 @@ select ok(pg_temp.seen_kal() > 0, 'and does read Kalyani''s');
 select throws_ok(
   format($q$select public.fixed_costs_list(%L)$q$, :'KPA'),
   '42501', null, 'a crafted list of Kanchrapara is refused');
-select throws_ok(
-  format($q$select public.overview_month_v2(%L)$q$, :'KPA'),
-  '42501', null, 'and so is its Overview month');
 select throws_ok(
   format($q$insert into public.fixed_costs (outlet_id, name, category, starts_on) values (%L, 'Crafted', 'other', %L)$q$,
          :'KPA', pg_temp.today(:'KPA')),
