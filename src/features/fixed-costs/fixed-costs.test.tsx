@@ -13,7 +13,8 @@ import {
 } from '@/data-access/mock'
 import { demoFixedCostFacts } from '@/data-access/mock/fixed-costs'
 import type { OverviewMonth } from '@/data-access/overview'
-import { addMonths, monthCost, monthOf, readProRata } from '@/domain/fixed-costs'
+import { addMonths, monthCost, monthOf, readProRata, thisMonthStatus } from '@/domain/fixed-costs'
+import { formatPaise } from '@/domain/money'
 import { LedgerStatementSurface } from '@/features/cash/ledger-statement-surface'
 import { OutletExpensesSurface } from '@/features/expenses/outlet-expenses-surface'
 import { OutletsOverview } from '@/features/overview/outlets-overview'
@@ -22,7 +23,7 @@ import { deriveSessionScope, type Session } from '@/session/session'
 import { ChangeGatesForTest, describeChangeGate } from '@/test/change-gates'
 import { FixedCostPage, FixedCostsSurface } from './fixed-costs-surface'
 import { ProRataCard } from './ledger-fixed-costs'
-import { overdueTone, overdueWords } from './words'
+import { overdueTone, overdueWords, shortMonths } from './words'
 import { NeedsAttention } from '@/features/attention/needs-attention'
 
 /**
@@ -185,7 +186,7 @@ describeChangeGate('pro-rata-pnl', (on) => {
       choice: null,
     })
     // A lookalike typed the same day, saying everything a payment says.
-    await adapters.expenses.createExpense({
+    const lookalike = await adapters.expenses.createExpense({
       outletId: KAL,
       businessDate: data.store.today,
       category: 'Salary',
@@ -196,36 +197,36 @@ describeChangeGate('pro-rata-pnl', (on) => {
     renderWith(on, <OutletExpensesSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
     await screen.findAllByText(/Salary|Nayan/)
     await screen.findByTestId('ledger-expense-list').catch(() => null)
-    const chips = screen.queryAllByTestId(/^expense-fixed-/)
-    if (on) {
-      expect(screen.getByTestId(`expense-fixed-${paymentId}`)).toBeInTheDocument()
-      expect(chips).toHaveLength(1)
-    } else {
-      expect(chips).toHaveLength(0)
-    }
+    // Asserted on the two rows made here, never on a count: a payment of the
+    // demo's own falls in the days shown near a month's turn (found 2026-10-20).
+    expect(screen.queryByTestId(`expense-fixed-${lookalike.id}`)).toBeNull()
+    if (on) expect(screen.getByTestId(`expense-fixed-${paymentId}`)).toBeInTheDocument()
+    else expect(screen.queryAllByTestId(/^expense-fixed-/)).toHaveLength(0)
   })
 })
 
 it('lists each fixed cost with this month, and overdue and ahead apart from it', async () => {
-  renderWith(
-    false,
-    <FixedCostsSurface />,
-    withFixedCosts().adapters,
-    'super_admin',
-    `/?outlet=${KAL}`,
-  )
+  const { data, adapters } = withFixedCosts()
+  renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
   const list = await screen.findByTestId('fixed-cost-list')
   const santu = within(list).getByText('Santu').closest('tr')!
   expect(within(santu).getByTestId(/^status-/)).toHaveTextContent('₹10,000 paid')
   const nayan = within(list).getByText('Nayan').closest('tr')!
   expect(within(nayan).getByTestId(/^status-/)).toHaveTextContent('₹4,000 of ₹12,000 paid')
   const priyanka = within(list).getByText('Priyanka').closest('tr')!
-  expect(within(priyanka).getByTestId(/^status-/)).toHaveTextContent('+ ₹3,300 overdue from Sep')
+  // She joined on last month's 20th, so what she is owed, and its month, move
+  // with the demo's today: read from the demo's own facts, never a date's.
+  const joined = data.store.fixedCosts.find((c) => c.name === 'Priyanka')!
+  const owed = thisMonthStatus(demoFixedCostFacts(data.store, joined), data.store.today).overdue
+  expect(within(priyanka).getByTestId(/^status-/)).toHaveTextContent(
+    `+ ${formatPaise(owed[0]!.paise)} overdue from ${shortMonths([owed[0]!.month])}`,
+  )
   const totals = screen.getByTestId('fixed-costs-totals')
   expect(within(totals).getByText('This month')).toBeInTheDocument()
   expect(within(totals).getByText('Paid')).toBeInTheDocument()
   expect(within(totals).getByText('Left to pay')).toBeInTheDocument()
-  expect(screen.getByTestId('fixed-costs-overdue')).toHaveTextContent('Overdue from September')
+  // Overdue is said on its row alone, not again above the list (owner, 2026-10-20).
+  expect(screen.queryByTestId('fixed-costs-overdue')).toBeNull()
 })
 
 it('pays from the row, starting at what is owed, and says where it was recorded', async () => {
@@ -555,7 +556,7 @@ describe('money owed in Needs attention (owner, 2026-10-20)', () => {
   })
 })
 
-it('leads the Fixed tab with what is overdue, named, and badges the tab as every tab is badged', async () => {
+it('leads the Fixed tab with what is overdue, highlighted, and badges the tab as every tab is badged', async () => {
   const { adapters } = withFixedCosts()
   renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
   const list = await screen.findByTestId('fixed-cost-list')
@@ -568,9 +569,6 @@ it('leads the Fixed tab with what is overdue, named, and badges the tab as every
   // Pay is filled only where a month is overdue; owed this month is still Pay, outlined.
   expect(within(rows[0]!).getByRole('button', { name: 'Pay Priyanka' })).toHaveClass('bg-primary')
   expect(within(list).getByRole('button', { name: 'Pay Nayan' })).not.toHaveClass('bg-primary')
-  expect(screen.getByTestId('fixed-costs-overdue')).toHaveTextContent(
-    'Overdue from September · Priyanka',
-  )
   // The app's own badge, inverted on the selected tab; the due and late tones are Overview's.
   const badge = await screen.findByTestId('expense-tab-fixed-owed')
   expect(badge).toHaveTextContent('1')

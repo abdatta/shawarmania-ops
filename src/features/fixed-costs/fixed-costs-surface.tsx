@@ -101,35 +101,21 @@ export function FixedCostsSurface() {
           Number(thisMonthStatus(a, current.today).overdue.length > 0),
       ) ?? []
   const stopped = current?.costs.filter((c) => c.stopsOn && c.stopsOn < current.today) ?? []
-  // This month on its own, and overdue money said apart from it (owner,
-  // 2026-10-19: "make it clear from the label itself").
+  // This month on its own (owner, 2026-10-19: "make it clear from the label
+  // itself"). Overdue money is said on its own row, highlighted at the top of
+  // the list, not again in a line above it (owner, 2026-10-20).
   const totals = useMemo(() => {
     if (!current) return null
     let totalPaise = 0
     let paidPaise = 0
     let leftPaise = 0
-    let overduePaise = 0
-    const overdueMonths = new Set<string>()
-    const overdueNames: string[] = []
     for (const cost of current.costs) {
       const status = thisMonthStatus(cost, current.today)
       totalPaise += status.costPaise
       paidPaise += status.paidPaise
       leftPaise += status.leftPaise
-      for (const row of status.overdue) {
-        overduePaise += row.paise
-        overdueMonths.add(row.month)
-      }
-      if (status.overdue.length > 0) overdueNames.push(cost.name)
     }
-    return {
-      totalPaise,
-      paidPaise,
-      leftPaise,
-      overduePaise,
-      overdueMonths: [...overdueMonths].sort(),
-      overdueNames,
-    }
+    return { totalPaise, paidPaise, leftPaise }
   }, [current])
 
   return (
@@ -168,7 +154,7 @@ export function FixedCostsSurface() {
       ) : (
         <div className="space-y-4">
           {totals && current.costs.length > 0 && (
-            <div className="space-y-2">
+            <div>
               <dl className="grid grid-cols-3 gap-2" data-testid="fixed-costs-totals">
                 <Tile caption="This month">
                   <Money paise={totals.totalPaise} />
@@ -180,22 +166,6 @@ export function FixedCostsSurface() {
                   <Money paise={totals.leftPaise} />
                 </Tile>
               </dl>
-              {totals.overduePaise > 0 && (
-                <p
-                  className="flex items-baseline justify-between gap-3 rounded-lg border border-warning px-3 py-2 text-sm"
-                  data-testid="fixed-costs-overdue"
-                >
-                  {/* Who, not only how much (owner, 2026-10-20): the row to pay is named. */}
-                  <span className="text-content">
-                    <span className="font-semibold">
-                      Overdue from {monthWords(totals.overdueMonths)}
-                    </span>
-                    {' · '}
-                    {totals.overdueNames.join(', ')}
-                  </span>
-                  <Money paise={totals.overduePaise} className="font-semibold" />
-                </p>
-              )}
             </div>
           )}
           <div data-testid="fixed-cost-list">

@@ -715,6 +715,18 @@ app's own orange: red read as out of the theme even there (owner). Amber for the
 first five days, orange from the 6th: both warm, and still the loudest row. The
 tones are named `due` and `late`, not for a colour.
 
+**The same day, no overdue line above the list.** With the overdue row first,
+highlighted and holding the only filled **Pay**, the *Overdue from September ·
+Priyanka* line said it twice, so it went (owner). The list's tiles are This
+month · Paid · Left to pay; money owed from a month that ended is said on its
+own row, *+ ₹3,300 overdue from Sept*, as it always was.
+
+The demo's dates move with today, so the tests read its months and Priyanka's
+prorated amount from the demo's own facts rather than as "September" and
+₹3,300, and the chip test asserts on the two rows it makes rather than a count
+a demo payment can join near a month's turn. Checked with the clock moved to
+31 Oct, 2 Nov, 15 Dec, 1 Jan and 1 Mar.
+
 ## Built live (§7–§10), 2026-10-20
 
 What the live build decided where the design above left room, or differs from it:
