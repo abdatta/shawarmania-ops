@@ -220,6 +220,13 @@ select is(
 
 -- Cash: whatever month it is said to count in, it shows on the day it was paid,
 -- and the drawer's expected cash follows it.
+select pg_temp.unimpersonate();
+create temp table drawer_before (paise bigint) on commit drop;
+grant insert, select on drawer_before to authenticated;
+select pg_temp.impersonate(:'OWNER'::uuid);
+insert into drawer_before
+select public.drawer_cash_expenses_paise(:'KAL', now() - interval '1 minute',
+                                         now() + interval '1 minute');
 select lives_ok(
   format($q$select public.record_fixed_cost_payment(%L, %L, 200000, %L, %L, true, 'advance', null)$q$,
          :'PAY_CASH', (select id from nayan), pg_temp.today(:'KAL'),
@@ -230,7 +237,8 @@ select is(
   pg_temp.today(:'KAL'),
   'cash is forced to the day it left the drawer');
 select is(
-  public.drawer_cash_expenses_paise(:'KAL', now() - interval '1 minute', now() + interval '1 minute'),
+  public.drawer_cash_expenses_paise(:'KAL', now() - interval '1 minute', now() + interval '1 minute')
+    - (select paise from drawer_before),
   200000::bigint,
   'and it is among the cash that left the drawer');
 

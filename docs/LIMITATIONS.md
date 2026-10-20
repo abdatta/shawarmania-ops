@@ -381,7 +381,14 @@ revenue record.
 
 ### Payroll is out of scope
 
-There is no salary data anywhere in the schema or the UI — `staff-as-accounts` (#21) removed the roster's `salary_paise` rather than migrating it, by owner decision. Attendance feeds whatever payroll process the business runs outside the app, and wages actually paid are recorded as ordinary expenses under a free-text category such as `Staff wages`. If payroll ever becomes in-scope, salary fields return by migration onto the person's account record — nothing else has to move.
+There is no payroll: no attendance-derived pay, no deductions, no statutory figures, no payslip. `staff-as-accounts` (#21) removed the roster's `salary_paise` by owner decision, and no account carries a salary. Attendance feeds whatever payroll process the business runs outside the app.
+
+What a person costs a month **is** recorded, as a cost: since `fixed-costs-are-spread-over-the-month` (#79) a salary is a **fixed cost** like rent, a typed name with a monthly amount, read only by the owner and the outlet's manager, and paying it records an ordinary expense. It is deliberately not linked to the person's account or their attendance, which is the doorway to payroll. Its own limits:
+
+- **One payment pays one fixed cost.** A day of ten salaries is ten payments, each from its own row's **Pay**.
+- **No money is given back.** Paying more than is owed is an advance, a one-time extra or a new monthly amount; an advance left over when a fixed cost stops is cleared by **Stop**, never refunded.
+- **P&L (Pro-rata) is a figure for now.** It exists for the current month only; a past month reads P&L, which holds every payment on the date it counts in.
+- **A payment is not edited in place.** Its amount, its day and how it was paid change by **Undo** on the fixed cost's page and paying again; the Expenses page edits only its note.
 
 ### The counter does not show an item's description
 

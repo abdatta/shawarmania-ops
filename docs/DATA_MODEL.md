@@ -1287,6 +1287,48 @@ and who recorded most of the rows already stored. Its predicates mirror the row
 policies deliberately, and `supabase/tests/21_manual_ledger.sql` asserts the two
 agree rather than trusting that they do.
 
+## Fixed costs *(#79)*
+
+An outlet's recurring costs — a salary, rent, a utility, anything else paid
+monthly — and the payments that pay them (`fixed-costs-are-spread-over-the-month`).
+Four tables, and **no month is stored**: what a month costs is derived on read,
+so *carried over* needs no job on the 1st.
+
+| Table | One row is |
+|---|---|
+| **`fixed_costs`** | a fixed cost: `name` (typed, never an account), `category` (`salary` · `rent` · `utility` · `other`), `note`, `starts_on`, `stops_on` |
+| **`fixed_cost_amounts`** | its monthly amount from a month (`from_month`, a 1st) on; voidable, and naming the payment that set it, if one did |
+| **`fixed_cost_settlements`** | one month settled at a figure; voidable, and naming its payment, if one did |
+| **`fixed_cost_payments`** | a payment's link to the expense it is, with the day it was paid (`paid_on`); insert-only |
+
+**A month's cost** is its latest unvoided settlement, otherwise the monthly
+amount in effect × the days it runs ÷ the days in the month, rounded down to the
+paisa. `fixed_cost_month_cost` and `monthCost()` in
+`src/domain/fixed-costs.ts` are held to one case table
+(`src/domain/fixed-cost-cases.json`, `npm run lint:fixed-costs`).
+
+**A payment is an expense.** The amount and the day it **counts in** are the
+expense's (`business_date`); the link adds only the day it was paid, so last
+month's salary paid on the 2nd counts in last month's P&L. Withdrawn, it pays
+nothing; corrected, it pays the new amount. Cash always counts on the day it left
+the drawer. **No payment names a month**: payments fill the oldest month's cost
+first, in the order they count in, and an advance runs on into months not yet
+owed. A month is **unpaid** once it has ended with part of its cost uncovered.
+
+Every child carries `outlet_id` with a composite foreign key to its fixed cost,
+so each policy is one membership test; a trigger refuses a link to another
+outlet's expense. **The owner and the outlet's manager only**, on an active
+account: no branch for a counter shift, a Biller or an Employee, and no delete
+for anyone. Writes go through functions that take the outlet from the fixed cost
+(`create_fixed_cost`, `update_fixed_cost`, `change_fixed_cost_amount`,
+`stop_fixed_cost`, `settle_fixed_cost_month`, `undo_fixed_cost_payment`);
+`record_fixed_cost_payment` writes the expense under the caller's own policy and
+`expense_guard`, the link and what its answer records in one transaction,
+recomputing the answer from what is owed and refusing one the pay sheet would not
+offer. Reads: `fixed_costs_list` (everything the screens fold, one request),
+`fixed_costs_unpaid` (Needs attention) and `overview_month_v2`
+(`overview_month` with the outlet's fixed costs beside it).
+
 ## The archived notebook
 
 **`archived_manual_ledger_days`** — the forty day rows the manual-ledger stopgap

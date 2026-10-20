@@ -92,3 +92,12 @@ is understated by the trade nobody rang up.
 Somebody reads the demo Ledger's month and the figure looks wrong, or the
 walkthrough is shown to somebody whose opinion matters. The surface exists again,
 so this no longer waits on anything.
+
+## Update, 2026-10-20
+
+Checked while seeding the demo's fixed costs (`fixed-costs-are-spread-over-the-month`,
+#79): the demo's current month now reads about ₹4.6 lakh of revenue against its
+expenses, and P&L (Pro-rata) about ₹3.5 lakh, so the month view no longer reads
+as a loss. The fixed costs were seeded against the trading days as they are, and
+no trading day was added. What stays open is the shorter periods, where a month's
+expenses can still fall inside a few days of bills.

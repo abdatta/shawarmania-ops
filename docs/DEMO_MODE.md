@@ -157,6 +157,7 @@ Nothing in it is authored as a total. Every figure the owner sees is derived at 
 Worth knowing before running one:
 
 - **Both outlets trade, and deliberately not identically.** Kalyani is busier and carries every awkward state; Kanchrapara turns over roughly half as much, is short of nothing, and closed yesterday exactly. Two outlets of the same shape would make the comparison screen unreadable — a difference is only legible against something that is not different.
+- **Kalyani has six fixed costs** (#79), dated from the session's today so the walkthrough reads the same any day: rent paid on time; a salary paid last month on the 2nd and counted in it, with an advance this month; one paid a month ahead; one who joined last month and is still unpaid for it, which is what Needs attention names; electricity settled higher last month; and garbage.
 - **Each outlet numbers its own bills from 1001**, mirroring the per-outlet sequence the database enforces. The outlets have been trading a while: a customer's older visits, which the customer directory carries, are listed on their card as the bills below 1001 in the same sequence (the-card-lists-every-bill).
 - **Every demo person has one canonical username.** Account creation on Team, correction
   and activation handover use the same namespace and validation as live mode,

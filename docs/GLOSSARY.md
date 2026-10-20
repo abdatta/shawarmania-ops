@@ -231,6 +231,32 @@ grouped by payment *instant* into a [drawer interval](#drawer-interval) rather
 than by date, because a date cannot express 22:00 and the drawer is counted
 mid-shift.
 
+### Fixed cost
+
+**A cost the outlet carries every month** — a salary, rent, a utility or other —
+from the day it starts until it stops, with a monthly amount (#79). A month it
+runs only part of costs that share of the amount. Paying one records an ordinary
+expense, marked **Fixed**. A salary is a typed name, never a person's account.
+
+### Counts in
+
+**The day a fixed-cost payment shows in the figures**: its expense's business
+date. It may be earlier than the day it was **paid on**, so last month's salary
+paid on the 2nd counts in last month's P&L. Cash always counts in the day it left
+the drawer.
+
+### Paid ahead
+
+**Paid beyond what a fixed cost has cost so far**: an advance on months to come.
+It covers the next months first in, first out; it is never a refund.
+
+### P&L (Pro-rata)
+
+**P&L less the share of this month's fixed costs owed so far and not yet paid**
+(#79). Each fixed cost's month is spread over its days, today counted; a payment
+covers its share at once. The current month only: a past month reads P&L, which
+already holds every payment on the day it counts in.
+
 ### Revenue
 
 **Everything customers paid**: settled counter bills' cash and UPI, after bill

@@ -152,6 +152,7 @@ What that spec measures rather than counts: the bar's own `scrollWidth` against 
 
 Pure functions over integer paise, so they are trivially testable and there is no excuse for gaps.
 
+- A fixed cost's month: what it costs, prorated by its start and stop, the latest settlement winning — against `src/domain/fixed-cost-cases.json`, which `monthCost()` and `fixed_cost_month_cost` are both held to. `npm run lint` fails when the copy in `supabase/tests/97_fixed_costs_are_spread_over_the_month.sql` drifts, because the pay function recomputes the answer the sheet offered and a drift refuses a payment the owner was offered.
 - Bill totals: `total = subtotal − discount + tax + rounding`, across quantities and rounding edges — and against the shared case table, which every implementation of the identity is held to. `npm run lint` fails when the copy in the pgTAP suite drifts from `src/domain/billing-totals-cases.json`, because an identity changed in one place and left alone in the other refuses live bills at a counter rather than turning a test red.
 - **The drawer's interval arithmetic** (#11), in `src/domain/drawer.test.ts`:
   `expected = opening + receipts − expenses − cash out`, `difference = counted −

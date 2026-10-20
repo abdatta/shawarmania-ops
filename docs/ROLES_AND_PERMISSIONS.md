@@ -170,6 +170,7 @@ assignment cannot be ended by anyone, including its holder.
 | Record an expense | ✓ all | ✓ own outlets, any date | ✓ own outlet, today, cash only | ✓ own outlet, today, cash only |
 | Correct or withdraw an expense | ✓ all | ✓ own outlets | own rows, today, cash only | own rows, today, cash only |
 | Delete an expense | — | — | — | — |
+| Read, add, edit, stop, pay or undo a fixed cost (#79) | ✓ all | ✓ own outlets | — | — |
 
 **Expense categories are business-wide suggestions, not authority.** Any active
 account that is allowed to record an expense now, or will be allowed by the live

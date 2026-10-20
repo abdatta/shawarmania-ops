@@ -669,3 +669,31 @@ name in front of the note.
 
 **2026-10-19, approved.** The owner approved the demo's UI as it stands, with
 Undo, and asked for the full build to follow (§7 on).
+
+## Built live (§7–§10), 2026-10-20
+
+What the live build decided where the design above left room, or differs from it:
+
+- **The screens fold, the server lists.** `fixed_costs_list` returns the raw
+  facts, and every figure is folded by `src/domain/fixed-costs.ts`, as in the
+  demo. `overview_month_v2` is `overview_month` with that list beside it as
+  `fixedCosts`; the adapter folds it with `readProRata`, so Overview's figure is
+  the Ledger's by construction. Still one request per card.
+- **The SQL copy is what the pay function needs**, no more:
+  `fixed_cost_month_cost`, the months with their running total, what was paid by
+  a day, and whether a month is prorated. They are `security invoker` and
+  granted to `authenticated` rather than to no role (D3, *RLS and authority*):
+  the invoker pay function must call them as the caller, and they read under the
+  tables' policies, so they show nothing a select would not.
+- **Each write is a function** taking the outlet from the fixed cost:
+  `create_fixed_cost`, `update_fixed_cost`, `change_fixed_cost_amount`,
+  `stop_fixed_cost`, `settle_fixed_cost_month`, `record_fixed_cost_payment`,
+  `undo_fixed_cost_payment`. Undo of a settlement is the one direct update; its
+  guard stamps who voided it.
+- **The pay function mirrors `payPrompt` and `payEffect`** at the outlet's
+  business date: more than owed needs an answer, and *That's all* or a cut there
+  is refused; less than owed settles the first month the payment leaves short,
+  and only if it reached it; *ahead*, or no answer where none is needed, records
+  nothing beside the payment.
+- **The Fixed tab is live** for the owner and the managers (registry `live`). It
+  changes no existing figure, so it is not behind `pro-rata-pnl`.

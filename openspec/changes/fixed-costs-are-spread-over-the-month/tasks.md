@@ -34,7 +34,7 @@ object is new.
   `off_means` word for word from the proposal, `change_name`, `change_number` 79,
   and the dependency on `one-revenue`.
 - [x] 1.3 The gate's words in `WORDS` in `src/data-access/mock/change-gates.ts`.
-- [ ] 1.4 `npm run lint:migrations`, `npm run lint:change-gates`, and the
+- [x] 1.4 `npm run lint:migrations`, `npm run lint:change-gates`, and the
   change-gate suite: the row reads back off and depends on `one-revenue`. *The row reads back off; `lint:change-gates` still wants the `@cg-on` and `@cg-round-trip` browser tests of §9, so it stays red until then.*
 
 ## 2. The rules, pure (D3–D6)
@@ -78,11 +78,11 @@ object is new.
 
 - [x] 4.1 The mock adapter over the store, folding with `src/domain/fixed-costs.ts`
   so demo and live cannot disagree; fixtures typed from the generated rows.
-- [ ] 4.2 The demo outlet's fixed costs (design *Demo*): rent; three salaries (one
+- [x] 4.2 The demo outlet's fixed costs (design *Demo*): rent; three salaries (one
   half-paid by a mid-month advance, one paid a month ahead, one joining on the
   20th); electricity settled higher last month; garbage; last month ending with
   one salary unpaid. Fill out the demo's trading days enough that its month reads
-  as a shop that trades, and update `the-demo-month-reads-as-a-loss.md`. *Seeded (`seedDemoFixedCosts`). The demo month already reads ₹4.6L of revenue and a P&L (Pro-rata) of ₹3.5L, so the trading days were left alone; the todo is updated with the rest of the docs in §10.*
+  as a shop that trades, and update `the-demo-month-reads-as-a-loss.md`. *Seeded (`seedDemoFixedCosts`). The demo month already reads ₹4.6L of revenue and a P&L (Pro-rata) of ₹3.5L, so the trading days were left alone; the todo carries an update (2026-10-20).*
 - [x] 4.3 Turn `pro-rata-pnl` on in the demo's change-gate snapshot, as the
   owner's demo runs every gate it is shown.
 
@@ -129,42 +129,42 @@ object is new.
 
 ## 7. The database, live
 
-- [ ] 7.1 In the migration: `fixed_cost_month_cost`, `create_fixed_cost`,
+- [x] 7.1 In the migration: `fixed_cost_month_cost`, `create_fixed_cost`,
   `settle_fixed_cost_month`, `record_fixed_cost_payment` (its authority check,
   idempotency on `p_id`, the server's recomputation of the choice),
   `fixed_costs_list` (an outlet's fixed costs with their amounts, settlements
   and effective payments, and its business date, in one read: what
   `FixedCostsAdapter.list` returns), `fixed_costs_unpaid` and `overview_month_v2`, each with the grants of *RLS and authority*.
   `npm run lint:migrations`.
-- [ ] 7.2 pgTAP: the shared case table against `fixed_cost_month_cost` and the
+- [x] 7.2 pgTAP: the shared case table against `fixed_cost_month_cost` and the
   balance; a payment counted in last month landing in that month's P&L; a cash
   payment forced to the day paid and moving the drawer's expected cash; a retried
   payment written once; a choice the server computes differently refused; a typed
   lookalike unmarked; `overview_month_v2` equal to `overview_month` plus its
   fixed costs.
-- [ ] 7.3 **Isolation, one test per table** (`fixed_costs`, `fixed_cost_amounts`,
+- [x] 7.3 **Isolation, one test per table** (`fixed_costs`, `fixed_cost_amounts`,
   `fixed_cost_settlements`, `fixed_cost_payments`) **and per read**: another
   outlet's Franchise Admin refused by a crafted request; a Biller, an Employee,
   a counter-shift session and anonymous refused; a deactivated owner refused; a
   link to another outlet's expense refused; a Biller calling the pay function
   refused with no expense written; no delete for anyone.
-- [ ] 7.4 `npm run db:reset`, `npm run test:db`, `npm run test:rls`,
+- [x] 7.4 `npm run db:reset`, `npm run test:db`, `npm run test:rls`,
   `npm run db:types`, and the types diff clean.
 
 ## 8. Live
 
-- [ ] 8.1 The Supabase adapter for `FixedCostsAdapter`, the v2 month read on the
+- [x] 8.1 The Supabase adapter for `FixedCostsAdapter`, the v2 month read on the
   gated Overview path, and the marks read alongside the Ledger month and the
   Expenses day, for the owner and a manager only.
-- [ ] 8.2 Registry state `live` for both surfaces; the demo still walks.
+- [x] 8.2 Registry state `live` for both surfaces; the demo still walks.
 
 ## 9. Browser suites
 
-- [ ] 9.1 Demo suite: add a fixed cost, pay part, keep pending, pay the rest; an
+- [x] 9.1 Demo suite: add a fixed cost, pay part, keep pending, pay the rest; an
   advance across months; a salary paid on the 2nd counted in last month; Needs
   attention appearing and clearing; tagged `@cg-on:pro-rata-pnl` where they assert
   the gated screens.
-- [ ] 9.2 Authenticated suite: the same against the local stack, a manager
+- [x] 9.2 Authenticated suite: the same against the local stack, a manager
   refused another outlet's page, a Biller seeing a cash payment without the chip,
   and `@cg-round-trip:pro-rata-pnl` (design D10).
 - [ ] 9.3 `e2e-auth/request-budget.spec.ts` green and unchanged: the counter and
@@ -175,7 +175,7 @@ object is new.
 
 ## 10. Docs
 
-- [ ] 10.1 Every page in the proposal's *Docs To Update Before Archive*, and
+- [x] 10.1 Every page in the proposal's *Docs To Update Before Archive*, and
   `docs/TESTING.md` for the shared case table.
 
 ## 11. Release
