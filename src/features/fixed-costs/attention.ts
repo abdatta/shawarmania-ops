@@ -5,9 +5,9 @@ import type { FixedCostsUnpaid } from '@/data-access/fixed-costs'
 import { useSharedRead, type Attention } from '@/features/attention/attention'
 
 import { FIXED_COSTS_PATH, useFixedTabAvailable } from './use-fixed-tab'
-import { monthWords } from './words'
+import { overdueTone, overdueWords } from './words'
 
-const NOTHING: FixedCostsUnpaid = { count: 0, months: [] }
+const NOTHING: FixedCostsUnpaid = { count: 0, months: [], paise: 0, categories: {}, today: null }
 
 /**
  * Fixed costs with a month that ended unpaid (fixed-costs-are-spread-over-the-month,
@@ -28,11 +28,13 @@ export function useFixedCostsUnpaidAttention(): Attention | null {
   )
   const { value } = useSharedRead(fixedCosts, read)
   if (value === null) return null
-  const words = `${value.count} unpaid from ${monthWords(value.months)}`
+  const words = overdueWords(value)
   return {
     count: value.count,
     label: words,
-    summaryLabel: `Fixed costs: ${words}`,
+    // Money first (owner, 2026-10-20): *₹27,300 overdue · 3 salaries, 1 rent · from September*.
+    summaryLabel: words,
     path: FIXED_COSTS_PATH,
+    tone: overdueTone(value),
   }
 }

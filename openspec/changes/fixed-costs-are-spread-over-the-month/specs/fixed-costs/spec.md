@@ -147,15 +147,23 @@ as one.
 
 ### Requirement: An unpaid month is named until it is paid or dropped
 
-Once a month has ended, the number of fixed costs with that month unpaid SHALL
-be shown under Needs attention for the owner and the outlet's manager, naming the
-month, and as the Fixed costs entry's badge, and SHALL clear when each is paid
-or dropped.
+Once a month has ended, fixed costs with that month unpaid SHALL be shown under
+Needs attention for the owner and the outlet's manager, and as the Expenses
+entry's badge, and SHALL clear when each is paid or dropped. The line SHALL lead
+with the amount left unpaid, then each category with its count, then the months,
+and SHALL be listed before every other row. It SHALL be tinted amber from the 1st
+to the 5th of the month and red from the 6th, or as soon as a month older than the
+last is unpaid; every other row stays untinted.
 
 #### Scenario: Salaries not recorded by the 1st
 
-- **WHEN** it is 1 November and three fixed costs have October unpaid
-- **THEN** Needs attention reads *Fixed costs: 3 unpaid from October*, opening the list
+- **WHEN** it is 1 November, three salaries and the rent have October unpaid, ₹57,300 in all, and attendance is waiting too
+- **THEN** Needs attention's first row reads *₹57,300 overdue · 3 salaries, 1 rent · from October* in amber, opening the Fixed tab, with attendance below it
+
+#### Scenario: Still unpaid on the 6th
+
+- **WHEN** it is 6 November and the same is still unpaid
+- **THEN** the row is red
 
 #### Scenario: Paid on the 2nd
 

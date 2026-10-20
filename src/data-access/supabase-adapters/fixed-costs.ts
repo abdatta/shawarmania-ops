@@ -120,7 +120,14 @@ export function createSupabaseFixedCostsAdapter(
     async unpaid() {
       const { data, error } = await client.rpc('fixed_costs_unpaid')
       if (error) throw toFixedCostError(error)
-      return data as unknown as FixedCostsUnpaid
+      const read = data as unknown as Partial<FixedCostsUnpaid>
+      return {
+        count: read.count ?? 0,
+        months: read.months ?? [],
+        paise: read.paise ?? 0,
+        categories: read.categories ?? {},
+        today: read.today ?? null,
+      }
     },
   }
 }

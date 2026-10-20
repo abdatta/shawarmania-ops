@@ -65,7 +65,13 @@ test('last month’s salary is paid now, counted in last month, and Needs attent
 }) => {
   await page.goto('demo/owner')
   const attention = page.getByTestId('overview-attention-fixed-costs-unpaid')
-  await expect(attention).toContainText(/Fixed costs: 1 unpaid from \w+/)
+  // Money first, and first in the list (owner, 2026-10-20).
+  await expect(attention).toHaveText(/^₹3,300 overdue · 1 salary · from \w+$/)
+  await expect(page.locator('[data-testid^="overview-attention-"]').first()).toHaveAttribute(
+    'data-testid',
+    'overview-attention-fixed-costs-unpaid',
+  )
+  await expect(attention).toHaveAttribute('data-tone', /^(warning|danger)$/)
   await attention.click()
   await expect(page).toHaveURL(/ledger\/fixed-costs/)
 

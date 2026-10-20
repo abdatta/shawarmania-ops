@@ -1,7 +1,9 @@
 import { Link, useSearchParams } from 'react-router'
 
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/cn'
 
+import { useFixedCostsUnpaidAttention } from './attention'
 import { useExpensesBase } from './use-fixed-tab'
 
 /**
@@ -19,6 +21,11 @@ export function ExpenseTabs({ current }: { current: 'daily' | 'fixed' }) {
   const [address] = useSearchParams()
   const outlet = address.get('outlet')
   const query = outlet ? `?outlet=${encodeURIComponent(outlet)}` : ''
+  // The Expenses badge counts fixed costs left unpaid, so the tab that holds
+  // them carries it too (owner, 2026-10-20): arriving on Daily, the eye goes to
+  // Fixed. The app's own badge, drawn as Delivery's channel switch draws it; the
+  // amber and red are Overview's alone. One shared read, no new request.
+  const owed = useFixedCostsUnpaidAttention()
   return (
     <nav
       aria-label="Expenses"
@@ -38,13 +45,23 @@ export function ExpenseTabs({ current }: { current: 'daily' | 'fixed' }) {
           aria-current={current === key ? 'page' : undefined}
           data-testid={`expense-tab-${key}`}
           className={cn(
-            'flex h-[var(--size-control-phone)] items-center justify-center rounded-lg text-sm font-semibold focus-visible:focus-ring',
+            'flex h-[var(--size-control-phone)] items-center justify-center gap-1.5 rounded-lg text-sm font-semibold focus-visible:focus-ring',
             current === key
               ? 'bg-primary text-on-primary'
               : 'text-content-muted hover:bg-surface-raised hover:text-content',
           )}
         >
           {label}
+          {key === 'fixed' && owed && (
+            <Badge
+              data-testid="expense-tab-fixed-owed"
+              count={owed.count}
+              label={`Fixed: ${owed.label}`}
+              // A selected tab is filled with `--primary`, the badge's own colour:
+              // the same asserted pair the other way round, as Delivery does.
+              className={current === key ? 'bg-on-primary text-primary' : ''}
+            />
+          )}
         </Link>
       ))}
     </nav>

@@ -316,8 +316,10 @@ select lives_ok(
   'rent from last month, never paid');
 select is(
   public.fixed_costs_unpaid(),
-  jsonb_build_object('count', 1, 'months', jsonb_build_array(pg_temp.last_month())),
-  'the owner is told of one fixed cost unpaid from last month, and Nayan is not it');
+  jsonb_build_object('count', 1, 'months', jsonb_build_array(pg_temp.last_month()),
+                     'paise', 2500000, 'categories', jsonb_build_object('rent', 1),
+                     'today', greatest(pg_temp.today(:'KAL'), pg_temp.today(:'KPA'))),
+  'the owner is told of one fixed cost unpaid from last month, what it left unpaid and what it is, and Nayan is not it');
 
 -- Edit and Stop.
 select lives_ok(

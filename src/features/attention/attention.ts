@@ -38,6 +38,12 @@ export interface Attention {
    * role's prefix, like a surface's path.
    */
   path?: string
+  /**
+   * How loudly the row reads in Needs attention: plain, `warning` (amber) or
+   * `danger` (red). Only money owed uses it (owner, 2026-10-20): an alert that
+   * looks like every other is one a manager learns to scroll past.
+   */
+  tone?: 'warning' | 'danger'
 }
 
 /** A hook a surface offers so the shell can badge it without knowing why. */

@@ -90,7 +90,16 @@ export function FixedCostsSurface() {
 
   const current = reading?.key === outletId ? reading.value : null
   const month = current ? monthOf(current.today) : null
-  const ongoing = current?.costs.filter((c) => !c.stopsOn || c.stopsOn >= current.today) ?? []
+  const ongoing =
+    current?.costs
+      .filter((c) => !c.stopsOn || c.stopsOn >= current.today)
+      // Overdue first (owner, 2026-10-20): the rows money is late on lead the
+      // list, and keep their order among themselves.
+      .sort(
+        (a, b) =>
+          Number(thisMonthStatus(b, current.today).overdue.length > 0) -
+          Number(thisMonthStatus(a, current.today).overdue.length > 0),
+      ) ?? []
   const stopped = current?.costs.filter((c) => c.stopsOn && c.stopsOn < current.today) ?? []
   // This month on its own, and overdue money said apart from it (owner,
   // 2026-10-19: "make it clear from the label itself").
@@ -101,6 +110,7 @@ export function FixedCostsSurface() {
     let leftPaise = 0
     let overduePaise = 0
     const overdueMonths = new Set<string>()
+    const overdueNames: string[] = []
     for (const cost of current.costs) {
       const status = thisMonthStatus(cost, current.today)
       totalPaise += status.costPaise
@@ -110,6 +120,7 @@ export function FixedCostsSurface() {
         overduePaise += row.paise
         overdueMonths.add(row.month)
       }
+      if (status.overdue.length > 0) overdueNames.push(cost.name)
     }
     return {
       totalPaise,
@@ -117,6 +128,7 @@ export function FixedCostsSurface() {
       leftPaise,
       overduePaise,
       overdueMonths: [...overdueMonths].sort(),
+      overdueNames,
     }
   }, [current])
 
@@ -173,8 +185,13 @@ export function FixedCostsSurface() {
                   className="flex items-baseline justify-between gap-3 rounded-lg border border-warning px-3 py-2 text-sm"
                   data-testid="fixed-costs-overdue"
                 >
+                  {/* Who, not only how much (owner, 2026-10-20): the row to pay is named. */}
                   <span className="text-content">
-                    Overdue from {monthWords(totals.overdueMonths)}
+                    <span className="font-semibold">
+                      Overdue from {monthWords(totals.overdueMonths)}
+                    </span>
+                    {' · '}
+                    {totals.overdueNames.join(', ')}
                   </span>
                   <Money paise={totals.overduePaise} className="font-semibold" />
                 </p>
@@ -292,16 +309,17 @@ function CostTable({
             onClick={() => onPay(cost)}
             aria-label={`Pay ${cost.name}`}
             data-testid={`pay-row-${cost.id}`}
-            // A small pill in the app's own button fills (owner, 2026-10-19): the
-            // primary orange where something is owed, the secondary fill where the
-            // month is paid, still plainly a button for paying ahead. The hit area
+            // A small pill in the app's own button fills: filled primary orange
+            // only where a month is overdue, the secondary fill everywhere else
+            // (owner, 2026-10-20), so a filled Pay means "this one is late" and
+            // the row the alert is about is the one that stands out. The hit area
             // reaches past the pill so it is a thumb's width. `relative` with no
             // z-index: above its own row's link (later in the page), and under the
             // phone's bottom bar, which comes later still.
             className={cn(
               'relative inline-flex h-8 items-center rounded-full px-3.5 text-xs font-semibold',
               "before:absolute before:-inset-2 before:content-[''] focus-visible:focus-ring",
-              owes
+              status.overdue.length > 0
                 ? 'bg-primary text-on-primary hover:brightness-95'
                 : 'border border-border bg-surface text-content hover:bg-surface-raised',
             )}
@@ -317,7 +335,13 @@ function CostTable({
       columns={columns}
       rows={costs}
       rowKey={(cost) => cost.id}
-      rowClassName={() => 'relative hover:bg-surface-raised'}
+      rowClassName={(cost) =>
+        // The row an alert is about stands out in the app's own orange tint
+        // (owner, 2026-10-20): found at a glance, without a colour of its own.
+        thisMonthStatus(cost, today).overdue.length > 0
+          ? 'relative bg-primary/10 ring-1 ring-inset ring-primary/40'
+          : 'relative hover:bg-surface-raised'
+      }
       empty={empty ?? null}
     />
   )

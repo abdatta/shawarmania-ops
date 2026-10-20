@@ -44,6 +44,12 @@ export interface FixedCostsUnpaid {
   count: number
   /** The ended months named, oldest first (1sts). */
   months: string[]
+  /** What those months left uncovered (owner, 2026-10-20: lead with the money). */
+  paise: number
+  /** How many of the fixed costs behind it are of each category. */
+  categories: Partial<Record<FixedCostCategory, number>>
+  /** The latest business date among the outlets read; null where nothing was. */
+  today: string | null
 }
 
 /** What Edit may change besides the monthly amount (owner, 2026-10-19: every field). */

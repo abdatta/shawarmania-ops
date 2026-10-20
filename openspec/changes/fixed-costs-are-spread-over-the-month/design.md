@@ -670,6 +670,46 @@ name in front of the note.
 **2026-10-19, approved.** The owner approved the demo's UI as it stands, with
 Undo, and asked for the full build to follow (§7 on).
 
+**2026-10-20, money owed is louder than work waiting.** The owner's worry: a
+salary unpaid read exactly like *5 attendance approvals*, so a manager who has
+learned to scroll past one scrolls past the other. Splitting the line by category
+alone would have left it looking the same, so the row changed how it looks, not
+only what it says:
+
+- **First in Needs attention**, whatever the navigation's order.
+- **The money leads**: *₹27,300 overdue · 3 salaries, 1 rent · from September*,
+  each category with its count.
+- **Tinted by how late it is**: amber from the 1st to the 5th, the days last
+  month's salaries are normally paid in, so payday does not cry wolf; red from
+  the 6th, or as soon as a month older than the last is owed. Every other row
+  stays plain, which is what makes this one stand out.
+
+No separate Dues card: one more block on a full phone screen, doing what a
+pinned, tinted row does. `fixed_costs_unpaid` gains `paise`, `categories` and
+`today` in a second migration declaring the same gate, its first two keys kept.
+
+**2026-10-20, the alert leads somewhere.** The owner, tapping the Expenses badge:
+it opened Daily with nothing pointing at Fixed, and on Fixed nothing said which
+of the orange Pay buttons the alert was about. So:
+
+- **The Fixed tab carries the badge**, the same count as Expenses.
+- **On Fixed, overdue rows come first.**
+- **The overdue line names who**: *Overdue from September · Priyanka*.
+
+The Overview line drops paise, as everything on Overview does; the Fixed tab
+keeps them.
+
+**The same day, the tones stay on Overview.** The first build carried the amber
+and red down into the page: a red badge on the Fixed tab, a tinted row and a red
+**Pay**. The owner refused it as out of the app's patterns. The tone exists to set
+money owed apart from the approvals beside it on Overview; once on a page, it is
+an alert like any other. So the Fixed tab carries the app's own badge, drawn as
+Delivery's channel switch draws it, and the overdue row is first and named in the
+usual amber. The row itself keeps a highlight, in the app's own orange tint
+(`bg-primary/10`), and **Pay is filled only where a month is overdue**; every
+other row's Pay is the outlined one (owner, the same day), so a filled Pay means
+"this one is late".
+
 ## Built live (§7–§10), 2026-10-20
 
 What the live build decided where the design above left room, or differs from it:

@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import type { DataAdapters } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
@@ -22,6 +22,8 @@ import { deriveSessionScope, type Session } from '@/session/session'
 import { ChangeGatesForTest, describeChangeGate } from '@/test/change-gates'
 import { FixedCostPage, FixedCostsSurface } from './fixed-costs-surface'
 import { ProRataCard } from './ledger-fixed-costs'
+import { overdueTone, overdueWords } from './words'
+import { NeedsAttention } from '@/features/attention/needs-attention'
 
 /**
  * The Fixed costs page, and `pro-rata-pnl`'s three toggle points: Overview's
@@ -511,4 +513,69 @@ it('offers a fixed-cost payment on Expenses only its note and its fixed cost’s
     ),
   )
   expect(data.store.expenses.find((e) => e.id === paymentId)?.amount_paise).toBe(60_000)
+})
+
+describe('money owed in Needs attention (owner, 2026-10-20)', () => {
+  const owed = {
+    count: 4,
+    months: ['2026-10-01'],
+    paise: 5_730_000,
+    categories: { salary: 3, rent: 1 },
+  }
+
+  it('leads with the money, then each kind with its count, then the months', () => {
+    expect(overdueWords(owed)).toBe('₹57,300 overdue · 3 salaries, 1 rent · from October')
+    expect(overdueWords({ ...owed, count: 1, paise: 330_000, categories: { salary: 1 } })).toBe(
+      '₹3,300 overdue · 1 salary · from October',
+    )
+    // A prorated month owes paise; Overview reads whole rupees.
+    expect(overdueWords({ ...owed, count: 1, paise: 348_387, categories: { salary: 1 } })).toBe(
+      '₹3,483 overdue · 1 salary · from October',
+    )
+  })
+
+  it('is amber in the days last month is paid in, and red from the 6th or once older months are owed', () => {
+    expect(overdueTone({ months: ['2026-10-01'], today: '2026-11-01' })).toBe('warning')
+    expect(overdueTone({ months: ['2026-10-01'], today: '2026-11-05' })).toBe('warning')
+    expect(overdueTone({ months: ['2026-10-01'], today: '2026-11-06' })).toBe('danger')
+    expect(overdueTone({ months: ['2026-09-01', '2026-10-01'], today: '2026-11-02' })).toBe(
+      'danger',
+    )
+  })
+
+  it('lists it first, tinted, above attendance, which stays plain', async () => {
+    const { adapters } = withFixedCosts()
+    adapters.fixedCosts.unpaid = async () => ({ ...owed, today: '2026-11-02' })
+    renderWith(false, <NeedsAttention />, adapters)
+    const money = await screen.findByTestId('overview-attention-fixed-costs-unpaid')
+    expect(money).toHaveTextContent('₹57,300 overdue · 3 salaries, 1 rent · from October')
+    expect(money).toHaveAttribute('data-tone', 'warning')
+    const attendance = await screen.findByTestId('overview-attention-attendance-waiting')
+    expect(attendance).toHaveAttribute('data-tone', 'plain')
+    const rows = screen.getAllByTestId(/^overview-attention-/)
+    expect(rows[0]).toBe(money)
+  })
+})
+
+it('leads the Fixed tab with what is overdue, named, and badges the tab as every tab is badged', async () => {
+  const { adapters } = withFixedCosts()
+  renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
+  const list = await screen.findByTestId('fixed-cost-list')
+  const rows = within(list).getAllByRole('row').slice(1)
+  // Priyanka owes last month, so her row comes first whatever the order added.
+  expect(rows[0]).toHaveTextContent('Priyanka')
+  // Highlighted in the app's own orange, and only that row.
+  expect(rows[0]).toHaveClass('bg-primary/10')
+  expect(rows.slice(1).some((row) => row.classList.contains('bg-primary/10'))).toBe(false)
+  // Pay is filled only where a month is overdue; owed this month is still Pay, outlined.
+  expect(within(rows[0]!).getByRole('button', { name: 'Pay Priyanka' })).toHaveClass('bg-primary')
+  expect(within(list).getByRole('button', { name: 'Pay Nayan' })).not.toHaveClass('bg-primary')
+  expect(screen.getByTestId('fixed-costs-overdue')).toHaveTextContent(
+    'Overdue from September · Priyanka',
+  )
+  // The app's own badge, inverted on the selected tab; amber and red are Overview's.
+  const badge = await screen.findByTestId('expense-tab-fixed-owed')
+  expect(badge).toHaveTextContent('1')
+  expect(badge).toHaveClass('bg-on-primary')
+  expect(screen.queryByText((_, node) => node?.getAttribute('data-tone') === 'danger')).toBeNull()
 })

@@ -334,17 +334,25 @@ export function createMockFixedCostsAdapter(
     },
 
     async unpaid() {
-      if (role !== 'super_admin' && role !== 'franchise_admin') return { count: 0, months: [] }
+      if (role !== 'super_admin' && role !== 'franchise_admin')
+        return { count: 0, months: [], paise: 0, categories: {}, today: null }
       const months = new Set<string>()
+      const categories: Partial<Record<FixedCostCategory, number>> = {}
       let count = 0
+      let paise = 0
       for (const row of store.fixedCosts) {
         if (role === 'franchise_admin' && !(reach ?? []).includes(row.outlet_id)) continue
         const unpaid = unpaidEndedMonths(demoFixedCostFacts(store, row), store.today)
         if (unpaid.length === 0) continue
         count += 1
-        for (const month of unpaid) months.add(month.month)
+        const category = row.category as FixedCostCategory
+        categories[category] = (categories[category] ?? 0) + 1
+        for (const month of unpaid) {
+          months.add(month.month)
+          paise += month.costPaise - month.coveredPaise
+        }
       }
-      return { count, months: [...months].sort() }
+      return { count, months: [...months].sort(), paise, categories, today: store.today }
     },
   }
 }
