@@ -1,5 +1,5 @@
 import { render, screen, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { BillingBill } from '@/data-access/adapters'
 
@@ -58,6 +58,10 @@ const paperBill: BillingBill = {
   enteredAt: '2026-10-21T04:45:00.000Z',
 }
 
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 function summary(bill: BillingBill) {
   render(
     <ManagerBillSummary bill={bill} expanded={false} showingDetail={false} onToggle={vi.fn()} />,
@@ -96,6 +100,9 @@ describe('a paper bill', () => {
   })
 
   it('says in its timeline who entered it and when', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    // Days after entry, so the time reads as a date and not "Today" or "Yesterday".
+    vi.setSystemTime(new Date('2026-10-25T06:30:00Z'))
     const timeline = detail(paperBill)
     const entered = within(timeline).getByText('Entered from paper').parentElement!
     expect(entered).toHaveTextContent('Demo Manager')
