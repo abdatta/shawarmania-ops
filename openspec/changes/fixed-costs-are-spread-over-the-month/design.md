@@ -727,6 +727,17 @@ prorated amount from the demo's own facts rather than as "September" and
 a demo payment can join near a month's turn. Checked with the clock moved to
 31 Oct, 2 Nov, 15 Dec, 1 Jan and 1 Mar.
 
+**2026-10-21, the tap is seen.** On a phone the Pay pills sit close, and a
+sheet's title is not always read, so the owner asked to see which row was
+touched. A tapped row tints orange, and stays tinted
+for 100 ms before its sheet or its page opens: a press highlight alone lasted
+the tenth of a second a tap takes and was never seen. 300 ms was built first
+and felt long on the phone, so the owner set 100 ms. A tapped Pay keeps its own thin border, turned orange, over a light
+tint (a filled Pay deepens a shade); a row tapped to open its page leaves its Pay
+alone. No thicker border anywhere: a first build ringed both, and the owner found
+it heavy. While the sheet is open the row stays tinted, which shows on a tablet;
+a phone's sheet covers the list.
+
 ## Built live (§7–§10), 2026-10-20
 
 What the live build decided where the design above left room, or differs from it:

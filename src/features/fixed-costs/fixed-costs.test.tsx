@@ -235,6 +235,8 @@ it('pays from the row, starting at what is owed, and says where it was recorded'
   const nayan = data.store.fixedCosts.find((c) => c.name === 'Nayan')!
   renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
   await user.click(await screen.findByTestId(`pay-row-${nayan.id}`))
+  // The row stays lit for a moment before its sheet opens (owner, 2026-10-21).
+  await screen.findByTestId('fixed-cost-pay-amount')
   expect(screen.getByTestId('fixed-cost-pay-amount')).toHaveValue('8000')
   await user.selectOptions(screen.getByTestId('fixed-cost-paid-with'), 'other')
   await user.click(screen.getByTestId('save-fixed-cost-payment'))
@@ -349,6 +351,8 @@ it('starts on Exact, and Less or More is chosen on purpose or follows what is ty
   const nayan = data.store.fixedCosts.find((c) => c.name === 'Nayan')!
   renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
   await user.click(await screen.findByTestId(`pay-row-${nayan.id}`))
+  // The row stays lit for a moment before its sheet opens (owner, 2026-10-21).
+  await screen.findByTestId('fixed-cost-pay-amount')
   const amount = screen.getByTestId('fixed-cost-pay-amount')
   expect(screen.getByTestId('pay-aim-exact')).toHaveAttribute('aria-checked', 'true')
   expect(amount).toHaveValue('8000')
@@ -376,6 +380,8 @@ it('names the figures in every reason, and puts the switch back when the amount 
   const nayan = data.store.fixedCosts.find((c) => c.name === 'Nayan')!
   renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
   await user.click(await screen.findByTestId(`pay-row-${nayan.id}`))
+  // The row stays lit for a moment before its sheet opens (owner, 2026-10-21).
+  await screen.findByTestId('fixed-cost-pay-amount')
   const amount = screen.getByTestId('fixed-cost-pay-amount')
 
   // ₹10,000 against ₹8,000 due on a ₹12,000 salary.
@@ -412,6 +418,8 @@ it('points a refused Save at the field it was refused for, outlined, with the me
   const nayan = data.store.fixedCosts.find((c) => c.name === 'Nayan')!
   renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
   await user.click(await screen.findByTestId(`pay-row-${nayan.id}`))
+  // The row stays lit for a moment before its sheet opens (owner, 2026-10-21).
+  await screen.findByTestId('fixed-cost-pay-amount')
   await user.clear(screen.getByTestId('fixed-cost-pay-amount'))
   await user.type(screen.getByTestId('fixed-cost-pay-amount'), '18000')
   await user.click(screen.getByTestId('save-fixed-cost-payment'))
@@ -574,4 +582,71 @@ it('leads the Fixed tab with what is overdue, highlighted, and badges the tab as
   expect(badge).toHaveTextContent('1')
   expect(badge).toHaveClass('bg-on-primary')
   expect(screen.queryByText((_, node) => node?.getAttribute('data-tone') === 'late')).toBeNull()
+})
+
+it('opens Daily on the day the address asks for, as Recorded on … · View links it', async () => {
+  const { data, adapters } = withFixedCosts()
+  const asked: string[][] = []
+  const list = adapters.expenses.listRecentExpenses.bind(adapters.expenses)
+  adapters.expenses.listRecentExpenses = async (outletId, dates) => {
+    asked.push([...dates])
+    return list(outletId, dates)
+  }
+  // Three days back from the demo's today: a day the page would never open on.
+  const [y, m, d] = data.store.today.split('-').map(Number) as [number, number, number]
+  const day = new Date(Date.UTC(y, m - 1, d - 3)).toISOString().slice(0, 10)
+  renderWith(
+    false,
+    <OutletExpensesSurface />,
+    adapters,
+    'super_admin',
+    `/?outlet=${KAL}&date=${day}`,
+  )
+  await waitFor(() => expect(asked.length).toBeGreaterThan(0))
+  expect(asked[0]).toEqual([day])
+})
+
+it('keeps the row being paid, and its Pay, lit while the sheet is open', async () => {
+  const user = userEvent.setup()
+  const { data, adapters } = withFixedCosts()
+  const nayan = data.store.fixedCosts.find((c) => c.name === 'Nayan')!
+  renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
+  const pay = await screen.findByTestId(`pay-row-${nayan.id}`)
+  await user.click(pay)
+  await screen.findByTestId('fixed-cost-pay-amount')
+  expect(screen.getByTestId(`pay-row-${nayan.id}`)).toHaveAttribute('data-selected', 'true')
+  // A tint, no border of its own; the pill's own border turns orange.
+  const row = screen.getByTestId(`pay-row-${nayan.id}`).closest('tr')!
+  expect(row).toHaveClass('bg-primary/20')
+  expect(row).not.toHaveClass('ring-2')
+  expect(screen.getByTestId(`pay-row-${nayan.id}`)).toHaveClass('border-primary')
+  const others = screen
+    .getAllByTestId(/^pay-row-/)
+    .filter((b) => b !== screen.getByTestId(`pay-row-${nayan.id}`))
+  expect(others.some((b) => b.hasAttribute('data-selected'))).toBe(false)
+})
+
+it('lights the tapped row for a moment before its sheet opens, so the tap is seen', async () => {
+  const user = userEvent.setup()
+  const { data, adapters } = withFixedCosts()
+  const santu = data.store.fixedCosts.find((c) => c.name === 'Santu')!
+  renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
+  await user.click(await screen.findByTestId(`pay-row-${santu.id}`))
+  // Lit at once, the sheet not yet open.
+  expect(screen.getByTestId(`pay-row-${santu.id}`)).toHaveAttribute('data-selected', 'true')
+  expect(screen.queryByTestId('fixed-cost-pay-amount')).toBeNull()
+  // Then the sheet, with the row still lit behind it.
+  await screen.findByTestId('fixed-cost-pay-amount')
+  expect(screen.getByTestId(`pay-row-${santu.id}`)).toHaveAttribute('data-selected', 'true')
+})
+
+it('tints a row tapped to open its page, and leaves its Pay alone', async () => {
+  const user = userEvent.setup()
+  const { data, adapters } = withFixedCosts()
+  const santu = data.store.fixedCosts.find((c) => c.name === 'Santu')!
+  renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
+  await user.click(await screen.findByTestId(`open-fixed-cost-${santu.id}`))
+  expect(screen.getByTestId(`pay-row-${santu.id}`).closest('tr')).toHaveClass('bg-primary/20')
+  expect(screen.getByTestId(`pay-row-${santu.id}`)).not.toHaveAttribute('data-selected')
+  expect(screen.getByTestId(`pay-row-${santu.id}`)).not.toHaveClass('border-primary')
 })

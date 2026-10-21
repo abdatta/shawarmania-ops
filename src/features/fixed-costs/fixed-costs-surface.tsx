@@ -1,5 +1,13 @@
 import { CalendarClock } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
@@ -60,6 +68,43 @@ import { monthName, monthWords, shortDate, shortMonths } from './words'
  * Owner and manager only, as the policies are. Salaries are typed names, never
  * accounts (owner, 2026-10-19).
  */
+/**
+ * How long a tapped row stays lit before its Pay sheet or its page opens
+ * (owner, 2026-10-21). A tap is over in a tenth of a second and the sheet
+ * covers the list at once on a phone, so the highlight was never seen. 300 ms
+ * felt long on the phone (owner); 100 ms holds the tint just past the tap.
+ */
+export const PRESS_PAUSE_MS = 100
+
+/** A row lit by a tap: on its Pay, or on the row to open its page. */
+interface Lit {
+  id: string
+  pay: boolean
+}
+
+/** The row just tapped, lit for {@link PRESS_PAUSE_MS}, then what the tap does. */
+function usePressPause() {
+  const [pressed, setPressed] = useState<Lit | null>(null)
+  const timer = useRef<number | null>(null)
+  useEffect(
+    () => () => {
+      if (timer.current !== null) window.clearTimeout(timer.current)
+    },
+    [],
+  )
+  // A second tap inside the pause is the same tap, not another row's.
+  const hold = useCallback((lit: Lit, then: () => void) => {
+    if (timer.current !== null) return
+    setPressed(lit)
+    timer.current = window.setTimeout(() => {
+      timer.current = null
+      setPressed(null)
+      then()
+    }, PRESS_PAUSE_MS)
+  }, [])
+  return { pressed, hold }
+}
+
 export function FixedCostsSurface() {
   const { fixedCosts } = useAdapters()
   const { outletId, selector } = useOutletScope()
@@ -70,6 +115,13 @@ export function FixedCostsSurface() {
   // Pay from the row (owner, 2026-10-19): a salary day is ten payments in a
   // row, and opening each person first is a detour.
   const [paying, setPaying] = useState<FixedCostFacts | null>(null)
+  const press = usePressPause()
+  const navigate = useNavigate()
+  const pay = (cost: FixedCostFacts) =>
+    press.hold({ id: cost.id, pay: true }, () => setPaying(cost))
+  const open = (cost: FixedCostFacts) =>
+    press.hold({ id: cost.id, pay: false }, () => void navigate(cost.id, { relative: 'path' }))
+  const lit: Lit | null = paying ? { id: paying.id, pay: true } : press.pressed
   const [recorded, setRecorded] = useState<{ name: string; countsIn: string } | null>(null)
 
   useEffect(() => {
@@ -172,7 +224,9 @@ export function FixedCostsSurface() {
             <CostTable
               costs={ongoing}
               today={current.today}
-              onPay={setPaying}
+              lit={lit}
+              onPay={pay}
+              onOpen={open}
               empty={
                 <EmptyState
                   icon={CalendarClock}
@@ -183,7 +237,13 @@ export function FixedCostsSurface() {
           </div>
           {stopped.length > 0 && (
             <Section id="stopped-fixed-costs" title="Stopped">
-              <CostTable costs={stopped} today={current.today} onPay={setPaying} />
+              <CostTable
+                costs={stopped}
+                today={current.today}
+                lit={lit}
+                onPay={pay}
+                onOpen={open}
+              />
             </Section>
           )}
         </div>
@@ -224,12 +284,17 @@ export function FixedCostsSurface() {
 function CostTable({
   costs,
   today,
+  lit = null,
   onPay,
+  onOpen,
   empty,
 }: {
   costs: FixedCostFacts[]
   today: string
+  /** The row just tapped, or whose Pay sheet is open; its Pay too, if that was tapped. */
+  lit?: Lit | null
   onPay: (cost: FixedCostFacts) => void
+  onOpen: (cost: FixedCostFacts) => void
   empty?: ReactNode
 }) {
   const month = monthOf(today)
@@ -244,6 +309,11 @@ function CostTable({
           to={cost.id}
           relative="path"
           data-testid={`open-fixed-cost-${cost.id}`}
+          onClick={(event) => {
+            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return
+            event.preventDefault()
+            onOpen(cost)
+          }}
           className="block py-2 after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:focus-ring"
         >
           <span className="block font-semibold text-content">{cost.name}</span>
@@ -292,7 +362,21 @@ function CostTable({
               status.overdue.length > 0
                 ? 'bg-primary text-on-primary hover:brightness-95'
                 : 'border border-border bg-surface text-content hover:bg-surface-raised',
+              // Which Pay the thumb landed on, said by the pill itself (owner,
+              // 2026-10-21): the pills sit close on a phone, and a sheet's title
+              // is not always read. Its own border turns orange, at its own
+              // thickness, over a light tint; a filled Pay deepens a shade. The
+              // moment it is pressed, and for as long as its sheet is open.
+              status.overdue.length > 0
+                ? 'active:brightness-90'
+                : 'active:border-primary active:bg-primary/10 active:text-accent-text',
+              lit?.id === cost.id &&
+                lit.pay &&
+                (status.overdue.length > 0
+                  ? 'brightness-90'
+                  : 'border-primary bg-primary/10 text-accent-text'),
             )}
+            data-selected={lit?.id === cost.id && lit.pay ? 'true' : undefined}
           >
             Pay
           </button>
@@ -306,11 +390,20 @@ function CostTable({
       rows={costs}
       rowKey={(cost) => cost.id}
       rowClassName={(cost) =>
-        // The row an alert is about stands out in the app's own orange tint
-        // (owner, 2026-10-20): found at a glance, without a colour of its own.
-        thisMonthStatus(cost, today).overdue.length > 0
-          ? 'relative bg-primary/10 ring-1 ring-inset ring-primary/40'
-          : 'relative hover:bg-surface-raised'
+        cn(
+          'relative',
+          // The row an alert is about stands out in the app's own orange tint
+          // (owner, 2026-10-20), without a colour of its own.
+          thisMonthStatus(cost, today).overdue.length > 0
+            ? 'bg-primary/10 ring-1 ring-inset ring-primary/40'
+            : 'hover:bg-surface-raised',
+          // Any row tints the moment it is pressed, for its Pay or its page, and
+          // stays tinted through the pause and behind its sheet (owner,
+          // 2026-10-21: which row was touched, seen rather than read). A tint
+          // only: no border of its own.
+          'has-[:active]:bg-primary/20',
+          lit?.id === cost.id && 'bg-primary/20',
+        )
       }
       empty={empty ?? null}
     />
