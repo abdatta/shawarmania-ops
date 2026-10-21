@@ -104,6 +104,17 @@ function nameOf(actor: ExpenseActor | null): string {
   return actor?.name ?? 'someone'
 }
 
+/**
+ * A row no person recorded was written by a sync, and is credited to it rather
+ * than to "someone" — which read as a stranger writing into the books. The name
+ * comes from the source's own id, so a sync added later needs nothing here.
+ */
+function recorderOf(expense: ExpenseRecord): string {
+  if (expense.recordedBy || !expense.source) return nameOf(expense.recordedBy)
+  const system = expense.source.system.replaceAll('_', ' ')
+  return `${system.charAt(0).toUpperCase()}${system.slice(1)} sync`
+}
+
 export function ExpenseList({
   expenses,
   outletId,
@@ -649,7 +660,7 @@ export function ExpenseList({
                       <div className="flex justify-between gap-3">
                         <dt>Recorded</dt>
                         <dd className="text-right" data-testid={`ledger-recorder-${expense.id}`}>
-                          {nameOf(expense.recordedBy)}, {formatDateTime(expense.createdAt)}
+                          {recorderOf(expense)}, {formatDateTime(expense.createdAt)}
                         </dd>
                       </div>
                       {/*

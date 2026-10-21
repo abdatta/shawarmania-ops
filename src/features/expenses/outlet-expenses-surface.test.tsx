@@ -228,6 +228,22 @@ describe('the outlet expenses surface', () => {
     expect(picker).toHaveValue(today)
     expect(forward).toBeDisabled()
   })
+
+  it('credits a row no person recorded to the sync that wrote it', async () => {
+    const synced = (id: string, system: string): ExpenseRecord => ({
+      ...expense(id, today, 2_500),
+      recordedBy: null,
+      source: { system, ref: `${id}-ref` },
+    })
+    const rows = [synced('hyperpure', 'hyperpure'), synced('zomato', 'zomato')]
+    const { adapters } = adaptersFor('super_admin', () => rows)
+    renderExpenses('super_admin', adapters)
+
+    await userEvent.click(await screen.findByTestId('expand-expense-hyperpure'))
+    expect(screen.getByTestId('ledger-recorder-hyperpure')).toHaveTextContent(/^Hyperpure sync, /)
+    await userEvent.click(screen.getByTestId('expand-expense-zomato'))
+    expect(screen.getByTestId('ledger-recorder-zomato')).toHaveTextContent(/^Zomato sync, /)
+  })
 })
 
 /**
