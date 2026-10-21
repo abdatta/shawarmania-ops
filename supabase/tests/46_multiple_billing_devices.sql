@@ -209,7 +209,7 @@ select 'c1000000-0000-4000-a000-000000000001'::uuid as command_id,
 grant select on pg_temp.owned to authenticated;
 
 select is(
-  (select public.create_billing_order(
+  (select public.create_billing_order_v2(
      command_id, 1,
      public.billing_payload_hash(pg_temp.order_payload(order_id, line_id, business_date)),
      created_at, :'SHIFT_ONE',
@@ -254,7 +254,7 @@ select coalesce(max(bill_number), 0) as high from public.bills where outlet_id =
 grant select on pg_temp.numbers_before to authenticated;
 
 select is(
-  (select public.revise_billing_order(
+  (select public.revise_billing_order_v2(
      'c1000000-0000-4000-a000-000000000002'::uuid, 1,
      public.billing_payload_hash(pg_temp.order_payload(order_id, line_id, business_date, 27800)),
      now(), :'SHIFT_TWO',

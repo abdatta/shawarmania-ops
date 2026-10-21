@@ -176,7 +176,7 @@ $$;
 
 create function pg_temp.create_v3(p_n integer, p_service text, p_table integer, p_lines jsonb)
 returns text language sql volatile as $$
-  select pg_temp.send('create_billing_order', pg_temp.id('b6200000', p_n), 3,
+  select pg_temp.send('create_billing_order_v2', pg_temp.id('b6200000', p_n), 3,
     pg_temp.order_v3(pg_temp.id('b6000000', p_n), p_service, p_table, p_lines)) ->> 'status'
 $$;
 
@@ -396,19 +396,19 @@ update public.outlets set packaging_mode = 'per_bag', packaging_price_paise = 50
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000004');
 
 select is(
-  pg_temp.send('revise_billing_order', pg_temp.id('b6200000', 101), 3,
+  pg_temp.send('revise_billing_order_v2', pg_temp.id('b6200000', 101), 3,
     pg_temp.order_v3(pg_temp.id('b6000000', 1), 'dine_in', 5,
       jsonb_build_array(pg_temp.shawarma(pg_temp.id('b6100000', 1))))) ->> 'status',
   'accepted', 'an open order moves from table 4 to table 5');
 
 select is(
-  pg_temp.send('revise_billing_order', pg_temp.id('b6200000', 102), 3,
+  pg_temp.send('revise_billing_order_v2', pg_temp.id('b6200000', 102), 3,
     pg_temp.order_v3(pg_temp.id('b6000000', 1), 'takeaway', 5,
       jsonb_build_array(pg_temp.shawarma(pg_temp.id('b6100000', 1))))) ->> 'status',
   'malformed_payload', 'but not to a takeaway that keeps a table');
 
 select is(
-  pg_temp.send('revise_billing_order', pg_temp.id('b6200000', 181), 3,
+  pg_temp.send('revise_billing_order_v2', pg_temp.id('b6200000', 181), 3,
     pg_temp.order_v3(pg_temp.id('b6000000', 18), 'takeaway', null, jsonb_build_array(
       pg_temp.shawarma(pg_temp.id('b6100000', 18)),
       pg_temp.bags(pg_temp.id('b6100000', 180), 3, true)))) ->> 'status',
@@ -421,21 +421,21 @@ update public.outlets set packaging_price_paise = 1000
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000004');
 
 select is(
-  pg_temp.send('revise_billing_order', pg_temp.id('b6200000', 182), 3,
+  pg_temp.send('revise_billing_order_v2', pg_temp.id('b6200000', 182), 3,
     pg_temp.order_v3(pg_temp.id('b6000000', 18), 'takeaway', null, jsonb_build_array(
       pg_temp.shawarma(pg_temp.id('b6100000', 18)),
       pg_temp.bags(pg_temp.id('b6100000', 180), 3)))) ->> 'status',
   'accepted', 'the bags on the bill keep the ₹5 they were captured at');
 
 select is(
-  pg_temp.send('revise_billing_order', pg_temp.id('b6200000', 183), 3,
+  pg_temp.send('revise_billing_order_v2', pg_temp.id('b6200000', 183), 3,
     pg_temp.order_v3(pg_temp.id('b6000000', 18), 'takeaway', null, jsonb_build_array(
       pg_temp.shawarma(pg_temp.id('b6100000', 18)),
       pg_temp.bags(pg_temp.id('b6100000', 181), 3)))) ->> 'status',
   'arithmetic_invalid', 'but a new packaging line at the old price is refused');
 
 select is(
-  pg_temp.send('revise_billing_order', pg_temp.id('b6200000', 184), 3,
+  pg_temp.send('revise_billing_order_v2', pg_temp.id('b6200000', 184), 3,
     pg_temp.order_v3(pg_temp.id('b6000000', 18), 'takeaway', null, jsonb_build_array(
       pg_temp.shawarma(pg_temp.id('b6100000', 18)),
       pg_temp.bags(pg_temp.id('b6100000', 180), 3) || '{"kind":"item"}'))) ->> 'status',
@@ -455,13 +455,13 @@ select is(
 -- and the till read it as a malformed edit.
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000004');
 select is(
-  pg_temp.send('create_billing_order', pg_temp.id('b6200000', 20), 3,
+  pg_temp.send('create_billing_order_v2', pg_temp.id('b6200000', 20), 3,
     pg_temp.order_v3(pg_temp.id('b6000000', 20), 'takeaway', null, jsonb_build_array(
       pg_temp.shawarma(pg_temp.id('b6100000', 20)),
       pg_temp.bags(pg_temp.id('b6100000', 200), 1)), 1000)) ->> 'status',
   'accepted', 'a takeaway with 10% off the bill is rung, rounding 40 paise');
 select is(
-  pg_temp.send('revise_billing_order', pg_temp.id('b6200000', 201), 3,
+  pg_temp.send('revise_billing_order_v2', pg_temp.id('b6200000', 201), 3,
     pg_temp.order_v3(pg_temp.id('b6000000', 20), 'takeaway', null, jsonb_build_array(
       pg_temp.shawarma(pg_temp.id('b6100000', 20)),
       pg_temp.bags(pg_temp.id('b6100000', 200), 2)), 1000)) ->> 'status',
@@ -479,7 +479,7 @@ select is(
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000004');
 select is(
-  pg_temp.send('revise_billing_order', pg_temp.id('b6200000', 202), 3,
+  pg_temp.send('revise_billing_order_v2', pg_temp.id('b6200000', 202), 3,
     pg_temp.order_v3(pg_temp.id('b6000000', 20), 'takeaway', null, jsonb_build_array(
       pg_temp.shawarma(pg_temp.id('b6100000', 20)),
       pg_temp.bags(pg_temp.id('b6100000', 200), 2)))) ->> 'status',
@@ -558,12 +558,12 @@ select set_config('app.billing_command', '0', true);
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000004');
 
 select is(
-  pg_temp.send('create_billing_order', pg_temp.id('b6200000', 30), 2,
+  pg_temp.send('create_billing_order_v2', pg_temp.id('b6200000', 30), 2,
     pg_temp.as_v2(pg_temp.order_v3(pg_temp.id('b6000000', 30), null, null,
       jsonb_build_array(pg_temp.shawarma(pg_temp.id('b6100000', 30)))))) ->> 'status',
   'accepted', 'a version-2 order queued before the release is accepted');
 select is(
-  pg_temp.send('create_billing_order', pg_temp.id('b6200000', 31), 1,
+  pg_temp.send('create_billing_order_v2', pg_temp.id('b6200000', 31), 1,
     pg_temp.as_v1(pg_temp.order_v3(pg_temp.id('b6000000', 31), null, null,
       jsonb_build_array(pg_temp.shawarma(pg_temp.id('b6100000', 31)))))) ->> 'status',
   'accepted', 'and so is a version-1 one');
@@ -572,29 +572,29 @@ select is(
     pg_temp.pay_payload(pg_temp.id('b6000000', 30), pg_temp.id('b6300000', 30))) ->> 'status',
   'accepted', 'and a version-2 payment of it');
 select is(
-  pg_temp.send('create_billing_order', pg_temp.id('b6200000', 30), 2,
+  pg_temp.send('create_billing_order_v2', pg_temp.id('b6200000', 30), 2,
     pg_temp.as_v2(pg_temp.order_v3(pg_temp.id('b6000000', 30), null, null,
       jsonb_build_array(pg_temp.shawarma(pg_temp.id('b6100000', 30)))))) ->> 'status',
   'replay', 'the version-2 order replayed returns its result');
 select is(
-  pg_temp.send('create_billing_order', pg_temp.id('b6200000', 1), 3,
+  pg_temp.send('create_billing_order_v2', pg_temp.id('b6200000', 1), 3,
     pg_temp.order_v3(pg_temp.id('b6000000', 1), 'dine_in', 4,
       jsonb_build_array(pg_temp.shawarma(pg_temp.id('b6100000', 1))))) ->> 'status',
   'replay', 'and so does a version-3 one');
 
 select is(
-  pg_temp.send('create_billing_order', pg_temp.id('b6200000', 32), 2,
+  pg_temp.send('create_billing_order_v2', pg_temp.id('b6200000', 32), 2,
     pg_temp.order_v3(pg_temp.id('b6000000', 32), null, null,
       jsonb_build_array(pg_temp.shawarma(pg_temp.id('b6100000', 32))))) ->> 'status',
   'malformed_payload', 'a version-2 envelope carrying version-3 keys is refused');
 select is(
-  pg_temp.send('create_billing_order', pg_temp.id('b6200000', 33), 3,
+  pg_temp.send('create_billing_order_v2', pg_temp.id('b6200000', 33), 3,
     pg_temp.order_v3(pg_temp.id('b6000000', 33), null, null,
       jsonb_build_array(pg_temp.shawarma(pg_temp.id('b6100000', 33)))) - 'serviceType') ->> 'status',
   'malformed_payload', 'a version-3 envelope missing a version-3 key is refused');
 select is(
   -- Version 4 is #62's (a discount entry's source); 5 is nobody's yet.
-  pg_temp.send('create_billing_order', pg_temp.id('b6200000', 34), 5,
+  pg_temp.send('create_billing_order_v2', pg_temp.id('b6200000', 34), 5,
     pg_temp.order_v3(pg_temp.id('b6000000', 34), null, null,
       jsonb_build_array(pg_temp.shawarma(pg_temp.id('b6100000', 34))))) ->> 'status',
   'unsupported_schema', 'a version nobody has written yet is unsupported');
@@ -656,7 +656,7 @@ select ok(not pg_temp.shared(42) and not pg_temp.shared(43), 'and nothing else i
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000004');
 select is(
-  pg_temp.send('revise_billing_order', pg_temp.id('b6200000', 421), 3,
+  pg_temp.send('revise_billing_order_v2', pg_temp.id('b6200000', 421), 3,
     pg_temp.order_v3(pg_temp.id('b6000000', 42), 'dine_in', 7,
       jsonb_build_array(pg_temp.shawarma(pg_temp.id('b6100000', 42))))) ->> 'status',
   'accepted', 'table 8 is moved onto table 7');
@@ -706,7 +706,7 @@ select is(pg_temp.create_v3(46, 'dine_in', 20,
   'Kalyani seats table 20');
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000005');
 select is(
-  pg_temp.send('create_billing_order', pg_temp.id('b6200000', 47), 3,
+  pg_temp.send('create_billing_order_v2', pg_temp.id('b6200000', 47), 3,
     pg_temp.order_v3(pg_temp.id('b6000000', 47), 'dine_in', 20, jsonb_build_array(
       pg_temp.shawarma(pg_temp.id('b6100000', 47)) || '{"menuItemId":null,"itemName":"Chef''s plate"}'),
       null, '00000000-0000-4000-a000-000000000002'),

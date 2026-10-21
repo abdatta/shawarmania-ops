@@ -27,23 +27,34 @@ halves. No gate of its own and no migration until section 3.
   so the rest run in both suite states. Escape stays proved by
   `e2e/dialog-escape.spec.ts`.
 - [x] 1.4 The `design-system` delta and `docs/DESIGN_SYSTEM.md`.
-- [ ] 1.5 `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`,
+- [x] 1.5 `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`,
   `npm run build`; the browser suites on Staging.
-- [ ] 1.6 Release: push to `stage`, Staging green, the owner promotes. The gate's row
+  *(Green on `stage` as `56d103cb`, and in Deploy `f0b4c7c6`'s full suite on 16
+  October.)*
+- [x] 1.6 Release: push to `stage`, Staging green, the owner promotes. The gate's row
   is left alone and keeps reading on, so a tablet on an older build keeps closing
   pop-ups on an outside tap.
+  *(Promoted: first live in Deploy `f0b4c7c6`, 07:07 UTC on 16 October.)*
 
 ## 2. Wait for every tablet
 
-- [ ] 2.1 Every tablet's build, on the Change gates page, is the retirement build or
+- [x] 2.1 Every tablet's build, on the Change gates page, is the retirement build or
   later, continuously for a week. Record the date it was first true and the evidence.
+  *(Read-only on 21 October: both registered devices report `0b06e73`, which
+  contains `56d103cb`, after Cafe Laptop was removed; five services on it, 16–20
+  October. The owner set three services in place of a week on 18 October, and
+  reloaded the app on their phone.)*
 
 ## 3. The contract migration
 
-- [ ] 3.1 A migration headed `-- release: contract outside-tap-closes` that sets the
+- [x] 3.1 A migration headed `-- release: contract outside-tap-closes` that sets the
   gate's `retired_at` and turns it off. Nothing else in the schema belongs to this
   gate.
-- [ ] 3.2 Every database gate on a fresh reset; release it.
+  *(`20261031000000_contract_outside_tap_closes.sql`. Nothing in production or a
+  fresh reset reads the key.)*
+- [x] 3.2 Every database gate on a fresh reset; release it.
+  *(On a fresh reset with the other three contracts, 21 October; see
+  retire-dish-ticks 3.4. Released with them.)*
 
 ## 4. Archive
 

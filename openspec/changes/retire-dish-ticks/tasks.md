@@ -47,31 +47,64 @@ and no migration until section 3.
   `billing-counter-dish.test.tsx` and `mock/dish-kitchen.test.ts` go.
 - [x] 1.5 The `counter-billing` delta, and `docs/` no longer calls the behaviour
   gated.
-- [ ] 1.6 `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`,
+- [x] 1.6 `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`,
   `npm run build`; the browser suites on Staging.
-- [ ] 1.7 Release: push to `stage`, Staging green, the owner promotes. The gates'
+  *(Green on `stage` as `aabc97b7`, and in Deploy `ac4ce56d`'s full suite on 18
+  October.)*
+- [x] 1.7 Release: push to `stage`, Staging green, the owner promotes. The gates'
   rows are left alone and keep reading on, so a tablet on an older build keeps
   the behaviour it has.
+  *(Promoted: first live in Deploy `ac4ce56d`, 05:00 UTC on 18 October.)*
 
 ## 2. Wait for every tablet
 
-- [ ] 2.1 Every tablet's build, on the Change gates page, is the retirement build or
+- [x] 2.1 Every tablet's build, on the Change gates page, is the retirement build or
   later, continuously for a week. Record the date it was first true and the
   evidence.
+  *(The owner set the wait to three services on 18 October, in place of a week.
+  Read-only on 21 October: the registered devices are Kalyani Counter 2 and Shawarma
+  Kitchen, both reporting `0b06e73`, which contains `aabc97b7`, both outboxes All
+  sent. Cafe Laptop, registered but silent since 13 October and never reporting a
+  build, was removed from Tablets at the owner's request the same morning. Kalyani
+  Cafe traded 18, 19 and 20 October on it (138, 126 and 125 bills). The owner
+  reloaded the app on their phone.)*
 
 ## 3. The contract migrations, children first
 
-- [ ] 3.1 `-- release: contract instant-saves`: sets the gate's `retired_at` and
+- [x] 3.1 `-- release: contract instant-saves`: sets the gate's `retired_at` and
   turns it off. Nothing else in the schema belongs to this gate.
-- [ ] 3.2 `-- release: contract kitchen-ready`: sets the gate's `retired_at` and
+  *(`20261031010000_contract_instant_saves.sql`.)*
+- [x] 3.2 `-- release: contract kitchen-ready`: sets the gate's `retired_at` and
   turns it off.
-- [ ] 3.3 `-- release: contract dish-ticks`: sets the gate's `retired_at`, turns it
+  *(`20261031020000_contract_kitchen_ready.sql`.)*
+- [x] 3.3 `-- release: contract dish-ticks`: sets the gate's `retired_at`, turns it
   off, and drops what only the off path used — the pre-#74 functions restored by
   `20261017000000_restore_counter_before_dish_ticks`, `kitchen_board`,
   `counter_kitchen_marks` and `kitchen_acknowledge` — once no tablet's build
   calls them and no queued command can name them. Keep every `_v2` name.
-- [ ] 3.4 The pgTAP tests that named what was dropped; every database gate on a
+  *(`20261031030000_contract_dish_ticks.sql`. Production had two readers of the key,
+  `order_label_leaves_the_rail()` and `order_line_added_by_an_edit()`; both keep
+  only their on branch. Dropped: `create_billing_order`, `revise_billing_order`,
+  `kitchen_board`, `counter_kitchen_marks`, `kitchen_acknowledge` and
+  `kitchen_same_lines`, none called by any function kept. Kept, because a kept
+  function still calls them: `prepare_order_lines` (`prepare_order_lines_v2`
+  delivers through it) and `kitchen_visible_lines` (`kitchen_ticket`).
+  `pay_billing_now`, `prepare_billing_order` and `billing_order_guard` were restored
+  too but have no `_v2`: they are the live path.
+  `scripts/rollback74-production.mjs`, which re-applied the restore, goes with
+  them.)*
+- [x] 3.4 The pgTAP tests that named what was dropped; every database gate on a
   fresh reset; release it.
+  *(pgTAP calls to the dropped functions now call their `_v2`s, so the kitchen's
+  refusals in 81 and 84 still run against the live functions; 88 loses its old-board
+  and gate-off cases, 89 and 90 their gate turns, and 91, which only tested the
+  `instant-saves` declaration, is deleted. The billing-race REST test sends the
+  `dishes` variant through `billingCommandRpc`, as the app does. On a fresh reset,
+  21 October: `test:db` 96 files green; billing races, dish ticks, change gates,
+  drawer writes, counter telemetry and ledger timing green; `db:types` drops exactly
+  the six. The Edge Function cases of `test:rls` answered 503 locally, from a shared
+  Edge container another worktree had started and then removed; they run on the
+  `stage` push.)*
 
 ## 4. Archive
 

@@ -78,7 +78,7 @@ create function pg_temp.ring(
   p_command uuid, p_order uuid, p_line uuid, p_shift uuid, p_item uuid,
   p_phone text, p_name text)
 returns text language sql volatile as $$
-  select public.create_billing_order(
+  select public.create_billing_order_v2(
     p_command, 2,
     public.billing_payload_hash(pg_temp.order_payload(p_order, p_line, p_item, p_phone, p_name)),
     now(), p_shift,

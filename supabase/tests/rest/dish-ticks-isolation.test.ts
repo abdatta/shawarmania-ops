@@ -196,8 +196,8 @@ describe('dish records and labels enforce isolation over hand-crafted HTTP reque
         payload: { orderId, reason: 'Isolation probe finished' },
       })
       await counter.rpc('cancel_billing_order', rpcArgs(cancel))
-      // The label goes with the order only while the gate is on; this probe
-      // does not turn it, so it removes its own.
+      // The label goes as the order leaves the rail; removing it again is
+      // harmless, and keeps the probe from leaning on the trigger.
       await service.from('order_labels').delete().eq('order_id', orderId)
     }
     // Leave immutable history; take only these test devices out of use.

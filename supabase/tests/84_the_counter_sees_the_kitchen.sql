@@ -90,7 +90,7 @@ create function pg_temp.take_order(p_order uuid, p_shawarmas integer, p_burgers 
 returns text language plpgsql as $$
 declare v jsonb := pg_temp.payload(p_order, p_shawarmas, p_burgers);
 begin
-  return public.create_billing_order(
+  return public.create_billing_order_v2(
     gen_random_uuid(), 1, public.billing_payload_hash(v), now(),
     '90000000-0000-4000-a000-000000000001', v) ->> 'status';
 end;
@@ -100,28 +100,28 @@ create function pg_temp.revise_order(p_order uuid, p_shawarmas integer, p_burger
 returns text language plpgsql as $$
 declare v jsonb := pg_temp.payload(p_order, p_shawarmas, p_burgers);
 begin
-  return public.revise_billing_order(
+  return public.revise_billing_order_v2(
     gen_random_uuid(), 1, public.billing_payload_hash(v), now(),
     '90000000-0000-4000-a000-000000000001', v) ->> 'status';
 end;
 $$;
 
 create function pg_temp.marks() returns jsonb language sql as $$
-  select public.counter_kitchen_marks()
+  select public.counter_kitchen_marks_v2()
 $$;
 
 /** One order's answers, in kitchen order, as text: '["waiting", null]'. */
 create function pg_temp.answers(p_order uuid) returns text language sql as $$
   select (o -> 'marks')::text
-    from jsonb_array_elements(public.counter_kitchen_marks() -> 'orders') o
+    from jsonb_array_elements(public.counter_kitchen_marks_v2() -> 'orders') o
    where o ->> 'orderId' = p_order::text
 $$;
 
 /** Acknowledge as the calling kitchen, at the version its board shows. */
 create function pg_temp.ack(p_order uuid, p_kind text) returns text language sql as $$
-  select public.kitchen_acknowledge(gen_random_uuid(), p_order, p_kind,
+  select public.kitchen_acknowledge_v2(gen_random_uuid(), p_order, p_kind,
     (select (o ->> 'version')::timestamptz
-       from jsonb_array_elements(public.kitchen_board() -> 'orders') o
+       from jsonb_array_elements(public.kitchen_board_v2() -> 'orders') o
       where o ->> 'id' = p_order::text)) ->> 'status'
 $$;
 
@@ -157,31 +157,31 @@ $$;
 -- ---------------------------------------------------------------------------
 -- Shape, and who may ask.
 
-select has_function('public', 'counter_kitchen_marks', array[]::text[],
+select has_function('public', 'counter_kitchen_marks_v2', array[]::text[],
   'the counter has one kitchen read');
-select ok(not has_function_privilege('anon', 'public.counter_kitchen_marks()', 'EXECUTE'),
+select ok(not has_function_privilege('anon', 'public.counter_kitchen_marks_v2()', 'EXECUTE'),
   'which anonymous callers cannot call');
-select ok(not has_function_privilege('authenticated', 'public.kitchen_same_lines(jsonb, jsonb)', 'EXECUTE'),
+select ok(not has_function_privilege('authenticated', 'public.kitchen_same_lines_v2(jsonb, jsonb)', 'EXECUTE'),
   'and whose comparison is internal');
 
 -- The kitchen's "same dishes" rule: the pairs src/domain/kitchen.test.ts pins.
-select ok(public.kitchen_same_lines(
+select ok(public.kitchen_same_lines_v2(
   '[{"menuItemId":"a","itemName":"A","quantity":2}]',
   '[{"menuItemId":"a","itemName":"A","quantity":1},{"menuItemId":"a","itemName":"A","quantity":1}]'),
   'two lines of one dish equal one line of their sum');
-select ok(not public.kitchen_same_lines(
+select ok(not public.kitchen_same_lines_v2(
   '[{"menuItemId":"a","itemName":"A","quantity":2}]',
   '[{"menuItemId":"a","itemName":"A","quantity":3}]'),
   'a changed quantity differs');
-select ok(not public.kitchen_same_lines(
+select ok(not public.kitchen_same_lines_v2(
   '[{"menuItemId":"a","itemName":"A","quantity":1}]',
   '[{"menuItemId":"a","itemName":"A","quantity":1},{"menuItemId":"b","itemName":"B","quantity":1}]'),
   'an added dish differs');
-select ok(public.kitchen_same_lines(
+select ok(public.kitchen_same_lines_v2(
   '[{"menuItemId":null,"itemName":"Off menu","quantity":1}]',
   '[{"menuItemId":null,"itemName":"Off menu","quantity":1}]'),
   'a line with no menu item is matched by its name');
-select ok(public.kitchen_same_lines('[]', '[]'), 'nothing equals nothing');
+select ok(public.kitchen_same_lines_v2('[]', '[]'), 'nothing equals nothing');
 
 -- An outlet with no kitchen tablet: nothing at all, so the counter never says
 -- "Kitchen offline" where there is no kitchen screen.
@@ -247,7 +247,8 @@ select is((select array_agg(k order by k) from jsonb_object_keys(pg_temp.marks()
   array['kitchens', 'kitchenTablets', 'orders'], 'the read carries kitchens, orders and a count of kitchen tablets');
 select is((select array_agg(distinct k order by k)
              from jsonb_array_elements(pg_temp.marks() -> 'orders') o, jsonb_object_keys(o) k),
-  array['marks', 'orderId'], 'and per order only its id and its answers: no dish, time or person');
+  array['dishStates', 'marks', 'orderId', 'readyQuantities'],
+  'and per order its id, its answers and what each dish has reached: no time or person');
 select is((select array_agg(distinct k order by k)
              from jsonb_array_elements(pg_temp.marks() -> 'kitchens') o, jsonb_object_keys(o) k),
   array['id', 'label'], 'and per kitchen only its id and label');
@@ -302,11 +303,11 @@ select is(pg_temp.revise_order(:'O1', 2, 0), 'accepted', 'the counter takes O1''
 select is(pg_temp.answers(:'O1'), '["seen", "waiting"]',
   'Kitchen 2 still has a cancellation to acknowledge');
 select pg_temp.impersonate(:'K2');
-select is((select jsonb_array_length(o -> 'lines') from jsonb_array_elements(public.kitchen_board() -> 'orders') o
+select is((select jsonb_array_length(o -> 'lines') from jsonb_array_elements(public.kitchen_board_v2() -> 'orders') o
             where o ->> 'id' = :'O1'), 0,
   'counter removal keeps a board card with no visible lines until cancel ACK');
 select is(pg_temp.ack(:'O1', 'cancel'), 'accepted', 'Kitchen 2 acknowledges it');
-select is((select count(*) from jsonb_array_elements(public.kitchen_board() -> 'orders') o
+select is((select count(*) from jsonb_array_elements(public.kitchen_board_v2() -> 'orders') o
             where o ->> 'id' = :'O1'), 0::bigint,
   'cancel ACK clears the removed-food card');
 select pg_temp.impersonate(:'COUNTER');
@@ -339,13 +340,13 @@ select pg_temp.unimpersonate();
 -- Refusals, and the pulse's reach.
 
 select pg_temp.impersonate(:'K1');
-select throws_ok('select public.counter_kitchen_marks()', '42501', null,
+select throws_ok('select public.counter_kitchen_marks_v2()', '42501', null,
   'a kitchen shift cannot read the counter''s marks');
 select pg_temp.impersonate(:'BILLER');
-select throws_ok('select public.counter_kitchen_marks()', '42501', null,
+select throws_ok('select public.counter_kitchen_marks_v2()', '42501', null,
   'nor can a person''s own session, a Biller holding a counter shift included');
 select pg_temp.impersonate(:'FA_KAL');
-select throws_ok('select public.counter_kitchen_marks()', '42501', null,
+select throws_ok('select public.counter_kitchen_marks_v2()', '42501', null,
   'nor a manager');
 
 select pg_temp.impersonate(:'COUNTER');
@@ -365,7 +366,7 @@ update public.counter_shifts set ended_at = now(), ended_reason = 'operator'
 select pg_temp.impersonate(:'COUNTER');
 select is((select count(*) from public.kitchen_pulses), 0::bigint,
   'a counter without a live shift reads no pulse');
-select throws_ok('select public.counter_kitchen_marks()', '42501', null,
+select throws_ok('select public.counter_kitchen_marks_v2()', '42501', null,
   'and no marks');
 select pg_temp.unimpersonate();
 

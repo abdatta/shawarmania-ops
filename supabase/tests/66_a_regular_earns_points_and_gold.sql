@@ -351,7 +351,7 @@ select is(
 
 -- An order holding 5 points, with a 10% biller discount before them.
 select is(
-  pg_temp.send('create_billing_order', pg_temp.id('c6200000', 3), 4,
+  pg_temp.send('create_billing_order_v2', pg_temp.id('c6200000', 3), 4,
     pg_temp.order_v4(pg_temp.id('c6000000', 3),
       jsonb_build_array(pg_temp.shawarma(pg_temp.id('c6100000', 3), 2)), '9000000661', 5, 1000))
     ->> 'status',

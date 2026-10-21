@@ -46,8 +46,6 @@ $$;
 \set O4 'e9000000-0000-4000-a000-000000000004'
 \set O5 'e9000000-0000-4000-a000-000000000005'
 \set O6 'e9000000-0000-4000-a000-000000000006'
-\set O7 'e9000000-0000-4000-a000-000000000007'
-\set O8 'e9000000-0000-4000-a000-000000000008'
 
 create function pg_temp.today() returns date language sql stable as $$
   select public.app_business_date(now(), time '04:00')
@@ -136,12 +134,6 @@ create function pg_temp.ticket(p_order uuid) returns jsonb language sql as $$
    where o ->> 'id' = p_order::text
 $$;
 
-/** The calling kitchen's old-board card for an order, or null. */
-create function pg_temp.old_card(p_order uuid) returns jsonb language sql as $$
-  select o from jsonb_array_elements(public.kitchen_board() -> 'orders') o
-   where o ->> 'id' = p_order::text
-$$;
-
 /** The counter's v2 reading of one order. */
 create function pg_temp.marks(p_order uuid) returns jsonb language sql as $$
   select o from jsonb_array_elements(public.counter_kitchen_marks_v2() -> 'orders') o
@@ -183,19 +175,11 @@ begin
 end;
 $$;
 
-/** The owner's switch, as the operator path takes it (no app session in a test). */
-create function pg_temp.gate(p_key text, p_on boolean) returns void language plpgsql as $$
-begin
-  perform pg_temp.unimpersonate();
-  perform public.change_gate_force(p_key, p_on, 'pgTAP');
-end;
-$$;
-
 -- ---------------------------------------------------------------------------
--- The gates exist, off, and the dependency is recorded.
+-- The gates are retired, and the dependency is still recorded.
 
-select is((select enabled from public.change_gates where key = 'dish-ticks'), false, 'dish-ticks is declared off');
-select is((select enabled from public.change_gates where key = 'kitchen-ready'), false, 'kitchen-ready is declared off');
+select isnt((select retired_at from public.change_gates where key = 'dish-ticks'), null, 'dish-ticks is retired');
+select isnt((select retired_at from public.change_gates where key = 'kitchen-ready'), null, 'kitchen-ready is retired');
 select is((select depends_on from public.change_gate_dependencies where gate_key = 'kitchen-ready'),
   'dish-ticks', 'kitchen-ready depends on dish-ticks');
 
@@ -210,10 +194,8 @@ select pg_temp.impersonate(:'K2');
 select is(public.set_kitchen_filter('include', array[:'BURGERS_CAT'::uuid]), 'ok', 'kitchen two burgers');
 
 -- ---------------------------------------------------------------------------
--- Labels and notes on the v2 commands; the old ones accept the keys and keep
--- neither, as they have since the rollback.
+-- Labels and notes on the v2 commands.
 
-select pg_temp.gate('dish-ticks', true);
 select pg_temp.impersonate(:'COUNTER');
 select is(pg_temp.send('create_billing_order_v2', pg_temp.content(:'O1', 2, 1, '  Red shirt  ', '  No sauce  ')),
   'accepted', 'label and note accepted with the oldest envelope version');
@@ -230,11 +212,6 @@ select is(pg_temp.send('create_billing_order_v2',
 select is(pg_temp.send('create_billing_order_v2', pg_temp.content(:'O2', 1, 0, '   ', null)),
   'accepted', 'a blank label is accepted');
 select is((select count(*) from public.order_labels where order_id = :'O2'), 0::bigint, 'a blank label is stored as none');
-select is(pg_temp.send('create_billing_order', pg_temp.content(:'O7', 1, 0, 'Old path', 'No onion')),
-  'accepted', 'the old create still accepts the keys');
-select is((select count(*) from public.order_labels where order_id = :'O7'), 0::bigint, 'the old create keeps no label');
-select is((select note from public.order_items where id = pg_temp.line(:'O7', :'SHAWARMA')), null::text,
-  'the old create keeps no note');
 select is(pg_temp.send('revise_billing_order_v2', pg_temp.content(:'O2', 1, 0, 'Blue cap', null)),
   'accepted', 'a revision labels an order');
 select is((select label from public.order_labels where order_id = :'O2'), 'Blue cap', 'the revision''s label is kept');
@@ -244,13 +221,12 @@ select is((select label from public.order_labels where order_id = :'O2'), 'Blue 
 
 -- ---------------------------------------------------------------------------
 -- The kitchen's v2 board: notes to the kitchen showing the dish, never a label,
--- customer or money; the old board unchanged.
+-- customer or money.
 
 select pg_temp.impersonate(:'K1');
 select ok(public.kitchen_board_v2()::text like '%No sauce%', 'the note reaches its kitchen');
 select ok(public.kitchen_board_v2()::text !~ 'Red shirt|Blue cap|Asha Counter|9876501234|Paise|paise|label|customer',
   'the v2 board omits labels, customers and all money');
-select ok(public.kitchen_board()::text not like '%No sauce%', 'the old board shows no note');
 select pg_temp.impersonate(:'K2');
 select ok(public.kitchen_board_v2()::text not like '%No sauce%', 'the other kitchen does not see a note on a dish it does not show');
 
@@ -272,10 +248,6 @@ select ok((select max(acked_at) from public.kitchen_acknowledgements where order
   'the acknowledgement is timed before its Ready');
 select is((select lines -> 0 ->> 'note' from public.kitchen_acknowledgements where order_id = :'O1' and device_id = :'K1'),
   'No sauce', 'an acknowledgement snapshots full lines with their notes');
-select is((pg_temp.old_card(:'O1') ->> 'acknowledged')::boolean, true,
-  'the old board reads the Done order as acknowledged');
-select is((pg_temp.old_card(:'O1') -> 'latestAck' -> 'lines' -> 0 ->> 'quantity')::integer, 2,
-  'the old board compares full lines, and stays quiet');
 select is(pg_temp.ticket(:'O1'), null::jsonb, 'nothing is owed, so no cooking ticket');
 select is((select count(*) from jsonb_array_elements(public.kitchen_board_v2() -> 'orders') o
   where o ->> 'readyId' = :'READY'), 1::bigint, 'Done is a separate receipt');
@@ -286,8 +258,6 @@ select is((pg_temp.marks(:'O1') -> 'readyQuantities' ->> pg_temp.line(:'O1', :'S
 select is((pg_temp.marks(:'O1') -> 'dishStates')::text, '["ready", "sent"]',
   'kitchen one has Ready food, kitchen two is still to answer');
 select is((pg_temp.marks(:'O1') -> 'marks')::text, '["seen", "waiting"]', 'and the old bell reads beside it');
-select is((select o -> 'marks' from jsonb_array_elements(public.counter_kitchen_marks() -> 'orders') o
-  where o ->> 'orderId' = :'O1')::text, '["seen", "waiting"]', 'the old marks read the same bell');
 
 -- Food added after Ready is the next ticket; a locked line keeps its note.
 select is(pg_temp.send('revise_billing_order_v2', pg_temp.content(:'O1', 3, 1, 'Red shirt', 'Changed')),
@@ -400,21 +370,14 @@ select is(pg_temp.tick('74740000-0000-4000-a000-000000000004', :'SHAWARMA', true
 select is((select prepared_source from public.orders where id = '74740000-0000-4000-a000-000000000004'), 'counter',
   'the earlier counter time stands');
 
--- With the gate off nothing clears a label; the on path's next create sweeps it.
+-- With every gate retired the trigger always runs: a cancelled order takes its
+-- label with it.
 select is(pg_temp.send('create_billing_order_v2', pg_temp.content(:'O6', 1, 0, 'Gap', null)), 'accepted',
   'a labelled order');
-select pg_temp.gate('dish-ticks', false);
-select pg_temp.impersonate(:'COUNTER');
 select is(pg_temp.send('cancel_billing_order', jsonb_build_object('orderId', :'O6', 'reason', 'Left')),
-  'accepted', 'cancelled while the gate is off');
-select is((select count(*) from public.order_labels where order_id = :'O6'), 1::bigint,
-  'the trigger does nothing while the gate is off');
-select pg_temp.gate('dish-ticks', true);
-select pg_temp.impersonate(:'COUNTER');
-select is(pg_temp.send('create_billing_order_v2', pg_temp.content(:'O8', 1, 0, null, null)), 'accepted',
-  'the next on-path order');
+  'accepted', 'is cancelled');
 select is((select count(*) from public.order_labels where order_id = :'O6'), 0::bigint,
-  'sweeps the label the gap left');
+  'and its label goes with it');
 
 -- ---------------------------------------------------------------------------
 -- Isolation and refusals. Nonempty rows prove isolation rather than an empty
@@ -528,19 +491,13 @@ select pg_temp.impersonate(:'COUNTER');
 select is(pg_temp.tick(:'O10', :'BURGER', true), 'accepted', 'the other kitchen''s burger is handed over');
 select pg_temp.impersonate(:'K1');
 select pg_temp.ticket(:'O10') as after_tick \gset
-select pg_temp.old_card(:'O10') as old_after_tick \gset
 select pg_temp.unimpersonate();
 select ok(public.kitchen_same_lines_v2(:'after_tick'::jsonb -> 'lines', :'after_tick'::jsonb -> 'latestAck' -> 'lines'),
   'kitchen one stays quiet');
-select is((:'old_after_tick'::jsonb -> 'latestAck' -> 'lines' -> 0 ->> 'quantity')::integer, 3,
-  'the old board holds the same full snapshot');
-select ok(public.kitchen_same_lines(:'old_after_tick'::jsonb -> 'lines', :'old_after_tick'::jsonb -> 'latestAck' -> 'lines'),
-  'and reads it quiet too');
 select pg_temp.impersonate(:'COUNTER');
 select is(pg_temp.tick(:'O10', :'SHAWARMA', true), 'accepted', 'the shawarmas are handed over');
 select pg_temp.impersonate(:'K1');
 select is(pg_temp.ticket(:'O10'), null::jsonb, 'handed over after ACK: silent, gone');
-select is(pg_temp.old_card(:'O10'), null::jsonb, 'the old board agrees: prepared is done');
 
 select pg_temp.unimpersonate();
 select * from finish();

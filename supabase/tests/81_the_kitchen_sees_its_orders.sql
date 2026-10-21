@@ -80,7 +80,7 @@ begin
     'customerId', null, 'customerName', 'Asha Kitchen', 'customerPhone', '9876501234',
     'subtotalPaise', v_total, 'discountPaise', 0, 'taxPaise', 0, 'totalPaise', v_total,
     'pricingMode', 'no_tax', 'lines', v_lines);
-  return public.create_billing_order(
+  return public.create_billing_order_v2(
     gen_random_uuid(), 1, public.billing_payload_hash(v), now(),
     '90000000-0000-4000-a000-000000000001', v) ->> 'status';
 end;
@@ -98,11 +98,11 @@ end;
 $$;
 
 create function pg_temp.board() returns jsonb language sql as $$
-  select public.kitchen_board()
+  select public.kitchen_board_v2()
 $$;
 
 create function pg_temp.card(p_order uuid) returns jsonb language sql as $$
-  select o from jsonb_array_elements(public.kitchen_board() -> 'orders') o
+  select o from jsonb_array_elements(public.kitchen_board_v2() -> 'orders') o
    where o ->> 'id' = p_order::text
 $$;
 
@@ -241,7 +241,7 @@ select is((select count(*) from public.menu_categories), 3::bigint,
 select is(public.app_may_look_up_customer(), false, 'it may not look up a customer');
 select is(public.app_counter_shift_outlet(), null::uuid, 'it is not a counter shift');
 select is(public.app_kitchen_shift_outlet(), :'KAL'::uuid, 'it is a kitchen shift at Kalyani');
-select is(public.create_billing_order(gen_random_uuid(), 1, 'x', now(),
+select is(public.create_billing_order_v2(gen_random_uuid(), 1, 'x', now(),
     (select id from public.counter_shifts where device_id = :'KITCHEN' and ended_at is null),
     jsonb_build_object('orderId', gen_random_uuid())) ->> 'status',
   'malformed_payload', 'a hand-crafted billing command is refused before it reaches an order');
@@ -262,7 +262,7 @@ select pg_temp.unimpersonate();
 
 -- A counter tablet cannot read the board.
 select pg_temp.impersonate(:'COUNTER');
-select throws_ok($$select public.kitchen_board()$$, '42501', null,
+select throws_ok($$select public.kitchen_board_v2()$$, '42501', null,
   'a counter shift cannot read the kitchen board');
 -- Since #72 the counter reads its own outlet's pulse -- the nudge that a
 -- kitchen's ACK may have changed its bells -- and nothing of the board.
@@ -298,7 +298,7 @@ select is(pg_temp.board()::text ~ '9876501234|Asha Kitchen|Paise|paise', false,
 select is((select count(*) from jsonb_object_keys(pg_temp.card('e7000000-0000-4000-a000-000000000001')) k
             where k not in ('id', 'orderNumber', 'serviceType', 'tableNumber', 'orderedAt',
                             'version', 'status', 'cancelledAt', 'lines', 'otherItemCount',
-                            'acknowledged', 'latestAck')),
+                            'acknowledged', 'latestAck', 'ticketNumber')),
   0::bigint, 'a card carries exactly the kitchen''s fields');
 
 select is(public.set_kitchen_filter('include', array[:'BURGERS_CAT'::uuid]), 'ok',
@@ -331,19 +331,19 @@ select is((select kitchen_filter_changed_by from public.counter_devices where id
 select pg_temp.impersonate(:'KITCHEN');
 select is(pg_temp.card('e7000000-0000-4000-a000-000000000001') ->> 'acknowledged', 'false',
   'an unacknowledged order is new to this kitchen');
-select is(public.kitchen_acknowledge('e8000000-0000-4000-a000-000000000001',
+select is(public.kitchen_acknowledge_v2('e8000000-0000-4000-a000-000000000001',
     'e7000000-0000-4000-a000-000000000001', 'new',
     pg_temp.version('e7000000-0000-4000-a000-000000000001')) ->> 'status',
   'accepted', 'the cook acknowledges O1');
-select is(public.kitchen_acknowledge('e8000000-0000-4000-a000-000000000001',
+select is(public.kitchen_acknowledge_v2('e8000000-0000-4000-a000-000000000001',
     'e7000000-0000-4000-a000-000000000001', 'new',
     pg_temp.version('e7000000-0000-4000-a000-000000000001')) ->> 'replay',
   'true', 'an exact replay returns the stored acknowledgement');
-select is(public.kitchen_acknowledge('e8000000-0000-4000-a000-000000000001',
+select is(public.kitchen_acknowledge_v2('e8000000-0000-4000-a000-000000000001',
     'e7000000-0000-4000-a000-000000000003', 'new',
     pg_temp.version('e7000000-0000-4000-a000-000000000003')) ->> 'status',
   'identity_conflict', 'the same identity for another order is a conflict');
-select is(public.kitchen_acknowledge(gen_random_uuid(),
+select is(public.kitchen_acknowledge_v2(gen_random_uuid(),
     'e7000000-0000-4000-a000-000000000003', 'new', now() - interval '1 day') ->> 'status',
   'stale', 'acknowledging a version that is no longer current is refused');
 select is(pg_temp.card('e7000000-0000-4000-a000-000000000001') ->> 'acknowledged', 'true',
@@ -371,7 +371,7 @@ select is(jsonb_array_length(pg_temp.card('e7000000-0000-4000-a000-000000000001'
   'the burger is newly on show and needs an edit ACK');
 select is(pg_temp.card('e7000000-0000-4000-a000-000000000002') ->> 'acknowledged', 'false',
   'the burger-only order is new to this kitchen');
-select is(public.kitchen_acknowledge(gen_random_uuid(),
+select is(public.kitchen_acknowledge_v2(gen_random_uuid(),
     'e7000000-0000-4000-a000-000000000001', 'edit',
     pg_temp.version('e7000000-0000-4000-a000-000000000001')) ->> 'status',
   'accepted', 'acknowledge both dishes');
@@ -383,7 +383,7 @@ select is(pg_temp.card('e7000000-0000-4000-a000-000000000001') -> 'latestAck' ->
 -- A cancel ACK written by #70 for a filter change must not hide visible food.
 select pg_temp.version('e7000000-0000-4000-a000-000000000001')::text as legacy_version \gset
 select is(public.set_kitchen_filter('include', array[:'SALADS_CAT'::uuid]), 'ok', 'hide O1');
-select is(public.kitchen_acknowledge(gen_random_uuid(),
+select is(public.kitchen_acknowledge_v2(gen_random_uuid(),
     'e7000000-0000-4000-a000-000000000001', 'cancel',
     :'legacy_version'::timestamptz) ->> 'status',
   'accepted', 'the old filter-change cancel ACK');
@@ -408,7 +408,7 @@ select pg_temp.unimpersonate();
 select pg_temp.impersonate(:'KITCHEN');
 select is(pg_temp.card('e7000000-0000-4000-a000-000000000003') ->> 'status', 'cancelled',
   'the kitchen still shows O3, as cancelled');
-select is(public.kitchen_acknowledge(gen_random_uuid(),
+select is(public.kitchen_acknowledge_v2(gen_random_uuid(),
     'e7000000-0000-4000-a000-000000000003', 'cancel',
     pg_temp.version('e7000000-0000-4000-a000-000000000003')) ->> 'status',
   'accepted', 'the cook acknowledges the cancellation');

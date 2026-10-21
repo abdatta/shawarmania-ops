@@ -279,7 +279,7 @@ it has no subscription, poll or timer, so every figure stays visibly tied to the
 same stated moment rather than changing piecemeal.
 
 **The kitchen tablet** *(#70)* follows the counter's contract with a narrower
-read. It calls `kitchen_board()` on load, on every bump of its outlet's
+read. It calls `kitchen_board_v2()` on load, on every bump of its outlet's
 `kitchen_pulses` row, every twenty seconds while visible and on foreground; the
 pulse is a nudge, never the data, because a kitchen shift may not select
 `orders`. It says it is stale — a floating alert — when offline, when the channel
@@ -287,7 +287,7 @@ has been down ten seconds, or when the last read is older than forty-five. It
 holds no outbox and caches nothing for a restart: a kitchen is online by design.
 
 **The counter hears the kitchen** *(#72)* through the same pulse. Its rail reads
-`counter_kitchen_marks()` — which kitchen on shift is still to press ACK on which
+`counter_kitchen_marks_v2()` — which kitchen on shift is still to press ACK on which
 open order — with every rail load and again on each bump of its outlet's
 `kitchen_pulses` row, and on that bump re-reads the marks alone, not the rail or
 the menu. So the pulse is bumped not only by order writes but by a kitchen's ACK,

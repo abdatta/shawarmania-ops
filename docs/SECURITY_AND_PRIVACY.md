@@ -113,9 +113,7 @@ the identity interval is display evidence, never an alternate route to rows.
 
 ### A kitchen reads orders without their customers *(#70)*
 
-An order row carries the customer's name and phone, and Row-Level Security filters rows, not columns, so any select grant to a kitchen shift would hand a hand-crafted request both. A kitchen shift therefore holds **no** select on `orders`, `order_items`, `order_discounts`, `bills` or `bill_items`; it reads one `security definer` function, `kitchen_board()`, which returns dishes, quantities, numbers and times and nothing about the customer or the money. Its live nudge is a one-row-per-outlet pulse table for the same reason.
-
-Since #74 `kitchen_board_v2()` is the kitchen's only read and keeps the same promise: dishes, owed quantities, notes, numbers and times, and no label, customer column, price or payment fact. `order_labels` has no kitchen select at all. `kitchen_board()` stays published, unchanged, for a tablet on an older build until the contract migration of `retire-dish-ticks`.
+An order row carries the customer's name and phone, and Row-Level Security filters rows, not columns, so any select grant to a kitchen shift would hand a hand-crafted request both. A kitchen shift therefore holds **no** select on `orders`, `order_items`, `order_discounts`, `bills` or `bill_items`; it reads one `security definer` function, `kitchen_board_v2()`, which returns dishes, owed quantities, notes, numbers and times, and no label, customer column, price or payment fact. `order_labels` has no kitchen select at all. Its live nudge is a one-row-per-outlet pulse table for the same reason.
 
 ### A label is a word on the rail
 

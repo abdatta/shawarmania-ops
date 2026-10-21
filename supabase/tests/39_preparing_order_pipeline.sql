@@ -147,7 +147,7 @@ values
 
 select pg_temp.impersonate(:'DEVICE_KAL');
 select is(
-  public.create_billing_order(
+  public.create_billing_order_v2(
     'e1000000-0000-4000-a000-000000000001', 1,
     public.billing_payload_hash(pg_temp.order_payload(
       'e2000000-0000-4000-a000-000000000001',
@@ -240,7 +240,7 @@ select isnt(
 -- The upfront payer: paid while still preparing completes into prepared.
 select pg_temp.impersonate(:'DEVICE_KAL');
 select is(
-  public.create_billing_order(
+  public.create_billing_order_v2(
     'e1000000-0000-4000-a000-000000000006', 1,
     public.billing_payload_hash(pg_temp.order_payload(
       'e2000000-0000-4000-a000-000000000002',

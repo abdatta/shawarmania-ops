@@ -85,7 +85,7 @@ begin
       'menuItemId', '31000000-0000-4000-a000-000000000001',
       'itemName', 'Classic Chicken Shawarma',
       'unitPricePaise', 13900, 'quantity', 1, 'lineTotalPaise', 13900)));
-  return public.create_billing_order(
+  return public.create_billing_order_v2(
     gen_random_uuid(), 1, public.billing_payload_hash(v), p_at,
     'e5000000-0000-4000-a000-000000000001', v) ->> 'status';
 end;

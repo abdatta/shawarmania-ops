@@ -1,6 +1,6 @@
 -- #74: an edit marks the dish lines it adds (each-dish-is-ticked-off, design
 -- R12), so the rail can set them below a divider. Never the lines an order was
--- created with, never a line an edit kept, and nothing while `dish-ticks` is off.
+-- created with, and never a line an edit kept.
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
@@ -101,10 +101,9 @@ create function pg_temp.added(p_order uuid) returns text[] language sql as $$
 $$;
 
 -- ---------------------------------------------------------------------------
--- With dish-ticks on: a create marks nothing; an edit marks what it adds.
+-- A create marks nothing; an edit marks what it adds.
 
 select pg_temp.unimpersonate();
-select public.change_gate_force('dish-ticks', true, 'pgTAP');
 select pg_temp.impersonate(:'COUNTER');
 select is(pg_temp.send('create_billing_order_v2', pg_temp.payload(:'O1', 1, 0)), 'accepted',
   'an order is created');
@@ -131,19 +130,6 @@ select pg_temp.impersonate(:'COUNTER');
 select is((select count(*)::integer from public.order_line_additions where order_id = :'O1'), 1,
   'the outlet''s counter reads it');
 select pg_temp.unimpersonate();
-
--- With it off, nothing is recorded.
-
-select public.change_gate_force('dish-ticks', false, 'pgTAP');
-select pg_temp.impersonate(:'COUNTER');
-select is(pg_temp.send('create_billing_order_v2', pg_temp.payload(:'O2', 1, 0)), 'accepted',
-  'with the gate off an order is created');
-select pg_temp.age(:'O2');
-select pg_temp.impersonate(:'COUNTER');
-select is(pg_temp.send('revise_billing_order', pg_temp.payload(:'O2', 1, 1)), 'accepted',
-  'and edited on the old path');
-select pg_temp.unimpersonate();
-select is(pg_temp.added(:'O2'), '{}'::text[], 'the trigger is inert while the gate is off');
 
 select ok(not has_table_privilege('anon', 'public.order_line_additions', 'select'),
   'anon cannot read additions');

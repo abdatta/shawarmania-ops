@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import {
   billingCommandRpcArguments,
-  BILLING_COMMAND_RPC,
+  billingCommandRpc,
   billingPayloadHash,
   createBillingCommand,
   type BillingCommand,
@@ -151,6 +151,7 @@ describe.sequential('automatic receipts after offline billing', () => {
         type: 'create_order',
         createdAt: new Date().toISOString(),
         payload: content,
+        variant: 'dishes',
       }),
       await createBillingCommand({
         commandId: crypto.randomUUID(),
@@ -163,6 +164,7 @@ describe.sequential('automatic receipts after offline billing', () => {
           customerName: 'Synthetic payment-time customer',
           customerPhone: '+919000000592',
         },
+        variant: 'dishes',
       }),
       await createBillingCommand({
         commandId: crypto.randomUUID(),
@@ -206,7 +208,7 @@ describe.sequential('automatic receipts after offline billing', () => {
       execute: async (command) => {
         if (!online) throw new Error('offline')
         const response = await tabletTwo.rpc(
-          BILLING_COMMAND_RPC[command.type] as keyof Database['public']['Functions'],
+          billingCommandRpc(command) as keyof Database['public']['Functions'],
           rpcArgs(command),
         )
         outcomes.push({ type: command.type, data: response.data, error: response.error })
@@ -592,7 +594,7 @@ describe.sequential('billing command races over PostgREST', () => {
           createdAt: new Date().toISOString(),
           payload,
         })
-        const created = await client.rpc('create_billing_order', rpcArgs(command))
+        const created = await client.rpc('create_billing_order_v2', rpcArgs(command))
         expect(created.error).toBeNull()
         expect(status(created.data)).toBe('accepted')
         return { n, total, which }
@@ -810,7 +812,7 @@ describe.sequential('billing command races over PostgREST', () => {
       createdAt,
       payload: orderPayload,
     })
-    const created = await tablet.rpc('create_billing_order', rpcArgs(create))
+    const created = await tablet.rpc('create_billing_order_v2', rpcArgs(create))
     expect(created.error).toBeNull()
     expect(status(created.data)).toBe('accepted')
 
@@ -942,7 +944,7 @@ describe.sequential('billing command races over PostgREST', () => {
       payload: { outletId: OUTLET, businessDate, unsentCount: 0, needsAttentionCount: 0 },
     })
     const [created, confirmed] = await Promise.all([
-      tablet.rpc('create_billing_order', rpcArgs(create)),
+      tablet.rpc('create_billing_order_v2', rpcArgs(create)),
       tablet.rpc('confirm_billing_end_of_day', rpcArgs(confirm)),
     ])
     expect(created.error).toBeNull()

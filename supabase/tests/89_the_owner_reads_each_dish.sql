@@ -108,7 +108,6 @@ select pg_temp.impersonate(:'K1');
 select is(public.set_kitchen_filter('include', array[:'SHAWARMA_CAT'::uuid]), 'ok', 'it shows shawarmas');
 
 select pg_temp.unimpersonate();
-select public.change_gate_force('dish-ticks', true, 'pgTAP');
 select pg_temp.impersonate(:'COUNTER');
 select is(pg_temp.send('create_billing_order_v2', jsonb_build_object(
     'orderId', :'O1', 'businessDate', pg_temp.today(),

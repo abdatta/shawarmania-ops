@@ -99,7 +99,7 @@ returns text language plpgsql as $$
 declare v jsonb;
 begin
   v := pg_temp.order_payload(p_order, gen_random_uuid(), p_date);
-  return public.create_billing_order(
+  return public.create_billing_order_v2(
     p_cmd, 1, public.billing_payload_hash(v), p_at, p_shift, v) ->> 'status';
 end;
 $$;

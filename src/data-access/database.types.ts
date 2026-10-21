@@ -5495,7 +5495,6 @@ export type Database = {
         }
         Returns: Json
       }
-      counter_kitchen_marks: { Args: never; Returns: Json }
       counter_kitchen_marks_v2: { Args: never; Returns: Json }
       counter_operations_snapshot: {
         Args: { p_outlet_ids: string[] }
@@ -5545,17 +5544,6 @@ export type Database = {
           shift_id: string
           upi_total_paise: number
         }[]
-      }
-      create_billing_order: {
-        Args: {
-          p_command_id?: string
-          p_created_at?: string
-          p_payload?: Json
-          p_payload_hash?: string
-          p_schema_version?: number
-          p_shift_id?: string
-        }
-        Returns: Json
       }
       create_billing_order_v2: {
         Args: {
@@ -6111,15 +6099,6 @@ export type Database = {
           status: string
         }[]
       }
-      kitchen_acknowledge: {
-        Args: {
-          p_id: string
-          p_kind: string
-          p_order_id: string
-          p_order_version: string
-        }
-        Returns: Json
-      }
       kitchen_acknowledge_v2: {
         Args: {
           p_id: string
@@ -6129,7 +6108,6 @@ export type Database = {
         }
         Returns: Json
       }
-      kitchen_board: { Args: never; Returns: Json }
       kitchen_board_v2: { Args: never; Returns: Json }
       kitchen_done_lines: { Args: { p_ready: string }; Returns: Json }
       kitchen_filter_lines: {
@@ -6180,10 +6158,6 @@ export type Database = {
           ready_id: string
           ticket: number
         }[]
-      }
-      kitchen_same_lines: {
-        Args: { p_left: Json; p_right: Json }
-        Returns: boolean
       }
       kitchen_same_lines_v2: {
         Args: { p_left: Json; p_right: Json }
@@ -6660,17 +6634,6 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
-      }
-      revise_billing_order: {
-        Args: {
-          p_command_id?: string
-          p_created_at?: string
-          p_payload?: Json
-          p_payload_hash?: string
-          p_schema_version?: number
-          p_shift_id?: string
-        }
-        Returns: Json
       }
       revise_billing_order_v2: {
         Args: {

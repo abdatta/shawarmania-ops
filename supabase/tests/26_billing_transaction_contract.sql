@@ -102,7 +102,7 @@ select has_table('public', 'order_items', 'order items exist');
 select has_table('public', 'billing_commands', 'compact command receipts exist');
 select has_table('public', 'billing_end_of_day_confirmations',
   'end-of-day confirmations exist');
-select has_function('public', 'create_billing_order',
+select has_function('public', 'create_billing_order_v2',
   array['uuid','integer','text','timestamp with time zone','uuid','jsonb'],
   'create-order command has the settled envelope signature');
 select has_function('public', 'pay_billing_order',
@@ -115,7 +115,7 @@ select has_function('public', 'pay_billing_now',
 select is(
   (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
     where n.nspname='public'
-      and p.proname in ('create_billing_order','revise_billing_order',
+      and p.proname in ('create_billing_order_v2','revise_billing_order_v2',
         'cancel_billing_order','pay_billing_order','pay_billing_now',
         'correct_bill_payment',
         'void_billing_bill','manager_cancel_billing_order','confirm_billing_end_of_day')
@@ -140,7 +140,7 @@ select is(
 -- Missing optional RPC keys still resolve to a function and are classified as
 -- malformed. This is the regression that undefined command arguments exposed.
 select is(
-  public.create_billing_order() ->> 'status',
+  public.create_billing_order_v2() ->> 'status',
   'malformed_payload',
   'an omitted declared key is malformed rather than an unknown RPC');
 
@@ -148,7 +148,7 @@ select pg_temp.impersonate('10000000-0000-4000-a000-000000000004');
 
 -- Create one open order on the seeded live tablet shift.
 select is(
-  public.create_billing_order(
+  public.create_billing_order_v2(
     'a1000000-0000-4000-a000-000000000001', 1,
     public.billing_payload_hash(pg_temp.order_payload(
       'a2000000-0000-4000-a000-000000000001',
@@ -188,7 +188,7 @@ select
   public.app_business_date(now(), time '04:00') as business_date;
 
 select is(
-  public.create_billing_order(
+  public.create_billing_order_v2(
     command_id, 1,
     public.billing_payload_hash(pg_temp.order_payload(order_id,line_id,business_date)),
     created_at, '90000000-0000-4000-a000-000000000001',
@@ -199,7 +199,7 @@ select is(
 from pg_temp.create_replay_case;
 
 create temporary table pg_temp.create_replay_result as
-select public.create_billing_order(
+select public.create_billing_order_v2(
     command_id, 1,
     public.billing_payload_hash(pg_temp.order_payload(order_id,line_id,business_date)),
     created_at, '90000000-0000-4000-a000-000000000001',
@@ -226,7 +226,7 @@ select is(
 from pg_temp.create_replay_result;
 
 select is(
-  public.create_billing_order(
+  public.create_billing_order_v2(
     command_id, 1,
     public.billing_payload_hash(jsonb_set(
       pg_temp.order_payload(order_id,line_id,business_date),
@@ -254,7 +254,7 @@ select is(
 from pg_temp.create_replay_result;
 
 select is(
-  public.create_billing_order(
+  public.create_billing_order_v2(
     'a1000000-0000-4000-a000-000000000092', 1,
     public.billing_payload_hash(pg_temp.order_payload(
       'a2000000-0000-4000-a000-000000000092',
@@ -289,7 +289,7 @@ update public.menu_items
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000004');
 
 select is(
-  public.revise_billing_order(
+  public.revise_billing_order_v2(
     'a1000000-0000-4000-a000-000000000002', 1,
     public.billing_payload_hash(pg_temp.order_payload(
       'a2000000-0000-4000-a000-000000000001',
@@ -356,7 +356,7 @@ select is(
   'only successful payment consumes the next permanent bill number');
 
 select is(
-  public.revise_billing_order(
+  public.revise_billing_order_v2(
     'a1000000-0000-4000-a000-000000000004', 1,
     public.billing_payload_hash(pg_temp.order_payload(
       'a2000000-0000-4000-a000-000000000001',
@@ -584,7 +584,7 @@ values
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000009');
 
 select is(
-  public.create_billing_order(
+  public.create_billing_order_v2(
     'a1000000-0000-4000-a000-000000000008', 1,
     public.billing_payload_hash(pg_temp.order_payload(
       'a2000000-0000-4000-a000-000000000002',
@@ -607,7 +607,7 @@ select is(
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000009');
 select is(
-  public.create_billing_order(
+  public.create_billing_order_v2(
     'a1000000-0000-4000-a000-000000000009', 1,
     public.billing_payload_hash(pg_temp.order_payload(
       'a2000000-0000-4000-a000-000000000003',
@@ -730,7 +730,7 @@ select is((select count(*) from public.bills
 -- and the current tablet has not confirmed.
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000004');
 select is(
-  public.create_billing_order(
+  public.create_billing_order_v2(
     'a1000000-0000-4000-a000-00000000000d', 1,
     public.billing_payload_hash(pg_temp.order_payload(
       'a2000000-0000-4000-a000-000000000004',
@@ -759,7 +759,7 @@ select is(
   'the owning tablet cancels an open order with attribution');
 
 select is(
-  public.create_billing_order(
+  public.create_billing_order_v2(
     'a1000000-0000-4000-a000-00000000000f', 1,
     public.billing_payload_hash(pg_temp.order_payload(
       'a2000000-0000-4000-a000-000000000005',
@@ -777,7 +777,7 @@ select is(
 -- A line UUID belongs to exactly one order. Naming another order's line must
 -- refuse without changing either parent or either captured child.
 select is(
-  public.revise_billing_order(
+  public.revise_billing_order_v2(
     'a1000000-0000-4000-a000-000000000020', 1,
     public.billing_payload_hash(pg_temp.order_payload(
       'a2000000-0000-4000-a000-000000000005',
@@ -806,7 +806,7 @@ insert into pg_temp.command_values values ('order_counter_before_collision',
       and business_date=public.app_business_date(now(),time '04:00')));
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000004');
 select is(
-  public.create_billing_order(
+  public.create_billing_order_v2(
     'a1000000-0000-4000-a000-000000000021', 1,
     public.billing_payload_hash(pg_temp.order_payload(
       'a2000000-0000-4000-a000-000000000005',
@@ -822,7 +822,7 @@ select is(
   'a duplicate order UUID is an identity conflict');
 
 select is(
-  public.create_billing_order(
+  public.create_billing_order_v2(
     'a1000000-0000-4000-a000-000000000022', 1,
     public.billing_payload_hash(pg_temp.order_payload(
       'a2000000-0000-4000-a000-000000000006',
@@ -846,7 +846,7 @@ select is(
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000004');
 select is(
-  public.revise_billing_order(
+  public.revise_billing_order_v2(
     'a1000000-0000-4000-a000-000000000024',1,
     public.billing_payload_hash(pg_temp.order_payload(
       'a2000000-0000-4000-a000-000000000005',
@@ -921,7 +921,7 @@ insert into pg_temp.command_values values
 -- the customer from the phone and never reads the client's id, so a malformed
 -- value in a field nothing consults must not cost a sale. The key is still
 -- required by the envelope; its contents are simply not the client's to decide.
-select is(public.create_billing_order('a1000000-0000-4000-a000-000000000030',1,
+select is(public.create_billing_order_v2('a1000000-0000-4000-a000-000000000030',1,
   public.billing_payload_hash((select value from pg_temp.command_values where name='malformed_create')),
   now(),'90000000-0000-4000-a000-000000000001',
   (select value from pg_temp.command_values where name='malformed_create'))->>'status',
@@ -930,7 +930,7 @@ select is(
   (select customer_id from public.orders where id='a2000000-0000-4000-a000-000000000030'),
   null,
   'and the order it wrote carries no link, never the string the client sent');
-select is(public.revise_billing_order('a1000000-0000-4000-a000-000000000031',1,
+select is(public.revise_billing_order_v2('a1000000-0000-4000-a000-000000000031',1,
   public.billing_payload_hash((select value from pg_temp.command_values where name='malformed_revise')),
   now(),'90000000-0000-4000-a000-000000000001',
   (select value from pg_temp.command_values where name='malformed_revise'))->>'status',
@@ -952,7 +952,7 @@ select is(public.pay_billing_now('a1000000-0000-4000-a000-000000000034',1,
   (select value from pg_temp.command_values where name='malformed_pay_now'))->>'status',
   'accepted','pay-now ignores a client-supplied customer UUID rather than refusing the money');
 
-select is(public.create_billing_order('a1000000-0000-4000-a000-000000000038',1,
+select is(public.create_billing_order_v2('a1000000-0000-4000-a000-000000000038',1,
   public.billing_payload_hash(pg_temp.order_payload(
     'a2000000-0000-4000-a000-000000000038',
     'a3000000-0000-4000-a000-000000000038',
@@ -963,7 +963,7 @@ select is(public.create_billing_order('a1000000-0000-4000-a000-000000000038',1,
     public.app_business_date(now(),time '04:00')) || jsonb_build_object('totalPaise',null)
   )->>'status','malformed_payload','null money is malformed rather than retryable');
 
-select is(public.create_billing_order('a1000000-0000-4000-a000-000000000039',1,
+select is(public.create_billing_order_v2('a1000000-0000-4000-a000-000000000039',1,
   public.billing_payload_hash(jsonb_set(pg_temp.order_payload(
     'a2000000-0000-4000-a000-000000000039',
     'a3000000-0000-4000-a000-000000000039',
@@ -974,7 +974,7 @@ select is(public.create_billing_order('a1000000-0000-4000-a000-000000000039',1,
     public.app_business_date(now(),time '04:00')),'{lines,0,itemName}','null'::jsonb)
   )->>'status','malformed_payload','null line facts are malformed rather than retryable');
 
-select is(public.create_billing_order('a1000000-0000-4000-a000-00000000003f',1,
+select is(public.create_billing_order_v2('a1000000-0000-4000-a000-00000000003f',1,
   public.billing_payload_hash(pg_temp.order_payload(
     'a2000000-0000-4000-a000-00000000003f',
     'a3000000-0000-4000-a000-00000000003f',
@@ -985,7 +985,7 @@ select is(public.create_billing_order('a1000000-0000-4000-a000-00000000003f',1,
     public.app_business_date(now(),time '04:00')) || jsonb_build_object('totalPaise','13900')
   )->>'status','malformed_payload','string money cannot masquerade as a JSON number');
 
-select is(public.create_billing_order('a1000000-0000-4000-a000-000000000040',1,
+select is(public.create_billing_order_v2('a1000000-0000-4000-a000-000000000040',1,
   public.billing_payload_hash(jsonb_set(pg_temp.order_payload(
     'a2000000-0000-4000-a000-000000000040',
     'a3000000-0000-4000-a000-000000000040',
