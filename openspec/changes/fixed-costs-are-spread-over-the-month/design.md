@@ -738,6 +738,13 @@ alone. No thicker border anywhere: a first build ringed both, and the owner foun
 it heavy. While the sheet is open the row stays tinted, which shows on a tablet;
 a phone's sheet covers the list.
 
+**2026-10-21, what a day costs.** The owner asked to see how much the fixed
+costs take each day. Paid plus Left to pay is This month, and each row says what
+is paid, so the Paid tile gave way to **Per day**: this month's fixed costs, each
+spread over the days it runs, for those running today (`dailySpreadPaise`), in
+whole rupees. It is the cost of a day, not what is still owed, so a payment does
+not change it; Kalyani Cafe's thirteen come to ₹8,770 in October.
+
 ## Built live (§7–§10), 2026-10-20
 
 What the live build decided where the design above left room, or differs from it:

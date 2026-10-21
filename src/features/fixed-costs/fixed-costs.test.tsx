@@ -11,9 +11,16 @@ import {
   OUTLET_KALYANI_ID as KAL,
   personaFixtures,
 } from '@/data-access/mock'
-import { demoFixedCostFacts } from '@/data-access/mock/fixed-costs'
+import { demoFixedCostFacts, demoOutletFixedCosts } from '@/data-access/mock/fixed-costs'
 import type { OverviewMonth } from '@/data-access/overview'
-import { addMonths, monthCost, monthOf, readProRata, thisMonthStatus } from '@/domain/fixed-costs'
+import {
+  addMonths,
+  dailySpreadPaise,
+  monthCost,
+  monthOf,
+  readProRata,
+  thisMonthStatus,
+} from '@/domain/fixed-costs'
 import { formatPaise } from '@/domain/money'
 import { LedgerStatementSurface } from '@/features/cash/ledger-statement-surface'
 import { OutletExpensesSurface } from '@/features/expenses/outlet-expenses-surface'
@@ -223,7 +230,12 @@ it('lists each fixed cost with this month, and overdue and ahead apart from it',
   )
   const totals = screen.getByTestId('fixed-costs-totals')
   expect(within(totals).getByText('This month')).toBeInTheDocument()
-  expect(within(totals).getByText('Paid')).toBeInTheDocument()
+  // Paid gave way to what the month's fixed costs come to a day, in whole rupees.
+  expect(within(totals).queryByText('Paid')).toBeNull()
+  const perDay = dailySpreadPaise(demoOutletFixedCosts(data.store, KAL), data.store.today)
+  expect(within(totals).getByText('Per day').parentElement).toHaveTextContent(
+    formatPaise(perDay - (perDay % 100)),
+  )
   expect(within(totals).getByText('Left to pay')).toBeInTheDocument()
   // Overdue is said on its row alone, not again above the list (owner, 2026-10-20).
   expect(screen.queryByTestId('fixed-costs-overdue')).toBeNull()

@@ -587,6 +587,23 @@ export function readProRata(costs: readonly FixedCostFacts[], today: string): Pr
   }
 }
 
+/**
+ * What this month's fixed costs come to per day (owner, 2026-10-21): each one's
+ * cost this month over the days it runs, for those running on `today`, the way
+ * Pro-rata P&L spreads them. What has been paid does not change it: it is the
+ * cost of a day, not what is still owed. Each share rounded down to the paisa.
+ */
+export function dailySpreadPaise(costs: readonly FixedCostFacts[], today: string): number {
+  const month = monthOf(today)
+  let total = 0
+  for (const cost of costs) {
+    const active = activeDays(cost, month)
+    if (active.count === 0 || today < active.first || today > active.last) continue
+    total += Math.floor(monthCost(cost, month) / active.count)
+  }
+  return total
+}
+
 /** Pro-rata P&L: P&L less the unpaid share of this month's fixed costs. */
 export function proRataPnl(pnlPaise: number, reading: ProRataReading): number {
   return assertPaise(pnlPaise) - reading.unpaidPaise

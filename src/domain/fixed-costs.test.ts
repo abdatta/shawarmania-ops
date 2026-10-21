@@ -7,6 +7,7 @@ import {
   balanceState,
   coverage,
   coveredPercent,
+  dailySpreadPaise,
   fixedCostLabel,
   monthCost,
   payEffect,
@@ -400,5 +401,32 @@ describe('this month, said in parts', () => {
       leftPaise: 0,
       overdue: [{ month: '2026-09-01', paise: 1_000_000 }],
     })
+  })
+})
+
+describe('what fixed costs come to per day', () => {
+  it('spreads each cost over the days it runs this month, whatever has been paid', () => {
+    // ₹2,71,900 over 31 days: Kalyani Cafe's thirteen in October.
+    const cafe = salary({ monthlyPaise: 27_190_000 })
+    expect(dailySpreadPaise([cafe], '2026-10-21')).toBe(877_096)
+    expect(
+      dailySpreadPaise([{ ...cafe, payments: [payment(27_190_000, '2026-10-02')] }], '2026-10-21'),
+    ).toBe(877_096)
+  })
+
+  it('counts a part month over its own days, and nothing on a day it does not run', () => {
+    // Joined on the 20th of a 30-day month: ₹10,000 × 11/30 over 11 days.
+    const joiner = salary({ startsOn: '2026-11-20' })
+    expect(dailySpreadPaise([joiner], '2026-11-25')).toBe(33_333)
+    expect(dailySpreadPaise([joiner], '2026-11-10')).toBe(0)
+    const leaver = salary({ stopsOn: '2026-11-12' })
+    expect(dailySpreadPaise([leaver], '2026-11-12')).toBe(33_333)
+    expect(dailySpreadPaise([leaver], '2026-11-13')).toBe(0)
+  })
+
+  it('adds the costs that run today', () => {
+    const rent = salary({ id: 'r', monthlyPaise: 3_100_000 })
+    const nayan = salary({ id: 'n', monthlyPaise: 1_240_000 })
+    expect(dailySpreadPaise([rent, nayan], '2026-10-05')).toBe(100_000 + 40_000)
   })
 })

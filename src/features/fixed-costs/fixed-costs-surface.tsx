@@ -39,6 +39,7 @@ import {
   monthOf,
   settlementFor,
   paymentUndo,
+  dailySpreadPaise,
   thisMonthStatus,
   type FixedCostPayment,
   type ThisMonthStatus,
@@ -159,15 +160,16 @@ export function FixedCostsSurface() {
   const totals = useMemo(() => {
     if (!current) return null
     let totalPaise = 0
-    let paidPaise = 0
     let leftPaise = 0
     for (const cost of current.costs) {
       const status = thisMonthStatus(cost, current.today)
       totalPaise += status.costPaise
-      paidPaise += status.paidPaise
       leftPaise += status.leftPaise
     }
-    return { totalPaise, paidPaise, leftPaise }
+    // Paid is This month less Left to pay, and each row says it, so its tile
+    // gave way to what the month costs a day (owner, 2026-10-21).
+    const perDayPaise = dailySpreadPaise(current.costs, current.today)
+    return { totalPaise, leftPaise, perDayPaise: perDayPaise - (perDayPaise % 100) }
   }, [current])
 
   return (
@@ -211,11 +213,12 @@ export function FixedCostsSurface() {
                 <Tile caption="This month">
                   <Money paise={totals.totalPaise} />
                 </Tile>
-                <Tile caption="Paid">
-                  <Money paise={totals.paidPaise} />
-                </Tile>
                 <Tile caption="Left to pay">
                   <Money paise={totals.leftPaise} />
+                </Tile>
+                {/* Whole rupees: a day's share is an estimate, not a sum paid. */}
+                <Tile caption="Per day">
+                  <Money paise={totals.perDayPaise} />
                 </Tile>
               </dl>
             </div>
