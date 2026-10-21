@@ -151,7 +151,7 @@ export function OutletExpensesSurface() {
           outletId,
           today: resolved,
           businessDate:
-            !current && askedDate && /^d{4}-d{2}-d{2}$/.test(askedDate) && askedDate <= resolved
+            !current && askedDate && /^\d{4}-\d{2}-\d{2}$/.test(askedDate) && askedDate <= resolved
               ? askedDate
               : carryPeriod(current?.businessDate ?? null, current?.today ?? null, resolved),
         }))
