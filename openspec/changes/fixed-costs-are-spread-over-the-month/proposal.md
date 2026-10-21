@@ -175,6 +175,21 @@ costs among the expenses so that the two still add up (owner, 2026-10-19). An ou
 
 ## Change gate
 
+**No gate: replacing the Fixed tab's Paid tile with Per day (2026-10-21).**
+This follow-up meets both conditions of the clean-revert exception in
+`AGENTS.md`:
+
+- **The revert is clean.** The tile derives a daily figure from the fixed costs
+  already loaded by the page. It changes no stored data, outbox commands,
+  browser storage or Edge Functions; reverting restores the Paid tile with
+  nothing for the old build to reconcile.
+- **It cannot reach the live counter or kitchen.** The display is confined to
+  the owner and manager's Fixed costs page. It adds no requests or database
+  writes and changes no shared component, app-wide code or table read by the
+  counter or kitchen. Recovery can use a revert through stage, CI and Promote.
+
+The existing gate below continues to govern the separate Pro-rata P&L change.
+
 - **`pro-rata-pnl`** (*PR*), depends on **`one-revenue`**
   - **On:** Overview and the Ledger's current month show P&L (Pro-rata), which
     charges the unpaid share of this month's fixed costs up to today, beside P&L.
