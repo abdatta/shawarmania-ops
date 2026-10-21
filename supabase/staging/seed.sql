@@ -666,6 +666,32 @@ begin
     where d.id in ('5a000000-0000-4000-a000-000000000021', '5a000000-0000-4000-a000-000000000022')
       and d.removed_at is null;
 
+  -- ── Expenses the syncs wrote ───────────────────────────────────────────────
+  -- As the Hyperpure and Zomato syncs write theirs: no person recorded these, so
+  -- `recorded_by` is null and the source names the sync, and an expanded row
+  -- reads "Hyperpure sync" or "Zomato sync" on its Recorded line. Outside the
+  -- Cafe block so a staging seeded before them gains them on its next push; the
+  -- source references make every later run a no-op.
+
+  insert into public.expenses
+    (outlet_id, business_date, category, description, amount_paise, is_cash,
+     source_system, source_ref, recorded_by)
+  select '5a000000-0000-4000-a000-000000000001'::uuid,
+         public.app_business_date(now(), time '04:00') - n * 5,
+         'Hyperpure', format('Hyperpure invoice HP-%s', 88200 + n),
+         (3000 + (n * 211) % 5000) * 100, false,
+         'hyperpure', format('HP-%s', 88200 + n), null::uuid
+    from generate_series(1, 6) as n
+  union all
+  select '5a000000-0000-4000-a000-000000000001',
+         public.app_business_date(now(), time '04:00') - n * 7,
+         'Advertising', 'Zomato ads, weekly payout deduction',
+         (400 + n * 37) * 100, false,
+         'zomato', format('ADS::staging::%s', n), null
+    from generate_series(1, 3) as n
+  on conflict (outlet_id, source_system, source_ref) where source_system is not null
+  do nothing;
+
   raise notice '%', 'Staging holds Cafe Staging with ' ||
          (select count(*) from public.bills where outlet_id = '5a000000-0000-4000-a000-000000000001') ||
          ' bills, ' ||
