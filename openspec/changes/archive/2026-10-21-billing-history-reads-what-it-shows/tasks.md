@@ -136,7 +136,10 @@ adapters.
 ## 5. Close
 
 - [x] 5.1 Update `docs/SCREENS.md` and `docs/DATA_MODEL.md` as the proposal lists.
-- [ ] 5.2 PHASE GATE: no roadmap row, so no roadmap checkpoint. A green Staging
+- [x] 5.2 PHASE GATE: no roadmap row, so no roadmap checkpoint. A green Staging
   run on the pushed commit, a Promote, and the owner using Billing history through
   a busy day's service. Archive after #78 has archived (this delta modifies its
   requirements) and after the owner calls it.
+  *(2026-10-21: green Staging run, Promoted with `0b06e731` on 19 October and used
+  by the owner through the 19 and 20 October services, which they called fine.
+  Archived the same day as #78, straight after it.)*

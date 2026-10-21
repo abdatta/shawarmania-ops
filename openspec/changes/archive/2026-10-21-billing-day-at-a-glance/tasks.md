@@ -50,16 +50,18 @@ already exists in both adapters.
 - [x] 4.1 Browser: the demo walk of Overview → Billing history (Bills filter,
   Open orders on today and a past day, Stats) at phone and tablet widths, light
   and dark, no console errors and no unexpected requests.
-- [ ] 4.2 The quick gates (`format`, `lint`, `format:check`, both typechecks,
+- [x] 4.2 The quick gates (`format`, `lint`, `format:check`, both typechecks,
   `npm test`, `contrast`, `build`) and the DB job (`test:db`, `test:rls`, the
   types diff); then push to `stage` and read the Staging run for the browser
   suites.
+  *(2026-10-21: green on `stage`; the last commit, `7092c88f`, first went live in
+  Deploy `0b06e731` on 19 October, whose full suite passed.)*
 
 ## 5. Close
 
 - [x] 5.1 Update `docs/SCREENS.md`, `docs/GLOSSARY.md` and `docs/DATA_MODEL.md`
   as the proposal lists.
-- [ ] 5.2 PHASE GATE: roadmap #78's checkpoint. Overview's Today's revenue shows
+- [x] 5.2 PHASE GATE: roadmap #78's checkpoint. Overview's Today's revenue shows
   the unpaid open orders beside it and opens Billing history; Open orders lists
   only the chosen day's and names their unpaid total; Stats reads the whole chosen
   day, matching a count of that day's rows in production, with a sync chip that
@@ -67,3 +69,6 @@ already exists in both adapters.
   leaves the day's figures alone; both new reads refuse another outlet's manager;
   the four-role demo walkthrough still walks; and the owner has used it through a
   service.
+  *(2026-10-21: the owner called it after using it in production: "it works
+  fabulously". Live since `0b06e731` on 19 October, through the 19 and 20 October
+  services at Kalyani Cafe, 126 and 125 bills.)*

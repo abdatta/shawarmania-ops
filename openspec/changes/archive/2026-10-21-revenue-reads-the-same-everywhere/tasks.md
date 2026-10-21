@@ -137,8 +137,11 @@ database object is new.
   sales did: the owner, once the gate was on in production, called the move to
   the Ledger unintended (2026-10-16). The on path's link, its browser test and
   a unit test that fails with the Ledger link; design, spec and SCREENS say so.
-- [ ] 5.3 Confirm the counter and kitchen request budget
+- [x] 5.3 Confirm the counter and kitchen request budget
   (`e2e-auth/request-budget.spec.ts`) is unchanged, with the gate on and off.
+  *(2026-10-21: every Deploy since the change reached `main` (`f0b4c7c6` 16 Oct,
+  `ac4ce56d` 18 Oct, `0b06e731` 19 Oct, `d772b7fe` 21 Oct) passed the authenticated
+  suite in both gate states, `request-budget.spec.ts` with it, unchanged.)*
 
 ## 6. Close
 
@@ -147,10 +150,12 @@ database object is new.
   `docs/SCREENS.md` (Overview, Ledger day and month, Analytics),
   `docs/DATA_MODEL.md`, `docs/DEMO_MODE.md`, `docs/TESTING.md` and
   `docs/LIMITATIONS.md`, as the proposal lists.
-- [ ] 6.2 Run every gate `.github/workflows/verify.yml` runs locally that can run
+- [x] 6.2 Run every gate `.github/workflows/verify.yml` runs locally that can run
   here (quick and DB tiers), then push to `stage` and let Staging run the browser
   suites both ways.
-- [ ] 6.3 PHASE GATE: roadmap #76's checkpoint. The owner approved the three
+  *(2026-10-21: the gates ran on `stage` and again in each Deploy listed under 5.3,
+  every one green.)*
+- [x] 6.3 PHASE GATE: roadmap #76's checkpoint. The owner approved the three
   screens from demo screenshots before they were wired live. With `one-revenue`
   on, Overview's month, the Ledger's month and Analytics' Month give the same
   revenue for one outlet and month to the paisa, and Overview and the Ledger the
@@ -162,3 +167,13 @@ database object is new.
   crafted request for another outlet is refused by every new read. With the gate
   off every screen reads as before. The gate was turned on in production, pulled
   once and turned back on. The four-role demo walkthrough still walks.
+  *(2026-10-21: the owner called it. `one-revenue` was turned on in production at
+  12:42 IST on 16 October (`change_gate_events`, read-only) and has stayed on since,
+  through five services at Kalyani Cafe (16–20 Oct, 125–138 bills a day) on both
+  reporting tablets. **The pull was not made, and the owner waived it**: the gate
+  has run seamlessly for five days on every device expected to operate, and turning
+  revenue off and on during trade buys nothing they need. What the pull would prove
+  is covered elsewhere: the gate's round trip is `none:` in `gates.ts`, because
+  every figure is read and derived and the on path writes nothing, and the
+  authenticated suite runs both states on every Deploy. Retirement seeded as
+  `retire-one-revenue`.)*

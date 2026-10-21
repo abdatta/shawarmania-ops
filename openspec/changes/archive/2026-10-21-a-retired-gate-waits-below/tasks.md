@@ -36,3 +36,9 @@ No gate (proposal, *Change gate*), no migration.
   `functions:typecheck`, `test`, `contrast`, `build`). The page was checked against
   the local backend, whose rows match production (DT, KR, OT, IS live and on), on
   phone and tablet, in light and dark. The browser suites run on the `stage` push.
+
+## 5. Archive
+
+- [x] 5.1 The `change-gates` capability is still new in `a-release-can-be-switched-off`'s
+  delta, unarchived, so this change's requirement was carried into that delta on
+  2026-10-21 and lands in `openspec/specs/` with the capability.

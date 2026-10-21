@@ -477,10 +477,40 @@ drain, and SHALL never interrupt billing with a dialog about it.
 ### Requirement: A manager reviews outlet history, voids, and clears stranded orders
 
 A Franchise Admin SHALL review their outlets' paid bills and a Super Admin any
-outlet. The surface SHALL ask two questions and no more — which outlet, and
-which revenue business date — and SHALL NOT offer a bill-status or payment-method
-filter. Every bill of the selected outlet-day SHALL be listed whatever its status
-or tender, because each summary already names its own state and tender.
+outlet. The surface SHALL ask two questions of the page — which outlet, and
+which revenue business date. By default every bill of the selected outlet-day
+SHALL be listed whatever its status or tender, newest payment first, because
+each summary already names its own state and tender.
+
+The list SHALL be read a page at a time: about a screenful and a margin first,
+and the next page as the reader nears the end, until every matching bill of the
+day is shown. Paging SHALL neither repeat nor skip a bill when bills are paid
+while the reader scrolls. Each listed row SHALL carry only what its collapsed
+summary shows, and SHALL NOT carry the customer's name or phone. Sorting and
+filtering SHALL be done by the server over the whole outlet-day, never over the
+rows already shown.
+
+The Bills tab SHALL offer one Filter control opening a sheet that sorts and
+narrows the listed bills of that outlet-day and nothing else. Sort SHALL be by
+paid time, order time, amount, or wait (paid time less order time), each in
+either direction named in the sort's own words (newest or oldest first, highest
+or lowest first, longest or shortest first), ties broken by bill number in the
+same direction. Filters SHALL be: Bill (Paid, Cancelled, Cancelled after paid,
+Payment undone); Paid with (Cash, UPI, Split); Customer as a single choice (All,
+With number, Without, Gold), where a bill carrying a name but no phone counts as
+Without; Service (Dine-in, Takeaway); Only bills that (Had a discount, Payment
+changed, Receipt failed); and Tablet, listing each billing tablet by name and
+shown only on a day two or more tablets took bills. Choices within a group SHALL
+widen the list and choices across groups SHALL narrow it; a group with no choice
+SHALL not filter. The control SHALL name the choices in force and offer Clear
+while any is chosen. The Bills tab SHALL read the shown and total counts while a
+filter hides bills. The day's Cash, UPI, Total and AOV SHALL be unaffected by
+any filter, and SHALL be the selected outlet-day's counter takings as the shared
+revenue definition counts them — the figures Overview and the Ledger read —
+never a sum of the rows on the phone. Choices SHALL survive a change of day or
+outlet, SHALL be cleared on leaving the page, and SHALL NOT be written to browser
+storage. A change of choice SHALL re-read the list from its first page and
+nothing else.
 
 The outlet SHALL be chosen with the same shared, remembered outlet selector every
 other outlet-scoped surface uses, in the page header. The date SHALL be chosen
@@ -497,7 +527,12 @@ Each bill SHALL have a scannable collapsed summary naming its bill number,
 plain-language Paid or Cancelled state, total, tender, outlet-local time and
 biller; a timestamp from today or yesterday SHALL use that relative calendar-day
 label while retaining its absolute time. Selecting a summary SHALL expand that
-bill directly beneath the summary, with at most one bill expanded at a time. The
+bill directly beneath the summary, with at most one bill expanded at a time.
+What the summary carries SHALL show at once and the rest of the detail SHALL be
+read with one request the first time that bill is opened. A bill's detail, once
+read, SHALL be kept in memory until the reader leaves the page, so collapsing it,
+opening another bill and returning to it SHALL NOT read or show a loading state
+again; it SHALL NOT be written to browser storage. The
 expanded summary and detail SHALL use ordinary structural borders rather than an
 accent-coloured expanded-state outline. Opening and closing detail SHALL use a
 brief reduced-motion-aware height/opacity transition. When selection moves from
@@ -520,10 +555,19 @@ actions SHALL remain legible without horizontal scrolling.
 An expanded paid bill SHALL initially show no cancellation-reason field. A manager SHALL
 deliberately open `Cancel this bill` before the reason input, immutable-history consequence
 and final confirmation appear. Confirmation SHALL perform the existing reasoned void
-transition while the surface calls the result Cancelled. The corrected sale SHALL then be
+transition while the surface calls the result Cancelled. The cancelled bill SHALL then
+replace its own row and detail in place, still expanded, without a loading state over the
+list or a change of scroll position, and the day's figures SHALL refresh beside it. The
+corrected sale SHALL then be
 manually rung as a new bill on the enrolled counter tablet; the manager surface SHALL
 create no payment command, cross-device draft or automatic prefill. The manager SHALL see
-any open order at that outlet and cancel it with a reason. Each open order SHALL show its
+any open order at that outlet whose business date is the selected day, and no other, and
+cancel it with a reason. The Open orders view SHALL name the unpaid total of the listed
+orders — open, unpaid orders only, in integer paise — and its tab count SHALL be that
+day's. The Open orders view SHALL be read in one round trip, its orders and their
+kitchens' answers asked for together. Returning to the page after more than two minutes
+away SHALL re-read the day's figures and the rows already shown, keeping the filter, the
+expanded bill and the scroll position. Each open order SHALL show its
 captured items, total, customer facts including explicit absence, creator and ordered time
 before offering an exceptional cancellation action. The cancellation-reason input and final
 confirmation SHALL remain hidden until the manager chooses `Cancel this order`.
@@ -570,7 +614,27 @@ confirmation SHALL remain hidden until the manager chooses `Cancel this order`.
 
 #### Scenario: Cancelled bills are read alongside paid ones
 - **WHEN** a manager opens an outlet-day on which bills were both paid and cancelled
-- **THEN** every one of them is listed, each naming its own state, with no filter to operate and none needed to see either kind
+- **THEN** every one of them is listed, each naming its own state, with no filter chosen and none needed to see either kind
+
+#### Scenario: A manager finds the day's cancelled bills by size
+- **WHEN** a manager chooses Cancelled and Cancelled after paid, sorted by Amount, highest first
+- **THEN** only those bills are listed, largest first, the control reads what is chosen, the Bills tab reads the shown and total counts, and Cash, UPI, Total and AOV still read the whole day
+
+#### Scenario: Customer choices cannot contradict
+- **WHEN** a manager chooses Without under Customer
+- **THEN** bills with no phone, including those carrying only a name, are listed, and Gold cannot be chosen at the same time
+
+#### Scenario: A filter finds nothing
+- **WHEN** the chosen filters match no bill of the day
+- **THEN** the list reads No bills match with a Clear action, and Clear restores every bill in the default order
+
+#### Scenario: A one-tablet day
+- **WHEN** every bill of the day was taken on one billing tablet
+- **THEN** the sheet offers no Tablet group
+
+#### Scenario: Open orders follow the day
+- **WHEN** a manager steps back to yesterday while today has open orders
+- **THEN** Open orders lists only yesterday's orders still open, usually none, with that day's count and unpaid total
 
 #### Scenario: The surface asks the same two questions as its neighbours
 - **WHEN** a manager opens Billing history at an ordinary phone width
@@ -588,27 +652,37 @@ confirmation SHALL remain hidden until the manager chooses `Cancel this order`.
 - **WHEN** a manager opens the Open orders view
 - **THEN** each order's items, total, customer facts, creator and ordered time are readable, and no cancellation reason field is visible until they choose Cancel this order
 
-### Requirement: Manager delivery diagnostics summarise sync health before technical evidence
+#### Scenario: A busy day opens with its first page
+- **WHEN** a manager opens a day of 128 bills
+- **THEN** the first page of rows is listed with the day's Cash, UPI, Total and AOV for all 128, and the next page is read only as the manager scrolls towards the end
 
-The manager history surface SHALL call command transport evidence `Sync status`, explain that
-it describes recent tablet activity reaching the server, and remain read-only. It SHALL lead
-with whether any recent result needs attention, group routine successful delivery by familiar
-business action and count, and SHALL NOT render every accepted command as a separate default
-card. Individual short references, command types, result categories and receipt times SHALL
-appear only after the manager opens a technical-details disclosure. Payloads, command contents
-and customer details SHALL remain unavailable.
+#### Scenario: A bill is paid while the manager scrolls
+- **WHEN** a new bill is paid after the first page was read and the manager scrolls to the second
+- **THEN** no bill appears twice and none is missing from the pages read
 
-#### Scenario: Routine activity all arrived
-- **WHEN** recent diagnostics contain many accepted create, pay and cancel commands and no problem result
-- **THEN** Sync status reports no recent sync problems and shows grouped action counts without a chronological card for every receipt
+#### Scenario: A filter is answered by the server
+- **WHEN** a manager chooses Cancelled on a day whose cancelled bills are not among the rows already shown
+- **THEN** the list re-reads and shows every cancelled bill of the day, and the Bills tab reads the shown and total counts
 
-#### Scenario: A result needs attention
-- **WHEN** a recent diagnostic has a non-success result
-- **THEN** Sync status places a human-readable problem summary before successful activity and directs the manager to check the originating tablet
+#### Scenario: A reopened bill does not load again
+- **WHEN** a manager opens a bill, collapses it, opens another, and opens the first again
+- **THEN** the first bill's detail reads once in all, and reopening it shows no loading state
 
-#### Scenario: Technical evidence is needed
-- **WHEN** the manager opens Show technical details
-- **THEN** short references, command types, result categories and receipt times become visible while payload and customer facts remain absent
+#### Scenario: A cancelled bill stays where it was
+- **WHEN** a manager cancels a bill halfway down a long list
+- **THEN** that row reads Cancelled in place, its detail stays open, the list shows no loading state, the scroll position holds, and Cash, UPI, Total and AOV refresh
+
+#### Scenario: The day's figures agree with Overview
+- **WHEN** a manager opens today's Billing history and Overview's Today's revenue
+- **THEN** Billing history's Cash and UPI equal Overview's counter figures for today
+
+#### Scenario: A list row keeps the customer out
+- **WHEN** a manager's list is read for a day whose bills carry customer phones
+- **THEN** no listed row carries a customer name or phone until that bill's detail is opened
+
+#### Scenario: Another outlet's rows are asked for
+- **WHEN** a franchise admin requests the bill rows of an outlet they do not manage
+- **THEN** no row is returned
 
 ### Requirement: Delivery states are shown in words, without blocking the counter
 
@@ -2262,3 +2336,76 @@ a server response, and SHALL then correct itself from the server's read.
 - **GIVEN** the gate is on and an order for table 4 was just saved on this tablet while the server has not answered
 - **WHEN** the biller opens the table picker for the next order
 - **THEN** table 4 is marked busy
+
+### Requirement: The Stats tab reads the chosen day
+
+Billing history's third tab SHALL be named Stats. It SHALL show, for the
+selected outlet and business day and from one read, three groups stacked one
+below the other, each a single card divided into a 2 × 2 grid with each number
+above its caption: Counter (Placed, Updated, Cancelled, Paid), Kitchen (Seen,
+Ready, Avg to ready, Avg handover) and Bills (Bills cancelled, Cancelled after
+paid, Payment undone, Payment changed). Placed SHALL count the day's orders;
+Updated those with at least one accepted revision, counted once per order;
+Cancelled and Paid those in that state; Seen those a kitchen acknowledged; Ready
+those with a live kitchen Ready mark. Avg to ready SHALL average the last live
+Ready less the order time, and Avg handover the counter's Prepared mark less the
+last live Ready, each over the orders it can be measured on, excluding orders the
+day change finished; an average with nothing to average SHALL read as a dash.
+The Bills figures SHALL count the day's bills cancelled by a manager (legacy
+cancellations included), cancelled after payment at the counter, whose payment
+the counter undid, and whose tender was corrected, each bill once. The groups
+SHALL NOT be drawn as the tiles that carry the day's Cash, UPI, Total and AOV.
+
+Above the groups a sync chip SHALL report the tablets' sync: in sync with the
+age of the outlet's newest received command, which SHALL be independent of the
+selected day, or the number of sync problems with each problem listed beneath in
+plain words, naming its order where the refusal named one and saying where a
+resend cannot help. The sync problems SHALL be every refused command the outlet
+received on the selected business day, through the outlet's cutover, however
+many commands that day received — never a fixed count of the newest commands. It
+SHALL show no technical-details disclosure, payload or customer detail. The tab
+label SHALL carry the selected day's problem count in parentheses, coloured as a
+warning, only while it is above zero.
+
+The figures, the sync problems and the day's Cash, UPI, Total and AOV SHALL
+arrive in one read when the page opens or the day changes, so choosing the Stats
+tab SHALL read nothing.
+
+The read SHALL answer the owner and that outlet's franchise admins and refuse
+everyone else, including a manager's crafted request for another outlet.
+
+#### Scenario: A busy day is counted whole
+- **WHEN** a manager opens Stats on a day with more than a hundred tablet commands
+- **THEN** every figure counts that whole day's orders and bills, matching a count of the day's rows
+
+#### Scenario: A past day
+- **WHEN** a manager steps the day bar back a week while Stats is open
+- **THEN** the three groups and the sync problems read that day's, and the chip's in-sync age still speaks for now
+
+#### Scenario: An order goes to two kitchens
+- **WHEN** one kitchen marks its part Ready at 12:04 and the other at 12:09, and the counter marks the order prepared at 12:11
+- **THEN** the order counts once under Ready, its time to ready runs to 12:09, and its handover is two minutes
+
+#### Scenario: Nothing to average
+- **WHEN** no order of the day was marked Ready
+- **THEN** Avg to ready and Avg handover read a dash, not zero
+
+#### Scenario: A refusal waits
+- **WHEN** a tablet command was refused
+- **THEN** the tab reads Stats (1) with the count as a warning, and the chip names the problem and the order it concerned
+
+#### Scenario: A lunchtime refusal is still there in the evening
+- **WHEN** a command was refused at 13:00 and the outlet's tablets sent 600 more commands before 21:00
+- **THEN** at 21:00 that day the tab still reads Stats (1) and the chip still lists the refusal
+
+#### Scenario: A past day's refusals
+- **WHEN** a manager steps back to a day on which one command was refused, while today has none
+- **THEN** the tab reads Stats (1), the chip lists that day's refusal, and stepping back to today clears the count
+
+#### Scenario: Stats opens without a read
+- **WHEN** a manager chooses the Stats tab after the page has opened
+- **THEN** the figures and the chip show at once and no request is made
+
+#### Scenario: Another outlet is asked for
+- **WHEN** a franchise admin requests the stats of an outlet they do not manage
+- **THEN** the read is refused

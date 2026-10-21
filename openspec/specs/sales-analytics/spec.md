@@ -50,22 +50,48 @@ With three or four compared periods, the trend headline, every dish and category
 - **THEN** it shows `→ steady` without a number, four bars of exactly those heights, and appears in neither Rising nor Slow
 
 ### Requirement: One trend as a chart or a table
-On both pages the trend SHALL be one card with a Chart / Table switch kept in the address. The table SHALL hold every figure the chart draws: every bucket of every compared period, exact to the paisa, with the change against the previous period and a CSV export. Sales SHALL NOT show a separate Days list or a weekday-average card.
+On both pages the trend SHALL be one card with a Chart / Cumulative / Table switch kept in the address. The table SHALL hold every figure the chart draws: every bucket of every compared period, exact to the paisa, with the change against the previous period and a CSV export. Sales SHALL NOT show a separate Days list or a weekday-average card.
+
+Cumulative SHALL draw the chart as running figures for every compared period, in the chart's own order: each point is the period's total from its first bucket through that one. On AOV each point SHALL be the weighted counter average so far, total counter revenue divided by total counter bills, never a sum or an average of averages. A bucket with nothing recorded SHALL add nothing; a bucket without bills SHALL hold the running AOV; a point an earlier period does not reach SHALL remain a gap. Ongoing and future points SHALL keep their markers and their **so far** and **not started** wording. The headline, caption, table and CSV SHALL remain per bucket, and switching SHALL reuse the loaded snapshot.
 
 #### Scenario: Owner switches the Sales trend to a table
 - **WHEN** the owner groups four 30-day periods by week and chooses Table
 - **THEN** the table has one row per week the chart plots, one column per period plus Change, and reloading keeps the table
 
+#### Scenario: Owner reads revenue as a running total
+- **WHEN** the owner compares this week with last week by day on Revenue and chooses Cumulative
+- **THEN** each period's line rises by each day's revenue, its last point equals that period's total in the table, inspecting a day shows every period's total up to that day, and reloading keeps Cumulative
+
+#### Scenario: AOV accumulates bills, not averages
+- **WHEN** a period has ₹300 across 2 bills on its first day, no bills on its second and ₹100 across 2 bills on its third, and the owner chooses Cumulative on AOV
+- **THEN** the points read ₹150, ₹150 and ₹100
+
+#### Scenario: Cumulative makes no read
+- **WHEN** a loaded Items or Sales page switches between Chart, Cumulative and Table
+- **THEN** no request is made and the headline and the table's figures are unchanged
+
 ### Requirement: Inclusive business dates and multiple comparisons
-Both pages SHALL offer 1d/7d/30d presets, default 7d, and custom ranges. Sales SHALL support one through four total adjacent inclusive equal-length windows, actual short date-range legends and hour/day/week grouping. Boundary groups SHALL include only selected days and align older periods by elapsed day.
+Sales SHALL offer 1d/7d/Month presets and Items 1d/7d/30d, each defaulting to 7d, with custom ranges. Month SHALL select the current month from its 1st through today. Sales SHALL support one through four total inclusive windows, actual short date-range legends and hour/day/week grouping. For 1d, 7d and custom ranges the windows SHALL be adjacent and of equal length; for Month they SHALL be the same day-of-month span in each earlier month, as defined by `business-figures`, and a whole month SHALL compare with whole months. Boundary groups SHALL include only selected days and align older periods by elapsed day.
 
-Default and preset ranges SHALL include the current business date resolved through the selected outlet's cutover, spanning exactly 1/7/30 inclusive dates. Explicit URL dates SHALL remain respected; next-period navigation SHALL permit a range ending today. On each opening of Dates, editing the first endpoint SHALL shift the opposite endpoint to preserve the inclusive range length, including repeated edits of that first endpoint. Explicitly editing the opposite endpoint SHALL release the link for the rest of that opening. Apply SHALL commit only valid ordered ranges of 1–92 days within supported dates through today; cancel SHALL discard draft edits. Manual dates SHALL preserve grouping.
+Default and preset ranges SHALL include the current business date resolved through the selected outlet's cutover, spanning exactly 1, 7 or 30 inclusive dates, or the month to date. Explicit URL dates SHALL remain respected, and Month SHALL be kept in the address. With Month selected, previous- and next-period navigation SHALL step by calendar month and SHALL permit the current month; otherwise it SHALL step by the range's length and permit a range ending today. On each opening of Dates, editing the first endpoint SHALL shift the opposite endpoint to preserve the inclusive range length, including repeated edits of that first endpoint. Explicitly editing the opposite endpoint SHALL release the link for the rest of that opening. Apply SHALL commit only valid ordered ranges of 1–92 days within supported dates through today, and a range chosen by hand SHALL leave Month; cancel SHALL discard draft edits. Manual dates SHALL preserve grouping.
 
-Comparison SHALL use a distinct compact icon pill and a total-period count, with Current only and 2/3/4-period choices labeled by actual ranges. Hour grouping SHALL use counter totals by Kolkata clock hour across each range, reusing the bounded period/hour payload. The 1d preset SHALL group by Hour and 7d and 30d by Day on both pages; dates chosen by hand SHALL keep the grouping. The bottom Hours graph SHALL use grouped columns, including preceding periods and accessible point inspection.
+Comparison SHALL use a distinct compact icon pill and a total-period count, with Current only and 2/3/4-period choices labeled by actual ranges. When the current window ends today, every comparison figure (a change against an earlier period, an earlier period's total, a dish's or category's earlier units and revenue, and a fitted trend) SHALL use the earlier windows cut at the same time of day on their matched date, as defined by `business-figures`, computed by the server's clock. Chart points and table rows for earlier dates SHALL remain whole days, and an earlier period's cut total SHALL say up to what time it runs. Hour grouping SHALL use counter totals by Kolkata clock hour across each range, reusing the bounded period/hour payload. The 1d preset SHALL group by Hour, and 7d, 30d and Month by Day; dates chosen by hand SHALL keep the grouping. The bottom Hours graph SHALL use grouped columns, including preceding periods and accessible point inspection.
 
-#### Scenario: Four thirty-day windows
-- **WHEN** the owner chooses 30d and three preceding periods
-- **THEN** Sales compares four windows of exactly thirty days, labels actual ranges and preserves the choices on reload
+#### Scenario: Month in mid-October
+- **WHEN** the owner chooses Month on 15 October and three preceding periods
+- **THEN** Sales compares October 1–15 with September, August and July 1–15, labels those ranges, and preserves the choice on reload
+
+#### Scenario: Step back from Month
+- **WHEN** the owner, on Month in October, steps back once
+- **THEN** the range is September 1–30, compared with the whole of August
+
+#### Scenario: Month equals Overview
+- **WHEN** the owner opens Month for an outlet whose Overview shows October revenue
+- **THEN** the Revenue headline equals Overview's figure and its change equals Overview's change
+
+#### Scenario: Today against yesterday at 15:40
+- **WHEN** the owner chooses 1d at 15:40 with Revenue selected
+- **THEN** the headline change compares today so far with yesterday up to 15:40, while yesterday's hourly points remain whole hours
 
 #### Scenario: Change a seven-day range into eight days
 - **WHEN** a range of October 4–10 has From changed to October 2, then To changed to October 9
@@ -73,7 +99,7 @@ Comparison SHALL use a distinct compact icon pill and a total-period count, with
 
 #### Scenario: Before the outlet cutover
 - **WHEN** the Kolkata calendar date is October 10 but the outlet's cutover has not occurred
-- **THEN** 1d selects October 9 and 7d selects October 3–9
+- **THEN** 1d selects October 9, 7d selects October 3–9, and Month on Sales selects October 1–9
 
 ### Requirement: Items terminology and selected-measure shares
 The Items page SHALL label sold quantities Items/Items sold rather than Units in controls, charts, explanations, accessibility text, tables and exports. Dishes SHALL show the selected measure's total rather than an order count. Each dish and captured category SHALL show its current-period share of all items sold when Items is selected, or of all dish revenue when Revenue is selected, using the same full outlet/range denominator. Search, filters and chart subject SHALL NOT change the denominator. Zero denominators SHALL show an em dash and zero sellers with a positive denominator SHALL show 0%. Revenue shares SHALL use captured line totals less line discounts, excluding delivery, packaging, bill-level discounts, tax and rounding. Order-share labels and the Items export's order-count column SHALL be absent.
@@ -139,15 +165,15 @@ The hourly pattern card SHALL name the chosen measure and aggregation. Hourly Re
 - **THEN** the lower hourly card reports ₹52.50 or five orders per day at noon, main Hour totals report ₹105 or ten orders, and hourly AOV remains ₹10.50
 
 ### Requirement: Clear solid comparison columns
-Hourly columns SHALL use solid theme-aware colors with rounded corners and gaps, without hatch patterns. A numbered legend and matching inspection markers SHALL identify the stable left-to-right series order. The lower hourly chart SHALL focus on hours with counter orders across all compared periods, retaining one adjacent hour on each side and intervening zero-sale hours. Empty data SHALL retain the full 24-hour axis. Historical main Hour trends and multi-day Hour aggregates SHALL trim to the same trading hours as their table. Current one-day Hour trends and their table SHALL use cutoff-aware business-day ordering and retain the ongoing interval and unfinished tail even when zero; leading trimming SHALL preserve one neighboring hour before activity in any compared period. Current and comparison series SHALL share the axis. Pointer/touch/keyboard inspection and up to four comparisons SHALL remain available in both themes.
+Hourly columns SHALL use solid theme-aware colors with rounded corners and gaps, without hatch patterns. A numbered legend and matching inspection markers SHALL identify the stable left-to-right series order. The lower hourly chart SHALL focus on hours with counter orders across all compared periods, retaining one adjacent hour on each side and intervening zero-sale hours. Empty data SHALL retain the full 24-hour axis. Historical main Hour trends and multi-day Hour aggregates SHALL trim to the same trading hours as their table. Current one-day Hour trends and their table SHALL use cutoff-aware business-day ordering and SHALL end one hour after the last hour any compared day sold in, or at the ongoing hour if that is later, rather than running on through closed hours to the cutoff; leading trimming SHALL preserve one neighboring hour before activity in any compared period. Current and comparison series SHALL share the axis. Pointer/touch/keyboard inspection and up to four comparisons SHALL remain available in both themes.
 
 #### Scenario: Four periods on a phone
 - **WHEN** the owner compares four periods with counter orders only between noon and 22:00
 - **THEN** the lower chart shows 11:00 through 23:00, clearly spaced solid series with numbered actual-range legends and exact details, without additional reads
 
-#### Scenario: Today's hourly tail crosses midnight
-- **WHEN** a current one-day Hour view under a 04:00 cutoff is opened at 02:45 Kolkata with the last sale at 23:00
-- **THEN** 00:00–03:00 follow 23:00 on the shared chart/table axis, completed midnight and 01:00 zeros remain plotted, and ongoing/future intervals remain visible on the axis without current-series dots
+#### Scenario: Today's hourly chart ends after the last sale
+- **WHEN** a current one-day Hour view is opened at 09:20 with the ongoing hour at 09:00, and yesterday's last sale was at 22:00
+- **THEN** the axis ends at 23:00, the hours after it are not drawn, and today's ongoing hour keeps its hollow point
 
 ### Requirement: Bounded database aggregates and low egress
 The client SHALL request one aggregate RPC per outlet/view/date/count change, with no raw bill/line records or identities. Metric, group and Chart/Table changes SHALL reuse the loaded snapshot. The Items chart SHALL read one subject's daily units and revenue as two arrays only when that subject is charted, never every dish's series at once, and SHALL not read a subject twice on one page. The database SHALL bound each window to 1–92 days and the count to 1–4. Items SHALL omit delivery/hours and collapse daily records into per-window summaries; Sales SHALL omit item/category payloads and skip bill-line reads. Hourly records SHALL be grouped by period/hour and bounded to 24 × count. No menu collector or telemetry schema SHALL be introduced.
@@ -170,3 +196,39 @@ Demo Analytics SHALL reconcile to shared captured bills, provide over three mont
 #### Scenario: Demo demonstrates an ongoing zero interval
 - **WHEN** a deterministic demo clock is within an hour with no recorded sales and preceding completed hours exist
 - **THEN** the line ends at the previous completed point, the ongoing hour has no filled or hollow point, completed zeros remain plotted, and table/CSV figures still reconcile to the shared bills
+
+### Requirement: A comparison chart says what the earlier periods came to
+Every trend that compares periods, on Sales and on Items, SHALL say beneath its headline what each earlier period came to, with its dates, and the time of day it runs to where it was cut: `vs ₹1,42,469 (3–9 Oct, until 8:58 am)`, or with several, `vs 448 (1–16 Sept) · 435 (1–16 Aug), each until 8:38 am`. With no earlier period it SHALL name the current period's dates. The headline's change, every dish's and category's change on Items, and the figures this line quotes SHALL use earlier windows cut at the same time of day where the current window ends today, as defined by `business-figures`. Descriptions of the measure (*Counter + delivery*, *Counter bills only*) and the Delivery coverage chip SHALL NOT appear in its place.
+
+#### Scenario: Items at 9:20 in the morning
+- **WHEN** the owner opens Items for the week ending today at 09:20
+- **THEN** the headline compares this week with the previous one up to 09:20 on its last day, and the line reads `vs N (3–9 Oct, until 9:20 am)`
+
+### Requirement: Axis labels fit without touching
+A trend's date or hour axis SHALL draw as many labels as fit between the plot's edges without touching, evenly spaced, centred on their points and kept inside the chart's frame.
+
+#### Scenario: A week of dates on a phone
+- **WHEN** a seven-day trend is shown on a 375px phone
+- **THEN** each date is drawn once, readable, with none running into its neighbour or past the chart's edge
+
+### Requirement: Each page reopens on its last date shortcut
+Items and Sales SHALL each remember, for the signed-in person on that browser and separately in demo mode, the last date shortcut (1d, 7d, 30d or Month) whose range was chosen there, and SHALL open on it whenever the address names no dates, counted from the outlet's current business date, with that shortcut's grouping. A choice on one page SHALL NOT change the other. Ranges chosen by hand or by stepping to an earlier period SHALL NOT change what is remembered. Where the remembered shortcut is not offered, its nearest one SHALL be used (Month for 30d, 30d for Month). With nothing remembered, or with storage unavailable, the page SHALL open on 7d. An address naming dates SHALL open on those dates.
+
+#### Scenario: Items on a day, Sales on a week
+- **WHEN** the owner taps 1d on Items, opens Sales, taps 7d there, and opens the app again the next day
+- **THEN** Items opens on that business day grouped by hour, and Sales opens on the seven days ending that day grouped by day
+
+#### Scenario: A hand-picked range is a one-off
+- **WHEN** the owner, with 1d remembered on Sales, picks 3–9 Oct by hand and later reopens Sales
+- **THEN** Sales opens on 1d
+
+#### Scenario: Another person on the same phone
+- **WHEN** a manager signs in on a phone where the owner remembered 30d on Items
+- **THEN** Items opens on 7d for the manager
+
+### Requirement: Each trend reopens as it was last read
+Items and Sales SHALL each remember, the same way as the date shortcut, whether the person last read the trend as Chart, Cumulative or Table, and the card SHALL open on it whenever the address names no view. With nothing remembered the card SHALL open as Chart. A choice on one page SHALL NOT change the other, and an address naming a view SHALL open on it.
+
+#### Scenario: Items as a table, Sales as a running total
+- **WHEN** the owner chooses Table on Items and Cumulative on Sales, then reopens each page from the navigation
+- **THEN** Items opens as the table and Sales as the running total

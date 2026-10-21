@@ -46,24 +46,37 @@ date at which the ledger has to consult a retired table to be complete.
 The reading SHALL carry a **revenue** section and a **drawer** section.
 
 Revenue SHALL show Cash and UPI derived from counter allocations, and each
-aggregator channel as a sourced reading with its gross, its commission and its
-net, each carrying its settlement state. A commission not yet determined SHALL
-read as not known yet and SHALL NOT read as nought.
+aggregator channel as a sourced reading with its sales before commission, its
+commission and what was received, each carrying its settlement state. The day's
+**revenue** SHALL be cash, UPI and each channel's sales before commission, as
+defined by `business-figures`. A commission not yet stated SHALL read as not
+known yet and SHALL NOT read as nought.
 
-The drawer section SHALL contain only cash movements. UPI, Swiggy and Zomato
-SHALL appear in revenue and SHALL move no drawer figure. A cash expense SHALL
-appear in both the expenses total and the drawer; a non-cash expense SHALL appear
-only in the expenses total.
+The day's expenses SHALL include, for each channel whose commission is stated, a
+**Delivery commission** line for that channel, derived on read, with no recorder
+and no edit or withdraw action. It SHALL count in the day's expenses total.
+
+The drawer section SHALL contain only cash movements. UPI, Swiggy and Zomato, and
+their commission, SHALL appear in revenue and expenses and SHALL move no drawer
+figure. A cash expense SHALL appear in both the expenses total and the drawer; a
+non-cash expense SHALL appear only in the expenses total.
 
 #### Scenario: A UPI expense does not move the drawer
 
 - **WHEN** a day carries a ₹900 cash expense and a ₹300 UPI expense
 - **THEN** the expenses total is ₹1,200 and the drawer falls by ₹900
 
-#### Scenario: An unsettled aggregator commission
+#### Scenario: A stated commission is a day's expense
 
-- **WHEN** a channel's commission for that day is undetermined
-- **THEN** the reading says it is not known yet and the month is presented as a ceiling
+- **WHEN** Zomato states ₹2,000 of sales and ₹1,400 received for a day
+- **THEN** revenue includes ₹2,000, the expenses carry a ₹600 Zomato commission
+  line, and the drawer does not move
+
+#### Scenario: An unstated aggregator commission
+
+- **WHEN** a channel's commission for that day is not yet stated
+- **THEN** the reading says it is not known yet, the day's revenue includes the
+  channel's sales, and no commission line appears
 
 ### Requirement: The drawer section is ordered by instant, not grouped by category
 
@@ -160,17 +173,22 @@ verify more than one day at a time.
 ### Requirement: The month reports what the month earned, spent and kept
 
 The ledger SHALL offer a month reading for one outlet, derived from the same
-sources as its days and storing no row of its own. It SHALL report:
+sources as its days and storing no row of its own. Its current month SHALL run
+through today's business date resolved through the outlet's own cutover. It SHALL
+report:
 
-- **revenue** — cash and UPI derived from bill allocations, and each aggregator
-  channel with its gross, its commission and its net;
-- **expenses** — grouped by category, with every line beneath its category
+- **revenue**: cash and UPI derived from bill allocations, and each aggregator
+  channel's sales before commission, with what each channel's days received
+  beneath;
+- **expenses**: grouped by category, with every line beneath its category
   carrying that line's business date, its note where it has one, and whether it
-  came out of the drawer;
-- **an operating profit estimate** — revenue received less everything recorded as
-  spent, with its basis stated on screen.
+  came out of the drawer, and with **Delivery commission** as a category of
+  derived lines, one per channel per date with a stated commission;
+- **an operating profit estimate**: revenue less expenses, with its basis stated
+  on screen.
 
-Every figure SHALL be integer paise. No figure on the month reading SHALL be
+Every figure SHALL be integer paise and SHALL equal what `business-figures`
+defines for the same outlet and dates. No figure on the month reading SHALL be
 presented as an input.
 
 The profit figure SHALL be an **operating** estimate and SHALL say so: cash out
@@ -179,47 +197,51 @@ the month reading so that such a purchase is findable without knowing its date.
 
 #### Scenario: A month of trading reads as a month
 
-- **WHEN** an outlet has traded for a full month with commissions settled
-- **THEN** the reading reports cash, UPI and each channel's net, the expenses by
-  category, and a profit figure naming its basis
+- **WHEN** an outlet has traded for a full month with commissions stated
+- **THEN** the reading reports cash, UPI and each channel's sales and received
+  amounts, the expenses by category including Delivery commission, and a profit
+  figure naming its basis
 
 #### Scenario: A large cash purchase stays outside the operating figure
 
 - **WHEN** a ₹40,000 freezer is paid from the drawer during the month
 - **THEN** it is listed on the month reading and the profit figure is unchanged by it
 
-### Requirement: Each aggregator day is netted at its own rate, and an undetermined day makes the month a ceiling
+#### Scenario: Today is in the month
 
-Each aggregator day SHALL be netted using the commission stored against **that
-day**, and the results added. A rate that changes mid-month SHALL therefore be
-correct on both sides of the change, and SHALL NOT be applied to days it did not
-govern.
+- **WHEN** the current month is opened at 15:00 on the 15th
+- **THEN** its figures include today's bills so far, and equal Overview's month to
+  date to the paisa
 
-Where a day's commission is undetermined, that day SHALL contribute **its gross**
-to the month's net, so the total states the most that can have arrived rather than
-less than certainly did. The month's commission total SHALL be derived as gross
-less net, so that a determined-only commission and a ceiling net cannot disagree.
+### Requirement: Each aggregator day's commission is its own expense, and an unstated one is named
 
-A month containing any undetermined day SHALL be presented as a ceiling on every
-figure that day reaches — the channel's net, the revenue total and the profit
-estimate — and SHALL state **how many** days are still waiting. A commission not
-yet determined SHALL NOT read as nought.
+Each aggregator day's commission SHALL be derived from **that day's** stated
+figures and then summed, so a rate that changes mid-month SHALL be correct on both
+sides of the change and SHALL NOT reach days it did not govern.
+
+A day whose commission is not yet stated SHALL contribute its sales to revenue
+and nothing to expenses. Where any day in the month is waiting, the month SHALL
+state **how many**, beside its profit, and that profit falls by their commission
+once stated. Revenue SHALL NOT be presented as a ceiling, because it no longer
+depends on the commission. A commission not yet stated SHALL NOT read as nought.
 
 #### Scenario: A renegotiated rate mid-month
 
 - **WHEN** a channel's commission rate differs across two halves of a month
-- **THEN** each day is netted at its own rate and neither rate reaches the other's days
+- **THEN** each day's commission is derived from that day's figures and neither
+  rate reaches the other's days
 
 #### Scenario: Three days still waiting
 
-- **WHEN** three days in the month carry an undetermined commission
-- **THEN** the revenue and profit read as ceilings, the reading says three days are
-  waiting, and those days contribute their gross
+- **WHEN** three days in the month carry a commission not yet stated
+- **THEN** revenue reads without qualification, the reading says three days'
+  delivery commission is not stated yet beside the profit, and those days add no
+  commission
 
-#### Scenario: A settled month states no ceiling
+#### Scenario: A settled month states nothing waiting
 
-- **WHEN** every day's commission in the month is determined
-- **THEN** no ceiling language appears and the figures read as final
+- **WHEN** every day's commission in the month is stated
+- **THEN** no waiting line appears and the figures read as final
 
 ### Requirement: A date with no recorded sales is named, and no cause is claimed
 
@@ -381,21 +403,13 @@ The month SHALL report the total discount given across its bills as its own
 section, and SHALL state that its revenue figures are net of it.
 
 The figure SHALL be reported for the month even where the month's other
-qualifications apply, and SHALL carry the same qualification as the revenue it
-sits beside where any of that revenue is a ceiling.
+qualifications apply.
 
 #### Scenario: A month running a discount
 
 - **WHEN** a month's bills carry discounts
 - **THEN** the month reports the total given away beside its revenue, and names
   the revenue as net of it
-
-#### Scenario: Revenue is already a ceiling
-
-- **WHEN** the month's revenue is qualified as a ceiling because a commission is
-  undetermined
-- **THEN** the discount figure carries the same qualification rather than reading
-  as settled
 
 #### Scenario: A month with no billed date
 
