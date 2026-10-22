@@ -7,6 +7,7 @@ import {
 } from '@/data-access/adapters'
 import type { Database, Tables } from '@/data-access/database.types'
 import { includes, rolesIncludedBy, STAFF_ROLES_BY_SENIORITY } from '@/data-access/role-includes'
+import { onRoleIncludes } from '@/change-gates/role-includes'
 
 /**
  * The session contract both modes implement — a real Supabase session (#4)
@@ -126,8 +127,14 @@ export function heldRoles(session: Session): Role[] {
 export function reachableRoles(session: Session): Role[] {
   const reachable = new Set(heldRoles(session))
   if (reachable.has('super_admin')) reachable.add('franchise_admin')
-  // A staff role reaches the surfaces of every role it includes: a Biller is staff.
-  for (const role of [...reachable]) for (const below of rolesIncludedBy(role)) reachable.add(below)
+  if (onRoleIncludes()) {
+    // A staff role reaches the surfaces of every role it includes: a Biller is staff.
+    for (const role of [...reachable])
+      for (const below of rolesIncludedBy(role)) reachable.add(below)
+    return ROLE_ORDER_BY_INCLUDES.filter((role) => reachable.has(role))
+  }
+  // roles-lint: allow the role-includes off path, as it ran before; removed when the gate retires
+  if (reachable.has('biller')) reachable.add('employee')
   return ROLE_ORDER.filter((role) => reachable.has(role))
 }
 
@@ -147,7 +154,12 @@ export function personalNavigationRoles(session: Session): Role[] {
 export function personalHeldRoles(session: Session): Role[] {
   const assigned = heldRoles(session)
   return personalNavigationRoles(session).filter(
-    (role) => assigned.includes(role) || assigned.some((held) => includes(held, role)),
+    (role) =>
+      assigned.includes(role) ||
+      (onRoleIncludes()
+        ? assigned.some((held) => includes(held, role))
+        : // roles-lint: allow the role-includes off path, as it ran before; removed when the gate retires
+          role === 'employee' && assigned.includes('biller')),
   )
 }
 
@@ -162,7 +174,15 @@ export function sessionOutlets(session: Session): string[] {
 }
 
 /** Most senior first. Orders shells and navigation; confers nothing. */
-const ROLE_ORDER: Role[] = ['super_admin', 'franchise_admin', ...STAFF_ROLES_BY_SENIORITY]
+// roles-lint: allow the role-includes off path, as it ran before; removed when the gate retires
+const ROLE_ORDER: Role[] = ['super_admin', 'franchise_admin', 'biller', 'employee']
+
+/** The same, read from which role includes which, with `role-includes` on. */
+const ROLE_ORDER_BY_INCLUDES: Role[] = [
+  'super_admin',
+  'franchise_admin',
+  ...STAFF_ROLES_BY_SENIORITY,
+]
 
 export type SessionMode = Session['mode']
 

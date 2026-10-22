@@ -2,6 +2,7 @@ import { ChevronDown, LogOut, RotateCcw, TriangleAlert, Unplug, Wifi, WifiOff } 
 import { useState, type ComponentType } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router'
 
+import { useChangeGate } from '@/change-gates/context'
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { getPartState, isRenderable } from '@/gates/registry'
 import { STAFF_ROLES_BY_SENIORITY } from '@/data-access/role-includes'
@@ -12,7 +13,11 @@ import { ROLE_LABELS, ROLE_SEGMENTS, type Role } from '@/session/session'
 import { useDemoConnectivity, type DemoConnectivityState } from './demo-connectivity'
 import { useDemoReset } from './demo-reset'
 
-const ROLES: Role[] = ['super_admin', 'franchise_admin', ...STAFF_ROLES_BY_SENIORITY]
+// roles-lint: allow the role-includes off path, as it ran before; removed when the gate retires
+const ROLES: Role[] = ['super_admin', 'franchise_admin', 'biller', 'employee']
+
+/** The roles the switcher offers with `role-includes` on: the same, read from which includes which. */
+const ROLES_BY_INCLUDES: Role[] = ['super_admin', 'franchise_admin', ...STAFF_ROLES_BY_SENIORITY]
 
 /**
  * The connectivity options, named for the state being entered rather than the
@@ -78,6 +83,7 @@ const CONNECTIVITY_STATES = Object.keys(CONNECTIVITY) as DemoConnectivityState[]
  * shorter.
  */
 export function DemoBanner() {
+  const roleIncludes = useChangeGate('role-includes')
   const session = useSession()
   const reset = useDemoReset()
   const connectivity = useDemoConnectivity()
@@ -201,7 +207,7 @@ export function DemoBanner() {
               }
               className="absolute inset-0 h-full w-full cursor-pointer appearance-none border-0 bg-transparent p-0 text-transparent outline-none"
             >
-              {ROLES.map((role) => (
+              {(roleIncludes ? ROLES_BY_INCLUDES : ROLES).map((role) => (
                 <option key={role} value={role} className="bg-surface text-content">
                   {ROLE_LABELS[role]}
                 </option>
@@ -215,7 +221,7 @@ export function DemoBanner() {
           </span>
 
           <span className="hidden items-center gap-1 sm:flex">
-            {ROLES.map((role) => (
+            {(roleIncludes ? ROLES_BY_INCLUDES : ROLES).map((role) => (
               <NavLink
                 key={role}
                 to={`/demo/${ROLE_SEGMENTS[role]}`}

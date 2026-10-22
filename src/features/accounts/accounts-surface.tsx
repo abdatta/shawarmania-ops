@@ -26,6 +26,8 @@ import {
   type AppRole,
   type RosterPerson,
 } from '@/data-access/adapters'
+import { useChangeGate } from '@/change-gates/context'
+import { STAFF_ROLES_BY_SENIORITY } from '@/data-access/role-includes'
 import { useSession } from '@/session/context'
 import { holdsRole, ROLE_LABELS, sessionOutletsFor } from '@/session/session'
 import { validateUsername, usernameErrorMessage } from '../../../shared/username'
@@ -50,7 +52,15 @@ import { AccountHandoverPanel } from './account-handover'
  * changes go through the privileged function.
  */
 
-const ROLE_ORDER: AppRole[] = ['super_admin', 'franchise_admin', ...STAFF_ROLES]
+// roles-lint: allow the role-includes off path, as it ran before; removed when the gate retires
+const ROLE_ORDER: AppRole[] = ['super_admin', 'franchise_admin', 'biller', 'employee']
+
+/** The roles on offer with `role-includes` on: the same, read from which includes which. */
+const ROLE_ORDER_BY_INCLUDES: AppRole[] = [
+  'super_admin',
+  'franchise_admin',
+  ...STAFF_ROLES_BY_SENIORITY,
+]
 
 /**
  * One listed person, and their account once the identities have said who they
@@ -81,7 +91,13 @@ type OrdinaryAssignment = Exclude<
   { role: 'super_admin' }
 > & { outletId: string; role: Exclude<AppRole, 'super_admin'> }
 
-const ORDINARY_ROLES: Exclude<AppRole, 'super_admin'>[] = ['franchise_admin', ...STAFF_ROLES]
+// roles-lint: allow the role-includes off path, as it ran before; removed when the gate retires
+const ORDINARY_ROLES: Exclude<AppRole, 'super_admin'>[] = ['franchise_admin', 'biller', 'employee']
+
+const ORDINARY_ROLES_BY_INCLUDES: Exclude<AppRole, 'super_admin'>[] = [
+  'franchise_admin',
+  ...STAFF_ROLES_BY_SENIORITY,
+]
 
 function todayInIndia() {
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -100,9 +116,18 @@ export function AccountsSurface() {
   const { accounts: adapter, outlets: outletsAdapter } = useAdapters()
 
   const isOwner = holdsRole(session, 'super_admin')
+  const roleIncludes = useChangeGate('role-includes')
   const assignableRoles = useMemo<AppRole[]>(
-    () => (isOwner ? ROLE_ORDER : [...STAFF_ROLES]),
-    [isOwner],
+    () =>
+      roleIncludes
+        ? isOwner
+          ? ROLE_ORDER_BY_INCLUDES
+          : [...STAFF_ROLES_BY_SENIORITY]
+        : isOwner
+          ? ROLE_ORDER
+          : // roles-lint: allow the role-includes off path, as it ran before; removed when the gate retires
+            ['biller', 'employee'],
+    [isOwner, roleIncludes],
   )
 
   // Two halves, read at once and shown as each lands (people-shows-names-first,
@@ -1147,7 +1172,14 @@ function EditPersonSheet({
   const [ownerAccess, setOwnerAccess] = useState(ownerAssignment !== null)
   const [ownerAccessConfirmed, setOwnerAccessConfirmed] = useState(false)
   const [accountEmail, setAccountEmail] = useState(account?.accountEmail ?? '')
-  const editableRoles = isOwner ? ORDINARY_ROLES : STAFF_ROLES
+  const roleIncludes = useChangeGate('role-includes')
+  const editableRoles = roleIncludes
+    ? isOwner
+      ? ORDINARY_ROLES_BY_INCLUDES
+      : STAFF_ROLES_BY_SENIORITY
+    : isOwner
+      ? ORDINARY_ROLES
+      : STAFF_ROLES
   const selectedOutletIds = new Set(assignments.map((assignment) => assignment.outletId))
 
   const addableOutlets = outlets.filter((outlet) => !selectedOutletIds.has(outlet.id))

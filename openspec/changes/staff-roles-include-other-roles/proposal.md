@@ -83,11 +83,14 @@ if the new checks are wrong anywhere, Off puts back the checks that ran
 yesterday. A row written under On is a row Off accepts, because the same people
 may write the same rows (round trip `none:`, design D7).
 
-**The app's own lists are not behind the gate.** Session reachability, Team's
-role choices, the demo's role switcher and the shell order read one map in
-`src/data-access/role-includes.ts`. Every answer they give is today's, proved by
-a unit test over every combination of roles a person can hold. A refactor that
-changes no answer has no behaviour to gate.
+**The app's own lists are behind the gate too** (owner, 2026-10-22). Which shell
+a person lands on, which surfaces a Biller also reaches, who counts as staff,
+Team's role choices, the demo's role switcher and the staff home run their old
+code, exactly as it was, with the gate off, and read one map in
+`src/data-access/role-includes.ts` with it on. That code is app-wide, the
+counter's shell included, so a mistake in it must be a switch away, not a
+Republish. Both states give every role today's answer, proved by a unit test
+over every combination of roles a person can hold, run once each way.
 
 ## Non-goals
 

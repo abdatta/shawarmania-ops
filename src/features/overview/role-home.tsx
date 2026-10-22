@@ -1,3 +1,4 @@
+import { useChangeGate } from '@/change-gates/context'
 import { isStaffRole } from '@/data-access/role-includes'
 import { CounterHandshakeCards } from '@/features/counter/counter-handshake-cards'
 import { useSession } from '@/session/context'
@@ -21,6 +22,7 @@ import { StaffHome } from './staff-home'
  */
 export function RoleHome() {
   const session = useSession()
+  const roleIncludes = useChangeGate('role-includes')
   return (
     <>
       <CounterHandshakeCards />
@@ -36,9 +38,12 @@ export function RoleHome() {
         <OutletsOverview />
       )}
       {session.role === 'biller' && session.mode === 'demo' && <CounterHome />}
-      {session.role !== null &&
-        isStaffRole(session.role) &&
-        !(session.role === 'biller' && session.mode === 'demo') && <StaffHome />}
+      {roleIncludes
+        ? session.role !== null &&
+          isStaffRole(session.role) &&
+          !(session.role === 'biller' && session.mode === 'demo') && <StaffHome />
+        : (session.role === 'employee' ||
+            (session.role === 'biller' && session.mode === 'real')) && <StaffHome />}
     </>
   )
 }
