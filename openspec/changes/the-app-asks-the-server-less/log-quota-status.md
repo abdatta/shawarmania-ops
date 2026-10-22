@@ -87,7 +87,15 @@ database and 402 responses, any of which stops the counter.
   whether "raise the level when needed, no history" is enough during an
   incident; whether off/min/max is enough or we need per-source filters;
   whether stopping ingest on Free while the project runs as usual would work;
-  and what the mock misses. Unanswered as of this entry.
+  and what the mock misses.
+- **2026-10-22**: we answered Kemal, approved by the owner,
+  [under his comment](https://github.com/supabase/supabase/discussions/51817#discussioncomment-19120777):
+  no history is fine if _min_ keeps errors (4xx/5xx, plus a slow-request
+  threshold); off/min/max is enough if preflights drop below _max_, per-source
+  levels nice but not essential; yes to stopping ingest on Free while the
+  project runs, provided going over never pauses it, makes it read-only or
+  returns 402s; and asked for per-source daily ingest on the usage page and the
+  setting on Free before enforcement.
 - **2026-10-22**: the support ticket is unchanged since Sam's hand-off on
   15 October; no person has written.
 - **2026-10-22**: production measured again, the 24 hours to 10:30 UTC, gate on:
@@ -103,8 +111,9 @@ database and 402 responses, any of which stops the counter.
 
 ## Open items
 
-- **Answer Kemal's four questions on #51817.** The most direct line into the
-  team building the setting; a reply is drafted for the owner's approval.
+- **Kemal's response on #51817** to our answers: the most direct line into the
+  team building the setting. Watch for whether it reaches the Free plan, and
+  when.
 - **leizerbeam's answer on #50925**: whether the verbosity control reaches the
   Free plan, and before enforcement. If three weeks pass with nothing, a short,
   friendly follow-up in the same sub-thread, approved by the owner first.
