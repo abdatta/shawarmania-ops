@@ -76,19 +76,49 @@ database and 402 responses, any of which stops the counter.
   the verbosity control would solve it for us on diarmidmackenzie's three
   conditions, with our numbers (96% `edge_logs`, ~1.5 GB a month after our
   ~30% cut, preflights ~9%) and a link to #51817.
+- **2026-10-16 to 22**: more Free and paid users joined #50925 with the same
+  numbers (90–98% `edge_logs`), asking for errors-only, sampling, and route or
+  method exclusion including preflights. No new word from leizerbeam.
+- **2026-10-22**: `kemaldotearth` (Kemal, who works on Supabase Studio and
+  its logs screens) replied on
+  [#51817](https://github.com/supabase/supabase/discussions/51817#discussioncomment-19117446)
+  with a video mock of a per-project log-ingest setting, *off / min / max*,
+  where switching off or to *min* keeps no history. He asked us four questions:
+  whether "raise the level when needed, no history" is enough during an
+  incident; whether off/min/max is enough or we need per-source filters;
+  whether stopping ingest on Free while the project runs as usual would work;
+  and what the mock misses. Unanswered as of this entry.
+- **2026-10-22**: the support ticket is unchanged since Sam's hand-off on
+  15 October; no person has written.
+- **2026-10-22**: production measured again, the 24 hours to 10:30 UTC, gate on:
+  28,911 gateway requests (92 MB of logs) against 30,162 (~88 MB) on 15
+  October, while orders rose from 54 to 79, so requests per order fell from
+  about 560 to about 370 (−35%). Daily volume is flat because trading grew: at
+  this pace, about 2.7 GB a month. The kitchen no longer reads its categories
+  or the gates; the counter still reads the gates about 545 times a day, in
+  step with its menu and shift re-reads, which points to the counter re-reading
+  everything each time it returns to the foreground (40 to 140 times an hour),
+  something `fewer-requests` does not touch. Two Windows counters share its
+  address.
 
 ## Open items
 
+- **Answer Kemal's four questions on #51817.** The most direct line into the
+  team building the setting; a reply is drafted for the owner's approval.
 - **leizerbeam's answer on #50925**: whether the verbosity control reaches the
   Free plan, and before enforcement. If three weeks pass with nothing, a short,
   friendly follow-up in the same sub-thread, approved by the owner first.
 - **A person on the support ticket.** Supabase owes us an answer to the two
   questions. Nudge politely in the same thread if two weeks pass with nothing.
-- **Measure `fewer-requests` in production.** On since 16 October, mid-cycle.
-  The daily *Log Ingestion per day* chart on Organization → Usage should fall
-  from about 70–80 MB to about 50 MB a day from 16 October; the first full cycle
-  with it on is 27 October to 27 November. The archive waits for that reading
-  (`tasks.md` 7.1).
+- **Measure `fewer-requests` in production.** On since 16 October. Per order
+  it works (−35% on 22 October), but busier trading keeps the day at about
+  90 MB. The first full cycle with it on is 27 October to 27 November; the
+  archive waits for that reading (`tasks.md` 7.1), and for one pull of the gate
+  (off and on), which has not been done.
+- **The counter's foreground re-reads.** Find out why the counter returns to the
+  foreground so often and whether each return needs the full menu, shift and
+  gates again. Investigate before changing anything: it is counter runtime, so
+  any change is a gated change.
 - **`cron.log_statement` off**: about 2% more. Production configuration and the
   owner's call, outside trading hours; the command is in `docs/OPERATIONS.md`.
 - **Decide by 31 December 2026**: stay on Free if Supabase ships a gateway
