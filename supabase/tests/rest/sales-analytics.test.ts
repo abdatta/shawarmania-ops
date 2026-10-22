@@ -128,11 +128,14 @@ describe('analytics HTTP authority and bounded projection', () => {
       name: 'Uncategorised',
     })
     expect(category.units).toHaveLength(60)
+    // The v2 series: each window's cut totals, and the instant they were cut at.
     expect(Object.keys(all).sort()).toEqual([
+      'cutAt',
       'from',
       'hourRevenue',
       'hourUnits',
       'revenue',
+      'totals',
       'units',
     ])
     expect(JSON.stringify(all)).not.toMatch(/customer|bill_id|ordered_at|item_name/)
