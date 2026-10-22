@@ -137,6 +137,17 @@ export function readMigrations(files) {
     }
     for (const statement of statements) {
       const code = statement.code.replace(/\s+/g, ' ').trim()
+      // A dependency cut by a later migration, as a retirement does for a gate
+      // that stays declared after its parent goes.
+      const cut =
+        /^delete from (?:public\.)?change_gate_dependencies where gate_key = '([^']+)' and depends_on = '([^']+)'$/i.exec(
+          code,
+        )
+      if (cut) {
+        const at = dependencies.findIndex((d) => d.gate === cut[1] && d.dependsOn === cut[2])
+        if (at >= 0) dependencies.splice(at, 1)
+        continue
+      }
       const insert =
         /^insert into (?:public\.)?(change_gates|change_gate_dependencies)\s*(?:\(([^)]*)\))?\s*(.*)$/i.exec(
           code,

@@ -386,9 +386,11 @@ expenses. **A past month is unchanged**, apart from the Fixed chip on its lines.
 
 ## D10. The gate
 
-One gate, `pro-rata-pnl` (*PR*), `dependsOn: ['one-revenue']`, on three toggle
-points: Overview's P&L tile, the Ledger's month (its P&L block and Fixed chips),
-and the Expenses page's Fixed chip. It counts toward no root-gate limit.
+One gate, `pro-rata-pnl` (*PR*), on three toggle points: Overview's P&L tile, the
+Ledger's month (its P&L block and Fixed chips), and the Expenses page's Fixed
+chip. It was declared `dependsOn: ['one-revenue']` and counted toward no root-gate
+limit, until `retire-one-revenue` (2026-10-22) kept One Revenue for good and cut
+the dependency.
 `retireBy` about eight weeks after it is first turned on.
 
 **The Fixed costs page and its attention source are not behind it.** They are a

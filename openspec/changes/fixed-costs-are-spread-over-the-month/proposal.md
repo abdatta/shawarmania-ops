@@ -212,15 +212,16 @@ both conditions of the clean-revert exception:
 
 The existing gate below continues to govern the separate Pro-rata P&L change.
 
-- **`pro-rata-pnl`** (*PR*), depends on **`one-revenue`**
+- **`pro-rata-pnl`** (*PR*), depends on nothing since `one-revenue` retired
   - **On:** Overview and the Ledger's current month show P&L (Pro-rata), which
     charges the unpaid share of this month's fixed costs up to today, beside P&L.
   - **Off:** Overview and the Ledger show one P&L that counts every cost on the
     date it was recorded.
 
-**It depends on `one-revenue`** because it is built on that change's revenue,
-expenses and month to date, and means nothing on the older ones. A dependent
-gate counts toward no root-gate limit.
+**It depended on `one-revenue`** because it is built on that change's revenue,
+expenses and month to date, and means nothing on the older ones. `retire-one-revenue`
+(2026-10-22) kept those figures for good and cut the dependency, so it is now a
+root gate.
 
 **Off is today, and what On saved outlives it.** The Fixed costs page and its
 Needs attention line are a new surface, held back by the surface registry rather
