@@ -64,14 +64,19 @@ It needs no demo round: nothing on any screen changes.
   migration's inserts.
 - [x] 4.2 `STAFF_ROLES`, `isStaffRole`, `highestRole` (unknown roles never
   land), `reachableRoles`, `personalHeldRoles`, both `ROLE_ORDER`s, Team's
-  choices, the demo's roles, the staff home and the billing mock's role type
-  derived from the map. `staff-roles.test.ts` now reads the original
-  `attendance_elsewhere(`, as its own message asks when the predicate moves.
+  choices, the demo's roles and the staff home read the map with the gate on,
+  and run their old code, restored verbatim, with it off (owner, 2026-10-22).
+  The billing mock's role type is now `AppRole`, a type with no runtime.
+  `staff-roles.test.ts` now reads the original `attendance_elsewhere(`, as its
+  own message asks when the predicate moves.
 - [x] 4.3 The toggle points: `onRoleIncludes()` in
-  `src/change-gates/role-includes.ts`; the five adapter calls choose `_v2` when
-  on. `supabase-adapters/role-includes.test.ts` covers both states with
-  `describeChangeGate`, and `e2e-auth/role-includes.spec.ts` the on state over
-  the real transport.
+  `src/change-gates/role-includes.ts` for the five adapter calls and the session
+  and seniority functions; `useChangeGate('role-includes')` in Team, the demo
+  banner and the staff home. `role-includes.test.ts` and
+  `supabase-adapters/role-includes.test.ts` cover both states with
+  `describeChangeGate`; a mutation check shows the two states run different
+  code; `e2e-auth/role-includes.spec.ts` covers the on state over the real
+  transport.
 
 ## 5. The guard
 
@@ -86,8 +91,13 @@ It needs no demo round: nothing on any screen changes.
   container belongs to a deleted worktree; read them from the Staging run.
 - [x] 6.2 `npm run format`, lint, `format:check`, both typechecks, `npm test`,
   `contrast`, `build`.
-- [ ] 6.3 Push to `stage` and read the Staging run: every suite, gates off and
-  on, the Edge-dependent suites included.
+- [x] 6.3 Push to `stage` and read the Staging run: every suite, gates off and
+  on, the Edge-dependent suites included. *Staging 39760734883 passed on
+  0e9a80d8, all 24 jobs, with the app side still ungated.*
+- [ ] 6.4 The app side behind the gate (4.2, 4.3), and the explicit read grants
+  (`20261101000001_staff_roles_have_explicit_grants.sql`, design *RLS and
+  authority*): the gates again, the database job, and a Staging run on that
+  commit.
 
 ## 7. Docs
 

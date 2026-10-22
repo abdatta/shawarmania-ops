@@ -185,20 +185,34 @@ to walk a branching map of roles that do not exist yet. `STAFF_ROLES`,
 `isStaffRole`, `highestRole` (a role that includes another is the more senior
 shell; roles on separate branches go by the map's order), `reachableRoles`,
 `personalHeldRoles`, both `ROLE_ORDER`s, Team's choices, the demo's roles and the
-staff home are derived from it.
+staff home read it **with the gate on**. With it off each runs the code it ran
+before this change, restored verbatim beside the new and marked `roles-lint:
+allow` until the gate retires.
+
+**The app side is gated too** (owner, 2026-10-22). The first build left it
+ungated, on the ground that a refactor changing no answer has no behaviour to
+gate. The owner asked otherwise: that code is app-wide, the counter's shell
+included, and an untested corner would then have no switch, only a Republish.
+`AGENTS.md` agrees: Off is the old code path left untouched, not rewritten to
+look the same.
 
 `src/data-access/role-includes.test.ts` keeps **frozen copies** of the functions
-these replaced and asserts every derived answer is theirs for every set of live
-assignments a person can hold at two outlets, owner or not; walks a branching
-map (Cook and Biller both include Waiter, Head cook includes both); and reads
-every migration's inserts into `staff_roles` and `staff_role_includes` and
-asserts they say what the map says. Not gated: it changes no answer.
+these replaced and, with `describeChangeGate`, asserts every derived answer is
+theirs in both states, for every set of live assignments a person can hold at
+two outlets, owner or not; walks a branching map (Cook and Biller both include
+Waiter, Head cook includes both); and reads every migration's inserts into
+`staff_roles` and `staff_role_includes` and asserts they say what the map says.
+A mutation check (the map emptied) fails the gate-on equivalence and leaves the
+gate-off one passing, so the two states run different code.
 
 **`role-includes`** (*RI*), root, `retireBy` 2026-11-18. Toggle points: the five
-adapter calls of D2 (`onRoleIncludes()` in `src/change-gates/role-includes.ts`,
-read from the page's frozen snapshot as the request counting reads
-`tablet-health`), and the ten twins in the database. `e2e-auth/role-includes.spec.ts`
-(`@cg-on:role-includes`) proves the app reads through a `_v2` with the gate on.
+adapter calls of D2 and the session and seniority functions
+(`onRoleIncludes()` in `src/change-gates/role-includes.ts`, read from the page's
+frozen snapshot as the request counting reads `tablet-health`); Team, the demo
+banner and the staff home (`useChangeGate('role-includes')`); and the ten twins
+in the database. `e2e-auth/role-includes.spec.ts` (`@cg-on:role-includes`)
+proves the app reads through a `_v2` with the gate on, and both browser suites
+run every screen with every gate off and on.
 
 **Round trip `none:`**: on and off admit the same people to write the same rows,
 so a row written under either is read the same by both. Nothing is queued: none
@@ -263,6 +277,20 @@ deactivated account. Both tables are readable by `authenticated` and writable by
 nobody, the owner included. `app_role_includes` returns false for
 `franchise_admin` and `super_admin`, tested, and neither can be written into the
 rows.
+
+**The read grants are explicit** (`20261101000001_staff_roles_have_explicit_grants.sql`).
+The first migration created the two tables with read policies for
+`authenticated` and revoked only the writes, so it relied on Supabase's default
+SELECT grant. From 30 October 2026 Supabase gives new tables in `public` no Data
+API grants, on existing projects and on every fresh schema (new projects,
+preview branches, a local `db reset`), so a fresh stack or a production deploy
+after that date would have answered *permission denied* to a signed-in read.
+Raised by the Supabase log-quota session on 2026-10-22. The fix is a second
+migration rather than an edit to the first, which had already migrated staging:
+select to `authenticated`, all to `service_role`, nothing to `anon`, as every
+table since `20260726000010_grants_hygiene.sql` grants. pgTAP asserts each grant,
+that a signed-in Employee reads the includes row, and that an anonymous caller
+reads nothing whether or not the old default grant is present.
 
 ## Offline
 

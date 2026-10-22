@@ -171,6 +171,56 @@ select throws_ok(
   'and no client adds a staff role');
 reset role;
 
+-- Who may read the two tables is granted explicitly, not left to Supabase's
+-- default grants, which new tables stop receiving on 30 October 2026
+-- (20261101000001_staff_roles_have_explicit_grants.sql).
+select ok(
+  has_table_privilege('authenticated', 'public.staff_roles', 'SELECT')
+  and has_table_privilege('authenticated', 'public.staff_role_includes', 'SELECT'),
+  'a signed-in client may read both tables');
+
+select ok(
+  not has_table_privilege('authenticated', 'public.staff_roles', 'INSERT')
+  and not has_table_privilege('authenticated', 'public.staff_roles', 'UPDATE')
+  and not has_table_privilege('authenticated', 'public.staff_roles', 'DELETE')
+  and not has_table_privilege('authenticated', 'public.staff_role_includes', 'INSERT')
+  and not has_table_privilege('authenticated', 'public.staff_role_includes', 'UPDATE')
+  and not has_table_privilege('authenticated', 'public.staff_role_includes', 'DELETE'),
+  'and may write neither');
+
+select ok(
+  has_table_privilege('service_role', 'public.staff_roles', 'SELECT')
+  and has_table_privilege('service_role', 'public.staff_role_includes', 'INSERT'),
+  'the service role is granted both, table by table');
+
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid);
+select is(
+  (select count(*)::int from public.staff_role_includes),
+  1,
+  'an Employee signed in reads the includes row');
+reset role;
+
+-- An anonymous caller holds no grant on a fresh schema after 30 October, and the
+-- old default grant before it; either way it must read nothing.
+create function pg_temp.anon_reads()
+returns integer language plpgsql as $$
+declare v_rows integer;
+begin
+  execute 'set local role anon';
+  begin
+    select (select count(*) from public.staff_roles)::int
+         + (select count(*) from public.staff_role_includes)::int
+      into v_rows;
+  exception when insufficient_privilege then
+    v_rows := 0;
+  end;
+  execute 'reset role';
+  return v_rows;
+end;
+$$;
+
+select is(pg_temp.anon_reads(), 0, 'an anonymous caller reads nothing from either table');
+
 -- ---------------------------------------------------------------------------
 -- 1. Policies: each twin alone admits what its original alone admits.
 
