@@ -212,5 +212,5 @@ object is new.
 - [x] 13.3 The Ledger's month: one *{Month} P&L* card (variant A); *Current
   profit* where the current month has fixed costs; the basis paragraphs behind
   the dotted label; *Estimated profit* gone.
-- [ ] 13.4 Unit and browser tests follow the new words; the quick gates; push to
+- [x] 13.4 Unit and browser tests follow the new words; the quick gates; push to
   `stage` and read the Staging run.
