@@ -287,17 +287,16 @@ packaging or whole-bill discounts.
 ### Delivery commission
 
 What a delivery platform kept on a day: its stated sales less what the outlet
-received, from the day the platform states it. With *One revenue* on it is an
-**expense**, listed under *Delivery commission* on that date, worked out from the
-channel's figures on every read and never typed in or stored as an expense row. A
-day not stated yet adds none and is counted as *waiting*. A charge on a day with
+received, from the day the platform states it. It is an **expense**, listed under
+*Delivery commission* on that date, worked out from the channel's figures on every
+read and never typed in or stored as an expense row. A day not stated yet adds none and is counted as *waiting*. A charge on a day with
 no orders (a negative receipt) is commission in full.
 
 ### Month to date
 
 The 1st of the current month through today's business date, resolved through the
 outlet's cutover by the server's clock: what Overview's month tiles, the Ledger's
-current month and Analytics' **Month** read with *One revenue* on.
+current month and Analytics' **Month** read.
 
 ### Comparison
 
