@@ -1,7 +1,8 @@
 import { Settings2 } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { FixedChip, ProRataCard } from '@/features/fixed-costs/ledger-fixed-costs'
+import { currentProRata, FixedChip, ProRataRows } from '@/features/fixed-costs/ledger-fixed-costs'
+import { monthName } from '@/features/fixed-costs/words'
 import { useFixedMarks, useOutletFixedCosts } from '@/features/fixed-costs/use-fixed-costs'
 
 import { PageHeader } from '@/components/layout/page-header'
@@ -743,6 +744,10 @@ function MonthReading({ month }: { month: LedgerStatementMonth }) {
   // only with `pro-rata-pnl` on, and built on One Revenue's figures.
   const fixed = useOutletFixedCosts(month.outletId, figures !== undefined)
   const marks = useFixedMarks(fixed)
+  const profitPaise = (figures ? figures.profitPaise : reading.profitPaise) ?? 0
+  // P&L (Pro-rata) and the fixed costs behind it: the current month only.
+  const proRata =
+    figures && fixed && figures.profitPaise !== null ? currentProRata(month.month, fixed) : null
 
   return (
     <div className="space-y-3">
@@ -1034,41 +1039,71 @@ function MonthReading({ month }: { month: LedgerStatementMonth }) {
       */}
       {!nothingSold && (
         <Card className="space-y-2" data-testid="month-profit">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="text-sm font-bold text-content">
-              {figures
-                ? 'Estimated profit'
-                : pending
-                  ? 'Estimated profit, at most'
-                  : 'Estimated profit'}
-            </span>
+          {/*
+            One card for the month's profit (owner, 2026-10-21, variant A of
+            three): the sum written out, and in the current month with fixed
+            costs, on to P&L (Pro-rata) and how far the month is from covering
+            them. The basis, which every profit figure must state
+            (`profit-estimates`), is a tap on the label: as paragraphs on the card
+            nobody read them.
+          */}
+          <h2 className="text-sm font-bold text-content">{monthName(month.month)} P&amp;L</h2>
+          <Row
+            label="Revenue"
+            paise={figures ? figures.revenuePaise : reading.netRevenuePaise}
+            testId="month-profit-revenue"
+          />
+          <Row
+            label="Expenses"
+            paise={-(figures ? figures.expensesPaise : reading.totalExpensesPaise)}
+            testId="month-profit-expenses"
+          />
+          <div className="flex flex-wrap items-baseline justify-between gap-2 border-t border-border pt-2">
+            <Explain
+              label="what this figure means"
+              className="text-sm font-bold text-content"
+              data-testid="month-profit-label"
+              explanation={
+                <>
+                  <strong data-testid="month-profit-basis">Cash basis operating figure.</strong>{' '}
+                  {figures
+                    ? 'Revenue less everything spent so far, delivery commission included.'
+                    : 'Revenue actually received, less everything recorded as spent.'}{' '}
+                  It answers whether this month&rsquo;s trading covered its running costs, and is
+                  what has happened so far, not a forecast.
+                  <span className="mt-2 block">
+                    Equipment and anything else outliving the month is not recorded as an expense,
+                    so it is not in here. Stock is not valued either.
+                  </span>
+                </>
+              }
+            >
+              {proRata ? 'Current profit' : !figures && pending ? 'P&L, at most' : 'P&L'}
+            </Explain>
             <Money
-              paise={(figures ? figures.profitPaise : reading.profitPaise) ?? 0}
-              display
+              paise={profitPaise}
+              display={!proRata}
+              className={proRata ? 'text-sm font-bold' : undefined}
               data-testid="month-profit-figure"
             />
           </div>
-          {/*
-            The basis, in words, beside the figure — required of every profit
-            figure in this app by `profit-estimates`, because cash basis and
-            consumption basis answer different questions and a blend is wrong.
-          */}
-          <p className="text-sm font-semibold text-content" data-testid="month-profit-basis">
-            Cash basis operating estimate
-          </p>
-          {figures ? (
-            <p className="text-xs text-content-muted">
-              Revenue less everything spent, delivery commission included. It answers whether this
-              month&rsquo;s trading covered its running costs.
-            </p>
-          ) : (
-            <p className="text-xs text-content-muted">
-              Revenue actually received, less everything recorded as spent. It answers whether this
-              month&rsquo;s trading covered its running costs.
-            </p>
+          {proRata && figures && (
+            <ProRataRows
+              pnlPaise={profitPaise}
+              proRata={proRata}
+              fixedCostsPath="fixed-costs"
+              search={`?outlet=${encodeURIComponent(month.outletId)}`}
+            />
           )}
+          {/*
+            What qualifies the figures goes beneath the sum, never through it:
+            between Current profit and the unpaid share it broke the arithmetic.
+          */}
           {figures && figures.waitingDays > 0 && (
-            <p className="text-xs text-content" data-testid="month-commission-waiting">
+            <p
+              className={cn('text-xs text-content', proRata && 'border-t border-border pt-2')}
+              data-testid="month-commission-waiting"
+            >
               <strong>
                 {figures.waitingDays === 1
                   ? '1 day’s delivery commission is not stated yet.'
@@ -1085,26 +1120,7 @@ function MonthReading({ month }: { month: LedgerStatementMonth }) {
             beside the sales figure reads the profit as final (D3).
           */}
           {missing > 0 && <NoSalesNote dates={reading.datesWithoutSales} where="profit" />}
-          <p className="text-xs text-content-muted">
-            <strong>An operating figure, not a full account of money out.</strong> Equipment and
-            anything else outliving the month is deliberately not recorded as an expense, so nothing
-            here accounts for it. Where such a purchase came out of the drawer it is recorded as a
-            spend, which keeps that count honest without entering this figure.
-          </p>
-          <p className="text-xs text-content-muted">
-            Stock is not valued here either, so there is no consumption-basis figure to offer.
-          </p>
         </Card>
-      )}
-
-      {figures && fixed && figures.profitPaise !== null && (
-        <ProRataCard
-          month={month.month}
-          pnlPaise={figures.profitPaise}
-          reading={fixed}
-          fixedCostsPath="fixed-costs"
-          search={`?outlet=${encodeURIComponent(month.outletId)}`}
-        />
       )}
 
       {/*

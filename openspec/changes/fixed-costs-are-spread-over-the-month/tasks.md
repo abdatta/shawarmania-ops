@@ -200,3 +200,17 @@ object is new.
   show P&L (Pro-rata) beside P&L, and past months P&L alone; only the owner and the
   outlet's manager reach any of it; and with the gate off every figure reads as
   it does today.
+
+## 13. Follow-up: Short or Ahead, and one P&L card (2026-10-21)
+
+- [x] 13.1 `aheadOfCoveringPaise` (P&L less still to pay) replaces
+  `shortOfCoveringPaise`; `coveredPercent` measures the same quantity; the shared
+  cases carry `aheadOfCoveringPaise`, an advance from last month among them.
+- [x] 13.2 Overview's tile: the margin beside the figure, measured to fit as today's
+  open orders are; *Expenses · Short* or *Ahead* beneath, gone once every fixed
+  cost of the month is paid.
+- [x] 13.3 The Ledger's month: one *{Month} P&L* card (variant A); *Current
+  profit* where the current month has fixed costs; the basis paragraphs behind
+  the dotted label; *Estimated profit* gone.
+- [ ] 13.4 Unit and browser tests follow the new words; the quick gates; push to
+  `stage` and read the Staging run.

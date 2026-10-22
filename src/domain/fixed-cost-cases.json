@@ -109,7 +109,7 @@
       "paidPaise": 0,
       "unpaidPaise": 18737419,
       "proRataPnlPaise": 199381,
-      "shortOfCoveringPaise": 13333200
+      "aheadOfCoveringPaise": -13333200
     },
     {
       "name": "a salary paid in full on the 20th charges nothing more",
@@ -119,7 +119,7 @@
       "paidPaise": 1000000,
       "unpaidPaise": 0,
       "proRataPnlPaise": 5000000,
-      "shortOfCoveringPaise": 0
+      "aheadOfCoveringPaise": 5000000
     },
     {
       "name": "an advance of 3,000 on the 10th leaves the rest of the share to date",
@@ -129,7 +129,7 @@
       "paidPaise": 300000,
       "unpaidPaise": 200000,
       "proRataPnlPaise": 4800000,
-      "shortOfCoveringPaise": 0
+      "aheadOfCoveringPaise": 4300000
     }
   ]
 }

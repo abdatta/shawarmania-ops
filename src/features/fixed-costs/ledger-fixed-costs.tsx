@@ -1,16 +1,17 @@
 import { CalendarClock } from 'lucide-react'
 import { Link } from 'react-router'
 
-import { Card } from '@/components/ui/card'
 import { Money } from '@/components/ui/money'
+import { Explain } from '@/components/ui/why'
 import type { FixedCostsReading } from '@/data-access/fixed-costs'
 import {
+  aheadOfCoveringPaise,
   coveredPercent,
-  shortOfCoveringPaise,
   fixedCostLabel,
   monthOf,
   proRataPnl,
   readProRata,
+  type ProRataReading,
 } from '@/domain/fixed-costs'
 
 import { monthName } from './words'
@@ -49,52 +50,85 @@ export function FixedChip({
 }
 
 /**
- * The current month's P&L (Pro-rata) on the Ledger (design D6, D9): P&L, the
- * unpaid share of this month's fixed costs owed so far, Pro-rata P&L with how
- * far through the month it is, then the month's fixed costs, how much of them
- * trading covers so far, and what is still to pay, then each fixed cost.
- *
- * Shown only for the current month, and only where it has a fixed cost: a past
+ * The current month's fixed costs read against P&L at the Ledger's `today`, or
+ * null where the month shown is not the current one or has no fixed cost: a past
  * month reads P&L from what was paid, and nothing else (owner, 2026-10-19).
  */
-export function ProRataCard({
-  month,
+export function currentProRata(month: string, reading: FixedCostsReading) {
+  if (monthOf(reading.today) !== `${month.slice(0, 7)}-01`) return null
+  const proRata = readProRata(reading.costs, reading.today)
+  return proRata.lines.length === 0 ? null : proRata
+}
+
+/**
+ * The rest of the month's one P&L card where the current month has fixed costs
+ * (design D6, D9, *Short or Ahead*): the unpaid share of this month's fixed costs
+ * owed so far, P&L (Pro-rata) as the card's headline, how far the month is Short
+ * of or Ahead of covering its fixed costs, then the month's fixed costs, how much
+ * of them is covered, what is left to pay, and each fixed cost.
+ */
+export function ProRataRows({
   pnlPaise,
-  reading,
+  proRata,
   fixedCostsPath,
   search = '',
 }: {
-  month: string
   pnlPaise: number
-  reading: FixedCostsReading
+  proRata: ProRataReading
   fixedCostsPath: string
   search?: string
 }) {
-  if (monthOf(reading.today) !== `${month.slice(0, 7)}-01`) return null
-  const proRata = readProRata(reading.costs, reading.today)
-  if (proRata.lines.length === 0) return null
   const figure = proRataPnl(pnlPaise, proRata)
   const covered = coveredPercent(pnlPaise, proRata)
-  const short = shortOfCoveringPaise(pnlPaise, proRata)
+  const ahead = aheadOfCoveringPaise(pnlPaise, proRata)
+  const name = monthName(proRata.month)
   return (
-    <Card className="space-y-2" data-testid="month-pro-rata">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-sm font-semibold text-content">P&amp;L</span>
-        <Money paise={pnlPaise} className="text-sm font-semibold" />
-      </div>
+    <div className="space-y-2" data-testid="month-pro-rata">
       <div className="flex items-baseline justify-between gap-2 text-sm text-content-muted">
         <span>Fixed costs owed so far, unpaid</span>
         <Money paise={-proRata.unpaidPaise} data-testid="month-pro-rata-unpaid" />
       </div>
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-t border-border pt-2">
-        <span className="text-sm font-bold text-content">P&amp;L (Pro-rata)</span>
+        <Explain
+          label="what P&L (Pro-rata) means"
+          className="text-sm font-bold text-content"
+          explanation={
+            <>
+              Current profit less the part of {name}&rsquo;s fixed costs owed up to today and not
+              yet paid. Once a fixed cost is paid, the payment is in Current profit and stops being
+              spread.
+            </>
+          }
+        >
+          P&amp;L (Pro-rata)
+        </Explain>
         <Money paise={figure} display data-testid="month-pro-rata-figure" />
       </div>
-      <p className="text-sm font-semibold text-content">
-        This month&rsquo;s fixed costs charged to today
-      </p>
+      {/*
+        The finish line beside the headline (owner, 2026-10-19, 2026-10-21): P&L
+        (Pro-rata) says how the month is going at this pace; this says how far it
+        is from covering the whole month's fixed costs, and then how far past.
+      */}
+      <div
+        className="flex items-baseline justify-between gap-2 text-sm"
+        data-testid="month-covering"
+      >
+        <Explain
+          label={`what ${ahead < 0 ? 'short' : 'ahead'} of covering means`}
+          className="text-content"
+          explanation={
+            <>
+              Current profit with all of {name}&rsquo;s fixed costs charged, paid or not. Short
+              until the month&rsquo;s trading covers them, Ahead after.
+            </>
+          }
+        >
+          {ahead < 0 ? 'Short' : 'Ahead'} of covering {name}
+        </Explain>
+        <Money paise={Math.abs(ahead)} className="font-semibold" />
+      </div>
 
-      <dl className="grid grid-cols-3 gap-2 pt-1">
+      <dl className="grid grid-cols-3 gap-2 border-t border-border pt-3">
         <div className="rounded-lg bg-surface-raised px-3 py-2">
           <dt className="text-xs text-content-muted">Fixed costs</dt>
           <dd className="text-sm font-semibold">
@@ -117,29 +151,15 @@ export function ProRataCard({
       <div
         className="h-2 overflow-hidden rounded-full bg-surface-raised"
         role="progressbar"
-        aria-label="Fixed costs covered by trading so far"
+        aria-label="Fixed costs covered so far"
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={covered}
       >
         <div className="h-full rounded-full bg-primary" style={{ width: `${covered}%` }} />
       </div>
-      {/*
-        The finish line beside the headline (owner, 2026-10-19): P&L (Pro-rata)
-        says how the month is going at this pace; this says how far its trading
-        is from covering the whole month's fixed costs. Gone once it covers them.
-      */}
-      {short > 0 && (
-        <div
-          className="flex items-baseline justify-between gap-2 text-sm"
-          data-testid="month-short-of-covering"
-        >
-          <span className="text-content">Short of covering {monthName(proRata.month)}</span>
-          <Money paise={short} className="font-semibold" />
-        </div>
-      )}
 
-      <ul className="space-y-1 pt-2" data-testid="month-fixed-costs">
+      <ul className="space-y-1 pt-1" data-testid="month-fixed-costs">
         {proRata.lines.map((line) => (
           <li key={line.id}>
             <Link
@@ -159,6 +179,6 @@ export function ProRataCard({
           </li>
         ))}
       </ul>
-    </Card>
+    </div>
   )
 }

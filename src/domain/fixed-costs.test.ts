@@ -6,6 +6,7 @@ import {
   balance,
   balanceState,
   coverage,
+  aheadOfCoveringPaise,
   coveredPercent,
   dailySpreadPaise,
   fixedCostLabel,
@@ -17,7 +18,6 @@ import {
   showsInDefault,
   proRataPnl,
   readProRata,
-  shortOfCoveringPaise,
   thisMonthStatus,
   unpaidEndedMonths,
   type FixedCostCategory,
@@ -280,7 +280,7 @@ describe('Pro-rata P&L, held to the shared cases', () => {
       const reading = readProRata([cost], c.today)
       expect(reading.unpaidPaise).toBe(c.unpaidPaise)
       expect(proRataPnl(c.pnlPaise, reading)).toBe(c.proRataPnlPaise)
-      expect(shortOfCoveringPaise(c.pnlPaise, reading)).toBe(c.shortOfCoveringPaise)
+      expect(aheadOfCoveringPaise(c.pnlPaise, reading)).toBe(c.aheadOfCoveringPaise)
     })
 
   it('says how far through the month it is', () => {
@@ -318,23 +318,31 @@ describe('Pro-rata P&L, held to the shared cases', () => {
     })
   })
 
-  it('covers the month’s fixed costs by what trading has earned, capped at 100%', () => {
+  it('covers the month’s fixed costs by P&L and what is paid, between 0 and 100%', () => {
     const reading = readProRata([salary({ monthlyPaise: 32_270_000 })], '2026-10-18')
     expect(coveredPercent(18_936_800, reading)).toBe(58)
     expect(coveredPercent(99_000_000, reading)).toBe(100)
     expect(coveredPercent(-5_000_000, reading)).toBe(0)
   })
 
-  it('is nothing once trading covers the month, and the whole month when it has earned nothing', () => {
+  it('is short by the month and any loss, and ahead once P&L passes what is still to pay', () => {
     const reading = readProRata([salary({ monthlyPaise: 32_270_000 })], '2026-10-18')
-    expect(shortOfCoveringPaise(99_000_000, reading)).toBe(0)
-    expect(shortOfCoveringPaise(-5_000_000, reading)).toBe(32_270_000)
+    expect(aheadOfCoveringPaise(35_000_000, reading)).toBe(2_730_000)
+    expect(aheadOfCoveringPaise(-5_000_000, reading)).toBe(-37_270_000)
+    expect(coveredPercent(32_270_000, reading)).toBe(100)
+    expect(aheadOfCoveringPaise(32_270_000, reading)).toBe(0)
+  })
+
+  it('does not charge again an advance paid last month', () => {
+    const cost = salary({ payments: [payment(2_000_000, '2026-10-15')] })
+    const reading = readProRata([cost], '2026-11-20')
+    expect(aheadOfCoveringPaise(5_000_000, reading)).toBe(5_000_000)
+    expect(coveredPercent(5_000_000, reading)).toBe(100)
   })
 
   it('adds back fixed-cost payments already in P&L when it measures what trading earned', () => {
     const cost = salary({ payments: [payment(1_000_000, '2026-10-10')] })
     const reading = readProRata([cost], '2026-10-18')
-    expect(reading.paidInMonthPaise).toBe(1_000_000)
     expect(coveredPercent(-500_000, reading)).toBe(50)
   })
 })

@@ -20,14 +20,23 @@ day or month SHALL offer P&L alone, from recorded expenses, and no P&L (Pro-rata
 SHALL be offered or stored for it. A current month with no active fixed cost SHALL
 offer P&L alone.
 
+**Beside P&L (Pro-rata), the current month SHALL say how far it is from
+covering its fixed costs**: P&L less every part of this month's fixed costs not
+yet covered by a payment, read as **Short** of covering the month below zero and
+**Ahead** from zero up. An advance paid in an earlier month covers this month and
+SHALL NOT be charged again. Once every fixed cost of the month is paid it equals
+P&L, and Overview MAY leave it out.
+
 The figure SHALL be computed from the promoted expense record and from bills and
 sourced aggregator channel days, and P&L (Pro-rata) additionally from the outlet's
 fixed costs. No notebook table SHALL appear in the chain, and the archived
 notebook rows SHALL remain unreachable.
 
 **The Ledger's month reading is the surface that carries these figures in
-full**, and it SHALL name each basis there. Overview's P&L SHALL be the same
-figures. A profit figure SHALL NOT appear anywhere that does not name its basis.
+full**, in one card, and each label there SHALL open its basis in words.
+Overview's P&L SHALL be the same figures. A profit figure SHALL NOT appear
+anywhere without its name, and SHALL NOT be called an estimate: the figures are
+what has happened so far, not a forecast.
 
 **An unstated commission is named, not presented as a ceiling.** While any
 channel-day in the period is waiting for its commission, the Ledger's month
@@ -56,7 +65,22 @@ beside the figure rather than only beside the revenue total.
 #### Scenario: The basis is named
 
 - **WHEN** any profit figure is shown
-- **THEN** it is labelled P&L or P&L (Pro-rata), with its basis in words beside it
+- **THEN** it is labelled P&L, Current profit or P&L (Pro-rata), and on the Ledger
+  its label opens its basis in words
+
+#### Scenario: Short, then Ahead
+
+- **WHEN** it is 18 October, P&L is ₹1,89,368 and ₹3,22,700 of this month's fixed
+  costs is unpaid
+- **THEN** the month is Short ₹1,33,332
+- **AND WHEN** P&L reaches ₹3,50,000 with the same costs unpaid
+- **THEN** it is Ahead ₹27,300
+
+#### Scenario: An advance paid last month is not charged again
+
+- **WHEN** a ₹10,000 salary for November was paid in October, and November's P&L
+  is ₹50,000 with no other fixed cost
+- **THEN** November is Ahead ₹50,000
 
 #### Scenario: P&L (Pro-rata) on the 18th
 

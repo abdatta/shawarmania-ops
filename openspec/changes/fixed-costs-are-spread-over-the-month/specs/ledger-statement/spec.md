@@ -2,15 +2,18 @@
 
 ### Requirement: The current month reads both P&Ls and the fixed costs behind them
 
-Where the outlet has a fixed cost active in the month shown, and the month shown
-is the current month, the Ledger's month reading SHALL show, in this order: P&L;
-the fixed costs owed so far and unpaid; P&L (Pro-rata); the month's fixed costs in full; how much of them the month's
-trading covers so far, as a percentage and a bar capped at 100%; how far that
-trading is short of covering the month's fixed costs in full, named for the
-month, until it covers them; and what is still to pay. It SHALL then list each fixed cost with its cost this month, what
-is paid and what is owed, each linking to that fixed cost's page.
+The month's profit SHALL read as one card, *{Month} P&L*: Revenue, Expenses, and
+P&L. Where the outlet has a fixed cost active in the month shown, and the month
+shown is the current month, P&L SHALL be called *Current profit* and the card
+SHALL go on, in this order: the fixed costs owed so far and unpaid; P&L
+(Pro-rata), as the card's headline; *Short of covering {Month}* or *Ahead of
+covering {Month}* (`profit-estimates`); the month's fixed costs in full; how much
+of them is covered so far, as a percentage and a bar capped at 100% that reaches
+100% when Short turns to Ahead; and what is left to pay. It SHALL then list each
+fixed cost with its cost this month, what is paid and what is owed, each linking
+to that fixed cost's page.
 
-A past month SHALL read as it does without fixed costs. The category breakdown
+A past month SHALL read Revenue, Expenses and P&L alone. The category breakdown
 SHALL keep every recorded expense, fixed-cost payments included, so that it adds
 up to recorded expenses in every month.
 
@@ -21,13 +24,16 @@ read alongside the month's existing read, not after it.
 
 - **WHEN** the owner opens the Ledger's October on 18 October with ₹3,22,700 of
   fixed costs set up and none paid, and P&L of ₹1,89,368
-- **THEN** it shows P&L, *Fixed costs owed so far, unpaid* ₹1,87,374, P&L (Pro-rata), *Fixed costs this month* ₹3,22,700, the covered percentage,
-  *Short of covering October* ₹1,33,332 and *Still to pay* ₹3,22,700, then each fixed cost
+- **THEN** one card shows Revenue, Expenses, *Current profit* ₹1,89,368, *Fixed
+  costs owed so far, unpaid* ₹1,87,374, P&L (Pro-rata), *Short of covering October*
+  ₹1,33,332, *Fixed costs* ₹3,22,700, *Covered* 58% and *Left to pay* ₹3,22,700,
+  then each fixed cost
 
 #### Scenario: Last month, after it ended
 
 - **WHEN** the owner opens September on 18 October
-- **THEN** it shows P&L and no P&L (Pro-rata), covered bar or fixed costs group
+- **THEN** it shows Revenue, Expenses and P&L, and no P&L (Pro-rata), Short or
+  Ahead, covered bar or fixed costs group
 
 ### Requirement: A fixed-cost payment reads as its fixed cost on the month's lines
 

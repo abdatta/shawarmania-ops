@@ -278,17 +278,16 @@ Kalyani Cafe's 18 October, had the placeholders been fixed costs instead: P&L
 ₹1,89,368; unpaid ₹3,22,700 × 18/31 = ₹1,87,374; P&L (Pro-rata) **₹1,994**. A case
 in the shared table.
 
-**Covered** = `max(0, revenue − expenses that are not fixed-cost payments −
-commission)` ÷ the month's fixed costs in full, capped at 100%: how much of what
-this month will cost in fixed costs its trading has earned so far. **Still to
-pay** = Σ max(0, cost(f, C) − covered(f)).
+**Still to pay** = Σ max(0, cost(f, C) − covered(f)).
 
-**Short of covering {Month}** = `max(0, the month's fixed costs in full −
-max(0, P&L + fixed-cost payments counted this month through today))`: the
-uncovered part of the quantity Covered measures, in integer paise
-(`shortOfCoveringPaise`). Kalyani Cafe's 18 October: ₹3,22,700 − ₹1,89,368 =
-**₹1,33,332**. It disappears once Covered reaches 100%, which the owner's
-less-text convention prefers to a line saying *Covered*.
+**Short or Ahead of covering {Month}** = `P&L − still to pay`
+(`aheadOfCoveringPaise`, 2026-10-21): P&L with every fixed cost of this month
+charged in full, *Short* below zero and *Ahead* from zero up. Kalyani Cafe's 18
+October: ₹1,89,368 − ₹3,22,700 = Short **₹1,33,332**. **Covered** measures the
+same quantity, `P&L + Σ covered(f)` over the month's fixed costs in full,
+between 0 and 100%, so the bar is full exactly when Short turns to Ahead. As
+first built, both measured trading against the month in full, which charged an
+advance paid last month a second time (*Short or Ahead*, below).
 
 **A month with no active fixed cost** shows P&L alone: no P&L (Pro-rata), no
 covered bar, no fixed costs group.
@@ -744,6 +743,43 @@ is paid, so the Paid tile gave way to **Per day**: this month's fixed costs, eac
 spread over the days it runs, for those running today (`dailySpreadPaise`), in
 whole rupees. It is the cost of a day, not what is still owed, so a payment does
 not change it; Kalyani Cafe's thirteen come to ₹8,770 in October.
+
+**2026-10-21, Short or Ahead.** The owner asked for a switch, outlet-wide,
+between Pro-rata and charging the whole month's fixed costs on the 1st, then
+replaced it with both at once: the full-month figure as a short second line,
+always there, so the gap to catch up is never out of sight. Shown a toggle's
+pros and cons (the two agree on the last day; month-ahead is deeply negative
+early whatever the trade, and unmoved by a festival week; pro-rata says how the
+pace is going), the owner kept Pro-rata as the headline.
+
+- **The figure** is P&L less every fixed cost of this month not yet covered:
+  `P&L − still to pay` (`aheadOfCoveringPaise`), shown as
+  **Short ₹Y** below zero and **Ahead ₹Y** from zero up. An advance paid last
+  month covers this month and was charged to last month, so it is not charged
+  again. *Short of covering*, as first built, measured trading against the
+  month's costs in full and so charged an advance twice; it and **Covered** now
+  measure the same quantity, `P&L + covered` over the month's costs, so the bar
+  reaches 100% exactly when Short turns to Ahead. A month trading at a loss is
+  short by the loss as well.
+- **The words.** *Due* was refused: it is what is owed, a positive amount that
+  shrinks, while this is a profit; *Due −₹1.3L* reads as money owed to the shop.
+  *All-in* did not read to the owner. **Short**, from the Ledger's *Short of
+  covering*, was chosen as the worry it should be; **Ahead** is its positive,
+  over *Over* (the drawer's short and over), *Clear* (reads as a button) and
+  *Surplus*.
+- **Overview's tile**: *{Month} P&L (Pro-rata)*, the figure with its margin
+  beside it as the open orders sit beside today's revenue, and *Expenses ₹X ·
+  Short ₹Y* beneath, in the tile's short figures. Short or Ahead goes once every
+  fixed cost of the month is paid, when it equals the figure. An outlet with no
+  fixed cost keeps the tile as it was.
+- **The Ledger's one P&L card** (variant A of three shown in the demo, owner's
+  pick): *{Month} P&L*, Revenue, Expenses, then **P&L**, or **Current profit**
+  where the current month has fixed costs, then *Fixed costs owed so far,
+  unpaid*, **P&L (Pro-rata)** as the headline, *Short* or *Ahead of covering
+  {Month}*, the three tiles, the bar and each fixed cost. *Estimated profit* read
+  as a forecast to the owner, so it is gone. The basis paragraphs, which nobody
+  read, sit behind the dotted label; the waiting-commission and unbilled-dates
+  notes stay on the card, since they change the figure.
 
 ## Built live (§7–§10), 2026-10-20
 

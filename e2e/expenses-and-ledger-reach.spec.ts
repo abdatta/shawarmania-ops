@@ -138,11 +138,13 @@ for (const segment of ['owner', 'admin'] as const) {
 
     await page.getByRole('button', { name: 'The month' }).click()
 
-    // Three cards, and the basis named on the third — `profit-estimates`
+    // Three cards, and the basis a tap on the third's label — `profit-estimates`
     // requires that of every profit figure in this app.
     await expect(page.getByTestId('month-revenue')).toBeVisible()
     await expect(page.getByTestId('month-expenses')).toBeVisible()
+    await page.getByTestId('month-profit-label').click()
     await expect(page.getByTestId('month-profit-basis')).toHaveText(/cash basis operating/i)
+    await page.getByTestId('explain-close').click()
 
     // The thirty-one drawer rows are gone, replaced by one line.
     await expect(page.getByTestId('month-drawer-summary')).toBeVisible()

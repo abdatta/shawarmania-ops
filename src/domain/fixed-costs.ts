@@ -543,15 +543,12 @@ export interface ProRataReading {
   monthPaise: number
   unpaidPaise: number
   stillToPayPaise: number
-  /** Fixed-cost payments counted this month through today: inside recorded expenses. */
-  paidInMonthPaise: number
 }
 
 /** The current month's fixed costs read at `today`, the outlet's business date. */
 export function readProRata(costs: readonly FixedCostFacts[], today: string): ProRataReading {
   const month = monthOf(today)
   const lines: ProRataLine[] = []
-  let paidInMonthPaise = 0
   for (const cost of costs) {
     const active = activeDays(cost, month)
     if (active.count === 0) continue
@@ -559,9 +556,6 @@ export function readProRata(costs: readonly FixedCostFacts[], today: string): Pr
     const elapsed = daysBetween(active.first, minDate(today, active.last))
     const spreadPaise = Math.floor((costPaise * elapsed) / active.count)
     const coveredPaise = coverage(cost, month, today).months.at(-1)?.coveredPaise ?? 0
-    for (const payment of cost.payments)
-      if (payment.countsIn >= month && payment.countsIn <= today)
-        paidInMonthPaise += assertPaise(payment.amountPaise)
     lines.push({
       id: cost.id,
       name: cost.name,
@@ -583,7 +577,6 @@ export function readProRata(costs: readonly FixedCostFacts[], today: string): Pr
     monthPaise: sum('costPaise'),
     unpaidPaise: sum('unpaidPaise'),
     stillToPayPaise: sum('stillToPayPaise'),
-    paidInMonthPaise,
   }
 }
 
@@ -610,25 +603,27 @@ export function proRataPnl(pnlPaise: number, reading: ProRataReading): number {
 }
 
 /**
- * How much of the month's fixed costs its trading covers so far, in whole
- * percent, capped at 100: what is left of revenue after every cost that is not
- * a fixed-cost payment, over the month's fixed costs in full.
+ * How much of the month's fixed costs is covered so far, in whole percent,
+ * between 0 and 100: P&L plus what payments have covered of this month, over
+ * the month's fixed costs in full. It reaches 100 exactly when
+ * `aheadOfCoveringPaise` reaches zero.
  */
 export function coveredPercent(pnlPaise: number, reading: ProRataReading): number {
   if (reading.monthPaise <= 0) return 100
-  const earned = Math.max(0, assertPaise(pnlPaise) + reading.paidInMonthPaise)
-  return Math.min(100, Math.floor((earned * 100) / reading.monthPaise))
+  const covered = assertPaise(pnlPaise) + reading.monthPaise - reading.stillToPayPaise
+  return Math.min(100, Math.max(0, Math.floor((covered * 100) / reading.monthPaise)))
 }
 
 /**
- * How far the month's trading so far is from covering its fixed costs in full:
- * the uncovered part of the same quantity `coveredPercent` measures, in paise,
- * never below zero. Pro-rata P&L answers "are we making money at this pace";
- * this answers "how far are we from covering the month" (owner, 2026-10-19).
+ * P&L with every fixed cost of this month charged in full: P&L less what is
+ * still to pay of them. Below zero the month is **Short** of covering its fixed
+ * costs by that much, from zero up it is **Ahead** (owner, 2026-10-21).
+ * Pro-rata P&L answers "are we making money at this pace"; this answers "how
+ * far are we from covering the month". An advance paid last month covers this
+ * month and was charged to last month, so it is not charged again.
  */
-export function shortOfCoveringPaise(pnlPaise: number, reading: ProRataReading): number {
-  const earned = Math.max(0, assertPaise(pnlPaise) + reading.paidInMonthPaise)
-  return Math.max(0, reading.monthPaise - earned)
+export function aheadOfCoveringPaise(pnlPaise: number, reading: ProRataReading): number {
+  return assertPaise(pnlPaise) - reading.stillToPayPaise
 }
 
 /** *Nayan (Salary)*, or *Rent* where the name and the category are one word. */

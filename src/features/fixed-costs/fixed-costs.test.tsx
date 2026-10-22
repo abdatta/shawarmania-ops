@@ -29,7 +29,7 @@ import { SessionContext } from '@/session/context'
 import { deriveSessionScope, type Session } from '@/session/session'
 import { ChangeGatesForTest, describeChangeGate } from '@/test/change-gates'
 import { FixedCostPage, FixedCostsSurface } from './fixed-costs-surface'
-import { ProRataCard } from './ledger-fixed-costs'
+import { currentProRata, ProRataRows } from './ledger-fixed-costs'
 import { overdueTone, overdueWords, shortMonths } from './words'
 import { NeedsAttention } from '@/features/attention/needs-attention'
 
@@ -131,6 +131,11 @@ describeChangeGate('pro-rata-pnl', (on) => {
       // ₹1,89,806 less 18/31 of ₹3,22,700 (₹1,87,374.19) is ₹2,431.81.
       expect(profit).toHaveTextContent('₹2,431')
       expect(within(card).getByTestId(`pro-rata-expenses-${KAL}`)).toHaveTextContent('₹6.6L')
+      // The margin beside the figure, and ₹1,89,806 less all ₹3,22,700 beneath it.
+      expect(within(card).getByTestId(`margin-${KAL}`)).toHaveTextContent('0.4%')
+      expect(within(card).getByTestId(`covering-${KAL}`).parentElement).toHaveTextContent(
+        /· Short ₹1\.3L$/,
+      )
     } else {
       expect(within(card).getByText('October P&L · est.')).toBeInTheDocument()
       expect(profit).toHaveTextContent('₹1,89,806')
@@ -298,7 +303,7 @@ it('asks why a payment differs from what was due, and makes Other say it', async
   expect(expense?.amount_paise).toBe(100_000)
 })
 
-it('names how far the month is from covering its fixed costs, and drops the line once covered', () => {
+it('says how far the month is short of covering its fixed costs, then how far ahead', () => {
   const reading = {
     today: '2026-10-18',
     costs: [
@@ -315,20 +320,29 @@ it('names how far the month is from covering its fixed costs, and drops the line
       },
     ],
   }
+  const proRata = currentProRata('2026-10', reading)!
   const { rerender } = render(
     <MemoryRouter>
-      <ProRataCard month="2026-10" pnlPaise={18_936_800} reading={reading} fixedCostsPath="x" />
+      <ProRataRows pnlPaise={18_936_800} proRata={proRata} fixedCostsPath="x" />
     </MemoryRouter>,
   )
-  expect(screen.getByTestId('month-short-of-covering')).toHaveTextContent(
-    'Short of covering October₹1,33,332',
+  expect(screen.getByTestId('month-covering')).toHaveTextContent(
+    'Short of covering October, explain: what short of covering means₹1,33,332',
   )
+  expect(screen.getByTestId('month-pro-rata-covered')).toHaveTextContent('58%')
   rerender(
     <MemoryRouter>
-      <ProRataCard month="2026-10" pnlPaise={40_000_000} reading={reading} fixedCostsPath="x" />
+      <ProRataRows pnlPaise={35_000_000} proRata={proRata} fixedCostsPath="x" />
     </MemoryRouter>,
   )
-  expect(screen.queryByTestId('month-short-of-covering')).toBeNull()
+  expect(screen.getByTestId('month-covering')).toHaveTextContent(
+    'Ahead of covering October, explain: what ahead of covering means₹27,300',
+  )
+  expect(screen.getByTestId('month-pro-rata-covered')).toHaveTextContent('100%')
+})
+
+it('reads no fixed costs for a month that is not the current one', () => {
+  expect(currentProRata('2026-09', { today: '2026-10-18', costs: [] })).toBeNull()
 })
 
 it('edits every field of a fixed cost from the title row', async () => {

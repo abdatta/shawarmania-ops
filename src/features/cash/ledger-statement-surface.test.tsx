@@ -398,11 +398,16 @@ describe('the month reports what it earned, spent and kept', () => {
     expect(screen.getByTestId('month-profit')).toBeInTheDocument()
   })
 
-  it('names the basis beside the profit figure', async () => {
+  it('names the profit figure P&L, and its label opens the basis', async () => {
     await renderMonth(august)
 
-    await waitFor(() => expect(screen.getByTestId('month-profit-basis')).toBeInTheDocument())
-    expect(screen.getByTestId('month-profit-basis')).toHaveTextContent(/cash basis operating/i)
+    const label = await screen.findByTestId('month-profit-label')
+    expect(label).toHaveTextContent(/^P&L/)
+    expect(screen.getByTestId('month-profit')).not.toHaveTextContent(/estimated/i)
+    await userEvent.setup().click(label)
+    expect(await screen.findByTestId('month-profit-basis')).toHaveTextContent(
+      /cash basis operating/i,
+    )
   })
 
   it('groups expenses by category with every line beneath', async () => {
@@ -446,7 +451,7 @@ describe('the month says how far its figures can be trusted', () => {
       /2 days are still waiting for their commission/i,
     )
     expect(screen.getByTestId('month-revenue')).toHaveTextContent(/revenue received, at most/i)
-    expect(screen.getByTestId('month-profit')).toHaveTextContent(/estimated profit, at most/i)
+    expect(screen.getByTestId('month-profit-label')).toHaveTextContent(/^P&L, at most/i)
   })
 })
 

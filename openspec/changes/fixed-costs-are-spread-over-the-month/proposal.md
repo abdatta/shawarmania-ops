@@ -150,28 +150,31 @@ where each one is a tap from Pay. It clears when the balance is paid, or dropped
   and lands there when paid; until then it is under Needs attention.
 - When every fixed cost of the month is paid, the two figures are equal.
 
-**The Ledger's current month** reads:
+**The Ledger's current month** reads as one card (owner, 2026-10-21):
 
 ```
+October P&L
 Revenue                                ₹6,65,500
 Expenses                              −₹4,76,100
-P&L                                    ₹1,89,400
-
+Current profit                         ₹1,89,400
 Fixed costs owed so far, unpaid       −₹1,87,400
 P&L (Pro-rata)                           ₹2,000
+Short of covering October          ₹1,33,300
 
-Fixed costs this month   ₹3,22,700
-Covered                  59%     ▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░
-Short of covering October          ₹1,33,332
-Still to pay             ₹3,22,700
+Fixed costs ₹3,22,700 · Covered 58% · Left to pay ₹3,22,700
+▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░
 ```
 
 followed by each fixed cost with its month's cost, what is paid and what is
-owed, linking to its page. A past month reads P&L only, as today.
+owed, linking to its page. *Short* turns to *Ahead of covering October* once the
+month's trading covers its fixed costs. A past month reads Revenue, Expenses
+and P&L in the same card.
 
-**Overview's P&L tile** reads *October P&L (Pro-rata)*, the figure, and beneath
-it the line it has today, *Expenses ₹X · margin*, with the unpaid share of fixed
-costs among the expenses so that the two still add up (owner, 2026-10-19). An outlet with no fixed cost this month shows P&L alone, as today.
+**Overview's P&L tile** reads *October P&L (Pro-rata)*, the figure with its
+margin beside it, and beneath it *Expenses ₹X · Short ₹Y*, with the unpaid share
+of fixed costs among the expenses so that the two still add up (owner,
+2026-10-19, 2026-10-21). An outlet with no fixed cost this month shows P&L alone,
+as today.
 
 ## Change gate
 
@@ -187,6 +190,25 @@ This follow-up meets both conditions of the clean-revert exception in
   the owner and manager's Fixed costs page. It adds no requests or database
   writes and changes no shared component, app-wide code or table read by the
   counter or kitchen. Recovery can use a revert through stage, CI and Promote.
+
+**No gate: Short or Ahead, and one P&L card on the Ledger (2026-10-21).** The
+owner asked for the full-month view beside Pro-rata, not a switch between them,
+and for the Ledger's two profit cards to become one (design, *Short or Ahead*).
+Overview's P&L tile puts the margin beside its figure and reads *Expenses ₹X ·
+Short ₹Y* or *Ahead ₹Y* beneath it; the Ledger's month reads as one card,
+*{Month} P&L*: Revenue, Expenses, P&L, and in the current month with fixed costs
+*Current profit*, the unpaid share, P&L (Pro-rata), *Short* or *Ahead of covering
+{Month}*, and the fixed costs. *Estimated profit* is gone everywhere. It meets
+both conditions of the clean-revert exception:
+
+- **The revert is clean.** Every figure is derived on the screen from reads the
+  pages already make. It changes no stored data, outbox commands, browser
+  storage, database function or Edge Function; reverting restores the two cards
+  and the old tile with nothing for the old build to reconcile.
+- **It cannot reach the live counter or kitchen.** Overview's outlet cards and
+  the Ledger are owner and manager screens. It adds no request or write and
+  changes no shared component, app-wide code or table the counter or kitchen
+  reads. Recovery can use a revert through stage, CI and Promote.
 
 The existing gate below continues to govern the separate Pro-rata P&L change.
 

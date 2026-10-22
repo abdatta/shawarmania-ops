@@ -31,7 +31,7 @@ import { useChangeGate } from '@/change-gates/context'
 import { useAdapters, type Tables } from '@/data-access'
 import { formatPaise, resolveBusinessDate } from '@/domain'
 import { outletPresence, overviewPeriod, revenueChange } from '@/domain/overview'
-import { proRataPnl } from '@/domain/fixed-costs'
+import { aheadOfCoveringPaise, proRataPnl } from '@/domain/fixed-costs'
 import { NeedsAttention } from '@/features/attention/needs-attention'
 import { useOnForeground } from '@/features/attention/attention'
 import { useSession } from '@/session/context'
@@ -454,6 +454,18 @@ function OneRevenueCard({ outlet }: { outlet: Tables<'outlets'> }) {
   const proRata =
     fixedCosts && m && m.profitPaise !== null ? proRataPnl(m.profitPaise, fixedCosts) : null
   const shownProfit = proRata ?? m?.profitPaise ?? null
+  const covering =
+    fixedCosts && m && m.profitPaise !== null ? aheadOfCoveringPaise(m.profitPaise, fixedCosts) : 0
+  const profitIcon =
+    shownProfit === null
+      ? ChartPie
+      : shownProfit > 0
+        ? TrendingUp
+        : shownProfit < 0
+          ? TrendingDown
+          : Minus
+  const profitTone: Tone =
+    shownProfit === null || shownProfit === 0 ? 'primary' : shownProfit > 0 ? 'success' : 'danger'
   return (
     <Card
       className="overflow-hidden bg-gradient-to-br from-surface-raised/30 to-surface !px-3 !py-0"
@@ -503,10 +515,16 @@ function OneRevenueCard({ outlet }: { outlet: Tables<'outlets'> }) {
           {sales.value && (
             <>
               {sales.value.openPaise > 0 ? (
-                <TodayValue
-                  outletId={outlet.id}
-                  totalPaise={todayTotal}
-                  openPaise={sales.value.openPaise}
+                <ValueBeside
+                  paise={todayTotal}
+                  testId={`sales-${outlet.id}`}
+                  beside={formatPaise(
+                    sales.value.openPaise - (sales.value.openPaise % 100),
+                  ).replace(/\.\d{2}$/, '')}
+                  besideTitle={`Open orders not yet paid ${formatPaise(sales.value.openPaise)}`}
+                  besideTestId={`open-${outlet.id}`}
+                  icon={Banknote}
+                  tone="primary"
                 />
               ) : (
                 <MetricValue icon={Banknote} tone="primary">
@@ -626,43 +644,50 @@ function OneRevenueCard({ outlet }: { outlet: Tables<'outlets'> }) {
         >
           {m && (
             <>
-              <MetricValue
-                icon={
-                  shownProfit === null
-                    ? ChartPie
-                    : shownProfit > 0
-                      ? TrendingUp
-                      : shownProfit < 0
-                        ? TrendingDown
-                        : Minus
-                }
-                tone={
-                  shownProfit === null || shownProfit === 0
-                    ? 'primary'
-                    : shownProfit > 0
-                      ? 'success'
-                      : 'danger'
-                }
-              >
-                {shownProfit === null ? (
-                  <p className="text-sm leading-7">No sales recorded</p>
-                ) : (
-                  <OverviewMoney paise={shownProfit} data-testid={`profit-${outlet.id}`} />
-                )}
-              </MetricValue>
+              {proRata !== null && m.revenuePaise > 0 ? (
+                /*
+                  The margin beside the figure it is the margin of, as today's
+                  open orders sit beside its revenue (owner, 2026-10-21).
+                */
+                <ValueBeside
+                  paise={proRata}
+                  testId={`profit-${outlet.id}`}
+                  beside={`${((proRata / m.revenuePaise) * 100).toFixed(1)}%`}
+                  besideTitle="Operating margin"
+                  besideTestId={`margin-${outlet.id}`}
+                  icon={profitIcon}
+                  tone={profitTone}
+                />
+              ) : (
+                <MetricValue icon={profitIcon} tone={profitTone}>
+                  {shownProfit === null ? (
+                    <p className="text-sm leading-7">No sales recorded</p>
+                  ) : (
+                    <OverviewMoney paise={shownProfit} data-testid={`profit-${outlet.id}`} />
+                  )}
+                </MetricValue>
+              )}
               {proRata !== null && fixedCosts && m.profitPaise !== null ? (
+                /*
+                  Expenses, with the unpaid share so they add up to the figure,
+                  then how far the month is Short of covering all of its fixed
+                  costs, or Ahead (owner, 2026-10-21). Gone once every fixed cost
+                  of the month is paid, when it equals the figure.
+                */
                 <Subtext
-                  title={`Expenses ${formatPaise(m.expensesPaise + fixedCosts.unpaidPaise)}, of which fixed costs owed to date and unpaid ${formatPaise(fixedCosts.unpaidPaise)} · Percentage is operating margin`}
+                  fit
+                  title={`Expenses ${formatPaise(m.expensesPaise + fixedCosts.unpaidPaise)}, of which fixed costs owed to date and unpaid ${formatPaise(fixedCosts.unpaidPaise)}${fixedCosts.stillToPayPaise > 0 ? ` · ${covering < 0 ? 'Short' : 'Ahead'} of covering ${monthName}'s fixed costs ${formatPaise(Math.abs(covering))}` : ''}`}
                 >
                   Expenses{' '}
                   <span data-testid={`pro-rata-expenses-${outlet.id}`}>
                     <SupportingMoney paise={m.expensesPaise + fixedCosts.unpaidPaise} />
                   </span>
-                  {m.revenuePaise > 0 && (
+                  {fixedCosts.stillToPayPaise > 0 && (
                     <>
                       <span> · </span>
-                      <span className="font-bold">
-                        {((proRata / m.revenuePaise) * 100).toFixed(1)}%
+                      {covering < 0 ? 'Short' : 'Ahead'}{' '}
+                      <span data-testid={`covering-${outlet.id}`}>
+                        <SupportingMoney paise={Math.abs(covering)} />
                       </span>
                     </>
                   )}
@@ -691,10 +716,10 @@ function OneRevenueCard({ outlet }: { outlet: Tables<'outlets'> }) {
 }
 
 /**
- * Today's revenue with the sale still in progress beside it: `₹35,630 · ₹1,240`
- * (billing-day-at-a-glance, design D1). The second figure is today's open,
- * unpaid orders, in exact rupees and the tender figures' weight and colour,
- * with no label (owner, 2026-10-16). It is not revenue.
+ * A tile's figure with a second, smaller one beside it, unlabelled, in the tender
+ * figures' weight and colour: today's revenue with the sale still in progress,
+ * `₹35,630 · ₹1,240` (billing-day-at-a-glance, design D1; owner, 2026-10-16),
+ * and the month's P&L with its margin, `₹2,431 · 0.4%` (owner, 2026-10-21).
  *
  * A phone's cell is about 110px beside its icon, which a five-digit day and a
  * four-digit open amount overrun. So, as the tender line does, every form is
@@ -702,14 +727,22 @@ function OneRevenueCard({ outlet }: { outlet: Tables<'outlets'> }) {
  * the figure at the tenders' size, then at half the headline's, then the same
  * two without the icon. The icon is the decoration; both figures are the point.
  */
-function TodayValue({
-  outletId,
-  totalPaise,
-  openPaise,
+function ValueBeside({
+  paise,
+  testId,
+  beside,
+  besideTitle,
+  besideTestId,
+  icon: Icon,
+  tone,
 }: {
-  outletId: string
-  totalPaise: number
-  openPaise: number
+  paise: number
+  testId: string
+  beside: string
+  besideTitle: string
+  besideTestId: string
+  icon: LucideIcon
+  tone: Tone
 }) {
   const box = useRef<HTMLDivElement>(null)
   const measures = useRef<(HTMLSpanElement | null)[]>([])
@@ -731,25 +764,16 @@ function TodayValue({
     const observer = new ResizeObserver(choose)
     observer.observe(element)
     return () => observer.disconnect()
-  }, [totalPaise, openPaise])
-  const open = formatPaise(openPaise - (openPaise % 100)).replace(/\.\d{2}$/, '')
+  }, [paise, beside])
   const figures = (small: boolean, shown = true) => (
     <span className="flex items-baseline gap-1 whitespace-nowrap">
-      <OverviewMoney
-        paise={totalPaise}
-        {...(shown ? { 'data-testid': `sales-${outletId}` } : {})}
-      />
+      <OverviewMoney paise={paise} {...(shown ? { 'data-testid': testId } : {})} />
       <span
         className={`${small ? 'text-[0.6875rem]' : 'text-[0.8125rem]'} font-bold text-content-muted`}
-        {...(shown
-          ? {
-              title: `Open orders not yet paid ${formatPaise(openPaise)}`,
-              'data-testid': `open-${outletId}`,
-            }
-          : {})}
+        {...(shown ? { title: besideTitle, 'data-testid': besideTestId } : {})}
       >
         <span aria-hidden>· </span>
-        {open}
+        {beside}
       </span>
     </span>
   )
@@ -774,9 +798,9 @@ function TodayValue({
       {withIcon && (
         <span
           aria-hidden
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-accent-text"
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${TONE_CLASS[tone]}`}
         >
-          <Banknote size={22} strokeWidth={1.8} />
+          <Icon size={22} strokeWidth={1.8} />
         </span>
       )}
     </div>
@@ -941,16 +965,58 @@ function compactPaise(paise: number): string {
   return `${paise < 0 ? '-' : ''}₹${(absolute / unit).toFixed(1).replace(/\.0$/, '')}${suffix}`
 }
 
-function Subtext({ children, title }: { children: ReactNode; title?: string }) {
+/**
+ * A tile's caption, one line. With `fit`, a caption that overruns its cell
+ * drops to the size today's open orders fall back to, and returns once the cell
+ * is wide enough again: *Expenses ₹1.2L · Ahead ₹3.9L* is wider than a phone's
+ * cell (owner, 2026-10-21). Text scales with its size, so the width it would
+ * take at the regular size is the small width scaled up; no hidden copy, which
+ * would repeat the caption's test ids.
+ */
+function Subtext({
+  children,
+  title,
+  fit = false,
+}: {
+  children: ReactNode
+  title?: string
+  fit?: boolean
+}) {
+  const box = useRef<HTMLDivElement>(null)
+  const [small, setSmall] = useState(false)
+  useLayoutEffect(() => {
+    const element = box.current
+    if (!fit || !element) return
+    const choose = () => {
+      const width = element.clientWidth
+      // No layout to measure (jsdom under test): the regular size stands.
+      if (!width) return
+      setSmall((wasSmall) =>
+        wasSmall ? (element.scrollWidth * 13) / 11 > width + 1 : element.scrollWidth > width + 1,
+      )
+    }
+    choose()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(choose)
+    observer.observe(element)
+    return () => observer.disconnect()
+  })
   return (
     <div
+      ref={box}
       title={title}
       data-testid="metric-subtext"
-      className="mt-0.5 whitespace-nowrap text-[0.8125rem] leading-[1.125rem] text-content-muted"
+      className={`mt-0.5 whitespace-nowrap ${small ? 'text-[0.6875rem]' : 'text-[0.8125rem]'} leading-[1.125rem] text-content-muted`}
     >
       {children}
     </div>
   )
+}
+type Tone = 'success' | 'danger' | 'primary'
+const TONE_CLASS: Record<Tone, string> = {
+  success: 'bg-success/10 text-success',
+  danger: 'bg-danger/10 text-danger',
+  primary: 'bg-primary/10 text-accent-text',
 }
 function MetricValue({
   children,
@@ -959,14 +1025,14 @@ function MetricValue({
 }: {
   children: ReactNode
   icon: LucideIcon
-  tone: 'success' | 'danger' | 'primary'
+  tone: Tone
 }) {
   return (
     <div className="flex min-h-9 items-center justify-between gap-1">
       <div className="min-w-0">{children}</div>
       <span
         aria-hidden
-        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${tone === 'success' ? 'bg-success/10 text-success' : tone === 'danger' ? 'bg-danger/10 text-danger' : 'bg-primary/10 text-accent-text'}`}
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${TONE_CLASS[tone]}`}
       >
         <Icon size={22} strokeWidth={1.8} />
       </span>
