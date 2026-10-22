@@ -83,6 +83,13 @@ const WORDS: Record<
       'Overview and the Ledger show one P&L that counts every cost on the date it was recorded.',
     changeNumber: 79,
   },
+  'role-includes': {
+    title: 'Role includes',
+    onMeans:
+      'Who counts as staff, and who may hold a counter, is answered by which roles include which, everywhere the database asks.',
+    offMeans: 'Each check names Employee and Biller itself.',
+    changeNumber: null,
+  },
 }
 
 /**

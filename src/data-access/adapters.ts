@@ -17,6 +17,11 @@ import type { PositionReading } from '@/lib/geolocation'
 import type { BillingCommand } from '../../shared/billing-command'
 
 import type { Tables } from './database.types'
+import {
+  includes,
+  isStaffRole as isStaffRoleByIncludes,
+  STAFF_ROLES_BY_SENIORITY,
+} from './role-includes'
 import type { TabletKind } from '@/session/counter-session'
 
 export type { TabletKind } from '@/session/counter-session'
@@ -228,17 +233,35 @@ export function liveAssignments(assignments: readonly Assignment[]): Assignment[
  * Kanchrapara however senior it is (the role-hierarchy idea was rejected on
  * 2026-07-28). This orders shells, and nothing else.
  */
-const ROLE_SENIORITY: Record<AppRole, number> = {
-  super_admin: 4,
-  franchise_admin: 3,
-  biller: 2,
-  employee: 1,
+const MANAGEMENT_SENIORITY: readonly AppRole[] = ['super_admin', 'franchise_admin']
+
+/**
+ * Whether `a` is a more senior shell than `b`. The owner, then a manager, then a
+ * staff role that includes the other; two staff roles on separate branches go
+ * by the order `STAFF_ROLE_INCLUDES` lists them in. A role this build does not
+ * know is never more senior than anything, so it can never be the shell
+ * somebody lands in (staff-roles-include-other-roles, design D6).
+ */
+function isKnownRole(role: AppRole): boolean {
+  return MANAGEMENT_SENIORITY.includes(role) || isStaffRoleByIncludes(role)
+}
+
+function moreSenior(a: AppRole, b: AppRole): boolean {
+  if (!isKnownRole(a)) return false
+  if (!isKnownRole(b)) return true
+  const order = [...MANAGEMENT_SENIORITY, ...STAFF_ROLES_BY_SENIORITY]
+  if (isStaffRoleByIncludes(a) && isStaffRoleByIncludes(b) && a !== b) {
+    if (includes(a, b)) return true
+    if (includes(b, a)) return false
+  }
+  return order.indexOf(a) < order.indexOf(b)
 }
 
 /** The highest role a person holds live, or null if they hold none. */
 export function highestRole(assignments: readonly Assignment[]): AppRole | null {
   return liveAssignments(assignments).reduce<AppRole | null>(
-    (best, a) => (best === null || ROLE_SENIORITY[a.role] > ROLE_SENIORITY[best] ? a.role : best),
+    (best, a) =>
+      isKnownRole(a.role) && (best === null || moreSenior(a.role, best)) ? a.role : best,
     null,
   )
 }
@@ -441,18 +464,19 @@ export type StaffFactsPatch = Partial<{
  * which is the bug this change exists to correct. A rule worth stating once is
  * worth storing once.
  *
- * Ordered by seniority to match `ROLE_SENIORITY`, since the accounts surface
- * renders it directly as the roles on offer.
+ * Ordered by seniority, since the accounts surface renders it directly as the
+ * roles on offer. Since staff-roles-include-other-roles it is read from
+ * `STAFF_ROLE_INCLUDES`, so a new staff role joins it by being written there.
  *
  * Stated as the roles it admits rather than as the roles it excludes, so a role
  * added to the enum joins nothing until somebody decides that it should
  * (design D1).
  */
-export const STAFF_ROLES = ['biller', 'employee'] as const satisfies readonly AppRole[]
+export const STAFF_ROLES = STAFF_ROLES_BY_SENIORITY
 
 /** Does this role make its holder staff at the outlet it is held at? */
 export function isStaffRole(role: AppRole): boolean {
-  return (STAFF_ROLES as readonly AppRole[]).includes(role)
+  return isStaffRoleByIncludes(role)
 }
 
 /**

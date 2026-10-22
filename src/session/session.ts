@@ -6,6 +6,7 @@ import {
   outletsForRole,
 } from '@/data-access/adapters'
 import type { Database, Tables } from '@/data-access/database.types'
+import { includes, rolesIncludedBy, STAFF_ROLES_BY_SENIORITY } from '@/data-access/role-includes'
 
 /**
  * The session contract both modes implement — a real Supabase session (#4)
@@ -125,7 +126,8 @@ export function heldRoles(session: Session): Role[] {
 export function reachableRoles(session: Session): Role[] {
   const reachable = new Set(heldRoles(session))
   if (reachable.has('super_admin')) reachable.add('franchise_admin')
-  if (reachable.has('biller')) reachable.add('employee')
+  // A staff role reaches the surfaces of every role it includes: a Biller is staff.
+  for (const role of [...reachable]) for (const below of rolesIncludedBy(role)) reachable.add(below)
   return ROLE_ORDER.filter((role) => reachable.has(role))
 }
 
@@ -145,7 +147,7 @@ export function personalNavigationRoles(session: Session): Role[] {
 export function personalHeldRoles(session: Session): Role[] {
   const assigned = heldRoles(session)
   return personalNavigationRoles(session).filter(
-    (role) => assigned.includes(role) || (role === 'employee' && assigned.includes('biller')),
+    (role) => assigned.includes(role) || assigned.some((held) => includes(held, role)),
   )
 }
 
@@ -160,7 +162,7 @@ export function sessionOutlets(session: Session): string[] {
 }
 
 /** Most senior first. Orders shells and navigation; confers nothing. */
-const ROLE_ORDER: Role[] = ['super_admin', 'franchise_admin', 'biller', 'employee']
+const ROLE_ORDER: Role[] = ['super_admin', 'franchise_admin', ...STAFF_ROLES_BY_SENIORITY]
 
 export type SessionMode = Session['mode']
 

@@ -89,6 +89,11 @@ classified as (
       -- section 8 below and in `86_a_release_can_be_switched_off.sql`.
       when tbl in ('change_gates', 'change_gate_dependencies', 'change_gate_events')
         then 'global'
+      -- The staff roles and which includes which (staff-roles-include-other-
+      -- roles): what every staff check asks, read by every signed-in principal
+      -- and written by no client.
+      when tbl in ('staff_roles', 'staff_role_includes')
+        then 'global'
       -- Tenant-less: belongs to no outlet at all, because the thing it counts
       -- happens before anybody has an outlet. Listed by name rather than
       -- inferred, so the next table with no outlet_id still has to be argued
@@ -280,7 +285,10 @@ select is(
 
 select is(
   (select count(*) from pg_policies
-    where schemaname = 'public' and tablename = 'expense_categories'),
+    where schemaname = 'public' and tablename = 'expense_categories'
+      -- The role-includes twins are counted out until the change's cleanup
+      -- drops them (staff-roles-include-other-roles, design D3).
+      and policyname not like '%\_includes'),
   2::bigint,
   'the business-wide category list has explicit select and insert policies'
 );
@@ -349,7 +357,10 @@ select is(
 select is(
   (select count(*) from pg_policies
     where schemaname = 'public'
-      and tablename = 'expenses'),
+      and tablename = 'expenses'
+      -- The role-includes twins are counted out until the change's cleanup
+      -- drops them (staff-roles-include-other-roles, design D3).
+      and policyname not like '%\_includes'),
   3::bigint,
   'the promoted expense table carries select, insert and update policies');
 

@@ -18,6 +18,7 @@ import { demoReceiptToken, receiptLink } from '@/lib/receipt-link'
 
 import {
   BillingActionError,
+  type AppRole,
   CUSTOMER_BILLS_PAGE_SIZE,
   MANAGER_BILL_ROWS_PAGE_SIZE,
   ROUTINE_COMMAND_RESULTS,
@@ -133,7 +134,7 @@ interface PendingCommand {
 }
 
 export interface MockBillingContext {
-  role: 'super_admin' | 'franchise_admin' | 'biller' | 'employee'
+  role: AppRole
   userId: string
   outletIds: readonly string[]
 }

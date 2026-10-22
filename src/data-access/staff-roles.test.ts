@@ -60,8 +60,12 @@ describe('the app and the database agree on who is staff', () => {
     const defining = readdirSync(dir)
       .filter((f) => f.endsWith('.sql'))
       .sort()
+      // The original, which still answers while `role-includes` is off. Its
+      // `_v2` asks which roles include Employee instead, and those rows are held
+      // to `STAFF_ROLES` by src/data-access/role-includes.test.ts
+      // (staff-roles-include-other-roles).
       .filter((f) =>
-        readFileSync(`${dir}/${f}`, 'utf8').includes('function public.attendance_elsewhere'),
+        readFileSync(`${dir}/${f}`, 'utf8').includes('function public.attendance_elsewhere('),
       )
 
     expect(defining.length).toBeGreaterThan(0)

@@ -345,6 +345,7 @@ const OWNER_ID = personaFixtures.super_admin.profile.id
  * would not show what the surface is now for: seeing at a glance which rows are
  * yours to fix.
  */
+// roles-lint: allow the demo personas who record rows, keyed by persona, not a staff check
 const LEDGER_RECORDERS: Record<'owner' | 'manager' | 'biller' | 'employee', string> = {
   owner: OWNER_ID,
   manager: MANAGER_ID,

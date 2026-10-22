@@ -50,7 +50,7 @@ import { AccountHandoverPanel } from './account-handover'
  * changes go through the privileged function.
  */
 
-const ROLE_ORDER: AppRole[] = ['super_admin', 'franchise_admin', 'biller', 'employee']
+const ROLE_ORDER: AppRole[] = ['super_admin', 'franchise_admin', ...STAFF_ROLES]
 
 /**
  * One listed person, and their account once the identities have said who they
@@ -81,7 +81,7 @@ type OrdinaryAssignment = Exclude<
   { role: 'super_admin' }
 > & { outletId: string; role: Exclude<AppRole, 'super_admin'> }
 
-const ORDINARY_ROLES: Exclude<AppRole, 'super_admin'>[] = ['franchise_admin', 'biller', 'employee']
+const ORDINARY_ROLES: Exclude<AppRole, 'super_admin'>[] = ['franchise_admin', ...STAFF_ROLES]
 
 function todayInIndia() {
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -101,7 +101,7 @@ export function AccountsSurface() {
 
   const isOwner = holdsRole(session, 'super_admin')
   const assignableRoles = useMemo<AppRole[]>(
-    () => (isOwner ? ROLE_ORDER : ['biller', 'employee']),
+    () => (isOwner ? ROLE_ORDER : [...STAFF_ROLES]),
     [isOwner],
   )
 

@@ -4,6 +4,7 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { getPartState, isRenderable } from '@/gates/registry'
+import { STAFF_ROLES_BY_SENIORITY } from '@/data-access/role-includes'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/session/context'
 import { ROLE_LABELS, ROLE_SEGMENTS, type Role } from '@/session/session'
@@ -11,7 +12,7 @@ import { ROLE_LABELS, ROLE_SEGMENTS, type Role } from '@/session/session'
 import { useDemoConnectivity, type DemoConnectivityState } from './demo-connectivity'
 import { useDemoReset } from './demo-reset'
 
-const ROLES: Role[] = ['super_admin', 'franchise_admin', 'biller', 'employee']
+const ROLES: Role[] = ['super_admin', 'franchise_admin', ...STAFF_ROLES_BY_SENIORITY]
 
 /**
  * The connectivity options, named for the state being entered rather than the

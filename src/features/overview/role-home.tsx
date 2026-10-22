@@ -1,3 +1,4 @@
+import { isStaffRole } from '@/data-access/role-includes'
 import { CounterHandshakeCards } from '@/features/counter/counter-handshake-cards'
 import { useSession } from '@/session/context'
 
@@ -35,9 +36,9 @@ export function RoleHome() {
         <OutletsOverview />
       )}
       {session.role === 'biller' && session.mode === 'demo' && <CounterHome />}
-      {(session.role === 'employee' || (session.role === 'biller' && session.mode === 'real')) && (
-        <StaffHome />
-      )}
+      {session.role !== null &&
+        isStaffRole(session.role) &&
+        !(session.role === 'biller' && session.mode === 'demo') && <StaffHome />}
     </>
   )
 }

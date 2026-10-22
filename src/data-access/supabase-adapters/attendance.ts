@@ -1,5 +1,6 @@
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 
+import { onRoleIncludes } from '@/change-gates/role-includes'
 import type { PositionReading } from '@/lib/geolocation'
 
 import type {
@@ -570,10 +571,13 @@ export function createSupabaseAttendanceAdapter(
      */
     async listElsewhere(outletIds, businessDate) {
       if (outletIds.length === 0) return []
-      const { data, error } = await client.rpc('attendance_elsewhere', {
-        p_outlets: outletIds as string[],
-        p_business_date: businessDate,
-      })
+      const { data, error } = await client.rpc(
+        onRoleIncludes() ? 'attendance_elsewhere_v2' : 'attendance_elsewhere',
+        {
+          p_outlets: outletIds as string[],
+          p_business_date: businessDate,
+        },
+      )
       if (error) throw toActionError(error)
       return data ?? []
     },
@@ -629,14 +633,17 @@ export function createSupabaseAttendanceAdapter(
       attemptId = crypto.randomUUID(),
       expectedVersion = null,
     }) {
-      const { data, error } = await client.rpc('attendance_submit_attempt', {
-        p_attempt_id: attemptId,
-        p_outlet_id: outletId,
-        p_business_date: businessDate,
-        p_attempted_at: reading?.at ?? new Date().toISOString(),
-        ...attemptPosition(reading),
-        ...(expectedVersion == null ? {} : { p_expected_version: expectedVersion }),
-      })
+      const { data, error } = await client.rpc(
+        onRoleIncludes() ? 'attendance_submit_attempt_v2' : 'attendance_submit_attempt',
+        {
+          p_attempt_id: attemptId,
+          p_outlet_id: outletId,
+          p_business_date: businessDate,
+          p_attempted_at: reading?.at ?? new Date().toISOString(),
+          ...attemptPosition(reading),
+          ...(expectedVersion == null ? {} : { p_expected_version: expectedVersion }),
+        },
+      )
       if (error) throw toActionError(error)
       return readOne(data.id)
     },
@@ -648,14 +655,17 @@ export function createSupabaseAttendanceAdapter(
      * writing session for both and would overwrite anything supplied.
      */
     async recordManualEntry({ personId, outletId, businessDate, at }) {
-      const { data, error } = await client.rpc('attendance_record_manual', {
-        p_attempt_id: crypto.randomUUID(),
-        p_decision_id: crypto.randomUUID(),
-        p_person_id: personId,
-        p_outlet_id: outletId,
-        p_business_date: businessDate,
-        p_attempted_at: at,
-      })
+      const { data, error } = await client.rpc(
+        onRoleIncludes() ? 'attendance_record_manual_v2' : 'attendance_record_manual',
+        {
+          p_attempt_id: crypto.randomUUID(),
+          p_decision_id: crypto.randomUUID(),
+          p_person_id: personId,
+          p_outlet_id: outletId,
+          p_business_date: businessDate,
+          p_attempted_at: at,
+        },
+      )
       if (error) throw toActionError(error)
       return readOne(data.id)
     },

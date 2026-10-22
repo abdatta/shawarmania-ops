@@ -25,6 +25,22 @@ who has left **one** outlet still works at the others; somebody who holds no
 live assignment anywhere has left the business, which is derived rather than
 stored.
 
+### Staff role
+
+**A role a person holds to work at an outlet**: Employee or Biller today. Held
+in `public.staff_roles`. A manager and the owner are not staff roles; their
+authority is their own.
+
+### Includes
+
+**One staff role can do everything another can.** Written as a row: *a Biller
+includes an Employee*. Rows are followed down, so a role includes whatever the
+roles it includes include, and they may branch: two roles can include the same
+one without including each other. A check asks *does a role this person holds
+here include the one needed?* rather than naming roles. Held in
+`public.staff_role_includes` and `src/data-access/role-includes.ts`. See [Roles
+And Permissions](ROLES_AND_PERMISSIONS.md#staff-roles-include-other-roles-staff-roles-include-other-roles).
+
 ### Business date
 
 **The trading day a record belongs to — not the calendar date of its timestamp.**

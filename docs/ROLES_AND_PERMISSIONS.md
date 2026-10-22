@@ -44,6 +44,29 @@ A person may hold more than one of these, at different outlets. They land in
 the shell of the highest role they hold, and their navigation is the union of
 what those assignments entitle them to — nothing to switch between.
 
+### Staff roles include other roles *(staff-roles-include-other-roles)*
+
+Which staff role can do everything another can is **written down as plain
+rows**: *a Biller includes an Employee*, so a Biller is everything an Employee
+is, plus the counter. A role includes whatever the roles it includes include,
+and roles may branch: two roles can each include a third without including each
+other, and a role can include several. There are no ranks or numbers. The rows
+are `public.staff_role_includes`, mirrored in `src/data-access/role-includes.ts`,
+and every check of what a staff member may do asks one question: *does a role
+this person holds here include the one needed?* Checking in, recording an
+expense and being named on the expense list need an Employee; reading the menu
+from a phone and being re-attributed a bill need a Biller. Managers and the
+owner are not staff roles: their authority is their own, and a Manager does not
+act as an Employee.
+
+**A new role is a row or two**, and every check admits it wherever a role it
+includes is needed. Before this, Biller was made staff by adding `'biller'`
+beside `'employee'` in each of 19 database objects and a dozen app files, and
+`npm run lint:roles` now refuses a staff role listed by name outside the rows.
+While the `role-includes` gate is live the new checks run beside the old ones
+and give every existing role the same answer; its cleanup rewrites the rest, the
+expense trigger, the Team helper and the counter-shift helper among them.
+
 **The Super Admin reaches every outlet's manager surfaces without being
 assigned to one** (`owner-reaches-every-outlet`, #28). Running every outlet is
 what the role is, and the policies have always answered it that way: every
@@ -518,7 +541,7 @@ Why not full logins on the tablet: a shared device holding personal credentials 
 
 The honest trade-off: **the tablet's session is the credential, so a lost tablet is a real incident.** Mitigations are built in rather than retrofitted — `counter_devices.removed_at` is checked by every policy so removal is immediate and permanent, the tablet is scoped to one outlet and to the counter's own surfaces, and `last_seen_at` makes a missing tablet visible. Losing the tablet exposes one outlet's counter; it never exposes another outlet, admin functions, or the owner's cross-outlet view. And because it holds no password, a lost tablet compromises nobody's account.
 
-**A Biller assignment includes an Employee's attendance.** Holding `biller` at an outlet is enough to check in there, without a second assignment and without widening what a manager or the owner may do — `attendance_submit_attempt` accepts either role, and `supabase/tests/25_the_biller_turns_up_too.sql` asserts it.
+**A Biller assignment includes an Employee's attendance.** Holding `biller` at an outlet is enough to check in there, without a second assignment and without widening what a manager or the owner may do — a Biller includes an Employee, `attendance_submit_attempt` accepts anyone who acts as an Employee there, and `supabase/tests/25_the_biller_turns_up_too.sql` asserts it.
 
 ### Kitchen tablet — the kitchen shift's reach *(#70)*
 

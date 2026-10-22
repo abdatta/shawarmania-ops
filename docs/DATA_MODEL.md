@@ -100,6 +100,20 @@ whether they may sign in, and nothing about where they work.** Role, outlet and
 the dates are on the assignment below, because a person may work at more than
 one place and a column cannot say so.
 
+**`staff_roles`** and **`staff_role_includes`** *(staff-roles-include-other-roles)*
+— which staff role includes which. `staff_roles.role` lists the roles a person
+holds to work at an outlet (never a manager role): Employee and Biller.
+`staff_role_includes` (`role`, `includes`, a pair of staff roles, never the same
+one) says one thing per row: *this role can do everything that one can*. Today
+it holds *biller includes employee*. Rows are read transitively and may branch,
+so a role may include several and be included by several; a trigger refuses a
+row that would make a role include itself through others. No ranks or numbers.
+Readable by every signed-in principal, written by no client: a role is added by a
+migration. Three helpers ask them: `app_role_includes(held, required)`, false
+rather than null when either is not a staff role; `app_acts_as(required,
+outlet)` for the caller; and the set-returning `app_outlets_acting_as(required)`
+for `outlet_id in (select …)` policies. A staff role is never compared by name.
+
 **`assignments`** — who may do what, where. One row per person per role per
 outlet.
 `id`, `person_id`, `role` (`super_admin` | `franchise_admin` | `biller` | `employee`), `outlet_id` (null exactly for `super_admin`), `started_on`, `ended_on`, `created_at`.

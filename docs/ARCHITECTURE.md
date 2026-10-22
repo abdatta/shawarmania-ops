@@ -319,6 +319,13 @@ create policy outlet_isolation_read on bills for select
 
 The helpers are `stable security definer`, which is what avoids the **RLS recursion trap**: a policy on `assignments` that queried `assignments` to determine access would recurse infinitely, and definer rights bypass RLS for that one lookup. Any policy needing a table lookup goes through such a function; none reads a table directly.
 
+**A staff role is asked of the includes rows, never named.** Which staff role
+includes which is written down once in `staff_role_includes` (a Biller includes
+an Employee), walked transitively and free to branch, and a policy or function
+asks `app_acts_as('employee', outlet_id)` or `outlet_id in (select
+public.app_outlets_acting_as('biller'))` where it once listed `'employee'` and
+`'biller'`. A new role is a row, not a search (staff-roles-include-other-roles).
+
 The per-row cost the old JWT claims existed to avoid is avoided differently. `app_outlets_for` is **set-returning**, so `outlet_id in (select public.app_outlets_for('franchise_admin'))` is a non-correlated subquery Postgres hoists to a hashed SubPlan — one lookup per query, not per row. `app_is_owner()` takes no argument, so `(select public.app_is_owner())` becomes an InitPlan for the same reason.
 
 Because the policies read the table, **an assignment granted or ended bites at the very next request** — nothing is reissued and nobody is signed out. The same is true of everything else that must be immediate: removing a counter tablet and deactivating an account are status checks inside the policy, exactly as they always were. There is no longer any category of change that waits for a token.

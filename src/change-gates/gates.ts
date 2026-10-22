@@ -143,6 +143,21 @@ export const CHANGE_GATES = {
     retireBy: '2027-02-28',
     roundTrip: 'tested',
   },
+  /**
+   * Every check of what a staff member may do asks which staff role includes
+   * which (a Biller includes an Employee) instead of naming roles
+   * (staff-roles-include-other-roles, design D1–D7). On and off give every
+   * existing role the same answer: this is a safety switch for the new code
+   * path, and the Waiter (#80) needs it retired before the first is made.
+   */
+  'role-includes': {
+    kind: 'change',
+    code: 'RI',
+    change: 'staff-roles-include-other-roles',
+    retireBy: '2026-11-18',
+    roundTrip:
+      'none: on and off admit the same people to write the same rows, and nothing is queued',
+  },
 } as const satisfies Record<string, ChangeGateDeclaration>
 
 export type ChangeGateKey = keyof typeof CHANGE_GATES

@@ -4781,6 +4781,48 @@ export type Database = {
           },
         ]
       }
+      staff_role_includes: {
+        Row: {
+          includes: Database["public"]["Enums"]["app_role"]
+          role: Database["public"]["Enums"]["app_role"]
+        }
+        Insert: {
+          includes: Database["public"]["Enums"]["app_role"]
+          role: Database["public"]["Enums"]["app_role"]
+        }
+        Update: {
+          includes?: Database["public"]["Enums"]["app_role"]
+          role?: Database["public"]["Enums"]["app_role"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_role_includes_includes_fkey"
+            columns: ["includes"]
+            isOneToOne: false
+            referencedRelation: "staff_roles"
+            referencedColumns: ["role"]
+          },
+          {
+            foreignKeyName: "staff_role_includes_role_fkey"
+            columns: ["role"]
+            isOneToOne: false
+            referencedRelation: "staff_roles"
+            referencedColumns: ["role"]
+          },
+        ]
+      }
+      staff_roles: {
+        Row: {
+          role: Database["public"]["Enums"]["app_role"]
+        }
+        Insert: {
+          role: Database["public"]["Enums"]["app_role"]
+        }
+        Update: {
+          role?: Database["public"]["Enums"]["app_role"]
+        }
+        Relationships: []
+      }
       supplier_delivery_routes: {
         Row: {
           effective_from: string
@@ -4969,6 +5011,13 @@ export type Database = {
       }
       app_account_active: { Args: never; Returns: boolean }
       app_account_email_valid: { Args: { input: string }; Returns: boolean }
+      app_acts_as: {
+        Args: {
+          p_outlet: string
+          p_required: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: boolean
+      }
       app_billing_outlet: { Args: never; Returns: string }
       app_business_date: {
         Args: { cutover: string; ts: string }
@@ -5016,12 +5065,17 @@ export type Database = {
         Returns: boolean
       }
       app_may_see_person: { Args: { person: string }; Returns: boolean }
+      app_may_see_person_v2: { Args: { person: string }; Returns: boolean }
       app_next_cutover: {
         Args: { cutover: string; ts: string }
         Returns: string
       }
       app_normalize_account_email: { Args: { input: string }; Returns: string }
       app_normalize_username: { Args: { input: string }; Returns: string }
+      app_outlets_acting_as: {
+        Args: { p_required: Database["public"]["Enums"]["app_role"] }
+        Returns: string[]
+      }
       app_outlets_for: {
         Args: { required: Database["public"]["Enums"]["app_role"] }
         Returns: string[]
@@ -5035,6 +5089,13 @@ export type Database = {
           outlet: string
           profile: string
           required: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: boolean
+      }
+      app_role_includes: {
+        Args: {
+          p_held: Database["public"]["Enums"]["app_role"]
+          p_required: Database["public"]["Enums"]["app_role"]
         }
         Returns: boolean
       }
@@ -5154,7 +5215,57 @@ export type Database = {
         Args: { p_business_date: string; p_outlets: string[] }
         Returns: string[]
       }
+      attendance_elsewhere_v2: {
+        Args: { p_business_date: string; p_outlets: string[] }
+        Returns: string[]
+      }
       attendance_record_manual: {
+        Args: {
+          p_attempt_id: string
+          p_attempted_at: string
+          p_business_date: string
+          p_decision_id: string
+          p_outlet_id: string
+          p_person_id: string
+        }
+        Returns: {
+          approval_reason: string | null
+          approved_at: string | null
+          approved_by: string | null
+          approved_by_name: string | null
+          approver_accuracy_m: number | null
+          approver_distance_m: number | null
+          approver_lat: number | null
+          approver_lng: number | null
+          arrival_deadline: string | null
+          business_date: string
+          check_in_accuracy_m: number | null
+          check_in_at: string | null
+          check_in_distance_m: number | null
+          check_in_entered_by: string | null
+          check_in_entered_by_name: string | null
+          check_in_lat: number | null
+          check_in_lng: number | null
+          check_in_source: Database["public"]["Enums"]["check_in_source"] | null
+          created_at: string
+          current_attempt_id: string | null
+          id: string
+          latest_decision_id: string | null
+          outcome_attempt_id: string | null
+          outlet_id: string
+          person_id: string
+          retry_blocked: boolean
+          state_version: number
+          status: Database["public"]["Enums"]["attendance_status"]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "attendance"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      attendance_record_manual_v2: {
         Args: {
           p_attempt_id: string
           p_attempted_at: string
@@ -5205,6 +5316,54 @@ export type Database = {
         Returns: string
       }
       attendance_submit_attempt: {
+        Args: {
+          p_accuracy_m: number
+          p_attempt_id: string
+          p_attempted_at: string
+          p_business_date: string
+          p_expected_version?: number
+          p_lat: number
+          p_lng: number
+          p_outlet_id: string
+        }
+        Returns: {
+          approval_reason: string | null
+          approved_at: string | null
+          approved_by: string | null
+          approved_by_name: string | null
+          approver_accuracy_m: number | null
+          approver_distance_m: number | null
+          approver_lat: number | null
+          approver_lng: number | null
+          arrival_deadline: string | null
+          business_date: string
+          check_in_accuracy_m: number | null
+          check_in_at: string | null
+          check_in_distance_m: number | null
+          check_in_entered_by: string | null
+          check_in_entered_by_name: string | null
+          check_in_lat: number | null
+          check_in_lng: number | null
+          check_in_source: Database["public"]["Enums"]["check_in_source"] | null
+          created_at: string
+          current_attempt_id: string | null
+          id: string
+          latest_decision_id: string | null
+          outcome_attempt_id: string | null
+          outlet_id: string
+          person_id: string
+          retry_blocked: boolean
+          state_version: number
+          status: Database["public"]["Enums"]["attendance_status"]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "attendance"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      attendance_submit_attempt_v2: {
         Args: {
           p_accuracy_m: number
           p_attempt_id: string
@@ -5991,6 +6150,13 @@ export type Database = {
           id: string
         }[]
       }
+      expense_people_v2: {
+        Args: never
+        Returns: {
+          full_name: string
+          id: string
+        }[]
+      }
       finish_paid_orders_at_day_change: {
         Args: { p_now?: string }
         Returns: number
@@ -6611,6 +6777,31 @@ export type Database = {
         Returns: Json
       }
       review_billing_attribution: {
+        Args: {
+          p_bill_id: string
+          p_outcome: string
+          p_reason?: string
+          p_resolved_operator_id?: string
+        }
+        Returns: {
+          bill_id: string
+          id: string
+          original_operator_id: string
+          outcome: string
+          outlet_id: string
+          reason: string | null
+          resolved_operator_id: string | null
+          reviewed_at: string
+          reviewed_by: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "billing_attribution_reviews"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      review_billing_attribution_v2: {
         Args: {
           p_bill_id: string
           p_outcome: string
