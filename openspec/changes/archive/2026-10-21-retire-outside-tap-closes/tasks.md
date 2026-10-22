@@ -58,4 +58,8 @@ halves. No gate of its own and no migration until section 3.
 
 ## 4. Archive
 
-- [ ] 4.1 Report what was retired and when, then archive.
+- [x] 4.1 Report what was retired and when, then archive.
+  *(Archived 21 October. The four contract migrations ran in production at 11:56 IST
+  (Deploy of `da900d55`), setting `retired_at` on all four rows. Both registered
+  devices, Kalyani Counter 2 and Shawarma Kitchen, were reporting `167bd0f1`, which
+  contains it, by the evening.)*

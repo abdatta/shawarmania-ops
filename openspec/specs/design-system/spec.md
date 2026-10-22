@@ -365,9 +365,6 @@ and the one beneath SHALL stay open.
 The iOS install hint, a transient panel that is not a pop-up, SHALL close when a
 pointer lands outside it, as a menu does.
 
-This behaviour SHALL ship behind the change gate `outside-tap-closes`; with the
-gate off a pop-up closes only from its own controls and Escape.
-
 #### Scenario: A tap on the space outside a sheet
 
 - **WHEN** a sheet is open and a person presses and releases on the dimmed space outside it
@@ -402,8 +399,3 @@ gate off a pop-up closes only from its own controls and Escape.
 
 - **WHEN** a person has pressed Save on the Count & Collect sheet and taps outside it before the save returns
 - **THEN** the sheet stays open with what they typed
-
-#### Scenario: The gate is off
-
-- **WHEN** the `outside-tap-closes` change gate is off and a person taps the space outside a pop-up
-- **THEN** the pop-up stays open, and closes from its own Close button or Escape as before

@@ -768,13 +768,13 @@ latest-order card that can represent only one of several rapid orders. The order
 number SHALL be visually distinct from a bill number wherever both could be
 seen.
 
-With the `instant-saves` change gate on, the order SHALL be in the pipeline list
-as soon as the tablet has saved it, drawn from the tablet's own record, without
-waiting for any server response. Until the server assigns its number, the card
-SHALL show the shape of the number and nothing else. The card SHALL be as usable
-as any other order on the rail, and SHALL NOT be shown disabled, greyed or as a
-loading placeholder while the server's answer is outstanding. When the server
-answers, its answer SHALL replace what was drawn.
+The order SHALL be in the pipeline list as soon as the tablet has saved it,
+drawn from the tablet's own record, without waiting for any server response.
+Until the server assigns its number, the card SHALL show the shape of the number
+and nothing else. The card SHALL be as usable as any other order on the rail,
+and SHALL NOT be shown disabled, greyed or as a loading placeholder while the
+server's answer is outstanding. When the server answers, its answer SHALL
+replace what was drawn.
 
 #### Scenario: The order is saved
 
@@ -783,13 +783,13 @@ answers, its answer SHALL replace what was drawn.
 
 #### Scenario: The order is saved on a slow connection
 
-- **GIVEN** the `instant-saves` gate is on and the server has not yet answered any read made after the save
+- **GIVEN** the server has not yet answered any read made after the save
 - **WHEN** the biller presses Order
 - **THEN** the order's card is on the rail with its dishes, notes, label, customer and total, and the awaiting shape of its number, before any server response arrives
 
 #### Scenario: A just-saved order is worked before the server answers
 
-- **GIVEN** the `instant-saves` gate is on and an order was saved while the server has not answered
+- **GIVEN** an order was saved while the server has not answered
 - **WHEN** the biller ticks one of its dishes, pays it, edits it or cancels it
 - **THEN** the action is taken exactly as it is on any other order of this tablet
 
@@ -2236,19 +2236,18 @@ including dine-in/table and takeaway, with at most two legacy no-service example
 
 ### Requirement: The owner's Orders tab says what the counter's card says
 
-With `dish-ticks` on, each open order on the billing history's Orders tab SHALL
-show, compactly: its number, label and total; when it was ordered and how long
-ago, who rang it, and its table or takeaway; whether it is paid; each kitchen's
-answer in words (sent, seen, ready, served); each dish with its quantity, note and
-price in one of four states — placed, acknowledged, Done, handed over — in the
-counter's marks (✓, ✓✓, the bell, a ticked box), each named on hover and to a
-screen reader; and the customer on one line beside Cancel order. A dish SHALL read
-acknowledged only when every kitchen still owing it has acknowledged at least what
-it owes. With `kitchen-ready` off, nothing SHALL read Done. The kitchens' answers
-SHALL come from a read that only the owner and that outlet's franchise admins may
-make. Opening the page SHALL only count the open orders; choosing the Orders tab,
-or tapping it again, SHALL read the orders and their kitchens afresh, never on a
-timer; if the kitchens' read fails the orders SHALL still list. With `dish-ticks` off the tab SHALL be as it was.
+Each open order on the billing history's Orders tab SHALL show, compactly: its
+number, label and total; when it was ordered and how long ago, who rang it, and
+its table or takeaway; whether it is paid; each kitchen's answer in words (sent,
+seen, ready, served); each dish with its quantity, note and price in one of four
+states — placed, acknowledged, Done, handed over — in the counter's marks (✓, ✓✓,
+the bell, a ticked box), each named on hover and to a screen reader; and the
+customer on one line beside Cancel order. A dish SHALL read acknowledged only when
+every kitchen still owing it has acknowledged at least what it owes. The kitchens'
+answers SHALL come from a read that only the owner and that outlet's franchise
+admins may make. Opening the page SHALL only count the open orders; choosing the
+Orders tab, or tapping it again, SHALL read the orders and their kitchens afresh,
+never on a timer; if the kitchens' read fails the orders SHALL still list.
 
 #### Scenario: The owner checks an order from away
 
@@ -2262,41 +2261,39 @@ timer; if the kitchens' read fails the orders SHALL still list. With `dish-ticks
 
 ### Requirement: The counter draws its own saves before the server answers
 
-With the `instant-saves` change gate on, every change this tablet saves to an
-order or a bill SHALL be on screen as soon as the tablet has saved it, drawn from
-the tablet's own record, and SHALL NOT wait for a server response. This covers an
-edited order's card, a payment's bill in Bills this shift (from Pay now or from a
-rail card) with the shift's cash and UPI totals, a corrected tender, a payment
-taken back (its order back on the rail), and an order cancelled after payment.
+Every change this tablet saves to an order or a bill SHALL be on screen as soon
+as the tablet has saved it, drawn from the tablet's own record, and SHALL NOT
+wait for a server response. This covers an edited order's card, a payment's bill
+in Bills this shift (from Pay now or from a rail card) with the shift's cash and
+UPI totals, a corrected tender, a payment taken back (its order back on the
+rail), and an order cancelled after payment.
 
-Each save SHALL still cause the one server read it causes with the gate off, and
-no more. A read that began before a save SHALL NOT draw the rail or Bills without
-that save. When the server's read arrives, it SHALL replace what was drawn.
+Each save SHALL cause the one server read it would cause without the drawing,
+and no more. A read that began before a save SHALL NOT draw the rail or Bills
+without that save. When the server's read arrives, it SHALL replace what was
+drawn.
 
-With the gate off, each of those surfaces SHALL behave as it did before this
-requirement.
+#### Scenario: Save on a slow connection
 
-#### Scenario: Save changes on a slow connection
-
-- **GIVEN** the gate is on and an order with two dishes is open for edit
-- **WHEN** the biller adds a third dish and presses Save changes while the server has not answered
+- **GIVEN** an order with two dishes is open for edit
+- **WHEN** the biller adds a third dish and presses Save while the server has not answered
 - **THEN** the order's card shows all three dishes and the new total at once
 
 #### Scenario: Pay now on a slow connection
 
-- **GIVEN** the gate is on and the server has not answered
+- **GIVEN** the server has not answered
 - **WHEN** the biller settles a bill with Pay now
 - **THEN** the bill is in Bills this shift at once with the awaiting shape of its number, and the cash or UPI total includes it
 
 #### Scenario: Taking a payment back from Bills
 
-- **GIVEN** the gate is on and the server has not answered
+- **GIVEN** the server has not answered
 - **WHEN** the biller takes back a paid order's payment from Bills this shift
 - **THEN** the bill shows as taken back and the order is back on the rail, unpaid, at once
 
 #### Scenario: An older read lands after a save
 
-- **GIVEN** the gate is on and a rail read began before the biller pressed Order
+- **GIVEN** a rail read began before the biller pressed Order
 - **WHEN** that read's answer arrives after the order was drawn
 - **THEN** the new order's card stays on the rail throughout
 
@@ -2307,33 +2304,32 @@ requirement.
 
 ### Requirement: A re-read that fails after a save does not report the save as failed
 
-With the `instant-saves` change gate on, a save's confirmation SHALL stand once
-the tablet has saved it, and a failure of the server read that follows SHALL NOT
-replace it with the save's failure words. A server read of Bills this shift that
-fails while the panel shows a list SHALL keep the list and SHALL show no error;
-the panel SHALL say it could not load the shift only when it has nothing to show.
+A save's confirmation SHALL stand once the tablet has saved it, and a failure of
+the server read that follows SHALL NOT replace it with the save's failure words.
+A server read of Bills this shift that fails while the panel shows a list SHALL
+keep the list and SHALL show no error; the panel SHALL say it could not load the
+shift only when it has nothing to show.
 
 #### Scenario: Take back, then the re-read fails
 
-- **GIVEN** the gate is on
 - **WHEN** the biller takes back a payment and the server read that follows fails
 - **THEN** the panel says the payment was taken back, and does not say the item could not be resolved
 
 #### Scenario: Bills keeps its list when the server fails
 
-- **GIVEN** the gate is on and Bills this shift shows the shift's bills
+- **GIVEN** Bills this shift shows the shift's bills
 - **WHEN** a re-read of the shift fails
 - **THEN** the bills stay on screen with no error message
 
 ### Requirement: The table picker opens on the tables the counter already knows are busy
 
-With the `instant-saves` change gate on, opening the table picker SHALL mark
-busy every table held by an order the tablet already holds, without waiting for
-a server response, and SHALL then correct itself from the server's read.
+Opening the table picker SHALL mark busy every table held by an order the tablet
+already holds, without waiting for a server response, and SHALL then correct
+itself from the server's read.
 
 #### Scenario: A table taken a moment ago
 
-- **GIVEN** the gate is on and an order for table 4 was just saved on this tablet while the server has not answered
+- **GIVEN** an order for table 4 was just saved on this tablet while the server has not answered
 - **WHEN** the biller opens the table picker for the next order
 - **THEN** table 4 is marked busy
 

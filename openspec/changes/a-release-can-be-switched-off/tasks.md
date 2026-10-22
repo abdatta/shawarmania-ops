@@ -728,11 +728,16 @@ October.
   `/next-change` never lists it as due. Proposal, design D11 and D16, the
   `change-gates` and `project-scaffold` deltas, `docs/RELEASES.md` and
   `docs/GLOSSARY.md` say so.
-- [ ] 11.2 `retire-outside-tap-closes` through both halves: its code half released,
+- [x] 11.2 `retire-outside-tap-closes` through both halves: its code half released,
   then, once every tablet's health report shows the retirement build for a week,
   its contract migration (`-- release: contract outside-tap-closes`). Confirm
   `lint:migrations` accepts it and would have refused it before the key was
   tombstoned. Tracked in that folder's tasks.
+  *(Both halves done; archived 21 October as `2026-10-21-retire-outside-tap-closes`.
+  `20261031000000_contract_outside_tap_closes.sql` ran in production at 11:56 IST.
+  `lint:migrations` accepts it, and refuses a contract migration whose key is not yet
+  in RETIRED_CHANGE_GATES (`scripts/check-migrations.mjs`, the check that
+  "the code retires a gate before its contract migration does").)*
 - [x] 11.3 What the workflow left unsaid, found on `outside-tap-closes`, fixed in
   both trees: the demo's gate words and history (`src/data-access/mock/change-gates.ts`)
   lose the key; a requirement naming the gate loses its gate sentence and gate-off
