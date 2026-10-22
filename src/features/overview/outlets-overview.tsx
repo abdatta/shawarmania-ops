@@ -30,7 +30,7 @@ import { Money } from '@/components/ui/money'
 import { useChangeGate } from '@/change-gates/context'
 import { useAdapters, type Tables } from '@/data-access'
 import { formatPaise, resolveBusinessDate } from '@/domain'
-import { outletPresence, overviewPeriod, revenueChange } from '@/domain/overview'
+import { outletPresence, revenueChange } from '@/domain/overview'
 import { aheadOfCoveringPaise, proRataPnl } from '@/domain/fixed-costs'
 import { NeedsAttention } from '@/features/attention/needs-attention'
 import { useOnForeground } from '@/features/attention/attention'
@@ -47,7 +47,6 @@ export function OutletsOverview() {
   const read = useCallback(() => outlets.listOutlets(), [outlets])
   const rows = useOverviewRead(read)
   const [loadingOutletCount] = useState(readOverviewOutletCountHint)
-  const oneRevenue = useChangeGate('one-revenue')
   useEffect(() => {
     if (rows.value !== undefined) rememberOverviewOutletCount(rows.value.length)
   }, [rows.value])
@@ -60,7 +59,7 @@ export function OutletsOverview() {
           day: 'numeric',
           month: 'short',
           timeZone: 'Asia/Kolkata',
-        }).format(new Date())} · ${oneRevenue ? 'Month to date' : 'Month through yesterday'}`}
+        }).format(new Date())} · Month to date`}
       />
       {rows.error ? (
         <ReadError retry={rows.retry} />
@@ -85,310 +84,22 @@ export function OutletsOverview() {
       ) : rows.value.length === 0 ? (
         <p className="text-sm text-content-muted">No outlets are available to your account.</p>
       ) : (
-        rows.value.map((outlet) =>
-          oneRevenue ? (
-            <OneRevenueCard key={outlet.id} outlet={outlet} />
-          ) : (
-            <OutletCard key={outlet.id} outlet={outlet} />
-          ),
-        )
+        rows.value.map((outlet) => <OutletCard key={outlet.id} outlet={outlet} />)
       )}
       <NeedsAttention />
     </div>
   )
 }
 
-function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
-  const { overview } = useAdapters()
-  const session = useSession()
-  const base = `${session.mode === 'demo' ? '/demo' : ''}/${ROLE_SEGMENTS[session.role ?? 'franchise_admin']}`
-  const [now, setNow] = useState(Date.now)
-  const refreshClock = useCallback(() => setNow(Date.now()), [])
-  useOnForeground(refreshClock)
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 60_000)
-    return () => clearInterval(timer)
-  }, [])
-  const today = resolveBusinessDate(new Date(now), outlet.business_day_cutover)
-  const period = overviewPeriod(today)
-  const salesRead = useCallback(
-    () => overview.sales(outlet.id, today),
-    [overview, outlet.id, today],
-  )
-  const drawerRead = useCallback(() => overview.drawer(outlet.id), [overview, outlet.id])
-  const revenueRead = useCallback(
-    () => overview.revenue(outlet.id, period.from, period.through),
-    [overview, outlet.id, period.from, period.through],
-  )
-  const previousRead = useCallback(
-    () => overview.revenue(outlet.id, period.previousFrom, period.previousThrough),
-    [overview, outlet.id, period.previousFrom, period.previousThrough],
-  )
-  const expensesRead = useCallback(
-    () => overview.expenses(outlet.id, period.from, period.through),
-    [overview, outlet.id, period.from, period.through],
-  )
-  const tabletsRead = useCallback(() => overview.tablets(outlet.id), [overview, outlet.id])
-  const sales = useOverviewRead(salesRead)
-  const drawer = useOverviewRead(drawerRead)
-  const revenue = useOverviewRead(revenueRead)
-  const previous = useOverviewRead(previousRead)
-  const expenses = useOverviewRead(expensesRead)
-  const tablets = useOverviewRead(tabletsRead)
-  const rereadTablets = tablets.retry
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (document.visibilityState === 'visible') rereadTablets()
-    }, 60_000)
-    return () => clearInterval(timer)
-  }, [rereadTablets])
-  const status = tablets.value === undefined ? null : outletPresence(tablets.value, now)
-  const monthName = new Intl.DateTimeFormat('en-IN', {
-    month: 'long',
-    timeZone: 'Asia/Kolkata',
-  }).format(new Date(`${period.month}-01T12:00:00+05:30`))
-  const source = (path: string) => `${base}/${path}?outlet=${encodeURIComponent(outlet.id)}`
-  const ledger = `${source('ledger')}&view=month&month=${period.month}`
-  const qualifier = revenue.value?.incomplete
-    ? 'Delivery data incomplete'
-    : revenue.value?.provisional
-      ? 'Commission pending'
-      : null
-  const change =
-    revenue.value &&
-    previous.value &&
-    !qualifier &&
-    !previous.value.incomplete &&
-    !previous.value.provisional &&
-    previous.value.hasSales
-      ? revenueChange(revenue.value.revenuePaise, previous.value.revenuePaise)
-      : null
-  const profit =
-    revenue.value?.hasSales && expenses.value !== undefined
-      ? revenue.value.revenuePaise - expenses.value
-      : null
-  const periodLabel = period.fullMonth ? 'Full month' : 'Through yesterday'
-  return (
-    <Card
-      className="overflow-hidden bg-gradient-to-br from-surface-raised/30 to-surface !px-3 !py-0"
-      data-testid={`outlet-card-${outlet.id}`}
-    >
-      <div className="flex items-center justify-between gap-3 border-b border-border px-1 py-2.5">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="rounded-xl bg-primary/10 p-2.5 text-accent-text">
-            <Store size={26} aria-hidden />
-          </span>
-          <div className="min-w-0">
-            <h2 className="truncate text-[1.0625rem] font-bold leading-6">{outlet.name}</h2>
-            <p className="truncate text-sm leading-5 text-content-muted">{outlet.location_label}</p>
-          </div>
-        </div>
-        <Link
-          to={`${base}/outlets/${outlet.id}`}
-          data-testid={`open-outlet-${outlet.id}`}
-          className="flex min-h-12 shrink-0 items-center rounded-xl text-sm font-semibold focus-visible:focus-ring"
-          aria-label={
-            status === 'partial' ? 'Online, some tablets offline. View outlet' : undefined
-          }
-        >
-          {tablets.error ? (
-            'Status unavailable'
-          ) : status === null ? (
-            <Shimmer className="h-9 w-20 !rounded-xl" />
-          ) : (
-            <span className="flex items-center gap-2.5 rounded-xl border border-border px-3.5 py-2">
-              {status === 'offline' ? 'Offline' : 'Online'}
-              <span
-                aria-hidden
-                className={`h-2.5 w-2.5 rounded-full ${status === 'offline' ? 'bg-danger' : status === 'partial' ? 'bg-warning' : 'bg-success'}`}
-              />
-            </span>
-          )}
-        </Link>
-      </div>
-      <div className="grid grid-cols-2 divide-x divide-border">
-        <Metric
-          label="Today's counter sales"
-          to={source('billing-history')}
-          loading={sales.value === undefined}
-          error={sales.error}
-          retry={sales.retry}
-        >
-          {sales.value && (
-            <>
-              <MetricValue icon={Banknote} tone="primary">
-                <OverviewMoney
-                  paise={sales.value.cashPaise + sales.value.upiPaise}
-                  data-testid={`sales-${outlet.id}`}
-                />
-              </MetricValue>
-              <Subtext
-                title={`Cash ${formatPaise(sales.value.cashPaise)} · UPI ${formatPaise(sales.value.upiPaise)}`}
-              >
-                Cash <SupportingMoney paise={sales.value.cashPaise} /> · UPI{' '}
-                <SupportingMoney paise={sales.value.upiPaise} />
-              </Subtext>
-            </>
-          )}
-        </Metric>
-        <Metric
-          label="Drawer cash · expected"
-          to={source('drawer')}
-          loading={drawer.value === undefined}
-          error={drawer.error}
-          retry={drawer.retry}
-        >
-          {drawer.value && (
-            <>
-              <MetricValue icon={Wallet} tone="primary">
-                {drawer.value.expectedPaise === null ? (
-                  <p className="text-sm leading-7">Not counted yet</p>
-                ) : (
-                  <OverviewMoney
-                    paise={drawer.value.expectedPaise}
-                    data-testid={`cash-${outlet.id}`}
-                  />
-                )}
-              </MetricValue>
-              <Subtext
-                title={`Last left ${drawer.value.leftPaise === null ? '—' : formatPaise(drawer.value.leftPaise)} · Cash spent since the last count ${formatPaise(drawer.value.spentPaise)}`}
-              >
-                Left{' '}
-                {drawer.value.leftPaise === null ? (
-                  '—'
-                ) : (
-                  <SupportingMoney paise={drawer.value.leftPaise} />
-                )}{' '}
-                · Spent <SupportingMoney paise={drawer.value.spentPaise} />
-              </Subtext>
-            </>
-          )}
-        </Metric>
-      </div>
-      <div className="grid grid-cols-2 divide-x divide-border border-t border-border">
-        <Metric
-          label={`${monthName} revenue`}
-          title={`${monthName} revenue · ${periodLabel}`}
-          to={ledger}
-          loading={revenue.value === undefined}
-          error={revenue.error}
-          retry={revenue.retry}
-        >
-          {revenue.value && (
-            <>
-              <MetricValue
-                icon={
-                  change === null
-                    ? ChartNoAxesCombined
-                    : change > 0
-                      ? TrendingUp
-                      : change < 0
-                        ? TrendingDown
-                        : Minus
-                }
-                tone={
-                  change === null || change === 0 ? 'primary' : change > 0 ? 'success' : 'danger'
-                }
-              >
-                <OverviewMoney
-                  paise={revenue.value.revenuePaise}
-                  data-testid={`revenue-${outlet.id}`}
-                />
-              </MetricValue>
-              <Subtext title={periodLabel}>
-                {qualifier ??
-                  (previous.error ? (
-                    'Comparison unavailable'
-                  ) : previous.value === undefined ? (
-                    <Shimmer className="mt-1 h-3 w-24" />
-                  ) : change === null ? (
-                    'No comparable data'
-                  ) : (
-                    <span className="flex items-center gap-1">
-                      {change < 0 ? (
-                        <ArrowDownRight size={13} aria-hidden />
-                      ) : change === 0 ? (
-                        <Minus size={13} aria-hidden />
-                      ) : (
-                        <ArrowUpRight size={13} aria-hidden />
-                      )}
-                      <span className="font-bold">{Math.abs(change).toFixed(1)}%</span> vs{' '}
-                      {new Intl.DateTimeFormat('en-IN', {
-                        month: 'short',
-                        timeZone: 'Asia/Kolkata',
-                      }).format(new Date(`${period.previousFrom}T12:00:00+05:30`))}
-                      {period.fullMonth ? '' : ` 1–${Number(period.previousThrough.slice(8))}`}
-                    </span>
-                  ))}
-              </Subtext>
-            </>
-          )}
-        </Metric>
-        <Metric
-          label={`${monthName} P&L · est.`}
-          title={`${monthName} estimated operating P&L · ${periodLabel}`}
-          to={ledger}
-          loading={revenue.value === undefined || expenses.value === undefined}
-          error={revenue.error || expenses.error}
-          retry={() => {
-            revenue.retry()
-            expenses.retry()
-          }}
-        >
-          {revenue.value && expenses.value !== undefined && (
-            <>
-              <MetricValue
-                icon={
-                  profit === null
-                    ? ChartPie
-                    : profit > 0
-                      ? TrendingUp
-                      : profit < 0
-                        ? TrendingDown
-                        : Minus
-                }
-                tone={
-                  profit === null || profit === 0 ? 'primary' : profit > 0 ? 'success' : 'danger'
-                }
-              >
-                {profit === null ? (
-                  <p className="text-sm leading-7">No sales recorded</p>
-                ) : (
-                  <OverviewMoney paise={profit} data-testid={`profit-${outlet.id}`} />
-                )}
-              </MetricValue>
-              <Subtext
-                title={`Expenses ${formatPaise(expenses.value)}${qualifier ? ` · ${qualifier}` : ' · Percentage is operating margin'}`}
-              >
-                Expenses <SupportingMoney paise={expenses.value} />
-                {!qualifier && profit !== null && revenue.value.revenuePaise > 0 ? (
-                  <>
-                    <span> · </span>
-                    <span className="font-bold">
-                      {((profit / revenue.value.revenuePaise) * 100).toFixed(1)}%
-                    </span>
-                  </>
-                ) : (
-                  ''
-                )}
-              </Subtext>
-            </>
-          )}
-        </Metric>
-      </div>
-    </Card>
-  )
-}
-
 /**
- * The outlet card on One Revenue's definition (revenue-reads-the-same-everywhere,
+ * An outlet's card, on One Revenue's definition (revenue-reads-the-same-everywhere,
  * design D5). Today's revenue adds delivery imported for today; the month runs
  * through today and always compares with the same dates last month, cut at the
  * same time of day; expenses carry delivery commission. Nothing here qualifies
  * a figure for missing delivery or an unstated commission. The month, today and
  * the cut are the server's, so this card sends no date.
  */
-function OneRevenueCard({ outlet }: { outlet: Tables<'outlets'> }) {
+function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
   const { overview } = useAdapters()
   // P&L (Pro-rata) (fixed-costs-are-spread-over-the-month, design D9): where the
   // outlet has fixed costs this month, the tile charges the unpaid share of them

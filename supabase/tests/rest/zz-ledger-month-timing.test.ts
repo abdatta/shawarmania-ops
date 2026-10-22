@@ -22,7 +22,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { toMonthDayInput } from '../../../src/data-access/adapters'
 import { createSupabaseLedgerStatementAdapter } from '../../../src/data-access/supabase-adapters/ledger-statement'
-import { createSupabaseOverviewAdapter } from '../../../src/data-access/supabase-adapters/overview'
 import type { Database } from '../../../src/data-access/database.types'
 import { resolveBusinessDate, shiftBusinessDate } from '../../../src/domain'
 
@@ -197,20 +196,6 @@ describe('the derived ledger is read in a bounded number of round trips', () => 
       expect(dayMs).toBeLessThan(DAY_ROUND_TRIPS * LATENCY_MS)
       expect(monthMs).toBeLessThan(MONTH_ROUND_TRIPS * LATENCY_MS)
       expect(monthRequests).toBeLessThanOrEqual(MONTH_REQUEST_CEILING)
-
-      // Overview must agree with the independently assembled Ledger.
-      meter.slow = false
-      const overview = createSupabaseOverviewAdapter(client)
-      const [revenue, expenses, sales] = await Promise.all([
-        overview.revenue(outletId, `${MONTH}-01`, THROUGH),
-        overview.expenses(outletId, `${MONTH}-01`, THROUGH),
-        overview.sales(outletId, day.businessDate),
-      ])
-      expect(revenue.revenuePaise).toBe(month.reading.netRevenuePaise)
-      expect(revenue.provisional).toBe(month.reading.undeterminedDays > 0)
-      expect(revenue.hasSales).toBe(month.reading.daysWithSales > 0)
-      expect(expenses).toBe(month.reading.totalExpensesPaise)
-      expect(sales).toEqual({ cashPaise: day.revenue.cashPaise, upiPaise: day.revenue.upiPaise })
     },
     120_000,
   )

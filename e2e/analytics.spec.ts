@@ -98,439 +98,423 @@ for (const theme of ['light', 'dark']) {
     expect(backendRequests).toEqual([])
   })
 
-  test(
-    `inclusive dates and first-endpoint linking on both pages in ${theme}`,
-    { tag: '@cg-off:one-revenue' },
-    async ({ page }, testInfo) => {
-      await page.clock.install({ time: new Date('2026-10-10T12:00:00+05:30') })
-      const { errors, backendRequests } = await openAnalytics(
-        page,
-        testInfo,
-        theme,
-        'demo/owner/analytics/items',
-      )
-      for (const route of ['items', 'sales']) {
-        if (route === 'sales') {
-          await page.clock.setSystemTime(new Date('2026-10-10T18:30:00+05:30'))
-          await page.getByRole('link', { name: 'Sales', exact: true }).click()
-        }
-        await expect(page.getByRole('button', { name: 'Last 7 days' })).toHaveAttribute(
-          'aria-pressed',
-          'true',
-        )
-        await expect(page.getByText('Incomplete period', { exact: true })).toBeVisible()
-        const from = page.getByTestId('analytics-from-day-picker')
-        const to = page.getByTestId('analytics-to-day-picker')
-        for (const [days, start] of [
-          [1, '2026-10-10'],
-          [30, '2026-09-11'],
-          [7, '2026-10-04'],
-        ] as const) {
-          await page
-            .getByRole('button', {
-              name: `Last ${days} ${days === 1 ? 'day' : 'days'}`,
-              exact: true,
-            })
-            .click()
-          await page.getByRole('button', { name: 'Choose dates' }).click()
-          await expect(from).toHaveValue(start)
-          await expect(to).toHaveValue('2026-10-10')
-          await page
-            .getByRole('dialog', { name: 'Dates', exact: true })
-            .getByRole('button', { name: 'Close' })
-            .click()
-        }
-        await page.getByRole('button', { name: 'Previous period' }).click()
-        await expect(page.getByRole('button', { name: 'Next period' })).toBeEnabled()
-        await page.getByRole('button', { name: 'Next period' }).click()
-        await expect(page.getByRole('button', { name: 'Next period' })).toBeDisabled()
-        await page.getByRole('button', { name: 'Choose dates' }).click()
-        await from.fill('2026-10-02')
-        await expect(to).toHaveValue('2026-10-08')
-        await to.fill('2026-10-09')
-        await expect(from).toHaveValue('2026-10-02')
-        await page.getByRole('button', { name: 'Apply dates' }).click()
-        await expect(page).toHaveURL(/from=2026-10-02&to=2026-10-09/)
-        await expect(page.getByRole('button', { name: 'Group by: Day' })).toBeVisible()
-        await page.reload()
-        await page.getByRole('button', { name: 'Choose dates' }).click()
-        await to.fill('2026-10-08')
-        await expect(from).toHaveValue('2026-10-01')
-        await from.fill('2026-10-02')
-        await expect(to).toHaveValue('2026-10-08')
-        await page.getByRole('button', { name: 'Apply dates' }).click()
-        await expect(page).toHaveURL(/from=2026-10-02&to=2026-10-08/)
-        await page.getByRole('button', { name: 'Last 7 days' }).click()
-        await page.getByRole('button', { name: 'Choose dates' }).click()
-        await from.fill('2026-10-10')
-        await expect(to).toHaveValue('2026-10-16')
-        await expect(page.getByRole('button', { name: 'Apply dates' })).toBeDisabled()
-        await to.fill('2026-10-10')
-        await page.getByRole('button', { name: 'Apply dates' }).click()
-        await expect(page.getByRole('button', { name: 'Group by: Day' })).toBeVisible()
-        expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(
-          false,
-        )
+  test(`inclusive dates and first-endpoint linking on both pages in ${theme}`, async ({
+    page,
+  }, testInfo) => {
+    await page.clock.install({ time: new Date('2026-10-10T12:00:00+05:30') })
+    const { errors, backendRequests } = await openAnalytics(
+      page,
+      testInfo,
+      theme,
+      'demo/owner/analytics/items',
+    )
+    for (const route of ['items', 'sales']) {
+      if (route === 'sales') {
+        await page.clock.setSystemTime(new Date('2026-10-10T18:30:00+05:30'))
+        await page.getByRole('link', { name: 'Sales', exact: true }).click()
       }
-      expect(errors).toEqual([])
-      expect(backendRequests).toEqual([])
-    },
-  )
-
-  test(
-    `Items charts any dish or category against earlier periods in ${theme}`,
-    { tag: '@cg-off:one-revenue' },
-    async ({ page }, testInfo) => {
-      await page.clock.install({ time: new Date('2026-10-10T18:30:00+05:30') })
-      const { errors, backendRequests } = await openAnalytics(
-        page,
-        testInfo,
-        theme,
-        'demo/owner/analytics/items',
-      )
-      await expect(page.getByRole('heading', { name: 'Items', exact: true })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Last 7 days' })).toHaveAttribute(
         'aria-pressed',
         'true',
       )
-      // Head-to-head comparison is gone; the trend chart replaced it.
-      await expect(page.getByTestId('dish-comparison')).toHaveCount(0)
-      await expect(page.getByRole('button', { name: 'Compare', exact: true })).toHaveCount(0)
-      await expect(page.getByRole('button', { name: 'Group by: Day' })).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Measure: Items' })).toBeVisible()
-
-      const card = page.getByTestId('items-trend-card')
-      await expect(card.getByRole('button', { name: /^Charting All dishes/ })).toBeVisible()
-      await expect(card.getByRole('heading', { name: 'Items sold' })).toBeVisible()
-      const checkShares = async (metric: 'items' | 'revenue') => {
-        const total = Number(await page.getByTestId('items-total').getAttribute('data-value'))
-        for (const [rowId, shareId] of [
-          ['dish-row', 'dish-share'],
-          ['category-row', 'category-share'],
-        ]) {
-          const shares = await page.getByTestId(rowId!).evaluateAll(
-            (rows, shareId) =>
-              rows.map((row) => ({
-                value: Number(row.getAttribute('data-value')),
-                share: row.querySelector(`[data-testid="${shareId}"]`)!.textContent,
-              })),
-            shareId,
-          )
-          expect(shares.length).toBeGreaterThan(0)
-          for (const row of shares)
-            expect(row.share).toBe(
-              total ? `${Math.round((row.value / total) * 100)}% of ${metric}` : '—',
-            )
-        }
+      await expect(page.getByText('Incomplete period', { exact: true })).toBeVisible()
+      const from = page.getByTestId('analytics-from-day-picker')
+      const to = page.getByTestId('analytics-to-day-picker')
+      // Items keeps 30 days; Sales has the month to date in its place.
+      for (const [name, start] of [
+        ['Last 1 day', '2026-10-10'],
+        route === 'items' ? ['Last 30 days', '2026-09-11'] : ['This month', '2026-10-01'],
+        ['Last 7 days', '2026-10-04'],
+      ] as const) {
+        await page.getByRole('button', { name, exact: true }).click()
+        await page.getByRole('button', { name: 'Choose dates' }).click()
+        await expect(from).toHaveValue(start)
+        await expect(to).toHaveValue('2026-10-10')
+        await page
+          .getByRole('dialog', { name: 'Dates', exact: true })
+          .getByRole('button', { name: 'Close' })
+          .click()
       }
-      await checkShares('items')
-      await expect(page.getByTestId('items-trend').getByTestId('chart-series')).toHaveCount(2)
-      await expect(page.getByTestId('items-trend').getByTestId('chart-point')).toHaveCount(7)
-      const chart = page.getByTestId('items-trend').getByRole('group')
-      await chart.focus()
-      await chart.press('End')
-      await expect(page.getByTestId('items-trend').getByTestId('chart-details')).toBeVisible()
-      // Reached by keyboard, it does show the app's focus ring.
-      expect(await chart.evaluate((el) => getComputedStyle(el).boxShadow)).not.toBe('none')
-
-      // Rankings: a fixed card that pages more dishes in as it scrolls.
-      const rankings = page.getByRole('region', { name: 'Dish rankings' })
-      await expect(rankings.getByTestId('dish-row')).toHaveCount(12)
-      const height = (await rankings.boundingBox())!.height
-      expect(height).toBe(320)
-      const dishCount = Number(await rankings.getAttribute('data-total'))
-      for (
-        let batch = 0;
-        batch < 10 && (await rankings.getByTestId('dish-row').count()) < dishCount;
-        batch++
-      ) {
-        const before = await rankings.getByTestId('dish-row').count()
-        await rankings.evaluate((el) => {
-          el.scrollTop = el.scrollHeight
-        })
-        await expect.poll(() => rankings.getByTestId('dish-row').count()).toBeGreaterThan(before)
-      }
-      await expect(rankings.getByTestId('dish-row')).toHaveCount(dishCount)
-      expect(dishCount).toBeGreaterThan(50)
-      expect((await rankings.boundingBox())!.height).toBe(height)
-      const units = await rankings
-        .getByTestId('dish-row')
-        .evaluateAll((rows) => rows.map((row) => Number(row.getAttribute('data-units'))))
-      expect(units).toEqual([...units].sort((a, b) => b - a))
-      await rankings.evaluate((el) => {
-        el.scrollTop = 0
-      })
-
-      // Tapping a dish charts it, in the address so a reload keeps it.
-      const top = rankings.getByTestId('dish-row').nth(1)
-      const topUnits = await top.getAttribute('data-units')
-      const topName = (await top.getAttribute('aria-label'))!.replace(/^Chart /, '')
-      await top.click()
-      await expect(page).toHaveURL(/[?&]dish=/)
-      await expect(top).toHaveAttribute('aria-pressed', 'true')
-      await expect(
-        card.getByRole('button', { name: `Charting ${topName}. Choose what to chart` }),
-      ).toBeVisible()
-      await expect(page.getByTestId('items-trend-value')).toHaveText(topUnits!)
-
-      // The same figures as a table: every day of both periods and the change.
-      await card.getByRole('button', { name: 'Table', exact: true }).click()
-      const table = page.getByTestId('items-trend-table')
-      await expect(table.locator('tbody tr')).toHaveCount(7)
-      await expect(table.locator('thead th')).toHaveCount(4)
-      await page.screenshot({ path: testInfo.outputPath(`items-${theme}.png`) })
-      await page.reload()
-      await expect(page.getByTestId('items-trend-table')).toBeVisible()
-      await expect(
-        card.getByRole('button', { name: `Charting ${topName}. Choose what to chart` }),
-      ).toBeVisible()
-      await card.getByRole('button', { name: 'Chart', exact: true }).click()
-
-      // Four periods: the headline reads a direction and the usual range, not the last period.
-      await page.getByRole('button', { name: 'Compare periods: 2 periods' }).click()
-      await page.getByRole('button', { name: '4 periods', exact: true }).click()
-      await expect(page.getByTestId('items-trend').getByTestId('chart-series')).toHaveCount(4)
-      await expect(page.getByTestId('items-trend-usual')).toContainText(/^Usually .+ a week$/)
-      await expect(card.getByText(/^[▲≈▼] usual$/)).toBeVisible()
-      await expect(rankings.getByTestId('period-bars').first()).toBeVisible()
-      await chooseMeasure(page, 'Revenue')
-      await expect(card.getByRole('heading', { name: 'Dish revenue' })).toBeVisible()
-      await expect(page.getByTestId('items-trend-value')).toContainText('₹')
-      // The lists follow the measure: dish revenue, ranked, shown in rupees.
-      await expect(rankings.getByTestId('dish-row').first()).toContainText('₹')
-      const revenues = await rankings
-        .getByTestId('dish-row')
-        .evaluateAll((rows) => rows.map((row) => Number(row.getAttribute('data-value'))))
-      expect(revenues).toEqual([...revenues].sort((a, b) => b - a))
-      await expect(page.getByTestId('category-units').first()).toContainText('₹')
-      await expect(page.getByText('Revenue · captured')).toBeVisible()
-      await checkShares('revenue')
-      await page.getByRole('heading', { name: 'Categories', exact: true }).scrollIntoViewIfNeeded()
-      await page.screenshot({
-        path: testInfo.outputPath(`item-shares-${theme}.png`),
-        fullPage: true,
-      })
-
-      // One day opens by hour, keeping unfinished hours through the business-day cutoff.
-      const itemPoints = page.getByTestId('items-trend').getByTestId('chart-point')
-      await page.getByRole('button', { name: 'Last 1 day', exact: true }).click()
-      await expect(page.getByRole('button', { name: 'Group by: Hour' })).toBeVisible()
-      await expect.poll(() => itemPoints.count()).toBeGreaterThan(2)
-      expect(await itemPoints.count()).toBeLessThan(24)
-      await expect(page.getByTestId('items-trend').locator('svg text').last()).toHaveText('03:00')
-      const currentHours = await itemPoints.locator('title').allTextContents()
-      expect(currentHours.some((label) => label.includes('00:00'))).toBe(false)
-      await expect(page.getByTestId('items-trend').getByTestId('chart-series')).toHaveCount(4)
-      await expect(card.getByText('Counter bills by Kolkata order hour')).toBeVisible()
-      // A tap on the chart selects a point without drawing a focus box around it.
-      const hourChart = page.getByTestId('items-trend').getByRole('group')
-      await hourChart.click({ position: { x: 200, y: 80 } })
-      await expect(page.getByTestId('items-trend').getByTestId('chart-details')).toBeVisible()
-      expect(await hourChart.evaluate((el) => getComputedStyle(el).boxShadow)).toBe('none')
-      expect(await hourChart.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('none')
-      // By day it is a single point; a week goes back to days on its own.
-      await page.getByRole('button', { name: 'Group by: Hour' }).click()
-      await page.getByRole('button', { name: 'Day', exact: true }).click()
-      await expect(itemPoints).toHaveCount(1)
-      await page.getByRole('button', { name: 'Group by: Day' }).click()
-      await page.getByRole('button', { name: 'Hour', exact: true }).click()
-      await page.getByRole('button', { name: 'Last 7 days' }).click()
-      await expect(page.getByRole('button', { name: 'Group by: Day' })).toBeVisible()
-
-      // Categories carry their own change and chart the same way.
-      const categories = page.getByTestId('category-row')
-      // Changing the period count reads the snapshot again; wait for its rows.
-      await expect.poll(() => categories.count()).toBeGreaterThan(5)
-      // Category bars stand in one vertical line whatever each row's chip and number.
-      const lefts = await categories.evaluateAll((rows) =>
-        rows.map((row) =>
-          Math.round(
-            row.querySelector('[data-testid="period-bars"]')!.getBoundingClientRect().left,
-          ),
-        ),
-      )
-      expect(new Set(lefts).size).toBe(1)
-      await expect(page.getByText('Uncategorised', { exact: true })).toHaveCount(0)
-      const category = (await categories.first().getAttribute('aria-label'))!.replace(/^Chart /, '')
-      await categories.first().click()
-      await expect(page).toHaveURL(/[?&]category=/)
-      await expect(page).not.toHaveURL(/[?&]dish=/)
-      await expect(
-        card.getByRole('button', { name: `Charting ${category}. Choose what to chart` }),
-      ).toBeVisible()
-
-      // And through the picker, back to every dish.
-      await card.getByRole('button', { name: /Choose what to chart/ }).click()
-      const picker = page.getByRole('dialog', { name: 'Chart' })
-      await expect(picker.getByRole('region', { name: 'Categories' })).toBeVisible()
-      await picker.getByRole('button', { name: 'All dishes' }).click()
-      await expect(page).not.toHaveURL(/[?&](dish|category)=/)
-      await expect(card.getByRole('button', { name: /^Charting All dishes/ })).toBeVisible()
-
-      await page.getByRole('button', { name: 'Worst', exact: true }).click()
-      const worst = await rankings
-        .getByTestId('dish-row')
-        .evaluateAll((rows) => rows.map((row) => Number(row.getAttribute('data-value'))))
-      expect(worst[0]).toBe(0)
-      expect(worst).toEqual([...worst].sort((a, b) => a - b))
-      // Comparing four periods, each row shows a bar per period and where they head;
-      // Rising and Slow mean that direction, not beating the last period.
-      const slopes = async () =>
-        rankings.getByTestId('dish-row').evaluateAll((elements) =>
-          elements.map((el) => {
-            const values = [...el.querySelectorAll('[data-testid="period-bars"] [data-value]')].map(
-              (bar) => Number(bar.getAttribute('data-value')),
-            )
-            const mean = values.reduce((sum, v) => sum + v, 0) / values.length
-            const middle = (values.length - 1) / 2
-            return {
-              bars: values.length,
-              slope: values.reduce((sum, v, x) => sum + (x - middle) * (v - mean), 0),
-            }
-          }),
-        )
-      for (const tab of ['Rising', 'Slow']) {
-        await page.getByRole('button', { name: tab, exact: true }).click()
-        const rows = await slopes()
-        expect(rows.length).toBeGreaterThan(0)
-        expect(rows.every((row) => row.bars === 4)).toBe(true)
-        expect(rows.every((row) => (tab === 'Rising' ? row.slope > 0 : row.slope < 0))).toBe(true)
-      }
-      // Back to two periods, the rows compare with the previous one again.
-      await page.getByRole('button', { name: 'Compare periods: 4 periods' }).click()
-      await page.getByRole('button', { name: '2 periods', exact: true }).click()
-      await expect(rankings.getByTestId('period-bars')).toHaveCount(0)
-      for (const tab of ['Rising', 'Slow']) {
-        await page.getByRole('button', { name: tab, exact: true }).click()
-        const rows = await rankings.getByTestId('dish-row').evaluateAll((elements) =>
-          elements.map((el) => ({
-            units: Number(el.getAttribute('data-value')),
-            previous: Number(el.getAttribute('data-previous-value')),
-          })),
-        )
-        expect(rows.length).toBeGreaterThan(0)
-        expect(
-          rows.every(
-            (row) =>
-              row.previous > 0 &&
-              (tab === 'Rising' ? row.units > row.previous : row.units < row.previous),
-          ),
-        ).toBe(true)
-      }
-      await page.getByLabel('Search dishes').fill('does-not-exist')
-      await expect(page.getByText('No dishes match this filter.')).toBeVisible()
-      expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(
-        false,
-      )
-      expect(errors).toEqual([])
-      expect(backendRequests).toEqual([])
-    },
-  )
-
-  test(
-    `Sales reads one trend as a chart or a table in ${theme}`,
-    { tag: '@cg-off:one-revenue' },
-    async ({ page }, testInfo) => {
-      await page.clock.install({ time: new Date('2026-10-10T18:30:00+05:30') })
-      const { errors, backendRequests } = await openAnalytics(
-        page,
-        testInfo,
-        theme,
-        'demo/owner/analytics/sales',
-      )
-      const card = page.getByTestId('sales-trend-card')
-      await expect(card.getByRole('heading', { name: 'Revenue', exact: true })).toBeVisible()
-      // The Days list and the weekday card are gone: the table and the chart cover them.
-      await expect(page.getByRole('heading', { name: 'Days', exact: true })).toHaveCount(0)
-      await expect(page.getByTestId('sales-weekdays')).toHaveCount(0)
-      await expect(page.getByText('Table & export')).toHaveCount(0)
-      await page.screenshot({ path: testInfo.outputPath(`sales-${theme}.png`) })
-      const trend = page.getByTestId('sales-trend')
-      const chart = trend.getByRole('group')
-      await chart.focus()
-      await chart.press('Home')
-      await expect(trend.getByTestId('chart-details')).toContainText('₹')
-
-      await page.getByRole('button', { name: 'Compare periods: 2 periods' }).click()
-      await page.getByRole('button', { name: '4 periods', exact: true }).click()
-      for (const id of ['sales-trend', 'sales-hours'])
-        await expect(page.getByTestId(id).getByTestId('chart-series')).toHaveCount(4)
-      const fills = await page
-        .getByTestId('sales-hours')
-        .getByTestId('chart-series')
-        .evaluateAll((groups) =>
-          groups.map((group) => group.querySelector('rect')!.getAttribute('fill')),
-        )
-      expect(new Set(fills).size).toBe(4)
-      for (const metric of ['Orders', 'AOV', 'Revenue']) {
-        await chooseMeasure(page, metric)
-        await expect(card.getByRole('heading', { name: metric, exact: true })).toBeVisible()
-        const hourlyTitle =
-          metric === 'AOV' ? 'Average bill by hour' : `Hourly average ${metric.toLowerCase()}`
-        await expect(page.getByRole('heading', { name: hourlyTitle, exact: true })).toBeVisible()
-      }
-
-      await page.getByRole('button', { name: 'Last 30 days' }).click()
-      await page.getByRole('button', { name: 'Group by: Day' }).click()
-      await page.getByRole('button', { name: 'Week', exact: true }).click()
-      await expect(page.getByRole('button', { name: 'Group by: Week' })).toBeVisible()
-      // Thirty days from a Monday-week boundary is five or six weeks.
-      await expect.poll(() => trend.getByTestId('chart-point').count()).toBeLessThan(7)
-      const points = await trend.getByTestId('chart-point').count()
-      await card.getByRole('button', { name: 'Table', exact: true }).click()
-      const table = page.getByTestId('sales-trend-table')
-      // A header for the bucket, one per period, and the change.
-      await expect(table.locator('thead th')).toHaveCount(6)
-      await expect(table.locator('tbody tr')).toHaveCount(points)
-      await page.reload()
-      await expect(page.getByRole('button', { name: 'Group by: Week' })).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Compare periods: 4 periods' })).toBeVisible()
-      await expect(page.getByTestId('sales-trend-table')).toBeVisible()
-
-      await page.getByRole('button', { name: 'Group by: Week' }).click()
-      await page.getByRole('button', { name: 'Hour', exact: true }).click()
-      // Only the trading hours: the night is zero in every period.
-      await expect(page.getByRole('button', { name: 'Group by: Hour' })).toBeVisible()
-      await expect(table.locator('tbody th').first()).toHaveText(/^\d{2}:00$/)
-      const tradingRows = await table.locator('tbody tr').count()
-      expect(tradingRows).toBeGreaterThan(5)
-      expect(tradingRows).toBeLessThan(24)
-      const download = page.waitForEvent('download')
-      await card.getByRole('button', { name: 'Export CSV' }).click()
-      expect((await download).suggestedFilename()).toBe('sales-trends.csv')
-      await card.getByRole('button', { name: 'Chart', exact: true }).click()
-      await page.getByRole('button', { name: 'Last 1 day', exact: true }).click()
-      await expect(page.getByRole('button', { name: 'Group by: Hour' })).toBeVisible()
-      const dayHours = await trend.getByTestId('chart-point').count()
-      expect(dayHours).toBeGreaterThan(5)
-      expect(dayHours).toBeLessThan(24)
-
-      const hours = page.getByTestId('sales-hours')
-      const soldHour = hours.locator('[data-testid="chart-column"]:not([height="0"])').first()
-      const hourLabel = (await soldHour.textContent())!.match(/\d{2}:00/)![0]
-      await soldHour.hover()
-      await expect(hours.getByTestId('chart-details')).toContainText(hourLabel)
-      await soldHour.tap()
-      await expect(hours.getByTestId('chart-details')).toContainText(hourLabel)
-      expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(
-        false,
-      )
-
+      await page.getByRole('button', { name: 'Previous period' }).click()
+      await expect(page.getByRole('button', { name: 'Next period' })).toBeEnabled()
+      await page.getByRole('button', { name: 'Next period' }).click()
+      await expect(page.getByRole('button', { name: 'Next period' })).toBeDisabled()
       await page.getByRole('button', { name: 'Choose dates' }).click()
-      await page.getByTestId('analytics-from-day-picker').fill('2020-01-01')
-      await page.getByTestId('analytics-to-day-picker').fill('2020-01-07')
+      await from.fill('2026-10-02')
+      await expect(to).toHaveValue('2026-10-08')
+      await to.fill('2026-10-09')
+      await expect(from).toHaveValue('2026-10-02')
       await page.getByRole('button', { name: 'Apply dates' }).click()
-      await expect(
-        page.getByRole('heading', { name: 'No settled sales in this period' }),
-      ).toBeVisible()
-      await expect(hours.getByTestId('chart-column')).toHaveCount(24)
-      await page.getByRole('link', { name: 'Items', exact: true }).click()
-      await expect(page.getByRole('heading', { name: 'Dishes', exact: true })).toBeVisible()
-      await expect.poll(() => page.evaluate(() => scrollY)).toBe(0)
-      expect(errors).toEqual([])
-      expect(backendRequests).toEqual([])
-    },
-  )
+      await expect(page).toHaveURL(/from=2026-10-02&to=2026-10-09/)
+      await expect(page.getByRole('button', { name: 'Group by: Day' })).toBeVisible()
+      await page.reload()
+      await page.getByRole('button', { name: 'Choose dates' }).click()
+      await to.fill('2026-10-08')
+      await expect(from).toHaveValue('2026-10-01')
+      await from.fill('2026-10-02')
+      await expect(to).toHaveValue('2026-10-08')
+      await page.getByRole('button', { name: 'Apply dates' }).click()
+      await expect(page).toHaveURL(/from=2026-10-02&to=2026-10-08/)
+      await page.getByRole('button', { name: 'Last 7 days' }).click()
+      await page.getByRole('button', { name: 'Choose dates' }).click()
+      await from.fill('2026-10-10')
+      await expect(to).toHaveValue('2026-10-16')
+      await expect(page.getByRole('button', { name: 'Apply dates' })).toBeDisabled()
+      await to.fill('2026-10-10')
+      await page.getByRole('button', { name: 'Apply dates' }).click()
+      await expect(page.getByRole('button', { name: 'Group by: Day' })).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(
+        false,
+      )
+    }
+    expect(errors).toEqual([])
+    expect(backendRequests).toEqual([])
+  })
+
+  test(`Items charts any dish or category against earlier periods in ${theme}`, async ({
+    page,
+  }, testInfo) => {
+    await page.clock.install({ time: new Date('2026-10-10T18:30:00+05:30') })
+    const { errors, backendRequests } = await openAnalytics(
+      page,
+      testInfo,
+      theme,
+      'demo/owner/analytics/items',
+    )
+    await expect(page.getByRole('heading', { name: 'Items', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Last 7 days' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    // Head-to-head comparison is gone; the trend chart replaced it.
+    await expect(page.getByTestId('dish-comparison')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Compare', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Group by: Day' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Measure: Items' })).toBeVisible()
+
+    const card = page.getByTestId('items-trend-card')
+    await expect(card.getByRole('button', { name: /^Charting All dishes/ })).toBeVisible()
+    await expect(card.getByRole('heading', { name: 'Items sold' })).toBeVisible()
+    const checkShares = async (metric: 'items' | 'revenue') => {
+      const total = Number(await page.getByTestId('items-total').getAttribute('data-value'))
+      for (const [rowId, shareId] of [
+        ['dish-row', 'dish-share'],
+        ['category-row', 'category-share'],
+      ]) {
+        const shares = await page.getByTestId(rowId!).evaluateAll(
+          (rows, shareId) =>
+            rows.map((row) => ({
+              value: Number(row.getAttribute('data-value')),
+              share: row.querySelector(`[data-testid="${shareId}"]`)!.textContent,
+            })),
+          shareId,
+        )
+        expect(shares.length).toBeGreaterThan(0)
+        for (const row of shares)
+          expect(row.share).toBe(
+            total ? `${Math.round((row.value / total) * 100)}% of ${metric}` : '—',
+          )
+      }
+    }
+    await checkShares('items')
+    await expect(page.getByTestId('items-trend').getByTestId('chart-series')).toHaveCount(2)
+    await expect(page.getByTestId('items-trend').getByTestId('chart-point')).toHaveCount(7)
+    const chart = page.getByTestId('items-trend').getByRole('group')
+    await chart.focus()
+    await chart.press('End')
+    await expect(page.getByTestId('items-trend').getByTestId('chart-details')).toBeVisible()
+    // Reached by keyboard, it does show the app's focus ring.
+    expect(await chart.evaluate((el) => getComputedStyle(el).boxShadow)).not.toBe('none')
+
+    // Rankings: a fixed card that pages more dishes in as it scrolls.
+    const rankings = page.getByRole('region', { name: 'Dish rankings' })
+    await expect(rankings.getByTestId('dish-row')).toHaveCount(12)
+    const height = (await rankings.boundingBox())!.height
+    expect(height).toBe(320)
+    const dishCount = Number(await rankings.getAttribute('data-total'))
+    for (
+      let batch = 0;
+      batch < 10 && (await rankings.getByTestId('dish-row').count()) < dishCount;
+      batch++
+    ) {
+      const before = await rankings.getByTestId('dish-row').count()
+      await rankings.evaluate((el) => {
+        el.scrollTop = el.scrollHeight
+      })
+      await expect.poll(() => rankings.getByTestId('dish-row').count()).toBeGreaterThan(before)
+    }
+    await expect(rankings.getByTestId('dish-row')).toHaveCount(dishCount)
+    expect(dishCount).toBeGreaterThan(50)
+    expect((await rankings.boundingBox())!.height).toBe(height)
+    const units = await rankings
+      .getByTestId('dish-row')
+      .evaluateAll((rows) => rows.map((row) => Number(row.getAttribute('data-units'))))
+    expect(units).toEqual([...units].sort((a, b) => b - a))
+    await rankings.evaluate((el) => {
+      el.scrollTop = 0
+    })
+
+    // Tapping a dish charts it, in the address so a reload keeps it.
+    const top = rankings.getByTestId('dish-row').nth(1)
+    const topUnits = await top.getAttribute('data-units')
+    const topName = (await top.getAttribute('aria-label'))!.replace(/^Chart /, '')
+    await top.click()
+    await expect(page).toHaveURL(/[?&]dish=/)
+    await expect(top).toHaveAttribute('aria-pressed', 'true')
+    await expect(
+      card.getByRole('button', { name: `Charting ${topName}. Choose what to chart` }),
+    ).toBeVisible()
+    await expect(page.getByTestId('items-trend-value')).toHaveText(topUnits!)
+
+    // The same figures as a table: every day of both periods and the change.
+    await card.getByRole('button', { name: 'Table', exact: true }).click()
+    const table = page.getByTestId('items-trend-table')
+    await expect(table.locator('tbody tr')).toHaveCount(7)
+    await expect(table.locator('thead th')).toHaveCount(4)
+    await page.screenshot({ path: testInfo.outputPath(`items-${theme}.png`) })
+    await page.reload()
+    await expect(page.getByTestId('items-trend-table')).toBeVisible()
+    await expect(
+      card.getByRole('button', { name: `Charting ${topName}. Choose what to chart` }),
+    ).toBeVisible()
+    await card.getByRole('button', { name: 'Chart', exact: true }).click()
+
+    // Four periods: the headline reads a direction and the usual range, not the last period.
+    await page.getByRole('button', { name: 'Compare periods: 2 periods' }).click()
+    await page.getByRole('button', { name: '4 periods', exact: true }).click()
+    await expect(page.getByTestId('items-trend').getByTestId('chart-series')).toHaveCount(4)
+    await expect(page.getByTestId('items-trend-usual')).toContainText(/^Usually .+ a week$/)
+    await expect(card.getByText(/^[▲≈▼] usual$/)).toBeVisible()
+    await expect(rankings.getByTestId('period-bars').first()).toBeVisible()
+    await chooseMeasure(page, 'Revenue')
+    await expect(card.getByRole('heading', { name: 'Dish revenue' })).toBeVisible()
+    await expect(page.getByTestId('items-trend-value')).toContainText('₹')
+    // The lists follow the measure: dish revenue, ranked, shown in rupees.
+    await expect(rankings.getByTestId('dish-row').first()).toContainText('₹')
+    const revenues = await rankings
+      .getByTestId('dish-row')
+      .evaluateAll((rows) => rows.map((row) => Number(row.getAttribute('data-value'))))
+    expect(revenues).toEqual([...revenues].sort((a, b) => b - a))
+    await expect(page.getByTestId('category-units').first()).toContainText('₹')
+    await expect(page.getByText('Revenue · captured')).toBeVisible()
+    await checkShares('revenue')
+    await page.getByRole('heading', { name: 'Categories', exact: true }).scrollIntoViewIfNeeded()
+    await page.screenshot({
+      path: testInfo.outputPath(`item-shares-${theme}.png`),
+      fullPage: true,
+    })
+
+    // One day opens by hour, ending an hour after the last hour any compared day
+    // sold in, not running on to the business-day cutoff.
+    const itemPoints = page.getByTestId('items-trend').getByTestId('chart-point')
+    await page.getByRole('button', { name: 'Last 1 day', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Group by: Hour' })).toBeVisible()
+    await expect.poll(() => itemPoints.count()).toBeGreaterThan(2)
+    expect(await itemPoints.count()).toBeLessThan(24)
+    await expect(page.getByTestId('items-trend').locator('svg text').last()).toHaveText('22:00')
+    const currentHours = await itemPoints.locator('title').allTextContents()
+    expect(currentHours.some((label) => label.includes('00:00'))).toBe(false)
+    await expect(page.getByTestId('items-trend').getByTestId('chart-series')).toHaveCount(4)
+    // The caption says what the earlier periods came to.
+    await expect(card.getByTestId('items-trend-compared')).toContainText('vs')
+    // A tap on the chart selects a point without drawing a focus box around it.
+    const hourChart = page.getByTestId('items-trend').getByRole('group')
+    await hourChart.click({ position: { x: 200, y: 80 } })
+    await expect(page.getByTestId('items-trend').getByTestId('chart-details')).toBeVisible()
+    expect(await hourChart.evaluate((el) => getComputedStyle(el).boxShadow)).toBe('none')
+    expect(await hourChart.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('none')
+    // By day it is a single point; a week goes back to days on its own.
+    await page.getByRole('button', { name: 'Group by: Hour' }).click()
+    await page.getByRole('button', { name: 'Day', exact: true }).click()
+    await expect(itemPoints).toHaveCount(1)
+    await page.getByRole('button', { name: 'Group by: Day' }).click()
+    await page.getByRole('button', { name: 'Hour', exact: true }).click()
+    await page.getByRole('button', { name: 'Last 7 days' }).click()
+    await expect(page.getByRole('button', { name: 'Group by: Day' })).toBeVisible()
+
+    // Categories carry their own change and chart the same way.
+    const categories = page.getByTestId('category-row')
+    // Changing the period count reads the snapshot again; wait for its rows.
+    await expect.poll(() => categories.count()).toBeGreaterThan(5)
+    // Category bars stand in one vertical line whatever each row's chip and number.
+    const lefts = await categories.evaluateAll((rows) =>
+      rows.map((row) =>
+        Math.round(row.querySelector('[data-testid="period-bars"]')!.getBoundingClientRect().left),
+      ),
+    )
+    expect(new Set(lefts).size).toBe(1)
+    await expect(page.getByText('Uncategorised', { exact: true })).toHaveCount(0)
+    const category = (await categories.first().getAttribute('aria-label'))!.replace(/^Chart /, '')
+    await categories.first().click()
+    await expect(page).toHaveURL(/[?&]category=/)
+    await expect(page).not.toHaveURL(/[?&]dish=/)
+    await expect(
+      card.getByRole('button', { name: `Charting ${category}. Choose what to chart` }),
+    ).toBeVisible()
+
+    // And through the picker, back to every dish.
+    await card.getByRole('button', { name: /Choose what to chart/ }).click()
+    const picker = page.getByRole('dialog', { name: 'Chart' })
+    await expect(picker.getByRole('region', { name: 'Categories' })).toBeVisible()
+    await picker.getByRole('button', { name: 'All dishes' }).click()
+    await expect(page).not.toHaveURL(/[?&](dish|category)=/)
+    await expect(card.getByRole('button', { name: /^Charting All dishes/ })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Worst', exact: true }).click()
+    const worst = await rankings
+      .getByTestId('dish-row')
+      .evaluateAll((rows) => rows.map((row) => Number(row.getAttribute('data-value'))))
+    expect(worst[0]).toBe(0)
+    expect(worst).toEqual([...worst].sort((a, b) => a - b))
+    // Comparing four periods, each row shows a bar per period and where they head;
+    // Rising and Slow mean that direction, not beating the last period.
+    const slopes = async () =>
+      rankings.getByTestId('dish-row').evaluateAll((elements) =>
+        elements.map((el) => {
+          const values = [...el.querySelectorAll('[data-testid="period-bars"] [data-value]')].map(
+            (bar) => Number(bar.getAttribute('data-value')),
+          )
+          const mean = values.reduce((sum, v) => sum + v, 0) / values.length
+          const middle = (values.length - 1) / 2
+          return {
+            bars: values.length,
+            slope: values.reduce((sum, v, x) => sum + (x - middle) * (v - mean), 0),
+          }
+        }),
+      )
+    for (const tab of ['Rising', 'Slow']) {
+      await page.getByRole('button', { name: tab, exact: true }).click()
+      const rows = await slopes()
+      expect(rows.length).toBeGreaterThan(0)
+      expect(rows.every((row) => row.bars === 4)).toBe(true)
+      expect(rows.every((row) => (tab === 'Rising' ? row.slope > 0 : row.slope < 0))).toBe(true)
+    }
+    // Back to two periods, the rows compare with the previous one again.
+    await page.getByRole('button', { name: 'Compare periods: 4 periods' }).click()
+    await page.getByRole('button', { name: '2 periods', exact: true }).click()
+    await expect(rankings.getByTestId('period-bars')).toHaveCount(0)
+    for (const tab of ['Rising', 'Slow']) {
+      await page.getByRole('button', { name: tab, exact: true }).click()
+      const rows = await rankings.getByTestId('dish-row').evaluateAll((elements) =>
+        elements.map((el) => ({
+          units: Number(el.getAttribute('data-value')),
+          previous: Number(el.getAttribute('data-previous-value')),
+        })),
+      )
+      expect(rows.length).toBeGreaterThan(0)
+      expect(
+        rows.every(
+          (row) =>
+            row.previous > 0 &&
+            (tab === 'Rising' ? row.units > row.previous : row.units < row.previous),
+        ),
+      ).toBe(true)
+    }
+    await page.getByLabel('Search dishes').fill('does-not-exist')
+    await expect(page.getByText('No dishes match this filter.')).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
+    expect(errors).toEqual([])
+    expect(backendRequests).toEqual([])
+  })
+
+  test(`Sales reads one trend as a chart or a table in ${theme}`, async ({ page }, testInfo) => {
+    await page.clock.install({ time: new Date('2026-10-10T18:30:00+05:30') })
+    const { errors, backendRequests } = await openAnalytics(
+      page,
+      testInfo,
+      theme,
+      'demo/owner/analytics/sales',
+    )
+    const card = page.getByTestId('sales-trend-card')
+    await expect(card.getByRole('heading', { name: 'Revenue', exact: true })).toBeVisible()
+    // The Days list and the weekday card are gone: the table and the chart cover them.
+    await expect(page.getByRole('heading', { name: 'Days', exact: true })).toHaveCount(0)
+    await expect(page.getByTestId('sales-weekdays')).toHaveCount(0)
+    await expect(page.getByText('Table & export')).toHaveCount(0)
+    await page.screenshot({ path: testInfo.outputPath(`sales-${theme}.png`) })
+    const trend = page.getByTestId('sales-trend')
+    const chart = trend.getByRole('group')
+    await chart.focus()
+    await chart.press('Home')
+    await expect(trend.getByTestId('chart-details')).toContainText('₹')
+
+    await page.getByRole('button', { name: 'Compare periods: 2 periods' }).click()
+    await page.getByRole('button', { name: '4 periods', exact: true }).click()
+    for (const id of ['sales-trend', 'sales-hours'])
+      await expect(page.getByTestId(id).getByTestId('chart-series')).toHaveCount(4)
+    const fills = await page
+      .getByTestId('sales-hours')
+      .getByTestId('chart-series')
+      .evaluateAll((groups) =>
+        groups.map((group) => group.querySelector('rect')!.getAttribute('fill')),
+      )
+    expect(new Set(fills).size).toBe(4)
+    for (const metric of ['Orders', 'AOV', 'Revenue']) {
+      await chooseMeasure(page, metric)
+      await expect(card.getByRole('heading', { name: metric, exact: true })).toBeVisible()
+      const hourlyTitle =
+        metric === 'AOV' ? 'Average bill by hour' : `Hourly average ${metric.toLowerCase()}`
+      await expect(page.getByRole('heading', { name: hourlyTitle, exact: true })).toBeVisible()
+    }
+
+    await page.getByRole('button', { name: 'This month' }).click()
+    await page.getByRole('button', { name: 'Group by: Day' }).click()
+    await page.getByRole('button', { name: 'Week', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Group by: Week' })).toBeVisible()
+    // 1–10 October, from Thursday the 1st, is two Monday weeks.
+    await expect.poll(() => trend.getByTestId('chart-point').count()).toBeLessThan(7)
+    const points = await trend.getByTestId('chart-point').count()
+    await card.getByRole('button', { name: 'Table', exact: true }).click()
+    const table = page.getByTestId('sales-trend-table')
+    // A header for the bucket, one per period, and the change.
+    await expect(table.locator('thead th')).toHaveCount(6)
+    await expect(table.locator('tbody tr')).toHaveCount(points)
+    await page.reload()
+    await expect(page.getByRole('button', { name: 'Group by: Week' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Compare periods: 4 periods' })).toBeVisible()
+    await expect(page.getByTestId('sales-trend-table')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Group by: Week' }).click()
+    await page.getByRole('button', { name: 'Hour', exact: true }).click()
+    // Only the trading hours: the night is zero in every period.
+    await expect(page.getByRole('button', { name: 'Group by: Hour' })).toBeVisible()
+    await expect(table.locator('tbody th').first()).toHaveText(/^\d{2}:00$/)
+    const tradingRows = await table.locator('tbody tr').count()
+    expect(tradingRows).toBeGreaterThan(5)
+    expect(tradingRows).toBeLessThan(24)
+    const download = page.waitForEvent('download')
+    await card.getByRole('button', { name: 'Export CSV' }).click()
+    expect((await download).suggestedFilename()).toBe('sales-trends.csv')
+    await card.getByRole('button', { name: 'Chart', exact: true }).click()
+    await page.getByRole('button', { name: 'Last 1 day', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Group by: Hour' })).toBeVisible()
+    const dayHours = await trend.getByTestId('chart-point').count()
+    expect(dayHours).toBeGreaterThan(5)
+    expect(dayHours).toBeLessThan(24)
+
+    const hours = page.getByTestId('sales-hours')
+    const soldHour = hours.locator('[data-testid="chart-column"]:not([height="0"])').first()
+    const hourLabel = (await soldHour.textContent())!.match(/\d{2}:00/)![0]
+    await soldHour.hover()
+    await expect(hours.getByTestId('chart-details')).toContainText(hourLabel)
+    await soldHour.tap()
+    await expect(hours.getByTestId('chart-details')).toContainText(hourLabel)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
+
+    await page.getByRole('button', { name: 'Choose dates' }).click()
+    await page.getByTestId('analytics-from-day-picker').fill('2020-01-01')
+    await page.getByTestId('analytics-to-day-picker').fill('2020-01-07')
+    await page.getByRole('button', { name: 'Apply dates' }).click()
+    await expect(
+      page.getByRole('heading', { name: 'No settled sales in this period' }),
+    ).toBeVisible()
+    await expect(hours.getByTestId('chart-column')).toHaveCount(24)
+    await page.getByRole('link', { name: 'Items', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Dishes', exact: true })).toBeVisible()
+    await expect.poll(() => page.evaluate(() => scrollY)).toBe(0)
+    expect(errors).toEqual([])
+    expect(backendRequests).toEqual([])
+  })
 }
 
 /** The leading whole number of a figure such as `1,204 · so far`. */

@@ -23,9 +23,9 @@ export interface AnalyticsAdapter {
       view?: 'items' | 'sales'
       periods?: number
       /**
-       * One Revenue's Sales read only: how earlier windows align, and whether
-       * their last date is cut at the time it is now. The server decides the
-       * cut; the client only asks for it.
+       * How earlier windows align (`equal` unless asked), and whether their
+       * last date is cut at the time it is now. The server decides the cut; the
+       * client only asks for it.
        */
       align?: 'equal' | 'month'
       cut?: boolean
@@ -38,7 +38,7 @@ export interface AnalyticsAdapter {
     to: string,
     periods: number,
     subject: AnalyticsSubject,
-    /** One Revenue only: cut earlier windows at the time it is now. */
+    /** Cut earlier windows at the time it is now. */
     options?: { cut?: boolean },
   ): Promise<AnalyticsSeries>
 }

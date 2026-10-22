@@ -90,7 +90,15 @@ it('updates the presentation clock without rereading an explicitly selected snap
     window.dispatchEvent(new Event('focus'))
   })
   expect(screen.queryByText('Incomplete period')).toBeNull()
-  expect(read).toHaveBeenCalledTimes(1)
+  // The day it names has ended, so its comparison is no longer cut: one reread
+  // says so, and the outlet is not read again.
+  expect(read).toHaveBeenCalledTimes(2)
+  expect(read).toHaveBeenLastCalledWith(
+    'outlet',
+    '2026-10-10',
+    '2026-10-10',
+    expect.objectContaining({ cut: false }),
+  )
   expect(outlets.getOutlet).toHaveBeenCalledTimes(1)
   view.unmount()
 })

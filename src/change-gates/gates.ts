@@ -114,32 +114,18 @@ export const CHANGE_GATES = {
       'none: the on path changes when the app reads, never what it writes; a v2 health report writes the row a v1 report writes',
   },
   /**
-   * #76: one meaning for revenue on Overview, the Ledger and Analytics
-   * (revenue-reads-the-same-everywhere, design D1–D9): delivery before
-   * commission, commission as a derived expense, the month through today, and a
-   * comparison with the same dates last month up to the same time. Off, each
-   * screen reads as it did before.
-   */
-  'one-revenue': {
-    kind: 'change',
-    code: 'RV',
-    change: 'revenue-reads-the-same-everywhere',
-    retireBy: '2027-01-31',
-    roundTrip: 'none: every figure is read and derived; the on path writes nothing',
-  },
-  /**
    * #79: Pro-rata P&L beside P&L on Overview and the Ledger's current month,
    * charging the unpaid share of this month's fixed costs up to today, and the
    * Fixed chip on a fixed-cost payment (fixed-costs-are-spread-over-the-month,
-   * design D6–D10). Built on `one-revenue`'s figures, so it runs only with it.
-   * The Fixed costs page is a surface, not behind this gate: its payments are
-   * expense rows every figure already reads. Off, the figures read as before.
+   * design D6–D10). Built on One Revenue's figures; it depended on
+   * `one-revenue` until that gate retired and kept them for good. The Fixed
+   * costs page is a surface, not behind this gate: its payments are expense rows
+   * every figure already reads. Off, the figures read as before.
    */
   'pro-rata-pnl': {
     kind: 'change',
     code: 'PR',
     change: 'fixed-costs-are-spread-over-the-month',
-    dependsOn: ['one-revenue'],
     retireBy: '2027-02-28',
     roundTrip: 'tested',
   },
@@ -172,6 +158,9 @@ export const CHANGE_GATE_KEYS = Object.keys(CHANGE_GATES) as ChangeGateKey[]
  * not tombstoned: they are unique among live gates only.
  */
 export const RETIRED_CHANGE_GATES: readonly string[] = [
+  // retire-one-revenue: Overview, the Ledger and Analytics count revenue one
+  // way, and `pro-rata-pnl` no longer depends on it.
+  'one-revenue',
   // retire-outside-tap-closes: a tap outside a pop-up always closes it.
   'outside-tap-closes',
   // retire-dish-ticks, with the two gates that depended on it: the counter is

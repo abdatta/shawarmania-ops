@@ -59,7 +59,7 @@ function renderWith(
 ) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <ChangeGatesForTest on={{ 'one-revenue': true, 'pro-rata-pnl': proRata }}>
+      <ChangeGatesForTest on={{ 'pro-rata-pnl': proRata }}>
         <SessionContext.Provider value={sessionFor(role)}>
           <AdaptersContext.Provider value={adapters}>{node}</AdaptersContext.Provider>
         </SessionContext.Provider>

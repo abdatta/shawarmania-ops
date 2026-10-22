@@ -2,44 +2,10 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { readProRata } from '@/domain/fixed-costs'
 import type { Database } from '../database.types'
 import type { FixedCostsReading } from '../fixed-costs'
-import type {
-  OverviewAdapter,
-  OverviewDrawer,
-  OverviewMonth,
-  OverviewRevenue,
-  OverviewSales,
-  OverviewToday,
-} from '../overview'
+import type { OverviewAdapter, OverviewDrawer, OverviewMonth, OverviewToday } from '../overview'
 
 export function createSupabaseOverviewAdapter(client: SupabaseClient<Database>): OverviewAdapter {
   return {
-    async sales(outletId, date) {
-      const { data, error } = await client.rpc('overview_sales', {
-        p_outlet_id: outletId,
-        p_from: date,
-        p_through: date,
-      })
-      if (error) throw error
-      return data as unknown as OverviewSales
-    },
-    async revenue(outletId, from, through) {
-      const { data, error } = await client.rpc('overview_revenue', {
-        p_outlet_id: outletId,
-        p_from: from,
-        p_through: through,
-      })
-      if (error) throw error
-      return data as unknown as OverviewRevenue
-    },
-    async expenses(outletId, from, through) {
-      const { data, error } = await client.rpc('overview_expenses', {
-        p_outlet_id: outletId,
-        p_from: from,
-        p_through: through,
-      })
-      if (error) throw error
-      return Number(data)
-    },
     async drawer(outletId) {
       const { data, error } = await client.rpc('overview_drawer', { p_outlet_id: outletId })
       if (error) throw error

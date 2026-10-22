@@ -4114,9 +4114,9 @@ export interface LedgerStatementMonth {
   /**
    * The same month on One Revenue's definition (revenue-reads-the-same-everywhere):
    * delivery before commission, commission among the expenses. Folded from the
-   * same day inputs as `reading`, with no extra read; shown only with the gate on.
+   * same day inputs as `reading`, with no extra read.
    */
-  figures?: MonthFigures
+  figures: MonthFigures
   /**
    * Cash out that is deliberately outside the month's operating figure — a
    * spend. Reported so a ₹40,000 fridge is findable without touching the P&L

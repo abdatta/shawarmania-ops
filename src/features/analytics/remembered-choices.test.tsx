@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ChangeGatesForTest } from '@/test/change-gates'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 import { AnalyticsSurface } from './analytics-surface'
@@ -103,14 +102,12 @@ describe('a remembered date shortcut', () => {
 })
 
 describe('each Analytics page', () => {
-  function open(kind: 'items' | 'trends', entry = '/', oneRevenue = false, session = owner) {
+  function open(kind: 'items' | 'trends', entry = '/', session = owner) {
     return render(
       <SessionContext.Provider value={session}>
-        <ChangeGatesForTest on={{ 'one-revenue': oneRevenue }}>
-          <MemoryRouter initialEntries={[entry]}>
-            <AnalyticsSurface kind={kind} />
-          </MemoryRouter>
-        </ChangeGatesForTest>
+        <MemoryRouter initialEntries={[entry]}>
+          <AnalyticsSurface kind={kind} />
+        </MemoryRouter>
       </SessionContext.Provider>,
     )
   }
@@ -121,7 +118,7 @@ describe('each Analytics page', () => {
 
   it('opens on its own last shortcut, with that shortcut grouping', async () => {
     rememberRange(owner, 'items', '1d')
-    rememberRange(owner, 'sales', '30d')
+    rememberRange(owner, 'sales', 'month')
     const items = open('items')
     await act(async () => {})
     expect(read).toHaveBeenLastCalledWith('outlet', '2026-10-10', '2026-10-10', expect.any(Object))
@@ -133,13 +130,13 @@ describe('each Analytics page', () => {
     items.unmount()
     open('trends')
     await act(async () => {})
-    expect(read).toHaveBeenLastCalledWith('outlet', '2026-09-11', '2026-10-10', expect.any(Object))
+    expect(read).toHaveBeenLastCalledWith('outlet', '2026-10-01', '2026-10-10', expect.any(Object))
     expect(screen.getByText('Sales by day')).toBeVisible()
   })
 
   it('opens on 7d for another person, and on the dates an address names', async () => {
     rememberRange(owner, 'items', '1d')
-    const other = open('items', '/', false, manager)
+    const other = open('items', '/', manager)
     await act(async () => {})
     expect(read).toHaveBeenLastCalledWith('outlet', '2026-10-04', '2026-10-10', expect.any(Object))
     other.unmount()
@@ -150,23 +147,23 @@ describe('each Analytics page', () => {
   })
 
   it('remembers a tapped shortcut, and not a stepped-back period', async () => {
-    open('trends')
+    open('items')
     await act(async () => {})
     fireEvent.click(screen.getByRole('button', { name: 'Last 1 day' }))
     await act(async () => {})
-    expect(readRememberedRange(owner, 'sales')).toBe('1d')
-    expect(readRememberedRange(owner, 'items')).toBeNull()
+    expect(readRememberedRange(owner, 'items')).toBe('1d')
+    expect(readRememberedRange(owner, 'sales')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Last 30 days' }))
     await act(async () => {})
     fireEvent.click(screen.getByRole('button', { name: 'Previous period' }))
     await act(async () => {})
     expect(read).toHaveBeenLastCalledWith('outlet', '2026-08-12', '2026-09-10', expect.any(Object))
-    expect(readRememberedRange(owner, 'sales')).toBe('30d')
+    expect(readRememberedRange(owner, 'items')).toBe('30d')
   })
 
-  it('opens Sales on Month with One revenue on, from a remembered Month or 30d', async () => {
+  it('opens Sales on Month from a remembered Month or 30d', async () => {
     rememberRange(owner, 'sales', '30d')
-    open('trends', '/', true)
+    open('trends')
     await act(async () => {})
     expect(read).toHaveBeenLastCalledWith(
       'outlet',

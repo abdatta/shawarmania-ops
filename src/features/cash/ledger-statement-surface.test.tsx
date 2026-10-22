@@ -17,6 +17,7 @@ import { demoSessionFor } from '@/test/session'
 import {
   formatBusinessDate,
   readMonth,
+  readMonthFigures,
   resolveBusinessDate,
   shiftBusinessDate,
   type MonthDayInput,
@@ -338,11 +339,13 @@ function unsettled(grossPaise: number) {
 
 /** Render the month view over a month reading we control exactly. */
 async function renderMonth(days: MonthDayInput[]) {
+  const reading = readMonth(days, { expectedChannels: ['zomato', 'swiggy'] })
   const adapters = createMockAdapters('franchise_admin')
   const month: LedgerStatementMonth = {
     outletId: 'outlet-under-test',
     month: '2026-08',
-    reading: readMonth(days, { expectedChannels: ['zomato', 'swiggy'] }),
+    reading,
+    figures: readMonthFigures(days, reading),
     spends: [],
   }
   const patched: DataAdapters = {
@@ -421,8 +424,8 @@ describe('the month reports what it earned, spent and kept', () => {
     await renderMonth(august)
 
     await waitFor(() => expect(screen.getByTestId('month-revenue')).toBeInTheDocument())
-    expect(screen.queryByTestId('month-undetermined')).not.toBeInTheDocument()
-    expect(screen.getByTestId('month-revenue')).toHaveTextContent(/revenue actually received/i)
+    expect(screen.queryByTestId('month-commission-waiting')).not.toBeInTheDocument()
+    expect(screen.getByTestId('month-revenue-basis')).toHaveTextContent(/before commission/i)
   })
 
   it('replaces the thirty-one drawer rows with one line', async () => {
@@ -440,18 +443,17 @@ describe('the month reports what it earned, spent and kept', () => {
 })
 
 describe('the month says how far its figures can be trusted', () => {
-  it('reads as a ceiling and counts the days still waiting', async () => {
+  it('counts the days whose commission is not stated yet, beneath the profit', async () => {
     await renderMonth([
       monthDay('2026-08-01', { cashPaise: 1, channels: [unsettled(100000)] }),
       monthDay('2026-08-02', { cashPaise: 1, channels: [unsettled(100000)] }),
     ])
 
-    await waitFor(() => expect(screen.getByTestId('month-undetermined')).toBeInTheDocument())
-    expect(screen.getByTestId('month-undetermined')).toHaveTextContent(
-      /2 days are still waiting for their commission/i,
+    await waitFor(() => expect(screen.getByTestId('month-commission-waiting')).toBeInTheDocument())
+    expect(screen.getByTestId('month-commission-waiting')).toHaveTextContent(
+      /2 days’ delivery commission is not stated yet/i,
     )
-    expect(screen.getByTestId('month-revenue')).toHaveTextContent(/revenue received, at most/i)
-    expect(screen.getByTestId('month-profit-label')).toHaveTextContent(/^P&L, at most/i)
+    expect(screen.getByTestId('month-profit-label')).not.toHaveTextContent(/at most/i)
   })
 })
 
@@ -647,19 +649,6 @@ describe('what the month and the day gave away', () => {
     const section = await screen.findByTestId('month-discounts')
     expect(within(section).getByTestId('month-discount-total')).toHaveTextContent('₹0')
     expect(section).toHaveTextContent(/nothing was discounted this month/i)
-  })
-
-  it('carries the ceiling qualification onto the giveaway when revenue is one', async () => {
-    await renderMonth([
-      monthDay('2026-08-01', {
-        cashPaise: 100000,
-        discountPaise: 5000,
-        channels: [unsettled(300000)],
-      }),
-    ])
-
-    const section = await screen.findByTestId('month-discounts')
-    expect(section).toHaveTextContent(/both figures are ceilings while a commission is waiting/i)
   })
 })
 

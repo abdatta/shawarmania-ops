@@ -2,14 +2,13 @@ import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, expect, it, vi } from 'vitest'
-import { ChangeGatesForTest, describeChangeGate } from '@/test/change-gates'
 import { AnalyticsSurface } from './analytics-surface'
 import { comparedLine } from './analytics-trend'
 
 /**
- * One Revenue's toggle points on Analytics (revenue-reads-the-same-everywhere,
- * design D7): Month in place of 30d on Sales, month-aligned windows, and
- * comparisons cut at the server's now; off, the page reads as before.
+ * One Revenue on Analytics (revenue-reads-the-same-everywhere, design D7): Month
+ * in place of 30d on Sales, month-aligned windows, and comparisons cut at the
+ * server's now.
  */
 const { read, analytics, outlets } = vi.hoisted(() => {
   const read = vi.fn(async () => ({ days: [], items: [], categories: [], delivery: [], hours: [] }))
@@ -30,62 +29,49 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-function renderSales(on: boolean, kind: 'trends' | 'items' = 'trends') {
+function renderSales(kind: 'trends' | 'items' = 'trends') {
   return render(
     <MemoryRouter>
-      <ChangeGatesForTest on={{ 'one-revenue': on }}>
-        <AnalyticsSurface kind={kind} />
-      </ChangeGatesForTest>
+      <AnalyticsSurface kind={kind} />
     </MemoryRouter>,
   )
 }
 
-describeChangeGate('one-revenue', (on) => {
-  it('Sales offers Month in place of 30 days, and reads it month-aligned and cut', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date('2026-10-15T10:10:00Z')) // 15:40 Kolkata, 15 October.
-    renderSales(on)
-    await act(async () => {})
-    if (!on) {
-      expect(screen.getByRole('button', { name: 'Last 30 days' })).toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'This month' })).toBeNull()
-      expect(read).toHaveBeenLastCalledWith('outlet', '2026-10-09', '2026-10-15', {
-        view: 'sales',
-        periods: 2,
-      })
-      return
-    }
-    expect(screen.queryByRole('button', { name: 'Last 30 days' })).toBeNull()
-    // The default week ends today, so its comparison is cut.
-    expect(read).toHaveBeenLastCalledWith('outlet', '2026-10-09', '2026-10-15', {
-      view: 'sales',
-      periods: 2,
-      align: 'equal',
-      cut: true,
-    })
-    vi.useRealTimers()
-    await userEvent.click(screen.getByRole('button', { name: 'This month' }))
-    await act(async () => {})
-    expect(read).toHaveBeenLastCalledWith('outlet', '2026-10-01', '2026-10-15', {
-      view: 'sales',
-      periods: 2,
-      align: 'month',
-      cut: true,
-    })
+it('Sales offers Month in place of 30 days, and reads it month-aligned and cut', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-15T10:10:00Z')) // 15:40 Kolkata, 15 October.
+  renderSales()
+  await act(async () => {})
+  expect(screen.queryByRole('button', { name: 'Last 30 days' })).toBeNull()
+  // The default week ends today, so its comparison is cut.
+  expect(read).toHaveBeenLastCalledWith('outlet', '2026-10-09', '2026-10-15', {
+    view: 'sales',
+    periods: 2,
+    align: 'equal',
+    cut: true,
   })
+  vi.useRealTimers()
+  await userEvent.click(screen.getByRole('button', { name: 'This month' }))
+  await act(async () => {})
+  expect(read).toHaveBeenLastCalledWith('outlet', '2026-10-01', '2026-10-15', {
+    view: 'sales',
+    periods: 2,
+    align: 'month',
+    cut: true,
+  })
+})
 
-  it('Items keeps its range and asks for its dish figures cut', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date('2026-10-15T10:10:00Z'))
-    renderSales(on, 'items')
-    await act(async () => {})
-    expect(screen.getByRole('button', { name: 'Last 30 days' })).toBeInTheDocument()
-    expect(read).toHaveBeenLastCalledWith(
-      'outlet',
-      '2026-10-09',
-      '2026-10-15',
-      on ? { view: 'items', periods: 2, align: 'equal', cut: true } : { view: 'items', periods: 2 },
-    )
+it('Items keeps its range and asks for its dish figures cut', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-15T10:10:00Z'))
+  renderSales('items')
+  await act(async () => {})
+  expect(screen.getByRole('button', { name: 'Last 30 days' })).toBeInTheDocument()
+  expect(read).toHaveBeenLastCalledWith('outlet', '2026-10-09', '2026-10-15', {
+    view: 'items',
+    periods: 2,
+    align: 'equal',
+    cut: true,
   })
 })
 

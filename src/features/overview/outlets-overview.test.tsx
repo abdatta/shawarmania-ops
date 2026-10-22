@@ -9,12 +9,11 @@ import {
   OUTLET_KANCHRAPARA_ID as KPA,
   personaFixtures,
 } from '@/data-access/mock'
-import type { DataAdapters } from '@/data-access/adapters'
 import { SessionContext } from '@/session/context'
 import { deriveSessionScope, type Session } from '@/session/session'
 import { OutletsOverview } from './outlets-overview'
-import { formatPaise, resolveBusinessDate } from '@/domain'
-import { overviewPeriod } from '@/domain/overview'
+import { formatPaise } from '@/domain'
+import type { OverviewMonth } from '@/data-access/overview'
 import { attentionChanged } from '@/features/attention/attention'
 import { NavAttentionBadge } from '@/features/attention/nav-badge'
 
@@ -51,6 +50,33 @@ afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
+
+/** A month to date as the server answers it, with its comparison. */
+function monthOf(over: Partial<OverviewMonth> = {}): OverviewMonth {
+  return {
+    month: '2026-10',
+    from: '2026-10-01',
+    through: '2026-10-15',
+    revenuePaise: 10000,
+    cashPaise: 10000,
+    upiPaise: 0,
+    deliveryPaise: 0,
+    commissionPaise: 0,
+    waitingDays: 0,
+    recordedExpensesPaise: 0,
+    expensesPaise: 0,
+    profitPaise: 10000,
+    hasSales: true,
+    previous: {
+      from: '2026-09-01',
+      through: '2026-09-15',
+      cutAt: null,
+      revenuePaise: 10000,
+      hasSales: true,
+    },
+    ...over,
+  }
+}
 
 describe('progressive Overview', () => {
   it('defaults to one outlet shimmer while the first list is pending', () => {
@@ -95,121 +121,30 @@ describe('progressive Overview', () => {
     expect(localStorage.getItem('shawarmania.overview-outlet-count')).toBe('3')
   })
 
-  it('rolls an already-open page over at 4am and polls tablets once a minute', async () => {
+  it('reads today and the month again at the day change, and polls tablets once a minute', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-10-01T03:59:00+05:30'))
     const base = createMockAdapters('super_admin')
-    const sales = vi.fn(async () => ({ cashPaise: 100, upiPaise: 0 }))
-    const revenue = vi.fn(async () => ({
-      revenuePaise: 100,
-      hasSales: true,
-      provisional: false,
-      incomplete: false,
-    }))
+    const today = vi.fn(base.overview.today)
+    const month = vi.fn(base.overview.month)
     const tablets = vi.fn(async () => [new Date(Date.now() - 1000).toISOString()])
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
-    setup({ ...base, overview: { ...base.overview, sales, revenue, tablets } })
+    setup({ ...base, overview: { ...base.overview, today, month, tablets } })
     await act(async () => {})
-    expect(sales).toHaveBeenCalledWith(KAL, '2026-09-30')
+    // The card sends no date: the server decides which day it is.
+    expect(today).toHaveBeenCalledWith(KAL)
+    expect(today).toHaveBeenCalledTimes(2)
+    expect(month).toHaveBeenCalledTimes(2)
     expect(tablets).toHaveBeenCalledTimes(2)
     await act(async () => vi.advanceTimersByTimeAsync(59_999))
     expect(tablets).toHaveBeenCalledTimes(2)
     await act(async () => vi.advanceTimersByTimeAsync(1))
     expect(tablets).toHaveBeenCalledTimes(4)
-    expect(sales).toHaveBeenCalledWith(KAL, '2026-10-01')
-    expect(revenue).toHaveBeenCalledWith(KAL, '2026-09-01', '2026-09-30')
-    expect(
-      within(screen.getByTestId(`outlet-card-${KAL}`)).getByRole('link', { name: /revenue/ }),
-    ).toHaveAttribute('href', `/demo/owner/ledger?outlet=${KAL}&view=month&month=2026-09`)
+    expect(today).toHaveBeenCalledTimes(4)
+    expect(month).toHaveBeenCalledTimes(4)
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
     await act(async () => vi.advanceTimersByTimeAsync(60_000))
     expect(tablets).toHaveBeenCalledTimes(4)
-  })
-
-  it.each([
-    ['2026-10-01T00:00:00+05:30', '2026-09-30', '2026-09-01', '2026-09-29'],
-    ['2026-10-01T03:59:59+05:30', '2026-09-30', '2026-09-01', '2026-09-29'],
-    ['2026-10-01T04:00:00+05:30', '2026-10-01', '2026-09-01', '2026-09-30'],
-  ])(
-    'reads the business day at %s, independently of midnight',
-    async (now, today, from, through) => {
-      vi.useFakeTimers({ toFake: ['Date'] })
-      vi.setSystemTime(new Date(now))
-      const base = createMockAdapters('super_admin')
-      const sales = vi.fn(base.overview.sales)
-      const revenue = vi.fn(base.overview.revenue)
-      setup({ ...base, overview: { ...base.overview, sales, revenue } })
-      await screen.findByTestId(`sales-${KAL}`)
-      expect(sales).toHaveBeenCalledWith(KAL, today)
-      expect(revenue).toHaveBeenCalledWith(KAL, from, through)
-    },
-  )
-
-  it('uses each outlet cutover rather than hard-coding four o’clock', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date('2026-10-01T04:30:00+05:30'))
-    const base = createMockAdapters('super_admin')
-    const outlets = await base.outlets.listOutlets()
-    const sales = vi.fn(base.overview.sales)
-    setup({
-      ...base,
-      outlets: {
-        ...base.outlets,
-        listOutlets: async () =>
-          outlets.map((o) => ({
-            ...o,
-            business_day_cutover: o.id === KPA ? '05:00:00' : '04:00:00',
-          })),
-      },
-      overview: { ...base.overview, sales },
-    })
-    await screen.findByTestId(`sales-${KPA}`)
-    expect(sales).toHaveBeenCalledWith(KAL, '2026-10-01')
-    expect(sales).toHaveBeenCalledWith(KPA, '2026-09-30')
-  })
-
-  it.each([
-    'zero baseline',
-    'previous incomplete',
-    'previous provisional',
-    'current incomplete',
-    'current provisional',
-    'comparison failed',
-  ] as const)('withholds a directional revenue claim for %s', async (scenario) => {
-    const base = createMockAdapters('super_admin')
-    const from = overviewPeriod(resolveBusinessDate(new Date(), '04:00')).from
-    setup({
-      ...base,
-      overview: {
-        ...base.overview,
-        revenue: async (_id, start) => {
-          const previous = start !== from
-          if (previous && scenario === 'comparison failed')
-            throw new Error('comparison unavailable')
-          return {
-            revenuePaise: previous && scenario === 'zero baseline' ? 0 : previous ? 10000 : 20000,
-            hasSales: true,
-            incomplete: scenario === (previous ? 'previous incomplete' : 'current incomplete'),
-            provisional: scenario === (previous ? 'previous provisional' : 'current provisional'),
-          }
-        },
-      },
-    })
-    await screen.findByTestId(`revenue-${KAL}`)
-    const link = within(screen.getByTestId(`outlet-card-${KAL}`)).getByRole('link', {
-      name: /revenue/,
-    })
-    expect(link).not.toHaveTextContent('%')
-    expect(link.querySelector('.text-success, .text-danger')).toBeNull()
-    expect(link).toHaveTextContent(
-      scenario === 'current incomplete'
-        ? 'Delivery data incomplete'
-        : scenario === 'current provisional'
-          ? 'Commission pending'
-          : scenario === 'comparison failed'
-            ? 'Comparison unavailable'
-            : 'No comparable data',
-    )
   })
 
   it('keeps zero change and break-even neutral, and names uncounted drawers', async () => {
@@ -218,19 +153,13 @@ describe('progressive Overview', () => {
       ...base,
       overview: {
         ...base.overview,
-        revenue: async () => ({
-          revenuePaise: 10000,
-          hasSales: true,
-          provisional: false,
-          incomplete: false,
-        }),
-        expenses: async () => 10000,
+        month: async () => monthOf({ expensesPaise: 10000, profitPaise: 0 }),
         drawer: async () => ({ expectedPaise: null, leftPaise: null, spentPaise: 0 }),
       },
     })
     expect(await screen.findByTestId(`profit-${KAL}`)).toHaveTextContent(/^₹0$/)
     const card = screen.getByTestId(`outlet-card-${KAL}`)
-    for (const name of [/revenue/, /P&L/])
+    for (const name of [/October revenue/, /P&L/])
       expect(
         within(card).getByRole('link', { name }).querySelector('.text-accent-text .lucide-minus'),
       ).not.toBeNull()
@@ -244,13 +173,8 @@ describe('progressive Overview', () => {
       ...base,
       overview: {
         ...base.overview,
-        revenue: async () => ({
-          revenuePaise: 0,
-          hasSales: false,
-          provisional: false,
-          incomplete: false,
-        }),
-        expenses: async () => 12300,
+        month: async () =>
+          monthOf({ revenuePaise: 0, hasSales: false, expensesPaise: 12300, profitPaise: null }),
       },
     })
     await screen.findByTestId(`revenue-${KAL}`)
@@ -350,24 +274,31 @@ describe('progressive Overview', () => {
 
   it('omits paise on all headlines and keeps neutral tenders with directional financial icons', async () => {
     const base = createMockAdapters('super_admin')
-    const from = overviewPeriod(resolveBusinessDate(new Date(), '04:00')).from
     setup({
       ...base,
       overview: {
         ...base.overview,
-        sales: async () => ({ cashPaise: 55555555, upiPaise: 44444444 }),
+        today: async () => ({
+          cashPaise: 55555555,
+          upiPaise: 44444444,
+          deliveryPaise: 0,
+          openPaise: 0,
+        }),
         drawer: async () => ({
           expectedPaise: 99999999,
           leftPaise: 88888888,
           spentPaise: 77777777,
         }),
-        revenue: async (id, start) => ({
-          revenuePaise: start === from ? 99999999 : id === KAL ? 50000000 : 199999999,
-          hasSales: true,
-          provisional: false,
-          incomplete: false,
-        }),
-        expenses: async (id) => (id === KAL ? 199999998 : 0),
+        month: async (id) =>
+          monthOf({
+            revenuePaise: 99999999,
+            expensesPaise: id === KAL ? 199999998 : 0,
+            profitPaise: id === KAL ? -99999999 : 99999999,
+            previous: {
+              ...monthOf().previous,
+              revenuePaise: id === KAL ? 50000000 : 199999999,
+            },
+          }),
       },
     })
     for (const id of [KAL, KPA]) {
@@ -376,12 +307,12 @@ describe('progressive Overview', () => {
         expect(screen.getByTestId(`${metric}-${id}`)).toHaveAttribute('title', '₹9,99,999.99')
       }
       const card = screen.getByTestId(`outlet-card-${id}`)
-      for (const name of [/Today's counter sales/, /Drawer cash/]) {
+      for (const name of [/Today's revenue/, /Drawer cash/]) {
         expect(
           within(card).getByRole('link', { name }).querySelector('.text-accent-text'),
         ).not.toBeNull()
       }
-      const revenue = within(card).getByRole('link', { name: /revenue/ })
+      const revenue = within(card).getByRole('link', { name: /October revenue/ })
       const profit = within(card).getByRole('link', { name: /P&L/ })
       expect(
         revenue.querySelector(
@@ -456,13 +387,14 @@ describe('progressive Overview', () => {
   })
 
   it('shows every accessible outlet without a selector and links all metrics to their source', async () => {
-    setup()
+    const base = createMockAdapters('super_admin')
+    setup(base)
     const card = await screen.findByTestId(`outlet-card-${KAL}`)
     await screen.findByTestId(`sales-${KAL}`)
     await screen.findByTestId(`revenue-${KAL}`)
     expect(screen.getByTestId(`outlet-card-${KPA}`)).toBeInTheDocument()
     expect(screen.queryByTestId('outlet-scope')).toBeNull()
-    expect(within(card).getByRole('link', { name: /Today's counter sales/ })).toHaveAttribute(
+    expect(within(card).getByRole('link', { name: /Today's revenue/ })).toHaveAttribute(
       'href',
       `/demo/owner/billing-history?outlet=${KAL}`,
     )
@@ -474,8 +406,8 @@ describe('progressive Overview', () => {
       'href',
       `/demo/owner/outlets/${KAL}`,
     )
-    const month = overviewPeriod(resolveBusinessDate(new Date(), '04:00')).month
-    expect(within(card).getByRole('link', { name: /revenue/ })).toHaveAttribute(
+    const { month } = await base.overview.month(KAL)
+    expect(within(card).getByRole('link', { name: /^(?!Today).*revenue/ })).toHaveAttribute(
       'href',
       `/demo/owner/ledger?outlet=${KAL}&view=month&month=${month}`,
     )
@@ -488,32 +420,25 @@ describe('progressive Overview', () => {
     expect(card).not.toHaveTextContent('Collected')
   })
 
-  it('renders sales while drawer and monthly reads remain pending, then reveals revenue before comparison', async () => {
+  it('renders today while the drawer and the month remain pending, then reveals the month', async () => {
     const base = createMockAdapters('super_admin')
-    let finish!: (value: Awaited<ReturnType<DataAdapters['overview']['revenue']>>) => void
-    const pending = new Promise<Awaited<ReturnType<DataAdapters['overview']['revenue']>>>(
-      (resolve) => {
-        finish = resolve
-      },
-    )
-    const from = overviewPeriod(resolveBusinessDate(new Date(), '04:00')).from
+    let finish!: (value: OverviewMonth) => void
+    const pending = new Promise<OverviewMonth>((resolve) => {
+      finish = resolve
+    })
     setup({
       ...base,
       overview: {
         ...base.overview,
         drawer: () => new Promise(() => {}),
-        expenses: () => new Promise(() => {}),
-        revenue: (_id, start) => (start === from ? pending : new Promise(() => {})),
+        month: (id) => (id === KAL ? pending : new Promise(() => {})),
       },
     })
     expect(await screen.findByTestId(`sales-${KAL}`)).toBeInTheDocument()
     expect(screen.queryByTestId(`cash-${KAL}`)).toBeNull()
     expect(screen.queryByTestId(`revenue-${KAL}`)).toBeNull()
-    await act(async () =>
-      finish({ revenuePaise: 12300, hasSales: true, incomplete: false, provisional: false }),
-    )
+    await act(async () => finish(monthOf({ revenuePaise: 12300 })))
     expect(await screen.findByTestId(`revenue-${KAL}`)).toHaveTextContent(formatPaise(12300))
-    expect(screen.queryByTestId(`profit-${KAL}`)).toBeNull()
   })
 
   it('retries one failed metric without replacing successful values', async () => {
@@ -543,7 +468,7 @@ describe('progressive Overview', () => {
     const card = await screen.findByTestId(`outlet-card-${KAL}`)
     await screen.findByTestId(`sales-${KAL}`)
     expect(screen.queryByTestId(`outlet-card-${KPA}`)).toBeNull()
-    expect(within(card).getByRole('link', { name: /Today's counter sales/ })).toHaveAttribute(
+    expect(within(card).getByRole('link', { name: /Today's revenue/ })).toHaveAttribute(
       'href',
       `/admin/billing-history?outlet=${KAL}`,
     )
