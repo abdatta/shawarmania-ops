@@ -426,7 +426,11 @@ A small count attached to the thing it is about — a navigation entry, a day, a
 
 ### Geofence
 
-The radius around an outlet's stored coordinates within which a reading counts as on-site. It judges two things and refuses neither: an employee's check-in, which is recorded whatever its distance, and a manager's approval, which is recorded whatever its distance but costs a written reason from outside. See [Roles And Permissions](ROLES_AND_PERMISSIONS.md) for the approval rule and [Limitations](LIMITATIONS.md) for what geolocation can and cannot prove.
+The radius around an outlet's stored coordinates within which a reading counts as on-site. It judges two things: an employee's check-in, which inside it is **auto-approved at the shop** and outside it waits for a manager (or, where the outlet blocks away check-ins, is refused), and a manager's approval, which is recorded whatever its distance but costs a written reason from outside. Before #81, and while its gate is off, it decided nothing about a check-in and every one waited. See [Roles And Permissions](ROLES_AND_PERMISSIONS.md) for the approval rule and [Limitations](LIMITATIONS.md) for what geolocation can and cannot prove.
+
+### Auto-approved at the shop
+
+How a day reads when the database measured its check-in inside the outlet's fence and approved it with no manager (#81): its decision is `auto_approved`, names no actor, and stamps the radius that judged it. It is present, correctable like any settled day, and late if the arrival was. It does not happen where the outlet's managers have turned **Manager approves every check-in** on, or for a reading inside the fences of two outlets the person works at.
 
 ### Approval
 

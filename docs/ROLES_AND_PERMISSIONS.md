@@ -559,7 +559,14 @@ Since #74 a **counter shift** also reads, for its own outlet only, its `order_li
 
 Employees check in from their own phones. The browser's Geolocation API supplies coordinates; the app computes the distance to the outlet's stored position.
 
-**Policy: the fence is evidence, and a manager is the witness.** Every check-in is recorded and counts as nothing until an approval lands, in the fence or not — a phone inside the radius attests to where a phone was, which is not the same as somebody having worked. A reading beyond the radius is still shown to the person before they write, and recording it anyway is their decision to make.
+**Policy: the fence decides at the shop, and a manager decides away from it** (#81, `auto-approve-at-the-shop`). A check-in the database measures inside the outlet's own radius is approved at once with no actor: its decision is `auto_approved` and stamps the radius that judged it. A reading inside the fences of two outlets the person works at waits, since it cannot say which. A check-in outside the radius, or with no position, is recorded and waits for a manager, and recording it is the person's decision to make. The client's own reading of the fence is courtesy copy; the database decides, from the coordinates it stores. With the gate off every check-in waits for an approval, in the fence or not, as before #81.
+
+**Each outlet's attendance rules belong to its managers.** A Franchise Admin with a live assignment at the outlet, and the Super Admin anywhere, may turn two rules on or off, and nobody else, through `set_outlet_attendance_rules`, which re-derives the caller and writes those two columns only:
+
+- **Manager approves every check-in**: every check-in waits, even one inside the fence.
+- **Block check-ins away from the shop**: a check-in outside the fence, or with no position, is refused before anything is written, and the manager records the day by hand instead. At an outlet whose position was never captured, that refuses every check-in.
+
+**The outlet's position and radius stay the Super Admin's alone**, through `outlets_update`, because they prove where a franchise actually trades. A manager who could move the fence could approve their own staff from anywhere. Each refusal is a hand-crafted request in `supabase/tests/99_a_check_in_at_the_shop_approves_itself.sql` and `supabase/tests/rest/zz-auto-approve-at-the-shop.test.ts`.
 
 **Approving is a capability, held by a Super Admin anywhere and by a Franchise Admin at outlets they hold a live assignment at.** Resolved from the approving session by membership, never from anything the request states; an Employee cannot approve their own day or anyone else's, and the database refuses it rather than the surface merely not offering it. An approval requires an arrival on the row: a day nobody claimed is not a day anybody can settle.
 
@@ -584,8 +591,8 @@ approved or denied and do not offer the action.
 An employee may submit a later attempt only for their own person/date and a live
 outlet where they currently hold an Employee assignment. That attempt is allowed
 after outside/unverifiable current evidence or an open denial; an in-fence
-pending attempt, settled present/manual/leave/half-day, or globally prevented
-day is refused at the command boundary. A multi-outlet employee may therefore
+pending attempt, settled present/manual/leave/half-day (an auto-approved day
+included), or globally prevented day is refused at the command boundary. A multi-outlet employee may therefore
 recover from checking in to the wrong outlet without gaining permission to make
 two attendance days.
 

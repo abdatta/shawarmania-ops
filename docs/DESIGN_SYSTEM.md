@@ -254,6 +254,18 @@ The counter numbers are larger on purpose. Billing happens fast, one-handed, som
 - **This governs reads. A pending write stays on its control.** A submitted form or a triggered action shows its pending state where the person pressed — a disabled button reading "Saving…", the position capture reporting the accuracy it has so far — because they are waiting on something they just did, not on the surface arriving. Replacing a submitted form with a placeholder would hide the very thing they are asking about. A spinner on such a control is correct and stays.
 - **Loading never blocks the counter.** Optimistic UI on the billing path: a bill is rung, shown and settled without waiting for the network, which is about writes and is unaffected by any of the above.
 
+## The month calendar's day marks *(#81)*
+
+My attendance and the manager's By staff draw a month as day numbers in a week grid, and each day's state is drawn by **shape as well as colour**, never colour alone, and named to a screen reader:
+
+- **Present** — a solid disc in `--primary`, the number in `--on-primary`.
+- **Late** — the same disc, because a late day is a present day, with the late tag's **clock, filled** in `--warning`, ringed in the page's surface colour at the disc's corner. Filled, it still reads as a dot at a glance; up close it says why.
+- **Absent** — a solid ring in `--danger`, the number in the page's text colour.
+- **Waiting** — a ring of long dashes in `--warning`. The dashes are a share of the circle (`pathLength`), so a day and the count's key both read as dashes, never dots. A waiting day whose arrival was late carries the clock too: waiting and late are two facts.
+- **Leave or half day** — a grey disc. **A day to come** — the bare number.
+
+The month's counts sit **inside the same marks** above the grid, so they are the key: there is no swatch beside a label. Today carries no ring; its date is under the page's heading instead. The Home card's month line is the production tally, not the calendar.
+
 ## Analytics series
 
 Analytics comparison series use semantic `--primary`, `--chart-previous`, `--chart-earlier` and `--chart-oldest`: orange, slate, blue and violet, corrected for each theme. Columns use solid rounded fills and numbered legends in stable left-to-right period order; no hatch textures. Lines also retain distinct dash patterns. Numbered badge ink uses `--surface`; the contrast validator gates all four fill/ink pairs at 4.5:1, also exceeding the 3:1 needed for chart marks against their surface. These are data-series roles, separate from success/danger status semantics.

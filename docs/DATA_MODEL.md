@@ -51,6 +51,16 @@ outlet and a Franchise Admin for the outlets they manage, and both only through
 authority and writes these columns and no others: `outlets_update` stays the
 owner's, because widening it would hand a manager the cutover and the fence.
 
+**Attendance rules** *(#81)* — `attendance_needs_manager` (every check-in waits
+for a manager, even one inside the fence) and `attendance_blocks_away` (a
+check-in outside the fence, or with no position, is refused and nothing is
+written), both non-null booleans defaulting to false. On the outlet row because
+`outlets_select` already gives it to everybody who reads them; written only
+through `set_outlet_attendance_rules(outlet, needs_manager, blocks_away)`, by the
+owner or the outlet's own franchise admins, which writes these two and nothing
+else. They do anything only while the change gate `auto-approve-at-the-shop` is
+on.
+
 **Customer collection** *(#59)* — `collect_customer_details`, a non-null boolean
 defaulting to true for existing and new outlets. The service-settings RPC also
 writes this choice for the owner or the outlet's assigned franchise admins;
@@ -764,7 +774,14 @@ by one act rather than leaving it to be inferred from adjacent timestamps; it
 never replaces them, and each person keeps their own complete decision. A `correct_time`
 decision additionally holds `previous_check_in_at` and `new_check_in_at`: it
 updates only the canonical effective `attendance.check_in_at`, while the
-attempt's captured timestamp and GPS/manual evidence remain immutable. Both tables are
+attempt's captured timestamp and GPS/manual evidence remain immutable. An
+`auto_approved` decision *(#81)* is the one no person made: the check-in command
+writes it when the database measures the attempt inside the outlet's fence, with
+no actor (`actor_id` and `actor_name` null, which
+`attendance_decision_actor_required` admits for this kind and `legacy_outcome`
+only) and `fence_radius_m`, the radius that judged it, since the attempt stamps
+its distance but not the radius and a radius edited later would otherwise leave
+*it was inside* unanswerable. Its day is present with no approver. Both tables are
 append-only: updates and deletes are refused, including after a later retry or
 correction.
 
