@@ -409,15 +409,19 @@ only at check-in, approval, outlet capture*) holds.
 ## D8. My attendance and By staff: a month calendar (`refreshed-staff-screens`)
 
 - **A seven-column grid of day numbers**, Monday first. Each day's state is
-  in how its number is drawn: present a solid disc in the green of the checked-in tick [co-owner, 2026-10-29], late
-  the same disc with the late tag's clock, filled yellow, at its corner (a late
-  day is a present day; a filled clock still reads as a dot at a glance
-  [owner, 2026-10-29]), absent a solid red ring, waiting a ring of yellow
-  dashes (with the clock too when that arrival was late: waiting and late are
-  two facts), leave or half day a grey disc, a
-  day to come a bare number. Today is not ringed: its date is under the page's
-  heading, and My attendance has no Back, being a tab of its own [owner,
-  2026-10-28]. *As built* [owner, 2026-10-26]: green
+  in how its number is drawn, always as an open ring in the colour of its
+  status chip [owner and co-owner, 2026-10-29: filled discs flooded the month]:
+  present a green ring, as the chip's tick, late the same ring with the late
+  tag's clock, filled yellow, at its corner (a late day is a present day; a
+  filled clock still reads as a dot at a glance [owner, 2026-10-29]), absent a
+  red ring with the chip's slash, broken around the number (the slash, not the
+  red, keeps it apart from present), waiting a ring of yellow dashes (with the
+  clock too when that arrival was late: waiting and late are two facts), leave
+  or half day a grey ring, today with nothing recorded a grey ring as the *Not
+  yet arrived* chip, and once today has a status, that status's ring; a day to
+  come a bare number. My attendance has no Back, being a tab of its own [owner,
+  2026-10-28]. *Earlier rounds, superseded* [owner, 2026-10-28]: today was not
+  ringed at all. *As built* [owner, 2026-10-26]: green
   read as out of theme; "filled would imply its attendance is completed", so
   only a counted day is filled and the days not counted are open rings; solid
   against dashed keeps absent and waiting apart (a solid ring reads decided, a

@@ -22,10 +22,12 @@ import { PlaceChip } from './today-pass'
  * doubling as the key (a-check-in-at-the-shop-approves-itself, design D8;
  * `refreshed-staff-screens`).
  *
- * **Never colour alone, without a letter on every day.** The states differ by
- * shape as well as colour: present is a solid disc in the brand's colour, late
- * the same disc with a dot, absent a solid red ring, waiting a ring of yellow
- * dashes, leave a grey disc, a day still to come a bare number. Each day also names its state to a screen reader. The
+ * **Never colour alone, without a letter on every day.** Every day is an open
+ * ring in its status chip's colour, and the states differ by shape as well:
+ * present a green ring, late the same ring with the late clock, absent a red
+ * ring with the chip's slash, waiting a ring of yellow dashes, leave a grey
+ * ring, today before anything is recorded a grey ring as its chip, a day
+ * still to come a bare number. Each day also names its state to a screen reader. The
  * first version spelled it out with an icon and a letter in every cell, and read
  * as a table of symbols rather than as a month [owner, 2026-10-26].
  *
@@ -38,16 +40,18 @@ import { PlaceChip } from './today-pass'
 type Mark = 'present' | 'late' | 'absent' | 'waiting' | 'leave' | 'half' | 'elsewhere' | 'not-yet'
 
 const MARKS: Record<Mark, { label: string; disc: string }> = {
-  // Filled means the day is done [owner, 2026-10-26]: present is a solid disc
-  // in the brand's own colour, and a late day, still a present day, the same
-  // disc with the dot. A day not counted is an open ring: absent a solid red
-  // ring, because it is decided, and waiting a dashed yellow one, because it is
-  // not. Solid against dashed keeps the two apart for a reader who cannot tell
-  // red from yellow. The dashes are drawn, not a CSS border: a dotted or dashed
+  // Every day is an open ring in the colour of its status chip in the day's
+  // detail: filled discs flooded a good month [co-owner, 2026-10-29]. Present
+  // is green, as the chip's tick; absent red, with the chip's slash, so it
+  // never rests on red against green; waiting a dashed yellow ring, as the
+  // chip's warning. The dashes are drawn, not a CSS border: a dotted or dashed
   // border on a small circle comes out as a fine row of specks [owner,
   // 2026-10-26], so DashedRing sets a few long dashes whatever the size.
-  present: { label: 'Present', disc: 'bg-success text-on-success font-semibold' },
-  late: { label: 'Present, arrived late', disc: 'bg-success text-on-success font-semibold' },
+  present: { label: 'Present', disc: 'border-2 border-success text-content font-semibold' },
+  late: {
+    label: 'Present, arrived late',
+    disc: 'border-2 border-success text-content font-semibold',
+  },
   absent: {
     label: 'Absent',
     disc: 'border-2 border-danger text-danger font-semibold',
@@ -56,10 +60,18 @@ const MARKS: Record<Mark, { label: string; disc: string }> = {
     label: 'Waiting for a manager',
     disc: 'text-content',
   },
-  leave: { label: 'Leave', disc: 'bg-surface-raised text-content-muted' },
-  half: { label: 'Half day', disc: 'bg-surface-raised text-content-muted' },
-  elsewhere: { label: 'At another outlet', disc: 'bg-surface-raised text-content-muted' },
-  'not-yet': { label: 'Not checked in yet', disc: 'text-content' },
+  leave: { label: 'Leave', disc: 'border-2 border-content-muted text-content-muted' },
+  half: { label: 'Half day', disc: 'border-2 border-content-muted text-content-muted' },
+  elsewhere: {
+    label: 'At another outlet',
+    disc: 'border-2 border-content-muted text-content-muted',
+  },
+  // Today with nothing recorded yet: a grey ring, as the Not yet arrived chip, until
+  // the day has a status of its own [co-owner, 2026-10-29].
+  'not-yet': {
+    label: 'Not checked in yet',
+    disc: 'border-2 border-content-muted text-content font-semibold',
+  },
 }
 
 function markOf(row: DayRow): Mark {
@@ -98,7 +110,25 @@ function CountDisc({ mark, value }: { mark: Mark; value: number }) {
       {value}
       {mark === 'late' && <LateClock />}
       {mark === 'waiting' && <DashedRing dashes={8} strokeWidth={1} />}
+      {mark === 'absent' && <Slash />}
     </span>
+  )
+}
+
+/**
+ * The absent chip's slash, across the ring but broken where the number sits, so
+ * the number stays readable and absent differs from present by shape.
+ */
+function Slash() {
+  return (
+    <svg aria-hidden viewBox="0 0 36 36" className="absolute inset-0 size-full text-danger">
+      <path
+        d="M6.3 6.3 10.5 10.5M25.5 25.5 29.7 29.7"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </svg>
   )
 }
 
@@ -213,9 +243,9 @@ export function MonthCalendar({
   /** Name the outlet on a day. Noise for one shop; necessary for two. */
   showOutlet?: boolean
   /**
-   * Today's business date, named to a screen reader. Not ringed: today's date
-   * is under the page's heading, and a ring was one mark too many [owner,
-   * 2026-10-28].
+   * Today's business date, named to a screen reader. Ringed grey, as its chip,
+   * only while it has no status of its own (`not-yet`); once it has
+   * one, its ring is that status's [co-owner, 2026-10-29].
    */
   today?: string | null
 }) {
@@ -285,6 +315,7 @@ export function MonthCalendar({
                 {dayNumber}
                 {(mark === 'late' || (mark === 'waiting' && row.late)) && <LateClock />}
                 {mark === 'waiting' && <DashedRing dashes={8} strokeWidth={1} />}
+                {mark === 'absent' && <Slash />}
               </span>
             </button>
           )

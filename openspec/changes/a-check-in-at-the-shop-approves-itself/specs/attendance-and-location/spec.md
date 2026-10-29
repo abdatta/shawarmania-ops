@@ -342,8 +342,8 @@ direct response to the same check-in, and use the best reading.
 
 While `refreshed-staff-screens` is on, My attendance and the manager's By staff SHALL show
 one month as a calendar of days. Each day's state SHALL be drawn by shape as
-well as colour (a solid disc, a disc with a clock, a pale disc, a dashed ring, a
-bare number), never by colour alone, and SHALL be named to a screen reader. Opening a day SHALL show its detail
+well as colour (a ring, a ring with a clock, a ring with a slash, a dashed ring, a
+bare number), each ring in the colour of the day's status chip, never by colour alone, and SHALL be named to a screen reader. Opening a day SHALL show its detail
 with the shared evidence components. Both surfaces SHALL render the same
 component. The month's counts SHALL keep their numbers, each beside the mark it counts
 so that the counts are the key.

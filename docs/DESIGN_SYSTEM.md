@@ -258,13 +258,15 @@ The counter numbers are larger on purpose. Billing happens fast, one-handed, som
 
 My attendance and the manager's By staff draw a month as day numbers in a week grid, and each day's state is drawn by **shape as well as colour**, never colour alone, and named to a screen reader:
 
-- **Present** — a solid disc in `--success`, the green of the checked-in tick on Home and By day, the number in `--on-success`.
-- **Late** — the same disc, because a late day is a present day, with the late tag's **clock, filled** in `--warning`, ringed in the page's surface colour at the disc's corner. Filled, it still reads as a dot at a glance; up close it says why.
-- **Absent** — a solid ring in `--danger`, the number in the page's text colour.
-- **Waiting** — a ring of long dashes in `--warning`. The dashes are a share of the circle (`pathLength`), so a day and the count's key both read as dashes, never dots. A waiting day whose arrival was late carries the clock too: waiting and late are two facts.
-- **Leave or half day** — a grey disc. **A day to come** — the bare number.
+Every day is an **open ring in the colour of its status chip** in the day's detail. Nothing is filled: a month of filled discs flooded the screen.
 
-The month's counts sit **inside the same marks** above the grid, so they are the key: there is no swatch beside a label. Today carries no ring; its date is under the page's heading instead. The Home card's month line is the production tally, not the calendar.
+- **Present** — a ring in `--success`, the green of the chip's tick, the number in the page's text colour.
+- **Late** — the same ring, because a late day is a present day, with the late tag's **clock, filled** in `--warning`, ringed in the page's surface colour at the ring's corner. Filled, it still reads as a dot at a glance; up close it says why.
+- **Absent** — a ring in `--danger` with the chip's **slash**, broken where the number sits, the number in `--danger`. The slash is what keeps absent apart from present for a reader who cannot tell red from green.
+- **Waiting** — a ring of long dashes in `--warning`. The dashes are a share of the circle (`pathLength`), so a day and the count's key both read as dashes, never dots. A waiting day whose arrival was late carries the clock too: waiting and late are two facts.
+- **Leave or half day** — a grey ring, the number muted. **Today, before anything is recorded** — a grey ring, as the *Not yet arrived* chip, the number in the page's text colour; once today has a status, its ring is that status's. **A day to come** — the bare number.
+
+The month's counts sit **inside the same marks** above the grid, so they are the key: there is no swatch beside a label. The Home card's month line is the production tally, not the calendar.
 
 ## Analytics series
 
