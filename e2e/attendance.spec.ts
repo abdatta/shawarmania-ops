@@ -67,63 +67,72 @@ async function openStaffHome(page: Page) {
   await expect(page.getByText('Hello, Demo Staff')).toBeVisible()
 }
 
-test('an employee checks in at the counter, and the day waits for a manager', async ({ page }) => {
-  await openStaffHome(page)
+test(
+  'an employee checks in at the counter, and the day waits for a manager',
+  { tag: '@cg-off:auto-approve-at-the-shop' },
+  async ({ page }) => {
+    await openStaffHome(page)
 
-  const action = page.getByTestId('attendance-action')
-  await expect(action).toHaveText(/Check in/)
-  await action.click()
+    const action = page.getByTestId('attendance-action')
+    await expect(action).toHaveText(/Check in/)
+    await action.click()
 
-  // Standing at the counter, inside the fence, and still counting for nothing.
-  // The screen has to say so rather than imply the day is done.
-  await expect(page.getByTestId('attendance-waiting')).toContainText(
-    'waiting for your manager to approve it',
-  )
-  await expect(page.getByText(/from the outlet/)).toBeVisible()
-  await expect(page.getByTestId('attendance-blocked')).toHaveCount(0)
-  await expect(page.getByText('Waiting for a manager to approve')).toBeVisible()
-})
+    // Standing at the counter, inside the fence, and still counting for nothing.
+    // The screen has to say so rather than imply the day is done.
+    await expect(page.getByTestId('attendance-waiting')).toContainText(
+      'waiting for your manager to approve it',
+    )
+    await expect(page.getByText(/from the outlet/)).toBeVisible()
+    await expect(page.getByTestId('attendance-blocked')).toHaveCount(0)
+    await expect(page.getByText('Waiting for a manager to approve')).toBeVisible()
+  },
+)
 
-test('a check-in from outside the fence is refused, explained, and writes nothing', async ({
-  page,
-  context,
-}) => {
-  await context.setGeolocation(DOWN_THE_ROAD)
-  await openStaffHome(page)
+test(
+  'a check-in from outside the fence is refused, explained, and writes nothing',
+  { tag: '@cg-off:refreshed-staff-screens' },
+  async ({ page, context }) => {
+    await context.setGeolocation(DOWN_THE_ROAD)
+    await openStaffHome(page)
 
-  await page.getByTestId('attendance-action').click()
+    await page.getByTestId('attendance-action').click()
 
-  const blocked = page.getByTestId('attendance-blocked')
-  await expect(blocked).toBeVisible()
-  // Named, because the demo Employee works at two outlets since
-  // multi-outlet-people and "the outlet" would mean nothing to them. The fence
-  // picked the nearer one, which is whose manager will be asked.
-  await expect(blocked).toContainText('too far from Shawarmania Kalyani')
-  // The numbers a person needs to argue with it: distance, limit, and how
-  // sure the phone was.
-  await expect(blocked).toContainText('150 m')
-  await expect(blocked).toContainText(/±\d+/)
-  // And what it will cost the manager who settles it, so the person asking
-  // knows what they are asking for.
-  await expect(blocked).toContainText('will have to give a reason')
+    const blocked = page.getByTestId('attendance-blocked')
+    await expect(blocked).toBeVisible()
+    // Named, because the demo Employee works at two outlets since
+    // multi-outlet-people and "the outlet" would mean nothing to them. The fence
+    // picked the nearer one, which is whose manager will be asked.
+    await expect(blocked).toContainText('too far from Shawarmania Kalyani')
+    // The numbers a person needs to argue with it: distance, limit, and how
+    // sure the phone was.
+    await expect(blocked).toContainText('150 m')
+    await expect(blocked).toContainText(/±\d+/)
+    // And what it will cost the manager who settles it, so the person asking
+    // knows what they are asking for.
+    await expect(blocked).toContainText('will have to give a reason')
 
-  // Walking away records nothing at all.
-  await page.getByRole('button', { name: 'Not now' }).click()
-  await expect(page.getByTestId('attendance-blocked')).toHaveCount(0)
-  await page.reload()
-  await expect(page.getByTestId('attendance-action')).toHaveText(/Check in/)
-})
+    // Walking away records nothing at all.
+    await page.getByRole('button', { name: 'Not now' }).click()
+    await expect(page.getByTestId('attendance-blocked')).toHaveCount(0)
+    await page.reload()
+    await expect(page.getByTestId('attendance-action')).toHaveText(/Check in/)
+  },
+)
 
-test('a blocked check-in becomes a request the manager can approve', async ({ page, context }) => {
-  await context.setGeolocation(DOWN_THE_ROAD)
-  await openStaffHome(page)
+test(
+  'a blocked check-in becomes a request the manager can approve',
+  { tag: '@cg-off:refreshed-staff-screens' },
+  async ({ page, context }) => {
+    await context.setGeolocation(DOWN_THE_ROAD)
+    await openStaffHome(page)
 
-  await page.getByTestId('attendance-action').click()
-  await page.getByTestId('request-override').click()
+    await page.getByTestId('attendance-action').click()
+    await page.getByTestId('request-override').click()
 
-  // Claimed present, stored absent, and said in words.
-  await expect(page.getByText('Waiting for a manager to approve')).toBeVisible()
-})
+    // Claimed present, stored absent, and said in words.
+    await expect(page.getByText('Waiting for a manager to approve')).toBeVisible()
+  },
+)
 
 test('a manager standing at the counter approves a waiting day in one tap', async ({ page }) => {
   await page.goto('demo/admin/attendance')
@@ -452,27 +461,29 @@ test('a manager settles a waiting morning one day at a time, and the list holds 
   await expect(page.getByTestId('day-waiting')).toHaveCount(0)
 })
 
-test('a manager reads one person’s month, and the figures reconcile with the day', async ({
-  page,
-}) => {
-  await page.clock.setFixedTime(MID_MONTH)
-  await page.goto('demo/admin/attendance')
-  await expect(page.getByTestId('attendance-day')).toBeVisible()
+test(
+  'a manager reads one person’s month, and the figures reconcile with the day',
+  { tag: '@cg-off:refreshed-staff-screens' },
+  async ({ page }) => {
+    await page.clock.setFixedTime(MID_MONTH)
+    await page.goto('demo/admin/attendance')
+    await expect(page.getByTestId('attendance-day')).toBeVisible()
 
-  await page.getByTestId('axis-staff').click()
-  await page.getByTestId('person-picker').selectOption('d1000000-0000-4000-a000-000000000004')
+    await page.getByTestId('axis-staff').click()
+    await page.getByTestId('person-picker').selectOption('d1000000-0000-4000-a000-000000000004')
 
-  // The pattern, which reading one day at a time cannot show: present days, a
-  // late one, days derived as absent, and anything still waiting.
-  await expect(page.getByTestId('attendance-tally')).toBeVisible()
-  await expect(page.getByTestId('attendance-range')).toBeVisible()
-  await expect(page.getByTestId('late-tag').first()).toBeVisible()
-  await expect(page.getByTestId('derived-absent').first()).toBeVisible()
+    // The pattern, which reading one day at a time cannot show: present days, a
+    // late one, days derived as absent, and anything still waiting.
+    await expect(page.getByTestId('attendance-tally')).toBeVisible()
+    await expect(page.getByTestId('attendance-range')).toBeVisible()
+    await expect(page.getByTestId('late-tag').first()).toBeVisible()
+    await expect(page.getByTestId('derived-absent').first()).toBeVisible()
 
-  // And any range, not only this month.
-  await page.getByRole('button', { name: 'Previous month' }).click()
-  await expect(page.getByTestId('range-picker')).toBeVisible()
-})
+    // And any range, not only this month.
+    await page.getByRole('button', { name: 'Previous month' }).click()
+    await expect(page.getByTestId('range-picker')).toBeVisible()
+  },
+)
 
 test('a manager records a historical manual entry through today’s same process', async ({
   page,
@@ -601,24 +612,26 @@ test('a settled historical arrival time changes through an attributed correction
   await expect(history.getByText(/Checked in at Shawarmania Kalyani/)).toHaveCount(1)
 })
 
-test('an employee’s own history shows the approval, where the approver was, and why', async ({
-  page,
-}) => {
-  await page.clock.setFixedTime(MID_MONTH)
-  await page.goto('demo/staff/my-attendance')
+test(
+  'an employee’s own history shows the approval, where the approver was, and why',
+  { tag: '@cg-off:refreshed-staff-screens' },
+  async ({ page }) => {
+    await page.clock.setFixedTime(MID_MONTH)
+    await page.goto('demo/staff/my-attendance')
 
-  const history = page.getByTestId('attendance-history')
-  await expect(history).toBeVisible()
-  await openEveryDay(page)
-  // The same facts a manager sees about the same day — the symmetry the
-  // proposal insists on, including the new one: whether the manager was there.
-  await expect(history.getByText(/Demo Manager, /).first()).toBeVisible()
-  await expect(history.getByText(/Signal drift by the main road/).first()).toBeVisible()
-  await expect(history.getByTestId('late-tag').first()).toBeVisible()
-  await expect(history.getByTestId('derived-absent').first()).toBeVisible()
-  // And no check-out, anywhere, ever again.
-  await expect(history.getByText('Out', { exact: true })).toHaveCount(0)
-})
+    const history = page.getByTestId('attendance-history')
+    await expect(history).toBeVisible()
+    await openEveryDay(page)
+    // The same facts a manager sees about the same day — the symmetry the
+    // proposal insists on, including the new one: whether the manager was there.
+    await expect(history.getByText(/Demo Manager, /).first()).toBeVisible()
+    await expect(history.getByText(/Signal drift by the main road/).first()).toBeVisible()
+    await expect(history.getByTestId('late-tag').first()).toBeVisible()
+    await expect(history.getByTestId('derived-absent').first()).toBeVisible()
+    // And no check-out, anywhere, ever again.
+    await expect(history.getByText('Out', { exact: true })).toHaveCount(0)
+  },
+)
 
 test('a day is a headline until it is opened, and a waiting one is already open', async ({
   page,
@@ -700,50 +713,54 @@ test('the outlet chips carry their own unsettled days, in one row', async ({ pag
   )
 })
 
-test('the by-staff picker follows the outlet chips', async ({ page }) => {
-  await page.clock.setFixedTime(MID_MONTH)
-  await page.goto('demo/owner/attendance')
-  await expect(page.getByTestId('attendance-day')).toBeVisible()
+test(
+  'the by-staff picker follows the outlet chips',
+  { tag: '@cg-off:refreshed-staff-screens' },
+  async ({ page }) => {
+    await page.clock.setFixedTime(MID_MONTH)
+    await page.goto('demo/owner/attendance')
+    await expect(page.getByTestId('attendance-day')).toBeVisible()
 
-  // One scope above both axes, in the header, where the Ledger keeps its own.
-  // It stays put across the switch, because a control that appears and
-  // disappears under the title is one whose meaning the reader has to keep
-  // re-deciding.
-  const kanchrapara = page.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`)
-  await expect(kanchrapara).toHaveAttribute('aria-pressed', 'false')
-  await page.getByTestId('axis-staff').click()
-  await expect(page.getByTestId('surface-outlets')).toBeVisible()
+    // One scope above both axes, in the header, where the Ledger keeps its own.
+    // It stays put across the switch, because a control that appears and
+    // disappears under the title is one whose meaning the reader has to keep
+    // re-deciding.
+    const kanchrapara = page.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`)
+    await expect(kanchrapara).toHaveAttribute('aria-pressed', 'false')
+    await page.getByTestId('axis-staff').click()
+    await expect(page.getByTestId('surface-outlets')).toBeVisible()
 
-  const offered = () =>
-    page
-      .getByTestId('person-picker')
-      .locator('option')
-      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value))
+    const offered = () =>
+      page
+        .getByTestId('person-picker')
+        .locator('option')
+        .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value))
 
-  // Kalyani alone is selected, so a Kanchrapara-only person is not offered —
-  // and one tap brings them back, which is the whole cost of the narrowing.
-  expect(await offered()).not.toContain(DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID)
-  await kanchrapara.click()
-  await expect
-    .poll(offered, { message: 'Kanchrapara staff offered once their outlet is on' })
-    .toContain(DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID)
+    // Kalyani alone is selected, so a Kanchrapara-only person is not offered —
+    // and one tap brings them back, which is the whole cost of the narrowing.
+    expect(await offered()).not.toContain(DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID)
+    await kanchrapara.click()
+    await expect
+      .poll(offered, { message: 'Kanchrapara staff offered once their outlet is on' })
+      .toContain(DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID)
 
-  // What the chips must NOT narrow: the month itself. Somebody staffed at both
-  // shops still reads as one continuous month with Kalyani alone selected,
-  // because the read names no outlet at all.
-  await kanchrapara.click()
-  await expect(kanchrapara).toHaveAttribute('aria-pressed', 'false')
-  await page.getByTestId('person-picker').selectOption(DEMO_TWO_OUTLETS_ACCOUNT_ID)
-  await expect(page.getByTestId('attendance-range')).toBeVisible()
-  await expect(
-    page.getByTestId('attendance-range').getByText('Shawarmania Kanchrapara').first(),
-  ).toBeVisible()
+    // What the chips must NOT narrow: the month itself. Somebody staffed at both
+    // shops still reads as one continuous month with Kalyani alone selected,
+    // because the read names no outlet at all.
+    await kanchrapara.click()
+    await expect(kanchrapara).toHaveAttribute('aria-pressed', 'false')
+    await page.getByTestId('person-picker').selectOption(DEMO_TWO_OUTLETS_ACCOUNT_ID)
+    await expect(page.getByTestId('attendance-range')).toBeVisible()
+    await expect(
+      page.getByTestId('attendance-range').getByText('Shawarmania Kanchrapara').first(),
+    ).toBeVisible()
 
-  // And the period is a month, with no second way to say what the period is.
-  await expect(page.getByTestId('range-picker')).toBeVisible()
-  await expect(page.getByLabel('Range starts')).toHaveCount(0)
-  await expect(page.getByLabel('Range ends')).toHaveCount(0)
-})
+    // And the period is a month, with no second way to say what the period is.
+    await expect(page.getByTestId('range-picker')).toBeVisible()
+    await expect(page.getByLabel('Range starts')).toHaveCount(0)
+    await expect(page.getByLabel('Range ends')).toHaveCount(0)
+  },
+)
 
 test('the owner sees which outlets have never been surveyed', async ({ page }) => {
   await page.goto('demo/owner/outlets')
@@ -769,41 +786,45 @@ test('the owner captures a position and the outlet stops being unsurveyed', asyn
   await expect(page.getByTestId('uncaptured-kanchrapara')).toHaveCount(0)
 })
 
-test('the attendance walk makes no request beyond the app origin', async ({ page, baseURL }) => {
-  const origin = new URL(baseURL ?? E2E_ORIGIN).origin
-  const violations: string[] = []
-  page.on('request', (request) => {
-    if (new URL(request.url()).origin !== origin) violations.push(request.url())
-  })
+test(
+  'the attendance walk makes no request beyond the app origin',
+  { tag: '@cg-off:refreshed-staff-screens' },
+  async ({ page, baseURL }) => {
+    const origin = new URL(baseURL ?? E2E_ORIGIN).origin
+    const violations: string[] = []
+    page.on('request', (request) => {
+      if (new URL(request.url()).origin !== origin) violations.push(request.url())
+    })
 
-  await openStaffHome(page)
-  await page.getByTestId('attendance-action').click()
-  await expect(page.getByTestId('attendance-waiting')).toBeVisible()
+    await openStaffHome(page)
+    await page.getByTestId('attendance-action').click()
+    await expect(page.getByTestId('attendance-waiting')).toBeVisible()
 
-  await page.goto('demo/staff/my-attendance')
-  await expect(page.getByTestId('attendance-history')).toBeVisible()
+    await page.goto('demo/staff/my-attendance')
+    await expect(page.getByTestId('attendance-history')).toBeVisible()
 
-  await page.goto('demo/admin/attendance')
-  await expect(page.getByTestId('attendance-day')).toBeVisible()
-  // Denial and its retry-policy correction stay entirely in the demo store too.
-  await page.getByTestId(`deny-${DEMO_RUNNER_ACCOUNT_ID}`).click()
-  await expect(page.getByTestId('prevent-retry')).not.toBeChecked()
-  await page.getByTestId('prevent-retry').check()
-  await page.getByRole('button', { name: 'Deny check-in' }).click()
-  await page.getByTestId(`correct-${DEMO_RUNNER_ACCOUNT_ID}`).click()
-  await page.getByLabel('Correction').selectOption('allow_retry')
-  await page.getByLabel('Reason').fill('Employee should check in at the assigned outlet')
-  await page.getByRole('button', { name: 'Save correction' }).click()
-  await expect(page.getByText('Allowed another check-in')).toBeVisible()
+    await page.goto('demo/admin/attendance')
+    await expect(page.getByTestId('attendance-day')).toBeVisible()
+    // Denial and its retry-policy correction stay entirely in the demo store too.
+    await page.getByTestId(`deny-${DEMO_RUNNER_ACCOUNT_ID}`).click()
+    await expect(page.getByTestId('prevent-retry')).not.toBeChecked()
+    await page.getByTestId('prevent-retry').check()
+    await page.getByRole('button', { name: 'Deny check-in' }).click()
+    await page.getByTestId(`correct-${DEMO_RUNNER_ACCOUNT_ID}`).click()
+    await page.getByLabel('Correction').selectOption('allow_retry')
+    await page.getByLabel('Reason').fill('Employee should check in at the assigned outlet')
+    await page.getByRole('button', { name: 'Save correction' }).click()
+    await expect(page.getByText('Allowed another check-in')).toBeVisible()
 
-  await page.goto('demo/admin/team')
-  await expect(page.getByText('Demo Griller')).toBeVisible()
+    await page.goto('demo/admin/team')
+    await expect(page.getByText('Demo Griller')).toBeVisible()
 
-  await page.goto('demo/owner/outlets')
-  await expect(page.getByTestId('outlet-list')).toBeVisible()
+    await page.goto('demo/owner/outlets')
+    await expect(page.getByTestId('outlet-list')).toBeVisible()
 
-  expect(violations).toEqual([])
-})
+    expect(violations).toEqual([])
+  },
+)
 
 test('the employee shell offers its attendance surfaces in navigation', async ({ page }) => {
   await page.goto('demo/staff')
@@ -819,41 +840,43 @@ test('the employee shell offers its attendance surfaces in navigation', async ({
  * person, two outlets, one phone, and nothing anywhere asking them which shop
  * they are at.
  */
-test('a person assigned to two outlets sees each day named, and picks no outlet', async ({
-  page,
-}) => {
-  // Pinned mid-month for the same reason the other range specs are: the month
-  // defaults to the current one and the fixtures are days back from today, so
-  // on the 1st the pattern sits in the previous month.
-  await page.clock.setFixedTime(MID_MONTH)
-  await page.goto('demo/staff/my-attendance')
+test(
+  'a person assigned to two outlets sees each day named, and picks no outlet',
+  { tag: '@cg-off:refreshed-staff-screens' },
+  async ({ page }) => {
+    // Pinned mid-month for the same reason the other range specs are: the month
+    // defaults to the current one and the fixtures are days back from today, so
+    // on the 1st the pattern sits in the previous month.
+    await page.clock.setFixedTime(MID_MONTH)
+    await page.goto('demo/staff/my-attendance')
 
-  // Their own history spans both shops, and each day worked says which — a
-  // question that did not exist while a person had one outlet, and cannot be
-  // answered from context once they have two. A day nobody recorded names no
-  // outlet at all, because it was worked nowhere
-  // (attendance-one-day-per-person).
-  await expect(page.getByText('Shawarmania Kalyani').first()).toBeVisible()
-  await expect(page.getByText('Shawarmania Kanchrapara').first()).toBeVisible()
+    // Their own history spans both shops, and each day worked says which — a
+    // question that did not exist while a person had one outlet, and cannot be
+    // answered from context once they have two. A day nobody recorded names no
+    // outlet at all, because it was worked nowhere
+    // (attendance-one-day-per-person).
+    await expect(page.getByText('Shawarmania Kalyani').first()).toBeVisible()
+    await expect(page.getByText('Shawarmania Kanchrapara').first()).toBeVisible()
 
-  // And each business date appears exactly once, rather than once per outlet
-  // with half of them absences on days they were at work.
-  const dates = await page
-    .getByTestId(/^range-day-/)
-    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-testid')))
-  expect(new Set(dates).size).toBe(dates.length)
+    // And each business date appears exactly once, rather than once per outlet
+    // with half of them absences on days they were at work.
+    const dates = await page
+      .getByTestId(/^range-day-/)
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-testid')))
+    expect(new Set(dates).size).toBe(dates.length)
 
-  await page.goto('demo/staff')
-  await expect(page.getByText('Hello, Demo Staff')).toBeVisible()
-  // Assigned to both, said plainly on the header rather than hidden behind a
-  // control.
-  await expect(page.getByText(/Assigned to .*Kalyani.* and .*Kanchrapara/)).toBeVisible()
+    await page.goto('demo/staff')
+    await expect(page.getByText('Hello, Demo Staff')).toBeVisible()
+    // Assigned to both, said plainly on the header rather than hidden behind a
+    // control.
+    await expect(page.getByText(/Assigned to .*Kalyani.* and .*Kanchrapara/)).toBeVisible()
 
-  // And the one big button is still the only thing to press. No switcher, no
-  // outlet select, nothing session-scoped — the fence resolves it (design D5).
-  await expect(page.getByTestId('attendance-action')).toBeVisible()
-  await expect(page.getByRole('combobox')).toHaveCount(0)
-})
+    // And the one big button is still the only thing to press. No switcher, no
+    // outlet select, nothing session-scoped — the fence resolves it (design D5).
+    await expect(page.getByTestId('attendance-action')).toBeVisible()
+    await expect(page.getByRole('combobox')).toHaveCount(0)
+  },
+)
 
 /**
  * The owner, at a shop they hold no assignment at

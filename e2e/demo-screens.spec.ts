@@ -49,39 +49,43 @@ async function setTheme(page: Page, theme: 'light' | 'dark') {
 
 for (const viewport of VIEWPORTS) {
   for (const theme of THEMES) {
-    test(`demo shells render in ${theme} on ${viewport.name}`, async ({ page }, testInfo) => {
-      await page.setViewportSize({ width: viewport.width, height: viewport.height })
-      await page.goto('.')
-      await setTheme(page, theme)
+    test(
+      `demo shells render in ${theme} on ${viewport.name}`,
+      { tag: '@cg-off:refreshed-staff-screens' },
+      async ({ page }, testInfo) => {
+        await page.setViewportSize({ width: viewport.width, height: viewport.height })
+        await page.goto('.')
+        await setTheme(page, theme)
 
-      for (const shell of SHELLS) {
-        await page.goto(`demo/${shell.segment}`)
+        for (const shell of SHELLS) {
+          await page.goto(`demo/${shell.segment}`)
+          await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+          await expect(page.getByTestId('demo-banner')).toBeVisible()
+          await expect(shell.anchor(page)).toBeVisible()
+
+          await testInfo.attach(`${shell.segment}-${theme}-${viewport.name}`, {
+            body: await page.screenshot(),
+            contentType: 'image/png',
+          })
+        }
+
+        // The historical escape hatch is a real working state, not merely the
+        // attendance landing page. Keep its date-specific copy and time-only
+        // sheet readable in every visual cell the surface supports.
+        await page.goto('demo/admin/attendance')
+        await page.getByRole('button', { name: 'Previous day' }).click()
+        const helper = page.getByTestId(`expand-${DEMO_HELPER_ACCOUNT_ID}`)
+        if ((await helper.getAttribute('aria-expanded')) === 'false') await helper.click()
+        await page.getByTestId(`manual-${DEMO_HELPER_ACCOUNT_ID}`).click()
+        await page.getByLabel('When did they arrive?').fill('09:00')
+        await expect(page.getByRole('heading', { name: 'Record an arrival' })).toBeVisible()
+        await expect(page.getByRole('button', { name: 'Record it under my name' })).toBeEnabled()
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
-        await expect(page.getByTestId('demo-banner')).toBeVisible()
-        await expect(shell.anchor(page)).toBeVisible()
-
-        await testInfo.attach(`${shell.segment}-${theme}-${viewport.name}`, {
+        await testInfo.attach(`historical-arrival-${theme}-${viewport.name}`, {
           body: await page.screenshot(),
           contentType: 'image/png',
         })
-      }
-
-      // The historical escape hatch is a real working state, not merely the
-      // attendance landing page. Keep its date-specific copy and time-only
-      // sheet readable in every visual cell the surface supports.
-      await page.goto('demo/admin/attendance')
-      await page.getByRole('button', { name: 'Previous day' }).click()
-      const helper = page.getByTestId(`expand-${DEMO_HELPER_ACCOUNT_ID}`)
-      if ((await helper.getAttribute('aria-expanded')) === 'false') await helper.click()
-      await page.getByTestId(`manual-${DEMO_HELPER_ACCOUNT_ID}`).click()
-      await page.getByLabel('When did they arrive?').fill('09:00')
-      await expect(page.getByRole('heading', { name: 'Record an arrival' })).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Record it under my name' })).toBeEnabled()
-      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
-      await testInfo.attach(`historical-arrival-${theme}-${viewport.name}`, {
-        body: await page.screenshot(),
-        contentType: 'image/png',
-      })
-    })
+      },
+    )
   }
 }

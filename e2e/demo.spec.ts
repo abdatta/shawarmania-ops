@@ -13,50 +13,51 @@ import { E2E_ORIGIN } from '../ports'
 
 const ROLE_SEGMENTS = ['owner', 'admin', 'biller', 'staff'] as const
 
-test('walking all four demo role shells makes no request beyond the app origin', async ({
-  page,
-  baseURL,
-}) => {
-  const origin = new URL(baseURL ?? E2E_ORIGIN).origin
-  const violations: string[] = []
-  page.on('request', (request) => {
-    if (new URL(request.url()).origin !== origin) violations.push(request.url())
-  })
+test(
+  'walking all four demo role shells makes no request beyond the app origin',
+  { tag: '@cg-off:refreshed-staff-screens' },
+  async ({ page, baseURL }) => {
+    const origin = new URL(baseURL ?? E2E_ORIGIN).origin
+    const violations: string[] = []
+    page.on('request', (request) => {
+      if (new URL(request.url()).origin !== origin) violations.push(request.url())
+    })
 
-  await page.goto('demo/owner')
-  await expect(page.getByTestId('demo-banner')).toBeVisible()
-  // The card's own heading. The outlet switcher carries the same name as an
-  // option, so a bare text match is ambiguous — and the assertion here is that
-  // the outlet's figures rendered, not that its name appears somewhere.
-  await expect(page.getByRole('heading', { name: 'Shawarmania Kalyani' })).toBeVisible()
+    await page.goto('demo/owner')
+    await expect(page.getByTestId('demo-banner')).toBeVisible()
+    // The card's own heading. The outlet switcher carries the same name as an
+    // option, so a bare text match is ambiguous — and the assertion here is that
+    // the outlet's figures rendered, not that its name appears somewhere.
+    await expect(page.getByRole('heading', { name: 'Shawarmania Kalyani' })).toBeVisible()
 
-  // The switcher, through all four roles.
-  const switcher = page.getByRole('navigation', { name: 'Demo role switcher' })
-  await switcher.getByRole('link', { name: 'Admin' }).click()
-  // The same page the owner just read, scoped to the one outlet they run.
-  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
+    // The switcher, through all four roles.
+    const switcher = page.getByRole('navigation', { name: 'Demo role switcher' })
+    await switcher.getByRole('link', { name: 'Admin' }).click()
+    // The same page the owner just read, scoped to the one outlet they run.
+    await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
 
-  await switcher.getByRole('link', { name: 'Biller' }).click()
-  // The Biller walkthrough is the enrolled tablet's own shell, whose chrome
-  // names the device: a tablet is set up rather than signed in.
-  await expect(page.getByRole('heading', { name: 'Counter tablet' })).toBeVisible()
+    await switcher.getByRole('link', { name: 'Biller' }).click()
+    // The Biller walkthrough is the enrolled tablet's own shell, whose chrome
+    // names the device: a tablet is set up rather than signed in.
+    await expect(page.getByRole('heading', { name: 'Counter tablet' })).toBeVisible()
 
-  await switcher.getByRole('link', { name: 'Staff' }).click()
-  await expect(page.getByText('Hello, Demo Staff')).toBeVisible()
+    await switcher.getByRole('link', { name: 'Staff' }).click()
+    await expect(page.getByText('Hello, Demo Staff')).toBeVisible()
 
-  await switcher.getByRole('link', { name: 'Owner' }).click()
-  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()
+    await switcher.getByRole('link', { name: 'Owner' }).click()
+    await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()
 
-  // The new owner control is part of this same network-safety walk: opening
-  // it must stay as permanently demo-only as the four shells around it.
-  await page.goto('demo/owner/team')
-  await page.getByRole('button', { name: 'Add person' }).click()
-  await expect(page.getByTestId('account-outlet-options')).toBeVisible()
-  await expect(page.getByRole('checkbox', { name: 'Shawarmania Kalyani' })).toBeVisible()
-  await expect(page.getByRole('checkbox', { name: 'Shawarmania Kanchrapara' })).toBeVisible()
+    // The new owner control is part of this same network-safety walk: opening
+    // it must stay as permanently demo-only as the four shells around it.
+    await page.goto('demo/owner/team')
+    await page.getByRole('button', { name: 'Add person' }).click()
+    await expect(page.getByTestId('account-outlet-options')).toBeVisible()
+    await expect(page.getByRole('checkbox', { name: 'Shawarmania Kalyani' })).toBeVisible()
+    await expect(page.getByRole('checkbox', { name: 'Shawarmania Kanchrapara' })).toBeVisible()
 
-  expect(violations).toEqual([])
-})
+    expect(violations).toEqual([])
+  },
+)
 
 test('the demo banner is on every demo route and offers no dismissal', async ({ page }) => {
   for (const segment of ROLE_SEGMENTS) {
@@ -101,19 +102,23 @@ test('the demo can be left, and leaving is not dismissing', async ({ page }) => 
   await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible()
 })
 
-test('a demo deep link reconstructs the same role and surface on reload', async ({ page }) => {
-  await page.goto('demo/admin')
-  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
+test(
+  'a demo deep link reconstructs the same role and surface on reload',
+  { tag: '@cg-off:refreshed-staff-screens' },
+  async ({ page }) => {
+    await page.goto('demo/admin')
+    await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
 
-  await page.reload()
-  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
-  await expect(page.getByTestId('demo-banner')).toBeVisible()
+    await page.reload()
+    await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
+    await expect(page.getByTestId('demo-banner')).toBeVisible()
 
-  // And from a cold start with no prior navigation (fresh SPA boot via the
-  // static-hosting fallback, same as a shared link).
-  await page.goto('demo/staff')
-  await expect(page.getByText('Hello, Demo Staff')).toBeVisible()
-})
+    // And from a cold start with no prior navigation (fresh SPA boot via the
+    // static-hosting fallback, same as a shared link).
+    await page.goto('demo/staff')
+    await expect(page.getByText('Hello, Demo Staff')).toBeVisible()
+  },
+)
 
 test('the demo index lands on the owner shell', async ({ page }) => {
   await page.goto('demo')
