@@ -292,8 +292,10 @@ except the one widened check of D4, which the owner agreed to on 2026-10-26.
   on, all three projects. The Edge Function typecheck is unaffected (no function
   changed). The auth browser suites need Edge Functions this local stack does
   not serve, so they are left to the `stage` run.*
-- [ ] 11.2 Push to `stage`. Read the run for the four browser suites (gates off
-  and on) and the request budget. Fix what the log names.
+- [x] 11.2 Push to `stage`. Read the run for the four browser suites (gates off
+  and on) and the request budget. Fix what the log names. *2026-10-29: Staging
+  run 40855210446 on 9f3e0d0a, every job green: all four browser suites both
+  ways, the database job, migrate, publish and smoke.*
 - [ ] 11.3 The owner tries it on the staging fake outlet:
   - an in-fence check-in counts;
   - *Block* refuses from away;
