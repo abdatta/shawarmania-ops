@@ -15,10 +15,28 @@ import {
   instantOnBusinessDay,
   type FenceVerdict,
 } from '@/domain'
-import { readPosition, type GeolocationFailureKind, type PositionReading } from '@/lib/geolocation'
+import { useChangeGate } from '@/change-gates/context'
+import {
+  readCheckInPosition,
+  readPosition,
+  type GeolocationFailureKind,
+  type PositionReading,
+} from '@/lib/geolocation'
 
-import { isLate, isWaitingForApproval } from './attendance-record'
+import { isLate, isWaitingForApproval, type AttendanceTally } from './attendance-record'
 import { ApprovalNote, AttendanceHistory, DayVerdict, EventEvidence } from './evidence'
+import { TodayPass } from './today-pass'
+
+/**
+ * When a reading is answered at once on the refreshed screens, rather than read
+ * a few seconds longer (a-check-in-at-the-shop-approves-itself, design D7):
+ * inside a fence and no rougher than the first number, or sharp enough to be
+ * believed wherever it lands — more reading will not move somebody standing a
+ * kilometre away into the shop, and making them wait for it would be latency
+ * they feel for nothing.
+ */
+const GOOD_ENOUGH_INSIDE_M = 50
+const SHARP_ENOUGH_ANYWHERE_M = 25
 
 /**
  * One large action, today's status, and — when the fence refuses — a state
@@ -133,7 +151,13 @@ export function CheckInCard({
   record,
   onChange,
   onReload,
+  month = null,
 }: {
+  /**
+   * This month so far, for the refreshed Home's one line about it
+   * (`refreshed-staff-screens`). Unused by the card as it was.
+   */
+  month?: AttendanceTally | null
   /** Whose day this is — the signed-in session's own account id. */
   personId: string
   /**
@@ -155,6 +179,12 @@ export function CheckInCard({
   const { attendance } = useAdapters()
   const [attempt, setAttempt] = useState<Attempt>({ kind: 'idle' })
   const [busy, setBusy] = useState(false)
+  // Check in anyway reading afresh, on the refreshed screens: the decision
+  // stays up with its button spinning, rather than a screen of its own.
+  const [rechecking, setRechecking] = useState(false)
+  const refreshed = useChangeGate('refreshed-staff-screens')
+  const rulesOn = useChangeGate('auto-approve-at-the-shop')
+  const [refining, setRefining] = useState<PositionReading | null>(null)
 
   const phase = cardPhase(record)
   const radius = outlet.geofence_radius_m
@@ -164,7 +194,11 @@ export function CheckInCard({
     async (action: () => Promise<AttendanceRecord>) => {
       setBusy(true)
       try {
-        onChange(await action())
+        const settled = await action()
+        // A short buzz when the day is in, on the refreshed screens. iOS has no
+        // vibration, so it is never the only sign: the tick and the words are.
+        if (refreshed && settled.status === 'present') navigator.vibrate?.(30)
+        onChange(settled)
         // The write-time database instant is final. Refresh the shared outlet
         // context as well as adopting the returned row so a cutover crossed
         // while GPS or the network was in flight cannot leave retry visibility
@@ -189,7 +223,7 @@ export function CheckInCard({
         setBusy(false)
       }
     },
-    [onChange, onReload],
+    [onChange, onReload, refreshed],
   )
 
   const commitCheckIn = useCallback(
@@ -211,6 +245,11 @@ export function CheckInCard({
   const prepareCheckIn = useCallback(
     (target: Tables<'outlets'>, reading: PositionReading | null) => {
       if (!record) return commitCheckIn(target, reading)
+      // Refreshed: no "Use this new check-in?". A second check-in only happens
+      // where it can change the answer (from away to the shop, or after an
+      // absence), so it simply replaces the first, late if it is late
+      // [owner, 2026-10-28: "if it is late, it is late"].
+      if (refreshed) return commitCheckIn(target, reading)
       const previous = record.attempts.at(-1)
       if (!previous) return commitCheckIn(target, reading)
       const previousOutlet =
@@ -250,7 +289,7 @@ export function CheckInCard({
       if (changes.length === 0) return commitCheckIn(target, reading)
       setAttempt({ kind: 'confirm', outlet: target, reading, changes })
     },
-    [commitCheckIn, context.serverAt, outlet, outlets, record],
+    [commitCheckIn, context.serverAt, outlet, outlets, record, refreshed],
   )
 
   async function onCheckIn() {
@@ -263,7 +302,29 @@ export function CheckInCard({
       return
     }
     setAttempt({ kind: 'locating' })
-    const result = await readPosition()
+    // Refreshed: one reading as before, and a few seconds more only when it
+    // lands outside every fence or reads rough. Off: one reading, as it was.
+    const result = refreshed
+      ? await readCheckInPosition(
+          (reading) => {
+            const near = resolveOutlet(liveOutlets, reading) ?? outlet
+            const fence = evaluateFence(
+              {
+                latitude: near.latitude,
+                longitude: near.longitude,
+                radiusMetres: near.geofence_radius_m,
+              },
+              reading,
+            )
+            return (
+              reading.accuracyMetres <= SHARP_ENOUGH_ANYWHERE_M ||
+              (fence.kind === 'inside' && reading.accuracyMetres <= GOOD_ENOUGH_INSIDE_M)
+            )
+          },
+          { onRefining: setRefining },
+        )
+      : await readPosition()
+    setRefining(null)
 
     if (!result.ok) {
       // With one outlet there is nothing to resolve, so a missing position is
@@ -296,6 +357,66 @@ export function CheckInCard({
     }
 
     await prepareCheckIn(target, result.reading)
+  }
+
+  /**
+   * **Check in anyway**, on the refreshed screens: a fresh reading first, so
+   * somebody who has walked in since is approved like anyone at the shop, and
+   * the check-in carries the latest place there is [owner, 2026-10-26]. If no
+   * reading comes back this time, the earlier one stands, or none.
+   */
+  async function checkInAnyway(target: Tables<'outlets'>, earlier: PositionReading | null) {
+    setRechecking(true)
+    try {
+      const fresh = await readPosition()
+      const reading = fresh.ok ? fresh.reading : earlier
+      const liveOutlets = outlets.filter((candidate) => candidate.is_active)
+      const at = reading ? (resolveOutlet(liveOutlets, reading) ?? target) : target
+      await prepareCheckIn(at, reading)
+    } finally {
+      setRechecking(false)
+    }
+  }
+
+  const retry =
+    record?.retry.allowed === true &&
+    outlets.some(
+      (candidate) =>
+        candidate.is_active && businessDateForOutlet(context, candidate) === record.businessDate,
+    )
+
+  if (refreshed) {
+    return (
+      <TodayPass
+        businessDate={businessDateOf(record, outlet, context)}
+        outlet={outlet}
+        outlets={outlets}
+        serverAt={context.serverAt}
+        record={record}
+        late={late}
+        attempt={attempt.kind === 'confirm' ? { kind: 'confirm' } : attempt}
+        refining={refining}
+        busy={busy || rechecking}
+        retry={retry}
+        blocksAway={(target) => rulesOn && target.attendance_blocks_away}
+        month={month}
+        confirmation={
+          <RetryConfirmation
+            attempt={attempt}
+            // Not "a new manager review": a check-in at the shop approves itself.
+            intro="This changes:"
+            onKeep={() => setAttempt({ kind: 'idle' })}
+            onUse={() => {
+              if (attempt.kind === 'confirm') void commitCheckIn(attempt.outlet, attempt.reading)
+            }}
+          />
+        }
+        onCheckIn={() => void onCheckIn()}
+        onRecord={(target, reading) => void checkInAnyway(target, reading)}
+        onChoose={(chosen) => void checkInAnyway(chosen, null)}
+        onDismiss={() => setAttempt({ kind: 'idle' })}
+      />
+    )
   }
 
   return (
@@ -525,10 +646,13 @@ function RetryConfirmation({
   attempt,
   onKeep,
   onUse,
+  intro = 'This keeps the earlier evidence and adds a new manager review. These facts will change:',
 }: {
   attempt: Attempt
   onKeep: () => void
   onUse: () => void
+  /** The sentence above the changes. */
+  intro?: string
 }) {
   const open = attempt.kind === 'confirm'
   const changes = attempt.kind === 'confirm' ? attempt.changes : []
@@ -553,9 +677,7 @@ function RetryConfirmation({
         </div>
       }
     >
-      <p className="text-sm text-content-muted">
-        This keeps the earlier evidence and adds a new manager review. These facts will change:
-      </p>
+      <p className="text-sm text-content-muted">{intro}</p>
       <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-content">
         {changes.map((change) => (
           <li key={change}>{change}</li>

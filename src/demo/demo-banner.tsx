@@ -10,6 +10,7 @@ import { cn } from '@/lib/cn'
 import { useSession } from '@/session/context'
 import { ROLE_LABELS, ROLE_SEGMENTS, type Role } from '@/session/session'
 
+import { DemoCheckInPlace } from './demo-check-in-place'
 import { useDemoConnectivity, type DemoConnectivityState } from './demo-connectivity'
 import { useDemoReset } from './demo-reset'
 
@@ -84,6 +85,8 @@ const CONNECTIVITY_STATES = Object.keys(CONNECTIVITY) as DemoConnectivityState[]
  */
 export function DemoBanner() {
   const roleIncludes = useChangeGate('role-includes')
+  // The place switch serves the new check-in screens; off, the banner is as it was.
+  const refreshedStaffScreens = useChangeGate('refreshed-staff-screens')
   const session = useSession()
   const reset = useDemoReset()
   const connectivity = useDemoConnectivity()
@@ -121,6 +124,9 @@ export function DemoBanner() {
         exit in place, and lets the cluster's *left* edge be the thing that moves.
       */}
       <div className="ml-auto flex shrink-0 items-center gap-x-2 sm:gap-x-3">
+        {/* Where the phone is, for a check-in (a-check-in-at-the-shop-approves-itself). */}
+        {refreshedStaffScreens && <DemoCheckInPlace />}
+
         {/* Present exactly where a counter is on screen, and absent rather than
             inert everywhere else — see `demo-connectivity.ts` for why that is
             read from the tree instead of from the role. The three phone shells

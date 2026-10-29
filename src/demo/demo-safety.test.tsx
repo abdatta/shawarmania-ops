@@ -71,7 +71,9 @@ describe('demo mode safety', () => {
 
     // Staff.
     await user.click(screen.getByRole('link', { name: 'Staff' }))
-    expect(await screen.findByText('Hello, Demo Staff')).toBeInTheDocument()
+    // The one big button, which Home carries with or without the refreshed
+    // screens (a-check-in-at-the-shop-approves-itself); its greeting does not.
+    expect(await screen.findByTestId('attendance-action')).toHaveTextContent('Check in')
     expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
 
     // Every mock adapter method, including the ones no home calls yet — and

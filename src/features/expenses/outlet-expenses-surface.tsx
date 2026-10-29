@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card'
 import { LoadingFigures, LoadingList, LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { DayField, PeriodBar } from '@/components/ui/period-bar'
+import { useChangeGate } from '@/change-gates/context'
 import { useAdapters } from '@/data-access'
 import type { ExpenseRecord } from '@/data-access/adapters'
 import { carryPeriod, earliestOffered, resolveBusinessDate, shiftBusinessDate } from '@/domain'
@@ -84,6 +85,9 @@ export function OutletExpensesSurface() {
   // app_outlets_for('franchise_admin')`: policy and control ask one question.
   const fullReach = holdsRole(session, 'super_admin') || managed
   const shape = fullReach ? FULL_REACH_SHAPE : STAFF_SHAPE
+  // The heading is the explanation (owner UI convention); with the refreshed
+  // screens on there is no sentence beneath it (design D9).
+  const refreshed = useChangeGate('refreshed-staff-screens')
   // The Fixed chip (fixed-costs-are-spread-over-the-month): read only for the
   // owner and a manager, with `pro-rata-pnl` on. Staff make no request for it.
   const fixedMarks = useFixedMarks(useOutletFixedCosts(outletId, fullReach), outletId)
@@ -220,7 +224,11 @@ export function OutletExpensesSurface() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <PageHeader scope={outletSelector} title="Expenses" subtitle={shape.subtitle} />
+      <PageHeader
+        scope={outletSelector}
+        title="Expenses"
+        {...(refreshed ? {} : { subtitle: shape.subtitle })}
+      />
       {showTabs && <ExpenseTabs current="daily" />}
 
       {error && (

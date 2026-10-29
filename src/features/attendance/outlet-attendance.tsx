@@ -11,6 +11,8 @@ import {
 } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 
+import { useChangeGate } from '@/change-gates/context'
+
 import { EmptyState } from '@/components/layout/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
 import { Badge, BadgeDot } from '@/components/ui/badge'
@@ -59,6 +61,7 @@ import {
 } from './attendance-record'
 import { assembleRange, monthRange, type DateRange, type DayRow } from './attendance-range'
 import { RangeDayList, TallySummary } from './day-range-list'
+import { MonthCalendar, MonthTally } from './month-calendar'
 import {
   AbsenceReason,
   ApprovalNote,
@@ -2307,6 +2310,7 @@ function StaffAxis({
   onError: (message: string | null) => void
 }) {
   const { attendance } = useAdapters()
+  const refreshed = useChangeGate('refreshed-staff-screens')
   const today = outlets
     .map((outlet) => resolveBusinessDate(new Date(), outlet.business_day_cutover))
     .reduce((latest, candidate) => (candidate > latest ? candidate : latest), '')
@@ -2414,6 +2418,20 @@ function StaffAxis({
         <>
           <LoadingBlock label="the summary" className="mb-3" />
           <LoadingList label="this person’s days" data-testid="range-loading" />
+        </>
+      ) : refreshed ? (
+        // The calendar the person's own My attendance draws, so both sides keep
+        // reading the same month (refreshed-staff-screens, design D8).
+        <>
+          <MonthTally tally={tallyDays(days)} />
+          <MonthCalendar
+            rows={days}
+            range={range}
+            radiusFor={radiusFor}
+            personId={personId}
+            showOutlet={outlets.length > 1}
+            today={today}
+          />
         </>
       ) : (
         <>

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { readPosition, watchBestPosition } from './geolocation'
+import { readCheckInPosition, readPosition, watchBestPosition } from './geolocation'
 
 /**
  * Drives the one module that touches `navigator.geolocation` against a stub.
@@ -224,5 +224,65 @@ describe('watchBestPosition', () => {
     Reflect.deleteProperty(navigator, 'geolocation')
 
     await expect(watchBestPosition()).resolves.toEqual({ ok: false, kind: 'unsupported' })
+  })
+})
+
+describe('readCheckInPosition', () => {
+  const tight = (reading: { accuracyMetres: number }) => reading.accuracyMetres <= 50
+
+  it('answers a good first reading at once, without a window', async () => {
+    getCurrentPosition.mockImplementation((onSuccess: PositionCallback) =>
+      onSuccess(position({ latitude: 22.975, longitude: 88.4345, accuracy: 12 })),
+    )
+
+    const result = await readCheckInPosition(tight)
+
+    expect(result).toMatchObject({ ok: true, reading: { accuracyMetres: 12 } })
+    expect(watchPosition).not.toHaveBeenCalled()
+  })
+
+  it('keeps reading after a poor first reading and stops at the first good one', async () => {
+    getCurrentPosition.mockImplementation((onSuccess: PositionCallback) =>
+      onSuccess(position({ latitude: 22.975, longitude: 88.4345, accuracy: 120 })),
+    )
+    watchPosition.mockImplementation((onSuccess: PositionCallback) => {
+      onSuccess(position({ latitude: 22.975, longitude: 88.4345, accuracy: 70 }))
+      onSuccess(position({ latitude: 22.975, longitude: 88.4345, accuracy: 30 }))
+      return 7
+    })
+    const seen: number[] = []
+
+    const result = await readCheckInPosition(tight, {
+      onRefining: (reading) => seen.push(reading.accuracyMetres),
+    })
+
+    expect(result).toMatchObject({ ok: true, reading: { accuracyMetres: 30 } })
+    expect(seen).toEqual([120, 70, 30])
+    expect(clearWatch).toHaveBeenCalledWith(7)
+  })
+
+  it('keeps the first reading when the window finds nothing better', async () => {
+    vi.useFakeTimers()
+    getCurrentPosition.mockImplementation((onSuccess: PositionCallback) =>
+      onSuccess(position({ latitude: 22.975, longitude: 88.4345, accuracy: 90 })),
+    )
+    watchPosition.mockImplementation((onSuccess: PositionCallback) => {
+      onSuccess(position({ latitude: 22.975, longitude: 88.4345, accuracy: 140 }))
+      return 7
+    })
+
+    const pending = readCheckInPosition(tight, { windowMs: 6_000 })
+    await vi.advanceTimersByTimeAsync(6_000)
+
+    await expect(pending).resolves.toMatchObject({ ok: true, reading: { accuracyMetres: 90 } })
+  })
+
+  it('returns a failed first reading as it is', async () => {
+    getCurrentPosition.mockImplementation((_: PositionCallback, onError: PositionErrorCallback) =>
+      onError(failure(PERMISSION_DENIED)),
+    )
+
+    await expect(readCheckInPosition(tight)).resolves.toEqual({ ok: false, kind: 'denied' })
+    expect(watchPosition).not.toHaveBeenCalled()
   })
 })

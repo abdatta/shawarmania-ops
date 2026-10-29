@@ -161,7 +161,25 @@ export function ApprovalNote({
   radiusMetres: number
 }) {
   const { approval } = record
-  if (!approval) return null
+  if (!approval) {
+    // The fence approved it (a-check-in-at-the-shop-approves-itself, design D6):
+    // nobody to name and no approver's position, so it says so where the
+    // approver would be. Drawn whatever the gate says, because once such a day
+    // is written it has to read right with the gate off too.
+    const latest = record.decisions.find((decision) => decision.id === record.latestDecisionId)
+    if (latest?.kind !== 'auto_approved') return null
+    return (
+      <div data-testid="approval-note" className="text-xs">
+        <span
+          data-testid="auto-approved-note"
+          className="inline-flex items-center gap-1 text-content-muted"
+        >
+          <MapPin aria-hidden size={12} />
+          Auto-approved at the shop, {formatTime(latest.at)}
+        </span>
+      </div>
+    )
+  }
 
   const onSite = wasApprovedOnSite(record, radiusMetres)
   const manual = record.checkIn?.source === 'manual'
@@ -262,6 +280,18 @@ const DECISION_LABELS: Record<AttendanceRecord['decisions'][number]['kind'], str
   correct_time: 'Changed check-in time',
   manual_present: 'Recorded manually as present',
   legacy_outcome: 'Existing outcome',
+  // The fence decided, so the decision names nobody and the line has no "by"
+  // (a-check-in-at-the-shop-approves-itself, design D4).
+  auto_approved: 'Auto-approved at the shop',
+}
+
+/**
+ * A kind this build has no words for still reads as something. A Republish to
+ * an older build already lacks a label for a kind added after it; this keeps
+ * the next one from printing `undefined` (design D6).
+ */
+function decisionLabel(kind: string): string {
+  return (DECISION_LABELS as Record<string, string | undefined>)[kind] ?? 'Recorded'
 }
 
 /** Ordered immutable evidence and decisions, shared by manager and employee views. */
@@ -290,7 +320,7 @@ export function AttendanceHistory({ record }: { record: AttendanceRecord }) {
     ...record.decisions.map((decision) => ({
       id: `decision-${decision.id}`,
       at: decision.at,
-      text: `${DECISION_LABELS[decision.kind]}${
+      text: `${decisionLabel(decision.kind)}${
         decision.previousCheckInAt && decision.newCheckInAt
           ? ` from ${formatTime(decision.previousCheckInAt)} to ${formatTime(decision.newCheckInAt)}`
           : ''

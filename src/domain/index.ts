@@ -89,6 +89,7 @@ export {
   earliestOffered,
   formatBusinessDate,
   formatBusinessDateShort,
+  formatBusinessWeekday,
   formatDate,
   formatDateTime,
   formatDayTime,

@@ -1,5 +1,5 @@
 import { Banknote, ChevronDown, MapPinOff, Wallet } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { Fragment, useState, type FormEvent } from 'react'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { EmptyState } from '@/components/layout/empty-state'
@@ -16,7 +16,13 @@ import { Select } from '@/components/ui/select'
 import { useChangeGate } from '@/change-gates/context'
 import { useAdapters } from '@/data-access'
 import { DataActionError, type ExpenseActor, type ExpenseRecord } from '@/data-access/adapters'
-import { formatBusinessDate, formatDateTime, normalizeCategory, rupeesToPaise } from '@/domain'
+import {
+  formatBusinessDate,
+  formatDateTime,
+  normalizeCategory,
+  rupeesToPaise,
+  shiftBusinessDate,
+} from '@/domain'
 
 import { Field } from './field'
 import { FixedChip } from '@/features/fixed-costs/ledger-fixed-costs'
@@ -129,6 +135,11 @@ export function ExpenseList({
 }: ExpenseListProps) {
   const { expenses: adapter, expenseCategories: categoriesAdapter } = useAdapters()
   const fewerRequests = useChangeGate('fewer-requests')
+  // Day headings, the You tag and the amount-first form
+  // (a-check-in-at-the-shop-approves-itself, design D9).
+  const refreshed = useChangeGate('refreshed-staff-screens')
+  // A row's own date only where no heading above it already says the day.
+  const rowDates = showDates && !refreshed
 
   const [categories, setCategories] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
@@ -191,6 +202,14 @@ export function ExpenseList({
   function mayDiscard(expense: ExpenseRecord): boolean {
     return expense.delivery?.state === 'needs_attention' && Boolean(adapter.discardRefusedExpense)
   }
+
+  /** Which day a heading names, in words where words are shorter. */
+  const dayHeading = (date: string) =>
+    date === currentBusinessDate
+      ? 'Today'
+      : date === shiftBusinessDate(currentBusinessDate, -1)
+        ? 'Yesterday'
+        : formatBusinessDate(date)
 
   /** Whether this list holds a kebab at all — see where the slot is rendered. */
   const anyChangeable = expenses?.some((row) => mayChange(row) || mayDiscard(row)) ?? false
@@ -309,33 +328,50 @@ export function ExpenseList({
         <EmptyState icon={Wallet} title={emptyTitle} />
       ) : (
         <ul className="space-y-2" data-testid="ledger-expense-list">
-          {expenses.map((expense) => {
+          {expenses.map((expense, index) => {
+            // A heading where the day changes, on a list spanning days, so the
+            // rows below it need not each repeat their date.
+            const startsDay =
+              refreshed &&
+              showDates &&
+              (index === 0 || expenses[index - 1]?.businessDate !== expense.businessDate)
             const withdrawn = expense.voidedAt !== null
             const isOpen = expanded === expense.id
             const panelId = `ledger-expense-detail-${expense.id}`
             const changeable = mayChange(expense)
             const discardable = mayDiscard(expense)
             return (
-              <li key={expense.id}>
-                <Card
-                  className={
-                    // A withdrawn row reads as **withdrawn card**, not as struck
-                    // text on a live one. Three signals rather than one, because
-                    // a strikethrough alone is a hairline on a phone in daylight
-                    // and colour alone is a signal not every reader receives:
-                    // the surface recedes, the border goes dashed and the shadow
-                    // that lifts a live card off the page goes away. Nothing
-                    // here relies on opacity — dimming already-muted text is how
-                    // a row stops meeting contrast while still being the thing
-                    // somebody is trying to read.
-                    withdrawn
-                      ? 'space-y-1.5 p-3 border-dashed bg-surface-raised/40 shadow-none'
-                      : 'space-y-1.5 p-3'
-                  }
-                  data-testid={`ledger-expense-${expense.id}`}
-                  data-withdrawn={withdrawn ? 'true' : undefined}
-                >
-                  {/*
+              <Fragment key={expense.id}>
+                {startsDay && (
+                  <li
+                    className="pt-2 first:pt-0"
+                    data-testid={`expense-day-${expense.businessDate}`}
+                  >
+                    <h3 className="text-sm font-bold text-content">
+                      {dayHeading(expense.businessDate)}
+                    </h3>
+                  </li>
+                )}
+                <li>
+                  <Card
+                    className={
+                      // A withdrawn row reads as **withdrawn card**, not as struck
+                      // text on a live one. Three signals rather than one, because
+                      // a strikethrough alone is a hairline on a phone in daylight
+                      // and colour alone is a signal not every reader receives:
+                      // the surface recedes, the border goes dashed and the shadow
+                      // that lifts a live card off the page goes away. Nothing
+                      // here relies on opacity — dimming already-muted text is how
+                      // a row stops meeting contrast while still being the thing
+                      // somebody is trying to read.
+                      withdrawn
+                        ? 'space-y-1.5 p-3 border-dashed bg-surface-raised/40 shadow-none'
+                        : 'space-y-1.5 p-3'
+                    }
+                    data-testid={`ledger-expense-${expense.id}`}
+                    data-withdrawn={withdrawn ? 'true' : undefined}
+                  >
+                    {/*
                     **The whole card is the disclosure**, the way an attendance
                     card's header is — chevron included, but the chevron is only
                     the indicator of which way it is facing, not the target. A
@@ -350,24 +386,24 @@ export function ExpenseList({
                     is written out by hand for the same reason, and the menu
                     stops its own clicks from reaching the row.
                   */}
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    aria-expanded={isOpen}
-                    aria-controls={panelId}
-                    data-testid={`expand-expense-${expense.id}`}
-                    onClick={() => setExpanded(isOpen ? null : expense.id)}
-                    onKeyDown={(event) => {
-                      if (event.key !== 'Enter' && event.key !== ' ') return
-                      event.preventDefault()
-                      setExpanded(isOpen ? null : expense.id)
-                    }}
-                    className="flex cursor-pointer items-center gap-2 rounded text-left focus-visible:focus-ring"
-                  >
-                    <div className="flex min-w-0 flex-1 items-center gap-x-2">
-                      <span className="min-w-0 flex-1">
-                        {withdrawn ? (
-                          /*
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isOpen}
+                      aria-controls={panelId}
+                      data-testid={`expand-expense-${expense.id}`}
+                      onClick={() => setExpanded(isOpen ? null : expense.id)}
+                      onKeyDown={(event) => {
+                        if (event.key !== 'Enter' && event.key !== ' ') return
+                        event.preventDefault()
+                        setExpanded(isOpen ? null : expense.id)
+                      }}
+                      className="flex cursor-pointer items-center gap-2 rounded text-left focus-visible:focus-ring"
+                    >
+                      <div className="flex min-w-0 flex-1 items-center gap-x-2">
+                        <span className="min-w-0 flex-1">
+                          {withdrawn ? (
+                            /*
                             **A withdrawn row keeps its name and loses the rest.**
                             One line, struck through: the note, the badges and the
                             attribution are history, and printing them at full
@@ -379,24 +415,33 @@ export function ExpenseList({
                             "Withdrawn" alone is a row you have to open to know
                             whether it is the one you were looking for.
                           */
-                          <span
-                            className="text-sm font-semibold text-content-muted line-through decoration-2"
-                            data-testid={`ledger-withdrawn-${expense.id}`}
-                          >
-                            {expense.category}
-                            <span className="sr-only"> — withdrawn, counting toward nothing</span>
-                          </span>
-                        ) : (
-                          <>
-                            <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-content">
-                              {fixedMarks?.get(expense.id)?.label ?? expense.category}
-                              {fixedMarks?.has(expense.id) && (
-                                <FixedChip
-                                  paidOn={fixedMarks.get(expense.id)?.paidOn}
-                                  testId={`expense-fixed-${expense.id}`}
-                                />
-                              )}
-                              {/*
+                            <span
+                              className="text-sm font-semibold text-content-muted line-through decoration-2"
+                              data-testid={`ledger-withdrawn-${expense.id}`}
+                            >
+                              {expense.category}
+                              <span className="sr-only"> — withdrawn, counting toward nothing</span>
+                            </span>
+                          ) : (
+                            <>
+                              <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-content">
+                                {fixedMarks?.get(expense.id)?.label ?? expense.category}
+                                {/* The rows this reader recorded, which are the ones they can change. */}
+                                {refreshed && expense.recordedBy?.id === viewer.id && (
+                                  <span
+                                    data-testid={`expense-you-${expense.id}`}
+                                    className="inline-flex items-center rounded-lg border border-border px-2 py-0.5 text-xs font-semibold text-content-muted"
+                                  >
+                                    You
+                                  </span>
+                                )}
+                                {fixedMarks?.has(expense.id) && (
+                                  <FixedChip
+                                    paidOn={fixedMarks.get(expense.id)?.paidOn}
+                                    testId={`expense-fixed-${expense.id}`}
+                                  />
+                                )}
+                                {/*
                                 **A queued expense says which it is**, in the
                                 counter's existing vocabulary. `Not sent yet` is
                                 the phrase an unsent bill already carries, and it
@@ -406,42 +451,42 @@ export function ExpenseList({
                                 no — and it reads differently because retrying
                                 will never change it.
                               */}
-                              {expense.delivery && (
-                                <span
-                                  data-testid={`expense-delivery-${expense.id}`}
-                                  data-delivery={expense.delivery.state}
-                                  className={
-                                    expense.delivery.state === 'needs_attention'
-                                      ? 'inline-flex items-center rounded-lg border border-danger px-2 py-0.5 text-xs font-semibold text-content'
-                                      : 'inline-flex items-center rounded-lg border border-warning px-2 py-0.5 text-xs font-semibold text-content'
-                                  }
-                                >
-                                  {expense.delivery.state === 'needs_attention'
-                                    ? 'Refused'
-                                    : 'Not sent yet'}
-                                </span>
-                              )}
-                              {expense.isCash ? (
-                                <span
-                                  data-testid={`ledger-cash-${expense.id}`}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-primary px-2 py-0.5 text-xs font-semibold text-content"
-                                >
-                                  <Banknote aria-hidden size={12} />
-                                  Cash
-                                  {/*
+                                {expense.delivery && (
+                                  <span
+                                    data-testid={`expense-delivery-${expense.id}`}
+                                    data-delivery={expense.delivery.state}
+                                    className={
+                                      expense.delivery.state === 'needs_attention'
+                                        ? 'inline-flex items-center rounded-lg border border-danger px-2 py-0.5 text-xs font-semibold text-content'
+                                        : 'inline-flex items-center rounded-lg border border-warning px-2 py-0.5 text-xs font-semibold text-content'
+                                    }
+                                  >
+                                    {expense.delivery.state === 'needs_attention'
+                                      ? 'Refused'
+                                      : 'Not sent yet'}
+                                  </span>
+                                )}
+                                {expense.isCash ? (
+                                  <span
+                                    data-testid={`ledger-cash-${expense.id}`}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-primary px-2 py-0.5 text-xs font-semibold text-content"
+                                  >
+                                    <Banknote aria-hidden size={12} />
+                                    Cash
+                                    {/*
                                     The rest of the sentence, for a reader who cannot see
                                     the note. On a phone the badge sits between a category
                                     and an amount on one line, and "Cash — from the drawer"
                                     pushed both of those onto lines of their own.
                                   */}
-                                  <span className="sr-only"> — from the drawer</span>
-                                </span>
-                              ) : (
-                                <span className="text-xs font-normal text-content-muted">
-                                  Not from drawer
-                                </span>
-                              )}
-                              {/*
+                                    <span className="sr-only"> — from the drawer</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-xs font-normal text-content-muted">
+                                    Not from drawer
+                                  </span>
+                                )}
+                                {/*
                                 **The vocabulary attendance already uses**, not a
                                 new one: `MapPinOff` and "not on site" are what an
                                 approval given away from the outlet says, so the
@@ -457,18 +502,18 @@ export function ExpenseList({
                                 moved without anybody at the outlet spending it
                                 (design D9).
                               */}
-                              {expense.recordedAway && expense.isCash && (
-                                <span
-                                  data-testid={`ledger-away-${expense.id}`}
-                                  className="inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-xs font-semibold text-content-muted"
-                                >
-                                  <MapPinOff aria-hidden size={11} />
-                                  <span className="sr-only">Recorded: </span>
-                                  not on site
-                                </span>
-                              )}
-                            </span>
-                            {/*
+                                {expense.recordedAway && expense.isCash && (
+                                  <span
+                                    data-testid={`ledger-away-${expense.id}`}
+                                    className="inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-xs font-semibold text-content-muted"
+                                  >
+                                    <MapPinOff aria-hidden size={11} />
+                                    <span className="sr-only">Recorded: </span>
+                                    not on site
+                                  </span>
+                                )}
+                              </span>
+                              {/*
                               **What the row is about, not who typed it.** The
                               recorder moved behind the chevron: it settles an
                               argument once a month and cost a line of small print
@@ -476,31 +521,31 @@ export function ExpenseList({
                               the only thing here the category does not already
                               say.
                             */}
-                            {(() => {
-                              // A fixed-cost payment's description is its fixed cost's
-                              // name, which the row already reads; only its own note is
-                              // left to say.
-                              const mark = fixedMarks?.get(expense.id)
-                              const note = mark ? mark.note : expense.note
-                              return (
-                                (note || showDates) && (
-                                  <span className="mt-0.5 block text-xs text-content-muted">
-                                    {note}
-                                    {note && showDates && ' · '}
-                                    {showDates && (
-                                      <span data-testid={`ledger-expense-date-${expense.id}`}>
-                                        {formatBusinessDate(expense.businessDate)}
-                                      </span>
-                                    )}
-                                  </span>
+                              {(() => {
+                                // A fixed-cost payment's description is its fixed cost's
+                                // name, which the row already reads; only its own note is
+                                // left to say.
+                                const mark = fixedMarks?.get(expense.id)
+                                const note = mark ? mark.note : expense.note
+                                return (
+                                  (note || rowDates) && (
+                                    <span className="mt-0.5 block text-xs text-content-muted">
+                                      {note}
+                                      {note && rowDates && ' · '}
+                                      {rowDates && (
+                                        <span data-testid={`ledger-expense-date-${expense.id}`}>
+                                          {formatBusinessDate(expense.businessDate)}
+                                        </span>
+                                      )}
+                                    </span>
+                                  )
                                 )
-                              )
-                            })()}
-                          </>
-                        )}
-                      </span>
-                    </div>
-                    {/*
+                              })()}
+                            </>
+                          )}
+                        </span>
+                      </div>
+                      {/*
                       **Reserved per list, not per row.** Where any row offers a
                       menu the slot is held on all of them, so the amounts beside
                       it stay one column rather than stepping left on the
@@ -509,161 +554,161 @@ export function ExpenseList({
                       — the slot is not rendered at all, because a column of
                       nothing on every row is what made this list feel padded.
                     */}
-                    <div
-                      onClick={(event) => event.stopPropagation()}
-                      onKeyDown={(event) => event.stopPropagation()}
-                      className={
-                        anyChangeable ? 'order-first flex w-8 shrink-0 justify-center' : 'hidden'
-                      }
-                    >
-                      {discardable && (
-                        <RowActionsMenu
-                          compact
-                          align="start"
-                          label={`Actions for ${expense.category}`}
-                          actions={[
-                            {
-                              label: 'Discard',
-                              testId: `discard-expense-${expense.id}`,
-                              onSelect: () => {
-                                setError(null)
-                                void (async () => {
-                                  setBusy(true)
-                                  try {
-                                    await adapter.discardRefusedExpense?.(expense.id)
-                                    await onChanged()
-                                  } catch {
-                                    setError('That entry could not be discarded. Try again.')
-                                  } finally {
-                                    setBusy(false)
-                                  }
-                                })()
+                      <div
+                        onClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => event.stopPropagation()}
+                        className={
+                          anyChangeable ? 'order-first flex w-8 shrink-0 justify-center' : 'hidden'
+                        }
+                      >
+                        {discardable && (
+                          <RowActionsMenu
+                            compact
+                            align="start"
+                            label={`Actions for ${expense.category}`}
+                            actions={[
+                              {
+                                label: 'Discard',
+                                testId: `discard-expense-${expense.id}`,
+                                onSelect: () => {
+                                  setError(null)
+                                  void (async () => {
+                                    setBusy(true)
+                                    try {
+                                      await adapter.discardRefusedExpense?.(expense.id)
+                                      await onChanged()
+                                    } catch {
+                                      setError('That entry could not be discarded. Try again.')
+                                    } finally {
+                                      setBusy(false)
+                                    }
+                                  })()
+                                },
                               },
-                            },
-                          ]}
-                        />
-                      )}
-                      {changeable && fixedMarks?.has(expense.id) && (
-                        <FixedPaymentActions
-                          mark={fixedMarks.get(expense.id)!}
-                          expenseId={expense.id}
-                          label={`Actions for ${expense.category}`}
-                          onEditNote={() => {
-                            setError(null)
-                            setEditing(expense)
-                            setDraft({
-                              category: expense.category,
-                              amount: String(expense.amountPaise / 100),
-                              isCash: expense.isCash,
-                              note: fixedMarks.get(expense.id)?.note ?? '',
-                            })
-                            setOpen(true)
-                          }}
-                        />
-                      )}
-                      {changeable && !fixedMarks?.has(expense.id) && (
-                        <RowActionsMenu
-                          compact
-                          align="start"
-                          label={`Actions for ${expense.category}`}
-                          actions={[
-                            {
-                              label: 'Edit',
-                              testId: `edit-expense-${expense.id}`,
-                              onSelect: () => {
-                                setError(null)
-                                setEditing(expense)
-                                setDraft({
-                                  category: expense.category,
-                                  amount: String(expense.amountPaise / 100),
-                                  isCash: expense.isCash,
-                                  note: expense.note ?? '',
-                                })
-                                void loadCategories()
-                                setOpen(true)
+                            ]}
+                          />
+                        )}
+                        {changeable && fixedMarks?.has(expense.id) && (
+                          <FixedPaymentActions
+                            mark={fixedMarks.get(expense.id)!}
+                            expenseId={expense.id}
+                            label={`Actions for ${expense.category}`}
+                            onEditNote={() => {
+                              setError(null)
+                              setEditing(expense)
+                              setDraft({
+                                category: expense.category,
+                                amount: String(expense.amountPaise / 100),
+                                isCash: expense.isCash,
+                                note: fixedMarks.get(expense.id)?.note ?? '',
+                              })
+                              setOpen(true)
+                            }}
+                          />
+                        )}
+                        {changeable && !fixedMarks?.has(expense.id) && (
+                          <RowActionsMenu
+                            compact
+                            align="start"
+                            label={`Actions for ${expense.category}`}
+                            actions={[
+                              {
+                                label: 'Edit',
+                                testId: `edit-expense-${expense.id}`,
+                                onSelect: () => {
+                                  setError(null)
+                                  setEditing(expense)
+                                  setDraft({
+                                    category: expense.category,
+                                    amount: String(expense.amountPaise / 100),
+                                    isCash: expense.isCash,
+                                    note: expense.note ?? '',
+                                  })
+                                  void loadCategories()
+                                  setOpen(true)
+                                },
                               },
-                            },
-                            {
-                              label: 'Withdraw',
-                              testId: `withdraw-expense-${expense.id}`,
-                              onSelect: () => {
-                                setError(null)
-                                setWithdrawing(expense)
+                              {
+                                label: 'Withdraw',
+                                testId: `withdraw-expense-${expense.id}`,
+                                onSelect: () => {
+                                  setError(null)
+                                  setWithdrawing(expense)
+                                },
                               },
-                            },
-                          ]}
-                        />
-                      )}
-                    </div>
-                    {/*
+                            ]}
+                          />
+                        )}
+                      </div>
+                      {/*
                       **A column, not a trailing figure.** The amounts sit at
                       one horizontal position down the whole list, wide enough
                       for a five-figure rupee sum, so somebody totalling the
                       day by eye reads a column instead of hunting each number
                       across a different indent.
                     */}
-                    <span className="flex shrink-0 items-center gap-1.5">
-                      <Money
-                        paise={expense.amountPaise}
-                        className={`min-w-[5.5rem] text-right text-base font-semibold ${
-                          withdrawn ? 'text-content-muted line-through decoration-2' : ''
-                        }`}
-                      />
-                      <ChevronDown
-                        aria-hidden
-                        size={14}
-                        className={`shrink-0 text-content-muted transition-transform ${
-                          isOpen ? 'rotate-180' : ''
-                        }`}
-                      />
-                    </span>
-                  </div>
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        <Money
+                          paise={expense.amountPaise}
+                          className={`min-w-[5.5rem] text-right text-base font-semibold ${
+                            withdrawn ? 'text-content-muted line-through decoration-2' : ''
+                          }`}
+                        />
+                        <ChevronDown
+                          aria-hidden
+                          size={14}
+                          className={`shrink-0 text-content-muted transition-transform ${
+                            isOpen ? 'rotate-180' : ''
+                          }`}
+                        />
+                      </span>
+                    </div>
 
-                  {isOpen && (
-                    <dl
-                      id={panelId}
-                      className="space-y-1 border-t border-border pt-2 text-xs text-content-muted"
-                      data-testid={`ledger-expense-detail-${expense.id}`}
-                    >
-                      {/*
+                    {isOpen && (
+                      <dl
+                        id={panelId}
+                        className="space-y-1 border-t border-border pt-2 text-xs text-content-muted"
+                        data-testid={`ledger-expense-detail-${expense.id}`}
+                      >
+                        {/*
                         Only what the row above stopped saying. A live row carries
                         its note and its badges in full; a withdrawn one is down to
                         its name, so the rest waits here.
                       */}
-                      {withdrawn && (
-                        <>
-                          <div className="flex justify-between gap-3">
-                            <dt>Paid with</dt>
-                            <dd className="text-right">
-                              {expense.isCash ? 'Drawer cash' : 'UPI / bank or collected cash'}
-                            </dd>
-                          </div>
-                          {expense.note && (
+                        {withdrawn && (
+                          <>
                             <div className="flex justify-between gap-3">
-                              <dt>Note</dt>
-                              <dd className="text-right">{expense.note}</dd>
-                            </div>
-                          )}
-                          {showDates && (
-                            <div className="flex justify-between gap-3">
-                              <dt>Day</dt>
-                              <dd
-                                className="text-right"
-                                data-testid={`ledger-expense-date-${expense.id}`}
-                              >
-                                {formatBusinessDate(expense.businessDate)}
+                              <dt>Paid with</dt>
+                              <dd className="text-right">
+                                {expense.isCash ? 'Drawer cash' : 'UPI / bank or collected cash'}
                               </dd>
                             </div>
-                          )}
-                        </>
-                      )}
-                      <div className="flex justify-between gap-3">
-                        <dt>Recorded</dt>
-                        <dd className="text-right" data-testid={`ledger-recorder-${expense.id}`}>
-                          {recorderOf(expense)}, {formatDateTime(expense.createdAt)}
-                        </dd>
-                      </div>
-                      {/*
+                            {expense.note && (
+                              <div className="flex justify-between gap-3">
+                                <dt>Note</dt>
+                                <dd className="text-right">{expense.note}</dd>
+                              </div>
+                            )}
+                            {rowDates && (
+                              <div className="flex justify-between gap-3">
+                                <dt>Day</dt>
+                                <dd
+                                  className="text-right"
+                                  data-testid={`ledger-expense-date-${expense.id}`}
+                                >
+                                  {formatBusinessDate(expense.businessDate)}
+                                </dd>
+                              </div>
+                            )}
+                          </>
+                        )}
+                        <div className="flex justify-between gap-3">
+                          <dt>Recorded</dt>
+                          <dd className="text-right" data-testid={`ledger-recorder-${expense.id}`}>
+                            {recorderOf(expense)}, {formatDateTime(expense.createdAt)}
+                          </dd>
+                        </div>
+                        {/*
                         Not on a withdrawn row. Withdrawing is itself an update,
                         so the guard stamps the correcting account as it does for
                         any other — and since a withdrawn row can never be
@@ -671,38 +716,39 @@ export function ExpenseList({
                         withdrew it. Printing both lines reports one act twice,
                         a minute apart, as though two things had happened.
                       */}
-                      {expense.updatedBy && !withdrawn && (
-                        <div className="flex justify-between gap-3">
-                          <dt>Last corrected</dt>
-                          <dd className="text-right">
-                            {nameOf(expense.updatedBy)}, {formatDateTime(expense.updatedAt)}
-                          </dd>
-                        </div>
-                      )}
-                      {expense.voidedAt && (
-                        <div className="flex justify-between gap-3">
-                          <dt>Withdrawn</dt>
-                          <dd className="text-right">
-                            {nameOf(expense.voidedBy)}, {formatDateTime(expense.voidedAt)}
-                          </dd>
-                        </div>
-                      )}
-                      {/*
+                        {expense.updatedBy && !withdrawn && (
+                          <div className="flex justify-between gap-3">
+                            <dt>Last corrected</dt>
+                            <dd className="text-right">
+                              {nameOf(expense.updatedBy)}, {formatDateTime(expense.updatedAt)}
+                            </dd>
+                          </div>
+                        )}
+                        {expense.voidedAt && (
+                          <div className="flex justify-between gap-3">
+                            <dt>Withdrawn</dt>
+                            <dd className="text-right">
+                              {nameOf(expense.voidedBy)}, {formatDateTime(expense.voidedAt)}
+                            </dd>
+                          </div>
+                        )}
+                        {/*
                         Only where one was given. A reason is optional
                         [owner, 2026-08-09], and an empty "Reason —" row would
                         read as a field somebody failed to fill rather than one
                         nobody was asked for.
                       */}
-                      {expense.voidedReason && (
-                        <div className="flex justify-between gap-3">
-                          <dt>Because</dt>
-                          <dd className="text-right">{expense.voidedReason}</dd>
-                        </div>
-                      )}
-                    </dl>
-                  )}
-                </Card>
-              </li>
+                        {expense.voidedReason && (
+                          <div className="flex justify-between gap-3">
+                            <dt>Because</dt>
+                            <dd className="text-right">{expense.voidedReason}</dd>
+                          </div>
+                        )}
+                      </dl>
+                    )}
+                  </Card>
+                </li>
+              </Fragment>
             )
           })}
         </ul>
@@ -736,6 +782,68 @@ export function ExpenseList({
                 <Input
                   id="expense-description"
                   value={draft.note}
+                  data-testid="expense-description"
+                  onChange={(event) => setDraft({ ...draft, note: event.target.value })}
+                />
+              </Field>
+            </>
+          ) : refreshed ? (
+            <>
+              <Field label="Amount (₹)" id="expense-amount">
+                <Input
+                  id="expense-amount"
+                  required
+                  inputMode="decimal"
+                  value={draft.amount}
+                  placeholder="e.g. 2400"
+                  data-testid="expense-amount"
+                  onChange={(event) => setDraft({ ...draft, amount: event.target.value })}
+                />
+              </Field>
+
+              {/* Typed, with its suggestions, as it always was: a 28-day replay of
+                  Cafe's entries found tap buttons would have held what was
+                  typed one time in eight [owner, 2026-10-28]. */}
+              <Field label="Category" id="expense-category">
+                <CategoryInput
+                  id="expense-category"
+                  label="Expense category"
+                  value={draft.category}
+                  suggestions={categories}
+                  testId="expense-category"
+                  onChange={(category) => setDraft({ ...draft, category })}
+                />
+              </Field>
+
+              {viewer.mayTouchAnyRow ? (
+                <Field label="Paid with" id="expense-is-cash">
+                  <Select
+                    id="expense-is-cash"
+                    required
+                    value={draft.isCash === null ? '' : draft.isCash ? 'cash' : 'other'}
+                    data-testid="expense-is-cash"
+                    onChange={(event) =>
+                      setDraft({ ...draft, isCash: event.target.value === 'cash' })
+                    }
+                  >
+                    <option value="" disabled>
+                      Choose…
+                    </option>
+                    <option value="cash">Drawer cash</option>
+                    <option value="other">UPI / bank or collected cash</option>
+                  </Select>
+                </Field>
+              ) : (
+                <p className="text-xs text-content-muted" data-testid="expense-cash-only">
+                  Drawer cash.
+                </p>
+              )}
+
+              <Field label="Note (optional)" id="expense-description">
+                <Input
+                  id="expense-description"
+                  value={draft.note}
+                  placeholder="What was it for?"
                   data-testid="expense-description"
                   onChange={(event) => setDraft({ ...draft, note: event.target.value })}
                 />

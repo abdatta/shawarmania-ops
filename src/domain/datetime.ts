@@ -185,6 +185,27 @@ export function formatBusinessDateShort(
   }).format(new Date(`${businessDate}T00:00:00Z`))
 }
 
+const weekdayDateFormat = new Intl.DateTimeFormat('en-IN', {
+  timeZone: 'UTC',
+  weekday: 'short',
+  day: 'numeric',
+  month: 'short',
+})
+
+/**
+ * A business date with its weekday and no year: `Sun 26 Oct`
+ * (a-check-in-at-the-shop-approves-itself, design D8). For a person's own
+ * attendance, where the day of the week is what they remember a day by and the
+ * month and year are already on screen once.
+ */
+export function formatBusinessWeekday(businessDate: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) {
+    throw new TypeError(`Expected a YYYY-MM-DD business date, got "${businessDate}"`)
+  }
+  // en-IN puts a comma after the weekday; the attendance screens read without it.
+  return weekdayDateFormat.format(new Date(`${businessDate}T00:00:00Z`)).replace(',', '')
+}
+
 const partsFormat = new Intl.DateTimeFormat('en-GB', {
   timeZone: OUTLET_TIME_ZONE,
   year: 'numeric',

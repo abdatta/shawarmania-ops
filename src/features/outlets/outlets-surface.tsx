@@ -40,6 +40,7 @@ import { Input } from '@/components/ui/input'
 import { LoadingRegion, LoadingTable, Shimmer } from '@/components/ui/loading'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 
+import { useChangeGate } from '@/change-gates/context'
 import { useAdapters, type Tables } from '@/data-access'
 import {
   DataActionError,
@@ -69,6 +70,7 @@ import {
   OutletLoyaltyShimmer,
 } from '@/features/outlets/outlet-loyalty-section'
 import { OutletReviewSection, OutletReviewShimmer } from '@/features/outlets/outlet-review-section'
+import { OutletAttendanceSection } from '@/features/outlets/outlet-attendance-section'
 import { OutletSettingsLinkProvider } from '@/features/outlets/outlet-settings-link'
 import { OutletDiscountPresets } from './outlet-discount-presets'
 import { getPartState, isRenderable } from '@/gates/registry'
@@ -713,6 +715,9 @@ export function OutletPage() {
   // Points and gold, `demo` until #62's database section makes them real.
   const showLoyalty = isRenderable(getPartState('outlet-points'), session.mode)
   const showReviewAsk = isRenderable(getPartState('outlet-review-ask'), session.mode)
+  // The rules do nothing while the gate is off, so they are not offered then
+  // (a-check-in-at-the-shop-approves-itself, design D2).
+  const attendanceRules = useChangeGate('auto-approve-at-the-shop')
   /**
    * Whether this outlet has gold, as its Loyalty section last read or saved it.
    * Where that section is not shown yet, gold is as #57 and #60 left it, so
@@ -817,6 +822,17 @@ export function OutletPage() {
             A closed outlet has no counter to administer: its tablets are moved
             or removed from a trading outlet's page.
           */}
+            {shown.is_active && attendanceRules && (
+              <OutletAttendanceSection
+                key={`attendance-${shown.id}`}
+                outlet={shown}
+                // The owner, and a manager at the outlets they manage: how an
+                // outlet runs its staff is its own business [owner, 2026-10-25].
+                // Its position and fence stay under Details, the owner's. First
+                // after Details, above Orders [owner, 2026-10-29].
+                mayWrite={mayAdminister}
+              />
+            )}
             {shown.is_active && showService && (
               <OutletServiceSections
                 key={`service-${shown.id}`}
