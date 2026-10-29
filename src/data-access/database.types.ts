@@ -1033,6 +1033,7 @@ export type Database = {
           command_id: string | null
           created_at: string
           decided_at: string
+          fence_radius_m: number | null
           id: string
           kind: Database["public"]["Enums"]["attendance_decision_kind"]
           manager_accuracy_m: number | null
@@ -1058,6 +1059,7 @@ export type Database = {
           command_id?: string | null
           created_at?: string
           decided_at?: string
+          fence_radius_m?: number | null
           id: string
           kind: Database["public"]["Enums"]["attendance_decision_kind"]
           manager_accuracy_m?: number | null
@@ -1083,6 +1085,7 @@ export type Database = {
           command_id?: string | null
           created_at?: string
           decided_at?: string
+          fence_radius_m?: number | null
           id?: string
           kind?: Database["public"]["Enums"]["attendance_decision_kind"]
           manager_accuracy_m?: number | null
@@ -4527,6 +4530,8 @@ export type Database = {
           address_line1: string | null
           address_line2: string | null
           arrival_deadline: string
+          attendance_blocks_away: boolean
+          attendance_needs_manager: boolean
           business_day_cutover: string
           city: string | null
           code: string
@@ -4573,6 +4578,8 @@ export type Database = {
           address_line1?: string | null
           address_line2?: string | null
           arrival_deadline?: string
+          attendance_blocks_away?: boolean
+          attendance_needs_manager?: boolean
           business_day_cutover?: string
           city?: string | null
           code: string
@@ -4619,6 +4626,8 @@ export type Database = {
           address_line1?: string | null
           address_line2?: string | null
           arrival_deadline?: string
+          attendance_blocks_away?: boolean
+          attendance_needs_manager?: boolean
           business_day_cutover?: string
           city?: string | null
           code?: string
@@ -5364,6 +5373,54 @@ export type Database = {
         }
       }
       attendance_submit_attempt_v2: {
+        Args: {
+          p_accuracy_m: number
+          p_attempt_id: string
+          p_attempted_at: string
+          p_business_date: string
+          p_expected_version?: number
+          p_lat: number
+          p_lng: number
+          p_outlet_id: string
+        }
+        Returns: {
+          approval_reason: string | null
+          approved_at: string | null
+          approved_by: string | null
+          approved_by_name: string | null
+          approver_accuracy_m: number | null
+          approver_distance_m: number | null
+          approver_lat: number | null
+          approver_lng: number | null
+          arrival_deadline: string | null
+          business_date: string
+          check_in_accuracy_m: number | null
+          check_in_at: string | null
+          check_in_distance_m: number | null
+          check_in_entered_by: string | null
+          check_in_entered_by_name: string | null
+          check_in_lat: number | null
+          check_in_lng: number | null
+          check_in_source: Database["public"]["Enums"]["check_in_source"] | null
+          created_at: string
+          current_attempt_id: string | null
+          id: string
+          latest_decision_id: string | null
+          outcome_attempt_id: string | null
+          outlet_id: string
+          person_id: string
+          retry_blocked: boolean
+          state_version: number
+          status: Database["public"]["Enums"]["attendance_status"]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "attendance"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      attendance_submit_attempt_v3: {
         Args: {
           p_accuracy_m: number
           p_attempt_id: string
@@ -6906,6 +6963,67 @@ export type Database = {
         Args: { p_item_ids: string[]; p_outlet_id: string; p_title: string }
         Returns: Json
       }
+      set_outlet_attendance_rules: {
+        Args: {
+          p_blocks_away: boolean
+          p_needs_manager: boolean
+          p_outlet: string
+        }
+        Returns: {
+          address_line1: string | null
+          address_line2: string | null
+          arrival_deadline: string
+          attendance_blocks_away: boolean
+          attendance_needs_manager: boolean
+          business_day_cutover: string
+          city: string | null
+          code: string
+          collect_customer_details: boolean
+          created_at: string
+          dine_in_offered: boolean
+          discount_presets: Json
+          district: string | null
+          geofence_radius_m: number
+          gold_counter_grant: boolean
+          gold_duration_months: number
+          gold_earn_multiplier_x100: number
+          gold_enabled: boolean
+          gold_threshold_paise: number | null
+          hyperpure_delivery: boolean
+          id: string
+          is_active: boolean
+          latitude: number | null
+          location_accuracy_m: number | null
+          location_captured_at: string | null
+          location_label: string
+          longitude: number | null
+          menu_slug: string
+          name: string
+          packaging_free_for_gold: boolean
+          packaging_mode: Database["public"]["Enums"]["packaging_mode"]
+          packaging_price_paise: number | null
+          phone: string | null
+          pincode: string | null
+          points_earn_block_paise: number | null
+          points_earn_per_block: number | null
+          points_enabled: boolean
+          points_gold_use_cap_bp: number | null
+          points_use_cap_bp: number | null
+          review_ask_enabled: boolean
+          review_ask_percent: number
+          review_ask_popup: boolean
+          review_ask_url: string | null
+          table_numbers: boolean
+          takeaway_offered: boolean
+          zomato_res_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "outlets"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       set_outlet_loyalty_settings: {
         Args: {
           p_gold_counter_grant: boolean
@@ -6924,6 +7042,8 @@ export type Database = {
           address_line1: string | null
           address_line2: string | null
           arrival_deadline: string
+          attendance_blocks_away: boolean
+          attendance_needs_manager: boolean
           business_day_cutover: string
           city: string | null
           code: string
@@ -6985,6 +7105,8 @@ export type Database = {
           address_line1: string | null
           address_line2: string | null
           arrival_deadline: string
+          attendance_blocks_away: boolean
+          attendance_needs_manager: boolean
           business_day_cutover: string
           city: string | null
           code: string
@@ -7049,6 +7171,8 @@ export type Database = {
           address_line1: string | null
           address_line2: string | null
           arrival_deadline: string
+          attendance_blocks_away: boolean
+          attendance_needs_manager: boolean
           business_day_cutover: string
           city: string | null
           code: string
@@ -7225,6 +7349,7 @@ export type Database = {
         | "manual_present"
         | "legacy_outcome"
         | "correct_time"
+        | "auto_approved"
       attendance_status: "present" | "absent" | "half_day" | "leave"
       bill_status: "settled" | "void"
       check_in_source: "phone" | "counter_tablet" | "manual"
@@ -7393,6 +7518,7 @@ export const Constants = {
         "manual_present",
         "legacy_outcome",
         "correct_time",
+        "auto_approved",
       ],
       attendance_status: ["present", "absent", "half_day", "leave"],
       bill_status: ["settled", "void"],

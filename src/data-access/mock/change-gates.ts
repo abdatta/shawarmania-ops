@@ -82,6 +82,20 @@ const WORDS: Record<
     offMeans: 'Each check names Employee and Biller itself.',
     changeNumber: null,
   },
+  'auto-approve-at-the-shop': {
+    title: 'Auto-approve at the shop',
+    onMeans:
+      'A check-in measured inside the outlet’s fence is approved at once, and each outlet’s managers choose whether every check-in still needs them and whether check-ins away from the shop are refused.',
+    offMeans: 'Every check-in waits for a manager.',
+    changeNumber: 81,
+  },
+  'refreshed-staff-screens': {
+    title: 'Refreshed staff screens',
+    onMeans:
+      'The staff phone’s Home, My attendance and Expenses, the counter’s and managers’ expense lists, and the manager’s By staff use the new layouts.',
+    offMeans: 'Every screen reads as it does today.',
+    changeNumber: 81,
+  },
 }
 
 /**

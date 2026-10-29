@@ -144,6 +144,37 @@ export const CHANGE_GATES = {
     roundTrip:
       'none: on and off admit the same people to write the same rows, and nothing is queued',
   },
+  /**
+   * #81: a check-in the database measures inside the outlet's own fence is
+   * approved automatically, late or not, and each outlet's managers choose
+   * whether every check-in still needs them and whether check-ins away from the
+   * shop are refused (a-check-in-at-the-shop-approves-itself, design D1–D6).
+   * Off, every check-in waits for a manager and the two settings do nothing.
+   */
+  'auto-approve-at-the-shop': {
+    kind: 'change',
+    code: 'AA',
+    change: 'a-check-in-at-the-shop-approves-itself',
+    retireBy: '2027-02-28',
+    roundTrip:
+      'none: a check-in is never queued, and a day approved while it was on is a present day today’s screens read and a manager can correct',
+  },
+  /**
+   * #81: the staff phone's Home as a pass for today, My attendance and By staff
+   * as a month calendar, and the expense list's day headings, You tag and
+   * amount-first form, on the phone, the counter and the managers' screens
+   * alike (design D7–D9). Built around a day being approved at the shop, so it
+   * runs only under `auto-approve-at-the-shop`. Off, every screen reads as
+   * before.
+   */
+  'refreshed-staff-screens': {
+    kind: 'change',
+    code: 'RS',
+    change: 'a-check-in-at-the-shop-approves-itself',
+    dependsOn: ['auto-approve-at-the-shop'],
+    retireBy: '2027-02-28',
+    roundTrip: 'none: it changes what is drawn, never what is written',
+  },
 } as const satisfies Record<string, ChangeGateDeclaration>
 
 export type ChangeGateKey = keyof typeof CHANGE_GATES
