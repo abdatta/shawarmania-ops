@@ -409,7 +409,7 @@ only at check-in, approval, outlet capture*) holds.
 ## D8. My attendance and By staff: a month calendar (`refreshed-staff-screens`)
 
 - **A seven-column grid of day numbers**, Monday first. Each day's state is
-  in how its number is drawn: present a solid disc in the brand's orange, late
+  in how its number is drawn: present a solid disc in the green of the checked-in tick [co-owner, 2026-10-29], late
   the same disc with the late tag's clock, filled yellow, at its corner (a late
   day is a present day; a filled clock still reads as a dot at a glance
   [owner, 2026-10-29]), absent a solid red ring, waiting a ring of yellow

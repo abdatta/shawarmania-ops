@@ -258,7 +258,7 @@ The counter numbers are larger on purpose. Billing happens fast, one-handed, som
 
 My attendance and the manager's By staff draw a month as day numbers in a week grid, and each day's state is drawn by **shape as well as colour**, never colour alone, and named to a screen reader:
 
-- **Present** — a solid disc in `--primary`, the number in `--on-primary`.
+- **Present** — a solid disc in `--success`, the green of the checked-in tick on Home and By day, the number in `--on-success`.
 - **Late** — the same disc, because a late day is a present day, with the late tag's **clock, filled** in `--warning`, ringed in the page's surface colour at the disc's corner. Filled, it still reads as a dot at a glance; up close it says why.
 - **Absent** — a solid ring in `--danger`, the number in the page's text colour.
 - **Waiting** — a ring of long dashes in `--warning`. The dashes are a share of the circle (`pathLength`), so a day and the count's key both read as dashes, never dots. A waiting day whose arrival was late carries the clock too: waiting and late are two facts.

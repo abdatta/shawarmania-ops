@@ -46,8 +46,8 @@ const MARKS: Record<Mark, { label: string; disc: string }> = {
   // red from yellow. The dashes are drawn, not a CSS border: a dotted or dashed
   // border on a small circle comes out as a fine row of specks [owner,
   // 2026-10-26], so DashedRing sets a few long dashes whatever the size.
-  present: { label: 'Present', disc: 'bg-primary text-on-primary font-semibold' },
-  late: { label: 'Present, arrived late', disc: 'bg-primary text-on-primary font-semibold' },
+  present: { label: 'Present', disc: 'bg-success text-on-success font-semibold' },
+  late: { label: 'Present, arrived late', disc: 'bg-success text-on-success font-semibold' },
   absent: {
     label: 'Absent',
     disc: 'border-2 border-danger text-danger font-semibold',
