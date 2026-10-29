@@ -29,6 +29,8 @@ export default defineConfig({
       // Turns a change gate and writes tablet health, then restores both with
       // the service-role key: vitest.change-gates.config.ts.
       'supabase/tests/rest/zz-change-gates.test.ts',
+      // Turns auto-approve-at-the-shop: the same phase.
+      'supabase/tests/rest/zz-auto-approve-at-the-shop.test.ts',
       // Writes drawer anchors and counts and removes them with the
       // service-role key, so it has its own phase:
       // vitest.ledger-timing.config.ts.

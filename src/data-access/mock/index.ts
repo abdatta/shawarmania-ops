@@ -99,9 +99,18 @@ export function createDemoData(
      * when it reads them; every other test's figures stay what they were.
      */
     fixedCosts?: boolean
+    /**
+     * Where the attendance mock asks whether `auto-approve-at-the-shop` is on
+     * (a-check-in-at-the-shop-approves-itself). `'switchboard'` is the demo's
+     * own Change gates page, which the demo tree asks for so a walkthrough sees
+     * what it turns; a function answers for a test that wants one state.
+     * Absent, the page's frozen snapshot, as every other test's adapters read
+     * gates — so a test that names no gate meets the behaviour as it is today.
+     */
+    autoApproving?: 'switchboard' | (() => boolean)
   } = {},
 ): DemoData {
-  const { dishWalkthrough = false, fixedCosts = false, ...storeOptions } = options
+  const { dishWalkthrough = false, fixedCosts = false, autoApproving, ...storeOptions } = options
   const store = createDemoStore({ billingLifecycle: true, ...storeOptions })
   const changeGates = createDemoChangeGates()
   if (dishWalkthrough) seedDishWorkflow(store)
@@ -110,7 +119,14 @@ export function createDemoData(
   return {
     accounts: createDemoAccounts(),
     store,
-    attendance: createMockAttendanceAdapter(),
+    attendance: createMockAttendanceAdapter({
+      attendanceRules: store.attendanceRules,
+      ...(autoApproving === 'switchboard'
+        ? { autoApproving: () => changeGates.snapshot()['auto-approve-at-the-shop'] }
+        : autoApproving
+          ? { autoApproving }
+          : {}),
+    }),
     // Measured against the store's own today, so the customers' thirty days
     // and the bills they are counted from agree about which day it is.
     customers: createDemoCustomers(store.today),
@@ -202,6 +218,7 @@ export function createMockAdapters(
       {
         settings: store.serviceSettings,
         loyalty: store.loyaltySettings,
+        attendanceRules: store.attendanceRules,
         writable:
           role === 'super_admin'
             ? null

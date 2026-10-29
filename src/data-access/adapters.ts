@@ -199,6 +199,26 @@ export interface OutletsAdapter {
    * Franchise Admin for the outlets they manage, nobody else.
    */
   updateReviewAsk(id: string, ask: OutletReviewAsk): Promise<OutletReviewAsk>
+  /**
+   * Replace the outlet's two attendance rules as one write
+   * (a-check-in-at-the-shop-approves-itself, design D2): the owner for any
+   * outlet, a Franchise Admin for the outlets they manage, nobody else. The
+   * rules are read from the outlet row itself, which everybody who checks in
+   * there already reads. Its position and radius are not among them: those stay
+   * the owner's, through `saveLocation`.
+   */
+  updateAttendanceRules(id: string, rules: OutletAttendanceRules): Promise<Tables<'outlets'>>
+}
+
+/**
+ * How an outlet's check-ins are settled (#81). Both off is the default: a
+ * check-in at the shop approves itself, and one away waits for a manager.
+ */
+export interface OutletAttendanceRules {
+  /** Every check-in waits for a manager, even one at the shop. */
+  needsManager: boolean
+  /** A check-in away from the shop, or with no position, is refused outright. */
+  blocksAway: boolean
 }
 
 export type AppRole = Tables<'assignments'>['role']
@@ -727,6 +747,11 @@ export interface AttendanceDecision {
   /** Effective arrival time before/after a `correct_time` decision. */
   previousCheckInAt: string | null
   newCheckInAt: string | null
+  /**
+   * The outlet radius that judged an `auto_approved` decision, stamped when it
+   * was made (#81, design D4). Absent on every other kind.
+   */
+  fenceRadiusMetres?: number | null
 }
 
 export type AttendanceRetryReason =

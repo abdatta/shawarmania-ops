@@ -15,10 +15,12 @@ import {
 import {
   DataActionError,
   type NewOutlet,
+  type OutletAttendanceRules,
   type OutletPatch,
   type OutletReference,
   type OutletsAdapter,
 } from '../adapters'
+import type { Tables } from '../database.types'
 import { assignmentFixtures } from './fixtures/accounts'
 import { ALL_OFF_LOYALTY_COLUMNS } from '../outlet-loyalty-row'
 import { reviewAskFromRow } from '../outlet-review-ask-row'
@@ -103,6 +105,11 @@ export function createMockOutletsAdapter(
      * the same reach: the owner anywhere, a manager at the outlets they manage.
      */
     loyalty?: Map<string, OutletLoyaltySettings>
+    /**
+     * The outlets' attendance rules (#81), on the same reach, shared with the
+     * attendance adapter that settles check-ins by them.
+     */
+    attendanceRules?: Map<string, OutletAttendanceRules>
   } = {
     settings: new Map(),
     writable: null,
@@ -113,6 +120,16 @@ export function createMockOutletsAdapter(
   // and the shared fixture array must survive the walkthrough unedited.
   const outlets = structuredClone(outletFixtures)
   const loyalty = service.loyalty ?? new Map<string, OutletLoyaltySettings>()
+  const attendanceRules = service.attendanceRules ?? new Map<string, OutletAttendanceRules>()
+  // A rule changed in another role's adapter is the same demo's rule, so every
+  // row handed out carries the shared answer rather than this copy's.
+  const withRules = <T extends Tables<'outlets'>>(outlet: T): T => {
+    const rules = attendanceRules.get(outlet.id)
+    if (!rules) return outlet
+    outlet.attendance_needs_manager = rules.needsManager
+    outlet.attendance_blocks_away = rules.blocksAway
+    return outlet
+  }
   let nextId = 1
 
   const find = (id: string) => {
@@ -162,7 +179,9 @@ export function createMockOutletsAdapter(
     async listOutlets(options = {}) {
       const mine = readable === null ? outlets : outlets.filter((o) => readable.includes(o.id))
       const visible = options.includeInactive ? mine : mine.filter((o) => o.is_active)
-      return structuredClone(visible).sort((a, b) => a.name.localeCompare(b.name))
+      return structuredClone(visible)
+        .map(withRules)
+        .sort((a, b) => a.name.localeCompare(b.name))
     },
 
     async getOutlet(id: string) {
@@ -170,7 +189,7 @@ export function createMockOutletsAdapter(
       // an excluded row is what RLS produces.
       if (readable !== null && !readable.includes(id)) return null
       const outlet = outlets.find((candidate) => candidate.id === id)
-      return outlet ? structuredClone(outlet) : null
+      return outlet ? withRules(structuredClone(outlet)) : null
     },
 
     async createOutlet(outlet: NewOutlet) {
@@ -227,6 +246,9 @@ export function createMockOutletsAdapter(
         packaging_price_paise: null,
         packaging_free_for_gold: false,
         collect_customer_details: true,
+        // Nor its attendance rules: both off, as every outlet starts (#81).
+        attendance_needs_manager: false,
+        attendance_blocks_away: false,
         // Nor points or gold: all off, as every outlet starts (#62).
         ...ALL_OFF_LOYALTY_COLUMNS,
       }
@@ -364,6 +386,20 @@ export function createMockOutletsAdapter(
         review_ask_popup: ask.popup,
       })
       return reviewAskFromRow(outlet)
+    },
+
+    async updateAttendanceRules(id, rules) {
+      // As `set_outlet_attendance_rules` decides (#81, design D2): the owner
+      // anywhere, a manager at the outlets they manage, nobody else.
+      if (service.writable !== null && !service.writable.includes(id)) {
+        throw new DataActionError(
+          'not_permitted',
+          'Only the owner or this outlet’s manager changes its attendance rules.',
+        )
+      }
+      const outlet = find(id)
+      attendanceRules.set(id, { ...rules })
+      return withRules(structuredClone(outlet))
     },
 
     async updateServiceSettings(id, settings) {

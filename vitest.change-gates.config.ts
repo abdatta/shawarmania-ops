@@ -24,9 +24,15 @@ export default defineConfig({
   test: {
     env: { SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey() },
     environment: 'node',
-    include: ['supabase/tests/rest/zz-change-gates.test.ts'],
+    include: [
+      'supabase/tests/rest/zz-change-gates.test.ts',
+      // Turns auto-approve-at-the-shop on and a rule at Kalyani, then restores both.
+      'supabase/tests/rest/zz-auto-approve-at-the-shop.test.ts',
+    ],
     fileParallelism: false,
     testTimeout: 30_000,
     hookTimeout: 30_000,
   },
+  // The attendance probe imports the real outlets adapter, which resolves `@/`.
+  resolve: { alias: { '@': new URL('./src', import.meta.url).pathname } },
 })

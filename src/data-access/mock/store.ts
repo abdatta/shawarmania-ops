@@ -21,6 +21,7 @@ import type {
   DiscountPreset,
   MenuDiscount,
   MenuHighlights,
+  OutletAttendanceRules,
   PaymentAllocation,
 } from '../adapters'
 import {
@@ -131,6 +132,14 @@ export interface DemoStore {
    * off, which is what every outlet starts as.
    */
   loyaltySettings: Map<string, OutletLoyaltySettings>
+  /**
+   * Each outlet's attendance rules (a-check-in-at-the-shop-approves-itself).
+   * Written by the outlets adapter, on a manager's or the owner's say; read by
+   * the attendance adapter, which settles a check-in by them, and laid over the
+   * outlet rows every role reads, so a rule a manager turns on reaches the staff
+   * phone after a role switch.
+   */
+  attendanceRules: Map<string, OutletAttendanceRules>
   /** Read-only here; #9 owns enrolment. */
   counterDevices: Tables<'counter_devices'>[]
   /** Effective-dated display identity; current authority stays on counterDevices. */
@@ -1503,6 +1512,15 @@ export function createDemoStore(
     // and gold on, the others start all off.
     loyaltySettings: new Map(
       outletFixtures.map((outlet) => [outlet.id, loyaltySettingsFromRow(outlet)]),
+    ),
+    attendanceRules: new Map(
+      outletFixtures.map((outlet) => [
+        outlet.id,
+        {
+          needsManager: outlet.attendance_needs_manager,
+          blocksAway: outlet.attendance_blocks_away,
+        },
+      ]),
     ),
     orderNumbers,
     billingCommands,

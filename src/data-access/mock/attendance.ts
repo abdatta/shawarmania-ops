@@ -1,4 +1,6 @@
 import { distanceMetres, resolveBusinessDate, shiftBusinessDate } from '@/domain'
+import { onAutoApproveAtTheShop } from '@/change-gates/auto-approve-at-the-shop'
+import { BLOCKED_AWAY_MESSAGE, shopVerdict } from '@/features/attendance/at-the-shop'
 import type { PositionReading } from '@/lib/geolocation'
 
 import type {
@@ -10,6 +12,7 @@ import type {
   AttendanceEvent,
   AttendanceRecord,
   AttendanceStatus,
+  OutletAttendanceRules,
   WaitingCount,
 } from '../adapters'
 import {
@@ -113,8 +116,35 @@ export function createMockAttendanceAdapter(
     now?: () => Date
     /** Test/demo-only outlet cutover overrides, still read by the adapter. */
     businessDayCutovers?: Readonly<Record<string, string>>
+    /**
+     * Each outlet's attendance rules, shared with the outlets adapter that
+     * writes them (#81). Absent, the fixture rows' own: both off.
+     */
+    attendanceRules?: ReadonlyMap<string, OutletAttendanceRules>
+    /**
+     * Whether `auto-approve-at-the-shop` is on. The demo answers from its own
+     * switchboard, which the walkthrough turns; absent, the page's frozen
+     * snapshot, as a real adapter reads it.
+     */
+    autoApproving?: () => boolean
   } = {},
 ): AttendanceAdapter {
+  const autoApprovingNow = options.autoApproving ?? onAutoApproveAtTheShop
+  // The seeds take their shape once, from the answer when the demo was built: a
+  // turn later keeps the demo's days, as a turn keeps its orders.
+  const autoApproving = autoApprovingNow()
+  /** The outlet's fence and the rules it settles check-ins by, as they stand now. */
+  const fenceOf = (outletId: string) => {
+    const outlet = outletFor(outletId)
+    const rules = options.attendanceRules?.get(outletId)
+    return rules
+      ? {
+          ...outlet,
+          attendance_needs_manager: rules.needsManager,
+          attendance_blocks_away: rules.blocksAway,
+        }
+      : outlet
+  }
   // Demo has no database, so its adapter owns one reference clock. Components
   // receive the resulting context and never use their device clock for
   // attendance authority.
@@ -231,7 +261,10 @@ export function createMockAttendanceAdapter(
     const outletId = retryOutletId ?? initialOutletId
     const outlet = outletFor(outletId)
     const initialOutlet = outletFor(initialOutletId)
-    const approval = approvalFrom(businessDate, initialOutletId, seed.approval, initialCheckIn)
+    // A day the fence approved names no approver, whatever the seed carries.
+    const approval = seed.autoApproved
+      ? null
+      : approvalFrom(businessDate, initialOutletId, seed.approval, initialCheckIn)
 
     const id = `d3000000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`
     const attemptId = initialCheckIn
@@ -241,7 +274,7 @@ export function createMockAttendanceAdapter(
       ? `d3110000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`
       : null
     const decisionId =
-      approval || seed.denial || (seed.status !== 'absent' && !initialCheckIn)
+      approval || seed.denial || seed.autoApproved || (seed.status !== 'absent' && !initialCheckIn)
         ? `d3200000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`
         : null
     const correctionId = seed.correction
@@ -249,7 +282,9 @@ export function createMockAttendanceAdapter(
       : null
     const decisionAt = seed.denial
       ? instantAt(businessDate, seed.denial.time)
-      : (approval?.at ?? null)
+      : seed.autoApproved
+        ? (initialCheckIn?.at ?? null)
+        : (approval?.at ?? null)
     const attempts: AttendanceAttempt[] = []
     if (initialCheckIn && attemptId) {
       attempts.push({
@@ -284,11 +319,13 @@ export function createMockAttendanceAdapter(
             outletName: initialOutlet.name,
             kind: seed.denial
               ? 'deny'
-              : initialCheckIn?.source === 'manual'
-                ? 'manual_present'
-                : approval
-                  ? 'approve'
-                  : 'legacy_outcome',
+              : seed.autoApproved
+                ? 'auto_approved'
+                : initialCheckIn?.source === 'manual'
+                  ? 'manual_present'
+                  : approval
+                    ? 'approve'
+                    : 'legacy_outcome',
             by: seed.denial ? DEMO_MANAGER_ID : (approval?.by ?? null),
             byName: seed.denial?.byName ?? approval?.byName ?? null,
             at: decisionAt ?? instantAt(businessDate, '23:59'),
@@ -302,6 +339,7 @@ export function createMockAttendanceAdapter(
             longitude: approval?.longitude ?? null,
             accuracyMetres: approval?.accuracyMetres ?? null,
             distanceMetres: approval?.distanceMetres ?? null,
+            ...(seed.autoApproved ? { fenceRadiusMetres: initialOutlet.geofence_radius_m } : {}),
           },
         ]
       : []
@@ -344,7 +382,7 @@ export function createMockAttendanceAdapter(
         ? seed.correction.kind === 'correct_present'
           ? 'present'
           : 'absent'
-        : adjudicate(seed.status, checkIn, approval !== null)
+        : adjudicate(seed.status, checkIn, approval !== null || seed.autoApproved === true)
     const retry = currentAttemptId
       ? checkIn?.distanceMetres === null
         ? ({ allowed: true, reason: 'unverifiable-current' } as const)
@@ -379,7 +417,14 @@ export function createMockAttendanceAdapter(
     }
   }
 
-  const records: AttendanceRecord[] = attendanceSeeds.map(materialise)
+  // With the rule on, a seed that waited inside the fence is a state that can no
+  // longer happen, so it takes the shape the seed says it has instead (#81).
+  const records: AttendanceRecord[] = attendanceSeeds
+    .filter((seed) => autoApproving || !seed.onlyWhenAutoApproving)
+    .map((seed) =>
+      autoApproving && seed.whenAutoApproving ? { ...seed, ...seed.whenAutoApproving } : seed,
+    )
+    .map(materialise)
 
   let nextId = records.length + 1
 
@@ -647,6 +692,22 @@ export function createMockAttendanceAdapter(
         )
       }
 
+      // The outlet's rules, with the gate on (#81, design D3). With Block on, a
+      // check-in away from the shop is refused before anything is written, so a
+      // refused attempt id is never remembered — exactly where
+      // `attendance_submit_attempt_v3` refuses it.
+      const staffAccount = { assignments: assignmentFixtures[personId] ?? [] }
+      const otherFences = assignedOutlets(staffAccount.assignments)
+        .filter((id) => id !== outletId && isStaffAt(staffAccount, id))
+        .map(fenceOf)
+        .filter((candidate) => candidate.is_active)
+      const verdict = autoApprovingNow()
+        ? shopVerdict(reading, fenceOf(outletId), otherFences)
+        : 'wait'
+      if (verdict === 'refuse') {
+        throw new AttendanceActionError('blocked_away', BLOCKED_AWAY_MESSAGE)
+      }
+
       const person = personFor(personId)
       const event = eventFromReading(outlet, reading, serverAt)
 
@@ -700,6 +761,48 @@ export function createMockAttendanceAdapter(
         arrivalDeadline: outlet.arrival_deadline,
         checkIn: event,
         approval: null,
+      }
+
+      // A check-in at the shop approves itself, in the same command: nobody
+      // decided it, so the decision names nobody and stamps the radius that did
+      // (design D4). It is settled as the second step after the arrival, as v3
+      // settles it.
+      if (verdict === 'approve') {
+        const decisionId = crypto.randomUUID()
+        attempt.settledAt = now
+        record.decisions = [
+          ...record.decisions,
+          {
+            id: decisionId,
+            attemptId: nextAttemptId,
+            outletId,
+            outletName: outlet.name,
+            kind: 'auto_approved',
+            by: null,
+            byName: null,
+            at: now,
+            reason: null,
+            preventsRetry: true,
+            previousStatus: record.status,
+            newStatus: 'present',
+            latitude: null,
+            longitude: null,
+            accuracyMetres: null,
+            distanceMetres: null,
+            previousCheckInAt: null,
+            newCheckInAt: null,
+            fenceRadiusMetres: outlet.geofence_radius_m,
+          },
+        ]
+        Object.assign(record, {
+          status: 'present',
+          currentAttemptId: null,
+          outcomeAttemptId: nextAttemptId,
+          latestDecisionId: decisionId,
+          retryBlocked: true,
+          retry: { allowed: false, reason: 'prevented' },
+          stateVersion: record.stateVersion + 1,
+        } satisfies Partial<AttendanceRecord>)
       }
 
       if (existing) {

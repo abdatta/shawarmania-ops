@@ -1,6 +1,8 @@
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 
+import { onAutoApproveAtTheShop } from '@/change-gates/auto-approve-at-the-shop'
 import { onRoleIncludes } from '@/change-gates/role-includes'
+import { BLOCKED_AWAY_MESSAGE } from '@/features/attendance/at-the-shop'
 import type { PositionReading } from '@/lib/geolocation'
 
 import type {
@@ -316,6 +318,9 @@ function toActionError(error: PostgrestError): AttendanceActionError {
       'inside_retry_locked',
       'Your latest check-in is inside the fence and must be decided before another check-in.',
     )
+  }
+  if (detail.includes('check-in away from the shop is blocked here')) {
+    return new AttendanceActionError('blocked_away', BLOCKED_AWAY_MESSAGE)
   }
   if (detail.includes('another check-in is not allowed')) {
     return new AttendanceActionError(
@@ -634,7 +639,13 @@ export function createSupabaseAttendanceAdapter(
       expectedVersion = null,
     }) {
       const { data, error } = await client.rpc(
-        onRoleIncludes() ? 'attendance_submit_attempt_v2' : 'attendance_submit_attempt',
+        // v3 approves a day at the shop and honours the outlet's rules
+        // (a-check-in-at-the-shop-approves-itself, design D3); off, today's call.
+        onAutoApproveAtTheShop()
+          ? 'attendance_submit_attempt_v3'
+          : onRoleIncludes()
+            ? 'attendance_submit_attempt_v2'
+            : 'attendance_submit_attempt',
         {
           p_attempt_id: attemptId,
           p_outlet_id: outletId,

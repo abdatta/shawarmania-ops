@@ -478,6 +478,35 @@ export function createSupabaseOutletsAdapter(
       return reviewAskFromRow(row)
     },
 
+    /*
+      Through `set_outlet_attendance_rules` (a-check-in-at-the-shop-approves-
+      itself, design D2): the owner and the outlet's own managers may call it,
+      it re-derives the caller's authority, and it writes the two rules and
+      nothing else, so the position and radius stay the owner's.
+    */
+    async updateAttendanceRules(id, rules) {
+      const { data, error } = await client.rpc('set_outlet_attendance_rules', {
+        p_outlet: id,
+        p_needs_manager: rules.needsManager,
+        p_blocks_away: rules.blocksAway,
+      })
+      if (error) {
+        if (error.code === '42501') {
+          throw new DataActionError(
+            'not_permitted',
+            'Only the owner or this outlet’s manager changes its attendance rules.',
+          )
+        }
+        if (error.code === 'P0002') {
+          throw new DataActionError('not_found', 'That outlet no longer exists.')
+        }
+        throw error
+      }
+      const row = data as Tables<'outlets'>
+      remember(row)
+      return row
+    },
+
     async getServiceSettings(id) {
       const { data, error } = await table()
         .select(
