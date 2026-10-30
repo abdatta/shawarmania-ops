@@ -246,6 +246,24 @@ it('lists each fixed cost with this month, and overdue and ahead apart from it',
   expect(screen.queryByTestId('fixed-costs-overdue')).toBeNull()
 })
 
+it('rings what is paid of what is owed, overdue included, and ticks a cost paid in full', async () => {
+  const { data, adapters } = withFixedCosts()
+  renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
+  const list = await screen.findByTestId('fixed-cost-list')
+  const ring = (name: string) =>
+    within(within(list).getByText(name).closest('tr')!).getByTestId(/^paid-ring-/)
+  // Paid in full: the attendance list's Present tick, an outline, not a disc.
+  expect(ring('Santu')).toHaveAttribute('data-paid', 'all')
+  expect(ring('Santu').querySelector('.lucide-circle-check')).toHaveClass('text-success')
+  // ₹4,000 of ₹12,000: a third of the ring.
+  expect(ring('Nayan')).toHaveAttribute('data-paid', String(4_000 / 12_000))
+  // Nothing paid this month and a month overdue: an empty ring of the whole.
+  const joined = data.store.fixedCosts.find((c) => c.name === 'Priyanka')!
+  const status = thisMonthStatus(demoFixedCostFacts(data.store, joined), data.store.today)
+  expect(status.paidPaise).toBe(0)
+  expect(ring('Priyanka')).toHaveAttribute('data-paid', '0')
+})
+
 it('pays from the row, starting at what is owed, and says where it was recorded', async () => {
   const user = userEvent.setup()
   const { data, adapters } = withFixedCosts()

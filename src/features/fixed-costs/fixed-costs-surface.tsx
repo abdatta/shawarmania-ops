@@ -1,4 +1,4 @@
-import { CalendarClock } from 'lucide-react'
+import { CalendarClock, CheckCircle2 } from 'lucide-react'
 import {
   useCallback,
   useEffect,
@@ -334,7 +334,11 @@ function CostTable({
       id: 'month',
       header: 'This month',
       cell: (cost) => (
-        <MonthProgress status={thisMonthStatus(cost, today)} testId={`status-${cost.id}`} />
+        <MonthProgress
+          status={thisMonthStatus(cost, today)}
+          testId={`status-${cost.id}`}
+          ringTestId={`paid-ring-${cost.id}`}
+        />
       ),
     },
     {
@@ -417,17 +421,29 @@ function CostTable({
  * *₹4,000 of ₹12,000 paid*, then *+ ₹3,300 overdue from Sept* in amber or
  * *+ ₹5,000 ahead* in green where either applies.
  */
-function MonthProgress({ status, testId }: { status: ThisMonthStatus; testId?: string }) {
+function MonthProgress({
+  status,
+  testId,
+  ringTestId,
+}: {
+  status: ThisMonthStatus
+  testId?: string
+  ringTestId?: string
+}) {
   const overdue = status.overdue.reduce((sum, row) => sum + row.paise, 0)
-  // No bar (owner, 2026-10-19): part payments are occasional, and the figure says
-  // it. Overdue reads amber and paid ahead green, each on its own line.
+  // Overdue reads amber and paid ahead green, each on its own line.
   return (
     <span className="block min-w-[9.5rem] text-sm" data-testid={testId}>
       {!status.active ? (
         <span className="block text-content-muted">Stopped</span>
       ) : (
         <>
-          <span className="block whitespace-nowrap text-content-muted">
+          <span className="relative block whitespace-nowrap text-content-muted">
+            <PaidRing
+              paidPaise={status.paidPaise}
+              owedPaise={status.costPaise + overdue}
+              testId={ringTestId}
+            />
             {status.leftPaise === 0 ? (
               <>
                 <Money paise={status.costPaise} className="font-semibold text-content" /> paid
@@ -451,6 +467,55 @@ function MonthProgress({ status, testId }: { status: ThisMonthStatus; testId?: s
         <span className="mt-1 block whitespace-nowrap text-xs font-semibold text-success">
           + <Money paise={status.aheadPaise} /> ahead
         </span>
+      )}
+    </span>
+  )
+}
+
+/**
+ * What is paid of everything the row owes now, at a glance (owner, 2026-10-30):
+ * an empty ring, filling amber, then the attendance list's Present tick once
+ * this month and any overdue month are paid. It sits in the gap left of the
+ * figure, so the figures stay aligned under the heading. The figure says the
+ * same in words, so the ring is not read aloud.
+ */
+function PaidRing({
+  paidPaise,
+  owedPaise,
+  testId,
+}: {
+  paidPaise: number
+  owedPaise: number
+  testId?: string | undefined
+}) {
+  const all = paidPaise >= owedPaise
+  const part = all ? 1 : paidPaise / owedPaise
+  // A 14px ring, as the Present tick is 14px; r 5.5 with a 2px stroke.
+  const circumference = 2 * Math.PI * 5.5
+  return (
+    <span
+      aria-hidden
+      data-testid={testId}
+      data-paid={all ? 'all' : String(part)}
+      className="absolute -left-[1.1875rem] top-[0.1875rem] flex size-3.5"
+    >
+      {all ? (
+        <CheckCircle2 size={14} className="text-success" />
+      ) : (
+        <svg viewBox="0 0 14 14" className="size-3.5 -rotate-90">
+          <circle cx="7" cy="7" r="5.5" fill="none" strokeWidth="2" className="stroke-border" />
+          {part > 0 && (
+            <circle
+              cx="7"
+              cy="7"
+              r="5.5"
+              fill="none"
+              strokeWidth="2"
+              strokeDasharray={`${part * circumference} ${circumference}`}
+              className="stroke-warning"
+            />
+          )}
+        </svg>
       )}
     </span>
   )
