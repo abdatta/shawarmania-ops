@@ -51,17 +51,26 @@ export function CategoryTiles({
             data-testid={`expense-category-tile-${name}`}
             onClick={() => onChange(name)}
             className={cn(
-              'flex min-h-12 grow items-center justify-center gap-2 rounded-xl border py-2 text-center text-sm font-semibold focus-visible:focus-ring',
-              // The tick and its gap (24px) come out of the padding, so a chosen
-              // tile is no wider and the lines never reflow under the thumb;
-              // the name and tick are centred together [owner, 2026-10-29].
+              'flex min-h-12 grow items-center justify-center rounded-xl border px-5 py-2 text-center text-sm font-semibold focus-visible:focus-ring',
               chosen
-                ? 'border-primary bg-primary/10 px-5 text-accent-text'
-                : 'border-border bg-surface px-8 text-content hover:bg-surface-raised',
+                ? 'border-primary bg-primary/10 text-accent-text'
+                : 'border-border bg-surface text-content hover:bg-surface-raised',
             )}
           >
-            <span className="min-w-0 break-words">{name}</span>
-            {chosen && <Check aria-hidden size={16} className="shrink-0" />}
+            {/* Every tile is laid out with its tick, shown or not, so choosing
+                one never changes a width and the lines never reflow under the
+                thumb. What shows is centred: an unchosen name slides half the
+                tick's room (12px) over, which moves nothing else
+                [owner, 2026-10-30]. */}
+            <span
+              className={cn(
+                'flex min-w-0 items-center gap-2 transition-transform',
+                !chosen && 'translate-x-3',
+              )}
+            >
+              <span className="min-w-0 break-words">{name}</span>
+              <Check aria-hidden size={16} className={cn('shrink-0', !chosen && 'invisible')} />
+            </span>
           </button>
         )
       })}
