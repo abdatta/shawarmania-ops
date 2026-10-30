@@ -15,6 +15,10 @@ The Fixed costs list says what each cost has had paid this month in words, *₹4
 - **What the ring counts**: everything the row owes now. A row with an overdue month counts it in the whole: Priyanka at *₹0 of ₹9,000 paid + ₹3,300 overdue* is an empty ring of ₹12,300, and it shows the tick only when this month and the overdue are both paid. Money paid ahead does not overfill it.
 - A stopped cost has no ring.
 
+## Change gate
+
+No gate: a change away from the counter that a revert cleanly undoes. It changes how the owner's figures are drawn and writes nothing.
+
 ## Non-goals
 
 - The words stay; the ring is aria-hidden, since the figure beside it already says the same thing.

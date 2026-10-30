@@ -155,12 +155,14 @@ for (const width of [360, 390]) {
         expect(
           await number.evaluate((node) => Number(getComputedStyle(node).fontWeight)),
         ).toBeGreaterThanOrEqual(700)
+        // Clear of the tile's icon, or of the cell's edge where the icon gave way.
         expect(
-          await number.evaluate(
-            (node) =>
-              node.getBoundingClientRect().right <=
-              node.parentElement!.nextElementSibling!.getBoundingClientRect().left,
-          ),
+          await number.evaluate((node) => {
+            const row = node.closest('.min-h-9')!
+            const icon = row.querySelector(':scope > span[aria-hidden]')
+            const limit = (icon ?? row).getBoundingClientRect()
+            return node.getBoundingClientRect().right <= (icon ? limit.left : limit.right)
+          }),
         ).toBe(true)
       }
       await page.screenshot({

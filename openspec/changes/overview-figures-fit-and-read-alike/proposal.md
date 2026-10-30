@@ -12,6 +12,10 @@ Overview's headline figure dropped to a smaller size as soon as it reached ₹10
 - **One short form**: every shortened amount has at most three significant digits, trailing zeros dropped, in Indian units: *₹950*, *₹2.11K*, *₹12.5K*, *₹1.25L*, *₹10.5L*, *₹2.5Cr*. A value that rounds up to a unit's limit moves to the next unit (*₹1L*, never *₹100K*). Overview's captions always use it, whatever the size, so a caption never mixes the two forms. Analytics' short labels (chart axis, *Usually* range) use the same formatter, so both pages write *K*. Counts in Analytics use it without the rupee sign.
 - The formatter is `compactPaise` in `src/domain/money.ts`, beside `formatPaise`, so a third page cannot invent its own.
 
+## Change gate
+
+No gate: a change away from the counter that a revert cleanly undoes. It changes how the owner's figures are drawn and writes nothing.
+
 ## Non-goals
 
 - Headlines and exact figures keep full rupees; the hover title keeps exact paise.
