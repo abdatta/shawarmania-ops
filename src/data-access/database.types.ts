@@ -6532,19 +6532,7 @@ export type Database = {
         Returns: undefined
       }
       overview_drawer: { Args: { p_outlet_id: string }; Returns: Json }
-      overview_expenses: {
-        Args: { p_from: string; p_outlet_id: string; p_through: string }
-        Returns: number
-      }
       overview_month: { Args: { p_outlet_id: string }; Returns: Json }
-      overview_revenue: {
-        Args: { p_from: string; p_outlet_id: string; p_through: string }
-        Returns: Json
-      }
-      overview_sales: {
-        Args: { p_from: string; p_outlet_id: string; p_through: string }
-        Returns: Json
-      }
       overview_today: { Args: { p_outlet_id: string }; Returns: Json }
       overview_today_v2: { Args: { p_outlet_id: string }; Returns: Json }
       pay_billing_now: {
@@ -6956,27 +6944,6 @@ export type Database = {
       revoke_bill_public_link: {
         Args: { p_bill_id: string }
         Returns: undefined
-      }
-      sales_analytics: {
-        Args: {
-          p_from: string
-          p_outlet_id: string
-          p_periods?: number
-          p_to: string
-          p_view?: string
-        }
-        Returns: Json
-      }
-      sales_analytics_series: {
-        Args: {
-          p_category?: string
-          p_from: string
-          p_item?: string
-          p_outlet_id: string
-          p_periods?: number
-          p_to: string
-        }
-        Returns: Json
       }
       sales_analytics_series_v2: {
         Args: {
