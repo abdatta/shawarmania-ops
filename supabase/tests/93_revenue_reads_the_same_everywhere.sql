@@ -64,12 +64,6 @@ select is((select (f->>'recordedExpensesPaise')::bigint from got), (select recor
 
 grant select on fx, expected to authenticated;
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000001');
--- Profit is unchanged by the change (design D1): counter + net - recorded.
-select is(
-  (select (public.overview_revenue('00000000-0000-4000-a000-000000000001', d0, d2)->>'revenuePaise')::bigint
-          - public.overview_expenses('00000000-0000-4000-a000-000000000001', d0, d2) from fx),
-  (select counter + delivery - commission - recorded from expected),
-  'profit equals the earlier basis: revenue less recorded expenses and commission');
 
 -- ── Overview (D5) ─────────────────────────────────────────────────────────
 create temp table om as
@@ -121,18 +115,6 @@ select is(
 
 -- ── Analytics v2 (D7) ─────────────────────────────────────────────────────
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000001');
-select is(
-  (select public.sales_analytics_v2('00000000-0000-4000-a000-000000000001', d0, d2, 'sales', 2, 'equal')->'days' from fx),
-  (select public.sales_analytics('00000000-0000-4000-a000-000000000001', d0, d2, 'sales', 2)->'days' from fx),
-  'v2''s days equal the first read''s with equal windows and no cut');
-select is(
-  (select public.sales_analytics_v2('00000000-0000-4000-a000-000000000001', d0, d2, 'items', 2, 'equal')->'items' from fx),
-  (select public.sales_analytics('00000000-0000-4000-a000-000000000001', d0, d2, 'items', 2)->'items' from fx),
-  'v2''s dishes equal the first read''s with no cut');
-select is(
-  (select public.sales_analytics_v2('00000000-0000-4000-a000-000000000001', d0, d2, 'sales', 2, 'equal')->'hours' from fx),
-  (select public.sales_analytics('00000000-0000-4000-a000-000000000001', d0, d2, 'sales', 2)->'hours' from fx),
-  'v2''s hours equal the first read''s');
 -- The cut: yesterday's comparison counts only bills ordered before the cut.
 reset role;
 create temp table cut_expect as
@@ -165,15 +147,11 @@ select throws_ok($q$select public.sales_analytics_v2('00000000-0000-4000-a000-00
   '22023', null, 'a Month range across two months is refused');
 select throws_ok($q$select public.sales_analytics_v2('00000000-0000-4000-a000-000000000001','2026-10-01','2026-10-05','sales',2,'equal','later')$q$,
   '22023', null, 'an unknown cut is refused');
--- The series: its arrays as before, its totals per window.
-select is(
-  (select public.sales_analytics_series_v2('00000000-0000-4000-a000-000000000001', d0, d2, 2)->'units' from fx),
-  (select public.sales_analytics_series('00000000-0000-4000-a000-000000000001', d0, d2, 2)->'units' from fx),
-  'the series'' days are unchanged');
+-- The series: its totals per window.
 select is(
   (select (public.sales_analytics_series_v2('00000000-0000-4000-a000-000000000001', d0, d2, 2)->'totals'->0->>'units')::bigint from fx),
   (select sum((i->>'units')::bigint)::bigint from fx,
-     jsonb_array_elements(public.sales_analytics('00000000-0000-4000-a000-000000000001', fx.d0, fx.d2, 'items', 2)->'items') i),
+     jsonb_array_elements(public.sales_analytics_v2('00000000-0000-4000-a000-000000000001', fx.d0, fx.d2, 'items', 2)->'items') i),
   'the series'' current total is every dish''s units');
 
 -- ── Authority ─────────────────────────────────────────────────────────────
@@ -205,6 +183,15 @@ set local role anon;
 select throws_ok($q$select public.overview_month('00000000-0000-4000-a000-000000000001')$q$, '42501', null,
   'anonymous is refused');
 reset role;
+
+-- ── The retirement (retire-one-revenue) ───────────────────────────────────
+select hasnt_function('public', 'overview_sales', 'the old Overview card''s sales read is gone');
+select hasnt_function('public', 'overview_revenue', 'and its revenue read');
+select hasnt_function('public', 'overview_expenses', 'and its expenses read');
+select hasnt_function('public', 'sales_analytics', 'Analytics'' first read is gone');
+select hasnt_function('public', 'sales_analytics_series', 'and its first dish series');
+select is((select retired_at is not null and not enabled from public.change_gates where key = 'one-revenue'),
+  true, 'the gate is retired and off');
 
 select * from finish();
 rollback;
