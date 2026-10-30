@@ -130,11 +130,11 @@ describeChangeGate('pro-rata-pnl', (on) => {
       expect(within(card).getByText('October P&L (Pro-rata)')).toBeInTheDocument()
       // ₹1,89,806 less 18/31 of ₹3,22,700 (₹1,87,374.19) is ₹2,431.81.
       expect(profit).toHaveTextContent('₹2,431')
-      expect(within(card).getByTestId(`pro-rata-expenses-${KAL}`)).toHaveTextContent('₹6.6L')
+      expect(within(card).getByTestId(`pro-rata-expenses-${KAL}`)).toHaveTextContent('₹6.63L')
       // The margin beside the figure, and ₹1,89,806 less all ₹3,22,700 beneath it.
       expect(within(card).getByTestId(`margin-${KAL}`)).toHaveTextContent('0.4%')
       expect(within(card).getByTestId(`covering-${KAL}`).parentElement).toHaveTextContent(
-        /· Short ₹1\.3L$/,
+        /· Short ₹1\.33L$/,
       )
     } else {
       expect(within(card).getByText('October P&L · est.')).toBeInTheDocument()
