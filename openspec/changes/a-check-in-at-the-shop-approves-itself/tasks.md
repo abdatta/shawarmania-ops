@@ -321,7 +321,7 @@ except the one widened check of D4, which the owner agreed to on 2026-10-26.
   specs it contradicts, `@cg-on` twins for the tiles and Other's note.
 - [x] 11A.9 Docs: SCREENS (Expenses, Expense categories), DATA_MODEL, GLOSSARY
   if a word is new, DEMO_MODE.
-- [ ] 11A.10 Verify locally, push to `stage`, read the run.
+- [x] 11A.10 Verify locally, push to `stage`, read the run. *Staging run 40991444740 green, database tests included, at e884aede.*
 
 ## 12. Release
 
