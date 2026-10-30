@@ -33,3 +33,41 @@ the method SHALL still start unchosen for the owner and a manager.
 - **WHEN** a Biller, an Employee or the counter tablet opens the expense form
 - **THEN** the amount is the first field, the category is the typed field with its suggestions, and the note's example reads "What was it for?"
 
+### Requirement: An expense's category is chosen from the owners' list
+
+While `expense-category-list` is on, the expense form SHALL offer the category as
+tiles from a business-wide list the owners keep, in their order, instead of the
+typed field. A choice marked as asking what it was for SHALL make the note
+required, and the form SHALL refuse to save without it. Choices marked for
+managers and owners SHALL NOT be offered to an Employee, a Biller or the counter
+tablet. Editing an expense whose category is not on the list SHALL offer its
+recorded name as a chosen tile. The database SHALL store the chosen name as the
+expense's category text, as the typed field does, and SHALL NOT refuse a name
+because it is off the list.
+
+#### Scenario: Staff pick a category
+
+- **WHEN** an Employee opens the expense form with `expense-category-list` on
+- **THEN** the categories are tiles from the owners' list, without the managers-and-owners choices, and no tile is chosen
+
+#### Scenario: Other asks what it was for
+
+- **WHEN** someone chooses Other and saves with the note empty
+- **THEN** the form refuses with "Say what it was for." and nothing is recorded
+
+#### Scenario: An old expense keeps its name
+
+- **WHEN** a manager edits the amount of an expense filed as "Milk", which is not on the list
+- **THEN** "Milk" is offered as a chosen tile and saving keeps it
+
+### Requirement: Only the owners change the category list
+
+The list SHALL be changed only by an owner: adding, editing, reordering and
+removing a choice. Renaming a choice SHALL move the expenses recorded under its
+old name and log the operation as a rename. Removing a choice SHALL leave
+recorded expenses unchanged.
+
+#### Scenario: A manager cannot change the list
+
+- **WHEN** a Franchise Admin sends a hand-crafted request to add a choice
+- **THEN** the database refuses it and the list is unchanged

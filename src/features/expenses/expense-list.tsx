@@ -1,5 +1,5 @@
 import { Banknote, ChevronDown, MapPinOff, Wallet } from 'lucide-react'
-import { Fragment, useState, type FormEvent } from 'react'
+import { Fragment, useState, type FormEvent, type ReactNode } from 'react'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { EmptyState } from '@/components/layout/empty-state'
@@ -15,7 +15,12 @@ import { Money } from '@/components/ui/money'
 import { Select } from '@/components/ui/select'
 import { useChangeGate } from '@/change-gates/context'
 import { useAdapters } from '@/data-access'
-import { DataActionError, type ExpenseActor, type ExpenseRecord } from '@/data-access/adapters'
+import {
+  DataActionError,
+  type ExpenseActor,
+  type ExpenseCategoryChoice,
+  type ExpenseRecord,
+} from '@/data-access/adapters'
 import {
   formatBusinessDate,
   formatDateTime,
@@ -24,6 +29,7 @@ import {
   shiftBusinessDate,
 } from '@/domain'
 
+import { CategoryTiles } from './category-tiles'
 import { Field } from './field'
 import { FixedChip } from '@/features/fixed-costs/ledger-fixed-costs'
 import type { FixedMark } from '@/features/fixed-costs/use-fixed-costs'
@@ -86,6 +92,8 @@ export interface ExpenseListProps {
    * manager with `pro-rata-pnl` on; a row is never marked by what it says.
    */
   fixedMarks?: ReadonlyMap<string, FixedMark> | undefined
+  /** A control beside Add, such as the owner's way to the category list. */
+  action?: ReactNode
 }
 
 interface ExpenseDraft {
@@ -132,16 +140,27 @@ export function ExpenseList({
   emptyTitle,
   onChanged,
   fixedMarks,
+  action,
 }: ExpenseListProps) {
   const { expenses: adapter, expenseCategories: categoriesAdapter } = useAdapters()
   const fewerRequests = useChangeGate('fewer-requests')
   // Day headings, the You tag and the amount-first form
   // (a-check-in-at-the-shop-approves-itself, design D9).
   const refreshed = useChangeGate('refreshed-staff-screens')
+  // The category as a tile from the owners' list, Other asking what it was for
+  // (design D11). It sits in the refreshed form, so it runs only with it.
+  const categoryList = useChangeGate('expense-category-list') && refreshed
   // A row's own date only where no heading above it already says the day.
   const rowDates = showDates && !refreshed
 
   const [categories, setCategories] = useState<string[]>([])
+  /**
+   * The owners' list, narrowed to what this reader may pick. Null while it
+   * loads; empty when it could not be read, which falls back to the typed
+   * field, so a counter that resumed offline can still record what left the
+   * drawer.
+   */
+  const [choices, setChoices] = useState<ExpenseCategoryChoice[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
@@ -156,6 +175,15 @@ export function ExpenseList({
   const [expanded, setExpanded] = useState<string | null>(null)
 
   async function loadCategories() {
+    if (categoryList) {
+      try {
+        const list = await categoriesAdapter.choices()
+        setChoices(list.filter((choice) => viewer.mayTouchAnyRow || !choice.managersOnly))
+      } catch {
+        setChoices([])
+      }
+      return
+    }
     try {
       // The names are all a suggestion needs; `list()` also counts each
       // category's use, one request per category (the-app-asks-the-server-less, D5).
@@ -211,6 +239,17 @@ export function ExpenseList({
         ? 'Yesterday'
         : formatBusinessDate(date)
 
+  // Tiles once the list has loaded and holds something; the typed field
+  // otherwise, as before the list existed.
+  const tiles = categoryList && choices !== null && choices.length > 0
+  const asksNote =
+    tiles &&
+    (choices?.some(
+      (choice) =>
+        choice.asksNote && choice.name.toLocaleLowerCase() === draft.category.toLocaleLowerCase(),
+    ) ??
+      false)
+
   /** Whether this list holds a kebab at all — see where the slot is rendered. */
   const anyChangeable = expenses?.some((row) => mayChange(row) || mayDiscard(row)) ?? false
 
@@ -247,7 +286,15 @@ export function ExpenseList({
     }
     const category = normalizeCategory(draft.category)
     if (!category) {
-      setError('Choose or type what the money was spent on.')
+      setError(
+        tiles
+          ? 'Choose what the money was spent on.'
+          : 'Choose or type what the money was spent on.',
+      )
+      return
+    }
+    if (asksNote && !draft.note.trim()) {
+      setError('Say what it was for.')
       return
     }
     const isCash = draft.isCash
@@ -301,17 +348,20 @@ export function ExpenseList({
         ) : (
           <h2 className="text-sm font-bold text-content">{heading}</h2>
         )}
-        <AddButton
-          label="Add expense"
-          data-testid="add-ledger-expense"
-          onClick={() => {
-            setError(null)
-            setEditing(null)
-            setDraft(blankExpense(viewer.mayTouchAnyRow))
-            void loadCategories()
-            setOpen(true)
-          }}
-        />
+        <div className="flex items-center gap-2">
+          {action}
+          <AddButton
+            label="Add expense"
+            data-testid="add-ledger-expense"
+            onClick={() => {
+              setError(null)
+              setEditing(null)
+              setDraft(blankExpense(viewer.mayTouchAnyRow))
+              void loadCategories()
+              setOpen(true)
+            }}
+          />
+        </div>
       </div>
 
       {expenses === null ? (
@@ -801,19 +851,41 @@ export function ExpenseList({
                 />
               </Field>
 
-              {/* Typed, with its suggestions, as it always was: a 28-day replay of
-                  Cafe's entries found tap buttons would have held what was
-                  typed one time in eight [owner, 2026-10-28]. */}
-              <Field label="Category" id="expense-category">
-                <CategoryInput
-                  id="expense-category"
-                  label="Expense category"
-                  value={draft.category}
-                  suggestions={categories}
-                  testId="expense-category"
-                  onChange={(category) => setDraft({ ...draft, category })}
+              {tiles ? (
+                <div className="space-y-1">
+                  <span id="expense-category-label" className="block text-sm font-semibold">
+                    Category
+                  </span>
+                  <CategoryTiles
+                    choices={choices ?? []}
+                    value={draft.category}
+                    onChange={(category) => setDraft({ ...draft, category })}
+                  />
+                </div>
+              ) : categoryList && choices === null ? (
+                <LoadingList
+                  label="categories"
+                  rows={2}
+                  blockHeight="h-12"
+                  className="space-y-2"
+                  data-testid="expense-category-loading"
                 />
-              </Field>
+              ) : (
+                /* Typed, with its suggestions, where the owners' list is off:
+                   a 28-day replay of Cafe's entries found tap buttons drawn
+                   from what was typed would have held it one time in eight
+                   [owner, 2026-10-28]. The list replaced that (design D11). */
+                <Field label="Category" id="expense-category">
+                  <CategoryInput
+                    id="expense-category"
+                    label="Expense category"
+                    value={draft.category}
+                    suggestions={categories}
+                    testId="expense-category"
+                    onChange={(category) => setDraft({ ...draft, category })}
+                  />
+                </Field>
+              )}
 
               {viewer.mayTouchAnyRow ? (
                 <Field label="Paid with" id="expense-is-cash">
@@ -839,11 +911,16 @@ export function ExpenseList({
                 </p>
               )}
 
-              <Field label="Note (optional)" id="expense-description">
+              {/* A choice that asks (Other) makes the note the question itself. */}
+              <Field
+                label={asksNote ? 'What was it for?' : 'Note (optional)'}
+                id="expense-description"
+              >
                 <Input
                   id="expense-description"
+                  required={asksNote}
                   value={draft.note}
-                  placeholder="What was it for?"
+                  placeholder={asksNote ? undefined : 'What was it for?'}
                   data-testid="expense-description"
                   onChange={(event) => setDraft({ ...draft, note: event.target.value })}
                 />

@@ -484,7 +484,9 @@ Expenses, the Cash drawer's breakdowns):
   of entries were typed variants of a button already on screen. Staff type,
   and different spellings are accepted: reporting will group them (fuzzy or
   AI matching) when it is needed, without rewriting rows. Production's
-  categories are left unmerged. Then *Paid with* (owner and manager
+  categories are left unmerged. *Superseded* [co-owner and owner,
+  2026-10-29]: with `expense-category-list` on, the category is a tile from
+  the owners' list (D11). Then *Paid with* (owner and manager
   only, still unchosen), then **Note (optional)** with *What was it for?*. Four
   fields, as the spec demands.
 - **No subtitle under the Expenses heading** (owner UI convention).
@@ -495,6 +497,7 @@ Expenses, the Cash drawer's breakdowns):
 |---|---|---|---|
 | `auto-approve-at-the-shop` | AA | v3 and the toggle point that calls it; the outlet's Attendance section; the mock's rule | `none:` nothing is queued; an auto-approved day is a true, correctable present day |
 | `refreshed-staff-screens` | RS | Today pass, adaptive sampling, plain chips, calendar (My attendance and By staff), tally words, expense list and form. **Depends on `auto-approve-at-the-shop`** | `none:` changes what is drawn, never what is written |
+| `expense-category-list` | EL | The category tiles, *Other*'s note, the owners' list on Expense categories (D11). **Depends on `refreshed-staff-screens`** | `none:` its rows are ordinary text categories; its own table is never read with it off |
 
 **`refreshed-staff-screens` depends on `auto-approve-at-the-shop`.** The new screens are
 designed around *Approved* being a state a check-in reaches. Drawing them over
@@ -512,6 +515,95 @@ without waiting for `role-includes` to retire.
 **Why not one gate:** `refreshed-staff-screens` reaches the counter tablet's expense list
 and `auto-approve-at-the-shop` reaches pay. Being able to turn the screens off while
 keeping the rule is worth the second key.
+
+## D11. Expense categories are the owners' list (`expense-category-list`)
+
+**Asked for on 2026-10-29**, after the demo round, by the co-owner (Supratik):
+staff should not type a category but pick one of a few chosen in advance
+(*Chicken, Gas, Raw Materials, Staff Food Cost, Miscellaneous*), and choosing
+Miscellaneous should ask what the cost was. The owner renamed Miscellaneous
+**Other**, the word #81's first demo and Fixed costs already use, asked that
+the owners edit the list, and folded it into #81 under its own switch, since
+none of #81 has reached production.
+
+**What was measured.** Production, 1 September to 29 October 2026: about 330
+expenses under about 160 names. One thing goes by many spellings (*Staff
+lunch*, *staf lunch*, *Staff Food*, *Staff foo*, *Tiffin*, *Tifin*, *Tiffen*;
+*Paneer*, *paner*, *poneer*, *Panerr*), and the item is typed where the
+category goes (*poner + rice + vegitable*, *toto vara 26.10.26 night*). Only 3
+of 48 Milk entries carry a note. The month's breakdown is a list of names, not
+a breakdown.
+
+**Why this reverses D9's withdrawal.** D9 measured buttons drawn from what had
+been typed, and asked how often they would have held the next entry. A fixed
+list with **Other** holds every entry by construction; the question that
+decides it is whether the month's breakdown reads, and today it does not.
+
+- **The list.** Business-wide and ordered, like the suggestions it replaces in
+  the form. It starts as *Chicken, Raw Materials, Gas, Staff Food, Transport,
+  Wages & bonus, Other*, inserted by the migration, and the owners change it.
+  Each choice has a name, whether it **asks what it was for**, and **who picks
+  it**: everyone, or managers and owners. *Other* asks; *Wages & bonus* is for
+  managers and owners. *Transport* and *Wages & bonus* come from the data, not
+  the message: toto fares, the van and petrol are about fifteen entries a
+  month, and October's bonuses and part-time workers (₹35,000 and ₹15,800)
+  would otherwise be the largest thing in *Other*.
+- **The form.** Inside D9's amount-first form: **Amount**, then the choices as
+  tiles, each as wide as its name, wrapping onto as many lines as they need with each line stretched to fill [owner, 2026-10-29], in the owners' order, then *Paid with* where it applies,
+  then the note. A choice that asks makes the note **What was it for?**, no
+  longer optional; saving without it is refused with *Say what it was for.*
+  Staff and the counter do not see the managers-and-owners choices. Nothing is
+  pre-chosen.
+- **Editing an expense filed under a name not on the list** shows that name as
+  one more tile, chosen, so changing the amount does not force re-filing;
+  tapping a list tile files it there.
+- **Untouched:** a fixed-cost payment (its category is its fixed cost's), and
+  the syncs' rows (Hyperpure, delivery commission), whose names are reserved.
+- **Salary and rent are not on the list.** Fixed costs (#79) pays them, each
+  with its own row and its Pay button; a selectable *Salary* would be a second,
+  unlinked road for the same money, and *Left to pay* would never hear of it.
+  The maid's monthly pay, electricity and the garbage fee are fixed costs too:
+  the owner adds them there, which needs no code.
+- **The owner's page.** *Manage categories*, with Back to where the owner
+  came from [owner, 2026-10-29], opens with **The list**: its
+  choices in order, each with its tags (*Asks what it was for*, *Managers and
+  owners*), **Move up** / **Move down**, and **Edit** and **Remove** in its
+  menu; **Add category** above. Editing a choice's name renames that category
+  everywhere, recorded expenses included, and logs it under *Category changes*
+  like an ordinary rename: renaming a bucket means the same bucket under a
+  better name. **Remove** takes it off the tiles; recorded expenses keep their
+  name. Below the list, the typed names stay, with Rename, Merge and Retire, so
+  the owner can fold September's and October's names into the list's once.
+  The owner reaches the page from **Manage categories** beside Add on
+  Expenses, as well as from the Ledger's month, where it was hard to find
+  when needed [owner, 2026-10-29].
+- **Enforced by the form, not the database.** The counter records expenses
+  through the outbox, and the outbox never reads a gate: refusing a name off
+  the list in the database would refuse an expense queued on a tablet running
+  an older build, or saved before the gate turned. Expenses keep storing the
+  name as text, as today. A hand-crafted request can still store any name,
+  which is today's rule, and the owner's Merge corrects it.
+
+**Database (live).** A new table, **`expense_category_choices`**: `id`,
+`name` (normalised, unique without regard to case), `sort_order` (unique),
+`asks_note`, `managers_only`, `created_by`, `created_at`, `updated_by`,
+`updated_at`. Read by any active account, as `expense_categories` is. Written
+only through three owner-only `security definer` commands:
+`save_expense_category_choice` (add, or edit by id; an edit that renames moves
+the recorded rows and logs the operation, as a rename with history does),
+`move_expense_category_choice` and `remove_expense_category_choice`. Saving a
+choice also mints its suggestion, so the Merge picker offers it.
+
+**Version skew.** The table and the commands are new; no earlier build reads or
+calls them. **Turning `expense-category-list` off** puts the typed field back;
+an expense saved from a tile is an ordinary row with a text category, which
+the typed path already reads. The list stays saved and does nothing. Round
+trip `none:`: nothing it writes outside its own table, and the off path never
+reads that table.
+
+**The gate.** `expense-category-list` (*EL*) **depends on
+`refreshed-staff-screens`**: its tiles live in that gate's amount-first form,
+and a dependent gate does not count toward the cap (D10).
 
 ## Version skew
 
@@ -638,6 +730,11 @@ here changes that.
   - `PhoneShell` is shared by every phone role.
 - **Dropping the Cash chip for staff.** Owner decision 9.
 - **A receipt photo.** Owner decision 9: a bigger feature, not needed yet.
+- **Refusing names off the list in the database** (D11): it would refuse
+  queued counter expenses from older builds.
+- **Salary and rent as choices** (D11): Fixed costs already pays them.
+- **Tagging each choice as cost of food or running cost.** Nobody has asked
+  for a food-cost figure; a column can be added when one is.
 - **Today never reads Absent.** That would change `readDay`, which the roll-call
   and pay counts share. Home's wording carries the "you can still check in"
   instead (D7, D8).

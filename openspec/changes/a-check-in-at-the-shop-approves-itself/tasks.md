@@ -302,6 +302,27 @@ except the one widened check of D4, which the owner agreed to on 2026-10-26.
   - the manager records the refused day;
   - the manager turns *needs manager* on and the next check-in waits.
 
+## 11A. The owners' category list (`expense-category-list`, design D11)
+
+- [x] 11A.1 Declare `expense-category-list` (*EL*), depending on
+  `refreshed-staff-screens`, in `gates.ts` and its row, off, in a new migration.
+- [x] 11A.2 The adapter's choice methods; the mock's seeded list and owner-only
+  writes.
+- [x] 11A.3 The form's tiles, the required note for a choice that asks, the
+  recorded name as a tile on edit, managers-and-owners choices hidden from
+  staff and the counter.
+- [x] 11A.4 *The list* on Expense categories: Add, Edit, Move, Remove.
+- [x] 11A.5 CHECKPOINT: the owner approves the demo.
+- [x] 11A.6 `expense_category_choices`, its seed and its three commands; pgTAP:
+  a Franchise Admin, an Employee and a counter device cannot write it; an
+  owner's rename moves the rows and logs it; a removal changes no expense.
+- [x] 11A.7 The live adapter; unit tests both ways.
+- [x] 11A.8 Browser tests: `@cg-off:expense-category-list` on the typed-field
+  specs it contradicts, `@cg-on` twins for the tiles and Other's note.
+- [x] 11A.9 Docs: SCREENS (Expenses, Expense categories), DATA_MODEL, GLOSSARY
+  if a word is new, DEMO_MODE.
+- [ ] 11A.10 Verify locally, push to `stage`, read the run.
+
 ## 12. Release
 
 - [ ] 12.1 The owner approves a Promote. The build reaches the counters with

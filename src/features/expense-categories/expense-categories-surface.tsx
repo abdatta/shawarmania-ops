@@ -1,5 +1,6 @@
 import { Combine, Pencil, Tags, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useLocation, useNavigate } from 'react-router'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { EmptyState } from '@/components/layout/empty-state'
@@ -11,6 +12,7 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { LoadingFigures } from '@/components/ui/loading'
 import { Select } from '@/components/ui/select'
+import { useChangeGate } from '@/change-gates/context'
 import { useAdapters } from '@/data-access'
 import {
   DataActionError,
@@ -19,12 +21,16 @@ import {
 } from '@/data-access/adapters'
 import { formatDateTime, normalizeCategory } from '@/domain'
 
+import { CategoryListSection } from './category-list-section'
+
 type Action =
   | { kind: 'rename'; category: ExpenseCategorySuggestion }
   | { kind: 'merge'; category: ExpenseCategorySuggestion }
 
 export function ExpenseCategoriesSurface() {
   const { expenseCategories: adapter } = useAdapters()
+  // The owners' list above the typed names (#81, design D11).
+  const categoryList = useChangeGate('expense-category-list')
   const [categories, setCategories] = useState<ExpenseCategorySuggestion[] | null>(null)
   const [operations, setOperations] = useState<ExpenseCategoryOperation[] | null>(null)
   const [action, setAction] = useState<Action | null>(null)
@@ -35,22 +41,36 @@ export function ExpenseCategoriesSurface() {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<string | null>(null)
 
+  /**
+   * The list's names, offered as Merge targets beside the suggestions, so an
+   * old name folds into a choice nobody has used yet (design D11). Empty with
+   * the list off.
+   */
+  const [choiceNames, setChoiceNames] = useState<string[]>([])
+
   const load = useCallback(async () => {
-    const [nextCategories, nextOperations] = await Promise.all([
+    const [nextCategories, nextOperations, nextChoices] = await Promise.all([
       adapter.list(),
       adapter.listOperations(),
+      categoryList ? adapter.choices() : Promise.resolve([]),
     ])
     setCategories(nextCategories)
     setOperations(nextOperations)
-  }, [adapter])
+    setChoiceNames(nextChoices.map((choice) => choice.name))
+  }, [adapter, categoryList])
 
   useEffect(() => {
     let active = true
-    void Promise.all([adapter.list(), adapter.listOperations()])
-      .then(([nextCategories, nextOperations]) => {
+    void Promise.all([
+      adapter.list(),
+      adapter.listOperations(),
+      categoryList ? adapter.choices() : Promise.resolve([]),
+    ])
+      .then(([nextCategories, nextOperations, nextChoices]) => {
         if (!active) return
         setCategories(nextCategories)
         setOperations(nextOperations)
+        setChoiceNames(nextChoices.map((choice) => choice.name))
       })
       .catch(() => {
         if (active) setError('Could not load the category list. Try again in a moment.')
@@ -58,7 +78,7 @@ export function ExpenseCategoriesSurface() {
     return () => {
       active = false
     }
-  }, [adapter])
+  }, [adapter, categoryList])
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -75,7 +95,13 @@ export function ExpenseCategoriesSurface() {
       const moved =
         action.kind === 'rename'
           ? await adapter.rename(action.category.name, normalized, rewriteHistory)
-          : await adapter.merge(action.category.name, normalized)
+          : // A choice that is not yet a suggestion has nothing to merge into:
+            // renaming the old name onto it moves the same rows.
+            categories?.some(
+                (category) => category.name.toLocaleLowerCase() === normalized.toLocaleLowerCase(),
+              )
+            ? await adapter.merge(action.category.name, normalized)
+            : await adapter.rename(action.category.name, normalized, true)
       setResult(
         `${action.kind === 'rename' ? 'Renamed' : 'Merged'} ${action.category.name}. ` +
           `${moved.expenseRowsMoved} expense rows moved.`,
@@ -114,10 +140,17 @@ export function ExpenseCategoriesSurface() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-3">
-      <PageHeader
-        title="Expense categories"
-        subtitle="Suggestions are business-wide. Recorded rows keep their own text until you deliberately rewrite history."
-      />
+      {categoryList ? (
+        <ManageCategoriesHeader />
+      ) : (
+        <PageHeader
+          title="Expense categories"
+          subtitle="Suggestions are business-wide. Recorded rows keep their own text until you deliberately rewrite history."
+        />
+      )}
+
+      {categoryList && <CategoryListSection onChanged={load} />}
+      {categoryList && <h2 className="pt-2 text-sm font-bold text-content">Recorded names</h2>}
 
       {error && (
         <p role="alert" className="text-sm font-semibold text-danger">
@@ -248,6 +281,19 @@ export function ExpenseCategoriesSurface() {
                         {category.name}
                       </option>
                     ))}
+                  {choiceNames
+                    .filter(
+                      (name) =>
+                        !categories?.some(
+                          (category) =>
+                            category.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
+                        ),
+                    )
+                    .map((name) => (
+                      <option key={`choice-${name}`} value={name}>
+                        {name}
+                      </option>
+                    ))}
                 </Select>
               </label>
             ) : (
@@ -296,4 +342,21 @@ export function ExpenseCategoriesSurface() {
       />
     </div>
   )
+}
+
+/**
+ * The list's page header: its own name, and Back to wherever the owner came
+ * from, Expenses or the Ledger's month, or to Expenses when the page was
+ * opened cold [owner, 2026-10-29]. Its own component so the page without the
+ * list needs no router.
+ */
+function ManageCategoriesHeader() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const back = useCallback(() => {
+    if (location.key === 'default') {
+      void navigate('../expenses', { relative: 'path', replace: true })
+    } else void navigate(-1)
+  }, [location.key, navigate])
+  return <PageHeader title="Manage categories" onBack={back} />
 }

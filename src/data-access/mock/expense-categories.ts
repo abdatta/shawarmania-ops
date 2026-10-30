@@ -145,6 +145,72 @@ export function createMockExpenseCategoriesAdapter(
       if (index >= 0) store.expenseCategories.splice(index, 1)
     },
 
+    async choices() {
+      return store.expenseCategoryChoices.map((choice) => ({ ...choice }))
+    },
+
+    async saveChoice(input) {
+      ownerOnly()
+      const name = normalizeCategory(input.name)
+      if (!name) throw new DataActionError('bad_category', 'A category needs a name.')
+      const list = store.expenseCategoryChoices
+      const current = input.id ? list.find((choice) => choice.id === input.id) : undefined
+      if (input.id && !current) {
+        throw new DataActionError('not_found', 'That category is no longer on the list.')
+      }
+      if (
+        list.some(
+          (choice) =>
+            choice !== current && choice.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
+        )
+      ) {
+        throw new DataActionError('already_exists', 'That category is already on the list.')
+      }
+      if (!current) {
+        captureMockCategory(store, name)
+        list.push({
+          id: crypto.randomUUID(),
+          name,
+          asksNote: input.asksNote,
+          managersOnly: input.managersOnly,
+        })
+        return
+      }
+      // A renamed choice is the same bucket under a better name: the rows move
+      // with it and the rename is logged, as a rename with history is, or as a
+      // merge where the new name is already a suggestion (as the database does).
+      if (current.name !== name) {
+        const find = (value: string) =>
+          store.expenseCategories.find(
+            (row) => row.name.toLocaleLowerCase() === value.toLocaleLowerCase(),
+          )
+        const before = find(current.name)
+        const after = find(name)
+        if (before && after && before !== after) await this.merge(current.name, name)
+        else if (before) await this.rename(current.name, name, true)
+        else captureMockCategory(store, name)
+        current.name = name
+      }
+      current.asksNote = input.asksNote
+      current.managersOnly = input.managersOnly
+    },
+
+    async moveChoice(id, direction) {
+      ownerOnly()
+      const list = store.expenseCategoryChoices
+      const from = list.findIndex((choice) => choice.id === id)
+      const to = direction === 'up' ? from - 1 : from + 1
+      if (from < 0 || to < 0 || to >= list.length) return
+      const [choice] = list.splice(from, 1)
+      if (choice) list.splice(to, 0, choice)
+    },
+
+    async removeChoice(id) {
+      ownerOnly()
+      const index = store.expenseCategoryChoices.findIndex((choice) => choice.id === id)
+      if (index >= 0) store.expenseCategoryChoices.splice(index, 1)
+    },
+
     async listOperations() {
       ownerOnly()
       return store.expenseCategoryOperations.map((row) => ({

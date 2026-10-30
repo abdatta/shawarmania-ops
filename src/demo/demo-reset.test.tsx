@@ -17,6 +17,19 @@ function renderDemo(path: string) {
   )
 }
 
+/**
+ * The category, typed or picked: the demo runs every gate on, so with the
+ * owners' list (a-check-in-at-the-shop-approves-itself, D11) it is a tile, and
+ * Other's note carries what the walkthrough typed. These tests are about the
+ * reset, not the category.
+ */
+async function chooseCategory(user: ReturnType<typeof userEvent.setup>, typed: string) {
+  await screen.findByTestId('expense-amount')
+  const field = screen.queryByLabelText('Expense category')
+  if (field) await user.type(field, typed)
+  else await user.click(await screen.findByRole('radio', { name: 'Other' }))
+}
+
 async function reset(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByTestId('demo-reset'))
   await user.click(await screen.findByRole('button', { name: 'Discard and start again' }))
@@ -46,10 +59,10 @@ describe('demo reset', () => {
     const before = within(list).getAllByRole('listitem').length
 
     await user.click(screen.getByRole('button', { name: 'Add expense' }))
-    await user.type(screen.getByLabelText('Expense category'), 'Reset supplies')
+    await chooseCategory(user, 'Reset supplies')
     await user.type(screen.getByLabelText('Amount (₹)'), '175')
     await user.selectOptions(screen.getByLabelText('Paid with'), 'cash')
-    await user.type(screen.getByLabelText('Note (optional)'), 'Reset probe')
+    await user.type(screen.getByTestId('expense-description'), 'Reset probe')
     await user.click(screen.getByRole('button', { name: 'Record expense' }))
     await waitFor(() =>
       expect(screen.getByTestId('ledger-expense-list')).toHaveTextContent('Reset probe'),
@@ -81,10 +94,10 @@ describe('demo reset', () => {
 
     await screen.findByTestId('ledger-expense-list')
     await user.click(screen.getByRole('button', { name: 'Add expense' }))
-    await user.type(screen.getByLabelText('Expense category'), 'Freezer repair')
+    await chooseCategory(user, 'Freezer repair')
     await user.type(screen.getByLabelText('Amount (₹)'), '900')
     await user.selectOptions(screen.getByLabelText('Paid with'), 'cash')
-    await user.type(screen.getByLabelText('Note (optional)'), 'It read minus four this morning')
+    await user.type(screen.getByTestId('expense-description'), 'It read minus four this morning')
     await user.click(screen.getByRole('button', { name: 'Record expense' }))
     await waitFor(() =>
       expect(screen.getByTestId('ledger-expense-list')).toHaveTextContent(

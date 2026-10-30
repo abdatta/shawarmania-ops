@@ -175,6 +175,21 @@ export const CHANGE_GATES = {
     retireBy: '2027-02-28',
     roundTrip: 'none: it changes what is drawn, never what is written',
   },
+  /**
+   * #81: an expense's category picked as a tile from the owners' list, Other
+   * asking what it was for, and the list on Expense categories (design D11).
+   * Its tiles sit in `refreshed-staff-screens`' amount-first form, so it runs
+   * only under that gate. Off, the category is typed with its suggestions.
+   */
+  'expense-category-list': {
+    kind: 'change',
+    code: 'EL',
+    change: 'a-check-in-at-the-shop-approves-itself',
+    dependsOn: ['refreshed-staff-screens'],
+    retireBy: '2027-02-28',
+    roundTrip:
+      'none: an expense picked from the list is an ordinary row with a text category, and the off path never reads the list',
+  },
 } as const satisfies Record<string, ChangeGateDeclaration>
 
 export type ChangeGateKey = keyof typeof CHANGE_GATES

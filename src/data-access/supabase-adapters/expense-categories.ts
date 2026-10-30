@@ -51,6 +51,23 @@ function categoryError(error: PostgrestError): DataActionError {
   )
 }
 
+/** The list's refusals, in the words the owner's page shows. */
+function choiceError(error: PostgrestError): DataActionError {
+  if (error.code === '23505') {
+    return new DataActionError('already_exists', 'That category is already on the list.')
+  }
+  if (error.code === '23514' && /reserved/.test(error.message)) {
+    return new DataActionError(
+      'bad_category',
+      'That name is kept for an automatic expense. Choose another.',
+    )
+  }
+  if (error.code === 'P0002') {
+    return new DataActionError('not_found', 'That category is no longer on the list.')
+  }
+  return categoryError(error)
+}
+
 export function createSupabaseExpenseCategoriesAdapter(
   client: SupabaseClient<Database>,
 ): ExpenseCategoriesAdapter {
@@ -120,6 +137,46 @@ export function createSupabaseExpenseCategoriesAdapter(
         .order('performed_at', { ascending: false })
       if (error) throw categoryError(error)
       return (data ?? []).map(toOperation)
+    },
+
+    // The owners' list (#81, design D11): read by every active account, written
+    // only by an owner through its three commands.
+    async choices() {
+      const { data, error } = await client
+        .from('expense_category_choices')
+        .select('id, name, asks_note, managers_only')
+        .order('sort_order', { ascending: true })
+      if (error) throw categoryError(error)
+      return (data ?? []).map((row) => ({
+        id: row.id,
+        name: row.name,
+        asksNote: row.asks_note,
+        managersOnly: row.managers_only,
+      }))
+    },
+
+    async saveChoice(input) {
+      const { error } = await client.rpc('save_expense_category_choice', {
+        // A null id adds a choice; the generated type cannot say so.
+        p_id: (input.id ?? null) as string,
+        p_name: input.name,
+        p_asks_note: input.asksNote,
+        p_managers_only: input.managersOnly,
+      })
+      if (error) throw choiceError(error)
+    },
+
+    async moveChoice(id, direction) {
+      const { error } = await client.rpc('move_expense_category_choice', {
+        p_id: id,
+        p_direction: direction,
+      })
+      if (error) throw choiceError(error)
+    },
+
+    async removeChoice(id) {
+      const { error } = await client.rpc('remove_expense_category_choice', { p_id: id })
+      if (error) throw choiceError(error)
     },
   }
 }

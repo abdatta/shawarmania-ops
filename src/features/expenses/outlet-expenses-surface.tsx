@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router'
+import { Settings2 } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router'
 
 import { PageHeader } from '@/components/layout/page-header'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { LoadingFigures, LoadingList, LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
@@ -88,6 +90,10 @@ export function OutletExpensesSurface() {
   // The heading is the explanation (owner UI convention); with the refreshed
   // screens on there is no sentence beneath it (design D9).
   const refreshed = useChangeGate('refreshed-staff-screens')
+  // The owners' category list, reached from where expenses are recorded, not
+  // only from the Ledger's month [owner, 2026-10-29] (design D11).
+  const categoryList = useChangeGate('expense-category-list') && refreshed
+  const owner = holdsRole(session, 'super_admin')
   // The Fixed chip (fixed-costs-are-spread-over-the-month): read only for the
   // owner and a manager, with `pro-rata-pnl` on. Staff make no request for it.
   const fixedMarks = useFixedMarks(useOutletFixedCosts(outletId, fullReach), outletId)
@@ -296,6 +302,19 @@ export function OutletExpensesSurface() {
           }
           onChanged={() => load(businessDates)}
           fixedMarks={fullReach ? fixedMarks : undefined}
+          action={
+            categoryList && owner ? (
+              <Link
+                to="../categories"
+                relative="path"
+                data-testid="manage-categories"
+                className={buttonVariants({ variant: 'secondary', size: 'phone' })}
+              >
+                <Settings2 aria-hidden size={15} />
+                Manage categories
+              </Link>
+            ) : undefined
+          }
         />
       )}
 

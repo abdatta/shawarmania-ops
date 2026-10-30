@@ -294,7 +294,10 @@ for (const where of [
 
       // What the reader records is tagged as theirs.
       await sheet.getByTestId('expense-amount').fill('45')
-      await sheet.getByTestId('expense-category').fill('Lemons')
+      // The suite runs every gate on, so the category is a tile from the
+      // owners' list (design D11); Other carries what it was.
+      await sheet.getByRole('radio', { name: 'Other' }).click()
+      await sheet.getByTestId('expense-description').fill('Lemons')
       await sheet.getByRole('button', { name: 'Record expense' }).click()
       await expect(sheet).toHaveCount(0)
       const mine = list.getByRole('listitem').filter({ hasText: 'Lemons' })

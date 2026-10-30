@@ -19,6 +19,7 @@ import type {
   BillDiscountDraft,
   BillDraft,
   DiscountPreset,
+  ExpenseCategoryChoice,
   MenuDiscount,
   MenuHighlights,
   OutletAttendanceRules,
@@ -43,6 +44,7 @@ import { manualLedgerDaySeeds, manualLedgerExpenseSeeds } from './fixtures/retir
 import { analyticsHistorySeeds, HISTORY_OLDEST_AGE } from './fixtures/analytics-history'
 import { menuCategoryFixtures, menuDiscountFixtures, menuItemFixtures } from './fixtures/menu'
 import { expenseSeeds, OPENING_CASH_PAISE } from './fixtures/operations'
+import { SEEDED_EXPENSE_CATEGORY_CHOICES } from './fixtures/expense-category-choices'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID, outletFixtures } from './fixtures/outlets'
 import { customerFixtures, DEMO_MEMBER_CUSTOMER_PHONE, seededTierAt } from './fixtures/customers'
 import { DEMO_MANAGER_ID, personaFixtures } from './fixtures/personas'
@@ -203,6 +205,8 @@ export interface DemoStore {
   expenseCategories: Tables<'expense_categories'>[]
   /** Owner curation history. */
   expenseCategoryOperations: Tables<'expense_category_operations'>[]
+  /** The owners' list an expense's category is picked from, in order (#81, D11). */
+  expenseCategoryChoices: ExpenseCategoryChoice[]
   /**
    * An outlet's fixed costs and what pays them (fixed-costs-are-spread-over-the-month).
    * Owned by the fixed-costs adapter. Empty unless the demo seeds them
@@ -1117,6 +1121,15 @@ export function createDemoStore(
       created_at: new Date().toISOString(),
     }))
   const expenseCategoryOperations: Tables<'expense_category_operations'>[] = []
+  // The list the migration seeds (#81, design D11). As in the database, the
+  // seed mints no suggestions: a name becomes one when it is first used, or
+  // when an owner adds or renames a choice.
+  const expenseCategoryChoices: ExpenseCategoryChoice[] = SEEDED_EXPENSE_CATEGORY_CHOICES.map(
+    (choice, index) => ({
+      ...choice,
+      id: `e2000000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`,
+    }),
+  )
 
   // -- The drawer (#11) -----------------------------------------------------
   //
@@ -1529,6 +1542,7 @@ export function createDemoStore(
     expenses,
     expenseCategories,
     expenseCategoryOperations,
+    expenseCategoryChoices,
     fixedCosts: [],
     fixedCostAmounts: [],
     fixedCostSettlements: [],

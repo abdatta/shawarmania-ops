@@ -292,6 +292,7 @@ $$, $$ values
   -- no list could render.
   ('customers_name_not_blank'),
   ('expense_categories_name_not_blank'),
+  ('expense_category_choices_name_not_blank'),
   ('expense_category_operations_before_not_blank'),
   ('expense_category_operations_after_not_blank'),
   -- The notebook archive keeps its source constraints as part of the immutable

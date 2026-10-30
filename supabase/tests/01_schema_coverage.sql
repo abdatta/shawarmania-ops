@@ -75,11 +75,16 @@ classified as (
       -- category tables did: which categories a person may not type is a fact
       -- about the business, not about an outlet, and reserving one retires a
       -- hand-entry path everywhere at once.
+      -- `expense_category_choices` (#81, D11), the owners' list an expense's
+      -- category is picked from, is one list for every outlet, as the
+      -- suggestions are. Its teeth are in
+      -- `99_expense_categories_are_the_owners_list.sql`.
       -- `customer_memberships` sat here from #57 to #62, when gold became an
       -- outlet's (a-regular-earns-points-and-gold): it now carries `outlet_id`
       -- and is classified outlet-scoped by the first branch.
       when tbl in ('customers', 'expense_categories',
-                   'expense_category_operations', 'reserved_expense_categories')
+                   'expense_category_operations', 'reserved_expense_categories',
+                   'expense_category_choices')
         then 'global'
       -- The change gates (a-release-can-be-switched-off): one answer per gate
       -- for the whole business, never per outlet (owner, 2026-10-12), which

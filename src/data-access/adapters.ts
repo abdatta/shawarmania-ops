@@ -2942,6 +2942,38 @@ export interface ExpenseCategoriesAdapter {
   merge(from: string, into: string): Promise<ExpenseCategoryMoveResult>
   retire(name: string): Promise<void>
   listOperations(): Promise<ExpenseCategoryOperation[]>
+  /**
+   * The owners' list, in their order: the tiles an expense's category is
+   * picked from while `expense-category-list` is on (#81, design D11).
+   */
+  choices(): Promise<ExpenseCategoryChoice[]>
+  /**
+   * Add a choice, or change one by id. A changed name renames that category
+   * everywhere, recorded expenses included, and is logged as a rename.
+   * Owner only.
+   */
+  saveChoice(input: ExpenseCategoryChoiceInput): Promise<void>
+  /** One place up or down the list. Owner only. */
+  moveChoice(id: string, direction: 'up' | 'down'): Promise<void>
+  /** Off the list; recorded expenses keep their name. Owner only. */
+  removeChoice(id: string): Promise<void>
+}
+
+export interface ExpenseCategoryChoice {
+  id: string
+  name: string
+  /** The note becomes "What was it for?" and is required. Other's. */
+  asksNote: boolean
+  /** Offered to the owner and managers, never to staff or the counter. */
+  managersOnly: boolean
+}
+
+export interface ExpenseCategoryChoiceInput {
+  /** Absent to add a choice. */
+  id?: string
+  name: string
+  asksNote: boolean
+  managersOnly: boolean
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

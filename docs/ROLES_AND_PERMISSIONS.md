@@ -202,7 +202,11 @@ as part of that write. Seeing the shared list does not reveal an expense row or
 widen outlet access. Only a Super Admin may curate the vocabulary: rename, merge
 and retire run through database functions that re-derive that authority from the
 caller's session, and rename or merge records an immutable operation with the
-number of historical rows moved.
+number of historical rows moved. **The owners' category list (#81)** is read by
+every active account and changed only by a Super Admin, through its three
+commands; a choice marked for managers and owners is hidden from Employees,
+Billers and the counter by the form, which is a convenience rather than a
+permission, since any active account may record any category name.
 
 **Customers are the one thing here that is not an outlet's.** One normalized
 phone identifies one customer for the whole business, so a returning customer is

@@ -133,6 +133,10 @@ with a reason.
   - **On:** The staff phone's Home, My attendance and Expenses, the counter's
     and managers' expense lists, and the manager's By staff use the new layouts.
   - **Off:** Every screen reads as it does today.
+- **`expense-category-list`** (*EL*), depends on `refreshed-staff-screens`
+  - **On:** An expense's category is picked from the owners' list, and Other
+    asks what it was for.
+  - **Off:** An expense's category is typed, with suggestions.
 
 **Off is today for both.** With `auto-approve-at-the-shop` off, the app calls
 today's check-in command, and the new command also checks the gate in the
@@ -151,6 +155,11 @@ counter tablet's expense list, so it takes a switch rather than a revert
 run only while check-ins at the shop are approved automatically. Turning
 `auto-approve-at-the-shop` off puts today's screens back with it, and
 `refreshed-staff-screens` can still be turned off alone.
+
+`expense-category-list` writes ordinary expense rows whose category is a name,
+as the typed field does; turning it off brings the typed field back over the
+same rows, and the list stays saved (round trip `none:`). It depends on
+`refreshed-staff-screens`, whose form holds its tiles (design D11).
 
 ## Non-goals
 
@@ -180,7 +189,9 @@ run only while check-ins at the shop are approved automatically. Turning
   - Plain evidence words.
   - My attendance and By staff as a month calendar.
   - The tally's words.
-- `outlet-expenses`: day headings, the **You** tag, and amount first.
+- `outlet-expenses`: day headings, the **You** tag, and amount first; the
+  category picked from the owners' list, with *Other* asking what it was for
+  (asked by the co-owner, 2026-10-29).
 
 ## Impact
 
@@ -193,7 +204,9 @@ run only while check-ins at the shop are approved automatically. Turning
   - a nullable `fence_radius_m` on `attendance_decisions`;
   - one widened check on `attendance_decisions`, under a recorded lint
     exception (design D4);
-  - the gate rows, off.
+  - the gate rows, off;
+  - `expense_category_choices`, seeded with seven choices, and its three
+    owner-only commands (design D11).
 
   No existing function, trigger or policy changes.
 - **App:**

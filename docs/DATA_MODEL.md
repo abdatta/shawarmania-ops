@@ -708,6 +708,23 @@ retiring a suggestion must not invalidate the rows that used it.
 `performed_by`, `performed_at`. One immutable row explains each owner rename or
 merge and records how much history moved in each expense table.
 
+**`expense_category_choices`** (#81) — `id`, `name`, `sort_order`, `asks_note`,
+`managers_only`, `created_by`, `created_at`, `updated_by`, `updated_at`. The owners'
+list an expense's category is picked from while `expense-category-list` is on:
+business-wide, names normalised and unique without regard to case, `sort_order`
+unique and checked at commit. Every active account reads it; nobody writes it
+directly. `save_expense_category_choice(id, name, asks_note, managers_only)` adds
+(a null id; it goes last and mints the suggestion) or edits, and an edit that
+renames moves the recorded expenses through `rename_expense_category` with history,
+or `merge_expense_category` where the new name is already a suggestion;
+`move_expense_category_choice(id, 'up' | 'down')` swaps two places;
+`remove_expense_category_choice(id)` deletes the choice and nothing else. All three
+are owner-only and refuse a reserved name. **Nothing refuses an expense whose
+category is off the list**: expenses still store the name as text, because the
+counter's outbox never reads a gate and a refusal would strand an expense queued on
+an older build. Seeded with *Chicken, Raw Materials, Gas, Staff Food, Transport,
+Wages & bonus* (managers only) and *Other* (asks what it was for).
+
 **`effective_expenses`** — a view, and **the only relation a live surface should
 read for expenses**. It is now the un-voided rows of `expenses` and nothing else.
 

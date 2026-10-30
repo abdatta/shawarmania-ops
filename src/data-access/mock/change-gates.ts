@@ -96,6 +96,13 @@ const WORDS: Record<
     offMeans: 'Every screen reads as it does today.',
     changeNumber: 81,
   },
+  'expense-category-list': {
+    title: 'Expense category list',
+    onMeans:
+      'An expense’s category is picked from the owners’ list, and Other asks what it was for.',
+    offMeans: 'An expense’s category is typed, with suggestions.',
+    changeNumber: 81,
+  },
 }
 
 /**

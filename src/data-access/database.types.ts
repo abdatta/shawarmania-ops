@@ -3012,6 +3012,57 @@ export type Database = {
           },
         ]
       }
+      expense_category_choices: {
+        Row: {
+          asks_note: boolean
+          created_at: string
+          created_by: string | null
+          id: string
+          managers_only: boolean
+          name: string
+          sort_order: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          asks_note?: boolean
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          managers_only?: boolean
+          name: string
+          sort_order: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          asks_note?: boolean
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          managers_only?: boolean
+          name?: string
+          sort_order?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_category_choices_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_category_choices_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expense_category_operations: {
         Row: {
           expense_rows_moved: number
@@ -6459,6 +6510,10 @@ export type Database = {
           ledger_rows_moved: number
         }[]
       }
+      move_expense_category_choice: {
+        Args: { p_direction: string; p_id: string }
+        Returns: undefined
+      }
       normalize_expense_category: { Args: { p_value: string }; Returns: string }
       normalize_indian_phone: { Args: { p_input: string }; Returns: string }
       operator_statement_outlet: {
@@ -6737,6 +6792,10 @@ export type Database = {
         Args: { p_device_id: string; p_removed_by: string }
         Returns: string
       }
+      remove_expense_category_choice: {
+        Args: { p_id: string }
+        Returns: undefined
+      }
       remove_menu_item: { Args: { p_item_id: string }; Returns: undefined }
       rename_counter_device: {
         Args: { p_device_id: string; p_label: string; p_renamed_by: string }
@@ -6946,6 +7005,15 @@ export type Database = {
       save_aggregator_session: {
         Args: { p_channel: string; p_expires_at: string; p_session: string }
         Returns: undefined
+      }
+      save_expense_category_choice: {
+        Args: {
+          p_asks_note: boolean
+          p_id: string
+          p_managers_only: boolean
+          p_name: string
+        }
+        Returns: string
       }
       set_aggregator_login_identifier: {
         Args: { p_channel: string; p_identifier: string }
