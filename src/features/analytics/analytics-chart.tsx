@@ -1,4 +1,5 @@
 import { useRef, useState, type PointerEvent } from 'react'
+import { compactNumber, compactPaise } from '@/domain'
 import type { SalesMetric } from '@/domain/sales-analytics'
 
 /** Sales measures, plus dish units for the Items chart. */
@@ -61,17 +62,18 @@ export function metricText(
   exact = false,
 ) {
   if (value === null) return '—'
+  // Short labels read as Overview's do: three digits, `₹2.11K`.
+  if (compact)
+    return metric === 'orders' || metric === 'units'
+      ? compactNumber(value)
+      : compactPaise(Math.round(value))
   if (metric === 'orders' || metric === 'units')
-    return new Intl.NumberFormat('en-IN', {
-      notation: compact ? 'compact' : 'standard',
-      maximumFractionDigits: 1,
-    }).format(value)
+    return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 1 }).format(value)
   const rupees = value / 100
-  const paise = !compact && (exact || Math.abs(rupees) < 100) && Math.round(value) % 100 !== 0
+  const paise = (exact || Math.abs(rupees) < 100) && Math.round(value) % 100 !== 0
   return `₹${new Intl.NumberFormat('en-IN', {
-    notation: compact ? 'compact' : 'standard',
     minimumFractionDigits: paise ? 2 : 0,
-    maximumFractionDigits: compact ? 1 : paise ? 2 : 0,
+    maximumFractionDigits: paise ? 2 : 0,
   }).format(rupees)}`
 }
 /**

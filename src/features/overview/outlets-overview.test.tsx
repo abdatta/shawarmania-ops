@@ -329,6 +329,24 @@ describe('progressive Overview', () => {
     expect(screen.getByTestId(`profit-${KPA}`)).toHaveTextContent(/^₹9,99,999$/)
   })
 
+  it('keeps a seven-digit headline full size where it fits, and every caption amount in three digits', async () => {
+    const base = createMockAdapters('super_admin')
+    setup({
+      ...base,
+      overview: {
+        ...base.overview,
+        today: async () => ({ cashPaise: 95000, upiPaise: 0, deliveryPaise: 0, openPaise: 0 }),
+        drawer: async () => ({ expectedPaise: 100, leftPaise: 211400, spentPaise: 2310000 }),
+        month: async () => monthOf({ revenuePaise: 105014100 }),
+      },
+    })
+    // jsdom has no layout, so nothing overflows: the size is not chosen by digits.
+    expect(await screen.findByTestId(`revenue-${KAL}`)).toHaveClass('text-[1.375rem]')
+    const card = screen.getByTestId(`outlet-card-${KAL}`)
+    expect(card).toHaveTextContent('Left ₹2.11K · Spent ₹23.1K')
+    expect(card).toHaveTextContent('Cash₹950·UPI₹0·Delivery₹0')
+  })
+
   it('groups three blocked integrations into one Delivery row and badge', async () => {
     const base = createMockAdapters('super_admin')
     const countNeedsOwner = async () => [

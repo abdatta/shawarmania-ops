@@ -29,7 +29,7 @@ import { LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { useChangeGate } from '@/change-gates/context'
 import { useAdapters, type Tables } from '@/data-access'
-import { formatPaise, resolveBusinessDate } from '@/domain'
+import { compactPaise, formatPaise, resolveBusinessDate } from '@/domain'
 import { outletPresence, revenueChange } from '@/domain/overview'
 import { aheadOfCoveringPaise, proRataPnl } from '@/domain/fixed-costs'
 import { NeedsAttention } from '@/features/attention/needs-attention'
@@ -239,7 +239,7 @@ function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
                 />
               ) : (
                 <MetricValue icon={Banknote} tone="primary">
-                  <OverviewMoney paise={todayTotal} data-testid={`sales-${outlet.id}`} />
+                  <FittedMoney paise={todayTotal} data-testid={`sales-${outlet.id}`} />
                 </MetricValue>
               )}
               <TenderLine
@@ -264,7 +264,7 @@ function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
                 {drawer.value.expectedPaise === null ? (
                   <p className="text-sm leading-7">Not counted yet</p>
                 ) : (
-                  <OverviewMoney
+                  <FittedMoney
                     paise={drawer.value.expectedPaise}
                     data-testid={`cash-${outlet.id}`}
                   />
@@ -310,7 +310,7 @@ function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
                   change === null || change === 0 ? 'primary' : change > 0 ? 'success' : 'danger'
                 }
               >
-                <OverviewMoney paise={m.revenuePaise} data-testid={`revenue-${outlet.id}`} />
+                <FittedMoney paise={m.revenuePaise} data-testid={`revenue-${outlet.id}`} />
               </MetricValue>
               <Subtext title={`Compared with ${compared}${cutWords}`}>
                 {change === null ? (
@@ -374,7 +374,7 @@ function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
                   {shownProfit === null ? (
                     <p className="text-sm leading-7">No sales recorded</p>
                   ) : (
-                    <OverviewMoney paise={shownProfit} data-testid={`profit-${outlet.id}`} />
+                    <FittedMoney paise={shownProfit} data-testid={`profit-${outlet.id}`} />
                   )}
                 </MetricValue>
               )}
@@ -436,7 +436,8 @@ function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
  * four-digit open amount overrun. So, as the tender line does, every form is
  * measured against the cell and the first that fits is drawn: the icon with
  * the figure at the tenders' size, then at half the headline's, then the same
- * two without the icon. The icon is the decoration; both figures are the point.
+ * two without the icon, and last both at their smaller sizes. The icon is the
+ * decoration; both figures are the point.
  */
 function ValueBeside({
   paise,
@@ -468,7 +469,17 @@ function ValueBeside({
       const [regular = 0, small = 0] = measures.current.map((m) => m?.scrollWidth ?? 0)
       // The icon is h-9 w-9 beside a gap-1.
       const icon = 40
-      setForm(regular + icon <= width ? 0 : small + icon <= width ? 1 : regular <= width ? 2 : 3)
+      setForm(
+        regular + icon <= width
+          ? 0
+          : small + icon <= width
+            ? 1
+            : regular <= width
+              ? 2
+              : small <= width
+                ? 3
+                : 4,
+      )
     }
     choose()
     if (typeof ResizeObserver === 'undefined') return
@@ -476,9 +487,13 @@ function ValueBeside({
     observer.observe(element)
     return () => observer.disconnect()
   }, [paise, beside])
-  const figures = (small: boolean, shown = true) => (
+  const figures = (small: boolean, smallHeadline: boolean, shown = true) => (
     <span className="flex items-baseline gap-1 whitespace-nowrap">
-      <OverviewMoney paise={paise} {...(shown ? { 'data-testid': testId } : {})} />
+      <OverviewMoney
+        paise={paise}
+        small={smallHeadline}
+        {...(shown ? { 'data-testid': testId } : {})}
+      />
       <span
         className={`${small ? 'text-[0.6875rem]' : 'text-[0.8125rem]'} font-bold text-content-muted`}
         {...(shown ? { title: besideTitle, 'data-testid': besideTestId } : {})}
@@ -501,11 +516,11 @@ function ValueBeside({
             }}
             className="block w-max"
           >
-            {figures(small, false)}
+            {figures(small, false, false)}
           </span>
         ))}
       </div>
-      <div className="min-w-0">{figures(form % 2 === 1)}</div>
+      <div className="min-w-0">{figures(form % 2 === 1 || form === 4, form === 4)}</div>
       {withIcon && (
         <span
           aria-hidden
@@ -646,34 +661,65 @@ function comparedRange(from: string, through: string): string {
   return `${Number(from.slice(8))}–${Number(through.slice(8))} ${name}`
 }
 
-/** Overview alone drops paise; accounting and source pages keep the exact amount. */
-function OverviewMoney({ paise, ...props }: ComponentProps<typeof Money>) {
+/**
+ * Overview alone drops paise; accounting and source pages keep the exact amount.
+ * Bold at the smaller size, extra-bold at the regular one.
+ */
+function OverviewMoney({
+  paise,
+  small = false,
+  ...props
+}: ComponentProps<typeof Money> & { small?: boolean }) {
   return (
     <Money
       {...props}
       title={formatPaise(paise)}
       paise={paise - (paise % 100)}
-      className={`whitespace-nowrap leading-7 ${Math.abs(paise) >= 100_000_000 ? 'text-lg font-bold' : 'text-[1.375rem] font-extrabold'}`}
+      className={`whitespace-nowrap leading-7 ${small ? 'text-lg font-bold' : 'text-[1.375rem] font-extrabold'}`}
     />
+  )
+}
+
+/**
+ * A tile's headline at the regular size where it fits its cell, and at the
+ * smaller one only where it does not: ₹10,50,141 has room on a laptop and
+ * none in a phone's cell beside the icon (owner, 2026-10-30). The regular size
+ * is measured from a hidden copy, so the choice returns once the cell widens.
+ */
+function FittedMoney({ paise, ...props }: ComponentProps<typeof Money>) {
+  const box = useRef<HTMLSpanElement>(null)
+  const regular = useRef<HTMLSpanElement>(null)
+  const [small, setSmall] = useState(false)
+  useLayoutEffect(() => {
+    const element = box.current
+    if (!element) return
+    const choose = () => {
+      const width = element.clientWidth
+      // No layout to measure (jsdom under test): the regular size stands.
+      if (!width) return
+      setSmall((regular.current?.scrollWidth ?? 0) > width)
+    }
+    choose()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(choose)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [paise])
+  return (
+    <span ref={box} className="relative block">
+      <span aria-hidden className="invisible absolute left-0 top-0 h-0 overflow-hidden">
+        <span ref={regular} className="block w-max">
+          <OverviewMoney paise={paise} />
+        </span>
+      </span>
+      <OverviewMoney {...props} paise={paise} small={small} />
+    </span>
   )
 }
 
 /** Short display-only values; the title and linked source retain exact paise. */
 function SupportingMoney({ paise }: { paise: number }) {
   return <span className="font-bold">{compactPaise(paise)}</span>
-}
-
-function compactPaise(paise: number): string {
-  const exact = formatPaise(paise)
-  const absolute = Math.abs(paise)
-  if (absolute < 1_000_000) return exact.replace(/\.\d{2}$/, '')
-  const [unit, suffix] =
-    absolute >= 1_000_000_000
-      ? ([1_000_000_000, 'Cr'] as const)
-      : absolute >= 10_000_000
-        ? ([10_000_000, 'L'] as const)
-        : ([100_000, 'k'] as const)
-  return `${paise < 0 ? '-' : ''}₹${(absolute / unit).toFixed(1).replace(/\.0$/, '')}${suffix}`
 }
 
 /**
@@ -740,7 +786,7 @@ function MetricValue({
 }) {
   return (
     <div className="flex min-h-9 items-center justify-between gap-1">
-      <div className="min-w-0">{children}</div>
+      <div className="min-w-0 flex-1">{children}</div>
       <span
         aria-hidden
         className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${TONE_CLASS[tone]}`}
