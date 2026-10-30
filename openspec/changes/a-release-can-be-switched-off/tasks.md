@@ -378,7 +378,7 @@ steps are marked **owner**: an agent prepares them and confirms them afterwards
 read-only, but cannot create accounts or enter credentials. Work in this order:
 staging must verify this change before 10 promotes it to production.
 
-- [ ] 9.1 **Owner:** create a separate Supabase account with a different email, and
+- [x] 9.1 **Owner:** create a separate Supabase account with a different email, and
   in it a project on **the same plan and compute size as production**. Read both
   projects' plan, compute, Postgres major version and region through the Management
   API (read-only) and record them side by side in `docs/OPERATIONS.md`. Record the
@@ -392,6 +392,8 @@ staging must verify this change before 10 promotes it to production.
   *(Since: staging's Postgres `17.11.0.003` read through the Management API (9.10's note),
   and the side-by-side table is in `docs/OPERATIONS.md`. Still open: the account's email
   there, which only the owner has.)*
+  *(Done 2026-10-31: the owner gave the account's email, `dedattallp@gmail.com`,
+  now in `docs/OPERATIONS.md`'s side-by-side table.)*
 - [x] 9.2 **Owner:** set staging's Auth settings to production's (site URL and
   redirect URLs pointing at the staging address); bootstrap the owner's own Super
   Admin in staging the way production's was; create a Cloudflare Pages project
@@ -502,7 +504,7 @@ staging must verify this change before 10 promotes it to production.
   `production-hotfix` as well as `production-promote`; GitHub asks the owner once more
   for that job. `docs.yml` covers pushes to `main` and `stage` until 9.11 retires direct
   pushes to `main`. Nothing here runs until `stage` exists.)*
-- [ ] 9.10 Create `stage` from `main`'s tip and push it. **Owner:** create the deploy
+- [x] 9.10 Create `stage` from `main`'s tip and push it. **Owner:** create the deploy
   key and the `production-promote` environment (themselves as required reviewer);
   the `main` ruleset (no direct push, no force push, no deletion; the deploy key the
   only bypass) and the `stage` ruleset (no deletion; force pushes allowed, so the owner
@@ -541,6 +543,12 @@ staging must verify this change before 10 promotes it to production.
   request the same day: deletion refused, force pushes allowed; `gh api
   repos/abdatta/shawarmania-ops/rules/branches/stage` reads back `deletion` alone. Open:
   the `main` ruleset, after 10.2.)*
+  *(Confirmed read-only with `gh api` on 2026-10-31: ruleset `main` (25040290,
+  active) refuses deletion, non-fast-forward and update, with the deploy key the
+  only bypass; ruleset `stage` (25030428, active) refuses deletion only, so
+  force pushes stay open; the `promote` deploy key (166414824, rotated
+  2026-10-14) has write access; `production-promote` and `production-hotfix`
+  each require `abdatta` as reviewer.)*
 - [x] 9.11 In **one commit**, pushed to `stage` just before the ruleset is turned
   on: `AGENTS.md` (push to `stage`, never `main`; promotion is the release and keeps
   the deploy-window rule; a push to `stage` is safe at any hour), every workflow in

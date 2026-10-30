@@ -25,7 +25,7 @@
 
 | | Production | Staging |
 |---|---|---|
-| Supabase account | the owner's main account | a separate account, its own organization |
+| Supabase account | the owner's main account | a separate account, `dedattallp@gmail.com`, its own organization |
 | Plan and compute | Free, Nano | Free, Nano |
 | Region | ap-south-1 | ap-south-1 |
 | PostgreSQL | 17.6 | 17.11 |
