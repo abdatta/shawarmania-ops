@@ -8,7 +8,7 @@
 
 ## Live
 
-- [ ] 4. Migration (dated after the newest on main): replace `sales_analytics` with the same signature; each sales-view delivery entry adds `commission` and `state`; the sales view adds `deliveryCharges` for `aggregator_cycle_deductions` overlapping the current window; the items view carries neither. Regenerate `database.types.ts` and check its diff.
+- [ ] 4. Migration (dated after the newest on main): replace `sales_analytics_v2` with the same signature; each sales-view delivery entry adds `commission` and `state`; the sales view adds `deliveryCharges` for `aggregator_cycle_deductions` overlapping the current window; the items view carries neither. Regenerate `database.types.ts` and check its diff.
 - [ ] 5. pgTAP: the new fields for a settled, a provisional, a disputed, a cut-unknown and a charge-only day; a weekly charge inside, overlapping and outside the window; the items view omits both; **isolation** — a manager's crafted request for another outlet is refused and returns none of its delivery days or weekly charges.
 - [ ] 6. Live adapter maps the new fields; unit tests for the mapping and for the section's domain helpers (column parts per row kind, card tiles summed in integer paise, legend entries present, no-row days distinct from zero).
 - [ ] 7. Component tests: measure and grouping changes leave the section unchanged and make no request; a no-figures range shows the line and no cards; inspection reads each status in words; keyboard inspection and the keyboard-only focus ring.

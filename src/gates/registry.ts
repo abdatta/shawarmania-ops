@@ -444,7 +444,7 @@ const defs = {
     state: 'demo',
   },
 
-  // Items and Sales (#71): one outlet's aggregates, read by sales_analytics().
+  // Items and Sales (#71): one outlet's aggregates, read by sales_analytics_v2().
   'owner-item-analytics': {
     role: 'super_admin',
     path: 'analytics/items',
