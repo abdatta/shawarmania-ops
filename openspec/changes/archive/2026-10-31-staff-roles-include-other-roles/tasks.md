@@ -94,10 +94,13 @@ It needs no demo round: nothing on any screen changes.
 - [x] 6.3 Push to `stage` and read the Staging run: every suite, gates off and
   on, the Edge-dependent suites included. *Staging 39760734883 passed on
   0e9a80d8, all 24 jobs, with the app side still ungated.*
-- [ ] 6.4 The app side behind the gate (4.2, 4.3), and the explicit read grants
+- [x] 6.4 The app side behind the gate (4.2, 4.3), and the explicit read grants
   (`20261101000001_staff_roles_have_explicit_grants.sql`, design *RLS and
   authority*): the gates again, the database job, and a Staging run on that
   commit.
+  *(`cf071005` and `84e937df`. Staging 39765471627 on `84e937df` failed a unit
+  shard; Staging 39769311920 passed on `aa82e161`, which carries both, and
+  Deploy 39820324307 published it on 22 October.)*
 
 ## 7. Docs
 
@@ -106,23 +109,36 @@ It needs no demo round: nothing on any screen changes.
 
 ## 8. Release
 
-- [ ] 8.1 The owner tries a check-in, an expense and a Team change on the fake
+- [x] 8.1 The owner tries a check-in, an expense and a Team change on the fake
   outlet with the gate on.
-- [ ] 8.2 After Promote, at a quiet hour: turn it on, watch a check-in, an
+  *(Waived by the owner on 31 October: production's real use below stands in
+  for it.)*
+- [x] 8.2 After Promote, at a quiet hour: turn it on, watch a check-in, an
   expense, a Team change and the counter's menu load.
-- [ ] 8.3 Pull it once, or record the owner's waiver.
+  *(On in production at 19:17 UTC on 22 October and on since, read from
+  `change_gate_events` on 30 October. By 31 October Kalyani Cafe had traded
+  eight services on it: 420 bills, 54 expenses, 8 check-in attempts and 3
+  manager decisions, with nothing reported.)*
+- [x] 8.3 Pull it once, or record the owner's waiver.
+  *(Waived, 31 October: the owner's rule of 30 October is that a gate whose on
+  path has run a while, and which the owner is happy to retire, needs no pull.)*
 - [x] 8.4 Record in design D8 whether the owner agrees the cleanup need not wait
   three services. *It waits them (owner, 2026-10-21).*
-- [ ] 8.5 `retire-role-includes` (the `retire-gate` workflow): code half, then the
+- [x] 8.5 `retire-role-includes` (the `retire-gate` workflow): code half, then the
   contract migration of D8 once every registered tablet reports the retirement
   build and the counter has traded three services on it. The contract also
   rewrites the three objects of D4, and removes the `%_includes` exclusions from
   `01`, `21` and `24`. Tell #80 the first Waiter may now be made.
+  *(Seeded as `openspec/changes/retire-role-includes/`, which carries both
+  halves from here; its code half started on 31 October.)*
 
 ## 9. PHASE GATE
 
-- [ ] 9.1 Every check of what a staff member may do asks which role includes
+- [x] 9.1 Every check of what a staff member may do asks which role includes
   which; every existing role gets today's answer, proved by the existing suites;
   a staff role listed by name fails lint in a migration and in the app; a loop
   is refused; with the gate off every check runs as before; and after the
   cleanup, adding a role is a row or two.
+  *(Held on 31 October on the suites in both gate states and production use, the
+  owner calling the archive. Its last clause, adding a role in a row or two,
+  comes true with `retire-role-includes`' contract migration.)*
