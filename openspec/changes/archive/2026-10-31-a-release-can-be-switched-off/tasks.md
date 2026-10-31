@@ -775,7 +775,7 @@ October.
 
 ## 12. Phase gate
 
-- [ ] 12.1 **PHASE GATE.** The owner turns a change gate off and back on from their
+- [x] 12.1 **PHASE GATE.** The owner turns a change gate off and back on from their
   phone, and every tablet follows at its next free moment — within a minute, with no
   deploy and nobody pressing anything on the tablet — while the gate's page
   shows, for each tablet, its build, whether it is running the change, its failed
@@ -796,3 +796,13 @@ October.
   use; every agent workflow in both agent trees asks for the gate before it writes
   a line of the change, and a proposal that does not answer fails CI whichever agent
   wrote it; and the four-role demo walkthrough still walks.
+  *(Held, 2026-10-31, on the owner's word. Every task above it is ticked with its
+  evidence: the turn from the phone and the tablets following it (10.3, 10.4);
+  nothing stranded (8.3); the owner-only turn and isolated health (8.1); the
+  migration lint, both gate states in every suite and the request budget (8.1,
+  every Staging and Deploy run); Republish, Hotfix and Promote, and `main`
+  refusing a push (9.10, 9.14, 10.5); staging and the fake outlet (9.1, 9.12,
+  9.13); the agent workflows (6.x); the demo walkthrough. One clause stands
+  changed: the probe was kept for good (owner, 2026-10-16, 11.1), and the
+  retirement path was proven instead on `outside-tap-closes` through both
+  halves (11.2). The owner accepted that swap on 31 October.)*
