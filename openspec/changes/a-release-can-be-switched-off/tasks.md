@@ -561,12 +561,18 @@ staging must verify this change before 10 promotes it to production.
   `docs/OPERATIONS.md`; the script that wrote them is deleted in it. Pushed to `stage`
   2026-10-13 as `8ad96b90`. The `main` ruleset follows 10.2, not this push — see 9.10's
   correction.)*
-- [ ] 9.12 Push this change to `stage`. Staging migrates, seeds the empty project
+- [x] 9.12 Push this change to `stage`. Staging migrates, seeds the empty project
   (`--if-empty`), publishes, and the smoke suite passes. Run the paused-project message
   once by pausing staging deliberately, then resume it.
   *(2026-10-13, Staging run `38457964697` on `8ad96b90`, green in 16m15s: the suite
   11m, migrate and the first seed 2m, functions 29s, publish 32s, smoke 1m57s. Open: the
   paused-project message.)*
+  *(The paused-project message, 2026-10-31 at 06:00 IST: paused *Ops (Staging)*
+  from its dashboard in the owner's signed-in browser, then pushed `66802361`.
+  Staging run 41150600516 stopped at `staging is awake` with "Staging's Supabase
+  project is PAUSING, not running: resume it from the staging account's
+  dashboard, then run this workflow again." Resumed from the same dashboard;
+  the next push's Staging run is the one that verifies `66802361`.)*
 - [x] 9.12a The smoke suite moves to its own outlet (D19, at the owner's request
   during 9.13): *Smoke tests* with its own manager and biller, where the suite sets
   up a counter and a kitchen tablet with setup codes and removes them afterwards, so
