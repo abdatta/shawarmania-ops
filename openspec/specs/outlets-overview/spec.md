@@ -118,8 +118,7 @@ While the outlet list is pending, Overview SHALL reserve one outlet card when th
 
 ### Requirement: Today's revenue names the sale in progress
 
-With `one-revenue` on, Today's revenue SHALL show, beside its headline and after
-a separating dot, the total of the outlet's open, unpaid orders of its current
+Today's revenue SHALL show, beside its headline and after a separating dot, the total of the outlet's open, unpaid orders of its current
 business date as the server resolves it, in integer paise summed by the server
 and shown in exact rupees without compact notation, smaller than the headline
 and in the size, weight and colour of the tender figures beneath. Where the cell
@@ -147,3 +146,4 @@ no further request.
 #### Scenario: A large amount in progress
 - **WHEN** open orders come to ₹12,340
 - **THEN** the figure reads ₹12,340, not ₹12.3k
+

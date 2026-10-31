@@ -54,7 +54,7 @@ migration in the code half, for the dependency only.
 
 ## 2. Wait for every tablet
 
-- [ ] 2.1 The readiness check (`retire-gate` §2): every registered device on the
+- [x] 2.1 The readiness check (`retire-gate` §2): every registered device on the
   retirement build or later, three services on it, and the owner's and managers'
   phones reloaded (Overview, the Ledger and Analytics are their screens). Record
   the date and the evidence.
@@ -76,7 +76,7 @@ migration in the code half, for the dependency only.
   production or on a fresh reset reads `one-revenue`; the only callers of the
   five are `overview_revenue` (of `overview_sales`) and `sales_analytics_series`
   (of `sales_analytics`), both dropped with them.)*
-- [ ] 3.2 The pgTAP tests that name the dropped functions
+- [x] 3.2 The pgTAP tests that name the dropped functions
   (`53_overview_reads_the_business.sql`, `93_revenue_reads_the_same_everywhere.sql`
   and any other), every database gate on a fresh reset; release it.
   *(53 reads the business-day and delivery cases through `revenue_figures` and
@@ -89,4 +89,11 @@ migration in the code half, for the dependency only.
 
 ## 4. Archive
 
-- [ ] 4.1 Report what was retired and when, then archive.
+- [x] 4.1 Report what was retired and when, then archive.
+  *(The owner's phone read `efb07212`, then `5039246f` after its update, on 31
+  October before the contract's Promote; the owner approved Promote
+  41146033425, and Deploy 41146114580 ran the contract at 23:43 UTC on 30
+  October, retiring the row and dropping the five reads, read back from
+  production. Archived on 31 October at the owner's word, before a service had
+  traded on it: the code that read the five had left every build nine days
+  earlier.)*
