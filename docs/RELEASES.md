@@ -283,9 +283,11 @@ move.
 
 A change whose purpose is fewer requests proves it with a second, lower budget
 of its own, tagged `@cg-on:<key>`, rather than editing this one: an existing
-test takes only a tag. `e2e-auth/fewer-requests.spec.ts` is the first
-(the-app-asks-the-server-less); it shares this spec's CI shard, and runs only
-with gates on.
+test takes only a tag. `e2e-auth/fewer-requests.spec.ts` was the first
+(the-app-asks-the-server-less). Its gate has retired; it still shares this
+spec's CI shard, and runs only with gates on, tagged `@cg-on:tablet-health`,
+because a tablet's gate answers ride on its health report only while Tablet
+health is on.
 
 ## Tablet health
 
@@ -299,8 +301,7 @@ gate's current answer or still *waiting* for a free moment to reload into it,
 *38 requests · 0 failed · slowest 0.4 s · 20 s ago*, or *Silent* after two
 minutes without a report.
 
-With **Fewer requests** on as well, the report also brings back every gate's
-answer, and the tablet stops reading the gates on its own each minute: one
+The report also brings back every gate's answer, and the tablet stops reading the gates on its own each minute: one
 request a minute where there were two. A turn still reaches a tablet within
 seconds over its live channel, and within the minute at worst; if a report
 fails, the tablet reads the gates directly instead.
@@ -326,7 +327,7 @@ If the owner's phone cannot load the app, the same turn from the Supabase
 dashboard's SQL editor, which runs as the database owner:
 
 ```sql
-select public.change_gate_force('fewer-requests', false, 'Counter frozen; turned off from the dashboard');
+select public.change_gate_force('tablet-health', false, 'Counter frozen; turned off from the dashboard');
 ```
 
 It records the turn in the history as an operator turn, with no person.

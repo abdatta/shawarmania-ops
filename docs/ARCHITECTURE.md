@@ -416,9 +416,7 @@ may be before a sale reloads it (two minutes, because discounts and outlet
 settings have no notice of their own), what counts as one burst (300 ms), and
 how often a running aggregator sync is checked (three seconds). Its
 `mergeBursts` helper is the one way to answer a burst. The request budget
-([Testing](TESTING.md)) is what holds a screen to all of this. These rules are
-behind the `fewer-requests` change gate until it retires; with it off, each of
-those screens reads as it did before.
+([Testing](TESTING.md)) is what holds a screen to all of this.
 
 ## Offline boundary
 
