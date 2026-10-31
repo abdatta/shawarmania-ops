@@ -89,7 +89,10 @@ A start month asks for a total, not an addition: nothing has been paid yet.
 - **Placement** (Q4, Q5): a stopped cost stays in the list, in its place, while
   its stop month is the current month or while it owes. After that it leaves
   the list for **Stopped · N · Show** at the foot, one line, which shows the
-  old Stopped table when tapped.
+  old Stopped table when tapped. `fixed_costs_list` orders stopped costs
+  last, so the on path sorts the list back into the order costs were added,
+  read from each one's first monthly amount (written in the same transaction
+  as the cost), before putting overdue rows first.
 - **A cost's months**: a part month with a settlement reads *· closing* (the
   stop month) or *· first month* (the start month) and offers **Change**, which
   asks *{Month} comes to (₹)*, empty, and settles the month at it. A whole
