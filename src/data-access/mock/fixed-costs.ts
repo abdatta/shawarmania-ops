@@ -436,6 +436,8 @@ export function seedDemoFixedCosts(store: DemoStore): void {
     monthlyPaise: number,
     startsOn: string,
   ): Tables<'fixed_costs'> {
+    // A minute apart, in the order added, so the list can keep that order.
+    const added = at(previous, `09:${String(store.fixedCosts.length).padStart(2, '0')}`)
     const row: Tables<'fixed_costs'> = {
       id: id('fc100000'),
       outlet_id: DEMO_OUTLET_ID,
@@ -445,8 +447,8 @@ export function seedDemoFixedCosts(store: DemoStore): void {
       starts_on: startsOn,
       stops_on: null,
       created_by: OWNER,
-      created_at: at(previous, '09:00'),
-      updated_at: at(previous, '09:00'),
+      created_at: added,
+      updated_at: added,
     }
     store.fixedCosts.push(row)
     store.fixedCostAmounts.push({
@@ -457,7 +459,7 @@ export function seedDemoFixedCosts(store: DemoStore): void {
       amount_paise: monthlyPaise,
       fixed_cost_payment_id: null,
       created_by: OWNER,
-      created_at: at(previous, '09:00'),
+      created_at: added,
       voided_at: null,
       voided_by: null,
     })

@@ -158,6 +158,9 @@ export function FixedCostsSurface() {
   const ongoing =
     current?.costs
       .filter((c) => listed(c, current.today))
+      // The read puts stopped costs last; a stopped one keeps the place it was
+      // added in (agreed-part-months), so the list is put back in that order.
+      .sort((a, b) => (agreed ? addedAt(a).localeCompare(addedAt(b)) : 0))
       // Overdue first (owner, 2026-10-20): the rows money is late on lead the
       // list, and keep their order among themselves.
       .sort(
@@ -532,6 +535,14 @@ function MonthProgress({
         </span>
       )}
     </span>
+  )
+}
+
+/** When it was added: its first monthly amount is written in the same transaction. */
+function addedAt(cost: FixedCostFacts): string {
+  return cost.amounts.reduce(
+    (first, row) => (row.createdAt < first ? row.createdAt : first),
+    '9999-12-31',
   )
 }
 

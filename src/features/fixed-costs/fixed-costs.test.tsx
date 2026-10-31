@@ -862,6 +862,25 @@ describeChangeGate('agreed-part-months', (on) => {
     expect(screen.queryByTestId('stopped-fixed-costs')).toBeNull()
   })
 
+  it('a stopped cost keeps the place it was added in, though the read lists it last', async () => {
+    const { adapters } = withFixedCosts()
+    const listed = await adapters.fixedCosts.list(KAL)
+    const nayan = listed.costs.find((c) => c.name === 'Nayan')!
+    await adapters.fixedCosts.close({
+      fixedCostId: nayan.id,
+      stopsOn: '2026-10-28',
+      finalPaise: 0,
+      payment: null,
+    })
+    renderList(adapters)
+    const list = await screen.findByTestId('fixed-cost-list')
+    const names = within(list)
+      .getAllByRole('link')
+      .map((link) => link.querySelector('span')?.textContent)
+    if (on) expect(names.indexOf('Nayan')).toBeLessThan(names.indexOf('Santu'))
+    else expect(names).not.toContain('Nayan')
+  })
+
   it('a cost stopped last month waits behind one line', async () => {
     const user = userEvent.setup()
     const { adapters } = withFixedCosts()
