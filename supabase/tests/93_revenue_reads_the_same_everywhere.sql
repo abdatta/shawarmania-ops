@@ -80,8 +80,12 @@ select is((select (m->>'profitPaise')::bigint from om),
 select is((select m->'previous'->>'from' from om),
   to_char(date_trunc('month', (select d2 from fx)) - interval '1 month', 'YYYY-MM-DD'),
   'the comparison starts on the previous month''s 1st');
-select ok((select m->'previous'->>'cutAt' is not null from om),
-  'the comparison is cut at the time it is now');
+-- Unless last month has no day today's date (31 October against September):
+-- a clamped window ends whole, so it carries no cut (D3).
+select ok((select m->'previous'->>'cutAt' is not null
+               or extract(day from d2) > extract(day from date_trunc('month', d2) - interval '1 day')
+             from om, fx),
+  'the comparison is cut at the time it is now, unless last month is too short');
 select ok((select (o->>'cashPaise')::bigint + (o->>'upiPaise')::bigint + (o->>'deliveryPaise')::bigint >= 0
              from (select public.overview_today('00000000-0000-4000-a000-000000000001') as o) t),
   'today reads');
