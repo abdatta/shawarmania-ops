@@ -44,8 +44,10 @@ own, and no migration in the code half.
   *(31 October: every quick gate clean locally; on a fresh reset `test:db` 99
   files, 4127 tests, and the REST suites but the Edge-Function ones the shared
   stack cannot serve. Staging 41162301437 passed every job on `01f82d0a`.)*
-- [ ] 1.7 Release: push to `stage`, Staging green, the owner promotes. The gate's
+- [x] 1.7 Release: push to `stage`, Staging green, the owner promotes. The gate's
   row is left on.
+  *(Promote 41164326539 and Deploy 41164443637 on `01f82d0a`, 31 October at
+  03:27 UTC.)*
 
 ## 2. Wait for every tablet
 

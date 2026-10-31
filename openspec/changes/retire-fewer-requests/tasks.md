@@ -43,8 +43,10 @@ its own, and no migration in the code half.
   `0488b74c`, above the three commits from `1b04f8d0`, passed every job on 31
   October: unit, database, all four browser suites in both states, then migrate,
   functions, publish and smoke.)*
-- [ ] 1.7 Release: push to `stage`, Staging green, the owner promotes. The gate's
+- [x] 1.7 Release: push to `stage`, Staging green, the owner promotes. The gate's
   row is left on, so a tablet on an older build keeps the behaviour it has.
+  *(Promote 41154746076 and Deploy 41154842156 on `0488b74c`, 31 October at
+  01:20 UTC.)*
 
 ## 2. Wait for every tablet
 
