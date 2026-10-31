@@ -167,11 +167,15 @@ object is new.
 - [x] 9.2 Authenticated suite: the same against the local stack, a manager
   refused another outlet's page, a Biller seeing a cash payment without the chip,
   and `@cg-round-trip:pro-rata-pnl` (design D10).
-- [ ] 9.3 `e2e-auth/request-budget.spec.ts` green and unchanged: the counter and
+- [x] 9.3 `e2e-auth/request-budget.spec.ts` green and unchanged: the counter and
   kitchen make no new request.
-- [ ] 9.4 The quick gates (`format` first, then `lint`, `format:check`, both
+  *(Every Staging and Deploy run since `167bd0f1` ran the request budget green,
+  Staging 41162301437 on `01f82d0a` among them.)*
+- [x] 9.4 The quick gates (`format` first, then `lint`, `format:check`, both
   typechecks, `npm test`, `contrast`, `build`) and the DB job; push to `stage` and
   read the Staging run for the browser suites.
+  *(Staging 39561306827 green on `167bd0f1`, published by Deploy 39563935272 on
+  21 October at 07:42 UTC.)*
 
 ## 10. Docs
 
@@ -180,18 +184,25 @@ object is new.
 
 ## 11. Release
 
-- [ ] 11.1 Once Staging has published, the owner tries it on the fake outlet.
-- [ ] 11.2 After Promote: with the owners, add Kalyani Cafe's fixed costs, each
+- [x] 11.1 Once Staging has published, the owner tries it on the fake outlet.
+  *(Waived by the owner on 31 October: ten days of real use in production stand
+  in for it.)*
+- [x] 11.2 After Promote: with the owners, add Kalyani Cafe's fixed costs, each
   starting 1 October, and **withdraw the fifteen placeholder rows of 19
   October** on the Expenses page, so October is not charged twice. Then turn
   `pro-rata-pnl` on (with `one-revenue` already on) and read Overview and the
   Ledger together.
-- [ ] 11.3 Pull it once, off and on again, and confirm the round trip on the real
+  *(Done 21 October: the fifteen fixed costs added from 10:46 IST, each from 1
+  October, and every 19 October placeholder for one of them withdrawn, read back
+  on 31 October; `pro-rata-pnl` on at 05:27 UTC that day.)*
+- [x] 11.3 Pull it once, off and on again, and confirm the round trip on the real
   data.
+  *(Waived by the owner on 31 October: a gate whose on path has run a while, and
+  which the owner is happy to retire, needs no pull.)*
 
 ## 12. PHASE GATE
 
-- [ ] 12.1 The checkpoint in ROADMAP.md row #79 holds, every item checked against
+- [x] 12.1 The checkpoint in ROADMAP.md row #79 holds, every item checked against
   the running app: the owner approved the demo before it was wired live; fixed
   costs carry over and prorate from a start date and to a stop date; a payment is
   an expense with a chip no typed expense carries, offers its three choices, and
@@ -200,6 +211,10 @@ object is new.
   show P&L (Pro-rata) beside P&L, and past months P&L alone; only the owner and the
   outlet's manager reach any of it; and with the gate off every figure reads as
   it does today.
+  *(Held on 31 October on the owner's word. The proration clause is being
+  replaced by `part-months-cost-what-was-agreed`, which settles a part month at
+  an agreed figure; this archive leaves the requirement it modifies in place for
+  it.)*
 
 ## 13. Follow-up: Short or Ahead, and one P&L card (2026-10-21)
 

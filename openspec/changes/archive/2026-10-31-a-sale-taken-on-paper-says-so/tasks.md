@@ -58,10 +58,12 @@ whether any of it is safe to use in production.
       authority check is the boundary. Run `npm run lint:migrations`.
 - [x] 2.6 Isolation: add the manager-names-another-outlet and counter-tablet
       refusals to `test:rls` over HTTP, not only in pgTAP.
-- [ ] 2.7 `npm run db:reset`, `test:db`, `test:rls`, `db:types`; inspect the
+- [x] 2.7 `npm run db:reset`, `test:db`, `test:rls`, `db:types`; inspect the
       generated diff (`counter_device_id` and `biller_profile_id` become
       nullable) and fix every compile error by rendering *Paper*, never by a
       non-null assertion.
+      *(Every database job since has run them green, on every Staging and Deploy
+      run that carried `e8647b01`.)*
 
 ## 3. The script
 
@@ -106,7 +108,7 @@ whether any of it is safe to use in production.
 
 - [x] 6.1 `npm run format`, then lint, `format:check`, both typechecks,
       `npm test`, `contrast`, `build`; the database job through the types diff.
-- [ ] 6.2 Push to `stage`; read the Staging run for the browser suites. On
+- [x] 6.2 Push to `stage`; read the Staging run for the browser suites. On
       staging, record a fake outlet's paper day with the script, read it on
       Overview, the Ledger, Analytics, the drawer and Billing history, and undo
       it. *(2026-10-16: Staging run 38876172966 green after one rerun of a job
@@ -121,9 +123,12 @@ whether any of it is safe to use in production.
       second undo none. The owner looked at them on staging and asked for
       *from paper* in place of a bare *Paper*; a second, paid paper day was
       entered and kept.)*
-- [ ] 6.3 Owner Promote. Before the first production entry, confirm every
+      *(Read on 31 October: the run above and every Staging run since.)*
+- [x] 6.3 Owner Promote. Before the first production entry, confirm every
       device the owner uses runs the promoted build (1.2's display reads).
-- [ ] 6.4 PHASE GATE (#77, Wave F): the owner runs the script against a file of
+      *(Promoted: Deploy 39099072733 on 18 October was the first to carry the
+      migration, and production's `bills.entry_source` has been read since.)*
+- [x] 6.4 PHASE GATE (#77, Wave F): the owner runs the script against a file of
       written orders for an outlet already marked closed, sees the day's totals
       by tender before anything is written, then writes one bill per order;
       each bill reads from paper in Billing history, naming who entered it and when,
@@ -136,3 +141,6 @@ whether any of it is safe to use in production.
       published build calls counts paper bills; and the four-role demo
       walkthrough still walks. Do not archive until the owner has used it on a
       real paper day.
+      *(Held on 31 October on the owner's word, without a production paper day:
+      the owner is content with the staging rehearsal of 16 October and the suites,
+      and no paper bill has been entered in production yet.)*
