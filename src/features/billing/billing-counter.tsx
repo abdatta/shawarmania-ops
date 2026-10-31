@@ -58,7 +58,6 @@ import {
   pointsUsableMax,
   type OutletLoyaltySettings,
 } from '@/domain'
-import { useChangeGate } from '@/change-gates/context'
 import { addDish, dishLineKey, dishLocked, noteDish } from '@/domain/dish-workflow'
 import { useOnForeground } from '@/features/attention/attention'
 import { getPartState, isRenderable } from '@/gates/registry'
@@ -310,7 +309,6 @@ export function BillingCounter({
 } = {}) {
   const session = useContext(SessionContext)
   const counterDevice = useContext(CounterDeviceContext)
-  const fewerRequests = useChangeGate('fewer-requests')
   const kitchenMarks = useKitchenMarks()?.marks
   const [label, setLabel] = useState('')
   const [noteLine, setNoteLine] = useState<BillLineDraft | null>(null)
@@ -536,21 +534,15 @@ export function BillingCounter({
 
   useOnForeground(refreshVisibleData)
 
-  useEffect(() => {
-    if (!outletId || fewerRequests) return
-    return counter.subscribeToOutletBilling(outletId, refreshVisibleData)
-  }, [counter, outletId, refreshVisibleData, fewerRequests])
-
   /*
-    With `fewer-requests` on, the same notices, told apart
-    (the-app-asks-the-server-less, D4). A menu edit reloads the menu. A sale
+    The outlet's change notices, told apart (the-app-asks-the-server-less, D4). A menu edit reloads the menu. A sale
     refreshes the bills and the rail once for its burst of notices, and reloads
     the menu only when it is more than two minutes old: discounts and the
     outlet's settings have no notice of their own, and a sale is still how they
     reach a running counter.
   */
   useEffect(() => {
-    if (!outletId || !fewerRequests) return
+    if (!outletId) return
     const reloadMenu = () => {
       menuAskedAt.current = Date.now()
       void refreshMenu()
@@ -572,7 +564,7 @@ export function BillingCounter({
       menuNotices.cancel()
       saleNotices.cancel()
     }
-  }, [counter, outletId, refreshMenu, fewerRequests])
+  }, [counter, outletId, refreshMenu])
 
   /**
    * Hold off a waiting build while an order is being composed.

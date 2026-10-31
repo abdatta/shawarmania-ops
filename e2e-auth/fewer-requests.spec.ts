@@ -17,12 +17,13 @@ import {
  * The app asks the server less (the-app-asks-the-server-less, D9).
  *
  * `request-budget.spec.ts` holds every build to a ceiling in both states. This
- * holds `fewer-requests` to the lower numbers it exists for, the same readings
- * over the same kind of rail: an idle counter and kitchen for a measured minute,
- * and one payment. With the gate on, the kitchen no longer re-reads its
- * categories beside each board read, each tablet's gate answers ride on its
- * health report, and a sale neither reloads a fresh menu nor refreshes once per
- * notice. Every gate is on here, as a release leaves them.
+ * holds the change to the lower numbers it exists for, the same readings over
+ * the same kind of rail: an idle counter and kitchen for a measured minute, and
+ * one payment. The kitchen no longer re-reads its categories beside each board
+ * read, each tablet's gate answers ride on its health report, and a sale neither
+ * reloads a fresh menu nor refreshes once per notice. Every gate is on here, as
+ * a release leaves them: the change's own gate, `fewer-requests`, has retired,
+ * and the answers ride on the report only while Tablet health is on.
  *
  * Counted: every request to the Supabase origin, as the request budget counts.
  */
@@ -80,8 +81,8 @@ async function payOrder(page: Page, id: string) {
 }
 
 test(
-  'with fewer requests on, an idle counter and kitchen and a payment stay within the lower budget',
-  { tag: '@cg-on:fewer-requests' },
+  'an idle counter and kitchen and a payment stay within the lower budget',
+  { tag: '@cg-on:tablet-health' },
   async ({ browser, request }) => {
     test.setTimeout(6 * 60_000)
 

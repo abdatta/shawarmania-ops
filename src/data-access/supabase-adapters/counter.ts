@@ -463,24 +463,10 @@ export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): 
       )
     },
 
-    subscribeToOutletBilling(outletId: string, onChange: () => void): () => void {
-      return subscribe(
-        `counter-billing-${outletId}`,
-        [
-          ['menu_categories', `outlet_id=eq.${outletId}`],
-          ['menu_items', `outlet_id=eq.${outletId}`],
-          ['orders', `outlet_id=eq.${outletId}`],
-          ['bills', `outlet_id=eq.${outletId}`],
-        ],
-        onChange,
-      )
-    },
-
     subscribeToOutletBillingTables(
       outletId: string,
       onChange: (table: OutletBillingTable) => void,
     ): () => void {
-      // The topic and filters above, so both readers share one channel.
       return subscribe(
         `counter-billing-${outletId}`,
         [

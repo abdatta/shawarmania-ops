@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 
-import { useChangeGate } from '@/change-gates/context'
 import { FOREGROUND_REREAD_AFTER_MS, olderThan } from '@/lib/freshness'
 import type { AttentionTone } from './tone'
 
@@ -181,14 +180,13 @@ export function useSharedRead<T>(
     if (storeFor(key).value === null) reread()
   }, [key, reread])
 
-  // With `fewer-requests` on, a return to the foreground re-reads only a count
+  // A return to the foreground re-reads only a count
   // older than two minutes: on a laptop that is every switch between browser
   // tabs (the-app-asks-the-server-less, D6). A nudge still re-reads at once.
-  const fewerRequests = useChangeGate('fewer-requests')
   const rereadIfStale = useCallback(() => {
     if (olderThan(storeFor(key).readAt, FOREGROUND_REREAD_AFTER_MS)) reread()
   }, [key, reread])
-  useOnForeground(fewerRequests ? rereadIfStale : reread)
+  useOnForeground(rereadIfStale)
   useAttentionNudge(reread)
 
   return { value, reread }

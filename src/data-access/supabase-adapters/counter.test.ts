@@ -196,8 +196,8 @@ describe('the shared outlet billing channel', () => {
     const first = vi.fn()
     const second = vi.fn()
 
-    const leaveFirst = counter.subscribeToOutletBilling('outlet-1', first)
-    const leaveSecond = counter.subscribeToOutletBilling('outlet-1', second)
+    const leaveFirst = counter.subscribeToOutletBillingTables('outlet-1', first)
+    const leaveSecond = counter.subscribeToOutletBillingTables('outlet-1', second)
 
     expect(client.channel).toHaveBeenCalledTimes(1)
     expect(on.mock.calls.map((call) => call[1])).toEqual([

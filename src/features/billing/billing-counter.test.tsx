@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { BillDraft, DataAdapters } from '@/data-access/adapters'
+import type { BillDraft, DataAdapters, OutletBillingTable } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters, createDemoStore } from '@/data-access/mock'
 import { DEMO_MORNING_BILLER_ID } from '@/data-access/mock/fixtures/billing'
@@ -295,7 +295,7 @@ describe('BillingCounter', () => {
       billing: createMockBillingAdapter(store),
       menu: createMockMenuAdapter(store, 'biller'),
     }
-    vi.spyOn(adapters.counter, 'subscribeToOutletBilling').mockReturnValue(() => {})
+    vi.spyOn(adapters.counter, 'subscribeToOutletBillingTables').mockReturnValue(() => {})
     const listMenu = vi.spyOn(adapters.menu, 'listMenu')
     renderCounter(adapters)
 
@@ -321,8 +321,8 @@ describe('BillingCounter', () => {
       billing: createMockBillingAdapter(store),
       menu: createMockMenuAdapter(store, 'biller'),
     }
-    let nudge: (() => void) | null = null
-    vi.spyOn(adapters.counter, 'subscribeToOutletBilling').mockImplementation(
+    let nudge: ((table: OutletBillingTable) => void) | null = null
+    vi.spyOn(adapters.counter, 'subscribeToOutletBillingTables').mockImplementation(
       (_outletId, onChange) => {
         nudge = onChange
         return () => {}
@@ -339,7 +339,10 @@ describe('BillingCounter', () => {
     const liveItem = store.menuItems.find((item) => item.id === MENU_ITEM_CLASSIC_ID)
     if (!liveItem) throw new Error('Expected the classic item')
     liveItem.is_available = false
-    act(() => nudge?.())
+    act(() => {
+      nudge?.('menu_items')
+      nudge?.('orders')
+    })
 
     await waitFor(() => expect(classic).toBeDisabled())
     await waitFor(() => expect(listOrders.mock.calls.length).toBeGreaterThan(beforeOrders))

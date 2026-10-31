@@ -34,14 +34,13 @@ export function KitchenRoot() {
     }
   }, [])
 
-  // With `fewer-requests` and Tablet health on, the minute's gate answers come
-  // back on the health report rather than a read of their own
-  // (the-app-asks-the-server-less, D8).
+  // With Tablet health on, the minute's gate answers come back on the health
+  // report rather than a read of their own (the-app-asks-the-server-less, D8).
   const gatesOnReport = useGatesOnHealthReport()
   // This tablet's change-gate answers, kept current (a-release-can-be-switched-off, D6).
   useChangeGateRefresh(session ? adapters?.changeGates : null, { minuteRead: !gatesOnReport })
   // Its health, each minute, while Tablet health is on (D13).
-  useDeviceHealthReport(session ? adapters?.changeGates : null, { carriesGates: gatesOnReport })
+  useDeviceHealthReport(session ? adapters?.changeGates : null)
 
   if (state.status === 'loading') return <LoadingShell />
   if (state.status === 'unavailable') return <UnconfirmedSession onRetry={revalidate} />

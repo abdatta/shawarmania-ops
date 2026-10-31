@@ -11,8 +11,8 @@ import { useDeviceHealthReport } from './use-device-health-report'
  * loaded, at once and then each minute (a-release-can-be-switched-off, D13).
  */
 
-function Reporter({ reportHealth }: { reportHealth: () => Promise<void> }) {
-  useDeviceHealthReport({ reportHealth })
+function Reporter({ reportHealth }: { reportHealth: () => Promise<Record<string, boolean>> }) {
+  useDeviceHealthReport({ reportHealthReadingGates: reportHealth, read: async () => ({}) })
   return null
 }
 
@@ -21,7 +21,7 @@ afterEach(() => vi.useRealTimers())
 describeChangeGate('tablet-health', (on) => {
   it(on ? 'reports at once and every minute' : 'reports nothing', () => {
     vi.useFakeTimers()
-    const reportHealth = vi.fn().mockResolvedValue(undefined)
+    const reportHealth = vi.fn().mockResolvedValue({})
     render(
       <ChangeGatesForTest on={{ 'tablet-health': on, probe: true }}>
         <Reporter reportHealth={reportHealth} />

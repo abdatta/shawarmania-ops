@@ -25,6 +25,7 @@ import {
 } from '@/data-access/mock'
 import { DEMO_MORNING_BILLER_ID } from '@/data-access/mock/fixtures/billing'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
+import { FOREGROUND_REREAD_AFTER_MS } from '@/lib/freshness'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
@@ -934,7 +935,7 @@ describe('the outlet attendance day', () => {
     expect(screen.queryByTestId('later-days-waiting')).not.toBeInTheDocument()
   })
 
-  it('re-reads the counts when the app comes back to the foreground', async () => {
+  it('re-reads stale counts when the app comes back to the foreground', async () => {
     const adapters = createMockAdapters()
     const today = await todayAt(adapters, OUTLET_KALYANI_ID)
     stageCounts(adapters, [
@@ -949,9 +950,16 @@ describe('the outlet attendance day', () => {
     renderDay(adapters)
     await screen.findByTestId('earlier-days-waiting')
 
-    // Somebody else settled the backlog while this phone was in an apron.
+    // Somebody else settled the backlog while this phone was in an apron, long
+    // enough ago that the count on screen is stale (the-app-asks-the-server-less, D6).
     stageCounts(adapters, [])
-    document.dispatchEvent(new Event('visibilitychange'))
+    const now = Date.now() + FOREGROUND_REREAD_AFTER_MS + 1_000
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+    try {
+      document.dispatchEvent(new Event('visibilitychange'))
+    } finally {
+      clock.mockRestore()
+    }
 
     await waitFor(() =>
       expect(screen.queryByTestId('earlier-days-waiting')).not.toBeInTheDocument(),

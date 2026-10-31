@@ -178,18 +178,6 @@ export function createSupabaseChangeGatesAdapter(client: Client): ChangeGatesAda
       )
     },
 
-    async reportHealth(report) {
-      const { error } = await client.rpc('report_device_health', {
-        p_build: report.build,
-        p_booted_gates: report.bootedGates,
-        p_window_seconds: report.windowSeconds,
-        p_requests: report.requests,
-        p_failed: report.failed,
-        p_slowest_ms: report.slowestMs,
-      })
-      if (error) throw new DataActionError('report_failed', 'Could not report tablet health.')
-    },
-
     async reportHealthReadingGates(report) {
       const { data, error } = await client.rpc('report_device_health_v2', {
         p_build: report.build,

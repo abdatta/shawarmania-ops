@@ -63,7 +63,6 @@ function renderList(on: boolean) {
       on={{
         'auto-approve-at-the-shop': true,
         'refreshed-staff-screens': on,
-        'fewer-requests': true,
       }}
     >
       <AdaptersContext.Provider value={adapters}>

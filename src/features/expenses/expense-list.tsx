@@ -143,7 +143,6 @@ export function ExpenseList({
   action,
 }: ExpenseListProps) {
   const { expenses: adapter, expenseCategories: categoriesAdapter } = useAdapters()
-  const fewerRequests = useChangeGate('fewer-requests')
   // Day headings, the You tag and the amount-first form
   // (a-check-in-at-the-shop-approves-itself, design D9).
   const refreshed = useChangeGate('refreshed-staff-screens')
@@ -187,12 +186,7 @@ export function ExpenseList({
     try {
       // The names are all a suggestion needs; `list()` also counts each
       // category's use, one request per category (the-app-asks-the-server-less, D5).
-      if (fewerRequests) {
-        setCategories(await categoriesAdapter.names())
-        return
-      }
-      const list = await categoriesAdapter.list()
-      setCategories(list.map((category) => category.name))
+      setCategories(await categoriesAdapter.names())
     } catch {
       // Suggestions are convenience, never a write prerequisite. In an
       // offline-resumed counter the operator may still type the category that

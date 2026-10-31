@@ -7,7 +7,6 @@ import { DEMO_KITCHEN_DEVICE_ID, DEMO_KITCHEN_SHIFT_ID } from '@/data-access/moc
 import { DEMO_OUTLET_ID } from '@/data-access/mock/store'
 import { CounterDeviceContext } from '@/session/counter-context'
 import type { CounterDeviceSession } from '@/session/counter-session'
-import { ChangeGatesForTest, describeChangeGate } from '@/test/change-gates'
 
 import { DishKitchenBoardScreen } from './dish-kitchen-board-screen'
 import { kitchenFilterKey } from './kitchen-filter-key'
@@ -69,34 +68,29 @@ it('keys a filter the same however its ids are ordered', () => {
   expect(kitchenFilterKey(undefined)).toBeNull()
 })
 
-describeChangeGate('fewer-requests', (on) => {
-  it(`${on ? 'does not re-read' : 're-reads'} the categories when the board is read again`, async () => {
-    const data = createDemoData({ dishWalkthrough: true })
-    const adapters = createMockAdapters('biller', data)
-    const categories = vi.spyOn(adapters.kitchen, 'listCategories')
-    const boardReads = vi.spyOn(adapters.kitchen, 'readDishBoard')
-    render(
-      <ChangeGatesForTest on={{ 'fewer-requests': on }}>
-        <CounterDeviceContext.Provider value={session}>
-          <AdaptersContext.Provider value={adapters}>
-            <DishKitchenBoardScreen player={silent} />
-          </AdaptersContext.Provider>
-        </CounterDeviceContext.Provider>
-      </ChangeGatesForTest>,
-    )
+it('does not re-read the categories when the board is read again', async () => {
+  const data = createDemoData({ dishWalkthrough: true })
+  const adapters = createMockAdapters('biller', data)
+  const categories = vi.spyOn(adapters.kitchen, 'listCategories')
+  const boardReads = vi.spyOn(adapters.kitchen, 'readDishBoard')
+  render(
+    <CounterDeviceContext.Provider value={session}>
+      <AdaptersContext.Provider value={adapters}>
+        <DishKitchenBoardScreen player={silent} />
+      </AdaptersContext.Provider>
+    </CounterDeviceContext.Provider>,
+  )
 
-    await screen.findAllByTestId(/^kitchen-card-/)
-    await waitFor(() => expect(categories).toHaveBeenCalled())
-    const readsBefore = boardReads.mock.calls.length
-    const categoryReadsBefore = categories.mock.calls.length
+  await screen.findAllByTestId(/^kitchen-card-/)
+  await waitFor(() => expect(categories).toHaveBeenCalled())
+  const readsBefore = boardReads.mock.calls.length
+  const categoryReadsBefore = categories.mock.calls.length
 
-    act(() => ringUpOrder(data, 901))
-    await screen.findByTestId('kitchen-card-901', {}, { timeout: 3000 })
-    await waitFor(() => expect(boardReads.mock.calls.length).toBeGreaterThan(readsBefore))
-    // Let any effect the new board would set off run.
-    await act(() => new Promise((resolve) => window.setTimeout(resolve, 50)))
+  act(() => ringUpOrder(data, 901))
+  await screen.findByTestId('kitchen-card-901', {}, { timeout: 3000 })
+  await waitFor(() => expect(boardReads.mock.calls.length).toBeGreaterThan(readsBefore))
+  // Let any effect the new board would set off run.
+  await act(() => new Promise((resolve) => window.setTimeout(resolve, 50)))
 
-    if (on) expect(categories.mock.calls.length).toBe(categoryReadsBefore)
-    else expect(categories.mock.calls.length).toBeGreaterThan(categoryReadsBefore)
-  })
+  expect(categories.mock.calls.length).toBe(categoryReadsBefore)
 })

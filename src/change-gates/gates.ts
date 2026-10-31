@@ -99,21 +99,6 @@ export const CHANGE_GATES = {
       'none: a health report is overwritten every minute and no other path reads what it writes',
   },
   /**
-   * The app skips re-reads it does not need (the-app-asks-the-server-less,
-   * design D1–D8): the kitchen's categories, the counter's menu on every sale,
-   * the expense list's per-category counts, badges on every return to the
-   * foreground, a tablet's separate minute gate read. Off, every screen
-   * re-reads exactly as it did before.
-   */
-  'fewer-requests': {
-    kind: 'change',
-    code: 'FR',
-    change: 'the-app-asks-the-server-less',
-    retireBy: '2027-01-31',
-    roundTrip:
-      'none: the on path changes when the app reads, never what it writes; a v2 health report writes the row a v1 report writes',
-  },
-  /**
    * #79: Pro-rata P&L beside P&L on Overview and the Ledger's current month,
    * charging the unpaid share of this month's fixed costs up to today, and the
    * Fixed chip on a fixed-cost payment (fixed-costs-are-spread-over-the-month,
@@ -204,6 +189,9 @@ export const CHANGE_GATE_KEYS = Object.keys(CHANGE_GATES) as ChangeGateKey[]
  * not tombstoned: they are unique among live gates only.
  */
 export const RETIRED_CHANGE_GATES: readonly string[] = [
+  // retire-fewer-requests: the app skips the re-reads nothing asked for, and a
+  // tablet's minute gate answers ride on its health report.
+  'fewer-requests',
   // retire-one-revenue: Overview, the Ledger and Analytics count revenue one
   // way, and `pro-rata-pnl` no longer depends on it.
   'one-revenue',

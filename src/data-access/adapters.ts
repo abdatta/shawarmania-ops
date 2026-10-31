@@ -2323,14 +2323,11 @@ export interface CounterAdapter {
   /** The tablet's own version of the above, watching its request and its shift. */
   subscribeToDeviceHandshake(deviceId: string, onChange: () => void): () => void
   /**
-   * Be told that this outlet's menu or billing activity moved. The event is a
-   * nudge only: callers must re-read and must also refresh on foreground so a
-   * silently dead channel cannot leave prices or open work stale all evening.
-   */
-  subscribeToOutletBilling(outletId: string, onChange: () => void): () => void
-  /**
-   * The same nudges on the same channel, each naming the table that moved, so a
-   * caller can tell a menu edit from a sale (the-app-asks-the-server-less, D4).
+   * Be told that this outlet's menu or billing activity moved, each nudge naming
+   * the table that moved, so a caller can tell a menu edit from a sale
+   * (the-app-asks-the-server-less, D4). The event is a nudge only: callers must
+   * re-read and must also refresh on foreground so a silently dead channel
+   * cannot leave prices or open work stale all evening.
    */
   subscribeToOutletBillingTables(
     outletId: string,
@@ -3182,13 +3179,10 @@ export interface ChangeGatesAdapter {
    */
   turn(key: string, enabled: boolean, reason: string | null): Promise<void>
   /**
-   * A tablet's health for the last minute (D13). The device and its outlet come
-   * from the tablet's own session; a person's session is refused.
-   */
-  reportHealth(report: DeviceHealthReport): Promise<void>
-  /**
-   * The same report, answered with every live gate's answer, as `read()` gives
-   * it (the-app-asks-the-server-less, D8): one request a minute instead of two.
+   * A tablet's health for the last minute (D13), answered with every live gate's
+   * answer, as `read()` gives it (the-app-asks-the-server-less, D8): one request
+   * a minute instead of two. The device and its outlet come from the tablet's
+   * own session; a person's session is refused.
    */
   reportHealthReadingGates(report: DeviceHealthReport): Promise<Record<string, boolean>>
 }
@@ -3203,7 +3197,7 @@ export interface DeviceHealthReport {
   slowestMs: number
 }
 
-/** The tables whose changes `subscribeToOutletBilling` reports. */
+/** The tables whose changes `subscribeToOutletBillingTables` reports. */
 export type OutletBillingTable = 'menu_categories' | 'menu_items' | 'orders' | 'bills'
 
 /** The bag of domain adapters a session provider supplies to its tree. */

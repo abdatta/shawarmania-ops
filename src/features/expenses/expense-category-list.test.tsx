@@ -51,7 +51,6 @@ function renderList(on: boolean, mayTouchAnyRow: boolean) {
         'auto-approve-at-the-shop': true,
         'refreshed-staff-screens': true,
         'expense-category-list': on,
-        'fewer-requests': true,
       }}
     >
       <AdaptersContext.Provider value={adapters}>

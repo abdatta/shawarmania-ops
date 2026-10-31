@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, SlidersHorizontal, VolumeX, WifiOff } from 'lucide-react'
 
-import { useChangeGate } from '@/change-gates/context'
 import { BuildVersion } from '@/components/build-version'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { useAdapters } from '@/data-access'
@@ -45,28 +44,13 @@ export function DishKitchenBoardScreen({ player }: { player?: TunePlayer }) {
   const [categories, setCategories] = useState<KitchenCategory[]>([])
   const [muted, setMuted] = useState(() => audioBlocked())
   useWakeLock()
-  const fewerRequests = useChangeGate('fewer-requests')
   const filterKey = kitchenFilterKey(board?.filter)
 
-  useEffect(() => {
-    if (fewerRequests) return
-    let active = true
-    void kitchen
-      .listCategories()
-      .then((rows) => {
-        if (active) setCategories(rows)
-      })
-      .catch(() => undefined)
-    return () => {
-      active = false
-    }
-  }, [kitchen, board?.filter.mode, board?.filter.categoryIds, fewerRequests])
-
-  // With `fewer-requests` on, the names are read when the filter really changes,
+  // The names are read when the filter really changes,
   // not beside every board read: the ids arrive as a new array each time
   // (the-app-asks-the-server-less, D3).
   useEffect(() => {
-    if (!fewerRequests || filterKey === null) return
+    if (filterKey === null) return
     let active = true
     void kitchen
       .listCategories()
@@ -77,7 +61,7 @@ export function DishKitchenBoardScreen({ player }: { player?: TunePlayer }) {
     return () => {
       active = false
     }
-  }, [kitchen, filterKey, fewerRequests])
+  }, [kitchen, filterKey])
 
   useEffect(() => {
     const timer = window.setInterval(() => setMuted(audioBlocked()), 2000)

@@ -60,13 +60,6 @@ const WORDS: Record<
     offMeans: 'Tablets report nothing new.',
     changeNumber: 75,
   },
-  'fewer-requests': {
-    title: 'Fewer requests',
-    onMeans:
-      'The app skips re-reads it does not need: menus and categories when nothing changed, badges seconds after the last read, a tablet’s separate gate check.',
-    offMeans: 'Every screen re-reads exactly as it does today.',
-    changeNumber: null,
-  },
   'pro-rata-pnl': {
     title: 'Pro-rata P&L',
     onMeans:
@@ -421,11 +414,9 @@ export function createMockChangeGatesAdapter(
       ownerOnly()
       gates.turn(key, enabled, reason)
     },
-    async reportHealth() {
-      // The demo's tablets are fixtures; a demo page reports nothing anywhere.
-    },
     async reportHealthReadingGates() {
-      // Reports nothing, as above, and answers as a read does.
+      // The demo's tablets are fixtures; a demo page reports nothing anywhere,
+      // and answers as a read does.
       return { ...gates.snapshot() }
     },
   }

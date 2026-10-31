@@ -15,7 +15,7 @@ export const GATE_READ_INTERVAL_MS = 60_000
 
 /**
  * Answers a device was handed rather than read: a tablet's health report
- * brings them back with `fewer-requests` on (the-app-asks-the-server-less, D8).
+ * brings them back (the-app-asks-the-server-less, D8).
  */
 const offered = new Set<(answers: SavedAnswers) => void>()
 

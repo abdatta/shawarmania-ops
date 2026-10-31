@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { gateAnswers } from '@/data-access/supabase-adapters/change-gates'
-import { ChangeGatesForTest, describeChangeGate } from '@/test/change-gates'
+import { ChangeGatesForTest } from '@/test/change-gates'
 
 import { GATE_READ_INTERVAL_MS, startChangeGateRefresh } from './refresh'
 import { ALL_OFF } from './snapshot'
@@ -11,7 +11,7 @@ import { useDeviceHealthReport } from './use-device-health-report'
 import { useGatesOnHealthReport } from './use-gates-on-report'
 
 /**
- * With `fewer-requests` on, a tablet's minute health report brings back the gate
+ * A tablet's minute health report brings back the gate
  * answers, and the tablet stops reading them separately each minute
  * (the-app-asks-the-server-less, D8). A failed report falls back to a read, so
  * a turn still reaches the tablet within the minute.
@@ -63,13 +63,13 @@ describe('answers handed in by the health report', () => {
   type ReportAdapter = NonNullable<Parameters<typeof useDeviceHealthReport>[0]>
 
   function Reporter({ adapter }: { adapter: ReportAdapter }) {
-    useDeviceHealthReport(adapter, { carriesGates: true })
+    useDeviceHealthReport(adapter)
     return null
   }
 
   function renderReporter(adapter: ReportAdapter) {
     return render(
-      <ChangeGatesForTest on={{ 'tablet-health': true, 'fewer-requests': true }}>
+      <ChangeGatesForTest on={{ 'tablet-health': true }}>
         <Reporter adapter={adapter} />
       </ChangeGatesForTest>,
     )
@@ -79,11 +79,9 @@ describe('answers handed in by the health report', () => {
     const refresh = refreshWith(false)
     const answers = { probe: true }
     const reportHealthReadingGates = vi.fn(async () => answers)
-    const reportHealth = vi.fn(async () => {})
-    renderReporter({ reportHealth, reportHealthReadingGates, read: vi.fn() })
+    renderReporter({ reportHealthReadingGates, read: vi.fn() })
 
     await vi.waitFor(() => expect(refresh.saved).toContainEqual(answers))
-    expect(reportHealth).not.toHaveBeenCalled()
     expect(refresh.applied()).toBe(1)
     expect(refresh.read).not.toHaveBeenCalled()
     refresh.stop()
@@ -94,7 +92,6 @@ describe('answers handed in by the health report', () => {
     const answers = { probe: true }
     const read = vi.fn(async () => answers)
     renderReporter({
-      reportHealth: vi.fn(async () => {}),
       reportHealthReadingGates: vi.fn(async () => {
         throw new Error('offline')
       }),
@@ -110,7 +107,7 @@ describe('answers handed in by the health report', () => {
     vi.useFakeTimers()
     const refresh = refreshWith(false)
     const reportHealthReadingGates = vi.fn(async () => ({}))
-    renderReporter({ reportHealth: vi.fn(), reportHealthReadingGates, read: vi.fn() })
+    renderReporter({ reportHealthReadingGates, read: vi.fn() })
     vi.advanceTimersByTime(GATE_READ_INTERVAL_MS)
     expect(reportHealthReadingGates).toHaveBeenCalledTimes(2)
     refresh.stop()
@@ -120,7 +117,7 @@ describe('answers handed in by the health report', () => {
     const refresh = refreshWith(false)
     refresh.stop()
     const reportHealthReadingGates = vi.fn(async () => ({ probe: true }))
-    renderReporter({ reportHealth: vi.fn(), reportHealthReadingGates, read: vi.fn() })
+    renderReporter({ reportHealthReadingGates, read: vi.fn() })
     await vi.waitFor(() => expect(reportHealthReadingGates).toHaveBeenCalled())
     await Promise.resolve()
     expect(refresh.saved).toEqual([])
@@ -138,16 +135,14 @@ describe('the v2 report’s answer', () => {
   })
 })
 
-describeChangeGate('fewer-requests', (on) => {
+describe('where a tablet takes its minute answers from', () => {
   for (const tabletHealth of [true, false]) {
-    it(`${on && tabletHealth ? 'takes' : 'does not take'} the answers from the report with Tablet health ${tabletHealth ? 'on' : 'off'}`, () => {
+    it(`${tabletHealth ? 'is the report' : 'is its own read'} with Tablet health ${tabletHealth ? 'on' : 'off'}`, () => {
       const wrapper = ({ children }: { children: ReactNode }) => (
-        <ChangeGatesForTest on={{ 'fewer-requests': on, 'tablet-health': tabletHealth }}>
-          {children}
-        </ChangeGatesForTest>
+        <ChangeGatesForTest on={{ 'tablet-health': tabletHealth }}>{children}</ChangeGatesForTest>
       )
       const { result } = renderHook(() => useGatesOnHealthReport(), { wrapper })
-      expect(result.current).toBe(on && tabletHealth)
+      expect(result.current).toBe(tabletHealth)
     })
   }
 })

@@ -640,10 +640,6 @@ export function createMockCounterAdapter(
       }
     },
 
-    subscribeToOutletBilling(_outletId: string, _onChange: () => void): () => void {
-      return () => {}
-    },
-
     subscribeToOutletBillingTables(
       _outletId: string,
       _onChange: (table: OutletBillingTable) => void,
