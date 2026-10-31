@@ -38,9 +38,12 @@ own, and no migration in the code half.
   `e2e-auth/role-includes.spec.ts` loses its `@cg-on` tags.
 - [x] 1.5 The `identity-and-access` delta; `docs/ROLES_AND_PERMISSIONS.md` no
   longer calls the app's checks gated.
-- [ ] 1.6 `npm run lint`, `format:check`, `typecheck`, `functions:typecheck`,
+- [x] 1.6 `npm run lint`, `format:check`, `typecheck`, `functions:typecheck`,
   `contrast`, `test`, `build`, `lint:change-gates`, `lint:roles`; `test:db` on a
   fresh reset and `test:rls`; the browser suites on Staging.
+  *(31 October: every quick gate clean locally; on a fresh reset `test:db` 99
+  files, 4127 tests, and the REST suites but the Edge-Function ones the shared
+  stack cannot serve. Staging 41162301437 passed every job on `01f82d0a`.)*
 - [ ] 1.7 Release: push to `stage`, Staging green, the owner promotes. The gate's
   row is left on.
 
