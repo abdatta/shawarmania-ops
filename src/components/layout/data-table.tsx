@@ -45,6 +45,8 @@ interface DataTableProps<T> {
    * Classes for one row. A table whose rows each open something gives its rows
    * `relative` here and stretches one link over the row from inside a cell, so
    * the whole row is one tap target and still one link to a screen reader.
+   * Anything positioned in a later cell paints above that link and swallows
+   * the taps on it, so give it `pointer-events-none` unless it is a control.
    */
   rowClassName?: (row: T) => string | undefined
 }

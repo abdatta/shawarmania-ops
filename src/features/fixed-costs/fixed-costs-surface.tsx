@@ -500,9 +500,11 @@ function MonthProgress({
   ringTestId?: string
 }) {
   const overdue = status.overdue.reduce((sum, row) => sum + row.paise, 0)
-  // Overdue reads amber and paid ahead green, each on its own line.
+  // Overdue reads amber and paid ahead green, each on its own line. Taps pass
+  // through to the row's link: the line the ring hangs from is positioned, so it
+  // paints above that link and would otherwise swallow them.
   return (
-    <span className="block min-w-[9.5rem] text-sm" data-testid={testId}>
+    <span className="pointer-events-none block min-w-[9.5rem] text-sm" data-testid={testId}>
       {!status.active ? (
         <span className="block text-content-muted">Stopped</span>
       ) : (

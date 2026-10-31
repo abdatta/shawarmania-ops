@@ -60,6 +60,38 @@ test('a fixed cost is added, paid in two parts, and a payment undone', async ({ 
   await expect(page.getByTestId('fixed-cost-left')).toContainText('₹6,000')
 })
 
+test('a tap anywhere on a row opens it or pays it, its paid line too', async ({ page }) => {
+  await page.goto(FIXED)
+  await expect(row(page, 'Shop rent')).toBeVisible()
+  // The row's link is stretched over it from the first cell; anything
+  // positioned in a later cell paints above that and swallows the tap, which
+  // a click on the name (as every other test does) never lands on.
+  const dead = await page.getByTestId('fixed-cost-list').evaluate((list) => {
+    const missed: string[] = []
+    for (const tr of list.querySelectorAll('tbody tr')) {
+      const box = tr.getBoundingClientRect()
+      for (let x = box.left + 4; x < box.right - 4; x += 8)
+        for (let y = box.top + 3; y < box.bottom - 3; y += 6) {
+          const hit = document.elementFromPoint(x, y)
+          if (hit && tr.contains(hit) && !hit.closest('a, button'))
+            missed.push(tr.querySelector('a')?.textContent ?? '')
+        }
+    }
+    return [...new Set(missed)]
+  })
+  expect(dead).toEqual([])
+
+  // The tap the owner made: on what the month has had paid.
+  const paid = (await row(page, 'Shop rent')
+    .getByTestId(/^status-/)
+    .locator(':scope > span')
+    .first()
+    .boundingBox())!
+  await page.mouse.click(paid.x + paid.width / 2, paid.y + paid.height / 2)
+  await expect(page).toHaveURL(/fixed-costs\/fc[\w-]+/)
+  await expect(page.getByRole('heading', { name: 'Shop rent' })).toBeVisible()
+})
+
 test('last month’s salary is paid now, counted in last month, and Needs attention clears', async ({
   page,
 }) => {
