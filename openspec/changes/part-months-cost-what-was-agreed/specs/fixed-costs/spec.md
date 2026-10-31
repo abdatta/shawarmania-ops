@@ -58,7 +58,7 @@ month the same way.
 While `agreed-part-months` is on, the Fixed list SHALL keep a stopped fixed cost
 in its place while its stop month is the current month or while it is not
 closed, saying that it stopped but not when. Once Stop is saved it SHALL be
-shown as done, greyed with a red cross and no Pay. After its stop month it
+shown as done, greyed with no Pay, its paid ring unchanged. After its stop month it
 SHALL leave the list for one line at the foot that shows the stopped costs when
 tapped.
 

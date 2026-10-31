@@ -874,7 +874,7 @@ describeChangeGate('agreed-part-months', (on) => {
     const row = within(await screen.findByTestId('fixed-cost-list'))
       .getByText('Jayanta')
       .closest('tr')!
-    expect(within(row).getByTestId(`paid-ring-${id}`)).toHaveAttribute('data-paid', 'done')
+    expect(within(row).getByTestId(`paid-ring-${id}`)).toHaveAttribute('data-paid', 'all')
     expect(within(row).queryByRole('button', { name: 'Pay Jayanta' })).toBeNull()
   })
 
@@ -894,7 +894,7 @@ describeChangeGate('agreed-part-months', (on) => {
     void data
   })
 
-  it('a stopped cost keeps its place this month, done with a red cross, or sits under Stopped', async () => {
+  it('a stopped cost keeps its place this month, greyed with its paid tick, or sits under Stopped', async () => {
     const { adapters } = withFixedCosts()
     const id = await jayanta(adapters)
     if (on)
@@ -918,7 +918,7 @@ describeChangeGate('agreed-part-months', (on) => {
     expect(row).toHaveTextContent('Salary · Stopped')
     expect(row).not.toHaveTextContent('28 Oct')
     expect(row).not.toHaveTextContent('days')
-    expect(within(row).getByTestId(`paid-ring-${id}`)).toHaveAttribute('data-paid', 'done')
+    expect(within(row).getByTestId(`paid-ring-${id}`)).toHaveAttribute('data-paid', 'all')
     expect(within(row).queryByRole('button', { name: 'Pay Jayanta' })).toBeNull()
     expect(screen.queryByTestId('stopped-fixed-costs')).toBeNull()
   })

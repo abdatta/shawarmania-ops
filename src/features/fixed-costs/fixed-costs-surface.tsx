@@ -1,4 +1,4 @@
-import { CalendarClock, CheckCircle2, XCircle } from 'lucide-react'
+import { CalendarClock, CheckCircle2 } from 'lucide-react'
 import {
   useCallback,
   useEffect,
@@ -340,7 +340,7 @@ function CostTable({
 }: {
   costs: FixedCostFacts[]
   today: string
-  /** agreed-part-months: no day count, stopped dates said, done rows marked. */
+  /** agreed-part-months: no day count, stopped said, done rows greyed. */
   agreed?: boolean
   /** The row just tapped, or whose Pay sheet is open; its Pay too, if that was tapped. */
   lit?: Lit | null
@@ -387,7 +387,6 @@ function CostTable({
       cell: (cost) => (
         <MonthProgress
           status={thisMonthStatus(cost, today)}
-          done={agreed && isDone(cost, today)}
           testId={`status-${cost.id}`}
           ringTestId={`paid-ring-${cost.id}`}
         />
@@ -470,7 +469,8 @@ function CostTable({
           thisMonthStatus(cost, today).overdue.length > 0
             ? 'bg-primary/10 ring-1 ring-inset ring-primary/40'
             : 'hover:bg-surface-raised',
-          // Done: greyed, still in its place (owner, 2026-10-31).
+          // Done: greyed, still in its place, its ring still saying what was
+          // paid; the grey alone says it stopped (owner, 2026-10-31).
           agreed && isDone(cost, today) && 'opacity-50 grayscale',
           // Any row tints the moment it is pressed, for its Pay or its page, and
           // stays tinted through the pause and behind its sheet (owner,
@@ -491,13 +491,10 @@ function CostTable({
  */
 function MonthProgress({
   status,
-  done = false,
   testId,
   ringTestId,
 }: {
   status: ThisMonthStatus
-  /** Stopped and all paid: the red cross in place of the ring (agreed-part-months). */
-  done?: boolean
   testId?: string
   ringTestId?: string
 }) {
@@ -510,22 +507,11 @@ function MonthProgress({
       ) : (
         <>
           <span className="relative block whitespace-nowrap text-content-muted">
-            {done ? (
-              <span
-                aria-hidden
-                data-testid={ringTestId}
-                data-paid="done"
-                className="absolute -left-[1.1875rem] top-[0.1875rem] flex size-3.5"
-              >
-                <XCircle size={14} className="text-danger" />
-              </span>
-            ) : (
-              <PaidRing
-                paidPaise={status.paidPaise}
-                owedPaise={status.costPaise + overdue}
-                testId={ringTestId}
-              />
-            )}
+            <PaidRing
+              paidPaise={status.paidPaise}
+              owedPaise={status.costPaise + overdue}
+              testId={ringTestId}
+            />
             {status.leftPaise === 0 ? (
               <>
                 <Money paise={status.costPaise} className="font-semibold text-content" /> paid
@@ -1086,7 +1072,6 @@ function CostDetail({
           className="flex items-center justify-center gap-1.5 pt-2 text-sm font-semibold text-content-muted"
           data-testid="fixed-cost-stopped"
         >
-          <XCircle size={16} className="text-danger" aria-hidden />
           Stopped
         </p>
       )}

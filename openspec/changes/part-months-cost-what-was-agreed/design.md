@@ -97,13 +97,14 @@ A start month asks for a total, not an addition: nothing has been paid yet.
 - **The list**: no *· 28 days*. A stopped cost reads *Salary · Stopped*, with
   no date (owner, 2026-10-31: it serves no purpose on screen).
 - **Done** = stopped and closed, which leaves nothing to pay. A done row is
-  greyed (`opacity-50 grayscale`), its ring is the red cross (`XCircle`,
-  `text-danger`), and it has no **Pay**. A cost stopped before this change, its
+  greyed (`opacity-50 grayscale`) and has no **Pay**. Its ring still says what
+  was paid, the tick once it is all paid: the grey alone says it stopped. A red
+  cross was tried on production and withdrawn the same night (owner,
+  2026-10-31): the ring is about payment, and a cross read as *not paid*. A cost stopped before this change, its
   last month with no settlement, shows **Close** in Pay's place, opening its
   page. A closed cost that still owes (only a v2 *paying later* on staging) keeps
   the amber ring and Pay.
-- **A cost's page**, once stopped: *Stopped* with the red cross where **Stop**
-  was, and no **Pay**.
+- **A cost's page**, once stopped: *Stopped* where **Stop** was, and no **Pay**.
 - **Placement** (Q4, Q5): a stopped cost stays in the list, in its place, while
   its stop month is the current month or while it owes. After that it leaves
   the list for **Stopped · N · Show** at the foot, one line, which shows the
