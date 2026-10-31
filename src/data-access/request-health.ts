@@ -2,8 +2,7 @@
  * How this device is talking to the server, over the last minute
  * (a-release-can-be-switched-off, D13).
  *
- * Installed on the one Supabase client only when the `tablet-health` gate was on
- * as the page loaded. Per request it keeps the time it finished, whether it
+ * Installed on the one Supabase client. Per request it keeps the time it finished, whether it
  * failed and how long it took — **never the URL's query, a header or a body**,
  * so no phone number, name, amount or order can reach a report. The counting is
  * wrapped so that its own failure can never fail, slow or change a request.

@@ -32,9 +32,8 @@ right → **Change gates** → **Dish ticks**". Never your shorthand.
    build it is running. A tablet on an older build does not know the gate and
    keeps running as before (unknown is off), so it is safe, but it will not run
    the change until it updates — say which tablets those are.
-6. **Tablet health is on**, so the page shows each tablet's requests, failures
-   and slowest request. If it is off, ask the owner to turn **Tablet health** on
-   first, and note each tablet's readings for a few minutes as the baseline.
+6. **Note the baseline.** The page shows each tablet's requests, failures and
+   slowest request; note each tablet's readings for a few minutes before the turn.
 
 ## 2. Choose the hour
 

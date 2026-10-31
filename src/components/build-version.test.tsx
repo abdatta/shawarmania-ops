@@ -48,18 +48,18 @@ describe('the build stamp', () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     stubClipboard(writeText)
     render(
-      <ChangeGatesContext.Provider value={{ ...ALL_OFF, probe: true, 'tablet-health': true }}>
+      <ChangeGatesContext.Provider value={{ ...ALL_OFF, probe: true, 'pro-rata-pnl': true }}>
         <BuildVersion />
       </ChangeGatesContext.Provider>,
     )
     const stamp = screen.getByTestId('build-version')
     expect(stamp).toHaveTextContent(/^Build \S+ · \d/)
     expect(stamp).not.toHaveTextContent('PB')
-    expect(stamp).toHaveAttribute('data-build-code', `${BUILD_SHA}·PB-TH`)
+    expect(stamp).toHaveAttribute('data-build-code', `${BUILD_SHA}·PB-PR`)
     const builtAt = (stamp.textContent ?? '').split(' · ')[1]
 
     await user.click(stamp)
-    expect(writeText).toHaveBeenCalledWith(`Build ${BUILD_SHA}·PB-TH · ${builtAt}`)
+    expect(writeText).toHaveBeenCalledWith(`Build ${BUILD_SHA}·PB-PR · ${builtAt}`)
   })
 
   it('shows and selects the whole line where the clipboard is refused, claiming no copy', async () => {

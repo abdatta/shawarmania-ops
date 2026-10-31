@@ -1,5 +1,4 @@
-import { render, renderHook } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import { render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { gateAnswers } from '@/data-access/supabase-adapters/change-gates'
@@ -8,7 +7,6 @@ import { ChangeGatesForTest } from '@/test/change-gates'
 import { GATE_READ_INTERVAL_MS, startChangeGateRefresh } from './refresh'
 import { ALL_OFF } from './snapshot'
 import { useDeviceHealthReport } from './use-device-health-report'
-import { useGatesOnHealthReport } from './use-gates-on-report'
 
 /**
  * A tablet's minute health report brings back the gate
@@ -69,7 +67,7 @@ describe('answers handed in by the health report', () => {
 
   function renderReporter(adapter: ReportAdapter) {
     return render(
-      <ChangeGatesForTest on={{ 'tablet-health': true }}>
+      <ChangeGatesForTest on={{}}>
         <Reporter adapter={adapter} />
       </ChangeGatesForTest>,
     )
@@ -133,16 +131,4 @@ describe('the v2 report’s answer', () => {
     expect(() => gateAnswers(null)).toThrow()
     expect(() => gateAnswers([true])).toThrow()
   })
-})
-
-describe('where a tablet takes its minute answers from', () => {
-  for (const tabletHealth of [true, false]) {
-    it(`${tabletHealth ? 'is the report' : 'is its own read'} with Tablet health ${tabletHealth ? 'on' : 'off'}`, () => {
-      const wrapper = ({ children }: { children: ReactNode }) => (
-        <ChangeGatesForTest on={{ 'tablet-health': tabletHealth }}>{children}</ChangeGatesForTest>
-      )
-      const { result } = renderHook(() => useGatesOnHealthReport(), { wrapper })
-      expect(result.current).toBe(tabletHealth)
-    })
-  }
 })

@@ -2,13 +2,13 @@ import { render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { BUILD_SHA } from '@/pwa/build-info'
-import { ChangeGatesForTest, describeChangeGate } from '@/test/change-gates'
+import { ChangeGatesForTest } from '@/test/change-gates'
 
 import { useDeviceHealthReport } from './use-device-health-report'
 
 /**
- * A tablet reports its health only while Tablet health was on as its page
- * loaded, at once and then each minute (a-release-can-be-switched-off, D13).
+ * A tablet reports its health as its page loads and then each minute
+ * (a-release-can-be-switched-off, D13).
  */
 
 function Reporter({ reportHealth }: { reportHealth: () => Promise<Record<string, boolean>> }) {
@@ -18,24 +18,20 @@ function Reporter({ reportHealth }: { reportHealth: () => Promise<Record<string,
 
 afterEach(() => vi.useRealTimers())
 
-describeChangeGate('tablet-health', (on) => {
-  it(on ? 'reports at once and every minute' : 'reports nothing', () => {
+describe('a tablet', () => {
+  it('reports at once and every minute', () => {
     vi.useFakeTimers()
     const reportHealth = vi.fn().mockResolvedValue({})
     render(
-      <ChangeGatesForTest on={{ 'tablet-health': on, probe: true }}>
+      <ChangeGatesForTest on={{ probe: true }}>
         <Reporter reportHealth={reportHealth} />
       </ChangeGatesForTest>,
     )
     vi.advanceTimersByTime(60_000)
-    if (!on) {
-      expect(reportHealth).not.toHaveBeenCalled()
-      return
-    }
     expect(reportHealth).toHaveBeenCalledTimes(2)
     expect(reportHealth.mock.calls[0]![0]).toMatchObject({
       build: BUILD_SHA,
-      bootedGates: ['probe', 'tablet-health'],
+      bootedGates: ['probe'],
       windowSeconds: 60,
     })
   })
@@ -46,7 +42,7 @@ describe('a failed report', () => {
     const reportHealth = vi.fn().mockRejectedValue(new Error('offline'))
     expect(() =>
       render(
-        <ChangeGatesForTest on={{ 'tablet-health': true }}>
+        <ChangeGatesForTest on={{}}>
           <Reporter reportHealth={reportHealth} />
         </ChangeGatesForTest>,
       ),

@@ -53,13 +53,6 @@ const WORDS: Record<
     offMeans: 'PB is not in the build code.',
     changeNumber: 75,
   },
-  'tablet-health': {
-    title: 'Tablet health',
-    onMeans:
-      'Every tablet reports, each minute, how many requests it made, how many failed and the slowest one.',
-    offMeans: 'Tablets report nothing new.',
-    changeNumber: 75,
-  },
   'pro-rata-pnl': {
     title: 'Pro-rata P&L',
     onMeans:
@@ -205,14 +198,6 @@ export function createDemoChangeGates(
       at: ago(27 * HOUR),
       byName: owner,
       reason: 'Quiet hour, first try',
-      source: 'app',
-    },
-    {
-      key: 'tablet-health',
-      enabled: true,
-      at: ago(50 * HOUR),
-      byName: owner,
-      reason: null,
       source: 'app',
     },
   ]

@@ -15,9 +15,7 @@
  * this list.
  */
 export const AUTH_SHARDS: readonly (readonly string[])[] = [
-  // The two measured-minute specs. `fewer-requests` runs only with gates on
-  // (Tablet health carries its gate answers), so the gates-off run of this shard
-  // is the request budget alone.
+  // The two measured-minute specs, each run with gates off and on.
   ['request-budget.spec.ts', 'fewer-requests.spec.ts'],
   ['billing-served.spec.ts'],
   ['billing-offline.spec.ts', 'dish-ticks.spec.ts'],

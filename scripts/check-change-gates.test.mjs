@@ -344,7 +344,8 @@ describe('reading', () => {
     const { declared, retired } = loadDeclarations(
       readFileSync(resolve(process.cwd(), 'src/change-gates/gates.ts'), 'utf8'),
     )
-    expect(Object.keys(declared)).toEqual(expect.arrayContaining(['probe', 'tablet-health']))
+    expect(Object.keys(declared)).toContain('probe')
+    expect(retired).toContain('tablet-health')
     expect(Array.isArray(retired)).toBe(true)
     const { rows } = readMigrations([
       {

@@ -1471,7 +1471,7 @@ Deliberately minimal at this scale — the useful signals are operational rather
 
 - **Sync backlog**: a tablet with a persistent unsynced queue is the most valuable alert in the system. It means bills exist in exactly one place.
 - **Device last-seen**: a counter device silent during trading hours means something is wrong at that outlet.
-- **Tablet health**: with the **Tablet health** change gate on, every gate's page shows each counter and kitchen's last minute — requests, failures, slowest request, build, and whether it runs the gate's current answer. A tablet's requests jumping well above its normal, or failures above zero, is the earliest sign of a change hurting the database; see [Releases](RELEASES.md#tablet-health).
+- **Tablet health**: every gate's page shows each counter and kitchen's last minute — requests, failures, slowest request, build, and whether it runs the gate's current answer. A tablet's requests jumping well above its normal, or failures above zero, is the earliest sign of a change hurting the database; see [Releases](RELEASES.md#tablet-health).
 - **Cash differences**: a consistently non-zero difference at one outlet is a business signal, and the app already computes it.
 - **Identity functions**: monitor `admin-accounts`, `redeem-invite`, and
   `email-sign-in` non-2xx rates plus email-sign-in abuse limits. Logs may name

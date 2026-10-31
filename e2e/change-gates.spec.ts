@@ -25,12 +25,12 @@ test('the demo’s Change gates opens from its address, and nothing links to it'
 
 test(
   'with every gate on, a tap on the stamp copies the build with each gate’s code',
-  { tag: ['@cg-on:probe', '@cg-on:tablet-health'] },
+  { tag: '@cg-on:probe' },
   async ({ page, context }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write'])
     await page.goto('demo/owner/change-gates')
     const stamp = page.getByTestId('build-version')
-    await expect(stamp).toHaveAttribute('data-build-code', /^[0-9a-f]+·PB-TH(-[A-Z]{2})*$/)
+    await expect(stamp).toHaveAttribute('data-build-code', /^[0-9a-f]+·PB(-[A-Z]{2})*$/)
     const builtAt = ((await stamp.textContent()) ?? '').split(' · ')[1]
     await stamp.click()
     await expect(stamp).toContainText('Copied')
@@ -63,18 +63,18 @@ test(
 
 test(
   'turning the probe off and on changes the build stamp at once, and a reset restores it',
-  { tag: ['@cg-on:probe', '@cg-on:tablet-health'] },
+  { tag: '@cg-on:probe' },
   async ({ page }) => {
     await page.goto('demo/owner/change-gates/probe')
     const codeAfterOpening = () => page.getByTestId('build-version').getAttribute('data-build-code')
-    expect(await codeAfterOpening()).toMatch(/·PB-TH(-[A-Z]{2})*$/)
+    expect(await codeAfterOpening()).toMatch(/·PB(-[A-Z]{2})*$/)
 
     await page.getByRole('switch', { name: 'Turn off Probe' }).click()
     await page.getByTestId('turn-reason').fill('Comparing the two')
     await page.getByTestId('confirm-turn-submit').click()
 
     await expect(page.getByTestId('gate-since')).toContainText(/^Off/)
-    expect(await codeAfterOpening()).toMatch(/·TH(-[A-Z]{2})*$/)
+    expect(await codeAfterOpening()).not.toMatch(/PB/)
     await expect(page.getByTestId('gate-history').getByRole('listitem').first()).toContainText(
       'Comparing the two',
     )
@@ -85,13 +85,13 @@ test(
     await expect(page.getByTestId('gate-history').getByRole('listitem').first()).toContainText(
       'Comparing the two',
     )
-    expect(await codeAfterOpening()).toMatch(/·TH(-[A-Z]{2})*$/)
+    expect(await codeAfterOpening()).not.toMatch(/PB/)
 
     // …and a reset is the starting scenario, which has every gate on.
     await page.getByTestId('demo-reset').click()
     await page.getByRole('button', { name: 'Discard and start again' }).click()
     await expect(page.getByTestId('gate-since')).toContainText(/^On/)
-    expect(await codeAfterOpening()).toMatch(/·PB-TH(-[A-Z]{2})*$/)
+    expect(await codeAfterOpening()).toMatch(/·PB(-[A-Z]{2})*$/)
   },
 )
 

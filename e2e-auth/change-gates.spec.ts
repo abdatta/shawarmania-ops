@@ -51,8 +51,8 @@ test(
 )
 
 test(
-  'a counter running tablet health reports its build, its gates and counts, and never a query',
-  { tag: '@cg-on:tablet-health' },
+  'a counter reports its build, its gates and counts, and never a query',
+  { tag: '@cg-on:probe' },
   async ({ browser, request }) => {
     await forgetHealth(request)
     const { context, page } = await openTill(browser, request, TILL_ONE)
@@ -63,27 +63,13 @@ test(
     await expect.poll(() => healthRow(request), { timeout: 20_000 }).not.toBeNull()
     const row = (await healthRow(request))!
     expect(row['build']).toBe(build)
-    expect(row['booted_gates']).toEqual(expect.arrayContaining(['probe', 'tablet-health']))
+    expect(row['booted_gates']).toEqual(expect.arrayContaining(['probe']))
     expect(row['window_seconds']).toBe(60)
     expect(row['requests']).toEqual(expect.any(Number))
     expect(row['requests'] as number).toBeGreaterThan(0)
     expect(row['failed']).toBe(0)
     // Counts and durations only: no URL, query, filter or body reached the row.
     expect(JSON.stringify(row)).not.toMatch(/\?|=|eq\.|rest\/v1|phone/)
-    await context.close()
-  },
-)
-
-test(
-  'with tablet health off, a counter reports nothing',
-  { tag: '@cg-off:tablet-health' },
-  async ({ browser, request }) => {
-    await forgetHealth(request)
-    const { context, page } = await openTill(browser, request, TILL_ONE)
-    // The report would leave the moment the counter's screen mounted; give it
-    // the same twenty seconds the gates-on test allows, then look once.
-    await page.waitForTimeout(20_000)
-    expect(await healthRow(request)).toBeNull()
     await context.close()
   },
 )

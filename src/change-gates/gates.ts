@@ -86,19 +86,6 @@ export const CHANGE_GATES = {
     roundTrip: 'none: the probe changes nothing but its code in the build stamp',
   },
   /**
-   * Tablets count their requests and report their health each minute. The
-   * counting wraps every request the app makes, so it is gated like any other
-   * new behaviour (design D13, D16).
-   */
-  'tablet-health': {
-    kind: 'change',
-    code: 'TH',
-    change: 'a-release-can-be-switched-off',
-    retireBy: '2026-11-30',
-    roundTrip:
-      'none: a health report is overwritten every minute and no other path reads what it writes',
-  },
-  /**
    * #79: Pro-rata P&L beside P&L on Overview and the Ledger's current month,
    * charging the unpaid share of this month's fixed costs up to today, and the
    * Fixed chip on a fixed-cost payment (fixed-costs-are-spread-over-the-month,
@@ -174,6 +161,9 @@ export const CHANGE_GATE_KEYS = Object.keys(CHANGE_GATES) as ChangeGateKey[]
  * not tombstoned: they are unique among live gates only.
  */
 export const RETIRED_CHANGE_GATES: readonly string[] = [
+  // retire-tablet-health: tablets count their requests and report their health
+  // each minute.
+  'tablet-health',
   // retire-role-includes: every check of what a staff member may do asks which
   // staff role includes which.
   'role-includes',
