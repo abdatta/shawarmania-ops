@@ -39,6 +39,17 @@ assignments and mounts the corresponding navigation and route set; it does not
 rely on routing for security, because the database evaluates those same
 assignments independently on every request.
 
+**A tablet is fenced once, at the top of the real route tree, and the fence is
+deny by default** *(a-tablet-keeps-its-login)*. `RealSessionProvider` wraps
+every real route, so `TabletBoundary` inside it sees every address a tablet
+can be given. A tablet may open its home (`/counter` or `/kitchen`) and the
+paths beneath it, except `/counter/setup`; anything else sends it home. A new
+route is closed to a tablet unless it lives beneath that tablet's home, so a
+counter page goes beneath `/counter` and needs no edit to the boundary. The
+route-matrix test (`src/routes/tablet-boundary.test.tsx`) walks `appRoutes`
+itself, so a route added later is checked the day it is added. People are
+fenced the other way by the screens they reach, as before.
+
 ## Why this stack
 
 ### Postgres with Row-Level Security — the load-bearing choice

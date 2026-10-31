@@ -1588,6 +1588,17 @@ block remains manually typeable.
 
 ## Runbook stubs
 
+**A counter laptop "lost its registration" and asks to be set up again** →
+before issuing a new code, check whether a person signed in on it. In the Auth
+logs, a password grant for a staff account from the shop's IP and the
+counter's user agent, followed by a `/logout`, is the cause: the person's
+sign-in replaced the tablet's session in the browser's one slot. The old
+tablet's session cannot be handed back, so set the laptop up again and
+**remove the abandoned row** from the outlet's Tablets list. Remind staff that
+attendance goes on their own phones. With `a-tablet-keeps-its-login` on, a
+set-up tablet never shows the sign-in form, so this should not recur
+(Kalyani Cafe, 14, 25 and 30 October 2026).
+
 **A receipt link has to be killed** → revoke that one link rather than switching
 the endpoint off; it is immediate, permanent for that token, and kills no other
 bill's link, and a fresh one can be issued for a customer who still needs a

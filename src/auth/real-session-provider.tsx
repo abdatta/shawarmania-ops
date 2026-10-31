@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router'
 
 import { RealSessionContext } from './real-session-context'
+import { TabletBoundary } from './tablet-boundary'
 import { useRealSession } from './use-real-session'
 
 /**
@@ -13,6 +14,12 @@ import { useRealSession } from './use-real-session'
  * flash this whole change exists to remove. Each consumer decides for itself
  * what an unresolved session means for it — the root and the role shells wait,
  * the credential screens do not (design D6).
+ *
+ * **One case does wait here: a browser whose stored session is a tablet's**
+ * (a-tablet-keeps-its-login, design D1). `TabletBoundary` sends a set-up tablet
+ * home from any address outside its own branch, and while the session is still
+ * resolving it holds back a page a tablet must never draw, such as the login
+ * form. Every other visitor gets the `Outlet` unconditionally, as before.
  *
  * **Demo mode is outside this provider, and that is structural rather than
  * conditional** (design D5). `getSupabaseClient()` throws while demo scope is
@@ -29,7 +36,9 @@ export function RealSessionProvider() {
 
   return (
     <RealSessionContext.Provider value={session}>
-      <Outlet />
+      <TabletBoundary state={session.state} onRetry={session.revalidate}>
+        <Outlet />
+      </TabletBoundary>
     </RealSessionContext.Provider>
   )
 }
