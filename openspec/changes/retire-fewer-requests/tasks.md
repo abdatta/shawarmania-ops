@@ -30,7 +30,7 @@ its own, and no migration in the code half.
   retagged `@cg-on:tablet-health`.
 - [x] 1.5 The `project-scaffold` delta; `docs/` (ARCHITECTURE, RELEASES, TESTING)
   no longer calls the behaviour gated.
-- [ ] 1.6 `npm run lint`, `format:check`, `typecheck`, `functions:typecheck`,
+- [x] 1.6 `npm run lint`, `format:check`, `typecheck`, `functions:typecheck`,
   `contrast`, `test`, `build`, `lint:change-gates`; `test:db` on a fresh reset and
   `test:rls`; the browser and Edge-Function REST suites on Staging.
   *(Locally on 30–31 October: lint, format, typecheck, functions:typecheck,
@@ -39,7 +39,10 @@ its own, and no migration in the code half.
   change: `93_revenue_reads_the_same_everywhere.sql` test 12 expects a month
   comparison cut, and on the 31st, after a 30-day month, the comparison clamps
   and has none. `test:rls` green but for the three Edge-Function suites, which
-  503 on the shared local stack; they are read from Staging.)*
+  503 on the shared local stack; they are read from Staging. Staging run 41151093769 on
+  `0488b74c`, above the three commits from `1b04f8d0`, passed every job on 31
+  October: unit, database, all four browser suites in both states, then migrate,
+  functions, publish and smoke.)*
 - [ ] 1.7 Release: push to `stage`, Staging green, the owner promotes. The gate's
   row is left on, so a tablet on an older build keeps the behaviour it has.
 
