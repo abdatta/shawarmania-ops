@@ -162,6 +162,26 @@ export const CHANGE_GATES = {
     roundTrip:
       'none: nothing is queued, and what it saves is a settlement, a stop date and a payment, which the off path already reads',
   },
+  /**
+   * A set-up tablet opens only its own home and the pages beneath it, whatever
+   * address it is given, and `signIn` and `redeemInvite` refuse while the
+   * browser holds a tablet's session (a-tablet-keeps-its-login, design D1–D2).
+   * A person signing in on the counter laptop used to replace the tablet's
+   * session in the one storage slot, and signing out left it unregistered. Off,
+   * `/sign-in` and `/activate` show their forms on a tablet as before.
+   * Retirement removes the per-screen tablet redirects in `RealRoot`,
+   * `RootResolver`, `CounterRoot`, `KitchenRoot` and `CounterSetup`, which the
+   * boundary makes redundant.
+   */
+  'a-tablet-keeps-its-login': {
+    kind: 'change',
+    code: 'TK',
+    change: 'a-tablet-keeps-its-login',
+    // Provisional: eight weeks after it is first turned on, corrected at release.
+    retireBy: '2027-01-15',
+    roundTrip:
+      'none: it changes which page a tablet is shown and refuses a sign-in before it is sent; nothing is written or queued either way',
+  },
 } as const satisfies Record<string, ChangeGateDeclaration>
 
 export type ChangeGateKey = keyof typeof CHANGE_GATES

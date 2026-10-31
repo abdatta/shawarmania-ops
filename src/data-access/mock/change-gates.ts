@@ -90,6 +90,14 @@ const WORDS: Record<
       'A part month costs its share by days, and stopped fixed costs sit under Stopped at the foot of the list.',
     changeNumber: 79,
   },
+  'a-tablet-keeps-its-login': {
+    title: 'A tablet keeps its login',
+    onMeans:
+      'A set-up tablet opens only its own counter or kitchen page, whatever address it is given, and nobody can sign in as a person on it.',
+    offMeans:
+      'A set-up tablet can still open the sign-in and activation pages, and a person signing in there replaces the tablet’s login.',
+    changeNumber: null,
+  },
 }
 
 /**
