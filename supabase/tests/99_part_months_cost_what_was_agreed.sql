@@ -2,10 +2,12 @@
 -- (part-months-cost-what-was-agreed, the #79 follow-up behind
 -- `agreed-part-months`).
 --
--- Held here: stopping with a final payment settles the stop month at what was
--- already paid plus it, and records the payment on the last day when it is paid
--- now; a retried stop counts nothing twice; a mid-month start settles its first
--- month; and only the owner and the outlet's own manager may call any of it.
+-- Held here: stopping closes a fixed cost (`stop_fixed_cost_v3`, the owner's
+-- staging round): the stop month is settled at what was already paid plus the
+-- final payment, which is recorded on the last day; a month left short before
+-- it is settled at what it covered; a second stop and a stop after today are
+-- refused, and a retried one counts nothing twice; a mid-month start settles its
+-- first month; and only the owner and the outlet's own manager may call any of it.
 -- Every date is last month's, so the test reads the same on any day.
 
 begin;
@@ -66,7 +68,7 @@ select is(public.fixed_cost_already_paid_in((select id from costs where label = 
 -- 1. Paid now: the ₹2,000 handed over at closing is recorded on the last day.
 
 select lives_ok(
-  format($q$select public.stop_fixed_cost_v2(%L, %L, 200000, %L, false)$q$,
+  format($q$select public.stop_fixed_cost_v3(%L, %L, 200000, %L, false)$q$,
          (select id from costs where label = 'now'), pg_temp.last_month() + 27, :'FINAL'),
   'stopping with a final payment, paid now, saves');
 
@@ -90,7 +92,7 @@ select is(
 
 -- A retried tap finds the payment and settles nothing twice.
 select lives_ok(
-  format($q$select public.stop_fixed_cost_v2(%L, %L, 200000, %L, false)$q$,
+  format($q$select public.stop_fixed_cost_v3(%L, %L, 200000, %L, false)$q$,
          (select id from costs where label = 'now'), pg_temp.last_month() + 27, :'FINAL'),
   'a retried stop saves');
 select is(public.fixed_cost_month_cost((select id from costs where label = 'now'),
@@ -101,24 +103,43 @@ select is((select count(*) from public.fixed_cost_payments
           2::bigint, 'with one final payment, not two');
 
 -- ---------------------------------------------------------------------------
--- 2. Paying later, and nothing more.
+-- 2. Nothing more, a second stop, a stop after today, and an earlier month left short.
 
-select public.stop_fixed_cost_v2((select id from costs where label = 'later'),
-                                 pg_temp.last_month() + 27, 200000);
-select is(public.fixed_cost_month_cost((select id from costs where label = 'later'),
-                                       pg_temp.last_month()),
-          400000::bigint, 'paying later still closes the month at ₹4,000');
-select is(public.fixed_cost_paid_paise((select id from costs where label = 'later'), current_date),
-          200000::bigint, 'with only the advance paid');
-
-select public.stop_fixed_cost_v2((select id from costs where label = 'nothing'),
+select public.stop_fixed_cost_v3((select id from costs where label = 'nothing'),
                                  pg_temp.last_month() + 27, 0);
 select is(public.fixed_cost_month_cost((select id from costs where label = 'nothing'),
                                        pg_temp.last_month()),
-          200000::bigint, 'nothing more closes the month at what was paid');
+          200000::bigint, '0 at close closes the month at what was paid');
 
 select throws_ok(
-  format($q$select public.stop_fixed_cost_v2(%L, %L, -100)$q$,
+  format($q$select public.stop_fixed_cost_v3(%L, %L, 200000)$q$,
+         (select id from costs where label = 'nothing'), pg_temp.last_month() + 27),
+  '22023', 'It is already stopped.', 'a stopped cost cannot be stopped again');
+
+select throws_ok(
+  format($q$select public.stop_fixed_cost_v3(%L, %L, 0)$q$,
+         (select id from costs where label = 'later'), current_date + 40),
+  '22023', 'It stops today or on a day already gone.', 'nor stopped on a day still to come');
+
+-- From the month before last, ₹1,000 paid in all, stopped last month: the
+-- earlier month closes at the ₹1,000, the last at nothing, and nothing is owed.
+insert into costs
+values ('short', public.create_fixed_cost(:'KAL', 'Short', 'salary', 600000,
+                                          (pg_temp.last_month() - interval '1 month')::date, null));
+select public.record_fixed_cost_payment('f1000000-0000-4000-a000-000000000005',
+         (select id from costs where label = 'short'), 100000,
+         pg_temp.last_month() - 10, pg_temp.last_month() - 10, false, null, null);
+select public.stop_fixed_cost_v3((select id from costs where label = 'short'),
+                                 pg_temp.last_month() + 4, 0);
+select results_eq(
+  format($q$select m.month, m.cost_paise from public.fixed_cost_months(%L, %L) m$q$,
+         (select id from costs where label = 'short'), pg_temp.last_month()),
+  format($q$values (%L::date, 100000::bigint), (%L::date, 0::bigint)$q$,
+         (pg_temp.last_month() - interval '1 month')::date, pg_temp.last_month()),
+  'stopping closes an earlier month left short at what it covered');
+
+select throws_ok(
+  format($q$select public.stop_fixed_cost_v3(%L, %L, -100)$q$,
          (select id from costs where label = 'nothing'), pg_temp.last_month() + 27),
   '22023', null, 'a final payment below zero is refused');
 
@@ -162,7 +183,7 @@ select is(public.fixed_cost_month_cost((select id from costs where label = 'move
 
 select pg_temp.impersonate(:'FA_KPA');
 select throws_ok(
-  format($q$select public.stop_fixed_cost_v2(%L, %L, 0)$q$,
+  format($q$select public.stop_fixed_cost_v3(%L, %L, 0)$q$,
          (select id from costs where label = 'nothing'), pg_temp.last_month() + 27),
   'P0002', null, 'another outlet''s manager cannot even find the fixed cost to stop');
 select throws_ok(

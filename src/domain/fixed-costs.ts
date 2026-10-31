@@ -268,6 +268,22 @@ export function alreadyPaidIn(cost: FixedCostFacts, month: string, today: string
   return Math.max(0, paid - earlier)
 }
 
+/**
+ * The months before `month` that payments leave short, each with what they
+ * covered: what stopping on a day of `month` settles them at, so a stopped
+ * cost owes nothing (owner, 2026-10-31). The TypeScript copy of the loop in
+ * `stop_fixed_cost_v3`.
+ */
+export function shortBefore(
+  cost: FixedCostFacts,
+  month: string,
+  today: string,
+): { month: string; coveredPaise: number }[] {
+  return coverage(cost, addMonths(month, -1), today)
+    .months.filter((row) => row.month < month && row.coveredPaise < row.costPaise)
+    .map((row) => ({ month: row.month, coveredPaise: row.coveredPaise }))
+}
+
 /** What the stop month comes to when it stops on `stopsOn` with `finalPaise` paid on top. */
 export function closingCost(
   cost: FixedCostFacts,
@@ -287,8 +303,10 @@ export function agreedPartMonth(
   cost: FixedCostFacts,
   month: string,
 ): 'closing' | 'first month' | null {
-  if (!isProrated(cost, month) || !settlementFor(cost, month)) return null
-  return cost.stopsOn && monthOf(cost.stopsOn) === month ? 'closing' : 'first month'
+  if (!settlementFor(cost, month)) return null
+  // Stopped on the month's last day is still its closing (owner, 2026-10-31).
+  if (cost.stopsOn && monthOf(cost.stopsOn) === month) return 'closing'
+  return isProrated(cost, month) ? 'first month' : null
 }
 
 export type BalanceState =

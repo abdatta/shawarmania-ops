@@ -37,7 +37,7 @@ export interface FixedCostClosing {
   stopsOn: string
   /** On top of what payments already leave for the stop month; 0 for nothing more. */
   finalPaise: number
-  /** Paid now: the final payment is recorded on the last day. Null when paying later. */
+  /** The final payment, recorded on the last day; null when nothing more was paid. */
   payment: { id: string; isCash: boolean } | null
 }
 
@@ -86,7 +86,10 @@ export interface FixedCostsAdapter {
   changeAmount(fixedCostId: string, fromMonth: string, amountPaise: number): Promise<void>
   /** Stop from a date; `clearAhead` settles the last month to clear a paid-ahead balance. */
   stop(fixedCostId: string, stopsOn: string, clearAhead: boolean): Promise<void>
-  /** Stop with the final payment: the stop month costs what was paid plus it (agreed-part-months). */
+  /**
+   * Stop, closing every month through the stop month: the stop month costs what
+   * was paid plus the final payment, and nothing is left to pay (agreed-part-months).
+   */
   close(closing: FixedCostClosing): Promise<void>
   pay(payment: FixedCostPaymentInput): Promise<void>
   /**

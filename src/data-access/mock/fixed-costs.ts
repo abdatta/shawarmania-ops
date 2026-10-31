@@ -7,6 +7,8 @@ import {
   monthOf,
   payEffect,
   payPrompt,
+  settlementFor,
+  shortBefore,
   unpaidEndedMonths,
   type FixedCostCategory,
   type FixedCostFacts,
@@ -241,37 +243,48 @@ export function createMockFixedCostsAdapter(
 
     async close(closing) {
       const row = find(closing.fixedCostId)
-      if (closing.stopsOn < row.starts_on)
-        throw new DataActionError('refused', 'It cannot stop before it started.')
-      if (!Number.isInteger(closing.finalPaise) || closing.finalPaise < 0)
-        throw new DataActionError(
-          'bad_amount',
-          'The final payment is a number of rupees, or nothing.',
-        )
       // A retried tap finds its payment and settles nothing twice (design D2).
       if (
         closing.payment &&
         store.fixedCostPayments.some((p) => p.expense_id === closing.payment!.id)
       )
         return
+      if (closing.stopsOn < row.starts_on)
+        throw new DataActionError('refused', 'It cannot stop before it started.')
+      if (closing.stopsOn > store.today)
+        throw new DataActionError('refused', 'It stops today or on a day already gone.')
+      if (!Number.isInteger(closing.finalPaise) || closing.finalPaise < 0)
+        throw new DataActionError(
+          'bad_amount',
+          'The final payment is a number of rupees, 0 for none.',
+        )
+      const before = demoFixedCostFacts(store, row)
+      if (before.stopsOn && settlementFor(before, monthOf(before.stopsOn)))
+        throw new DataActionError('refused', 'It is already stopped.')
       row.stops_on = closing.stopsOn
       row.updated_at = now()
+      // Stopping closes it: every month through the stop month settled, as
+      // `stop_fixed_cost_v3` does (owner, 2026-10-31).
       const month = monthOf(closing.stopsOn)
       const facts = demoFixedCostFacts(store, row)
-      settle(row, month, alreadyPaidIn(facts, month, store.today) + closing.finalPaise)
-      if (closing.payment && closing.finalPaise > 0) {
-        const on = closing.stopsOn < store.today ? closing.stopsOn : store.today
+      for (const short of shortBefore(facts, month, store.today))
+        settle(row, short.month, short.coveredPaise)
+      settle(
+        row,
+        month,
+        alreadyPaidIn(demoFixedCostFacts(store, row), month, store.today) + closing.finalPaise,
+      )
+      if (closing.payment && closing.finalPaise > 0)
         await adapter.pay({
           id: closing.payment.id,
           fixedCostId: row.id,
           amountPaise: closing.finalPaise,
-          paidOn: on,
-          countsIn: on,
+          paidOn: closing.stopsOn,
+          countsIn: closing.stopsOn,
           isCash: closing.payment.isCash,
           note: 'Final payment',
           choice: null,
         })
-      }
     },
 
     async pay(payment) {

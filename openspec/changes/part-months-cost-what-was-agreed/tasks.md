@@ -22,7 +22,9 @@
 ## 4. Verify and release
 
 - [x] 4.1 Quick gates, `test:db`, `test:rls`, types diff clean locally (2026-10-30: the REST suites that call Edge Functions answer 503 on the shared local stack, which serves none; this change touches no function or policy, and Staging runs them)
-- [ ] 4.2 Pushed to `stage`, Staging green; the owner tries it on the staging outlet
-- [ ] 4.3 Promote, then turn `agreed-part-months` on; close Jayanta Da's October with Close October (final ₹2,000, paid now, 28 Oct) unless it was closed with Pay first
+- [x] 4.2 Pushed to `stage`, Staging green; the owner tries it on the staging outlet (2026-10-31: tried; asked for the round below)
+- [x] 4.2a Owner's staging round: stopping closes the cost (`stop_fixed_cost_v3`, migration `20261109000000`): no Paying later, no Nothing more, *Any final payment at close?*, last day today or earlier and last in the sheet, earlier short months closed, a second stop refused; a stopped cost is done at once — greyed, red cross, *Stopped* without a date, no Pay on row or page, *Stopped* in place of Stop; a cost stopped before the change shows Close
+- [ ] 4.2b Pushed to `stage`, Staging green, and the owner tries the round
+- [ ] 4.3 Promote, then turn `agreed-part-months` on; close Jayanta Da's October with Close (final payment ₹2,000, last day 28 Oct) unless it was closed with Pay first
 - [ ] 4.4 Pull once (off and on), real use, then docs (`SCREENS.md`, `DATA_MODEL.md`, `TESTING.md`) and archive after #79
 - [ ] 4.5 PHASE GATE: follow-up to #79; no ROADMAP checkpoint of its own — Staging green and the owner's Promote

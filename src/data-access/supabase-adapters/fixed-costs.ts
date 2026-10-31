@@ -92,7 +92,7 @@ export function createSupabaseFixedCostsAdapter(
     },
 
     async close(closing) {
-      const { error } = await client.rpc('stop_fixed_cost_v2', {
+      const { error } = await client.rpc('stop_fixed_cost_v3', {
         p_fixed_cost_id: closing.fixedCostId,
         p_stops_on: closing.stopsOn,
         p_final_paise: closing.finalPaise,

@@ -778,11 +778,14 @@ describeChangeGate('agreed-part-months', (on) => {
     // Empty to start, and the month said as it is typed.
     expect(screen.getByTestId('fixed-cost-final')).toHaveValue('')
     expect(screen.getByText('On top of ₹2,000 already paid in October.')).toBeVisible()
+    expect(screen.getByLabelText('Any final payment at close? (₹)')).toBeVisible()
+    // Typed every time, 0 for nothing: no shortcut, no paying later (owner, 2026-10-31).
+    expect(screen.queryByText('Nothing more')).toBeNull()
+    expect(screen.queryByText('Paying later')).toBeNull()
     await user.click(screen.getByTestId('save-fixed-cost-stop'))
-    expect(await screen.findByText(/tap Nothing more/)).toBeVisible()
+    expect(await screen.findByText(/or 0 if nothing was/)).toBeVisible()
     await user.type(screen.getByTestId('fixed-cost-final'), '2000')
     expect(screen.getByTestId('fixed-cost-comes-to')).toHaveTextContent('October comes to ₹4,000')
-    await user.click(screen.getByTestId('fixed-cost-final-now'))
     await user.selectOptions(screen.getByTestId('fixed-cost-final-paid-with'), 'other')
     await user.click(screen.getByTestId('save-fixed-cost-stop'))
 
@@ -798,11 +801,14 @@ describeChangeGate('agreed-part-months', (on) => {
     expect(
       within(october).getByRole('button', { name: /Change what October comes to/ }),
     ).toBeVisible()
+    // Stopped is done: no Stop again, and nothing to Pay (owner, 2026-10-31).
+    expect(screen.queryByTestId('stop-fixed-cost')).toBeNull()
+    expect(screen.queryByTestId('pay-fixed-cost')).toBeNull()
+    expect(screen.getByTestId('fixed-cost-stopped')).toHaveTextContent('Stopped')
   })
 
-  it('paying later leaves the rest owed, and Nothing more closes at what was paid', async () => {
+  it('0 at close closes at what was paid, closes a short earlier month too, and stops once', async () => {
     const { data, adapters } = withFixedCosts()
-    const later = await jayanta(adapters)
     const nothing = await jayanta(adapters)
     const facts = (id: string) =>
       demoFixedCostFacts(
@@ -811,27 +817,81 @@ describeChangeGate('agreed-part-months', (on) => {
       )
     if (!on) {
       // The day share, untouched.
-      await adapters.fixedCosts.stop(later, '2026-10-28', false)
-      expect(monthCost(facts(later), '2026-10-01')).toBe(541_935)
+      await adapters.fixedCosts.stop(nothing, '2026-10-28', false)
+      expect(monthCost(facts(nothing), '2026-10-01')).toBe(541_935)
       return
     }
-    await adapters.fixedCosts.close({
-      fixedCostId: later,
-      stopsOn: '2026-10-28',
-      finalPaise: 200_000,
-      payment: null,
-    })
     await adapters.fixedCosts.close({
       fixedCostId: nothing,
       stopsOn: '2026-10-28',
       finalPaise: 0,
       payment: null,
     })
-    expect(thisMonthStatus(facts(later), '2026-10-30')).toMatchObject({
-      costPaise: 400_000,
-      paidPaise: 200_000,
-    })
     expect(monthCost(facts(nothing), '2026-10-01')).toBe(200_000)
+    await expect(
+      adapters.fixedCosts.close({
+        fixedCostId: nothing,
+        stopsOn: '2026-10-28',
+        finalPaise: 200_000,
+        payment: null,
+      }),
+    ).rejects.toThrow('It is already stopped.')
+    await expect(
+      adapters.fixedCosts.close({
+        fixedCostId: await jayanta(adapters),
+        stopsOn: '2026-11-02',
+        finalPaise: 0,
+        payment: null,
+      }),
+    ).rejects.toThrow('It stops today or on a day already gone.')
+
+    // Priyanka owes September in the demo: stopping in October closes it at what it covered.
+    const listed = await adapters.fixedCosts.list(KAL)
+    const priyanka = listed.costs.find((c) => c.name === 'Priyanka')!
+    expect(thisMonthStatus(priyanka, '2026-10-30').overdue).not.toHaveLength(0)
+    await adapters.fixedCosts.close({
+      fixedCostId: priyanka.id,
+      stopsOn: '2026-10-30',
+      finalPaise: 0,
+      payment: null,
+    })
+    const after = thisMonthStatus(facts(priyanka.id), '2026-10-30')
+    expect(after.overdue).toHaveLength(0)
+    expect(after.leftPaise).toBe(0)
+  })
+
+  it('stopping today is done at once', async () => {
+    const { adapters } = withFixedCosts()
+    const id = await jayanta(adapters)
+    if (!on) return
+    await adapters.fixedCosts.close({
+      fixedCostId: id,
+      stopsOn: '2026-10-30',
+      finalPaise: 0,
+      payment: null,
+    })
+    renderList(adapters)
+    const row = within(await screen.findByTestId('fixed-cost-list'))
+      .getByText('Jayanta')
+      .closest('tr')!
+    expect(within(row).getByTestId(`paid-ring-${id}`)).toHaveAttribute('data-paid', 'done')
+    expect(within(row).queryByRole('button', { name: 'Pay Jayanta' })).toBeNull()
+  })
+
+  it('a cost stopped before the change offers Close, not Pay', async () => {
+    const user = userEvent.setup()
+    const { data, adapters } = withFixedCosts()
+    const id = await jayanta(adapters)
+    await adapters.fixedCosts.stop(id, '2026-10-28', false)
+    renderList(adapters)
+    const list = await screen.findByTestId('fixed-cost-list')
+    if (!on) {
+      expect(within(list).queryByText('Jayanta')).toBeNull()
+      return
+    }
+    expect(within(list).queryByRole('button', { name: 'Pay Jayanta' })).toBeNull()
+    await user.click(within(list).getByRole('button', { name: 'Close Jayanta' }))
+    void data
   })
 
   it('a stopped cost keeps its place this month, done with a red cross, or sits under Stopped', async () => {
@@ -855,7 +915,8 @@ describeChangeGate('agreed-part-months', (on) => {
       return
     }
     const row = within(list).getByText('Jayanta').closest('tr')!
-    expect(row).toHaveTextContent('Salary · Stopped 28 Oct')
+    expect(row).toHaveTextContent('Salary · Stopped')
+    expect(row).not.toHaveTextContent('28 Oct')
     expect(row).not.toHaveTextContent('days')
     expect(within(row).getByTestId(`paid-ring-${id}`)).toHaveAttribute('data-paid', 'done')
     expect(within(row).queryByRole('button', { name: 'Pay Jayanta' })).toBeNull()
@@ -887,7 +948,14 @@ describeChangeGate('agreed-part-months', (on) => {
     // Garbage, paid in full for September in the demo, stopped on its last day.
     const listed = await adapters.fixedCosts.list(KAL)
     const garbage = listed.costs.find((c) => c.name === 'Garbage')!
-    await adapters.fixedCosts.stop(garbage.id, '2026-09-30', false)
+    if (on)
+      await adapters.fixedCosts.close({
+        fixedCostId: garbage.id,
+        stopsOn: '2026-09-30',
+        finalPaise: 0,
+        payment: null,
+      })
+    else await adapters.fixedCosts.stop(garbage.id, '2026-09-30', false)
     renderList(adapters)
     const list = await screen.findByTestId('fixed-cost-list')
     expect(within(list).queryByText('Garbage')).toBeNull()

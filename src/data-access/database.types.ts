@@ -7303,6 +7303,16 @@ export type Database = {
         }
         Returns: undefined
       }
+      stop_fixed_cost_v3: {
+        Args: {
+          p_final_paise: number
+          p_fixed_cost_id: string
+          p_is_cash?: boolean
+          p_payment_id?: string
+          p_stops_on: string
+        }
+        Returns: undefined
+      }
       undo_fixed_cost_payment: {
         Args: { p_fixed_cost_id: string; p_payment_id: string }
         Returns: undefined

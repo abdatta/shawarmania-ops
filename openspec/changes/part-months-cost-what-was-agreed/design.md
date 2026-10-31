@@ -42,13 +42,25 @@ earlier month. Where an earlier month is still short, `already` is 0 and the
 earlier month stays overdue; the final payment then pays the oldest month first,
 as every payment does.
 
-- **Starts empty**, whole rupees (`parseWholeRupees`: digits only, 0 allowed).
-  **Nothing more** fills 0. No prefill (owner, explicit).
-- **Paid now** records the final payment through `record_fixed_cost_payment`
-  inside the same transaction, dated the last day (or today, if the last day is
-  still ahead), counted on that day, noted *Final payment*, with no choice: once
-  the month is settled at `already + final`, `final` is exactly what is owed, so
-  the pay function asks nothing. **Paying later** records none.
+- **Starts empty**, whole rupees (`parseWholeRupees`: digits only, 0 allowed),
+  typed every time: *Any final payment at close? (₹)*, 0 for nothing. No
+  prefill and no shortcut button (owner, 2026-10-31: anyone can type 0).
+- **A final payment above 0 is recorded** through `record_fixed_cost_payment`
+  inside the same transaction, dated and counted on the last day, noted *Final
+  payment*, with no choice: once the month is settled at `already + final`,
+  `final` is exactly what is owed, so the pay function asks nothing.
+- **Stopping closes it** (owner's staging round, 2026-10-31). A month before
+  the stop month that payments leave short is settled at what they covered, in
+  the same step, so a stopped cost owes nothing: no **Pay** on its row or page,
+  and a second Stop is refused (`It is already stopped.`), which is what raised
+  a closed month on staging when the Stop button stayed after stopping today.
+- **The last day is today or earlier.** A stop is the moment it is saved,
+  back-dated when it is entered late (*we stopped him in October* noticed in
+  November); a day still to come is refused. The date moves no money: it says
+  which month closes, and when Pro-rata P&L has charged it in full.
+- **Rejected, after staging: Paying later and Nothing more.** Paying later
+  stopped nothing anyone could see and recorded nothing; people enter a payment
+  when they make it. Nothing more was a button for typing 0.
 - **Below what is paid cannot be typed**: the field is the addition, never
   negative. The old *paid ahead: Clear / Keep* choice goes with it.
 - **Rejected: asking for the month's total** (the first sketch, *October came to
@@ -57,17 +69,18 @@ as every payment does.
 - **Rejected: a separate Pay after Stop**. Two steps is how the ₹2,000 at
   Jayanta Da's closing was never entered.
 
-`stop_fixed_cost_v2(p_fixed_cost_id, p_stops_on, p_final_paise, p_payment_id,
+`stop_fixed_cost_v3(p_fixed_cost_id, p_stops_on, p_final_paise, p_payment_id,
 p_is_cash)` does it in one transaction. A retried tap finds the payment's link
 by `p_payment_id` and returns before settling again, so `already` is never
-counted twice.
+counted twice. `stop_fixed_cost_v2`, the first cut, reached staging only and is
+called by no build after it; it waits for the contract migration.
 
 ## D3. Close {Month}
 
 A stopped cost whose stop month is a part month **with no settlement** shows
 **Close {Month}** on its page where **Stop** was. It opens the same sheet with
 the last day already set, and saves through `stop_fixed_cost_v2` with that day.
-This is how Jayanta Da closes on the new build: final ₹2,000, Paid now.
+This is how Jayanta Da closes on the new build: final payment ₹2,000, last day 28 Oct.
 
 ## D4. Starting mid-month asks what that month comes to
 
@@ -81,11 +94,16 @@ A start month asks for a total, not an addition: nothing has been paid yet.
 
 ## D5. On screen
 
-- **The list**: no *· 28 days*. A stopped cost (last day before today) reads
-  *Salary · Stopped 28 Oct*; one stopping later this month, *Stops 31 Oct*.
-- **Done** = stopped, and nothing left this month or overdue. A done row is
-  greyed (`opacity-60`), its ring is the red cross (`XCircle`, `text-danger`),
-  and it has no **Pay**. Owed money keeps the amber ring (Q4).
+- **The list**: no *· 28 days*. A stopped cost reads *Salary · Stopped*, with
+  no date (owner, 2026-10-31: it serves no purpose on screen).
+- **Done** = stopped and closed, which leaves nothing to pay. A done row is
+  greyed (`opacity-50 grayscale`), its ring is the red cross (`XCircle`,
+  `text-danger`), and it has no **Pay**. A cost stopped before this change, its
+  last month with no settlement, shows **Close** in Pay's place, opening its
+  page. A closed cost that still owes (only a v2 *paying later* on staging) keeps
+  the amber ring and Pay.
+- **A cost's page**, once stopped: *Stopped* with the red cross where **Stop**
+  was, and no **Pay**.
 - **Placement** (Q4, Q5): a stopped cost stays in the list, in its place, while
   its stop month is the current month or while it owes. After that it leaves
   the list for **Stopped · N · Show** at the foot, one line, which shows the

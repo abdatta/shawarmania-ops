@@ -147,7 +147,6 @@ test(
     await expect(page.getByTestId('fixed-cost-final')).toHaveValue('')
     await page.getByTestId('fixed-cost-final').fill('2000')
     await expect(page.getByTestId('fixed-cost-comes-to')).toContainText('comes to ₹4,000')
-    await page.getByTestId('fixed-cost-final-now').check()
     await page.getByTestId('fixed-cost-final-paid-with').selectOption('other')
     await page.getByTestId('save-fixed-cost-stop').click()
     await expect(page.getByTestId('fixed-cost-recorded')).toBeVisible()
@@ -156,5 +155,9 @@ test(
     await expect(month).toContainText('Paid · closing')
     await expect(month).not.toContainText('days')
     await expect(page.getByTestId('fixed-cost-payments')).toContainText('Final payment')
+    // Stopped is done: no Stop again, nothing to Pay.
+    await expect(page.getByTestId('fixed-cost-stopped')).toBeVisible()
+    await expect(page.getByTestId('stop-fixed-cost')).toHaveCount(0)
+    await expect(page.getByTestId('pay-fixed-cost')).toHaveCount(0)
   },
 )
