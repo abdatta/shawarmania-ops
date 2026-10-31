@@ -699,7 +699,7 @@ this change's own first arrival, which carries Promote to `main` (10.2).
   yet pulled: its history holds the one turn on and nothing since.)*
   *(Pulled 2026-10-15: the owner turned it off at 09:23 IST, and Claude turned it back
   on from the owner's session at 11:45, first of the six so the reports would flow.)*
-- [ ] 10.5 Ways-out rehearsal, outside service and with the owner's agreement:
+- [x] 10.5 Ways-out rehearsal, outside service and with the owner's agreement:
   Republish with an unverified SHA is refused; Republish of the current verified SHA
   publishes without the suite; Hotfix of the current SHA waits for the owner's
   approval and, once approved, publishes while a Deploy run is still verifying.
@@ -716,6 +716,19 @@ this change's own first arrival, which carries Promote to `main` (10.2).
   Not shown: a hotfix publishing while a Deploy run is still verifying, because no
   Deploy was running. That case arises when a Deploy runs the full suite, as it does
   after a hotfix lands on `main`.)*
+  *(The last clause, 2026-10-31 at 05:11–05:48 IST with the counter closed and
+  the owner approving each step. `16d992cc` changes docs only, so no Staging
+  run ever passed it. Hotfix 41145981455 published it and moved `main` to it;
+  Deploy 41147844024 (dispatched, since a docs-only push starts none) found no
+  Staging run and ran the full suite. Hotfix 41147869145 of the same SHA was
+  approved at 00:09:00 UTC, 17 s before that Deploy ended (its database job
+  failed on GitHub's Docker pull limit), and published at 00:10:10, after it:
+  not the case. Retried the other way round: Hotfix 41148784659 passed its short
+  gate at 00:16:12; Deploy 41149252444 started its full suite at 00:16:22; the
+  owner approved at 00:16:53; migrate, functions and publish ran 00:17:00–
+  00:18:15, while all sixteen of the Deploy's gate jobs were still running.
+  Neither run waited for the other, and the approval cancelled no Deploy of the
+  same SHA.)*
 
 ## 11. The probe stays; the retirement path runs on `outside-tap-closes`
 
