@@ -24,6 +24,21 @@ export interface NewFixedCost {
   monthlyPaise: number
   startsOn: string
   note: string | null
+  /**
+   * What a month started part-way through comes to (agreed-part-months): sent
+   * only by the on path, and only when the start is not the 1st.
+   */
+  firstMonthPaise?: number
+}
+
+/** Stop, or close a stopped cost's last month, with the final payment (agreed-part-months). */
+export interface FixedCostClosing {
+  fixedCostId: string
+  stopsOn: string
+  /** On top of what payments already leave for the stop month; 0 for nothing more. */
+  finalPaise: number
+  /** Paid now: the final payment is recorded on the last day. Null when paying later. */
+  payment: { id: string; isCash: boolean } | null
 }
 
 export interface FixedCostPaymentInput {
@@ -58,6 +73,8 @@ export interface FixedCostDetails {
   category: FixedCostCategory
   startsOn: string
   note: string | null
+  /** What the start month comes to, where the start moves to a day that is not the 1st. */
+  firstMonthPaise?: number
 }
 
 export interface FixedCostsAdapter {
@@ -69,6 +86,8 @@ export interface FixedCostsAdapter {
   changeAmount(fixedCostId: string, fromMonth: string, amountPaise: number): Promise<void>
   /** Stop from a date; `clearAhead` settles the last month to clear a paid-ahead balance. */
   stop(fixedCostId: string, stopsOn: string, clearAhead: boolean): Promise<void>
+  /** Stop with the final payment: the stop month costs what was paid plus it (agreed-part-months). */
+  close(closing: FixedCostClosing): Promise<void>
   pay(payment: FixedCostPaymentInput): Promise<void>
   /**
    * Undo a payment: withdraw its expense and void what its answer recorded (the

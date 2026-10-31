@@ -1,7 +1,7 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { DataAdapters } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
@@ -693,4 +693,221 @@ it('tints a row tapped to open its page, and leaves its Pay alone', async () => 
   expect(screen.getByTestId(`pay-row-${santu.id}`).closest('tr')).toHaveClass('bg-primary/20')
   expect(screen.getByTestId(`pay-row-${santu.id}`)).not.toHaveAttribute('data-selected')
   expect(screen.getByTestId(`pay-row-${santu.id}`)).not.toHaveClass('border-primary')
+})
+
+/**
+ * `agreed-part-months` (part-months-cost-what-was-agreed): a part month costs
+ * the figure agreed for it, stopping asks for the final payment, and a stopped
+ * cost keeps its place for the month it stopped in. Off, the day share and the
+ * Stopped section as before. Read on 30 October, Jayanta Da's case.
+ */
+describeChangeGate('agreed-part-months', (on) => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-30T06:00:00Z')) // 30 Oct, 11:30 in Kolkata.
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  /** ₹6,000 a month from 1 October, ₹2,000 paid on the 21st. */
+  async function jayanta(adapters: DataAdapters) {
+    const cost = await adapters.fixedCosts.add({
+      outletId: KAL,
+      name: 'Jayanta',
+      category: 'salary',
+      monthlyPaise: 600_000,
+      startsOn: '2026-10-01',
+      note: null,
+    })
+    await adapters.fixedCosts.pay({
+      id: crypto.randomUUID(),
+      fixedCostId: cost.id,
+      amountPaise: 200_000,
+      paidOn: '2026-10-21',
+      countsIn: '2026-10-21',
+      isCash: false,
+      note: 'Advance',
+      choice: null,
+    })
+    return cost.id
+  }
+
+  function renderPage(adapters: DataAdapters, id: string) {
+    return render(
+      <MemoryRouter initialEntries={[`/fixed-costs/${id}?outlet=${KAL}`]}>
+        <ChangeGatesForTest on={{ 'agreed-part-months': on }}>
+          <SessionContext.Provider value={sessionFor('super_admin')}>
+            <AdaptersContext.Provider value={adapters}>
+              <Routes>
+                <Route path="/fixed-costs/:fixedCostId" element={<FixedCostPage />} />
+              </Routes>
+            </AdaptersContext.Provider>
+          </SessionContext.Provider>
+        </ChangeGatesForTest>
+      </MemoryRouter>,
+    )
+  }
+
+  function renderList(adapters: DataAdapters) {
+    return render(
+      <MemoryRouter initialEntries={[`/?outlet=${KAL}`]}>
+        <ChangeGatesForTest on={{ 'agreed-part-months': on }}>
+          <SessionContext.Provider value={sessionFor('super_admin')}>
+            <AdaptersContext.Provider value={adapters}>
+              <FixedCostsSurface />
+            </AdaptersContext.Provider>
+          </SessionContext.Provider>
+        </ChangeGatesForTest>
+      </MemoryRouter>,
+    )
+  }
+
+  it('Stop asks for the final payment and closes October at what was paid plus it, or keeps the day share', async () => {
+    const user = userEvent.setup()
+    const { data, adapters } = withFixedCosts()
+    const id = await jayanta(adapters)
+    renderPage(adapters, id)
+    await user.click(await screen.findByTestId('stop-fixed-cost'))
+    fireEvent.change(screen.getByLabelText('Last day'), { target: { value: '2026-10-28' } })
+    if (!on) {
+      expect(screen.queryByTestId('fixed-cost-final')).toBeNull()
+      expect(screen.getByText(/In October we pay ₹5,419\.35, then nothing more\./)).toBeVisible()
+      return
+    }
+    // Empty to start, and the month said as it is typed.
+    expect(screen.getByTestId('fixed-cost-final')).toHaveValue('')
+    expect(screen.getByText('On top of ₹2,000 already paid in October.')).toBeVisible()
+    await user.click(screen.getByTestId('save-fixed-cost-stop'))
+    expect(await screen.findByText(/tap Nothing more/)).toBeVisible()
+    await user.type(screen.getByTestId('fixed-cost-final'), '2000')
+    expect(screen.getByTestId('fixed-cost-comes-to')).toHaveTextContent('October comes to ₹4,000')
+    await user.click(screen.getByTestId('fixed-cost-final-now'))
+    await user.selectOptions(screen.getByTestId('fixed-cost-final-paid-with'), 'other')
+    await user.click(screen.getByTestId('save-fixed-cost-stop'))
+
+    expect(await screen.findByTestId('fixed-cost-recorded')).toHaveTextContent('28 Oct')
+    const row = data.store.fixedCosts.find((c) => c.id === id)!
+    expect(monthCost(demoFixedCostFacts(data.store, row), '2026-10-01')).toBe(400_000)
+    const final = data.store.expenses.find((e) => e.description === 'Jayanta · Final payment')
+    expect(final).toMatchObject({ amount_paise: 200_000, business_date: '2026-10-28' })
+    // The month reads as its closing, with Change, and no day count.
+    const october = await screen.findByTestId('month-2026-10-01')
+    expect(october).toHaveTextContent('Paid · closing')
+    expect(october).not.toHaveTextContent('days')
+    expect(
+      within(october).getByRole('button', { name: /Change what October comes to/ }),
+    ).toBeVisible()
+  })
+
+  it('paying later leaves the rest owed, and Nothing more closes at what was paid', async () => {
+    const { data, adapters } = withFixedCosts()
+    const later = await jayanta(adapters)
+    const nothing = await jayanta(adapters)
+    const facts = (id: string) =>
+      demoFixedCostFacts(
+        data.store,
+        data.store.fixedCosts.find((c) => c.id === id)!,
+      )
+    if (!on) {
+      // The day share, untouched.
+      await adapters.fixedCosts.stop(later, '2026-10-28', false)
+      expect(monthCost(facts(later), '2026-10-01')).toBe(541_935)
+      return
+    }
+    await adapters.fixedCosts.close({
+      fixedCostId: later,
+      stopsOn: '2026-10-28',
+      finalPaise: 200_000,
+      payment: null,
+    })
+    await adapters.fixedCosts.close({
+      fixedCostId: nothing,
+      stopsOn: '2026-10-28',
+      finalPaise: 0,
+      payment: null,
+    })
+    expect(thisMonthStatus(facts(later), '2026-10-30')).toMatchObject({
+      costPaise: 400_000,
+      paidPaise: 200_000,
+    })
+    expect(monthCost(facts(nothing), '2026-10-01')).toBe(200_000)
+  })
+
+  it('a stopped cost keeps its place this month, done with a red cross, or sits under Stopped', async () => {
+    const { adapters } = withFixedCosts()
+    const id = await jayanta(adapters)
+    if (on)
+      await adapters.fixedCosts.close({
+        fixedCostId: id,
+        stopsOn: '2026-10-28',
+        finalPaise: 200_000,
+        payment: { id: crypto.randomUUID(), isCash: false },
+      })
+    else await adapters.fixedCosts.stop(id, '2026-10-28', false)
+    renderList(adapters)
+    const list = await screen.findByTestId('fixed-cost-list')
+    if (!on) {
+      expect(within(list).queryByText('Jayanta')).toBeNull()
+      expect(
+        within(screen.getByRole('region', { name: 'Stopped' })).getByText('Jayanta'),
+      ).toBeVisible()
+      return
+    }
+    const row = within(list).getByText('Jayanta').closest('tr')!
+    expect(row).toHaveTextContent('Salary · Stopped 28 Oct')
+    expect(row).not.toHaveTextContent('days')
+    expect(within(row).getByTestId(`paid-ring-${id}`)).toHaveAttribute('data-paid', 'done')
+    expect(within(row).queryByRole('button', { name: 'Pay Jayanta' })).toBeNull()
+    expect(screen.queryByTestId('stopped-fixed-costs')).toBeNull()
+  })
+
+  it('a cost stopped last month waits behind one line', async () => {
+    const user = userEvent.setup()
+    const { adapters } = withFixedCosts()
+    // Garbage, paid in full for September in the demo, stopped on its last day.
+    const listed = await adapters.fixedCosts.list(KAL)
+    const garbage = listed.costs.find((c) => c.name === 'Garbage')!
+    await adapters.fixedCosts.stop(garbage.id, '2026-09-30', false)
+    renderList(adapters)
+    const list = await screen.findByTestId('fixed-cost-list')
+    expect(within(list).queryByText('Garbage')).toBeNull()
+    if (!on) {
+      expect(
+        within(screen.getByRole('region', { name: 'Stopped' })).getByText('Garbage'),
+      ).toBeVisible()
+      return
+    }
+    const line = screen.getByTestId('show-stopped-fixed-costs')
+    expect(line).toHaveTextContent('Stopped · 1 · Show')
+    expect(screen.queryByText('Garbage')).toBeNull()
+    await user.click(line)
+    expect(within(screen.getByTestId('stopped-fixed-costs')).getByText('Garbage')).toBeVisible()
+  })
+
+  it('a mid-month start asks what that month comes to', async () => {
+    const user = userEvent.setup()
+    const { data, adapters } = withFixedCosts()
+    renderList(adapters)
+    await screen.findByTestId('fixed-cost-list')
+    await user.click(screen.getByRole('button', { name: 'Add a fixed cost' }))
+    await user.type(await screen.findByTestId('fixed-cost-name'), 'Ravi')
+    await user.selectOptions(screen.getByTestId('fixed-cost-category'), 'salary')
+    await user.type(screen.getByTestId('fixed-cost-amount'), '10000')
+    fireEvent.change(screen.getByTestId('fixed-cost-starts'), { target: { value: '2026-10-20' } })
+    if (!on) {
+      expect(screen.queryByTestId('fixed-cost-first-month')).toBeNull()
+      expect(screen.getByText(/we pay only for the days from/)).toBeVisible()
+      return
+    }
+    expect(screen.queryByText(/we pay only for the days from/)).toBeNull()
+    expect(screen.getByText('From November, ₹10,000 a month.')).toBeVisible()
+    await user.click(screen.getByTestId('save-fixed-cost'))
+    expect(await screen.findByText('Say what October comes to, in whole rupees.')).toBeVisible()
+    await user.type(screen.getByTestId('fixed-cost-first-month'), '3500')
+    await user.click(screen.getByTestId('save-fixed-cost'))
+    await waitFor(() => expect(data.store.fixedCosts.some((c) => c.name === 'Ravi')).toBe(true))
+    const ravi = data.store.fixedCosts.find((c) => c.name === 'Ravi')!
+    expect(monthCost(demoFixedCostFacts(data.store, ravi), '2026-10-01')).toBe(350_000)
+  })
 })

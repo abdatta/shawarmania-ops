@@ -1,5 +1,6 @@
 import {
   addMonths,
+  alreadyPaidIn,
   balance,
   lastDayOf,
   monthCost,
@@ -162,7 +163,7 @@ export function createMockFixedCostsAdapter(
     })
   }
 
-  return {
+  const adapter: FixedCostsAdapter = {
     async list(outletId) {
       refuse(outletId)
       return { today: store.today, costs: demoOutletFixedCosts(store, outletId) }
@@ -186,8 +187,15 @@ export function createMockFixedCostsAdapter(
         created_at: now(),
         updated_at: now(),
       }
+      if (
+        cost.firstMonthPaise !== undefined &&
+        (!Number.isInteger(cost.firstMonthPaise) || cost.firstMonthPaise < 0)
+      )
+        throw new DataActionError('bad_amount', 'Say what the first month comes to, in rupees.')
       store.fixedCosts.push(row)
       addAmount(row, monthOf(cost.startsOn), cost.monthlyPaise)
+      if (cost.firstMonthPaise !== undefined && !cost.startsOn.endsWith('-01'))
+        settle(row, monthOf(cost.startsOn), cost.firstMonthPaise)
       return demoFixedCostFacts(store, row)
     },
 
@@ -209,6 +217,8 @@ export function createMockFixedCostsAdapter(
       row.starts_on = details.startsOn
       row.note = details.note?.trim() || null
       row.updated_at = now()
+      if (details.firstMonthPaise !== undefined)
+        settle(row, monthOf(details.startsOn), details.firstMonthPaise)
     },
 
     async changeAmount(fixedCostId, fromMonth, amountPaise) {
@@ -226,6 +236,41 @@ export function createMockFixedCostsAdapter(
         const last = monthOf(stopsOn)
         const ahead = -balance(facts, last)
         if (ahead > 0) settle(row, last, monthCost(facts, last) + ahead)
+      }
+    },
+
+    async close(closing) {
+      const row = find(closing.fixedCostId)
+      if (closing.stopsOn < row.starts_on)
+        throw new DataActionError('refused', 'It cannot stop before it started.')
+      if (!Number.isInteger(closing.finalPaise) || closing.finalPaise < 0)
+        throw new DataActionError(
+          'bad_amount',
+          'The final payment is a number of rupees, or nothing.',
+        )
+      // A retried tap finds its payment and settles nothing twice (design D2).
+      if (
+        closing.payment &&
+        store.fixedCostPayments.some((p) => p.expense_id === closing.payment!.id)
+      )
+        return
+      row.stops_on = closing.stopsOn
+      row.updated_at = now()
+      const month = monthOf(closing.stopsOn)
+      const facts = demoFixedCostFacts(store, row)
+      settle(row, month, alreadyPaidIn(facts, month, store.today) + closing.finalPaise)
+      if (closing.payment && closing.finalPaise > 0) {
+        const on = closing.stopsOn < store.today ? closing.stopsOn : store.today
+        await adapter.pay({
+          id: closing.payment.id,
+          fixedCostId: row.id,
+          amountPaise: closing.finalPaise,
+          paidOn: on,
+          countsIn: on,
+          isCash: closing.payment.isCash,
+          note: 'Final payment',
+          choice: null,
+        })
       }
     },
 
@@ -355,6 +400,7 @@ export function createMockFixedCostsAdapter(
       return { count, months: [...months].sort(), paise, categories, today: store.today }
     },
   }
+  return adapter
 }
 
 // ── The demo's fixed costs (design: Demo) ─────────────────────────────────

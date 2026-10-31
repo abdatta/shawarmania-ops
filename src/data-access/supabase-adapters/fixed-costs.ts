@@ -24,14 +24,22 @@ export function createSupabaseFixedCostsAdapter(
     },
 
     async add(cost) {
-      const { data, error } = await client.rpc('create_fixed_cost', {
+      const args = {
         p_outlet_id: cost.outletId,
         p_name: cost.name,
         p_category: cost.category,
         p_monthly_paise: cost.monthlyPaise,
         p_starts_on: cost.startsOn,
         p_note: cost.note ?? '',
-      })
+      }
+      // The on path's mid-month start says what that month comes to.
+      const { data, error } =
+        cost.firstMonthPaise === undefined
+          ? await client.rpc('create_fixed_cost', args)
+          : await client.rpc('create_fixed_cost_v2', {
+              ...args,
+              p_first_month_paise: cost.firstMonthPaise,
+            })
       if (error) throw toFixedCostError(error)
       const createdAt = new Date().toISOString()
       return {
@@ -48,13 +56,20 @@ export function createSupabaseFixedCostsAdapter(
     },
 
     async update(fixedCostId, details) {
-      const { error } = await client.rpc('update_fixed_cost', {
+      const args = {
         p_fixed_cost_id: fixedCostId,
         p_name: details.name,
         p_category: details.category,
         p_starts_on: details.startsOn,
         p_note: details.note ?? '',
-      })
+      }
+      const { error } =
+        details.firstMonthPaise === undefined
+          ? await client.rpc('update_fixed_cost', args)
+          : await client.rpc('update_fixed_cost_v2', {
+              ...args,
+              p_first_month_paise: details.firstMonthPaise,
+            })
       if (error) throw toFixedCostError(error)
     },
 
@@ -72,6 +87,18 @@ export function createSupabaseFixedCostsAdapter(
         p_fixed_cost_id: fixedCostId,
         p_stops_on: stopsOn,
         p_clear_ahead: clearAhead,
+      })
+      if (error) throw toFixedCostError(error)
+    },
+
+    async close(closing) {
+      const { error } = await client.rpc('stop_fixed_cost_v2', {
+        p_fixed_cost_id: closing.fixedCostId,
+        p_stops_on: closing.stopsOn,
+        p_final_paise: closing.finalPaise,
+        ...(closing.payment
+          ? { p_payment_id: closing.payment.id, p_is_cash: closing.payment.isCash }
+          : {}),
       })
       if (error) throw toFixedCostError(error)
     },

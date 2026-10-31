@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest'
 import cases from './fixed-cost-cases.json'
 import {
   addMonths,
+  agreedPartMonth,
+  alreadyPaidIn,
+  closingCost,
   balance,
   balanceState,
   coverage,
@@ -121,6 +124,48 @@ describe('the balance runs across months', () => {
   it('a payment counted in October on 2 November clears October', () => {
     const cost = salary({ payments: [payment(1_000_000, '2026-10-31', '2026-11-02')] })
     expect(unpaidEndedMonths(cost, '2026-11-02')).toEqual([])
+  })
+})
+
+describe('a part month costs what was agreed (part-months-cost-what-was-agreed)', () => {
+  // Jayanta Da: ₹6,000 a month from 1 October, ₹2,000 paid on 21 October.
+  const jayanta = () =>
+    salary({ monthlyPaise: 600_000, payments: [payment(200_000, '2026-10-21')] })
+
+  it('closes October at what is paid plus the final payment', () => {
+    expect(alreadyPaidIn({ ...jayanta(), stopsOn: '2026-10-28' }, '2026-10-01', '2026-10-30')).toBe(
+      200_000,
+    )
+    expect(closingCost(jayanta(), '2026-10-28', 200_000, '2026-10-30')).toBe(400_000)
+    expect(closingCost(jayanta(), '2026-10-28', 0, '2026-10-30')).toBe(200_000)
+  })
+
+  it('counts an advance paid in an earlier month toward the stop month', () => {
+    const cost = salary({ payments: [payment(1_500_000, '2026-10-05')] })
+    // October ₹10,000 paid, ₹5,000 left for November.
+    expect(closingCost(cost, '2026-11-12', 100_000, '2026-11-12')).toBe(600_000)
+  })
+
+  it('leaves an earlier short month overdue rather than counting its money twice', () => {
+    const cost = salary({ payments: [payment(400_000, '2026-10-05')] })
+    expect(alreadyPaidIn({ ...cost, stopsOn: '2026-11-12' }, '2026-11-01', '2026-11-12')).toBe(0)
+  })
+
+  it('names a part month with an agreed figure as its closing or its first month', () => {
+    const settled = (month: string) => ({
+      id: `s-${month}`,
+      month,
+      amountPaise: 300_000,
+      createdAt: '2026-10-28T00:00:00Z',
+      voidedAt: null,
+    })
+    const stopped = { ...jayanta(), stopsOn: '2026-10-28', settlements: [settled('2026-10-01')] }
+    expect(agreedPartMonth(stopped, '2026-10-01')).toBe('closing')
+    expect(monthCost(stopped, '2026-10-01')).toBe(300_000)
+    const joined = { ...jayanta(), startsOn: '2026-10-20', settlements: [settled('2026-10-01')] }
+    expect(agreedPartMonth(joined, '2026-10-01')).toBe('first month')
+    expect(agreedPartMonth({ ...jayanta(), stopsOn: '2026-10-28' }, '2026-10-01')).toBeNull()
+    expect(agreedPartMonth(jayanta(), '2026-10-01')).toBeNull()
   })
 })
 

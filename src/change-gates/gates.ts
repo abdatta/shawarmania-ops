@@ -147,6 +147,21 @@ export const CHANGE_GATES = {
     roundTrip:
       'none: an expense picked from the list is an ordinary row with a text category, and the off path never reads the list',
   },
+  /**
+   * #79 follow-up: a fixed cost's part month costs the figure agreed for it,
+   * stopping asks for the final payment, a mid-month start asks what that month
+   * comes to, and a stopped cost stays in its place for the month it stopped in
+   * (part-months-cost-what-was-agreed, design D1–D5). Off, a part month costs
+   * its share by days and stopped costs sit under Stopped at the foot.
+   */
+  'agreed-part-months': {
+    kind: 'change',
+    code: 'AM',
+    change: 'part-months-cost-what-was-agreed',
+    retireBy: '2027-02-28',
+    roundTrip:
+      'none: nothing is queued, and what it saves is a settlement, a stop date and a payment, which the off path already reads',
+  },
 } as const satisfies Record<string, ChangeGateDeclaration>
 
 export type ChangeGateKey = keyof typeof CHANGE_GATES

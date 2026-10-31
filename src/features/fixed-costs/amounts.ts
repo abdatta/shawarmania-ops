@@ -12,3 +12,13 @@ export function parseAmount(text: string): number | null {
 export function messageOf(cause: unknown, fallback: string): string {
   return cause instanceof DataActionError ? cause.message : fallback
 }
+
+/**
+ * Whole rupees as typed, zero allowed, to paise; null for anything else
+ * (agreed-part-months: nobody pays 35 paise, owner 2026-10-31).
+ */
+export function parseWholeRupees(text: string): number | null {
+  const cleaned = text.replace(/[,₹\s]/g, '')
+  if (!/^\d+$/.test(cleaned)) return null
+  return rupeesToPaise(Number(cleaned))
+}

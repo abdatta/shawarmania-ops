@@ -5834,6 +5834,18 @@ export type Database = {
         }
         Returns: string
       }
+      create_fixed_cost_v2: {
+        Args: {
+          p_category: string
+          p_first_month_paise: number
+          p_monthly_paise: number
+          p_name: string
+          p_note: string
+          p_outlet_id: string
+          p_starts_on: string
+        }
+        Returns: string
+      }
       create_menu_item_with_category: {
         Args: {
           p_category_name: string
@@ -6267,6 +6279,10 @@ export type Database = {
       }
       finish_paid_orders_at_day_change: {
         Args: { p_now?: string }
+        Returns: number
+      }
+      fixed_cost_already_paid_in: {
+        Args: { p_fixed_cost_id: string; p_month: string }
         Returns: number
       }
       fixed_cost_is_prorated: {
@@ -7277,6 +7293,16 @@ export type Database = {
         }
         Returns: undefined
       }
+      stop_fixed_cost_v2: {
+        Args: {
+          p_final_paise: number
+          p_fixed_cost_id: string
+          p_is_cash?: boolean
+          p_payment_id?: string
+          p_stops_on: string
+        }
+        Returns: undefined
+      }
       undo_fixed_cost_payment: {
         Args: { p_fixed_cost_id: string; p_payment_id: string }
         Returns: undefined
@@ -7295,6 +7321,17 @@ export type Database = {
       update_fixed_cost: {
         Args: {
           p_category: string
+          p_fixed_cost_id: string
+          p_name: string
+          p_note: string
+          p_starts_on: string
+        }
+        Returns: undefined
+      }
+      update_fixed_cost_v2: {
+        Args: {
+          p_category: string
+          p_first_month_paise: number
           p_fixed_cost_id: string
           p_name: string
           p_note: string

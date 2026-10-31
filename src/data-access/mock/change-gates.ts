@@ -82,6 +82,14 @@ const WORDS: Record<
     offMeans: 'An expense’s category is typed, with suggestions.',
     changeNumber: 81,
   },
+  'agreed-part-months': {
+    title: 'Agreed part months',
+    onMeans:
+      'A fixed cost that starts or stops part-way through a month costs the figure agreed for that month, stopping asks for the final payment, and a stopped cost stays in its place, marked done, for the month it stopped in.',
+    offMeans:
+      'A part month costs its share by days, and stopped fixed costs sit under Stopped at the foot of the list.',
+    changeNumber: 79,
+  },
 }
 
 /**

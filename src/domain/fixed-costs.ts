@@ -252,6 +252,45 @@ export function balance(cost: FixedCostFacts, through: string): number {
   return owed
 }
 
+/**
+ * What payments leave for `month` once every earlier month is paid
+ * (part-months-cost-what-was-agreed, design D2): everything counted on or
+ * before `today`, less what the months before it cost, never below zero. An
+ * advance paid in an earlier month is in it; where an earlier month is still
+ * short it is zero. The TypeScript copy of `fixed_cost_already_paid_in`.
+ */
+export function alreadyPaidIn(cost: FixedCostFacts, month: string, today: string): number {
+  let paid = 0
+  for (const payment of cost.payments)
+    if (payment.countsIn <= today) paid += assertPaise(payment.amountPaise)
+  let earlier = 0
+  for (const m of monthsThrough(cost, addMonths(month, -1))) earlier += monthCost(cost, m)
+  return Math.max(0, paid - earlier)
+}
+
+/** What the stop month comes to when it stops on `stopsOn` with `finalPaise` paid on top. */
+export function closingCost(
+  cost: FixedCostFacts,
+  stopsOn: string,
+  finalPaise: number,
+  today: string,
+): number {
+  return alreadyPaidIn({ ...cost, stopsOn }, monthOf(stopsOn), today) + assertPaise(finalPaise)
+}
+
+/**
+ * A part month's agreed figure, as a cost's months name it: the month it stopped
+ * in is its *closing*, the month it started in its *first month*. Null for a
+ * whole month, or a part month with no agreed figure.
+ */
+export function agreedPartMonth(
+  cost: FixedCostFacts,
+  month: string,
+): 'closing' | 'first month' | null {
+  if (!isProrated(cost, month) || !settlementFor(cost, month)) return null
+  return cost.stopsOn && monthOf(cost.stopsOn) === month ? 'closing' : 'first month'
+}
+
 export type BalanceState =
   { kind: 'to-pay'; paise: number } | { kind: 'clear'; paise: 0 } | { kind: 'ahead'; paise: number }
 

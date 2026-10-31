@@ -123,3 +123,38 @@ test(
     await expect(page.getByTestId('month-pro-rata')).toHaveCount(0)
   },
 )
+
+test(
+  'stopping asks for the final payment and closes the month at what was paid plus it',
+  { tag: '@cg-on:agreed-part-months' },
+  async ({ page }) => {
+    await page.goto(FIXED)
+    await page.getByRole('button', { name: 'Add a fixed cost' }).click()
+    await page.getByTestId('fixed-cost-name').fill('Jayanta')
+    await page.getByTestId('fixed-cost-category').selectOption('salary')
+    await page.getByTestId('fixed-cost-amount').fill('6000')
+    const today = await page.getByTestId('fixed-cost-starts').inputValue()
+    const first = `${today.slice(0, 7)}-01`
+    await page.getByTestId('fixed-cost-starts').fill(first)
+    await page.getByTestId('save-fixed-cost').click()
+    await page.getByRole('button', { name: 'Pay Jayanta' }).click()
+    await pay(page, '2000', 'advance-this')
+
+    // Stopped on the 1st, so the month is a part month whatever today is.
+    await row(page, 'Jayanta').getByText('Jayanta').click()
+    await page.getByTestId('stop-fixed-cost').click()
+    await page.getByTestId('fixed-cost-stops-on').fill(first)
+    await expect(page.getByTestId('fixed-cost-final')).toHaveValue('')
+    await page.getByTestId('fixed-cost-final').fill('2000')
+    await expect(page.getByTestId('fixed-cost-comes-to')).toContainText('comes to ₹4,000')
+    await page.getByTestId('fixed-cost-final-now').check()
+    await page.getByTestId('fixed-cost-final-paid-with').selectOption('other')
+    await page.getByTestId('save-fixed-cost-stop').click()
+    await expect(page.getByTestId('fixed-cost-recorded')).toBeVisible()
+    const month = page.getByTestId(`month-${first}`)
+    await expect(month).toContainText('₹4,000')
+    await expect(month).toContainText('Paid · closing')
+    await expect(month).not.toContainText('days')
+    await expect(page.getByTestId('fixed-cost-payments')).toContainText('Final payment')
+  },
+)
