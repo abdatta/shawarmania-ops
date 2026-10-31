@@ -2,7 +2,8 @@ import { FunctionsFetchError, isAuthRetryableFetchError } from '@supabase/supaba
 
 import type { Assignment } from './adapters'
 import type { Tables } from './database.types'
-import type { CounterDevice, CounterShift } from '@/session/counter-session'
+import { onATabletKeepsItsLogin } from '@/change-gates/a-tablet-keeps-its-login'
+import type { CounterDevice, CounterShift, TabletKind } from '@/session/counter-session'
 import { getSupabaseClient } from './supabase'
 import { authAliasToUsername, usernameToAuthAlias } from '../../shared/username'
 
@@ -25,12 +26,18 @@ export type Profile = Tables<'profiles'>
 export interface AuthedUser {
   userId: string
   username: string | null
+  /**
+   * The signed-in identity is a tablet's machine credential rather than a
+   * person's (a-tablet-keeps-its-login, design D4). Read off the address, so it
+   * is known before any row is.
+   */
+  isDevice: boolean
 }
 
 /** A sign-in refusal the screen can phrase for a person. */
 export class SignInError extends Error {
   constructor(
-    readonly code: 'invalid_credentials' | 'unavailable' | 'unreachable',
+    readonly code: 'invalid_credentials' | 'unavailable' | 'unreachable' | 'tablet',
     message: string,
   ) {
     super(message)
@@ -49,7 +56,12 @@ export class SignInError extends Error {
 export class ActivationError extends Error {
   constructor(
     readonly code:
-      'invalid_code' | 'username_mismatch' | 'weak_password' | 'rate_limited' | 'unavailable',
+      | 'invalid_code'
+      | 'username_mismatch'
+      | 'weak_password'
+      | 'rate_limited'
+      | 'unavailable'
+      | 'tablet',
     message: string,
   ) {
     super(message)
@@ -81,6 +93,78 @@ function signInFailure(error: unknown): SignInError {
     : new SignInError('invalid_credentials', INVALID_CREDENTIALS)
 }
 
+/**
+ * The reserved domain of a tablet's machine identity. A copy of
+ * `DEVICE_EMAIL_DOMAIN` in `supabase/functions/_shared/counter-code.ts`, which
+ * the browser bundle does not import; `auth-tablet.test.ts` pins the two equal.
+ */
+export const DEVICE_EMAIL_DOMAIN = 'device.shawarmania.invalid'
+
+/** Where supabase-js keeps this browser's one session (`./supabase.ts`). */
+export const AUTH_STORAGE_KEY = 'shawarmania.auth'
+
+/** Whether an Auth address is a tablet's machine identity rather than a person's. */
+export function isDeviceEmail(email: string | null | undefined): boolean {
+  return typeof email === 'string' && email.toLowerCase().endsWith(`@${DEVICE_EMAIL_DOMAIN}`)
+}
+
+/**
+ * Whether the session stored in this browser is a tablet's, read straight from
+ * storage with no request and no wait (a-tablet-keeps-its-login, design D1).
+ * For the first render, before the session has resolved. Absent, unreadable or
+ * corrupt storage reads as "not a tablet", which is what it was before.
+ */
+export function storedSessionIsDeviceNow(storage?: Pick<Storage, 'getItem'> | null): boolean {
+  try {
+    const raw = (storage === undefined ? window.localStorage : storage)?.getItem(AUTH_STORAGE_KEY)
+    if (!raw) return false
+    const stored = JSON.parse(raw) as { user?: { email?: unknown } } | null
+    const email = stored?.user?.email
+    return typeof email === 'string' && isDeviceEmail(email)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The kind of the tablet this browser was last read to be, for the refusal's
+ * wording. Set whenever the device row is read; unknown means `counter`.
+ */
+let lastTabletKind: TabletKind | null = null
+
+/**
+ * The kind of tablet whose session this browser holds, or null for a person, a
+ * visitor or a fresh browser (a-tablet-keeps-its-login, design D2).
+ * `getSession()` reads local state; the storage read before it answers even if
+ * the client cannot.
+ */
+export async function storedSessionIsDevice(): Promise<TabletKind | null> {
+  let device = storedSessionIsDeviceNow()
+  if (!device) {
+    try {
+      const { data } = await getSupabaseClient().auth.getSession()
+      device = isDeviceEmail(data.session?.user.email)
+    } catch {
+      // The storage read above is the answer.
+    }
+  }
+  return device ? (lastTabletKind ?? 'counter') : null
+}
+
+function tabletRefusal(kind: TabletKind): string {
+  return `This is a ${kind} tablet. Sign in on your own phone.`
+}
+
+/**
+ * With `a-tablet-keeps-its-login` on, the kind of tablet whose session a
+ * person's sign-in or activation would replace, so it is refused before any
+ * request. Off, null, which is today.
+ */
+async function tabletHoldingThisBrowser(): Promise<TabletKind | null> {
+  if (!onATabletKeepsItsLogin()) return null
+  return storedSessionIsDevice()
+}
+
 function accountEmail(input: string): string | null {
   const email = input.trim().toLowerCase()
   if (email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -90,6 +174,11 @@ function accountEmail(input: string): string | null {
 }
 
 export async function signIn(identifier: string, password: string): Promise<AuthedUser> {
+  // A person's session would replace the tablet's in the one slot this browser
+  // has, and signing out would then leave the counter unregistered.
+  const tablet = await tabletHoldingThisBrowser()
+  if (tablet) throw new SignInError('tablet', tabletRefusal(tablet))
+
   const authAlias = usernameToAuthAlias(identifier)
   const email = accountEmail(identifier)
   if (!authAlias && !email) {
@@ -103,7 +192,11 @@ export async function signIn(identifier: string, password: string): Promise<Auth
       password,
     })
     if (!error && data.user) {
-      return { userId: data.user.id, username: authAliasToUsername(data.user.email) }
+      return {
+        userId: data.user.id,
+        username: authAliasToUsername(data.user.email),
+        isDevice: isDeviceEmail(data.user.email),
+      }
     }
     if (error) throw signInFailure(error)
   } else {
@@ -122,6 +215,7 @@ export async function signIn(identifier: string, password: string): Promise<Auth
         return {
           userId: sessionData.user.id,
           username: authAliasToUsername(sessionData.user.email),
+          isDevice: isDeviceEmail(sessionData.user.email),
         }
       }
       if (sessionError) throw signInFailure(sessionError)
@@ -140,7 +234,13 @@ export async function signOut(): Promise<void> {
 export async function currentUser(): Promise<AuthedUser | null> {
   const { data } = await getSupabaseClient().auth.getSession()
   const user = data.session?.user
-  return user ? { userId: user.id, username: authAliasToUsername(user.email) } : null
+  return user
+    ? {
+        userId: user.id,
+        username: authAliasToUsername(user.email),
+        isDevice: isDeviceEmail(user.email),
+      }
+    : null
 }
 
 /**
@@ -154,6 +254,7 @@ export async function verifiedCurrentUser(): Promise<AuthedUser | null> {
   return {
     userId: data.user.id,
     username: authAliasToUsername(data.user.email),
+    isDevice: isDeviceEmail(data.user.email),
   }
 }
 
@@ -186,6 +287,7 @@ export async function loadOwnCounterDevice(userId: string): Promise<CounterDevic
     .is('removed_at', null)
     .maybeSingle()
   if (error) throw error
+  if (data) lastTabletKind = data.kind === 'kitchen' ? 'kitchen' : 'counter'
   return data
     ? {
         deviceId: data.id,
@@ -339,6 +441,8 @@ export async function redeemInvite(
   username: string,
   password: string,
 ): Promise<void> {
+  const tablet = await tabletHoldingThisBrowser()
+  if (tablet) throw new ActivationError('tablet', tabletRefusal(tablet))
   if (password.length < MIN_PASSWORD_LENGTH) throw activationFailure('weak_password')
 
   const { error } = await getSupabaseClient().functions.invoke('redeem-invite', {
@@ -480,12 +584,22 @@ export async function setUpCounterDevice(code: string): Promise<void> {
  * The failure this exists for is narrow and real: the browser signed in, the
  * proof request was lost, and the tablet now has a machine session belonging to
  * a row that is not a counter. Nothing else can rescue it, because no admin can
- * see it and no code is left to spend. Called on start, before the app decides
- * the tablet is unconfigured, and it is a no-op for a tablet already proven.
+ * see it and no code is left to spend. The same call closes the race in which
+ * the session check, fired by the setup's own sign-in, reads the row before
+ * `setUpCounterDevice`'s proof has landed.
+ *
+ * Called by `resolveSession` (`src/auth/use-real-session.ts`) when the signed-in
+ * identity is a machine's and its row reads as nothing, before it concludes the
+ * tablet was removed (a-tablet-keeps-its-login, design D4). A no-op for a tablet
+ * already proven. True when the row is now a counter; false when the server
+ * refused, because the row was removed or its window has passed. **A request
+ * that failed throws**, so a caller can tell "refused" from "not answered" and
+ * sign nobody out over the second.
  */
 export async function proveCounterDeviceSession(): Promise<boolean> {
   const { data, error } = await getSupabaseClient().rpc('prove_counter_device_session')
-  return !error && data === 'ok'
+  if (error) throw error
+  return data === 'ok'
 }
 
 /**

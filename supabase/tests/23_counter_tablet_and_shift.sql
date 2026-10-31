@@ -437,6 +437,34 @@ select is(
   1::bigint,
   'the tablet row exists and is active');
 
+-- The client proves again whenever a machine identity reads no row of its own
+-- (a-tablet-keeps-its-login, design D4), and relies on the proof refusing what
+-- removal and a lapsed window are meant to end. Both are injected on the row
+-- just proven, read under the tablet's own identity, and put back.
+update public.counter_devices set removed_at = now()
+ where id = 'dddddddd-0000-4000-a000-000000000002';
+select pg_temp.impersonate('dddddddd-0000-4000-a000-000000000002');
+select is(public.prove_counter_device_session(), 'invalid',
+  'a removed tablet cannot prove its way back, even one that was proven before');
+select is(public.app_device_ok(), false,
+  'and it stays refused by the predicate every policy asks');
+select pg_temp.unimpersonate();
+
+update public.counter_devices
+   set removed_at = null, session_proven_at = null,
+       proof_expires_at = now() - interval '1 minute'
+ where id = 'dddddddd-0000-4000-a000-000000000002';
+select pg_temp.impersonate('dddddddd-0000-4000-a000-000000000002');
+select is(public.prove_counter_device_session(), 'invalid',
+  'an unproven tablet whose code window has passed cannot prove');
+select is(public.app_device_ok(), false,
+  'so a setup that lapsed stays unset, and its session ends');
+select pg_temp.unimpersonate();
+
+update public.counter_devices
+   set session_proven_at = now()
+ where id = 'dddddddd-0000-4000-a000-000000000002';
+
 select is(
   (select status from public.redeem_counter_device_setup_code(
      pg_temp.hash('SETUP2'), 'dddddddd-0000-4000-a000-000000000003')),

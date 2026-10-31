@@ -146,6 +146,38 @@ export default tseslint.config(
   },
 
   {
+    // Every call that writes a session into this browser's one Auth slot lives
+    // in src/data-access/auth.ts, beside the `storedSessionIsDevice()` check a
+    // person's sign-in must pass first (a-tablet-keeps-its-login, design D2). A
+    // session written anywhere else could replace a counter tablet's, and the
+    // tablet would be unregistered at the next sign-out.
+    //
+    // `no-restricted-properties` rather than `no-restricted-syntax`, because the
+    // .tsx block above already holds that rule and flat config replaces a
+    // rule's options instead of merging them.
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/data-access/auth.ts', '**/*.test.{ts,tsx}'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        ...[
+          'signInWithPassword',
+          'signInWithOtp',
+          'verifyOtp',
+          'setSession',
+          'exchangeCodeForSession',
+          'signInWithIdToken',
+        ].map((property) => ({
+          property,
+          message:
+            'A session is written only in src/data-access/auth.ts, after storedSessionIsDevice() ' +
+            'has refused over a tablet (a-tablet-keeps-its-login). Put this call there.',
+        })),
+      ],
+    },
+  },
+
+  {
     // Edge Functions run on Deno, not in the browser and not in Node: they use
     // URL/JSR import specifiers and the Deno global, and tsconfig deliberately
     // does not include them (its lib and module resolution are the app's).

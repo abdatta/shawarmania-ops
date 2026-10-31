@@ -80,6 +80,7 @@ describe('provider identifier at sign-in', () => {
     await expect(signIn('Owner', 'correct-password')).resolves.toEqual({
       userId: 'person-1',
       username: 'owner',
+      isDevice: false,
     })
     expect(supabase.signInWithPassword).toHaveBeenCalledWith({
       email: 'owner@login.shawarmania.invalid',
@@ -92,6 +93,7 @@ describe('provider identifier at sign-in', () => {
     await expect(signIn(' Owner@Example.com ', 'correct-password')).resolves.toEqual({
       userId: 'person-1',
       username: 'owner',
+      isDevice: false,
     })
     expect(supabase.signInWithPassword).not.toHaveBeenCalled()
     expect(supabase.invoke).toHaveBeenCalledWith('email-sign-in', {

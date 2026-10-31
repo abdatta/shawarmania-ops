@@ -25,6 +25,7 @@ const auth = vi.hoisted(() => ({
   loadOwnAssignments: vi.fn(),
   loadOwnCounterDevice: vi.fn(),
   loadCounterShift: vi.fn(),
+  proveCounterDeviceSession: vi.fn(),
   signOut: vi.fn(),
   onAuthChange: vi.fn(),
 }))
@@ -409,5 +410,78 @@ describe('useRealSession', () => {
 
     expect(auth.signOut).toHaveBeenCalled()
     expect(result.current.state).toEqual({ status: 'anonymous' })
+  })
+})
+
+/**
+ * The setup race and the lost proof (a-tablet-keeps-its-login, design D4).
+ *
+ * Setup signs in, which fires the session check at once, and only then proves
+ * the session. Until the proof lands the row is invisible, so the check used to
+ * read "no tablet, no person" and sign a setup that had just succeeded out.
+ * A machine identity with no visible row now proves and reads again before
+ * concluding anything.
+ */
+describe('useRealSession, a machine identity whose row reads as nothing', () => {
+  const MACHINE = { userId: 'device-new', username: null, isDevice: true }
+  const TABLET = { deviceId: 'device-new', outletId: KALYANI, label: 'Cafe 2' }
+
+  beforeEach(() => {
+    auth.currentUser.mockResolvedValue(MACHINE)
+    // A tablet has no profile, so the person path would end the session.
+    auth.loadOwnProfile.mockResolvedValue(null)
+  })
+
+  it('proves the session and opens the counter, rather than signing a fresh setup out', async () => {
+    auth.loadOwnCounterDevice.mockResolvedValueOnce(null).mockResolvedValue(TABLET)
+    auth.proveCounterDeviceSession.mockResolvedValue(true)
+
+    const { result } = renderHook(() => useRealSession())
+    await waitFor(() => expect(result.current.state.status).toBe('counter'))
+    expect(auth.proveCounterDeviceSession).toHaveBeenCalledTimes(1)
+    expect(auth.signOut).not.toHaveBeenCalled()
+    expect(auth.loadOwnProfile).not.toHaveBeenCalled()
+  })
+
+  it('still ends a removed tablet, whose proof the server refuses, as removal does today', async () => {
+    auth.loadOwnCounterDevice.mockResolvedValue(null)
+    auth.proveCounterDeviceSession.mockResolvedValue(false)
+
+    const { result } = renderHook(() => useRealSession())
+    await waitFor(() =>
+      expect(result.current.state).toEqual({ status: 'anonymous', reason: 'deactivated' }),
+    )
+    expect(auth.signOut).toHaveBeenCalled()
+  })
+
+  it('signs nobody out when the proof cannot be sent', async () => {
+    auth.loadOwnCounterDevice.mockResolvedValue(null)
+    auth.proveCounterDeviceSession.mockRejectedValue(new Error('offline'))
+
+    const { result } = renderHook(() => useRealSession())
+    await waitFor(() => expect(result.current.state.status).toBe('unavailable'))
+    expect(auth.signOut).not.toHaveBeenCalled()
+    expect(auth.loadOwnProfile).not.toHaveBeenCalled()
+  })
+
+  it('makes no proof call for a person with no profile', async () => {
+    auth.currentUser.mockResolvedValue({
+      userId: 'u-1',
+      username: 'admin.kalyani',
+      isDevice: false,
+    })
+
+    const { result } = renderHook(() => useRealSession())
+    await waitFor(() => expect(result.current.state.status).toBe('anonymous'))
+    expect(auth.proveCounterDeviceSession).not.toHaveBeenCalled()
+    expect(auth.signOut).toHaveBeenCalled()
+  })
+
+  it('makes no proof call for a working tablet', async () => {
+    auth.loadOwnCounterDevice.mockResolvedValue(TABLET)
+
+    const { result } = renderHook(() => useRealSession())
+    await waitFor(() => expect(result.current.state.status).toBe('counter'))
+    expect(auth.proveCounterDeviceSession).not.toHaveBeenCalled()
   })
 })

@@ -8,6 +8,7 @@ import {
   loadOwnCounterDevice,
   loadOwnProfile,
   onAuthChange,
+  proveCounterDeviceSession,
   signOut,
   type Profile,
 } from '@/data-access/auth'
@@ -96,7 +97,15 @@ async function resolveSession(): Promise<Resolution> {
   // so it lands here as "not a tablet" and then as a person with no profile,
   // which ends the session — the same answer removal is supposed to give.
   try {
-    const device = await loadOwnCounterDevice(user.userId)
+    let device = await loadOwnCounterDevice(user.userId)
+    // A machine identity with no visible row is a setup whose proof has not
+    // landed yet, or never did (a-tablet-keeps-its-login, design D4). Prove it
+    // and read once more before concluding it was removed: a removed or lapsed
+    // row is refused by the server and still ends below, and a proof that
+    // cannot be sent is caught as the failed request it is.
+    if (!device && user.isDevice && (await proveCounterDeviceSession())) {
+      device = await loadOwnCounterDevice(user.userId)
+    }
     if (device) {
       const shift = await loadCounterShift(device.deviceId)
       return { kind: 'counter', device: { kind: 'counter-device', device, shift } }
