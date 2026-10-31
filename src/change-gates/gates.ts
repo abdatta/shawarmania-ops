@@ -115,21 +115,6 @@ export const CHANGE_GATES = {
     roundTrip: 'tested',
   },
   /**
-   * Every check of what a staff member may do asks which staff role includes
-   * which (a Biller includes an Employee) instead of naming roles
-   * (staff-roles-include-other-roles, design D1–D7). On and off give every
-   * existing role the same answer: this is a safety switch for the new code
-   * path, and the Waiter (#80) needs it retired before the first is made.
-   */
-  'role-includes': {
-    kind: 'change',
-    code: 'RI',
-    change: 'staff-roles-include-other-roles',
-    retireBy: '2026-11-18',
-    roundTrip:
-      'none: on and off admit the same people to write the same rows, and nothing is queued',
-  },
-  /**
    * #81: a check-in the database measures inside the outlet's own fence is
    * approved automatically, late or not, and each outlet's managers choose
    * whether every check-in still needs them and whether check-ins away from the
@@ -189,6 +174,9 @@ export const CHANGE_GATE_KEYS = Object.keys(CHANGE_GATES) as ChangeGateKey[]
  * not tombstoned: they are unique among live gates only.
  */
 export const RETIRED_CHANGE_GATES: readonly string[] = [
+  // retire-role-includes: every check of what a staff member may do asks which
+  // staff role includes which.
+  'role-includes',
   // retire-fewer-requests: the app skips the re-reads nothing asked for, and a
   // tablet's minute gate answers ride on its health report.
   'fewer-requests',

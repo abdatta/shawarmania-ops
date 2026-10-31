@@ -63,9 +63,11 @@ act as an Employee.
 includes is needed. Before this, Biller was made staff by adding `'biller'`
 beside `'employee'` in each of 19 database objects and a dozen app files, and
 `npm run lint:roles` now refuses a staff role listed by name outside the rows.
-While the `role-includes` gate is live the new checks run beside the old ones
-and give every existing role the same answer; its cleanup rewrites the rest, the
-expense trigger, the Team helper and the counter-shift helper among them.
+The app asks only the new checks (the `role-includes` gate retired in code on
+31 October 2026). In the database the old checks still stand beside the new
+ones for builds from before that, giving every existing role the same answer,
+until the gate's cleanup rewrites them, the expense trigger, the Team helper
+and the counter-shift helper among them.
 
 **The Super Admin reaches every outlet's manager surfaces without being
 assigned to one** (`owner-reaches-every-outlet`, #28). Running every outlet is

@@ -105,7 +105,7 @@ describe('submitting a check-in', () => {
     })
 
     expect(rpc).toHaveBeenCalledWith(
-      'attendance_submit_attempt',
+      'attendance_submit_attempt_v2',
       expect.objectContaining({
         p_business_date: '2026-08-04',
         p_attempted_at: READING.at,
@@ -294,7 +294,7 @@ describe('recording a historical arrival', () => {
     })
 
     const [name, args] = rpc.mock.calls[0] as [string, Record<string, unknown>]
-    expect(name).toBe('attendance_record_manual')
+    expect(name).toBe('attendance_record_manual_v2')
     expect(args).toEqual({
       p_attempt_id: expect.any(String),
       p_decision_id: expect.any(String),

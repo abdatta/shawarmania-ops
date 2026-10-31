@@ -36,7 +36,6 @@ import {
   type ShiftBillingHistory,
 } from '../adapters'
 import type { Database, Json, Tables } from '../database.types'
-import { onRoleIncludes } from '@/change-gates/role-includes'
 import {
   AWAITING_ORDER_NUMBER,
   billTotals,
@@ -2650,15 +2649,12 @@ export function createSupabaseBillingAdapter(
       resolvedOperatorId?: string | null,
       reason?: string | null,
     ): Promise<BillingAttributionReview> {
-      const { error } = await client.rpc(
-        onRoleIncludes() ? 'review_billing_attribution_v2' : 'review_billing_attribution',
-        {
-          p_bill_id: billId,
-          p_outcome: outcome,
-          ...(resolvedOperatorId ? { p_resolved_operator_id: resolvedOperatorId } : {}),
-          ...(reason ? { p_reason: reason } : {}),
-        },
-      )
+      const { error } = await client.rpc('review_billing_attribution_v2', {
+        p_bill_id: billId,
+        p_outcome: outcome,
+        ...(resolvedOperatorId ? { p_resolved_operator_id: resolvedOperatorId } : {}),
+        ...(reason ? { p_reason: reason } : {}),
+      })
       if (error) throw actionError(error, 'That attribution review could not be recorded.')
       const bill = (await readBills({ id: billId, limit: 1 }))[0]
       if (!bill?.attributionReview) {

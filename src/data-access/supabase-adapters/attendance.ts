@@ -1,7 +1,6 @@
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 
 import { onAutoApproveAtTheShop } from '@/change-gates/auto-approve-at-the-shop'
-import { onRoleIncludes } from '@/change-gates/role-includes'
 import { BLOCKED_AWAY_MESSAGE } from '@/features/attendance/at-the-shop'
 import type { PositionReading } from '@/lib/geolocation'
 
@@ -576,13 +575,10 @@ export function createSupabaseAttendanceAdapter(
      */
     async listElsewhere(outletIds, businessDate) {
       if (outletIds.length === 0) return []
-      const { data, error } = await client.rpc(
-        onRoleIncludes() ? 'attendance_elsewhere_v2' : 'attendance_elsewhere',
-        {
-          p_outlets: outletIds as string[],
-          p_business_date: businessDate,
-        },
-      )
+      const { data, error } = await client.rpc('attendance_elsewhere_v2', {
+        p_outlets: outletIds as string[],
+        p_business_date: businessDate,
+      })
       if (error) throw toActionError(error)
       return data ?? []
     },
@@ -641,11 +637,7 @@ export function createSupabaseAttendanceAdapter(
       const { data, error } = await client.rpc(
         // v3 approves a day at the shop and honours the outlet's rules
         // (a-check-in-at-the-shop-approves-itself, design D3); off, today's call.
-        onAutoApproveAtTheShop()
-          ? 'attendance_submit_attempt_v3'
-          : onRoleIncludes()
-            ? 'attendance_submit_attempt_v2'
-            : 'attendance_submit_attempt',
+        onAutoApproveAtTheShop() ? 'attendance_submit_attempt_v3' : 'attendance_submit_attempt_v2',
         {
           p_attempt_id: attemptId,
           p_outlet_id: outletId,
@@ -666,17 +658,14 @@ export function createSupabaseAttendanceAdapter(
      * writing session for both and would overwrite anything supplied.
      */
     async recordManualEntry({ personId, outletId, businessDate, at }) {
-      const { data, error } = await client.rpc(
-        onRoleIncludes() ? 'attendance_record_manual_v2' : 'attendance_record_manual',
-        {
-          p_attempt_id: crypto.randomUUID(),
-          p_decision_id: crypto.randomUUID(),
-          p_person_id: personId,
-          p_outlet_id: outletId,
-          p_business_date: businessDate,
-          p_attempted_at: at,
-        },
-      )
+      const { data, error } = await client.rpc('attendance_record_manual_v2', {
+        p_attempt_id: crypto.randomUUID(),
+        p_decision_id: crypto.randomUUID(),
+        p_person_id: personId,
+        p_outlet_id: outletId,
+        p_business_date: businessDate,
+        p_attempted_at: at,
+      })
       if (error) throw toActionError(error)
       return readOne(data.id)
     },

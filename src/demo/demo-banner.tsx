@@ -14,11 +14,8 @@ import { DemoCheckInPlace } from './demo-check-in-place'
 import { useDemoConnectivity, type DemoConnectivityState } from './demo-connectivity'
 import { useDemoReset } from './demo-reset'
 
-// roles-lint: allow the role-includes off path, as it ran before; removed when the gate retires
-const ROLES: Role[] = ['super_admin', 'franchise_admin', 'biller', 'employee']
-
-/** The roles the switcher offers with `role-includes` on: the same, read from which includes which. */
-const ROLES_BY_INCLUDES: Role[] = ['super_admin', 'franchise_admin', ...STAFF_ROLES_BY_SENIORITY]
+/** The roles the switcher offers, the staff ones read from which includes which. */
+const ROLES: Role[] = ['super_admin', 'franchise_admin', ...STAFF_ROLES_BY_SENIORITY]
 
 /**
  * The connectivity options, named for the state being entered rather than the
@@ -84,7 +81,6 @@ const CONNECTIVITY_STATES = Object.keys(CONNECTIVITY) as DemoConnectivityState[]
  * shorter.
  */
 export function DemoBanner() {
-  const roleIncludes = useChangeGate('role-includes')
   // The place switch serves the new check-in screens; off, the banner is as it was.
   const refreshedStaffScreens = useChangeGate('refreshed-staff-screens')
   const session = useSession()
@@ -213,7 +209,7 @@ export function DemoBanner() {
               }
               className="absolute inset-0 h-full w-full cursor-pointer appearance-none border-0 bg-transparent p-0 text-transparent outline-none"
             >
-              {(roleIncludes ? ROLES_BY_INCLUDES : ROLES).map((role) => (
+              {ROLES.map((role) => (
                 <option key={role} value={role} className="bg-surface text-content">
                   {ROLE_LABELS[role]}
                 </option>
@@ -227,7 +223,7 @@ export function DemoBanner() {
           </span>
 
           <span className="hidden items-center gap-1 sm:flex">
-            {(roleIncludes ? ROLES_BY_INCLUDES : ROLES).map((role) => (
+            {ROLES.map((role) => (
               <NavLink
                 key={role}
                 to={`/demo/${ROLE_SEGMENTS[role]}`}

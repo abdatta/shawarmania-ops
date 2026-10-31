@@ -1,15 +1,12 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
-import { onRoleIncludes } from '@/change-gates/role-includes'
-import { resetBootSnapshotForTests, writeSavedAnswers } from '@/change-gates/snapshot'
 import type { Assignment } from '@/data-access/adapters'
-import { highestRole, isStaffRole, STAFF_ROLES } from '@/data-access/adapters'
+import { highestRole, isStaffRole } from '@/data-access/adapters'
 import { Constants } from '@/data-access/database.types'
 import { personalHeldRoles, reachableRoles, type Role, type Session } from '@/session/session'
-import { describeChangeGate } from '@/test/change-gates'
 
 import {
   FIRST_STAFF_ROLE,
@@ -167,25 +164,11 @@ describe('which staff role includes which', () => {
 })
 
 /**
- * Off, each function runs the code it ran before this change; on, it asks the
- * includes. Either way the answer must be the frozen one (design D7).
+ * Each function asks the includes, and the answer must be the frozen one
+ * (design D7).
  */
-describeChangeGate('role-includes', (on) => {
-  beforeEach(() => {
-    writeSavedAnswers(localStorage, { 'role-includes': on })
-    resetBootSnapshotForTests()
-  })
-  afterEach(() => {
-    localStorage.clear()
-    resetBootSnapshotForTests()
-  })
-
-  it('reads the gate as the test set it', () => {
-    expect(onRoleIncludes()).toBe(on)
-  })
-
+describe('the includes give the answers the named roles gave', () => {
   it('names the same staff roles, in the same order', () => {
-    expect([...STAFF_ROLES]).toEqual(FROZEN.STAFF_ROLES)
     expect([...STAFF_ROLES_BY_SENIORITY]).toEqual(FROZEN.STAFF_ROLES)
     for (const role of ROLES) expect(isStaffRole(role)).toBe(FROZEN.isStaffRole(role))
   })

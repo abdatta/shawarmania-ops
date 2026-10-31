@@ -60,7 +60,7 @@ describeChangeGate('auto-approve-at-the-shop', (on) => {
   it(`checks in through ${on ? 'attendance_submit_attempt_v3' : 'today’s command'}`, async () => {
     const { client, calls } = recordingClient(STOP)
     await checkIn(client).catch(() => undefined)
-    expect(calls[0]?.fn).toBe(on ? 'attendance_submit_attempt_v3' : 'attendance_submit_attempt')
+    expect(calls[0]?.fn).toBe(on ? 'attendance_submit_attempt_v3' : 'attendance_submit_attempt_v2')
     expect(calls[0]?.args).toMatchObject({ p_attempt_id: 'a', p_outlet_id: 'o' })
   })
 })

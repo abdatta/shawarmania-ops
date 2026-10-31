@@ -16,7 +16,6 @@ import {
   listCounterExpenses,
   type QueuedCounterExpense,
 } from '@/outbox'
-import { onRoleIncludes } from '@/change-gates/role-includes'
 import type { CounterDeviceSession } from '@/session/counter-session'
 import { newUuid } from '@/lib/uuid'
 
@@ -24,9 +23,7 @@ const ALL = '*'
 type People = ReadonlyMap<string, string | null>
 
 async function readPeople(client: SupabaseClient<Database>): Promise<People> {
-  const { data, error } = await client.rpc(
-    onRoleIncludes() ? 'expense_people_v2' : 'expense_people',
-  )
+  const { data, error } = await client.rpc('expense_people_v2')
   if (error) throw toExpenseError(error)
   return new Map((data ?? []).map((row) => [row.id, row.full_name]))
 }

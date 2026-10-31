@@ -22,7 +22,6 @@ import {
   isStaffRole as isStaffRoleByIncludes,
   STAFF_ROLES_BY_SENIORITY,
 } from './role-includes'
-import { onRoleIncludes } from '@/change-gates/role-includes'
 import type { TabletKind } from '@/session/counter-session'
 
 export type { TabletKind } from '@/session/counter-session'
@@ -254,18 +253,11 @@ export function liveAssignments(assignments: readonly Assignment[]): Assignment[
  * Kanchrapara however senior it is (the role-hierarchy idea was rejected on
  * 2026-07-28). This orders shells, and nothing else.
  */
-const ROLE_SENIORITY: Record<AppRole, number> = {
-  super_admin: 4,
-  franchise_admin: 3,
-  biller: 2,
-  employee: 1,
-}
-
 const MANAGEMENT_SENIORITY: readonly AppRole[] = ['super_admin', 'franchise_admin']
 
 /**
- * With `role-includes` on (staff-roles-include-other-roles, design D7):
- * whether `a` is a more senior shell than `b`. The owner, then a manager, then a
+ * Whether `a` is a more senior shell than `b` (staff-roles-include-other-roles,
+ * design D7). The owner, then a manager, then a
  * staff role that includes the other; two staff roles on separate branches go
  * by the order `STAFF_ROLE_INCLUDES` lists them in. A role this build does not
  * know is never more senior than anything, so it can never be the shell
@@ -288,15 +280,9 @@ function moreSenior(a: AppRole, b: AppRole): boolean {
 
 /** The highest role a person holds live, or null if they hold none. */
 export function highestRole(assignments: readonly Assignment[]): AppRole | null {
-  if (onRoleIncludes()) {
-    return liveAssignments(assignments).reduce<AppRole | null>(
-      (best, a) =>
-        isKnownRole(a.role) && (best === null || moreSenior(a.role, best)) ? a.role : best,
-      null,
-    )
-  }
   return liveAssignments(assignments).reduce<AppRole | null>(
-    (best, a) => (best === null || ROLE_SENIORITY[a.role] > ROLE_SENIORITY[best] ? a.role : best),
+    (best, a) =>
+      isKnownRole(a.role) && (best === null || moreSenior(a.role, best)) ? a.role : best,
     null,
   )
 }
@@ -499,22 +485,14 @@ export type StaffFactsPatch = Partial<{
  * which is the bug this change exists to correct. A rule worth stating once is
  * worth storing once.
  *
- * Ordered by seniority to match `ROLE_SENIORITY`, since the accounts surface
- * renders it directly as the roles on offer. With `role-includes` on, callers
- * read `STAFF_ROLES_BY_SENIORITY` instead, the same roles in the same order
- * (staff-roles-include-other-roles, design D7).
- *
- * Stated as the roles it admits rather than as the roles it excludes, so a role
- * added to the enum joins nothing until somebody decides that it should
- * (design D1).
+ * The list is no longer spelled here: it is every role `role-includes.ts`'s
+ * `STAFF_ROLE_INCLUDES` names, read through `STAFF_ROLES_BY_SENIORITY`
+ * (staff-roles-include-other-roles, design D7). A role added to the enum joins
+ * nothing until somebody writes which roles it includes (design D1).
  */
-// roles-lint: allow the role-includes off path, as it ran before; removed when the gate retires
-export const STAFF_ROLES = ['biller', 'employee'] as const satisfies readonly AppRole[]
-
 /** Does this role make its holder staff at the outlet it is held at? */
 export function isStaffRole(role: AppRole): boolean {
-  if (onRoleIncludes()) return isStaffRoleByIncludes(role)
-  return (STAFF_ROLES as readonly AppRole[]).includes(role)
+  return isStaffRoleByIncludes(role)
 }
 
 /**
@@ -532,7 +510,7 @@ export function isStaffRole(role: AppRole): boolean {
  * through that assignment, which is exactly the case where their attendance is a
  * real thing.
  *
- * A **staff assignment is an Employee or a Biller one**, which is `STAFF_ROLES`
+ * A **staff assignment is an Employee or a Biller one**, which is `isStaffRole`
  * above. This read of it named Employee alone, so a person promoted from
  * Employee to Biller left the roll-call and the by-staff picker on the day of
  * the promotion (a-biller-is-staff).

@@ -3,14 +3,16 @@ import { resolve } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { STAFF_ROLES, isStaffRole, type AppRole } from './adapters'
+import { isStaffRole, type AppRole } from './adapters'
 import { Constants } from './database.types'
+import { STAFF_ROLES_BY_SENIORITY as STAFF_ROLES } from './role-includes'
 
 /**
  * The app and the database each decide who is staff, and they must decide it
  * the same way (a-biller-is-staff).
  *
- * `STAFF_ROLES` collapsed the app's four spellings into one. It could not
+ * `STAFF_ROLES` collapsed the app's four spellings into one, and now lives as
+ * `STAFF_ROLES_BY_SENIORITY`, read from which role includes which. It could not
  * collapse the database's, because the rule also lives inside
  * `attendance_elsewhere`, and a migration file is history: you do not edit it,
  * you write a new one on top. So there are two statements of the rule and there
@@ -60,10 +62,10 @@ describe('the app and the database agree on who is staff', () => {
     const defining = readdirSync(dir)
       .filter((f) => f.endsWith('.sql'))
       .sort()
-      // The original, which still answers while `role-includes` is off. Its
-      // `_v2` asks which roles include Employee instead, and those rows are held
-      // to `STAFF_ROLES` by src/data-access/role-includes.test.ts
-      // (staff-roles-include-other-roles).
+      // The original, which still answers a build from before the
+      // `role-includes` retirement until its cleanup. Its `_v2` asks which roles
+      // include Employee instead, and those rows are held to `STAFF_ROLES` by
+      // src/data-access/role-includes.test.ts (staff-roles-include-other-roles).
       .filter((f) =>
         readFileSync(`${dir}/${f}`, 'utf8').includes('function public.attendance_elsewhere('),
       )
