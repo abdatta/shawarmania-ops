@@ -159,5 +159,12 @@ test(
     await expect(page.getByTestId('fixed-cost-stopped')).toBeVisible()
     await expect(page.getByTestId('stop-fixed-cost')).toHaveCount(0)
     await expect(page.getByTestId('pay-fixed-cost')).toHaveCount(0)
+
+    // Undone, asked first: it runs again, and its final payment goes.
+    await page.getByTestId('unstop-fixed-cost').click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Undo' }).click()
+    await expect(page.getByTestId('stop-fixed-cost')).toBeVisible()
+    await expect(page.getByTestId('pay-fixed-cost')).toBeVisible()
+    await expect(page.getByTestId('fixed-cost-payments')).not.toContainText('Final payment')
   },
 )

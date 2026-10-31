@@ -9,6 +9,7 @@ import {
   payPrompt,
   settlementFor,
   shortBefore,
+  stopUndo,
   unpaidEndedMonths,
   type FixedCostCategory,
   type FixedCostFacts,
@@ -109,7 +110,10 @@ export function createMockFixedCostsAdapter(
   let serial = store.fixedCosts.length + store.fixedCostPayments.length + 1
   const nextId = (prefix: string) =>
     `${prefix}-0000-4000-a000-${String(serial++).padStart(12, '0')}`
-  const now = () => new Date().toISOString()
+  // A stop writes everything at one instant, as the database's one transaction
+  // does, so undoing it can find what it wrote (`stopUndo`).
+  let frozenAt: string | null = null
+  const now = () => frozenAt ?? new Date().toISOString()
 
   function refuse(outletId: string): void {
     const mayReach =
@@ -195,9 +199,16 @@ export function createMockFixedCostsAdapter(
       )
         throw new DataActionError('bad_amount', 'Say what the first month comes to, in rupees.')
       store.fixedCosts.push(row)
-      addAmount(row, monthOf(cost.startsOn), cost.monthlyPaise)
-      if (cost.firstMonthPaise !== undefined && !cost.startsOn.endsWith('-01'))
-        settle(row, monthOf(cost.startsOn), cost.firstMonthPaise)
+      // Added at one instant, as the database's one transaction, so a first
+      // month agreed with it is never taken for a stop's (`stopUndo`).
+      frozenAt = row.created_at
+      try {
+        addAmount(row, monthOf(cost.startsOn), cost.monthlyPaise)
+        if (cost.firstMonthPaise !== undefined && !cost.startsOn.endsWith('-01'))
+          settle(row, monthOf(cost.startsOn), cost.firstMonthPaise)
+      } finally {
+        frozenAt = null
+      }
       return demoFixedCostFacts(store, row)
     },
 
@@ -261,30 +272,50 @@ export function createMockFixedCostsAdapter(
       const before = demoFixedCostFacts(store, row)
       if (before.stopsOn && settlementFor(before, monthOf(before.stopsOn)))
         throw new DataActionError('refused', 'It is already stopped.')
-      row.stops_on = closing.stopsOn
-      row.updated_at = now()
-      // Stopping closes it: every month through the stop month settled, as
-      // `stop_fixed_cost_v3` does (owner, 2026-10-31).
-      const month = monthOf(closing.stopsOn)
-      const facts = demoFixedCostFacts(store, row)
-      for (const short of shortBefore(facts, month, store.today))
-        settle(row, short.month, short.coveredPaise)
-      settle(
-        row,
-        month,
-        alreadyPaidIn(demoFixedCostFacts(store, row), month, store.today) + closing.finalPaise,
-      )
-      if (closing.payment && closing.finalPaise > 0)
-        await adapter.pay({
-          id: closing.payment.id,
-          fixedCostId: row.id,
-          amountPaise: closing.finalPaise,
-          paidOn: closing.stopsOn,
-          countsIn: closing.stopsOn,
-          isCash: closing.payment.isCash,
-          note: 'Final payment',
-          choice: null,
-        })
+      frozenAt = new Date().toISOString()
+      try {
+        row.stops_on = closing.stopsOn
+        row.updated_at = now()
+        // Stopping closes it: every month through the stop month settled, as
+        // `stop_fixed_cost_v3` does (owner, 2026-10-31).
+        const month = monthOf(closing.stopsOn)
+        const facts = demoFixedCostFacts(store, row)
+        for (const short of shortBefore(facts, month, store.today))
+          settle(row, short.month, short.coveredPaise)
+        settle(
+          row,
+          month,
+          alreadyPaidIn(demoFixedCostFacts(store, row), month, store.today) + closing.finalPaise,
+        )
+        if (closing.payment && closing.finalPaise > 0)
+          await adapter.pay({
+            id: closing.payment.id,
+            fixedCostId: row.id,
+            amountPaise: closing.finalPaise,
+            paidOn: closing.stopsOn,
+            countsIn: closing.stopsOn,
+            isCash: closing.payment.isCash,
+            note: 'Final payment',
+            choice: null,
+          })
+      } finally {
+        frozenAt = null
+      }
+    },
+
+    async unstop(fixedCostId) {
+      const row = find(fixedCostId)
+      if (!row.stops_on) throw new DataActionError('refused', 'It is not stopped.')
+      const undo = stopUndo(demoFixedCostFacts(store, row))
+      for (const payment of undo.payments) await adapter.undoPayment(row.id, payment.id)
+      const at = now()
+      for (const s of store.fixedCostSettlements)
+        if (undo.settlementIds.includes(s.id) && !s.voided_at) {
+          s.voided_at = at
+          s.voided_by = userId
+        }
+      row.stops_on = null
+      row.updated_at = at
     },
 
     async pay(payment) {

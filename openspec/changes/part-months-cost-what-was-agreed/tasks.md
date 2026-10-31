@@ -26,7 +26,8 @@
 - [x] 4.2a Owner's staging round: stopping closes the cost (`stop_fixed_cost_v3`, migration `20261109000000`): no Paying later, no Nothing more, *Any final payment at close?*, last day today or earlier and last in the sheet, earlier short months closed, a second stop refused; a stopped cost is done at once — greyed, red cross, *Stopped* without a date, no Pay on row or page, *Stopped* in place of Stop; a cost stopped before the change shows Close
 - [x] 4.2b Pushed to `stage`, Staging green, and the owner tries the round (2026-10-31: tried; Promoted `e93d97d0`; gate on in production 23:59 IST by `change_gate_force` at the owner's word; Jayanta Da un-stopped by the agent at the owner's word and stopped by the owner: October ₹4,000, all paid)
 - [x] 4.2c The owner's production look: the paid ring stays on a stopped row, only greyed (no red cross)
-- [ ] 4.2d Pushed to `stage`, Staging green, Promoted
+- [x] 4.2d Undo a stop (owner, 2026-10-31): *✕ Stopped · Undo* on the page, Undo asked first; `unstop_fixed_cost` (migration `20261110000000`), `stopUndo`, pgTAP, unit and browser tests
+- [ ] 4.2e Pushed to `stage`, Staging green, Promoted
 - [ ] 4.3 Promote, then turn `agreed-part-months` on; close Jayanta Da's October with Close (final payment ₹2,000, last day 28 Oct) unless it was closed with Pay first
 - [ ] 4.4 Pull once (off and on), real use, then docs (`SCREENS.md`, `DATA_MODEL.md`, `TESTING.md`) and archive after #79
 - [ ] 4.5 PHASE GATE: follow-up to #79; no ROADMAP checkpoint of its own — Staging green and the owner's Promote

@@ -7328,6 +7328,10 @@ export type Database = {
         }
         Returns: Json
       }
+      unstop_fixed_cost: {
+        Args: { p_fixed_cost_id: string }
+        Returns: undefined
+      }
       update_fixed_cost: {
         Args: {
           p_category: string

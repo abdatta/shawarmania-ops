@@ -31,7 +31,8 @@ payment above 0 SHALL be recorded as a payment on the last day, all in one
 transaction. The last day SHALL be today or earlier. A stopped cost SHALL owe
 nothing, SHALL NOT offer Pay, and SHALL NOT be stopped again. A cost stopped
 before this, its stop month with no agreed figure, SHALL offer to close that
-month the same way.
+month the same way. A stop SHALL be undoable from the cost's page after a
+confirmation, taking back the closing figures and the final payment it wrote.
 
 #### Scenario: Jayanta Da's closing
 
@@ -47,6 +48,11 @@ month the same way.
 
 - **WHEN** a cost with September ₹1,000 short is stopped in October with 0 at close
 - **THEN** September closes at what was paid for it and nothing is owed
+
+#### Scenario: A stop undone
+
+- **WHEN** Jayanta Da's stop, with its ₹2,000 final payment, is undone and the confirmation accepted
+- **THEN** he runs again, October costs ₹6,000 with ₹2,000 paid, and the final payment is withdrawn
 
 #### Scenario: Stopped twice
 

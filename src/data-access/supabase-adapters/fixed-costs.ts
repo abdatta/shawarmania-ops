@@ -103,6 +103,11 @@ export function createSupabaseFixedCostsAdapter(
       if (error) throw toFixedCostError(error)
     },
 
+    async unstop(fixedCostId) {
+      const { error } = await client.rpc('unstop_fixed_cost', { p_fixed_cost_id: fixedCostId })
+      if (error) throw toFixedCostError(error)
+    },
+
     async pay(payment) {
       const { error } = await client.rpc('record_fixed_cost_payment', {
         p_id: payment.id,

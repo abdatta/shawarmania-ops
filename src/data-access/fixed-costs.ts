@@ -91,6 +91,8 @@ export interface FixedCostsAdapter {
    * was paid plus the final payment, and nothing is left to pay (agreed-part-months).
    */
   close(closing: FixedCostClosing): Promise<void>
+  /** Undo a stop: it runs again, its closing figures and final payment taken back (agreed-part-months). */
+  unstop(fixedCostId: string): Promise<void>
   pay(payment: FixedCostPaymentInput): Promise<void>
   /**
    * Undo a payment: withdraw its expense and void what its answer recorded (the

@@ -807,6 +807,44 @@ describeChangeGate('agreed-part-months', (on) => {
     expect(screen.getByTestId('fixed-cost-stopped')).toHaveTextContent('Stopped')
   })
 
+  it('a stop is undone from the page, asked first: it runs again and its final payment goes', async () => {
+    const user = userEvent.setup()
+    const { data, adapters } = withFixedCosts()
+    const id = await jayanta(adapters)
+    if (!on) {
+      // Off, no stop leaves an Undo behind.
+      await adapters.fixedCosts.stop(id, '2026-10-28', false)
+      renderPage(adapters, id)
+      await screen.findByTestId('fixed-cost-months')
+      expect(screen.queryByTestId('unstop-fixed-cost')).toBeNull()
+      return
+    }
+    // Stopped later than it was added, as a stop always is.
+    vi.setSystemTime(new Date('2026-10-30T07:00:00Z'))
+    await adapters.fixedCosts.close({
+      fixedCostId: id,
+      stopsOn: '2026-10-28',
+      finalPaise: 200_000,
+      payment: { id: crypto.randomUUID(), isCash: false },
+    })
+    renderPage(adapters, id)
+    expect(await screen.findByTestId('fixed-cost-stopped')).toHaveTextContent('Stopped·Undo')
+    await user.click(screen.getByTestId('unstop-fixed-cost'))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent(
+      "Jayanta runs again, as if never stopped. October's closing figure goes, and the ₹2,000 final payment of 28 Oct is withdrawn.",
+    )
+    await user.click(within(dialog).getByRole('button', { name: 'Undo' }))
+
+    expect(await screen.findByTestId('stop-fixed-cost')).toHaveTextContent('Stop')
+    expect(screen.getByTestId('pay-fixed-cost')).toBeVisible()
+    const row = data.store.fixedCosts.find((c) => c.id === id)!
+    expect(row.stops_on).toBeNull()
+    const facts = demoFixedCostFacts(data.store, row)
+    expect(monthCost(facts, '2026-10-01')).toBe(600_000)
+    expect(facts.payments.map((p) => p.amountPaise)).toEqual([200_000])
+  })
+
   it('0 at close closes at what was paid, closes a short earlier month too, and stops once', async () => {
     const { data, adapters } = withFixedCosts()
     const nothing = await jayanta(adapters)

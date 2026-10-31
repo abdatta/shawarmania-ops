@@ -284,6 +284,38 @@ export function shortBefore(
     .map((row) => ({ month: row.month, coveredPaise: row.coveredPaise }))
 }
 
+/**
+ * What undoing a stop takes back (owner, 2026-10-31): the closing figures the
+ * stop wrote and its final payment. A stop writes them in one transaction, so
+ * they share one instant: every settlement of the stop month that no payment
+ * set, except a first month agreed when the cost was added, names the
+ * instants; the earlier months settled and the payment made at those instants
+ * go with them. The TypeScript copy of `unstop_fixed_cost`.
+ */
+export function stopUndo(cost: FixedCostFacts): {
+  settlementIds: string[]
+  payments: FixedCostPayment[]
+} {
+  if (!cost.stopsOn) return { settlementIds: [], payments: [] }
+  const month = monthOf(cost.stopsOn)
+  // The cost's first monthly amount is written with it, at the instant it was added.
+  const added = cost.amounts.reduce(
+    (first, row) => (row.createdAt < first ? row.createdAt : first),
+    '9999-12-31',
+  )
+  const instants = new Set(
+    cost.settlements
+      .filter((s) => s.month === month && !s.voidedAt && !s.paymentId && s.createdAt !== added)
+      .map((s) => s.createdAt),
+  )
+  return {
+    settlementIds: cost.settlements
+      .filter((s) => !s.voidedAt && !s.paymentId && s.month <= month && instants.has(s.createdAt))
+      .map((s) => s.id),
+    payments: cost.payments.filter((p) => instants.has(p.createdAt)),
+  }
+}
+
 /** What the stop month comes to when it stops on `stopsOn` with `finalPaise` paid on top. */
 export function closingCost(
   cost: FixedCostFacts,

@@ -28,6 +28,14 @@ begin
 end;
 $$;
 
+create function pg_temp.unimpersonate_for_setup()
+returns void language plpgsql as $$
+begin
+  execute 'reset role';
+  perform set_config('request.jwt.claims', '', true);
+end;
+$$;
+
 create function pg_temp.last_month()
 returns date language sql stable as $$
   select (date_trunc('month', public.app_business_date(now(), o.business_day_cutover)::timestamp)
@@ -177,6 +185,36 @@ select lives_ok(
 select is(public.fixed_cost_month_cost((select id from costs where label = 'moved'),
                                        pg_temp.last_month()),
           150000::bigint, 'and the month costs it');
+
+-- ---------------------------------------------------------------------------
+-- 3b. Undoing a stop. Every row here has the same created_at (one
+-- transaction), so the cost and its advance are moved back an hour, as added
+-- and paid before it was stopped; triggers are set aside for those writes.
+
+select pg_temp.unimpersonate_for_setup();
+set local session_replication_role = replica;
+update public.fixed_costs set created_at = now() - interval '1 hour'
+ where id = (select id from costs where label = 'now');
+update public.fixed_cost_payments set created_at = now() - interval '1 hour'
+ where expense_id = :'ADVANCE';
+set local session_replication_role = origin;
+select pg_temp.impersonate(:'OWNER');
+
+select lives_ok(
+  format($q$select public.unstop_fixed_cost(%L)$q$, (select id from costs where label = 'now')),
+  'a stop is undone');
+select is((select stops_on from public.fixed_costs where id = (select id from costs where label = 'now')),
+          null::date, 'and the cost runs again');
+select is(public.fixed_cost_month_cost((select id from costs where label = 'now'),
+                                       pg_temp.last_month()),
+          600000::bigint, 'its stop month costs the monthly amount again');
+select is((select voided_at is not null from public.expenses where id = :'FINAL'),
+          true, 'and its final payment is withdrawn');
+select is(public.fixed_cost_paid_paise((select id from costs where label = 'now'), current_date),
+          200000::bigint, 'leaving the advance paid');
+select throws_ok(
+  format($q$select public.unstop_fixed_cost(%L)$q$, (select id from costs where label = 'now')),
+  '22023', 'It is not stopped.', 'a running cost has no stop to undo');
 
 -- ---------------------------------------------------------------------------
 -- 4. Only the owner and the outlet's own manager.

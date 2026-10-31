@@ -1,4 +1,4 @@
-import { CalendarClock, CheckCircle2 } from 'lucide-react'
+import { CalendarClock, CheckCircle2, XCircle } from 'lucide-react'
 import {
   useCallback,
   useEffect,
@@ -34,6 +34,7 @@ import {
   alreadyPaidIn,
   balance,
   shortBefore,
+  stopUndo,
   coverage,
   daysInMonth,
   FIXED_COST_CATEGORIES,
@@ -632,6 +633,8 @@ export function FixedCostPage() {
   const [dropping, setDropping] = useState<{ month: string; coveredPaise: number } | null>(null)
   // Undo a payment (owner, 2026-10-19): the expense, and what its answer recorded.
   const [undoing, setUndoing] = useState<FixedCostPayment | null>(null)
+  // Undo a stop, asked first (agreed-part-months, owner 2026-10-31).
+  const [unstopping, setUnstopping] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const back = useCallback(() => {
@@ -730,6 +733,7 @@ export function FixedCostPage() {
           onDrop={(month, coveredPaise) => setDropping({ month, coveredPaise })}
           onUndo={(settlementId) => void act(() => fixedCosts.voidSettlement(settlementId))}
           onUndoPayment={setUndoing}
+          onUnstop={() => setUnstopping(true)}
         />
       )}
 
@@ -789,6 +793,18 @@ export function FixedCostPage() {
             />
           )}
           <ConfirmDialog
+            open={unstopping}
+            title="Undo the stop?"
+            consequence={unstopWords(cost)}
+            confirmLabel="Undo"
+            busy={busy}
+            onClose={() => setUnstopping(false)}
+            onConfirm={() => {
+              setUnstopping(false)
+              void act(() => fixedCosts.unstop(cost.id))
+            }}
+          />
+          <ConfirmDialog
             open={undoing !== null}
             title="Undo this payment?"
             consequence={undoing ? undoWords(cost, undoing) : ''}
@@ -834,6 +850,7 @@ function CostDetail({
   onDrop,
   onUndo,
   onUndoPayment,
+  onUnstop,
 }: {
   cost: FixedCostFacts
   today: string
@@ -846,6 +863,7 @@ function CostDetail({
   onDrop: (month: string, coveredPaise: number) => void
   onUndo: (settlementId: string) => void
   onUndoPayment: (payment: FixedCostPayment) => void
+  onUnstop: () => void
 }) {
   const month = monthOf(today)
   const lastMonth = cost.stopsOn && monthOf(cost.stopsOn) < month ? monthOf(cost.stopsOn) : month
@@ -1068,11 +1086,24 @@ function CostDetail({
         </div>
       )}
       {agreed && stopped && !toClose && (
+        // The cross says it stopped here, where nothing is about payment; Undo
+        // is plain text, there when needed and never loud (owner, 2026-10-31).
         <p
-          className="flex items-center justify-center gap-1.5 pt-2 text-sm font-semibold text-content-muted"
+          className="flex items-center justify-center gap-1.5 pt-2 text-sm text-content-muted"
           data-testid="fixed-cost-stopped"
         >
-          Stopped
+          <XCircle size={16} className="text-danger" aria-hidden />
+          <span className="font-semibold">Stopped</span>
+          <span aria-hidden>·</span>
+          <button
+            type="button"
+            onClick={onUnstop}
+            aria-label={`Undo the stop of ${cost.name}`}
+            data-testid="unstop-fixed-cost"
+            className="rounded underline decoration-dotted underline-offset-4 hover:text-content focus-visible:focus-ring"
+          >
+            Undo
+          </button>
         </p>
       )}
     </div>
@@ -1096,6 +1127,23 @@ function undoWords(cost: FixedCostFacts, payment: FixedCostPayment): string {
   const sentence =
     parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)!}`
   return `This ${sentence}. The expense stays on its day, struck through. Then pay again with the right answer.`
+}
+
+/**
+ * *Jayanta Da runs again, as if never stopped. October's closing figure goes,
+ * and the ₹2,000 final payment of 28 Oct is withdrawn.*
+ */
+function unstopWords(cost: FixedCostFacts): string {
+  const undo = stopUndo(cost)
+  const month = cost.stopsOn ? monthName(monthOf(cost.stopsOn)) : ''
+  const payments = undo.payments.map(
+    (p) => `the ${formatPaise(p.amountPaise)} final payment of ${shortDate(p.paidOn)}`,
+  )
+  const closing =
+    undo.settlementIds.length > 0 ? `${month}'s closing figure goes` : `${month} is reopened`
+  const sentence =
+    payments.length > 0 ? `${closing}, and ${payments.join(' and ')} is withdrawn` : closing
+  return `${cost.name} runs again, as if never stopped. ${sentence}.`
 }
 
 function coverageWords(covered: number, cost: number, ended: boolean, future: boolean): string {

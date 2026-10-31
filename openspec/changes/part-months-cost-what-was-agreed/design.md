@@ -104,7 +104,31 @@ A start month asks for a total, not an addition: nothing has been paid yet.
   last month with no settlement, shows **Close** in Pay's place, opening its
   page. A closed cost that still owes (only a v2 *paying later* on staging) keeps
   the amber ring and Pay.
-- **A cost's page**, once stopped: *Stopped* where **Stop** was, and no **Pay**.
+- **A cost's page**, once stopped: *✕ Stopped · Undo* where **Stop** was (the
+  cross belongs here, where nothing is about payment), and no **Pay**.
+
+## D7. Undoing a stop
+
+Asked for on production, the night it went live (owner, 2026-10-31): a stop
+made by mistake must be undoable from the app, quietly. **Undo** is plain text
+with a dotted underline beside *Stopped*, and asks first (*Undo the stop?* —
+*Jayanta Da runs again, as if never stopped. October's closing figure goes, and
+the ₹2,000 final payment of 28 Oct is withdrawn.*).
+
+`unstop_fixed_cost` finds what the stop wrote by the instant it wrote it: a
+stop writes its settlements and its final payment in one transaction, so they
+share one `created_at`. The instants are those of every unvoided settlement of
+the stop month that no payment set, less the cost's own `created_at` (a first
+month agreed when it was added is not the stop's); the earlier months settled
+and the payment linked at those instants go with them, the payment through
+`undo_fixed_cost_payment`, as its own Undo does. Then `stops_on` is cleared.
+Nothing is deleted. A closing figure changed later with **Change** is the stop
+month's too, and goes. A stop month settled by a payment's own answer
+(*That's all for October*) is the payment's, and stays until that payment is
+undone. `stopUndo` is the TypeScript copy, which the confirmation reads.
+
+Rejected: a column naming the stop on each settlement it wrote. It would need
+a new stop function to fill it, and the instant already says the same.
 - **Placement** (Q4, Q5): a stopped cost stays in the list, in its place, while
   its stop month is the current month or while it owes. After that it leaves
   the list for **Stopped · N · Show** at the foot, one line, which shows the
