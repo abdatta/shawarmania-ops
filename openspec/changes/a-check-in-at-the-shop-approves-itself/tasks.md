@@ -322,6 +322,11 @@ except the one widened check of D4, which the owner agreed to on 2026-10-26.
 - [x] 11A.9 Docs: SCREENS (Expenses, Expense categories), DATA_MODEL, GLOSSARY
   if a word is new, DEMO_MODE.
 - [x] 11A.10 Verify locally, push to `stage`, read the run. *Staging run 40991444740 green, database tests included, at e884aede.*
+- [x] 11A.11 The counter tablet reads the list. A tablet signs in as its own
+  identity, with no profile, so the list read empty there and the counter fell
+  back to typing (production, 2026-10-30). An added select policy admits a live,
+  proven tablet while the gate is on; pgTAP 99 now impersonates the tablet itself,
+  and fails without the policy.
 
 ## 12. Release
 

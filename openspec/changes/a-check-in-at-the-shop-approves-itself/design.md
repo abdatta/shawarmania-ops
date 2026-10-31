@@ -587,7 +587,11 @@ decides it is whether the month's breakdown reads, and today it does not.
 **Database (live).** A new table, **`expense_category_choices`**: `id`,
 `name` (normalised, unique without regard to case), `sort_order` (unique),
 `asks_note`, `managers_only`, `created_by`, `created_at`, `updated_by`,
-`updated_at`. Read by any active account, as `expense_categories` is. Written
+`updated_at`. Read by any active account, as `expense_categories` is, and by a
+live, proven counter or kitchen tablet while the gate is on: a tablet signs in as
+its own identity, which has no profile, so the first policy alone gave the counter
+an empty list and its form fell back to typing (production, 2026-10-30; the
+second policy is `20261106000000`). Written
 only through three owner-only `security definer` commands:
 `save_expense_category_choice` (add, or edit by id; an edit that renames moves
 the recorded rows and logs the operation, as a rename with history does),

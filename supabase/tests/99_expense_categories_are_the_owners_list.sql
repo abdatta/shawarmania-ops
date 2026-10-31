@@ -46,7 +46,27 @@ select is((select count(*) from public.expense_category_choices), 7::bigint,
   'an Employee reads the list');
 select pg_temp.impersonate(:'BILLER_KAL');
 select is((select count(*) from public.expense_category_choices), 7::bigint,
-  'a Biller, whose account the counter tablet runs on, reads the list');
+  'a Biller reads the list');
+-- The tablet's own identity has no profile; it read nothing until the second
+-- policy (production, 2026-10-30), which admits it only while the gate is on.
+select pg_temp.impersonate(:'DEVICE');
+select is((select count(*) from public.expense_category_choices), 0::bigint,
+  'the counter tablet, signed in as itself, reads nothing while the gate is off');
+reset role;
+update public.change_gates set enabled = true
+ where key in ('auto-approve-at-the-shop', 'refreshed-staff-screens', 'expense-category-list');
+select pg_temp.impersonate(:'DEVICE');
+select is((select count(*) from public.expense_category_choices), 7::bigint,
+  'the counter tablet, signed in as itself, reads the list while the gate is on');
+reset role;
+update public.counter_devices set removed_at = now() where id = :'DEVICE';
+select pg_temp.impersonate(:'DEVICE');
+select is((select count(*) from public.expense_category_choices), 0::bigint,
+  'a removed tablet reads nothing');
+reset role;
+update public.counter_devices set removed_at = null where id = :'DEVICE';
+update public.change_gates set enabled = false
+ where key in ('auto-approve-at-the-shop', 'refreshed-staff-screens', 'expense-category-list');
 select pg_temp.impersonate(:'DEACTIVATED');
 select is((select count(*) from public.expense_category_choices), 0::bigint,
   'a deactivated account reads nothing');

@@ -712,8 +712,9 @@ merge and records how much history moved in each expense table.
 `managers_only`, `created_by`, `created_at`, `updated_by`, `updated_at`. The owners'
 list an expense's category is picked from while `expense-category-list` is on:
 business-wide, names normalised and unique without regard to case, `sort_order`
-unique and checked at commit. Every active account reads it; nobody writes it
-directly. `save_expense_category_choice(id, name, asks_note, managers_only)` adds
+unique and checked at commit. Every active account reads it, and so does a live,
+proven counter or kitchen tablet while the gate is on, since a tablet's own
+identity has no profile; nobody writes it directly. `save_expense_category_choice(id, name, asks_note, managers_only)` adds
 (a null id; it goes last and mints the suggestion) or edits, and an edit that
 renames moves the recorded expenses through `rename_expense_category` with history,
 or `merge_expense_category` where the new name is already a suggestion;
