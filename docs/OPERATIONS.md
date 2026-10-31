@@ -1534,8 +1534,10 @@ So:
 
 **Whether to stay on Free** is an open decision until 31 December 2026: what
 has been asked of Supabase, what they have said, and what is still owed are
-kept in `openspec/changes/the-app-asks-the-server-less/log-quota-status.md`
-(or that change's folder under `archive/` once it archives).
+kept in
+`openspec/changes/archive/2026-10-30-the-app-asks-the-server-less/log-quota-status.md`.
+It travelled with the change when it archived, and is still the running record:
+append to its timeline whenever something moves.
 
 ### Attributing an egress spike
 

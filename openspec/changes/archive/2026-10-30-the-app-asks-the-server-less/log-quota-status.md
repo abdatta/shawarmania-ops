@@ -108,6 +108,14 @@ database and 402 responses, any of which stops the counter.
   everything each time it returns to the foreground (40 to 140 times an hour),
   something `fewer-requests` does not touch. Two Windows counters share its
   address.
+- **2026-10-30**: the owner called the change done on the per-order figure:
+  −35% requests per order is its success test, so it archived without waiting
+  for the 27 October to 27 November cycle or a pull of the gate. This record
+  moved with it, to
+  `openspec/changes/archive/2026-10-30-the-app-asks-the-server-less/`, and the
+  gate's retirement (`retire-fewer-requests`) keeps the on path for good. The
+  cycle's ingestion is still worth reading on the Usage page after 27 November,
+  for the Free-or-Pro decision rather than for the change.
 
 ## Open items
 
@@ -119,11 +127,11 @@ database and 402 responses, any of which stops the counter.
   friendly follow-up in the same sub-thread, approved by the owner first.
 - **A person on the support ticket.** Supabase owes us an answer to the two
   questions. Nudge politely in the same thread if two weeks pass with nothing.
-- **Measure `fewer-requests` in production.** On since 16 October. Per order
-  it works (−35% on 22 October), but busier trading keeps the day at about
-  90 MB. The first full cycle with it on is 27 October to 27 November; the
-  archive waits for that reading (`tasks.md` 7.1), and for one pull of the gate
-  (off and on), which has not been done.
+- **Read the 27 October to 27 November cycle** on the Usage page once it
+  closes: the first full cycle with `fewer-requests` on. Per order it works
+  (−35% on 22 October), but busier trading keeps the day at about 90 MB, so this
+  is the number the 31 December decision turns on. The change itself no longer
+  waits for it.
 - **The counter's foreground re-reads.** Find out why the counter returns to the
   foreground so often and whether each return needs the full menu, shift and
   gates again. Investigate before changing anything: it is counter runtime, so
