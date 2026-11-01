@@ -166,15 +166,21 @@ Do not reopen that without a reason the design did not consider.
 
 ## 9. Release
 
-- [ ] 9.1 Push to `stage` (squash to a few commits first) and let the staging run
+- [x] 9.1 Push to `stage` (squash to a few commits first) and let the staging run
   go green. Promote with the owner.
-- [ ] 9.2 Before turning the gate on, the owner asks Supratik to tell staff that
+  - Stage `3648a1fc`, Staging run 41253237635 green; promoted 2026-11-01 (Promote
+    run 41262091938, Deploy run 41262145561).
+- [x] 9.2 Before turning the gate on, the owner asks Supratik to tell staff that
   attendance is marked on their own phones, never on the counter laptop.
 - [ ] 9.3 Turn `a-tablet-keeps-its-login` on at a quiet hour. On the counter
   laptop, open `/sign-in` by hand and confirm it lands on the counter, and the
   build stamp shows `TK`.
-- [ ] 9.4 The owner removes the abandoned tablets (Kalyani Counter 2, the second
+  - Turned on 2026-11-01 07:15 IST with the shop closed; `retireBy` set to
+    2026-12-27. The check on the counter laptop itself waits for it to open.
+- [x] 9.4 The owner removes the abandoned tablets (Kalyani Counter 2, the second
   Cafe 2) from the Tablets list.
+  - Done before release; the Tablets list holds only the counter, renamed
+    Cafe Laptop on 2026-11-01, and Shawarma Kitchen.
 
 ## 10. PHASE GATE
 

@@ -177,8 +177,8 @@ export const CHANGE_GATES = {
     kind: 'change',
     code: 'TK',
     change: 'a-tablet-keeps-its-login',
-    // Provisional: eight weeks after it is first turned on, corrected at release.
-    retireBy: '2027-01-15',
+    // Eight weeks after it was first turned on in production, 2026-11-01.
+    retireBy: '2026-12-27',
     roundTrip:
       'none: it changes which page a tablet is shown and refuses a sign-in before it is sent; nothing is written or queued either way',
   },
