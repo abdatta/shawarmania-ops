@@ -297,9 +297,20 @@ Third demo round (2026-11-01):
   total was only CSS-hidden, the demo's Hand over buttons shadowed the shift's,
   and two specs counted `_v2` names the gate replaces. Fixed in 51952434; run
   41371246277 green in both states, migrated, published and smoke-tested.
-- [ ] 8.3 Walk it on staging's fake outlet with the gate on and Delivery offered,
+- [x] 8.3 Walk it on staging's fake outlet with the gate on and Delivery offered,
   then turn the gate off with a delivery order open and one handed over, and
   check the off path reads as the proposal says.
+  *2026-11-02:* walked by a throwaway Playwright script at *Smoke tests*, as the
+  smoke suite's manager and biller with a counter and a kitchen set up by code,
+  so *Cafe Staging* stayed the owner's. On: the manager offered Delivery; a
+  delivery order showed no total, customer or Paid, its card carried no ₹, the
+  kitchen tagged it DELIVERY, Hand over waited for the tick, the card left
+  after the undo window, and My shift and Billing history → Delivered listed it
+  by label with no amount. Off, with one handed over and one open: the open one
+  read as a plain order with its ₹ total and Paid, the kitchen kept it with no
+  tag, the handed-over one was on no screen, the Delivered tab and the Delivery
+  switch were gone, and the biller cancelled the open one. Delivery withdrawn
+  and the gate left off.
 
 ## 9. Durable documentation
 
