@@ -7,4 +7,9 @@
 ## 2. Gate
 
 - [x] 2.1 The Overview test fails with 1.2 reverted and passes with it; build (typecheck), format and the touched test file pass; in the demo, tapping November revenue opens Sales with Month pressed and the same ₹ figure
-- [ ] 2.2 Pushed to `stage`, Staging green, and staging Overview's month revenue opens Sales on Month
+- [x] 2.2 Pushed to `stage`, Staging green, and staging Overview's month revenue opens Sales on Month
+  *(`dc5570d1` turned Staging red: three browser tests still expected the
+  Ledger from the revenue tile. `b085e587` moved them to Sales on Month and P&L
+  to the Ledger; Staging 41399222489 green. Promoted to production with
+  `c83ec673` on 2 November (Deploy 41404706038). The owner checked it on staging
+  and in production the same day and called it good.)*

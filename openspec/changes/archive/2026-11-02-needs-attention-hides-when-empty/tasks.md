@@ -7,4 +7,7 @@
 ## 2. Gate
 
 - [x] 2.1 The Overview test fails with 1.2 reverted (with only the test id added, so it fails on visibility) and passes with it; typecheck, lint, format and the touched test file pass
-- [ ] 2.2 Pushed to `stage`, Staging green
+- [x] 2.2 Pushed to `stage`, Staging green
+  *(`9cab8ca7`, Staging 41400563737 green and serving it on stage-ops. Promoted
+  to production with `c83ec673` on 2 November (Deploy 41404706038). The owner
+  checked it on staging and in production the same day and called it good.)*
