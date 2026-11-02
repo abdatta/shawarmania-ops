@@ -115,6 +115,21 @@ Task 0.4 stops for the owner's yes. **If the owner says no**, the fallback is
 D2's rejected cancelled form — written up, not built, and returned to the
 owner.
 
+**The owner agreed, 2026-11-01**, after being told in plain words what
+changes (today's body plus the two gated branches), why no write a published
+build makes is affected, how it differs from #74, and the cancelled-order
+fallback. Answer: "Yes, replace it".
+
+**A second widened object, found at apply.** `billing_commands.command_type`
+is a closed check list, and the two new commands record their own kinds,
+`hand_over_delivery` and `take_back_delivery_handover`. The check is dropped
+and re-added in one statement with today's list plus those two, under
+`-- release-lint: allow drop, constraint — …`. It only widens: every kind a
+published build writes stays allowed, and no build reads the list. **The owner
+agreed, 2026-11-01** ("Yes, widen the list"), after hearing the fallback:
+logging the two under `prepare_order_lines` and `void_order_payment`, which
+would misname them.
+
 The handover's attribution lives on `delivery_orders` (D1), not on `orders`,
 so the guard needs no new columns and `orders_change_fields_paired` is
 untouched.

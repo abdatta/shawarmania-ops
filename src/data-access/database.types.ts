@@ -2625,6 +2625,163 @@ export type Database = {
         }
         Relationships: []
       }
+      delivery_handover_takebacks: {
+        Row: {
+          handed_over_at: string
+          handed_over_by: string
+          handover_command_id: string
+          id: string
+          order_id: string
+          outlet_id: string
+          reason: string
+          taken_back_at: string
+          taken_back_by: string
+          taken_back_device_id: string
+          taken_back_shift_id: string
+        }
+        Insert: {
+          handed_over_at: string
+          handed_over_by: string
+          handover_command_id: string
+          id: string
+          order_id: string
+          outlet_id: string
+          reason: string
+          taken_back_at: string
+          taken_back_by: string
+          taken_back_device_id: string
+          taken_back_shift_id: string
+        }
+        Update: {
+          handed_over_at?: string
+          handed_over_by?: string
+          handover_command_id?: string
+          id?: string
+          order_id?: string
+          outlet_id?: string
+          reason?: string
+          taken_back_at?: string
+          taken_back_by?: string
+          taken_back_device_id?: string
+          taken_back_shift_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_handover_takebacks_handed_over_by_fkey"
+            columns: ["handed_over_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_handover_takebacks_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_handover_takebacks_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_handover_takebacks_taken_back_by_fkey"
+            columns: ["taken_back_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_handover_takebacks_taken_back_device_id_fkey"
+            columns: ["taken_back_device_id"]
+            isOneToOne: false
+            referencedRelation: "counter_devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_handover_takebacks_taken_back_shift_id_fkey"
+            columns: ["taken_back_shift_id"]
+            isOneToOne: false
+            referencedRelation: "counter_shifts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      delivery_orders: {
+        Row: {
+          handed_over_at: string | null
+          handed_over_by: string | null
+          handed_over_device_id: string | null
+          handed_over_shift_id: string | null
+          handover_command_id: string | null
+          handover_prior_ticks: Json | null
+          marked_at: string
+          order_id: string
+          outlet_id: string
+        }
+        Insert: {
+          handed_over_at?: string | null
+          handed_over_by?: string | null
+          handed_over_device_id?: string | null
+          handed_over_shift_id?: string | null
+          handover_command_id?: string | null
+          handover_prior_ticks?: Json | null
+          marked_at: string
+          order_id: string
+          outlet_id: string
+        }
+        Update: {
+          handed_over_at?: string | null
+          handed_over_by?: string | null
+          handed_over_device_id?: string | null
+          handed_over_shift_id?: string | null
+          handover_command_id?: string | null
+          handover_prior_ticks?: Json | null
+          marked_at?: string
+          order_id?: string
+          outlet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_orders_handed_over_by_fkey"
+            columns: ["handed_over_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_orders_handed_over_device_id_fkey"
+            columns: ["handed_over_device_id"]
+            isOneToOne: false
+            referencedRelation: "counter_devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_orders_handed_over_shift_id_fkey"
+            columns: ["handed_over_shift_id"]
+            isOneToOne: false
+            referencedRelation: "counter_shifts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_orders_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_orders_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       device_health: {
         Row: {
           booted_gates: string[]
@@ -3570,6 +3727,42 @@ export type Database = {
           ip_hash?: string | null
         }
         Relationships: []
+      }
+      kept_order_labels: {
+        Row: {
+          kept_at: string
+          label: string
+          order_id: string
+          outlet_id: string
+        }
+        Insert: {
+          kept_at: string
+          label: string
+          order_id: string
+          outlet_id: string
+        }
+        Update: {
+          kept_at?: string
+          label?: string
+          order_id?: string
+          outlet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kept_order_labels_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kept_order_labels_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       kitchen_acknowledgements: {
         Row: {
@@ -4588,6 +4781,7 @@ export type Database = {
           code: string
           collect_customer_details: boolean
           created_at: string
+          delivery_offered: boolean
           dine_in_offered: boolean
           discount_presets: Json
           district: string | null
@@ -4636,6 +4830,7 @@ export type Database = {
           code: string
           collect_customer_details?: boolean
           created_at?: string
+          delivery_offered?: boolean
           dine_in_offered?: boolean
           discount_presets?: Json
           district?: string | null
@@ -4684,6 +4879,7 @@ export type Database = {
           code?: string
           collect_customer_details?: boolean
           created_at?: string
+          delivery_offered?: boolean
           dine_in_offered?: boolean
           discount_presets?: Json
           district?: string | null
@@ -5583,12 +5779,20 @@ export type Database = {
         Args: { p_business_date: string; p_outlet_id: string }
         Returns: Json
       }
+      billing_day_numbers_v2: {
+        Args: { p_business_date: string; p_outlet_id: string }
+        Returns: Json
+      }
       billing_day_readiness: {
         Args: { p_business_date: string; p_outlet_id: string }
         Returns: Json
       }
       billing_day_stats: {
         Args: { p_business_date: string; p_outlet_id: string }
+        Returns: Json
+      }
+      billing_day_stats_v2: {
+        Args: { p_business_date: string; p_outlet_id: string; p_scope?: string }
         Returns: Json
       }
       billing_device_context: {
@@ -5643,7 +5847,21 @@ export type Database = {
         }
         Returns: Json
       }
+      billing_history_bills_v2: {
+        Args: {
+          p_after?: Json
+          p_business_date: string
+          p_filter?: Json
+          p_limit?: number
+          p_outlet_id: string
+        }
+        Returns: Json
+      }
       billing_history_day_extras: {
+        Args: { p_business_date: string; p_outlet_id: string }
+        Returns: Json
+      }
+      billing_history_delivery_orders: {
         Args: { p_business_date: string; p_outlet_id: string }
         Returns: Json
       }
@@ -5813,6 +6031,17 @@ export type Database = {
         }[]
       }
       create_billing_order_v2: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
+      }
+      create_billing_order_v3: {
         Args: {
           p_command_id?: string
           p_created_at?: string
@@ -6108,6 +6337,7 @@ export type Database = {
         Args: { p_at: string; p_customer: string; p_outlet: string }
         Returns: Database["public"]["Enums"]["customer_tier"]
       }
+      delivery_order_content_ok: { Args: { p: Json }; Returns: boolean }
       derive_dish_preparation: {
         Args: { p_at: string; p_order: string }
         Returns: undefined
@@ -6337,6 +6567,17 @@ export type Database = {
           invite_id: string
         }[]
       }
+      hand_over_delivery_order: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
+      }
       ingest_aggregator_cycle: {
         Args: { p_payload: Json; p_permitted_outlets: string[] }
         Returns: Json
@@ -6399,6 +6640,7 @@ export type Database = {
         Returns: Json
       }
       kitchen_board_v2: { Args: never; Returns: Json }
+      kitchen_board_v3: { Args: never; Returns: Json }
       kitchen_done_lines: { Args: { p_ready: string }; Returns: Json }
       kitchen_filter_lines: {
         Args: { p_category_ids: string[]; p_lines: Json; p_mode: string }
@@ -6551,6 +6793,7 @@ export type Database = {
       overview_month: { Args: { p_outlet_id: string }; Returns: Json }
       overview_today: { Args: { p_outlet_id: string }; Returns: Json }
       overview_today_v2: { Args: { p_outlet_id: string }; Returns: Json }
+      overview_today_v3: { Args: { p_outlet_id: string }; Returns: Json }
       pay_billing_now: {
         Args: {
           p_command_id?: string
@@ -6957,6 +7200,17 @@ export type Database = {
         }
         Returns: Json
       }
+      revise_billing_order_v3: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
+      }
       revoke_bill_public_link: {
         Args: { p_bill_id: string }
         Returns: undefined
@@ -6973,6 +7227,19 @@ export type Database = {
         }
         Returns: Json
       }
+      sales_analytics_series_v3: {
+        Args: {
+          p_category?: string
+          p_cut?: string
+          p_from: string
+          p_item?: string
+          p_outlet_id: string
+          p_periods?: number
+          p_scope?: string
+          p_to: string
+        }
+        Returns: Json
+      }
       sales_analytics_v2: {
         Args: {
           p_align?: string
@@ -6980,6 +7247,19 @@ export type Database = {
           p_from: string
           p_outlet_id: string
           p_periods?: number
+          p_to: string
+          p_view?: string
+        }
+        Returns: Json
+      }
+      sales_analytics_v3: {
+        Args: {
+          p_align?: string
+          p_cut?: string
+          p_from: string
+          p_outlet_id: string
+          p_periods?: number
+          p_scope?: string
           p_to: string
           p_view?: string
         }
@@ -7031,6 +7311,7 @@ export type Database = {
           code: string
           collect_customer_details: boolean
           created_at: string
+          delivery_offered: boolean
           dine_in_offered: boolean
           discount_presets: Json
           district: string | null
@@ -7100,6 +7381,7 @@ export type Database = {
           code: string
           collect_customer_details: boolean
           created_at: string
+          delivery_offered: boolean
           dine_in_offered: boolean
           discount_presets: Json
           district: string | null
@@ -7163,6 +7445,7 @@ export type Database = {
           code: string
           collect_customer_details: boolean
           created_at: string
+          delivery_offered: boolean
           dine_in_offered: boolean
           discount_presets: Json
           district: string | null
@@ -7229,6 +7512,75 @@ export type Database = {
           code: string
           collect_customer_details: boolean
           created_at: string
+          delivery_offered: boolean
+          dine_in_offered: boolean
+          discount_presets: Json
+          district: string | null
+          geofence_radius_m: number
+          gold_counter_grant: boolean
+          gold_duration_months: number
+          gold_earn_multiplier_x100: number
+          gold_enabled: boolean
+          gold_threshold_paise: number | null
+          hyperpure_delivery: boolean
+          id: string
+          is_active: boolean
+          latitude: number | null
+          location_accuracy_m: number | null
+          location_captured_at: string | null
+          location_label: string
+          longitude: number | null
+          menu_slug: string
+          name: string
+          packaging_free_for_gold: boolean
+          packaging_mode: Database["public"]["Enums"]["packaging_mode"]
+          packaging_price_paise: number | null
+          phone: string | null
+          pincode: string | null
+          points_earn_block_paise: number | null
+          points_earn_per_block: number | null
+          points_enabled: boolean
+          points_gold_use_cap_bp: number | null
+          points_use_cap_bp: number | null
+          review_ask_enabled: boolean
+          review_ask_percent: number
+          review_ask_popup: boolean
+          review_ask_url: string | null
+          table_numbers: boolean
+          takeaway_offered: boolean
+          zomato_res_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "outlets"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      set_outlet_service_settings_v2: {
+        Args: {
+          p_collect_customer_details?: boolean
+          p_delivery_offered?: boolean
+          p_dine_in_offered: boolean
+          p_outlet: string
+          p_packaging_free_for_gold: boolean
+          p_packaging_mode: Database["public"]["Enums"]["packaging_mode"]
+          p_packaging_price_paise: number
+          p_table_numbers: boolean
+          p_takeaway_offered: boolean
+        }
+        Returns: {
+          address_line1: string | null
+          address_line2: string | null
+          arrival_deadline: string
+          attendance_blocks_away: boolean
+          attendance_needs_manager: boolean
+          business_day_cutover: string
+          city: string | null
+          code: string
+          collect_customer_details: boolean
+          created_at: string
+          delivery_offered: boolean
           dine_in_offered: boolean
           discount_presets: Json
           district: string | null
@@ -7312,6 +7664,17 @@ export type Database = {
           p_stops_on: string
         }
         Returns: undefined
+      }
+      take_back_delivery_handover: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
       }
       undo_fixed_cost_payment: {
         Args: { p_fixed_cost_id: string; p_payment_id: string }
@@ -7446,7 +7809,7 @@ export type Database = {
       inventory_unit: "kg" | "litre" | "packet" | "piece"
       line_kind: "item" | "packaging"
       movement_type: "added" | "used" | "wasted" | "correction"
-      order_status: "open" | "paid" | "cancelled"
+      order_status: "open" | "paid" | "cancelled" | "handed_over"
       packaging_mode: "off" | "per_bag" | "per_order"
       payment_method: "cash" | "upi"
       points_entry_kind: "earned" | "used" | "earned_reversed" | "used_returned"
@@ -7616,7 +7979,7 @@ export const Constants = {
       inventory_unit: ["kg", "litre", "packet", "piece"],
       line_kind: ["item", "packaging"],
       movement_type: ["added", "used", "wasted", "correction"],
-      order_status: ["open", "paid", "cancelled"],
+      order_status: ["open", "paid", "cancelled", "handed_over"],
       packaging_mode: ["off", "per_bag", "per_order"],
       payment_method: ["cash", "upi"],
       points_entry_kind: ["earned", "used", "earned_reversed", "used_returned"],

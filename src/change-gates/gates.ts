@@ -182,6 +182,23 @@ export const CHANGE_GATES = {
     roundTrip:
       'none: it changes which page a tablet is shown and refuses a sign-in before it is sent; nothing is written or queued either way',
   },
+  /**
+   * #83: an outlet may offer Delivery, whose orders the kitchen makes and the
+   * counter hands to a rider without a bill; labels are kept after an order
+   * leaves the rail; and Stats, Billing History, Items and Sales gain a Counter ·
+   * Delivery switch (delivery-orders-are-made-not-billed, design D1–D9). Off,
+   * every order is billed or cancelled, labels go when an order leaves the
+   * rail, and no page shows delivery orders. A delivery order saved while on
+   * reads as a plain open order with the gate off, so it is turned off with no
+   * delivery order on the rail.
+   */
+  'delivery-orders': {
+    kind: 'change',
+    code: 'DO',
+    change: 'delivery-orders-are-made-not-billed',
+    retireBy: '2027-02-28',
+    roundTrip: 'tested',
+  },
 } as const satisfies Record<string, ChangeGateDeclaration>
 
 export type ChangeGateKey = keyof typeof CHANGE_GATES
