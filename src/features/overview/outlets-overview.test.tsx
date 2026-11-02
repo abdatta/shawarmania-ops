@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -263,12 +263,17 @@ describe('progressive Overview', () => {
           await screen.findByTestId('overview-attention-delivery-needs-you'),
         ).toHaveTextContent(`${count} delivery ${count === 1 ? 'issue' : 'issues'}`)
         expect(screen.getByTestId('nav-badge-delivery-needs-you')).toHaveTextContent(String(count))
+        expect(screen.getByTestId('needs-attention')).toBeVisible()
         resolved = true
         await act(async () => attentionChanged())
       }
       expect(screen.queryByTestId('overview-attention-delivery-needs-you')).toBeNull()
       expect(screen.queryByTestId('nav-badge-delivery-needs-you')).toBeNull()
       expect(screen.queryByTestId('overview-attention-attendance-waiting')).toBeNull()
+      // With nothing waiting anywhere, the section is left out, not shown empty.
+      await waitFor(() => expect(screen.getByTestId('needs-attention')).not.toBeVisible())
+      expect(screen.queryByRole('heading', { name: 'Needs attention' })).toBeNull()
+      expect(screen.queryByText('Nothing waiting')).toBeNull()
     },
   )
 

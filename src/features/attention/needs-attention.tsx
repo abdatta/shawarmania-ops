@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from 'react'
 import { ChevronRight, TriangleAlert } from 'lucide-react'
 import { Link } from 'react-router'
 import { Card } from '@/components/ui/card'
@@ -25,18 +26,27 @@ export function NeedsAttention() {
     // Money owed goes first, whatever the navigation's order (owner, 2026-10-20).
     .sort((a, b) => Number(pinned(b)) - Number(pinned(a)))
   const base = `${session.mode === 'demo' ? '/demo' : ''}/${ROLE_SEGMENTS[session.role ?? 'franchise_admin']}`
+  // Each row reads its own count, so each row reports it here. Once every row
+  // has read and none is waiting, the section is left out rather than saying so
+  // (owner, 2026-11-02); while any row is still loading it stays, shimmering.
+  const [counts, setCounts] = useState<Record<string, number | null>>({})
+  const report = useCallback(
+    (id: string, count: number | null) =>
+      setCounts((previous) => (previous[id] === count ? previous : { ...previous, [id]: count })),
+    [],
+  )
+  const empty = pages.every((page) => counts[page.id] === 0)
   return (
-    <Card className="space-y-2 !p-3">
+    <Card className="space-y-2 !p-3" hidden={empty} data-testid="needs-attention">
       <h2 className="flex items-center gap-2 text-sm font-bold">
         <TriangleAlert size={17} aria-hidden className="text-warning" />
         Needs attention
       </h2>
-      <ul className="peer space-y-1 empty:hidden">
+      <ul className="space-y-1">
         {pages.map((page) => (
-          <AttentionPage key={page.id} page={page} base={base} />
+          <AttentionPage key={page.id} page={page} base={base} report={report} />
         ))}
       </ul>
-      <p className="text-sm text-content-muted peer-has-[li]:hidden">Nothing waiting</p>
     </Card>
   )
 }
@@ -55,9 +65,19 @@ const TONE = {
   late: { row: `${TONE_SURFACE.late} font-semibold`, icon: TONE_ICON.late },
 } as const
 
-function AttentionPage({ page, base }: { page: Surface; base: string }) {
+function AttentionPage({
+  page,
+  base,
+  report,
+}: {
+  page: Surface
+  base: string
+  report: (id: string, count: number | null) => void
+}) {
   const useSource = ATTENTION_SOURCES[page.nav!.attention!]
   const attention = useSource()
+  const count = attention === null ? null : attention.count
+  useEffect(() => report(page.id, count), [report, page.id, count])
   if (attention === null)
     return (
       <li aria-label={`Loading ${page.nav?.label} attention`}>
