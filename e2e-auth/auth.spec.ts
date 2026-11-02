@@ -22,12 +22,12 @@ const PERSONAS = {
     segment: 'staff',
     // A personal Biller login is a staff phone, never a second till. Billing is
     // mounted only by the enrolled device principal under /counter.
-    lands: (page: Page) => page.getByText('Hello, Synthetic Biller'),
+    lands: (page: Page) => page.getByTestId('today-pass'),
   },
   staff: {
     username: 'staff.kalyani',
     segment: 'staff',
-    lands: (page: Page) => page.getByText('Hello, Synthetic Staff'),
+    lands: (page: Page) => page.getByTestId('today-pass'),
   },
 } as const
 
@@ -190,24 +190,20 @@ async function provisionEmployee(
 
 test.describe('username sign-in and role routing', () => {
   for (const [label, persona] of Object.entries(PERSONAS)) {
-    test(
-      `a ${label} signs in and lands on their own shell`,
-      { tag: persona.segment === 'staff' ? '@cg-off:refreshed-staff-screens' : [] },
-      async ({ page }) => {
-        await signIn(page, persona.username)
+    test(`a ${label} signs in and lands on their own shell`, async ({ page }) => {
+      await signIn(page, persona.username)
 
-        await expect(page).toHaveURL(new RegExp(`/${persona.segment}$`))
-        await expect(persona.lands(page)).toBeVisible()
-        await expect(page.getByTestId('account-menu')).toBeVisible()
-        await expect(page.getByTestId('demo-banner')).toHaveCount(0)
-        if (label === 'biller') {
-          await expect(
-            page.getByRole('navigation').getByRole('link', { name: 'My attendance' }),
-          ).toBeVisible()
-          await expect(page.getByRole('link', { name: 'Counter' })).toHaveCount(0)
-        }
-      },
-    )
+      await expect(page).toHaveURL(new RegExp(`/${persona.segment}$`))
+      await expect(persona.lands(page)).toBeVisible()
+      await expect(page.getByTestId('account-menu')).toBeVisible()
+      await expect(page.getByTestId('demo-banner')).toHaveCount(0)
+      if (label === 'biller') {
+        await expect(
+          page.getByRole('navigation').getByRole('link', { name: 'My attendance' }),
+        ).toBeVisible()
+        await expect(page.getByRole('link', { name: 'Counter' })).toHaveCount(0)
+      }
+    })
   }
 
   for (const label of ['owner', 'biller'] as const) {
@@ -420,115 +416,65 @@ test.describe('username sign-in and role routing', () => {
     await page.goto('owner/attendance')
     await expect(page.getByTestId(opened!)).toHaveAttribute('aria-pressed', 'true')
   })
-
-  test(
-    'another role path redirects to the live assignment shell',
-    { tag: '@cg-off:refreshed-staff-screens' },
-    async ({ page }) => {
-      await signIn(page, PERSONAS.staff.username)
-      await page.goto('owner')
-      await expect(page).toHaveURL(/\/staff$/)
-      await expect(PERSONAS.staff.lands(page)).toBeVisible()
-
-      await page.reload()
-      await expect(PERSONAS.staff.lands(page)).toBeVisible()
-      await signOut(page)
-    },
-  )
 })
 
 test.describe('provisioning and admin-issued reset', () => {
-  test(
-    'one username-only hire activates at two outlets',
-    { tag: '@cg-off:refreshed-staff-screens' },
-    async ({ page, browser }) => {
-      const person = freshPerson('starter')
-      await signIn(page, PERSONAS.owner.username)
-      await page.goto('owner/team')
+  test('rename preserves a session and an admin-issued reset changes the password', async ({
+    page,
+    browser,
+  }) => {
+    const person = freshPerson('rename')
+    const renamed = `${person.username}.new`
+    await signIn(page, PERSONAS.owner.username)
+    await page.goto('owner/team')
+    const issued = await provisionEmployee(page, person)
+    const activated = await activate(browser, issued.link, person.username)
+    await expect(activated.page).toHaveURL(/\/staff$/)
 
-      const { link, panel } = await provisionEmployee(page, person, [
-        'Shawarmania Kalyani',
-        'Shawarmania Kanchrapara',
-      ])
-      const row = page.getByRole('row', { name: new RegExp(person.name) })
-      await expect(row).toContainText('Set-up link issued')
-      await expect(row).toContainText('Shawarmania Kalyani')
-      await expect(row).toContainText('Shawarmania Kanchrapara')
-      await expect(panel.getByRole('img', { name: new RegExp(person.name) })).toBeVisible()
+    await issued.panel.getByRole('button', { name: 'Done' }).click()
+    let row = page.getByRole('row', { name: new RegExp(person.name) })
+    await row.getByRole('button', { name: /^Actions for / }).click()
+    await row.getByRole('button', { name: 'Change username' }).click()
+    const renameSheet = page.getByRole('dialog')
+    await renameSheet.getByLabel('Username', { exact: true }).fill(renamed)
+    await renameSheet.getByRole('button', { name: 'Save username' }).click()
+    await expect(page.getByText(renamed, { exact: true })).toBeVisible()
 
-      const activated = await activate(browser, link, person.username)
-      await expect(activated.page).toHaveURL(/\/staff$/)
-      await expect(activated.page.getByText(`Hello, ${person.name}`)).toBeVisible()
-      await expect(activated.page.getByTestId('attendance-action')).toBeVisible()
+    await activated.page.reload()
+    await expect(activated.page).toHaveURL(/\/staff$/)
+    await expect(activated.page.getByTestId('today-pass')).toBeVisible()
 
-      const replayContext = await browser.newContext()
-      const replay = await replayContext.newPage()
-      await replay.goto(link)
-      await expect(replay.getByTestId('activate-error')).toContainText('no longer usable')
-      await expect(replay.getByLabel('New password')).toHaveCount(0)
+    const oldContext = await browser.newContext()
+    const oldLogin = await oldContext.newPage()
+    await attemptSignIn(oldLogin, person.username, NEW_PASSWORD)
+    await expect(oldLogin.getByTestId('signin-error')).toHaveText(
+      'Those sign-in details are not right.',
+    )
 
-      await activated.context.close()
-      await replayContext.close()
-    },
-  )
+    const renamedContext = await browser.newContext()
+    const renamedLogin = await renamedContext.newPage()
+    await signIn(renamedLogin, renamed, NEW_PASSWORD)
+    await expect(renamedLogin).toHaveURL(/\/staff$/)
 
-  test(
-    'rename preserves a session and an admin-issued reset changes the password',
-    { tag: '@cg-off:refreshed-staff-screens' },
-    async ({ page, browser }) => {
-      const person = freshPerson('rename')
-      const renamed = `${person.username}.new`
-      await signIn(page, PERSONAS.owner.username)
-      await page.goto('owner/team')
-      const issued = await provisionEmployee(page, person)
-      const activated = await activate(browser, issued.link, person.username)
-      await expect(activated.page).toHaveURL(/\/staff$/)
+    row = page.getByRole('row', { name: new RegExp(person.name) })
+    await row.getByRole('button', { name: /^Actions for / }).click()
+    await row.getByRole('button', { name: 'Reset password' }).click()
+    const resetPanel = page.getByTestId('account-handover')
+    const resetLink = (await resetPanel.getByTestId('account-handover-link').innerText()).trim()
+    const reset = await activate(browser, resetLink, renamed, RESET_PASSWORD)
+    await expect(reset.page).toHaveURL(/\/staff$/)
 
-      await issued.panel.getByRole('button', { name: 'Done' }).click()
-      let row = page.getByRole('row', { name: new RegExp(person.name) })
-      await row.getByRole('button', { name: /^Actions for / }).click()
-      await row.getByRole('button', { name: 'Change username' }).click()
-      const renameSheet = page.getByRole('dialog')
-      await renameSheet.getByLabel('Username', { exact: true }).fill(renamed)
-      await renameSheet.getByRole('button', { name: 'Save username' }).click()
-      await expect(page.getByText(renamed, { exact: true })).toBeVisible()
+    const resetLoginContext = await browser.newContext()
+    const resetLogin = await resetLoginContext.newPage()
+    await signIn(resetLogin, renamed, RESET_PASSWORD)
+    await expect(resetLogin).toHaveURL(/\/staff$/)
 
-      await activated.page.reload()
-      await expect(activated.page).toHaveURL(/\/staff$/)
-      await expect(activated.page.getByText(`Hello, ${person.name}`)).toBeVisible()
-
-      const oldContext = await browser.newContext()
-      const oldLogin = await oldContext.newPage()
-      await attemptSignIn(oldLogin, person.username, NEW_PASSWORD)
-      await expect(oldLogin.getByTestId('signin-error')).toHaveText(
-        'Those sign-in details are not right.',
-      )
-
-      const renamedContext = await browser.newContext()
-      const renamedLogin = await renamedContext.newPage()
-      await signIn(renamedLogin, renamed, NEW_PASSWORD)
-      await expect(renamedLogin).toHaveURL(/\/staff$/)
-
-      row = page.getByRole('row', { name: new RegExp(person.name) })
-      await row.getByRole('button', { name: /^Actions for / }).click()
-      await row.getByRole('button', { name: 'Reset password' }).click()
-      const resetPanel = page.getByTestId('account-handover')
-      const resetLink = (await resetPanel.getByTestId('account-handover-link').innerText()).trim()
-      const reset = await activate(browser, resetLink, renamed, RESET_PASSWORD)
-      await expect(reset.page).toHaveURL(/\/staff$/)
-
-      const resetLoginContext = await browser.newContext()
-      const resetLogin = await resetLoginContext.newPage()
-      await signIn(resetLogin, renamed, RESET_PASSWORD)
-      await expect(resetLogin).toHaveURL(/\/staff$/)
-
-      await activated.context.close()
-      await oldContext.close()
-      await renamedContext.close()
-      await reset.context.close()
-      await resetLoginContext.close()
-    },
-  )
+    await activated.context.close()
+    await oldContext.close()
+    await renamedContext.close()
+    await reset.context.close()
+    await resetLoginContext.close()
+  })
 
   test('an owner safely promotes, expands, and marks a person as left', async ({
     page,
@@ -616,93 +562,6 @@ test.describe('provisioning and admin-issued reset', () => {
   })
 })
 
-/**
- * The production failure, walked end to end: a real session, a real database,
- * and a phone that cannot produce a position.
- *
- * Every layer of the suite had this green while it was broken. The component
- * tests drove the mock adapter, which takes a null reading happily; the REST
- * suite always sent coordinates; and the demo walk never reaches Supabase. So a
- * two-outlet employee whose phone found nothing chose their shop, was told "that
- * did not work, try again in a moment", and had nothing recorded — for as long
- * as the path existed. This is the one place where the screen, the adapter and
- * the database are all real at once.
- *
- * A freshly provisioned hire on purpose: they hold no attendance row, so this
- * cannot collide with the suites that share the stack in CI, and a person holds
- * one row a business date.
- */
-test(
-  'a two-outlet hire whose phone finds no position records the day and waits',
-  { tag: '@cg-off:refreshed-staff-screens' },
-  async ({ page, browser }) => {
-    const person = freshPerson('unlocated')
-    await signIn(page, PERSONAS.owner.username)
-    await page.goto('owner/team')
-    const issued = await provisionEmployee(page, person, [
-      'Shawarmania Kalyani',
-      'Shawarmania Kanchrapara',
-    ])
-    const activated = await activate(browser, issued.link, person.username)
-    await expect(activated.page).toHaveURL(/\/staff$/)
-
-    // Geolocation permission is never granted to this context, so the browser
-    // refuses the read exactly as a phone with location off does.
-    await activated.page.getByTestId('attendance-action').click()
-
-    // Two live assignments and no reading, so the one question anybody is ever
-    // asked, and nothing recorded until it is answered.
-    const question = activated.page.getByTestId('attendance-which-outlet')
-    await expect(question).toBeVisible()
-    await expect(question).toHaveAttribute('data-failure', 'denied')
-    await expect(question).toContainText('Location permission is off')
-
-    await question.getByRole('button', { name: 'Shawarmania Kalyani' }).click()
-
-    // Recorded, and honest about what it is worth: a claim waiting for a manager.
-    // This assertion is the bug. It used to be the error message instead.
-    await expect(activated.page.getByTestId('attendance-waiting')).toContainText(
-      'waiting for your manager to approve it',
-    )
-    await expect(activated.page.getByTestId('attendance-error')).toHaveCount(0)
-
-    // It survives a reload, because it is a row rather than a screen state.
-    await activated.page.reload()
-    await expect(activated.page.getByTestId('attendance-waiting')).toBeVisible()
-
-    // And their manager settles it from a phone that cannot find a position
-    // either — the other half of the same fault. No reading means this is treated
-    // as an off-site approval, so it costs a written reason.
-    const managerContext = await browser.newContext()
-    const manager = await managerContext.newPage()
-    await signIn(manager, PERSONAS.admin.username)
-    await manager.goto('admin/attendance')
-
-    const card = manager.locator('[data-testid^="day-"]').filter({ hasText: person.name })
-    await expect(card).toBeVisible()
-    // Exact, because the card's own expand control says "approve" in its label.
-    await card.getByRole('button', { name: 'Approve', exact: true }).click()
-
-    // The reason is demanded because nothing vouches for either of them: no
-    // employee position, and no manager position to compare it against.
-    await expect(manager.getByTestId('reason-required')).toBeVisible()
-    await manager
-      .getByLabel('Why are you approving this?')
-      .fill('Both phones lost GPS; seen at the counter all morning')
-    await manager.getByRole('button', { name: 'Approve and record my reason' }).click()
-
-    await expect(manager.getByTestId('attendance-error')).toHaveCount(0)
-    await expect(card).toContainText('Present')
-
-    // The person reads their own settled day, reason and all.
-    await activated.page.reload()
-    await expect(activated.page.getByTestId('attendance-approved')).toBeVisible()
-
-    await managerContext.close()
-    await activated.context.close()
-  },
-)
-
 test('deactivation ends an open username session immediately', async ({ page, browser }) => {
   const person = freshPerson('doomed')
   await signIn(page, PERSONAS.owner.username)
@@ -742,16 +601,13 @@ test('demo mode remains isolated beside a real username session', async ({ page 
 })
 
 /**
- * The `@cg-on:refreshed-staff-screens` twins of the specs above anchored on
- * *Hello, name* (a-check-in-at-the-shop-approves-itself, #81): a staff phone's
- * Home is the Today pass, with no greeting.
+ * A staff phone's Home is the Today pass, with no greeting
+ * (a-check-in-at-the-shop-approves-itself, #81).
  */
 test.describe('the Today pass, signed in', () => {
-  const SCREENS = { tag: '@cg-on:refreshed-staff-screens' }
-
   for (const label of ['biller', 'staff'] as const) {
     const persona = PERSONAS[label]
-    test(`a ${label} signs in and lands on the Today pass`, SCREENS, async ({ page }) => {
+    test(`a ${label} signs in and lands on the Today pass`, async ({ page }) => {
       await signIn(page, persona.username)
 
       await expect(page).toHaveURL(/\/staff$/)
@@ -768,7 +624,7 @@ test.describe('the Today pass, signed in', () => {
     })
   }
 
-  test('another role path redirects to the Today pass', SCREENS, async ({ page }) => {
+  test('another role path redirects to the Today pass', async ({ page }) => {
     await signIn(page, PERSONAS.staff.username)
     await page.goto('owner')
     await expect(page).toHaveURL(/\/staff$/)
@@ -779,76 +635,74 @@ test.describe('the Today pass, signed in', () => {
     await signOut(page)
   })
 
-  test(
-    'a username-only hire activates at two outlets onto the Today pass',
-    SCREENS,
-    async ({ page, browser }) => {
-      const person = freshPerson('pass')
-      await signIn(page, PERSONAS.owner.username)
-      await page.goto('owner/team')
-      const { link } = await provisionEmployee(page, person, [
-        'Shawarmania Kalyani',
-        'Shawarmania Kanchrapara',
-      ])
+  test('a username-only hire activates at two outlets onto the Today pass', async ({
+    page,
+    browser,
+  }) => {
+    const person = freshPerson('pass')
+    await signIn(page, PERSONAS.owner.username)
+    await page.goto('owner/team')
+    const { link } = await provisionEmployee(page, person, [
+      'Shawarmania Kalyani',
+      'Shawarmania Kanchrapara',
+    ])
 
-      const activated = await activate(browser, link, person.username)
-      await expect(activated.page).toHaveURL(/\/staff$/)
-      await expect(activated.page.getByTestId('today-pass')).toBeVisible()
-      await expect(activated.page.getByTestId('attendance-action')).toBeVisible()
+    const activated = await activate(browser, link, person.username)
+    await expect(activated.page).toHaveURL(/\/staff$/)
+    await expect(activated.page.getByTestId('today-pass')).toBeVisible()
+    await expect(activated.page.getByTestId('attendance-action')).toBeVisible()
 
-      await activated.page.reload()
-      await expect(activated.page.getByTestId('today-pass')).toBeVisible()
-      await activated.context.close()
-    },
-  )
+    await activated.page.reload()
+    await expect(activated.page.getByTestId('today-pass')).toBeVisible()
+    await activated.context.close()
+  })
 
-  test(
-    'a two-outlet hire with location off picks the shop, and the day waits',
-    SCREENS,
-    async ({ page, browser }) => {
-      const person = freshPerson('unlocated.pass')
-      await signIn(page, PERSONAS.owner.username)
-      await page.goto('owner/team')
-      const issued = await provisionEmployee(page, person, [
-        'Shawarmania Kalyani',
-        'Shawarmania Kanchrapara',
-      ])
-      const activated = await activate(browser, issued.link, person.username)
-      await expect(activated.page).toHaveURL(/\/staff$/)
+  test('a two-outlet hire with location off picks the shop, and the day waits', async ({
+    page,
+    browser,
+  }) => {
+    const person = freshPerson('unlocated.pass')
+    await signIn(page, PERSONAS.owner.username)
+    await page.goto('owner/team')
+    const issued = await provisionEmployee(page, person, [
+      'Shawarmania Kalyani',
+      'Shawarmania Kanchrapara',
+    ])
+    const activated = await activate(browser, issued.link, person.username)
+    await expect(activated.page).toHaveURL(/\/staff$/)
 
-      // Geolocation is never granted to this context: location is off.
-      await activated.page.getByTestId('attendance-action').click()
-      const question = activated.page.getByTestId('attendance-which-outlet')
-      await expect(question).toHaveAttribute('data-failure', 'denied')
-      await expect(question.getByTestId('location-help')).toBeVisible()
-      await question.getByRole('button', { name: 'Shawarmania Kalyani' }).click()
+    // Geolocation is never granted to this context: location is off.
+    await activated.page.getByTestId('attendance-action').click()
+    const question = activated.page.getByTestId('attendance-which-outlet')
+    await expect(question).toHaveAttribute('data-failure', 'denied')
+    await expect(question.getByTestId('location-help')).toBeVisible()
+    await question.getByRole('button', { name: 'Shawarmania Kalyani' }).click()
 
-      await expect(activated.page.getByTestId('attendance-waiting')).toHaveText(
-        'Waiting for your manager',
-      )
-      await expect(activated.page.getByTestId('attendance-error')).toHaveCount(0)
-      await activated.page.reload()
-      await expect(activated.page.getByTestId('attendance-waiting')).toBeVisible()
+    await expect(activated.page.getByTestId('attendance-waiting')).toHaveText(
+      'Waiting for your manager',
+    )
+    await expect(activated.page.getByTestId('attendance-error')).toHaveCount(0)
+    await activated.page.reload()
+    await expect(activated.page.getByTestId('attendance-waiting')).toBeVisible()
 
-      const managerContext = await browser.newContext()
-      const manager = await managerContext.newPage()
-      await signIn(manager, PERSONAS.admin.username)
-      await manager.goto('admin/attendance')
-      const card = manager.locator('[data-testid^="day-"]').filter({ hasText: person.name })
-      await card.getByRole('button', { name: 'Approve', exact: true }).click()
-      await manager
-        .getByLabel('Why are you approving this?')
-        .fill('Both phones lost GPS; seen at the counter all morning')
-      await manager.getByRole('button', { name: 'Approve and record my reason' }).click()
-      await expect(card).toContainText('Present')
+    const managerContext = await browser.newContext()
+    const manager = await managerContext.newPage()
+    await signIn(manager, PERSONAS.admin.username)
+    await manager.goto('admin/attendance')
+    const card = manager.locator('[data-testid^="day-"]').filter({ hasText: person.name })
+    await card.getByRole('button', { name: 'Approve', exact: true }).click()
+    await manager
+      .getByLabel('Why are you approving this?')
+      .fill('Both phones lost GPS; seen at the counter all morning')
+    await manager.getByRole('button', { name: 'Approve and record my reason' }).click()
+    await expect(card).toContainText('Present')
 
-      await activated.page.reload()
-      await expect(activated.page.getByTestId('today-pass-day')).toHaveAttribute(
-        'data-state',
-        'approved',
-      )
-      await managerContext.close()
-      await activated.context.close()
-    },
-  )
+    await activated.page.reload()
+    await expect(activated.page.getByTestId('today-pass-day')).toHaveAttribute(
+      'data-state',
+      'approved',
+    )
+    await managerContext.close()
+    await activated.context.close()
+  })
 })

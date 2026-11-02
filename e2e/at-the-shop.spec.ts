@@ -23,9 +23,6 @@ const AT_COUNTER = { latitude: 22.97505, longitude: 88.4346 }
 /** ~240 m away: outside the 150 m fence. */
 const DOWN_THE_ROAD = { latitude: 22.9765, longitude: 88.4362 }
 
-const AUTO = { tag: '@cg-on:auto-approve-at-the-shop' }
-const SCREENS = { tag: '@cg-on:refreshed-staff-screens' }
-
 test.use({ permissions: ['geolocation'], geolocation: AT_COUNTER })
 
 /** A fixed mid-month instant, for the specs that read a month (see `attendance.spec.ts`). */
@@ -44,49 +41,44 @@ async function switchRole(page: Page, role: 'Owner' | 'Admin' | 'Biller' | 'Staf
     .click()
 }
 
-test(
-  'a check-in at the counter is approved at once, with nothing to decide',
-  AUTO,
-  async ({ page }) => {
-    await openStaffHome(page)
-    await page.getByTestId('attendance-action').click()
+test('a check-in at the counter is approved at once, with nothing to decide', async ({ page }) => {
+  await openStaffHome(page)
+  await page.getByTestId('attendance-action').click()
 
-    // No popup: inside the fence there is no decision to make.
-    const day = page.getByTestId('today-pass-day')
-    await expect(day).toHaveAttribute('data-state', 'approved')
-    await expect(page.getByTestId('today-pass-approved')).toBeVisible()
-    await expect(page.getByTestId('check-in-steps')).toHaveCount(0)
-    // And nothing left to press.
-    await expect(page.getByTestId('attendance-action')).toHaveCount(0)
-    await expect(page.getByTestId('attendance-retry')).toHaveCount(0)
-  },
-)
+  // No popup: inside the fence there is no decision to make.
+  const day = page.getByTestId('today-pass-day')
+  await expect(day).toHaveAttribute('data-state', 'approved')
+  await expect(page.getByTestId('today-pass-approved')).toBeVisible()
+  await expect(page.getByTestId('check-in-steps')).toHaveCount(0)
+  // And nothing left to press.
+  await expect(page.getByTestId('attendance-action')).toHaveCount(0)
+  await expect(page.getByTestId('attendance-retry')).toHaveCount(0)
+})
 
-test(
-  'a check-in from away asks, explains, and Not now writes nothing',
-  SCREENS,
-  async ({ page, context }) => {
-    await context.setGeolocation(DOWN_THE_ROAD)
-    await openStaffHome(page)
-    await page.getByTestId('attendance-action').click()
+test('a check-in from away asks, explains, and Not now writes nothing', async ({
+  page,
+  context,
+}) => {
+  await context.setGeolocation(DOWN_THE_ROAD)
+  await openStaffHome(page)
+  await page.getByTestId('attendance-action').click()
 
-    const away = page.getByTestId('attendance-blocked')
-    await expect(away).toBeVisible()
-    // Named, because the demo Employee works at two outlets.
-    await expect(away).toContainText('You don’t seem to be at Shawarmania Kalyani')
-    await expect(away).toContainText('Your manager will need to approve it.')
-    // The numbers are behind Why?, not in the way.
-    await away.getByText('Why?').click()
-    await expect(away).toContainText('150 m')
+  const away = page.getByTestId('attendance-blocked')
+  await expect(away).toBeVisible()
+  // Named, because the demo Employee works at two outlets.
+  await expect(away).toContainText('You don’t seem to be at Shawarmania Kalyani')
+  await expect(away).toContainText('Your manager will need to approve it.')
+  // The numbers are behind Why?, not in the way.
+  await away.getByText('Why?').click()
+  await expect(away).toContainText('150 m')
 
-    await page.getByTestId('attendance-not-now').click()
-    await expect(away).toHaveCount(0)
-    await page.reload()
-    await expect(page.getByTestId('attendance-action')).toHaveText(/Check in/)
-  },
-)
+  await page.getByTestId('attendance-not-now').click()
+  await expect(away).toHaveCount(0)
+  await page.reload()
+  await expect(page.getByTestId('attendance-action')).toHaveText(/Check in/)
+})
 
-test('checking in anyway from away waits for the manager', SCREENS, async ({ page, context }) => {
+test('checking in anyway from away waits for the manager', async ({ page, context }) => {
   await context.setGeolocation(DOWN_THE_ROAD)
   await openStaffHome(page)
   await page.getByTestId('attendance-action').click()
@@ -97,35 +89,31 @@ test('checking in anyway from away waits for the manager', SCREENS, async ({ pag
   await expect(page.getByTestId('attendance-retry')).toHaveText(/Check my location again/)
 })
 
-test(
-  'Block refuses a check-in from away, and says so with one OK',
-  AUTO,
-  async ({ page, context }) => {
-    await page.goto(`demo/admin/outlets/${OUTLET_KALYANI_ID}`)
-    const rules = page.getByTestId('attendance-rules-section')
-    await expect(rules).toBeVisible()
-    await page.getByTestId('attendance-blocks-away-switch').click()
-    await page.getByTestId('attendance-rules-save').click()
-    await expect(page.getByTestId('attendance-rules-saved')).toBeVisible()
+test('Block refuses a check-in from away, and says so with one OK', async ({ page, context }) => {
+  await page.goto(`demo/admin/outlets/${OUTLET_KALYANI_ID}`)
+  const rules = page.getByTestId('attendance-rules-section')
+  await expect(rules).toBeVisible()
+  await page.getByTestId('attendance-blocks-away-switch').click()
+  await page.getByTestId('attendance-rules-save').click()
+  await expect(page.getByTestId('attendance-rules-saved')).toBeVisible()
 
-    await context.setGeolocation(DOWN_THE_ROAD)
-    await switchRole(page, 'Staff')
-    await expect(page.getByTestId('today-pass')).toBeVisible()
-    await page.getByTestId('attendance-action').click()
+  await context.setGeolocation(DOWN_THE_ROAD)
+  await switchRole(page, 'Staff')
+  await expect(page.getByTestId('today-pass')).toBeVisible()
+  await page.getByTestId('attendance-action').click()
 
-    const refused = page.getByTestId('attendance-refused')
-    await expect(refused).toContainText('Check-in denied')
-    await expect(refused).toContainText('You’re not at the shop. Ask your manager.')
-    await expect(page.getByTestId('request-override')).toHaveCount(0)
-    await expect(page.getByText('Check in again')).toHaveCount(0)
+  const refused = page.getByTestId('attendance-refused')
+  await expect(refused).toContainText('Check-in denied')
+  await expect(refused).toContainText('You’re not at the shop. Ask your manager.')
+  await expect(page.getByTestId('request-override')).toHaveCount(0)
+  await expect(page.getByText('Check in again')).toHaveCount(0)
 
-    await page.getByTestId('attendance-okay').click()
-    await expect(refused).toHaveCount(0)
-    await expect(page.getByTestId('attendance-action')).toBeVisible()
-  },
-)
+  await page.getByTestId('attendance-okay').click()
+  await expect(refused).toHaveCount(0)
+  await expect(page.getByTestId('attendance-action')).toBeVisible()
+})
 
-test('the outlet page puts Attendance straight after Details', AUTO, async ({ page }) => {
+test('the outlet page puts Attendance straight after Details', async ({ page }) => {
   await page.goto(`demo/admin/outlets/${OUTLET_KALYANI_ID}`)
   const rules = page.getByTestId('attendance-rules-section')
   await expect(rules).toBeVisible()
@@ -136,7 +124,7 @@ test('the outlet page puts Attendance straight after Details', AUTO, async ({ pa
   expect(headings.indexOf('Attendance')).toBe(headings.indexOf('Details') + 1)
 })
 
-test('the manager reads an auto-approved day with no approver', AUTO, async ({ page }) => {
+test('the manager reads an auto-approved day with no approver', async ({ page }) => {
   await page.goto('demo/admin/attendance')
   await expect(page.getByTestId('attendance-day')).toBeVisible()
 
@@ -147,7 +135,7 @@ test('the manager reads an auto-approved day with no approver', AUTO, async ({ p
   await expect(page.getByTestId(`approve-${DEMO_GRILLER_ACCOUNT_ID}`)).toHaveCount(0)
 })
 
-test('My attendance is a month calendar, and a day opens its detail', SCREENS, async ({ page }) => {
+test('My attendance is a month calendar, and a day opens its detail', async ({ page }) => {
   await page.clock.setFixedTime(MID_MONTH)
   await page.goto('demo/staff/my-attendance')
 
@@ -171,7 +159,7 @@ test('My attendance is a month calendar, and a day opens its detail', SCREENS, a
   await expect(detail.getByTestId('approval-note')).toBeVisible()
 })
 
-test('By staff reads one person’s month as the same calendar', SCREENS, async ({ page }) => {
+test('By staff reads one person’s month as the same calendar', async ({ page }) => {
   await page.clock.setFixedTime(MID_MONTH)
   await page.goto('demo/admin/attendance')
   await expect(page.getByTestId('attendance-day')).toBeVisible()
@@ -186,7 +174,7 @@ test('By staff reads one person’s month as the same calendar', SCREENS, async 
   await expect(page.getByTestId('range-picker')).toBeVisible()
 })
 
-test('a person at two outlets picks no outlet on Home', SCREENS, async ({ page }) => {
+test('a person at two outlets picks no outlet on Home', async ({ page }) => {
   await openStaffHome(page)
   // The one big button is the only thing to press: the fence resolves the shop.
   await expect(page.getByTestId('attendance-action')).toBeVisible()
@@ -197,29 +185,25 @@ test('a person at two outlets picks no outlet on Home', SCREENS, async ({ page }
   await expect(page.getByText(/Assigned to/)).toHaveCount(0)
 })
 
-test(
-  'the new staff screens make no request beyond the app origin',
-  SCREENS,
-  async ({ page, baseURL }) => {
-    const origin = new URL(baseURL ?? E2E_ORIGIN).origin
-    const violations: string[] = []
-    page.on('request', (request) => {
-      if (new URL(request.url()).origin !== origin) violations.push(request.url())
-    })
+test('the new staff screens make no request beyond the app origin', async ({ page, baseURL }) => {
+  const origin = new URL(baseURL ?? E2E_ORIGIN).origin
+  const violations: string[] = []
+  page.on('request', (request) => {
+    if (new URL(request.url()).origin !== origin) violations.push(request.url())
+  })
 
-    await openStaffHome(page)
-    await page.getByTestId('attendance-action').click()
-    await expect(page.getByTestId('today-pass-day')).toBeVisible()
-    await page.goto('demo/staff/my-attendance')
-    await expect(page.getByTestId('attendance-calendar')).toBeVisible()
-    await page.goto('demo/staff/ledger/expenses')
-    await expect(page.getByTestId('add-ledger-expense')).toBeVisible()
-    await page.goto(`demo/admin/outlets/${OUTLET_KALYANI_ID}`)
-    await expect(page.getByTestId('attendance-rules-section')).toBeVisible()
+  await openStaffHome(page)
+  await page.getByTestId('attendance-action').click()
+  await expect(page.getByTestId('today-pass-day')).toBeVisible()
+  await page.goto('demo/staff/my-attendance')
+  await expect(page.getByTestId('attendance-calendar')).toBeVisible()
+  await page.goto('demo/staff/ledger/expenses')
+  await expect(page.getByTestId('add-ledger-expense')).toBeVisible()
+  await page.goto(`demo/admin/outlets/${OUTLET_KALYANI_ID}`)
+  await expect(page.getByTestId('attendance-rules-section')).toBeVisible()
 
-    expect(violations).toEqual([])
-  },
-)
+  expect(violations).toEqual([])
+})
 
 /**
  * A recheck, on a fake clock (tasks 9.4): from away at 12:50 the day waits; a
@@ -227,38 +211,37 @@ test(
  * shop at 13:10, after Kalyani's 13:00 deadline, approves the day as late with
  * no confirmation, and leaves no button.
  */
-test(
-  'a recheck from the shop after the deadline approves the day as late',
-  SCREENS,
-  async ({ page, context }) => {
-    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date())
-    await page.clock.install({ time: new Date(`${today}T12:50:00+05:30`) })
-    await context.setGeolocation(DOWN_THE_ROAD)
-    await openStaffHome(page)
+test('a recheck from the shop after the deadline approves the day as late', async ({
+  page,
+  context,
+}) => {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date())
+  await page.clock.install({ time: new Date(`${today}T12:50:00+05:30`) })
+  await context.setGeolocation(DOWN_THE_ROAD)
+  await openStaffHome(page)
 
-    await page.getByTestId('attendance-action').click()
-    await page.getByTestId('request-override').click()
-    await expect(page.getByTestId('attendance-waiting')).toBeVisible()
+  await page.getByTestId('attendance-action').click()
+  await page.getByTestId('request-override').click()
+  await expect(page.getByTestId('attendance-waiting')).toBeVisible()
 
-    await page.clock.fastForward('10:00')
-    await page.getByTestId('attendance-retry').click()
-    const missed = page.getByTestId('recheck-missed')
-    await expect(missed).toContainText('Still not at the shop')
-    await expect(page.getByTestId('check-in-steps')).toHaveCount(0)
-    await page.clock.fastForward('00:04')
-    await expect(missed).toHaveCount(0)
-    await expect(page.getByTestId('attendance-retry')).toBeVisible()
+  await page.clock.fastForward('10:00')
+  await page.getByTestId('attendance-retry').click()
+  const missed = page.getByTestId('recheck-missed')
+  await expect(missed).toContainText('Still not at the shop')
+  await expect(page.getByTestId('check-in-steps')).toHaveCount(0)
+  await page.clock.fastForward('00:04')
+  await expect(missed).toHaveCount(0)
+  await expect(page.getByTestId('attendance-retry')).toBeVisible()
 
-    await page.clock.fastForward('10:00')
-    await context.setGeolocation(AT_COUNTER)
-    await page.getByTestId('attendance-retry').click()
-    await expect(page.getByTestId('today-pass-day')).toHaveAttribute('data-state', 'approved')
-    await expect(page.getByTestId('today-pass-day').getByTestId('late-tag')).toBeVisible()
-    // No "Use this new check-in?" on the way, and nothing to press after.
-    await expect(page.getByTestId('check-in-steps')).toHaveCount(0)
-    await expect(page.getByTestId('attendance-retry')).toHaveCount(0)
-  },
-)
+  await page.clock.fastForward('10:00')
+  await context.setGeolocation(AT_COUNTER)
+  await page.getByTestId('attendance-retry').click()
+  await expect(page.getByTestId('today-pass-day')).toHaveAttribute('data-state', 'approved')
+  await expect(page.getByTestId('today-pass-day').getByTestId('late-tag')).toBeVisible()
+  // No "Use this new check-in?" on the way, and nothing to press after.
+  await expect(page.getByTestId('check-in-steps')).toHaveCount(0)
+  await expect(page.getByTestId('attendance-retry')).toHaveCount(0)
+})
 
 /**
  * The expense list on the refreshed screens (tasks 9.3), on the counter tablet
@@ -269,41 +252,39 @@ for (const where of [
   { label: 'the counter tablet', path: 'demo/biller', days: false },
   { label: 'the staff phone', path: 'demo/staff/ledger/expenses', days: true },
 ]) {
-  test(
-    `expenses on ${where.label}: ${where.days ? 'day headings, ' : ''}mine tagged, amount first`,
-    SCREENS,
-    async ({ page }) => {
-      await page.goto(where.path)
-      const list = page.getByTestId('ledger-expense-list')
-      await expect(list).toBeVisible()
-      if (where.days) {
-        await expect(list.getByTestId(/^expense-day-/).first()).toBeVisible()
-        await expect(list.getByTestId(/^ledger-expense-date-/)).toHaveCount(0)
-      }
-      await expect(list.getByTestId(/^ledger-cash-/).first()).toHaveText(/Cash/)
+  test(`expenses on ${where.label}: ${where.days ? 'day headings, ' : ''}mine tagged, amount first`, async ({
+    page,
+  }) => {
+    await page.goto(where.path)
+    const list = page.getByTestId('ledger-expense-list')
+    await expect(list).toBeVisible()
+    if (where.days) {
+      await expect(list.getByTestId(/^expense-day-/).first()).toBeVisible()
+      await expect(list.getByTestId(/^ledger-expense-date-/)).toHaveCount(0)
+    }
+    await expect(list.getByTestId(/^ledger-cash-/).first()).toHaveText(/Cash/)
 
-      await page.getByTestId('add-ledger-expense').click()
-      const sheet = page.getByRole('dialog', { name: 'Add expense' })
-      await expect(sheet).toBeVisible()
-      const first = await sheet.getByRole('textbox').first().getAttribute('id')
-      expect(first).toBe('expense-amount')
-      await expect(sheet.getByTestId('expense-description')).toHaveAttribute(
-        'placeholder',
-        'What was it for?',
-      )
+    await page.getByTestId('add-ledger-expense').click()
+    const sheet = page.getByRole('dialog', { name: 'Add expense' })
+    await expect(sheet).toBeVisible()
+    const first = await sheet.getByRole('textbox').first().getAttribute('id')
+    expect(first).toBe('expense-amount')
+    await expect(sheet.getByTestId('expense-description')).toHaveAttribute(
+      'placeholder',
+      'What was it for?',
+    )
 
-      // What the reader records is tagged as theirs.
-      await sheet.getByTestId('expense-amount').fill('45')
-      // The suite runs every gate on, so the category is a tile from the
-      // owners' list (design D11); Other carries what it was.
-      await sheet.getByRole('radio', { name: 'Other' }).click()
-      await sheet.getByTestId('expense-description').fill('Lemons')
-      await sheet.getByRole('button', { name: 'Record expense' }).click()
-      await expect(sheet).toHaveCount(0)
-      const mine = list.getByRole('listitem').filter({ hasText: 'Lemons' })
-      await expect(mine.getByTestId(/^expense-you-/)).toHaveText('You')
-    },
-  )
+    // What the reader records is tagged as theirs.
+    await sheet.getByTestId('expense-amount').fill('45')
+    // The suite runs every gate on, so the category is a tile from the
+    // owners' list (design D11); Other carries what it was.
+    await sheet.getByRole('radio', { name: 'Other' }).click()
+    await sheet.getByTestId('expense-description').fill('Lemons')
+    await sheet.getByRole('button', { name: 'Record expense' }).click()
+    await expect(sheet).toHaveCount(0)
+    const mine = list.getByRole('listitem').filter({ hasText: 'Lemons' })
+    await expect(mine.getByTestId(/^expense-you-/)).toHaveText('You')
+  })
 }
 
 /** The staff shell's cells of `demo-screens.spec.ts`, anchored on the Today pass. */
@@ -312,27 +293,25 @@ for (const viewport of [
   { name: 'tablet', width: 1080, height: 810 },
 ] as const) {
   for (const theme of ['light', 'dark'] as const) {
-    test(
-      `the staff shell renders the Today pass in ${theme} on ${viewport.name}`,
-      SCREENS,
-      async ({ page }, testInfo) => {
-        await page.setViewportSize({ width: viewport.width, height: viewport.height })
-        await page.goto('.')
-        await page.evaluate((value) => localStorage.setItem('shawarmania.theme', value), theme)
-        await page.goto('demo/staff')
-        await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
-        await expect(page.getByTestId('demo-banner')).toBeVisible()
-        await expect(page.getByTestId('today-pass')).toBeVisible()
-        await testInfo.attach(`staff-${theme}-${viewport.name}`, {
-          body: await page.screenshot(),
-          contentType: 'image/png',
-        })
-      },
-    )
+    test(`the staff shell renders the Today pass in ${theme} on ${viewport.name}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height })
+      await page.goto('.')
+      await page.evaluate((value) => localStorage.setItem('shawarmania.theme', value), theme)
+      await page.goto('demo/staff')
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await expect(page.getByTestId('demo-banner')).toBeVisible()
+      await expect(page.getByTestId('today-pass')).toBeVisible()
+      await testInfo.attach(`staff-${theme}-${viewport.name}`, {
+        body: await page.screenshot(),
+        contentType: 'image/png',
+      })
+    })
   }
 }
 
-test('a staff deep link reconstructs the Today pass on reload', SCREENS, async ({ page }) => {
+test('a staff deep link reconstructs the Today pass on reload', async ({ page }) => {
   await page.goto('demo/staff')
   await expect(page.getByTestId('today-pass')).toBeVisible()
   await page.reload()
