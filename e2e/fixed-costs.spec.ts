@@ -6,10 +6,9 @@ import { OUTLET_KALYANI_ID as KAL } from '../src/data-access/mock/fixtures/outle
 /**
  * Fixed costs in the demo (fixed-costs-are-spread-over-the-month): the Fixed
  * tab of Expenses, paying in parts and undoing, last month's salary paid now
- * and counted in last month, Needs attention, and, with `pro-rata-pnl` on, the
- * figures that read them. The tab is not behind the gate, so the walk through
- * it runs both ways. Each test moves inside the app after its first page: the
- * demo keeps its data in the page, so a reload starts it again.
+ * and counted in last month, Needs attention, and the figures that read them.
+ * Each test moves inside the app after its first page: the demo keeps its data
+ * in the page, so a reload starts it again.
  */
 const FIXED = `demo/owner/ledger/fixed-costs?outlet=${KAL}`
 
@@ -123,38 +122,23 @@ test('last month’s salary is paid now, counted in last month, and Needs attent
   await expect(page.getByTestId('overview-attention-fixed-costs-unpaid')).toHaveCount(0)
 })
 
-test(
-  'Overview and the Ledger carry P&L (Pro-rata), and a payment carries the Fixed chip',
-  { tag: '@cg-on:pro-rata-pnl' },
-  async ({ page }) => {
-    await page.goto('demo/owner')
-    await expect(page.getByTestId(`outlet-card-${KAL}`)).toContainText(/P&L \(Pro-rata\)/)
+test('Overview and the Ledger carry P&L (Pro-rata), and a payment carries the Fixed chip', async ({
+  page,
+}) => {
+  await page.goto('demo/owner')
+  await expect(page.getByTestId(`outlet-card-${KAL}`)).toContainText(/P&L \(Pro-rata\)/)
 
-    await page.goto(FIXED)
-    await page.getByRole('button', { name: 'Pay Garbage' }).click()
-    await pay(page)
-    await page.getByTestId('fixed-cost-recorded-view').click()
-    await expect(page.locator('[data-testid^="expense-fixed-"]').first()).toContainText('Fixed')
+  await page.goto(FIXED)
+  await page.getByRole('button', { name: 'Pay Garbage' }).click()
+  await pay(page)
+  await page.getByTestId('fixed-cost-recorded-view').click()
+  await expect(page.locator('[data-testid^="expense-fixed-"]').first()).toContainText('Fixed')
 
-    await page.getByRole('link', { name: 'Ledger' }).first().click()
-    await page.getByRole('button', { name: 'The month' }).click()
-    await expect(page.getByTestId('month-pro-rata')).toBeVisible()
-    await expect(page.getByTestId('month-fixed-costs')).toContainText('Garbage')
-  },
-)
-
-test(
-  'with pro-rata-pnl off, Overview and the Ledger read as before',
-  { tag: '@cg-off:pro-rata-pnl' },
-  async ({ page }) => {
-    await page.goto('demo/owner')
-    await expect(page.getByTestId(`outlet-card-${KAL}`)).toBeVisible()
-    await expect(page.getByTestId(`outlet-card-${KAL}`)).not.toContainText('Pro-rata')
-    await page.goto(`demo/owner/ledger?outlet=${KAL}&view=month`)
-    await expect(page.getByTestId('month-expenses')).toBeVisible()
-    await expect(page.getByTestId('month-pro-rata')).toHaveCount(0)
-  },
-)
+  await page.getByRole('link', { name: 'Ledger' }).first().click()
+  await page.getByRole('button', { name: 'The month' }).click()
+  await expect(page.getByTestId('month-pro-rata')).toBeVisible()
+  await expect(page.getByTestId('month-fixed-costs')).toContainText('Garbage')
+})
 
 test(
   'stopping asks for the final payment and closes the month at what was paid plus it',

@@ -1,18 +1,14 @@
 import type { APIRequestContext, Page } from '@playwright/test'
 
-import { SAVED_ANSWERS_KEY } from '../src/change-gates/snapshot'
 import { expect, test } from './test'
-import { LOCAL_ANON_KEY, PASSWORD, SUPABASE_URL, serviceRoleKey } from './tills'
+import { LOCAL_ANON_KEY, PASSWORD, SUPABASE_URL } from './tills'
 
 /**
  * Fixed costs over the real transport (fixed-costs-are-spread-over-the-month):
  * a fixed cost added and paid in part by the owner, its payment an expense the
- * Fixed chip marks; P&L (Pro-rata) read from the outlet's fixed costs, asked
- * beside `overview_month`; and the gate's round trip (design D10): turned off,
- * Overview asks `overview_month` alone and the payment is an ordinary expense;
- * turned back on, the chip and P&L (Pro-rata) return, charging only the unpaid
- * share. A manager is refused the other outlet's fixed costs, and a Biller
- * reads a cash payment as the cash expense it is, with no chip.
+ * Fixed chip marks; and P&L (Pro-rata) read from the outlet's fixed costs, asked
+ * beside `overview_month`. A manager is refused the other outlet's fixed costs,
+ * and a Biller reads a cash payment as the cash expense it is, with no chip.
  *
  * Nothing here can be deleted, and the specs after this one share the stack, so
  * each test retires what it added: its payments undone, and the fixed cost moved
@@ -29,32 +25,6 @@ async function signIn(page: Page, username: string) {
   await page.getByLabel('Password').fill('shawarmania-local')
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).not.toHaveURL(/\/sign-in$/)
-}
-
-async function forceGate(enabled: boolean) {
-  const key = serviceRoleKey()
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/change_gate_force`, {
-    method: 'POST',
-    headers: { apikey: key, authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      p_key: 'pro-rata-pnl',
-      p_enabled: enabled,
-      p_reason: 'auth browser tests, the pro-rata-pnl round trip',
-    }),
-  })
-  if (!response.ok) throw new Error(`change_gate_force failed: ${response.status}`)
-}
-
-/** Boot the page as a phone that has heard the turn, as the update path's reload does. */
-async function rebootWith(page: Page, enabled: boolean) {
-  await page.evaluate(
-    ({ key, enabled }) => {
-      const saved = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, boolean>
-      localStorage.setItem(key, JSON.stringify({ ...saved, 'pro-rata-pnl': enabled }))
-    },
-    { key: SAVED_ANSWERS_KEY, enabled },
-  )
-  await page.reload()
 }
 
 /** A name of its own each run: the local stack is shared, and nothing here is deleted. */
@@ -140,66 +110,33 @@ async function addAndPayPart(page: Page, name: string, isCash = false) {
   return row
 }
 
-test(
-  'P&L (Pro-rata) and the Fixed chip go with the gate and come back with it',
-  { tag: '@cg-round-trip:pro-rata-pnl' },
-  async ({ page }) => {
-    await signIn(page, 'owner')
-    const name = unique()
-    added.push(name)
-    await addAndPayPart(page, name)
+test('Overview asks the fixed costs beside its month, and a payment carries the Fixed chip', async ({
+  page,
+}) => {
+  await signIn(page, 'owner')
+  const name = unique()
+  added.push(name)
+  await addAndPayPart(page, name)
 
-    try {
-      // On: Overview asks its month as before, and the fixed costs beside it.
-      const month = page.waitForResponse(
-        (r) => r.url().endsWith('/rpc/overview_month') && r.status() === 200,
-      )
-      const listed = page.waitForResponse(
-        (r) =>
-          r.url().endsWith('/rpc/fixed_costs_list') &&
-          r.request().postDataJSON()?.p_outlet_id === KAL &&
-          r.status() === 200,
-      )
-      await page.goto('owner')
-      await month
-      const costs = ((await (await listed).json()) as Listed).costs
-      expect(costs.some((cost) => cost.name === name)).toBe(true)
-      await expect(page.getByTestId(`outlet-card-${KAL}`)).toContainText('P&L (Pro-rata)')
+  const month = page.waitForResponse(
+    (r) => r.url().endsWith('/rpc/overview_month') && r.status() === 200,
+  )
+  const listed = page.waitForResponse(
+    (r) =>
+      r.url().endsWith('/rpc/fixed_costs_list') &&
+      r.request().postDataJSON()?.p_outlet_id === KAL &&
+      r.status() === 200,
+  )
+  await page.goto('owner')
+  await month
+  const costs = ((await (await listed).json()) as Listed).costs
+  expect(costs.some((cost) => cost.name === name)).toBe(true)
+  await expect(page.getByTestId(`outlet-card-${KAL}`)).toContainText('P&L (Pro-rata)')
 
-      await page.goto(`owner/ledger/expenses?outlet=${KAL}`)
-      const chip = page.locator('[data-testid^="expense-fixed-"]').filter({ hasText: 'Fixed' })
-      await expect(chip.first()).toBeVisible()
-
-      // Off: the month alone, and the payment an ordinary expense.
-      await forceGate(false)
-      await page.goto('owner')
-      const asked: string[] = []
-      page.on('request', (r) => {
-        if (r.url().includes('/rpc/')) asked.push(r.url().split('/rpc/')[1]!)
-      })
-      const alone = page.waitForResponse(
-        (r) => r.url().endsWith('/rpc/overview_month') && r.status() === 200,
-      )
-      await rebootWith(page, false)
-      await alone
-      await expect(page.getByTestId(`outlet-card-${KAL}`)).toBeVisible()
-      await expect(page.getByTestId(`outlet-card-${KAL}`)).not.toContainText('Pro-rata')
-      expect(asked).not.toContain('fixed_costs_list')
-      await page.goto(`owner/ledger/expenses?outlet=${KAL}`)
-      await expect(page.getByText(name).first()).toBeVisible()
-      await expect(page.locator('[data-testid^="expense-fixed-"]')).toHaveCount(0)
-
-      // On again: the chip returns, and P&L (Pro-rata) charges only what is unpaid.
-      await forceGate(true)
-      await rebootWith(page, true)
-      await expect(chip.first()).toBeVisible()
-      await page.goto('owner')
-      await expect(page.getByTestId(`outlet-card-${KAL}`)).toContainText('P&L (Pro-rata)')
-    } finally {
-      await forceGate(true)
-    }
-  },
-)
+  await page.goto(`owner/ledger/expenses?outlet=${KAL}`)
+  const chip = page.locator('[data-testid^="expense-fixed-"]').filter({ hasText: 'Fixed' })
+  await expect(chip.first()).toBeVisible()
+})
 
 test('a manager is refused the other outlet’s fixed costs', async ({ request }) => {
   const signedIn = await request.post(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
