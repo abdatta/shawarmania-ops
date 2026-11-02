@@ -39,9 +39,18 @@ its own, and no migration in the code half.
   example gate.
 - [x] 1.5 The `outlets-overview` delta; `docs/` (DATA_MODEL, SCREENS) no longer
   calls the behaviour gated.
-- [ ] 1.6 `npm run lint`, `format:check`, `typecheck`, `functions:typecheck`,
+- [x] 1.6 `npm run lint`, `format:check`, `typecheck`, `functions:typecheck`,
   `contrast`, `test`, `build`, `lint:change-gates`; the database and browser
   suites on Staging.
+  *(Locally on 2 November, rebased on `081dca99`: lint, format, typecheck,
+  functions:typecheck, contrast, build and lint:change-gates clean; `npm test`
+  265 files, 3324 tests, with two timing tests elsewhere failing under load and
+  passing alone. Staging run 41399171206 on `c6ab7749` failed only the Overview
+  link tests that `dc5570d1` had already broken (run 41397209076 on `bc752e2e`
+  failed the same five). Staging run 41399222489 on `b085e587`, which fixes them
+  above the three commits from `347ad72a`, passed every job: unit, database, all
+  four browser suites in both states, then migrate, functions, publish and
+  smoke.)*
 - [ ] 1.7 Release: push to `stage`, Staging green, the owner promotes. The gate's
   row is left on, so a tablet on an older build keeps the behaviour it has.
 
