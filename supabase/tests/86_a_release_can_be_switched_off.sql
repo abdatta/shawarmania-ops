@@ -238,19 +238,21 @@ select throws_ok($$delete from change_gate_events$$, '42501',
 -- ── Tablet health ─────────────────────────────────────────────────────────
 
 select pg_temp.impersonate(:'OWNER');
-select throws_ok($$select report_device_health('abc1234', '{}', 60, 1, 0, 10)$$, '42501',
+select throws_ok($$select report_device_health_v2('abc1234', '{}', 60, 1, 0, 10)$$, '42501',
   'Only a tablet reports its health.', 'a person cannot report tablet health');
 select pg_temp.impersonate(:'COUNTER_KAL');
-select lives_ok($$select report_device_health('abc1234', array['probe'], 60, 38, 0, 420)$$,
+select lives_ok($$select report_device_health_v2('abc1234', array['probe'], 60, 38, 0, 420)$$,
   'a counter tablet reports its health');
-select lives_ok($$select report_device_health('abc1234', array['probe'], 60, 40, 1, 500)$$,
+select lives_ok($$select report_device_health_v2('abc1234', array['probe'], 60, 40, 1, 500)$$,
   'and reports again over the same row');
 select throws_ok($$insert into device_health (device_id, outlet_id, build, window_seconds, requests, failed, slowest_ms)
   values ('10000000-0000-4000-a000-000000000005', '00000000-0000-4000-a000-000000000002', 'x', 60, 1, 0, 1)$$,
   '42501', null, 'a tablet cannot write another tablet''s row');
 select pg_temp.impersonate(:'COUNTER_KPA');
-select lives_ok($$select report_device_health('abc1234', '{}', 60, 12, 0, 290)$$,
+select lives_ok($$select report_device_health_v2('abc1234', '{}', 60, 12, 0, 290)$$,
   'the other outlet''s tablet reports too');
+select throws_ok($$select report_device_health('abc1234', '{}', 60, 12, 0, 290)$$, '42501', null,
+  'and no longer reports through v1, which only builds from before fewer-requests called');
 select pg_temp.unimpersonate();
 
 select results_eq(

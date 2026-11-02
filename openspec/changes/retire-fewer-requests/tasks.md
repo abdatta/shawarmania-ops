@@ -60,15 +60,30 @@ its own, and no migration in the code half.
     Services since Deploy 41154842156: 31 October (69 bills) and 1 November (58);
     the third is 2 November's. The owner's browser runs `51952434`. Nothing in
     production reads the key (functions, policies, triggers, views).
+  - 3 November 01:31 IST, production read-only: three registered devices
+    (Cafe Laptop, Conti Kitchen, Shawarma Kitchen), all reporting `c83ec673`
+    (Deploy 41404706038, 2 November 07:11 UTC), which contains `0488b74c`, as
+    `git merge-base --is-ancestor` against `origin/main` confirms. Three services
+    since Deploy 41154842156: 31 October (69 bills), 1 November (58) and 2 November
+    (47, the last at 22:33 IST). Still nothing reads the key, in production or
+    on a fresh reset. Left: the owner and managers reload before the Promote.
 
 ## 3. The contract migration
 
-- [ ] 3.1 A migration headed `-- release: contract fewer-requests` that sets the
+- [x] 3.1 A migration headed `-- release: contract fewer-requests` that sets the
   gate's `retired_at` and turns it off, after confirming in production and on a
   fresh reset that nothing reads the key. It may revoke `authenticated`'s execute
   on `report_device_health` (v1), which only builds before the change called;
   `report_device_health_v2` still calls it, so it is not dropped.
-- [ ] 3.2 The pgTAP and REST tests that call v1 as a tablet
+  *(`20261113000000_contract_fewer_requests.sql`: revokes v1 from
+  `authenticated` and retires the row.)*
+- [x] 3.2 The pgTAP and REST tests that call v1 as a tablet
   (`86_a_release_can_be_switched_off.sql`, `rest/zz-change-gates.test.ts`) call
   v2, if 3.1 revokes; every database gate on a fresh reset.
+  *(Both call v2, and `86` adds that a tablet can no longer call v1;
+  `92`'s off-gate example is a test gate now that `fewer-requests` is
+  retired. 3 November, fresh reset: `test:db` 101 files, 4333 tests, pass;
+  every REST suite passes but `account-flows`, whose four failures come from
+  another worktree's unfinished `admin-accounts` that the shared Edge runtime
+  serves, read from Staging instead.)*
 - [ ] 3.3 Release it through the normal path.

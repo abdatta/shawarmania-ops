@@ -1487,7 +1487,7 @@ One answer per gate for the whole business, turned by the owner (see [Releases](
 - **A gate turns on only while every gate it depends on is on**, and **turning one off turns off every gate depending on it**, at any depth, each with its own event. Turning it back on brings none of them back.
 - **A retired gate reads off** and refuses a turn; a code is unique among gates not retired, so a retired gate's code may be given out again.
 - **`app_change_gate(key)`** is what a gated trigger, policy or function asks: true only while the gate and everything it depends on is on.
-- **A tablet writes only its own health row**: `report_device_health` takes the device and outlet from the tablet's session, never from its arguments.
+- **A tablet writes only its own health row**: `report_device_health_v2` records through `report_device_health`, which takes the device and outlet from the tablet's session, never from its arguments. No client calls `report_device_health` itself since `fewer-requests`' contract revoked it.
 
 ## Dish ticks *(#74)*
 

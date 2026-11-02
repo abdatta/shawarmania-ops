@@ -132,8 +132,8 @@ describe('change gates over REST', () => {
       p_failed: 0,
       p_slowest_ms: 420,
     }
-    expect((await tabletKal.rpc('report_device_health', report)).error).toBeNull()
-    expect((await tabletKpa.rpc('report_device_health', report)).error).toBeNull()
+    expect((await tabletKal.rpc('report_device_health_v2', report)).error).toBeNull()
+    expect((await tabletKpa.rpc('report_device_health_v2', report)).error).toBeNull()
 
     // A tablet cannot write another tablet's row, nor read any row.
     const forged = await tabletKal.from('device_health').insert({
