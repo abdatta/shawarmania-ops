@@ -1,7 +1,8 @@
-import { type BrowserContext, type Page } from '@playwright/test'
+import { type APIRequestContext, type BrowserContext, type Page } from '@playwright/test'
 import { expect, test } from './test'
 
 import {
+  OUTLET_KALYANI,
   SUPABASE_URL,
   TILL_ONE,
   openKitchen,
@@ -9,6 +10,8 @@ import {
   orderCard,
   railSettled,
   ringOrder,
+  saveNewOrder,
+  serviceRoleKey,
   setSpareKind,
   setSpareTillInService,
 } from './tills'
@@ -73,6 +76,8 @@ const BUDGET = {
   counterPayment: 63,
   /** One dish ticked on a rail card (each-dish-is-ticked-off, R5). */
   counterDishTick: 47,
+  /** One delivery order handed over (delivery-orders-are-made-not-billed), gates on only. */
+  counterHandover: 47,
 }
 
 // A click with no limit waits out the whole test when its target never comes;
@@ -180,3 +185,79 @@ test('an idle counter and kitchen, an ACK and a payment each stay within their r
     await setSpareTillInService(request, false)
   }
 })
+
+async function offerDelivery(request: APIRequestContext, offered: boolean) {
+  const key = serviceRoleKey()
+  const response = await request.patch(`${SUPABASE_URL}/rest/v1/outlets`, {
+    headers: { apikey: key, authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+    params: { id: `eq.${OUTLET_KALYANI}` },
+    data: { delivery_offered: offered },
+  })
+  expect(response.ok(), 'could not set Kalyani’s Delivery choice').toBe(true)
+}
+
+/**
+ * A handover is the delivery order's one counted action, as a payment is a
+ * bill's. Its command goes out at the tap; the card's five-second undo hold is
+ * the screen's alone, so the window runs from the tap to ten seconds after the
+ * card has gone. Three handovers, each a reading against the one budget.
+ */
+test(
+  'a delivery order handed over stays within its request budget',
+  { tag: '@cg-on:delivery-orders' },
+  async ({ browser, request }) => {
+    test.setTimeout(4 * 60_000)
+    await offerDelivery(request, true)
+    const counter = await openTill(browser, request, TILL_ONE)
+    const counterRequests = countRequests(counter.context)
+    const page = counter.page
+
+    try {
+      const ids: string[] = []
+      for (let i = 1; i <= 3; i += 1) {
+        await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
+        await page.getByTestId('service-chip-delivery').click()
+        await page.locator('#order-label').fill(`ZMT budget ${i}`)
+        ids.push(
+          await saveNewOrder(page, () => page.getByTestId('save-order').click(), {
+            timeout: 15_000,
+          }),
+        )
+      }
+      for (const id of ids) {
+        await railSettled(page)
+        await orderCard(page, id)
+          .getByRole('button', { name: /^Tick / })
+          .click()
+        await expect(orderCard(page, id).getByTestId(`hand-over-${id}`)).toBeEnabled({
+          timeout: 15_000,
+        })
+      }
+      await railSettled(page)
+      await page.waitForTimeout(SETTLE_MS)
+
+      const readings: number[] = []
+      for (const id of ids) {
+        readings.push(
+          await counted(counterRequests, async () => {
+            const card = orderCard(page, id)
+            await card.getByTestId(`hand-over-${id}`).click()
+            await expect(card).toHaveCount(0, { timeout: 15_000 })
+            await page.waitForTimeout(ACTION_WINDOW_MS)
+          }),
+        )
+      }
+
+      console.log(`request budget readings: ${JSON.stringify({ counterHandover: readings })}`)
+      for (const count of readings) {
+        expect(
+          count,
+          `counterHandover: ${count} requests, budget ${BUDGET.counterHandover}`,
+        ).toBeLessThanOrEqual(BUDGET.counterHandover)
+      }
+    } finally {
+      await offerDelivery(request, false)
+      await counter.context.close()
+    }
+  },
+)
