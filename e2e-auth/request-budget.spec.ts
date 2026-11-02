@@ -68,6 +68,15 @@ const ACTION_WINDOW_MS = 10_000
  * | Counter, one dish tick | (not taken) | 28, 28, 31, 28 | 31 | 47 |
  *
  * The four existing budgets held in both states, unraised.
+ *
+ * One handover (delivery-orders-are-made-not-billed, task 7.3) was added
+ * 2026-11-02 and read on Staging run 41395144914 at `eb2518b7`, three handovers
+ * in the gates-on run, its budget set the same way. Only the gates-on run has
+ * a handover; the same run's other readings sat inside their budgets.
+ *
+ * | Reading | Gates off | Gates on (3 handovers) | Worst | Budget |
+ * |---|---|---|---|---|
+ * | Counter, one handover | (no handover) | 26, 26, 28 | 28 | 42 |
  */
 const BUDGET = {
   counterIdleMinute: 5,
@@ -77,7 +86,7 @@ const BUDGET = {
   /** One dish ticked on a rail card (each-dish-is-ticked-off, R5). */
   counterDishTick: 47,
   /** One delivery order handed over (delivery-orders-are-made-not-billed), gates on only. */
-  counterHandover: 47,
+  counterHandover: 42,
 }
 
 // A click with no limit waits out the whole test when its target never comes;

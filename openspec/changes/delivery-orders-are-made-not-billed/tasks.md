@@ -271,12 +271,13 @@ Third demo round (2026-11-01):
 - [x] 7.1 Live adapters for every new read and command.
 - [x] 7.2 The round-trip browser test (D9): a delivery create and a handover
   queued offline with the gate on, the gate turned off, reconnect, both land.
-- [ ] 7.3 A browser test that, with the gate on, an idle counter and kitchen,
+- [x] 7.3 A browser test that, with the gate on, an idle counter and kitchen,
   a handover and an ACK stay within `e2e-auth/request-budget.spec.ts`
   unchanged.
-  *2026-11-02:* the budget spec passes unchanged in Staging's gates-on run
-  (idle counter and kitchen, ACK, payment, tick); a handover is not yet one
-  of its measured actions.
+  *2026-11-02:* the existing budgets pass unchanged in Staging's gates-on run
+  (idle counter and kitchen, ACK, payment, tick). A handover is now measured
+  there too, gates on only: 26, 26 and 28 requests on Staging run 41395144914,
+  budget 42 (one and a half times the worst, as the others are set).
 - [x] 7.4 A hand-crafted-request browser or pgTAP test for each refusal the
   proposal promises: paying a delivery order, a foreign outlet's reads, a
   Biller turning Delivery on.
