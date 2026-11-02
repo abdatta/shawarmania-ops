@@ -99,7 +99,7 @@ except the one widened check of D4, which the owner agreed to on 2026-10-26.
   blocked check-in with the adapter's code and sentence.
 - [x] 4.2 The mock outlets adapter stores the two settings and enforces who may
   change them (owner or that outlet's manager), with the live sentences.
-- [ ] 4.3 Fixtures with the gate on:
+- [x] 4.3 Fixtures with the gate on:
   - the in-fence waiting seeds (`NEAR_COUNTER`, five days ago; Kanchrapara's
     arrival today) become waiting outside or with no position;
   - one recent in-fence day reads *Auto-approved at the shop*;
@@ -110,6 +110,9 @@ except the one widened check of D4, which the owner agreed to on 2026-10-26.
   waits from down the road; Kanchrapara today waits with no position. Not yet:
   the refused-then-recorded day. It needs Block on at a demo outlet, which is
   left off so the walk starts as production will.*
+  *Archived without the refused-then-recorded fixture (owner, 2 November): the
+  refusal is proved by pgTAP and the REST suite's hand-crafted request (8.4),
+  and the demo starts with Block off as production does.*
 - [x] 4.4 Turn both gates on in the demo's change-gate snapshot.
 
 ## 5. The screens, in the demo
@@ -296,11 +299,14 @@ except the one widened check of D4, which the owner agreed to on 2026-10-26.
   and on) and the request budget. Fix what the log names. *2026-10-29: Staging
   run 40855210446 on 9f3e0d0a, every job green: all four browser suites both
   ways, the database job, migrate, publish and smoke.*
-- [ ] 11.3 The owner tries it on the staging fake outlet:
+- [x] 11.3 The owner tries it on the staging fake outlet:
   - an in-fence check-in counts;
   - *Block* refuses from away;
   - the manager records the refused day;
   - the manager turns *needs manager* on and the next check-in waits.
+  *Waived by the owner on 2 November ("we have one evidence, and I've heard
+  good things"): the in-fence check-in counted in production; Block and needs
+  manager are proved by pgTAP and the REST suite's hand-crafted requests (8.4).*
 
 ## 11A. The owners' category list (`expense-category-list`, design D11)
 
@@ -333,7 +339,7 @@ except the one widened check of D4, which the owner agreed to on 2026-10-26.
 - [x] 12.1 The owner approves a Promote. The build reaches the counters with
   both gates off. *Promote 41014423014 and Deploy 41014535293 on `efb07212`,
   30 October 06:31 UTC.*
-- [ ] 12.2 `/release auto-approve-at-the-shop` after the 04:00 cutover and before
+- [x] 12.2 `/release auto-approve-at-the-shop` after the 04:00 cutover and before
   the first arrival (design, *Release*). Watch the next morning's check-ins read
   *Approved* and the waiting badge drop to away days. Pull it once, off and on.
   *Turned on by the owner at 12:04 IST on 30 October, after that day's two
@@ -341,15 +347,17 @@ except the one widened check of D4, which the owner agreed to on 2026-10-26.
   1 November; the first under the gate, 11:14 IST on 2 November from 13 m with
   ±56 m against a 150 m fence, is `auto_approved` and present. Neither setting has
   been turned on.*
-- [ ] 12.3 `/release refreshed-staff-screens` at a quiet hour. Watch the counter's
+  *Pull waived by the owner on 2 November with the try in 11.3.*
+- [x] 12.3 `/release refreshed-staff-screens` at a quiet hour. Watch the counter's
   expense list through the next service and the staff phones' first check-ins.
   Pull it once. *RS and EL turned on by the owner at 12:04 IST on 30 October,
   with no pull. Production, 2 November: 31 expense rows since, mostly in
   categories from the owners' list (Raw Materials, Chicken, Staff Food, Salary).*
+  *Pull waived by the owner on 2 November.*
 
 ## 13. PHASE GATE
 
-- [ ] 13.1 The checkpoint in ROADMAP.md row #81 holds, every item checked
+- [x] 13.1 The checkpoint in ROADMAP.md row #81 holds, every item checked
   against the running app:
   - the owner approved the demo before it was wired live;
   - an in-fence check-in is approved at once, late or not, with no manager, and an
@@ -365,3 +373,6 @@ except the one widened check of D4, which the owner agreed to on 2026-10-26.
     `refreshed-staff-screens` off every screen reads as before;
   - both gates were turned on in production and pulled once;
   - the four-role demo walkthrough still walks.
+
+  *2 November: holds, with the owner's waiver of the pull (12.2, 12.3) in place
+  of "pulled once". Archived; `retire-auto-approve-at-the-shop` seeded.*
