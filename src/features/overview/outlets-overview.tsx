@@ -148,6 +148,11 @@ function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
       )
     : ''
   const ledger = m ? `${source('ledger')}&view=month&month=${m.month}` : source('ledger')
+  // Revenue opens Sales on its Month shortcut, the address that button writes;
+  // P&L keeps the Ledger, so the two tiles do not lead to the same page.
+  const salesMonth = m
+    ? `${source('analytics/sales')}&from=${m.month}-01&to=${today}&grain=day&align=month&metric=revenue`
+    : source('analytics/sales')
   const change =
     m && m.previous.hasSales ? revenueChange(m.revenuePaise, m.previous.revenuePaise) : null
   const compared = m ? comparedRange(m.previous.from, m.previous.through) : ''
@@ -289,7 +294,7 @@ function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
         <Metric
           label={m ? `${monthName} revenue` : 'Month revenue'}
           title={`${monthName} revenue · month to date`}
-          to={ledger}
+          to={salesMonth}
           loading={m === undefined}
           error={month.error}
           retry={month.retry}

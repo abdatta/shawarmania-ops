@@ -12,7 +12,7 @@ import {
 import { SessionContext } from '@/session/context'
 import { deriveSessionScope, type Session } from '@/session/session'
 import { OutletsOverview } from './outlets-overview'
-import { formatPaise } from '@/domain'
+import { formatPaise, resolveBusinessDate } from '@/domain'
 import type { OverviewMonth } from '@/data-access/overview'
 import { attentionChanged } from '@/features/attention/attention'
 import { NavAttentionBadge } from '@/features/attention/nav-badge'
@@ -425,9 +425,14 @@ describe('progressive Overview', () => {
       `/demo/owner/outlets/${KAL}`,
     )
     const { month } = await base.overview.month(KAL)
+    // Month revenue opens Sales on its Month shortcut; P&L keeps the Ledger.
+    const today = resolveBusinessDate(
+      new Date(),
+      (await base.outlets.getOutlet(KAL))!.business_day_cutover,
+    )
     expect(within(card).getByRole('link', { name: /^(?!Today).*revenue/ })).toHaveAttribute(
       'href',
-      `/demo/owner/ledger?outlet=${KAL}&view=month&month=${month}`,
+      `/demo/owner/analytics/sales?outlet=${KAL}&from=${month}-01&to=${today}&grain=day&align=month&metric=revenue`,
     )
     expect(within(card).getByRole('link', { name: /P&L/ })).toHaveAttribute(
       'href',
