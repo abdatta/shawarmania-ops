@@ -274,6 +274,9 @@ Third demo round (2026-11-01):
 - [ ] 7.3 A browser test that, with the gate on, an idle counter and kitchen,
   a handover and an ACK stay within `e2e-auth/request-budget.spec.ts`
   unchanged.
+  *2026-11-02:* the budget spec passes unchanged in Staging's gates-on run
+  (idle counter and kitchen, ACK, payment, tick); a handover is not yet one
+  of its measured actions.
 - [x] 7.4 A hand-crafted-request browser or pgTAP test for each refusal the
   proposal promises: paying a delivery order, a foreign outlet's reads, a
   Biller turning Delivery on.
@@ -283,10 +286,17 @@ Third demo round (2026-11-01):
 
 ## 8. Verify
 
-- [ ] 8.1 Locally: quick gates and DB gates per `.github/workflows/verify.yml`
+- [x] 8.1 Locally: quick gates and DB gates per `.github/workflows/verify.yml`
   (re-reset the shared Supabase container first).
-- [ ] 8.2 Push to `stage` (`git push origin HEAD:stage`) and let Staging run both
+  *2026-11-02:* every quick gate, 4,328 pgTAP, types current, and the REST
+  phases that need no Edge Function; the shared local edge runtime is down
+  (bound to a deleted worktree), so those phases ran on Staging instead.
+- [x] 8.2 Push to `stage` (`git push origin HEAD:stage`) and let Staging run both
   browser suites, gates off and on. Fix what fails.
+  *2026-11-02:* the first run (32c66f5d) failed four gates-on specs: the card's
+  total was only CSS-hidden, the demo's Hand over buttons shadowed the shift's,
+  and two specs counted `_v2` names the gate replaces. Fixed in 51952434; run
+  41371246277 green in both states, migrated, published and smoke-tested.
 - [ ] 8.3 Walk it on staging's fake outlet with the gate on and Delivery offered,
   then turn the gate off with a delivery order open and one handed over, and
   check the off path reads as the proposal says.
