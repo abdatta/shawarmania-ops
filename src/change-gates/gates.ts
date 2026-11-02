@@ -154,10 +154,11 @@ export const RETIRED_CHANGE_GATES: readonly string[] = [
   // retire-auto-approve-at-the-shop, with the two gates that depended on it: a
   // check-in inside the fence approves itself under the outlet's rules, the
   // staff screens are the refreshed ones, and an expense's category is picked
-  // from the owners' list.
-  'auto-approve-at-the-shop',
-  'refreshed-staff-screens',
+  // from the owners' list. Children first, as the auth suite turns their rows
+  // on in reverse, parents first.
   'expense-category-list',
+  'refreshed-staff-screens',
+  'auto-approve-at-the-shop',
   // retire-pro-rata-pnl: Overview and the Ledger's current month show Pro-rata
   // P&L beside P&L, and a fixed-cost payment carries the Fixed chip.
   'pro-rata-pnl',
