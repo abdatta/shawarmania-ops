@@ -66,15 +66,33 @@ own, and no migration in the code half.
     `menu_categories_select_includes`, `menu_discounts_select_includes`,
     `menu_items_select_includes`, `profiles_select_includes`; no function,
     trigger or view names it.
+  - 3 November 01:31 IST, production read-only: three registered devices
+    (Cafe Laptop, Conti Kitchen, Shawarma Kitchen), all reporting `c83ec673`
+    (Deploy 41404706038, 2 November 07:11 UTC), which contains `01f82d0a`, as
+    `git merge-base --is-ancestor` against `origin/main` confirms. Three services
+    since Deploy 41164443637: 31 October (69 bills), 1 November (58) and 2 November
+    (47, the last at 22:33 IST). The readers are the same ten policies, in
+    production and on a fresh reset. Left: the owner's and managers' phones
+    reload before the Promote.
 
 ## 3. The contract migration
 
-- [ ] 3.1 A migration headed `-- release: contract role-includes` that, after
+- [x] 3.1 A migration headed `-- release: contract role-includes` that, after
   confirming in production and on a fresh reset what reads the key, rewrites the
   ten old policies, the three objects of design D4 and each old function to ask
   the includes rows only, drops the gated twins, and retires the row.
+  *(`20261113020000_contract_role_includes.sql`: each policy takes its twin's
+  expression without the gate, compared line for line on a fresh reset;
+  `expense_guard`, `account_actor_may_replace_set` and
+  `app_may_hold_counter_shift` ask the includes rows in place; the six
+  originals are calls to their `_v2`, as design D8 leaves them.)*
 - [ ] 3.2 pgTAP: the `%_includes` exclusions leave `01`, `21` and `24`; `98`
   stops turning the gate; every database gate on a fresh reset; release it.
+  *(Done but the release. `98` now holds each policy, and the Team and
+  counter-shift helpers, to a frozen copy of the role-by-name check it replaced,
+  for every persona, and a mutation of either copy fails it; `01` reads the
+  staff branch as `app_acts_as`. Every database gate on a fresh reset on 3
+  November, as `retire-fewer-requests` 3.2 records.)*
 - [ ] 3.3 Tell #80 (`waiters-take-orders-on-their-phones`) the first Waiter may
   now be made.
 

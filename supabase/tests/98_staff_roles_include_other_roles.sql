@@ -9,11 +9,14 @@
 --      `app_role_includes(role, 'biller')`, and every pair of
 --      `app_has_role_at` calls became one `app_acts_as`. Each is checked for
 --      every value of `app_role` and for every seeded person at both outlets.
---   2. Each policy twin ALONE, with its original dropped inside a savepoint,
---      admits exactly what the original alone admits, for every persona.
---   3. Each `_v2` a build calls returns what its original returns.
+--   2. Each of the ten policies, rewritten by the gate's contract migration,
+--      admits exactly what the role-by-name policy it replaced admitted, frozen
+--      here and put back inside a savepoint, for every persona; and so do the
+--      Team and counter-shift helpers the contract rewrote in place.
+--   3. Each `_v2` a build calls returns what its original returns, the
+--      original now being a call to it.
 --
--- With the gate off the twins admit nothing, so the off path is today's.
+-- The gate has retired: nothing reads it, and no twin is left.
 
 begin;
 create extension if not exists pgtap with schema extensions;
@@ -222,22 +225,27 @@ $$;
 select is(pg_temp.anon_reads(), 0, 'an anonymous caller reads nothing from either table');
 
 -- ---------------------------------------------------------------------------
--- 1. Policies: each twin alone admits what its original alone admits.
-
-update public.change_gates set enabled = true where key = 'role-includes';
+-- 1. Policies: each one admits what the role-by-name policy it replaced did.
+--
+-- The contract (20261113020000_contract_role_includes.sql) gave each of the ten
+-- policies its twin's expression and dropped the twin. Each is measured as it
+-- stands, then with its old expression put back inside a subtransaction, frozen
+-- here as it read in production before the contract.
 
 -- DDL inside a loop needs savepoints, which plpgsql cannot issue, so each
--- policy is measured with two subtransactions of its own: one where the twin is
--- dropped (the original alone) and one where the original is (the twin alone).
-create function pg_temp.measure(p_table text, p_drop text, p_probe text)
+-- measurement is a subtransaction of its own, rolled back by raising.
+create function pg_temp.measure(p_setup text[], p_probe text)
 returns text language plpgsql as $$
 declare
   v_person record;
+  v_sql text;
   v_out text := '';
 begin
   begin
     execute 'reset role';
-    execute format('drop policy %I on public.%I', p_drop, p_table);
+    foreach v_sql in array coalesce(p_setup, '{}') loop
+      execute v_sql;
+    end loop;
     for v_person in select * from personas order by label loop
       perform pg_temp.impersonate(v_person.id);
       v_out := v_out || v_person.label || '=' || pg_temp.outcome(p_probe) || '; ';
@@ -250,103 +258,240 @@ begin
 end;
 $$;
 
-create function pg_temp.twin_matches(p_table text, p_policy text, p_probe text)
+create function pg_temp.frozen_matches(p_policy text, p_frozen text[], p_probe text)
 returns boolean language plpgsql as $$
 declare
-  v_original text := pg_temp.measure(p_table, p_policy || '_includes', p_probe);
-  v_twin text := pg_temp.measure(p_table, p_policy, p_probe);
+  v_now text := pg_temp.measure(null, p_probe);
+  v_frozen text := pg_temp.measure(p_frozen, p_probe);
 begin
-  if v_original is distinct from v_twin then
-    raise notice E'% differs\n original: %\n twin:     %', p_policy, v_original, v_twin;
+  if v_now is distinct from v_frozen then
+    raise notice E'% differs\n now:    %\n frozen: %', p_policy, v_now, v_frozen;
   end if;
-  return v_original = v_twin;
+  return v_now = v_frozen;
 end;
 $$;
 
-select ok(pg_temp.twin_matches('expenses', 'expenses_select',
+select ok(pg_temp.frozen_matches('expenses_select', array[
+  $f$alter policy expenses_select on public.expenses using (
+     ((outlet_id = (select public.app_counter_shift_outlet())) and is_cash)
+     or (public.app_account_active() and ((select public.app_is_owner())
+       or (outlet_id in (select public.app_outlets_for('franchise_admin')))
+       or ((public.app_has_role_at('biller', outlet_id) or public.app_has_role_at('employee', outlet_id)) and is_cash))))$f$],
   'select 1 from public.expenses'),
-  'expenses_select_includes alone shows every persona the rows the original shows');
+  'expenses_select shows every persona the rows the role-by-name policy showed');
 
-select ok(pg_temp.twin_matches('expenses', 'expenses_insert',
+select ok(pg_temp.frozen_matches('expenses_insert', array[
+  $f$alter policy expenses_insert on public.expenses with check (
+     ((outlet_id = (select public.app_counter_shift_outlet())) and is_cash)
+     or (public.app_account_active() and (recorded_by = auth.uid()) and ((select public.app_is_owner())
+       or (outlet_id in (select public.app_outlets_for('franchise_admin')))
+       or ((public.app_has_role_at('biller', outlet_id) or public.app_has_role_at('employee', outlet_id)) and is_cash))))$f$],
   $p$insert into public.expenses (outlet_id, business_date, is_cash, amount_paise, category)
      values ('00000000-0000-4000-a000-000000000001', current_date, true, 5000, 'Vegetables')$p$),
-  'expenses_insert_includes alone admits a cash expense at Kalyani exactly as the original does');
+  'expenses_insert admits a cash expense at Kalyani exactly as the role-by-name policy did');
 
-select ok(pg_temp.twin_matches('expenses', 'expenses_insert',
+select ok(pg_temp.frozen_matches('expenses_insert', array[
+  $f$alter policy expenses_insert on public.expenses with check (
+     ((outlet_id = (select public.app_counter_shift_outlet())) and is_cash)
+     or (public.app_account_active() and (recorded_by = auth.uid()) and ((select public.app_is_owner())
+       or (outlet_id in (select public.app_outlets_for('franchise_admin')))
+       or ((public.app_has_role_at('biller', outlet_id) or public.app_has_role_at('employee', outlet_id)) and is_cash))))$f$],
   $p$insert into public.expenses (outlet_id, business_date, is_cash, amount_paise, category)
      values ('00000000-0000-4000-a000-000000000001', current_date, false, 5000, 'Rent')$p$),
   'and a non-cash one');
 
-select ok(pg_temp.twin_matches('expenses', 'expenses_update',
+select ok(pg_temp.frozen_matches('expenses_update', array[
+  $f$alter policy expenses_update on public.expenses
+     using (public.app_account_active() and ((select public.app_is_owner())
+       or (outlet_id in (select public.app_outlets_for('franchise_admin')))
+       or ((recorded_by = auth.uid())
+           and (public.app_has_role_at('biller', outlet_id) or public.app_has_role_at('employee', outlet_id)) and is_cash)))
+     with check (public.app_account_active() and ((select public.app_is_owner())
+       or (outlet_id in (select public.app_outlets_for('franchise_admin')))
+       or ((recorded_by = auth.uid())
+           and (public.app_has_role_at('biller', outlet_id) or public.app_has_role_at('employee', outlet_id)) and is_cash)))$f$],
   'update public.expenses set amount_paise = amount_paise'),
-  'expenses_update_includes alone lets every persona update the rows the original does');
+  'expenses_update lets every persona update the rows the role-by-name policy did');
 
-select ok(pg_temp.twin_matches('expense_categories', 'expense_categories_insert',
+select ok(pg_temp.frozen_matches('expense_categories_insert', array[
+  $f$alter policy expense_categories_insert on public.expense_categories with check (
+     public.app_account_active() and (created_by = auth.uid()) and ((select public.app_is_owner())
+       or exists (select 1 from public.app_outlets_for('franchise_admin'))
+       or exists (select 1 from public.app_outlets_for('biller'))
+       or exists (select 1 from public.app_outlets_for('employee'))))$f$],
   $p$insert into public.expense_categories (name) values ('Ladder probe')$p$),
-  'expense_categories_insert_includes alone admits a new category exactly as the original does');
+  'expense_categories_insert admits a new category exactly as the role-by-name policy did');
 
-select ok(pg_temp.twin_matches('menu_items', 'menu_items_select',
+select ok(pg_temp.frozen_matches('menu_items_select', array[
+  $f$alter policy menu_items_select on public.menu_items using (
+     public.app_device_ok() and ((outlet_id = (select public.app_counter_shift_outlet()))
+       or (public.app_account_active() and ((select public.app_is_owner())
+         or (outlet_id in (select public.app_outlets_for('franchise_admin')))
+         or (outlet_id in (select public.app_outlets_for('biller')))))))$f$],
   'select 1 from public.menu_items'),
-  'menu_items_select_includes alone shows every persona the menu the original shows');
+  'menu_items_select shows every persona the menu the role-by-name policy showed');
 
-select ok(pg_temp.twin_matches('menu_categories', 'menu_categories_select',
+select ok(pg_temp.frozen_matches('menu_categories_select', array[
+  $f$alter policy menu_categories_select on public.menu_categories using (
+     public.app_device_ok() and ((outlet_id = (select public.app_counter_shift_outlet()))
+       or (outlet_id = (select public.app_kitchen_shift_outlet()))
+       or (public.app_account_active() and ((select public.app_is_owner())
+         or (outlet_id in (select public.app_outlets_for('franchise_admin')))
+         or (outlet_id in (select public.app_outlets_for('biller')))))))$f$],
   'select 1 from public.menu_categories'),
-  'menu_categories_select_includes alone, likewise');
+  'menu_categories_select, likewise');
 
-select ok(pg_temp.twin_matches('menu_discounts', 'menu_discounts_select',
+select ok(pg_temp.frozen_matches('menu_discounts_select', array[
+  $f$alter policy menu_discounts_select on public.menu_discounts using (
+     public.app_device_ok() and ((outlet_id = (select public.app_counter_shift_outlet()))
+       or (public.app_account_active() and ((select public.app_is_owner())
+         or (outlet_id in (select public.app_outlets_for('franchise_admin')))
+         or (outlet_id in (select public.app_outlets_for('biller')))))))$f$],
   'select 1 from public.menu_discounts'),
-  'menu_discounts_select_includes alone, likewise');
+  'menu_discounts_select, likewise');
 
-select ok(pg_temp.twin_matches('profiles', 'profiles_select',
+-- profiles_select read `app_may_see_person`, which the contract made a call to
+-- its `_v2`, so its old body is put back with it.
+select ok(pg_temp.frozen_matches('profiles_select', array[
+  $f$create or replace function public.app_may_see_person(person uuid)
+     returns boolean language sql stable security definer set search_path = '' as $b$
+       select exists (
+         select 1
+           from public.assignments target
+           join public.assignments mine on mine.outlet_id = target.outlet_id
+          where target.person_id = person
+            and target.ended_on is null
+            and mine.person_id = auth.uid()
+            and mine.ended_on is null
+            and mine.role in ('franchise_admin', 'biller'))
+     $b$$f$,
+  $f$alter policy profiles_select on public.profiles using (
+     public.app_account_active() and public.app_device_ok()
+     and ((id = auth.uid()) or (select public.app_is_owner()) or public.app_may_see_person(id)))$f$],
   'select 1 from public.profiles'),
-  'profiles_select_includes alone shows every persona the people the original shows');
+  'profiles_select shows every persona the people the role-by-name policy showed');
 
-select ok(pg_temp.twin_matches('assignments', 'assignments_insert',
+select ok(pg_temp.frozen_matches('assignments_insert', array[
+  $f$alter policy assignments_insert on public.assignments with check (
+     public.app_account_active() and ((select public.app_is_owner())
+       or ((role = any (array['biller'::public.app_role, 'employee'::public.app_role]))
+           and (outlet_id in (select public.app_outlets_for('franchise_admin'))))))$f$],
   $p$insert into public.assignments (person_id, role, outlet_id, started_on)
      values ('10000000-0000-4000-a000-000000000007', 'employee', '00000000-0000-4000-a000-000000000001', current_date)$p$),
-  'assignments_insert_includes alone admits a staff assignment exactly as the original does');
+  'assignments_insert admits a staff assignment exactly as the role-by-name policy did');
 
-select ok(pg_temp.twin_matches('assignments', 'assignments_insert',
+select ok(pg_temp.frozen_matches('assignments_insert', array[
+  $f$alter policy assignments_insert on public.assignments with check (
+     public.app_account_active() and ((select public.app_is_owner())
+       or ((role = any (array['biller'::public.app_role, 'employee'::public.app_role]))
+           and (outlet_id in (select public.app_outlets_for('franchise_admin'))))))$f$],
   $p$insert into public.assignments (person_id, role, outlet_id, started_on)
      values ('10000000-0000-4000-a000-000000000007', 'franchise_admin', '00000000-0000-4000-a000-000000000001', current_date)$p$),
-  'and refuses a manager assignment exactly as the original does');
+  'and refuses a manager assignment exactly as it did');
 
-select ok(pg_temp.twin_matches('assignments', 'assignments_update',
+select ok(pg_temp.frozen_matches('assignments_update', array[
+  $f$alter policy assignments_update on public.assignments
+     using (public.app_account_active() and ((select public.app_is_owner())
+       or ((role = any (array['biller'::public.app_role, 'employee'::public.app_role]))
+           and (outlet_id in (select public.app_outlets_for('franchise_admin'))))))
+     with check (public.app_account_active() and ((select public.app_is_owner())
+       or ((role = any (array['biller'::public.app_role, 'employee'::public.app_role]))
+           and (outlet_id in (select public.app_outlets_for('franchise_admin'))))))$f$],
   'update public.assignments set ended_on = ended_on'),
-  'assignments_update_includes alone lets every persona update the rows the original does');
+  'assignments_update lets every persona update the rows the role-by-name policy did');
 
--- With the gate off, no twin admits anything.
-update public.change_gates set enabled = false where key = 'role-includes';
+-- Nothing reads the gate any more, and no twin is left beside its policy.
+select is(
+  (select count(*)::int from pg_policies
+    where coalesce(qual, '') || coalesce(with_check, '') like '%role-includes%'
+       or (schemaname = 'public' and policyname like '%\_includes')),
+  0,
+  'no policy reads the role-includes gate, and every twin is gone');
 
-create function pg_temp.twin_alone_with_gate_off(p_table text, p_policy text)
-returns bigint language plpgsql as $$
+select is(
+  (select count(*)::int from pg_proc
+    where pronamespace = 'public'::regnamespace and prosrc like '%role-includes%'),
+  0,
+  'and no function does');
+
+select ok(
+  (select retired_at is not null and not enabled from public.change_gates where key = 'role-includes'),
+  'the gate''s row is retired, and off with it');
+
+-- ---------------------------------------------------------------------------
+-- 1b. What waited for the cleanup (design D4) answers as before.
+--
+-- `expense_guard`'s one changed line is the pair of role checks section 0 proves
+-- `app_acts_as` answers as; the other two are compared with frozen copies.
+
+create function pg_temp.old_account_actor_may_replace_set(p_actor_id uuid, p_profile_id uuid, p_desired jsonb)
+returns boolean language plpgsql stable as $$
 declare
-  v_seen bigint := 0;
-  v_n bigint;
-  v_person record;
+  v_actor_is_owner boolean;
+  v_actor_managed uuid[];
 begin
-  begin
-    execute 'reset role';
-    execute format('drop policy %I on public.%I', p_policy, p_table);
-    for v_person in select * from personas loop
-      perform pg_temp.impersonate(v_person.id);
-      execute format('select count(*) from public.%I', p_table) into v_n;
-      v_seen := v_seen + v_n;
-      execute 'reset role';
-    end loop;
-    raise exception using errcode = 'P0096', message = v_seen::text;
-  exception when sqlstate 'P0096' then
-    return sqlerrm::bigint;
-  end;
+  if p_actor_id = p_profile_id then return false; end if;
+  if not exists (
+    select 1 from public.profiles p where p.id = p_actor_id and p.is_active
+  ) then return false; end if;
+  select exists (
+    select 1 from public.assignments a
+     where a.person_id = p_actor_id and a.role = 'super_admin' and a.ended_on is null
+  ) into v_actor_is_owner;
+  if v_actor_is_owner then return true; end if;
+  select coalesce(array_agg(a.outlet_id), '{}'::uuid[]) into v_actor_managed
+    from public.assignments a
+   where a.person_id = p_actor_id and a.role = 'franchise_admin' and a.ended_on is null;
+  if cardinality(v_actor_managed) = 0 then return false; end if;
+  if exists (
+    select 1 from public.assignments a
+     where a.person_id = p_profile_id and a.ended_on is null
+       and (a.role not in ('employee', 'biller') or a.outlet_id is null
+            or not (a.outlet_id = any(v_actor_managed)))
+  ) then return false; end if;
+  if exists (
+    select 1 from jsonb_to_recordset(coalesce(p_desired, '[]'::jsonb))
+        as wanted("outletId" uuid, role public.app_role)
+     where wanted.role not in ('employee', 'biller') or wanted."outletId" is null
+        or not (wanted."outletId" = any(v_actor_managed))
+  ) then return false; end if;
+  return true;
 end;
 $$;
 
-select is(pg_temp.twin_alone_with_gate_off('expenses', 'expenses_select'), 0::bigint,
-  'with the gate off, expenses_select_includes alone shows nobody anything');
-select is(pg_temp.twin_alone_with_gate_off('menu_items', 'menu_items_select'), 0::bigint,
-  'with the gate off, menu_items_select_includes alone shows nobody anything');
-select is(pg_temp.twin_alone_with_gate_off('profiles', 'profiles_select'), 0::bigint,
-  'with the gate off, profiles_select_includes alone shows nobody anything');
+select is(
+  (select count(*)::int
+     from personas actor
+     cross join personas target
+     cross join (
+       select '[]'::jsonb as desired
+       union all
+       select jsonb_build_array(jsonb_build_object('outletId', o, 'role', r))
+         from unnest(enum_range(null::public.app_role)) r,
+              unnest(array[:'KAL'::uuid, :'KPA'::uuid]) o
+     ) d
+    where public.account_actor_may_replace_set(actor.id, target.id, d.desired)
+          is distinct from pg_temp.old_account_actor_may_replace_set(actor.id, target.id, d.desired)),
+  0,
+  'account_actor_may_replace_set answers every actor, person and role at either outlet as before');
+
+create function pg_temp.old_app_may_hold_counter_shift(person uuid, outlet uuid)
+returns boolean language sql stable as $$
+  select exists (select 1 from public.profiles p where p.id = person and p.is_active)
+     and exists (
+       select 1 from public.assignments a
+        where a.person_id = person and a.ended_on is null
+          and (a.role = 'super_admin'
+               or (a.role in ('biller', 'franchise_admin') and a.outlet_id = outlet)))
+$$;
+
+select is(
+  (select count(*)::int
+     from personas p, unnest(array[:'KAL'::uuid, :'KPA'::uuid]) o
+    where public.app_may_hold_counter_shift(p.id, o)
+          is distinct from pg_temp.old_app_may_hold_counter_shift(p.id, o)),
+  0,
+  'app_may_hold_counter_shift answers every persona at either outlet as before');
 
 -- ---------------------------------------------------------------------------
 -- 2. The `_v2` functions return what their originals return.
@@ -456,31 +601,25 @@ select is(
   '',
   'review_billing_attribution_v2 refuses as the original does; its one changed clause is the at-least-Biller substitution proved in section 0');
 
--- Each _v2 differs from its original only in the role comparison. A body that
--- grew any other difference would show here as more than the expected lines.
-create function pg_temp.changed_lines(p_v1 text, p_v2 text)
-returns integer language sql as $$
-  select count(*)::int from (
-    select line from unnest(string_to_array(
-      (select prosrc from pg_proc where proname = p_v2 and pronamespace = 'public'::regnamespace), E'\n')) line
-    except all
-    select line from unnest(string_to_array(
-      (select prosrc from pg_proc where proname = p_v1 and pronamespace = 'public'::regnamespace), E'\n')) line
-  ) s
+-- Each original is now one call to its `_v2`, so the two cannot drift apart.
+create function pg_temp.calls_its_v2(p_v1 text)
+returns boolean language sql as $$
+  select prosrc ~* ('^\s*select (\* from )?public\.' || p_v1 || '_v2\(')
+    from pg_proc where proname = p_v1 and pronamespace = 'public'::regnamespace
 $$;
 
-select is(pg_temp.changed_lines('attendance_submit_attempt', 'attendance_submit_attempt_v2'), 1,
-  'attendance_submit_attempt_v2 changes one line of its original');
-select is(pg_temp.changed_lines('attendance_record_manual', 'attendance_record_manual_v2'), 2,
-  'attendance_record_manual_v2 changes its two role lines and nothing else');
-select is(pg_temp.changed_lines('attendance_elsewhere', 'attendance_elsewhere_v2'), 1,
-  'attendance_elsewhere_v2 changes one line');
-select is(pg_temp.changed_lines('expense_people', 'expense_people_v2'), 1,
-  'expense_people_v2 changes one line');
-select is(pg_temp.changed_lines('review_billing_attribution', 'review_billing_attribution_v2'), 1,
-  'review_billing_attribution_v2 changes one line');
-select is(pg_temp.changed_lines('app_may_see_person', 'app_may_see_person_v2'), 1,
-  'app_may_see_person_v2 changes one line');
+select ok(pg_temp.calls_its_v2('attendance_submit_attempt'),
+  'attendance_submit_attempt is a call to its _v2');
+select ok(pg_temp.calls_its_v2('attendance_record_manual'),
+  'attendance_record_manual is a call to its _v2');
+select ok(pg_temp.calls_its_v2('attendance_elsewhere'),
+  'attendance_elsewhere is a call to its _v2');
+select ok(pg_temp.calls_its_v2('expense_people'),
+  'expense_people is a call to its _v2');
+select ok(pg_temp.calls_its_v2('review_billing_attribution'),
+  'review_billing_attribution is a call to its _v2');
+select ok(pg_temp.calls_its_v2('app_may_see_person'),
+  'app_may_see_person is a call to its _v2');
 
 select * from finish();
 rollback;

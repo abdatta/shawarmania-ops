@@ -193,10 +193,7 @@ select pg_temp.unimpersonate();
 
 select is(
   (select string_agg(policyname, ', ' order by policyname)
-     from pg_policies where schemaname = 'public' and tablename = 'expenses'
-      -- The role-includes twins are counted out until the change's cleanup
-      -- drops them (staff-roles-include-other-roles, design D3).
-      and policyname not like '%\_includes'),
+     from pg_policies where schemaname = 'public' and tablename = 'expenses'),
   'expenses_insert, expenses_select, '
   'expenses_update',
   'the expense record still carries exactly three, with no delete policy');

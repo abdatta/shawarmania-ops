@@ -290,10 +290,7 @@ select is(
 
 select is(
   (select count(*) from pg_policies
-    where schemaname = 'public' and tablename = 'expense_categories'
-      -- The role-includes twins are counted out until the change's cleanup
-      -- drops them (staff-roles-include-other-roles, design D3).
-      and policyname not like '%\_includes'),
+    where schemaname = 'public' and tablename = 'expense_categories'),
   2::bigint,
   'the business-wide category list has explicit select and insert policies'
 );
@@ -362,10 +359,7 @@ select is(
 select is(
   (select count(*) from pg_policies
     where schemaname = 'public'
-      and tablename = 'expenses'
-      -- The role-includes twins are counted out until the change's cleanup
-      -- drops them (staff-roles-include-other-roles, design D3).
-      and policyname not like '%\_includes'),
+      and tablename = 'expenses'),
   3::bigint,
   'the promoted expense table carries select, insert and update policies');
 
@@ -396,7 +390,7 @@ select is(
   (select count(*) from pg_policies
     where schemaname = 'public'
       and tablename = 'expenses'
-      and coalesce(qual, '') || coalesce(with_check, '') like '%app_has_role_at%'),
+      and coalesce(qual, '') || coalesce(with_check, '') like '%app_acts_as%'),
   3::bigint,
   'and all three expense policies carry the staff branch, so outlet staff keep '
   'the reach this capability exists to give them');

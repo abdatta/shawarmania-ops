@@ -50,10 +50,7 @@ select throws_ok(
 
 select is(
   (select count(*) from pg_policies
-    where schemaname = 'public' and tablename = 'expenses'
-      -- The role-includes twins are counted out until the change's cleanup
-      -- drops them (staff-roles-include-other-roles, design D3).
-      and policyname not like '%\_includes'),
+    where schemaname = 'public' and tablename = 'expenses'),
   3::bigint,
   'expenses retain select, insert and update policies after the rename');
 select ok(
