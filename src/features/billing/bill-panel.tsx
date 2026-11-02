@@ -37,6 +37,7 @@ export function BillPanel({
   footer,
   discountRows,
   addDiscount,
+  moneyHidden = false,
 }: {
   lines: BillLineDraft[]
   labelField?: ReactNode
@@ -63,6 +64,11 @@ export function BillPanel({
   discountRows?: ReactNode
   /** The control that opens the discount panel, pinned under the lines. */
   addDiscount?: ReactNode
+  /**
+   * A delivery order's panel (delivery-orders-are-made-not-billed): the
+   * counter's prices are not what the platform charged, so no price is shown.
+   */
+  moneyHidden?: boolean
 }) {
   const editing = editingOrderReference !== undefined
   /*
@@ -158,7 +164,9 @@ export function BillPanel({
                         {made} made
                       </p>
                     )}
-                    <Money paise={line.unitPricePaise} className="text-xs text-content-muted" />
+                    {!moneyHidden && (
+                      <Money paise={line.unitPricePaise} className="text-xs text-content-muted" />
+                    )}
                   </div>
 
                   {packaging && packagingFlat ? (
@@ -217,7 +225,7 @@ export function BillPanel({
                     </div>
                   )}
 
-                  {waived ? (
+                  {moneyHidden ? null : waived ? (
                     <span className="flex w-20 shrink-0 flex-col items-end leading-tight">
                       <Money
                         paise={totalPaise}

@@ -94,7 +94,13 @@ export function StateToggle({
   disabled = false,
   onActivate,
   testId,
+  filling = false,
 }: {
+  /**
+   * Ticked, and filling over its undo's five seconds: a delivery order's Hand
+   * over (delivery-orders-are-made-not-billed). Absent, the toggle as ever.
+   */
+  filling?: boolean
   label: string
   tone: StateToggleTone
   checked: boolean
@@ -143,6 +149,7 @@ export function StateToggle({
         checked
           ? cn(tokens.fill, 'hover:brightness-95')
           : cn('border border-border bg-surface text-content hover:bg-surface-raised'),
+        checked && filling && 'handover-fill',
       )}
     >
       <StateBox
@@ -150,7 +157,8 @@ export function StateToggle({
         className={checked ? 'border-current bg-current' : cn(tokens.outline, 'bg-surface')}
         {...(checked ? { markClassName: tokens.mark } : {})}
       />
-      {label}
+      {/* Filling, the word rides above the fill. */}
+      {filling ? <span>{label}</span> : label}
     </button>
   )
 }

@@ -1,6 +1,7 @@
 import { ReadyDish } from './ready-dish'
 import {
   Bell,
+  Bike,
   Check,
   CheckCheck,
   MoreVertical,
@@ -84,6 +85,9 @@ export function PipelineCard({
   onCancel,
   onUnpay,
   onCancelAfterPaid,
+  onHandOver,
+  onUndoHandOver,
+  fadedOut = false,
 }: {
   order: BillingOrder
   dishTicks?: boolean
@@ -138,6 +142,16 @@ export function PipelineCard({
   onCancel: (order: BillingOrder) => void
   onUnpay: (order: BillingOrder, reason: string) => void
   onCancelAfterPaid: (order: BillingOrder, reason: string) => void
+  /**
+   * Hand a delivery order to its rider (delivery-orders-are-made-not-billed,
+   * D7), where Paid would be. Only the on branch of `delivery-orders` passes it,
+   * and only for a delivery order.
+   */
+  onHandOver?: (order: BillingOrder) => void
+  /** Undo a handover while the card still shows it, for a few seconds. */
+  onUndoHandOver?: (order: BillingOrder) => void
+  /** Already faded out by its own exit: the rail need not fade it again. */
+  fadedOut?: boolean
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [unpaying, setUnpaying] = useState(false)
@@ -184,6 +198,16 @@ export function PipelineCard({
   const reference = table !== null ? `${numberReference} · ${tableLabel(table)}` : numberReference
   const isPaid = order.status === 'paid'
   const prepared = order.preparedAt !== null
+  /** A delivery order shows no money and leaves by Hand over (delivery-orders-are-made-not-billed). */
+  const delivery = Boolean(order.delivery) && onHandOver !== undefined
+  const handedOver = delivery && order.status === 'handed_over'
+  /*
+    Hand over waits for every dish to be ticked (owner, 2026-11-01): a rider
+    leaves with the whole order, so the counter has made all of it first.
+  */
+  const allTicked = order.lines
+    .filter((line) => line.kind !== 'packaging')
+    .every((line) => (line.preparedQuantity ?? 0) >= line.quantity)
   /*
     The ticket's edit window, from the one domain function the database and both
     adapters also read — never a timer. Read one frame after mount so the render
@@ -270,7 +294,7 @@ export function PipelineCard({
     disabled?: boolean
     act: () => void
   }> = []
-  if (dishTicks && (hasCustomer || canSetCustomer)) {
+  if (dishTicks && !delivery && (hasCustomer || canSetCustomer)) {
     kebabRows.push({
       label: 'Customer',
       act: () => {
@@ -317,6 +341,7 @@ export function PipelineCard({
   return (
     <article
       data-flip-id={order.id}
+      data-faded-out={fadedOut || undefined}
       data-testid={
         isAwaitingOrderNumber(order.orderNumber)
           ? `open-order-local-${order.id}`
@@ -330,7 +355,12 @@ export function PipelineCard({
         An open menu lifts its card above the next one, which would otherwise
         paint over a menu opening downwards.
       */
-      className={cn('rail-ticket border border-transparent px-2 py-1.5', menuOpen && 'z-30')}
+      className={cn(
+        'rail-ticket border border-transparent px-2 py-1.5',
+        menuOpen && 'z-30',
+        // Blue wherever another card is orange (delivery-orders-are-made-not-billed).
+        delivery && 'delivery-theme',
+      )}
     >
       <div className="flex min-w-0 items-stretch gap-2">
         {/* The taller reference anchors the header. Customer and timing share
@@ -466,7 +496,7 @@ export function PipelineCard({
             heavy total inks right to its edge, so an equal gap reads tighter
             than the one between two outlined controls [owner, 2026-10-05]. */}
         <div className="flex shrink-0 self-center items-center gap-2.5">
-          <span className="flex items-baseline gap-1.5">
+          <span className={cn('flex items-baseline gap-1.5', delivery && 'hidden')}>
             {discounted && (
               <Money
                 paise={grossPaise}
@@ -483,7 +513,7 @@ export function PipelineCard({
               )}
             />
           </span>
-          {!dishTicks && (hasCustomer || canSetCustomer) && (
+          {!dishTicks && !delivery && (hasCustomer || canSetCustomer) && (
             <Button
               variant="secondary"
               size="phone"
@@ -624,7 +654,11 @@ export function PipelineCard({
           every state. This is the whole point of #55 and no state may reorder,
           resize, rename or withhold either of them.
         */}
-        {dishTicks ? (
+        {dishTicks && delivery ? (
+          <div className="flex min-w-0 flex-1 items-center justify-center">
+            <PlaceTag testId={`order-service-${order.id}`} icon={Bike} label="Delivery" />
+          </div>
+        ) : dishTicks ? (
           order.serviceType && (
             <div className="flex min-w-0 flex-1 items-center justify-center">
               <PlaceTag
@@ -645,23 +679,58 @@ export function PipelineCard({
             onActivate={() => (prepared ? onUnprepare(order) : onMarkPrepared(order))}
           />
         )}
-        <StateToggle
-          label="Paid"
-          tone="success"
-          checked={isPaid}
-          interactive={!foreignTill}
-          disabled={busy}
-          testId={`paid-toggle-${order.id}`}
-          /*
+        {delivery ? (
+          <span className="relative flex flex-1">
+            <StateToggle
+              // Handed over, it stays a moment ticked, and unticking it undoes
+              // it; the word never changes, as Paid's does not.
+              label="Hand over"
+              // The card's own accent, which `delivery-theme` turns blue.
+              tone="primary"
+              checked={handedOver}
+              interactive={!foreignTill}
+              disabled={!handedOver && (busy || !allTicked)}
+              testId={`hand-over-${order.id}`}
+              // The undo's time: the box fills, and full, the card goes.
+              filling={handedOver}
+              onActivate={() => (handedOver ? onUndoHandOver?.(order) : onHandOver?.(order))}
+            />
+          </span>
+        ) : (
+          <StateToggle
+            label="Paid"
+            tone="success"
+            checked={isPaid}
+            interactive={!foreignTill}
+            disabled={busy}
+            testId={`paid-toggle-${order.id}`}
+            /*
             Unchecked opens the tender dialog and the tick lands only when money
             is actually recorded; checked opens the reasoned take-back. A card
             sits in this list only while it is not both prepared and paid, so
             every ticked Paid box here is untickable by construction — the box
             never lies about what pressing it will do.
           */
-          onActivate={() => (isPaid ? setUnpaying(true) : onMarkPaid(order))}
-        />
+            onActivate={() => (isPaid ? setUnpaying(true) : onMarkPaid(order))}
+          />
+        )}
 
+        {/*
+          A handover held to undo has nothing its menu could do: Edit and Cancel
+          order need an open order. The menu stays, disabled, until the undo
+          runs out (owner, 2026-11-01).
+        */}
+        {handedOver && kebabRows.length === 0 && (
+          <Button
+            variant="secondary"
+            size="phone"
+            className="h-9 w-9 px-0"
+            aria-label={`More actions for ${reference}`}
+            disabled
+          >
+            <MoreVertical aria-hidden size={17} />
+          </Button>
+        )}
         {kebabRows.length > 0 && (
           <div className="relative" ref={menuRef}>
             <Button
@@ -1076,6 +1145,49 @@ export function CancelAfterPaidDialog({
           }
           keepLabel="Keep the order"
           confirmLabel="Void the money and cancel"
+          busy={busy}
+          onClose={onClose}
+          onConfirm={onConfirm}
+        />
+      )}
+    </Modal>
+  )
+}
+
+/**
+ * Taking a handover back (delivery-orders-are-made-not-billed, D7): the same
+ * reasoned confirmation as taking a payment back, minus the amount.
+ */
+export function TakeBackHandoverDialog({
+  open,
+  reference,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean
+  reference: string
+  busy?: boolean
+  onClose: () => void
+  onConfirm: (reason: string) => void
+}) {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      aria-label={`Take back the handover of ${reference}`}
+      dismissOnOutsideTap={!busy}
+      className="m-auto w-[min(92vw,26rem)] rounded-2xl p-4"
+    >
+      {open && (
+        <ReasonForm
+          tone="primary"
+          heading="Take back this handover?"
+          inputId="take-back-handover-reason"
+          inputPlaceholder="Why is it coming back?"
+          body={<>{reference} goes back on the rail as it was before the tap.</>}
+          keepLabel="Keep it handed over"
+          confirmLabel="Take back"
           busy={busy}
           onClose={onClose}
           onConfirm={onConfirm}

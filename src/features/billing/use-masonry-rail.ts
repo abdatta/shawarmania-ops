@@ -5,6 +5,8 @@ export function useMasonryRail(
   ref: RefObject<HTMLUListElement | null>,
   enabled: boolean,
   revision: unknown,
+  /** A second reason to lay out again: what is listed, beside what was read. */
+  listed?: string,
 ) {
   useLayoutEffect(() => {
     const root = ref.current
@@ -38,5 +40,5 @@ export function useMasonryRail(
       observer?.disconnect()
       window.removeEventListener('resize', measure)
     }
-  }, [ref, enabled, revision])
+  }, [ref, enabled, revision, listed])
 }

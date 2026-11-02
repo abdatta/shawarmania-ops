@@ -1,5 +1,5 @@
 import { ReceiptText, SlidersHorizontal } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { EmptyState } from '@/components/layout/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
@@ -38,6 +38,10 @@ import { ManagerBillDetail } from './manager-bill-detail'
 import { BillDetailTransition, DETAIL_TRANSITION_MS, ManagerBillSummary } from './manager-bill-row'
 import { DishOpenOrderSummary } from './dish-open-order-summary'
 import { ManagerDayStats, ManagerDayStatsShimmer } from './manager-day-stats'
+import { ManagerDeliveryHistory, ManagerDeliveryStats } from './manager-delivery-history'
+import { OrderScopePill } from './order-scope'
+import { useRememberedScope } from './order-scope-memory'
+import { useChangeGate } from '@/change-gates/context'
 import { ManagerSyncStatus } from './manager-sync-status'
 import { PaymentTotalCards } from './payment-total-cards'
 
@@ -55,12 +59,19 @@ import { PaymentTotalCards } from './payment-total-cards'
 function splitPipeline(orders: readonly BillingOrder[]): {
   preparing: BillingOrder[]
   unpaidPrepared: BillingOrder[]
+  readyToHandOver: BillingOrder[]
 } {
   const preparing: BillingOrder[] = []
   const unpaidPrepared: BillingOrder[] = []
+  // A delivery order made and waiting for its rider owes no money, so it is
+  // not an unpaid prepared order (delivery-orders-are-made-not-billed).
+  const readyToHandOver: BillingOrder[] = []
   for (const order of orders) {
     if (order.status === 'cancelled') continue
-    if (order.status === 'open') {
+    if (order.status === 'open' && order.delivery) {
+      if (order.preparedAt === null) preparing.push(order)
+      else readyToHandOver.push(order)
+    } else if (order.status === 'open') {
       if (order.preparedAt === null) preparing.push(order)
       else unpaidPrepared.push(order)
     } else if (order.status === 'paid' && order.preparedAt === null) {
@@ -68,10 +79,10 @@ function splitPipeline(orders: readonly BillingOrder[]): {
     }
     // Paid and prepared: fully done, listed among the bills instead.
   }
-  return { preparing, unpaidPrepared }
+  return { preparing, unpaidPrepared, readyToHandOver }
 }
 
-type View = 'bills' | 'orders' | 'stats'
+type View = 'bills' | 'orders' | 'delivery' | 'stats'
 
 /**
  * How long the page may have been away before coming back reads it again: the
@@ -150,6 +161,14 @@ export function ManagerBillingHistory() {
    */
   const [chosenDay, setChosenDay] = useState<{ day: string; today: string } | null>(null)
   const [view, setView] = useState<View>('bills')
+  /*
+    Delivery orders are a tab of their own, not bills [owner, 2026-11-01], and
+    Stats reads Counter or Delivery from a small pill, remembered
+    (delivery-orders-are-made-not-billed, D7). Off, neither exists.
+  */
+  const deliveryGate = useChangeGate('delivery-orders')
+  const [statsScopeChosen, setStatsScope] = useRememberedScope('stats')
+  const statsScope = deliveryGate ? statsScopeChosen : 'counter'
   /**
    * The rows read so far, the read they answer, and how many the filter keeps
    * across every page (billing-history-reads-what-it-shows, design D1). A key
@@ -219,7 +238,7 @@ export function ManagerBillingHistory() {
   // Open orders are read for the day bar's day (design D5), so the list is the day's.
   const dayOrders = ordersKey === dayKey ? orders : []
   const unpaidPaise = dayOrders
-    .filter((order) => order.status === 'open')
+    .filter((order) => order.status === 'open' && !order.delivery)
     .reduce((sum, order) => sum + order.totalPaise, 0)
   // The refusals behind the Stats tab, named on the tab itself. Its two
   // neighbours already carry their counts, so a tab that says nothing reads as a
@@ -683,7 +702,11 @@ export function ManagerBillingHistory() {
           the filter rides beside Stats, and where they do not it drops to a
           line of its own, right-aligned either way. */}
       <div className="flex flex-wrap items-center gap-2" data-testid="billing-views-row">
-        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Billing history views">
+        <div
+          className={deliveryGate ? 'flex flex-wrap gap-1.5' : 'flex flex-wrap gap-2'}
+          role="tablist"
+          aria-label="Billing history views"
+        >
           {(
             [
               [
@@ -720,19 +743,37 @@ export function ManagerBillingHistory() {
                   'Stats'
                 ),
               ],
-            ] as const
-          ).map(([id, label]) => (
-            <Button
-              key={id}
-              variant={view === id ? 'primary' : 'secondary'}
-              size="phone"
-              role="tab"
-              aria-selected={view === id}
-              onClick={() => chooseView(id)}
-            >
-              {label}
-            </Button>
-          ))}
+            ] as [View, ReactNode][]
+          )
+            .flatMap((tab): [View, ReactNode][] =>
+              // Delivered, after Bills: finished delivery orders, done as bills
+              // are done, though they are not bills [owner, 2026-11-01].
+              deliveryGate && tab[0] === 'bills'
+                ? [
+                    tab,
+                    [
+                      'delivery',
+                      dayNumbers?.deliveryStats
+                        ? `Delivered (${dayNumbers.deliveryStats.handedOver + dayNumbers.deliveryStats.cancelled})`
+                        : 'Delivered',
+                    ],
+                  ]
+                : [tab],
+            )
+            .map(([id, label]) => (
+              <Button
+                key={id}
+                variant={view === id ? 'primary' : 'secondary'}
+                size="phone"
+                // Four tabs fit a Pixel 8's width on one line (owner, 2026-11-01).
+                {...(deliveryGate ? { className: 'px-3' } : {})}
+                role="tab"
+                aria-selected={view === id}
+                onClick={() => chooseView(id)}
+              >
+                {label}
+              </Button>
+            ))}
         </div>
         {view === 'bills' && (dayNumbers?.bills ?? 0) > 0 && (
           <div className="ml-auto flex min-w-0 max-w-full items-center gap-2">
@@ -777,7 +818,11 @@ export function ManagerBillingHistory() {
         </p>
       )}
 
-      {view === 'bills' ? (
+      {view === 'delivery' ? (
+        outletId && businessDate ? (
+          <ManagerDeliveryHistory outletId={outletId} businessDate={businessDate} />
+        ) : null
+      ) : view === 'bills' ? (
         <div className="space-y-2">
           {filterOpen && (
             <BillFilterSheet
@@ -879,14 +924,28 @@ export function ManagerBillingHistory() {
         // (billing-history-reads-what-it-shows, design D2), so choosing the tab
         // reads nothing.
         dayNumbers === null ? (
-          <ManagerDayStatsShimmer />
+          // Stats → Delivery is two groups (delivery-orders-are-made-not-billed).
+          <ManagerDayStatsShimmer groups={statsScope === 'delivery' ? 2 : 3} />
         ) : (
-          <div className="space-y-3">
+          <div className="relative space-y-3">
             <ManagerSyncStatus
               problems={dayNumbers.refusals}
               newestAt={dayNumbers.newestCommandAt}
             />
-            <ManagerDayStats stats={dayNumbers.stats} />
+            {/*
+              Counter or Delivery rides at the right of the sync chip's line, so
+              it never takes a row of its own [owner, 2026-11-01].
+            */}
+            {deliveryGate && (
+              <div className="absolute right-0 top-0 flex h-9 items-center">
+                <OrderScopePill scope={statsScope} onChange={setStatsScope} testId="stats-scope" />
+              </div>
+            )}
+            {statsScope === 'delivery' && dayNumbers.deliveryStats ? (
+              <ManagerDeliveryStats stats={dayNumbers.deliveryStats} />
+            ) : (
+              <ManagerDayStats stats={dayNumbers.stats} />
+            )}
           </div>
         )
       ) : view === 'orders' ? (
@@ -914,6 +973,7 @@ export function ManagerBillingHistory() {
               [
                 ['Preparing', splitPipeline(dayOrders).preparing],
                 ['Unpaid Prepared Orders', splitPipeline(dayOrders).unpaidPrepared],
+                ['Ready to hand over', splitPipeline(dayOrders).readyToHandOver],
               ] as const
             ).map(
               ([sectionTitle, sectionOrders]) =>

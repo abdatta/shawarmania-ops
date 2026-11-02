@@ -73,6 +73,15 @@ export function ManagerBillSummary({
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-2">
           <span className="font-black text-content">Bill {bill.billNumber}</span>
+          {/* The order's label, kept after it left the rail; never on the bill. */}
+          {'orderLabel' in bill && typeof bill.orderLabel === 'string' && (
+            <span
+              data-testid={`manager-bill-label-${bill.id}`}
+              className="truncate text-sm font-semibold text-content-muted"
+            >
+              {bill.orderLabel}
+            </span>
+          )}
           <span
             className={`rounded-full border px-2 py-0.5 text-xs font-bold ${bill.status === 'void' ? 'border-danger text-danger' : 'border-success text-success'}`}
           >

@@ -55,7 +55,10 @@ export function ItemsPanel({
   subject,
   onSubject,
   windows,
+  scope,
 }: {
+  /** Delivery orders alone (delivery-orders-are-made-not-billed); absent is the counter's. */
+  scope?: 'delivery' | undefined
   data: AnalyticsSnapshot
   outletId: string
   from: string
@@ -153,6 +156,7 @@ export function ItemsPanel({
           subject={subject}
           onSubject={onSubject}
           windows={windows}
+          scope={scope}
         />
       </div>
       {!orders && (
@@ -436,7 +440,10 @@ function ItemTrend({
   subject,
   onSubject,
   windows,
+  scope,
 }: {
+  /** Delivery orders alone (delivery-orders-are-made-not-billed); absent is the counter's. */
+  scope?: 'delivery' | undefined
   data: AnalyticsSnapshot
   outletId: string
   from: string
@@ -456,7 +463,7 @@ function ItemTrend({
   const { analytics } = useAdapters()
   const [cache, setCache] = useState(() => new Map<string, AnalyticsSeries>())
   const cut = windows?.some((w) => w.cut) ?? false
-  const key = `${outletId}:${from}:${to}:${periods}:${subjectKey(subject)}${windows ? `:${cut}` : ''}`
+  const key = `${outletId}:${from}:${to}:${periods}:${subjectKey(subject)}${windows ? `:${cut}` : ''}${scope ? `:${scope}` : ''}`
   const [failed, setFailed] = useState<string | null>(null)
   const [retry, setRetry] = useState(0)
   const series = cache.get(key) ?? null
@@ -465,7 +472,14 @@ function ItemTrend({
     if (cached) return
     let alive = true
     analytics
-      .series(outletId, from, to, periods, subject, windows ? { cut } : undefined)
+      .series(
+        outletId,
+        from,
+        to,
+        periods,
+        subject,
+        scope ? { ...(windows ? { cut } : {}), scope } : windows ? { cut } : undefined,
+      )
       .then((next) => {
         if (alive) setCache((previous) => new Map(previous).set(key, next))
       })

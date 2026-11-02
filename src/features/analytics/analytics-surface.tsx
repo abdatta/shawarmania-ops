@@ -17,6 +17,9 @@ import { SessionContext } from '@/session/context'
 import { AnalyticsRange } from './analytics-range'
 import { ItemsPanel } from './items-panel'
 import { AnalyticsControls } from './analytics-controls'
+import { useChangeGate } from '@/change-gates/context'
+import { OrderScopePill } from '@/features/billing/order-scope'
+import { useRememberedScope } from '@/features/billing/order-scope-memory'
 import { ITEM_GRAINS, ITEM_METRICS, SALES_GRAINS, SALES_METRICS } from './analytics-trend'
 import { readRememberedRange, rememberRange, shortcutOf, shortcutRange } from './remembered-choices'
 import { SalesPanel } from './sales-panel'
@@ -77,13 +80,23 @@ function OutletAnalytics({
         : params.get('grain')
           ? 'day'
           : (opening?.grain ?? 'day')
-  const metric =
-    params.get('metric') === 'orders'
+  /*
+    Counter or Delivery, remembered per page (delivery-orders-are-made-not-billed,
+    D7). Delivery orders carry no money, so in Delivery the measure is Orders on
+    Sales and Items on Items, and the money measures say why they are unavailable.
+  */
+  const deliveryGate = useChangeGate('delivery-orders')
+  const [scopeChosen, setScope] = useRememberedScope(isItems ? 'items' : 'sales')
+  const scope = deliveryGate ? scopeChosen : 'counter'
+  const delivery = scope === 'delivery'
+  const metric = delivery
+    ? 'orders'
+    : params.get('metric') === 'orders'
       ? 'orders'
       : params.get('metric') === 'aov'
         ? 'aov'
         : 'revenue'
-  const itemMetric = params.get('metric') === 'revenue' ? 'revenue' : 'units'
+  const itemMetric = delivery ? 'units' : params.get('metric') === 'revenue' ? 'revenue' : 'units'
   // What the Items chart draws, so a reload or a shared link keeps it.
   const subject: AnalyticsSubject = params.get('dish')
     ? { kind: 'item', key: params.get('dish')! }
@@ -100,7 +113,7 @@ function OutletAnalytics({
       : 'equal'
   const cut = isSales && today !== null && to === today
   const itemsCut = isItems && today !== null && to === today
-  const readKey = `${outletId}:${from}:${to}:${kind}:${readPeriods}${isSales ? `:${align}:${cut}` : `:cut:${itemsCut}`}`
+  const readKey = `${outletId}:${from}:${to}:${kind}:${readPeriods}${isSales ? `:${align}:${cut}` : `:cut:${itemsCut}`}${deliveryGate ? `:${scope}` : ''}`
   const data = loaded?.key === readKey ? loaded.data : null
   const [error, setError] = useState(false)
   const [retry, setRetry] = useState(0)
@@ -126,14 +139,17 @@ function OutletAnalytics({
     let alive = true
     if (!outletId || !valid || !ready) return
     void analytics
-      .read(
-        outletId,
-        from,
-        to,
-        isSales
-          ? { view: 'sales', periods: readPeriods, align, cut }
-          : { view: 'items', periods: readPeriods, align: 'equal', cut: itemsCut },
-      )
+      .read(outletId, from, to, {
+        ...(isSales
+          ? { view: 'sales' as const, periods: readPeriods, align, cut }
+          : {
+              view: 'items' as const,
+              periods: readPeriods,
+              align: 'equal' as const,
+              cut: itemsCut,
+            }),
+        ...(deliveryGate ? { scope } : {}),
+      })
       .then((next) => {
         if (alive) {
           setLoaded({ key: readKey, data: next })
@@ -182,10 +198,17 @@ function OutletAnalytics({
             className="min-h-11 min-w-11 justify-center rounded-lg"
             explanation={
               <div className="space-y-3">
-                <p>
-                  Settled counter bills synced to the server. Open and voided orders are excluded;
-                  bills still on an offline tablet arrive after sync.
-                </p>
+                {delivery ? (
+                  <p>
+                    Delivery orders handed over at the counter, synced to the server. They carry no
+                    money: what the platforms paid is in Revenue on the Counter view.
+                  </p>
+                ) : (
+                  <p>
+                    Settled counter bills synced to the server. Open and voided orders are excluded;
+                    bills still on an offline tablet arrive after sync.
+                  </p>
+                )}
                 {isSales && align === 'month' ? (
                   <p>
                     Month compares the same dates in earlier months, using the outlet’s Kolkata
@@ -228,6 +251,26 @@ function OutletAnalytics({
         month={isSales ? { selected: align === 'month' } : null}
       />
       <AnalyticsControls
+        {...(deliveryGate
+          ? {
+              scope: (
+                <OrderScopePill
+                  scope={scope}
+                  onChange={setScope}
+                  testId="analytics-scope"
+                  compact
+                />
+              ),
+            }
+          : {})}
+        {...(delivery
+          ? {
+              unavailable: {
+                values: isItems ? ['revenue'] : ['revenue', 'aov'],
+                reason: 'Delivery orders carry no money',
+              },
+            }
+          : {})}
         grain={grain}
         grains={kind === 'items' ? ITEM_GRAINS : SALES_GRAINS}
         metric={kind === 'items' ? itemMetric : metric}
@@ -275,6 +318,7 @@ function OutletAnalytics({
           clock={clock}
           grain={grain}
           metric={itemMetric}
+          {...(delivery ? { scope: 'delivery' as const } : {})}
           periods={Math.floor(periods)}
           subject={subject}
           windows={

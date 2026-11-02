@@ -46,7 +46,15 @@ export function BillComposerFooter({
   service,
   serviceOwed = false,
   collectCustomerDetails = true,
+  delivery = false,
+  orderLabel,
 }: {
+  /**
+   * The order's label, with `delivery-orders` on: it sits here, by the chips and
+   * Order, and the customer row heads the panel instead (owner, 2026-11-01).
+   * Absent, this is today's footer.
+   */
+  orderLabel?: ReactNode
   lines: BillLineDraft[]
   /** What the biller decided, or null while they have decided nothing. */
   customer: CustomerSelection | null
@@ -72,6 +80,11 @@ export function BillComposerFooter({
    */
   serviceOwed?: boolean
   collectCustomerDetails?: boolean
+  /**
+   * A delivery order (delivery-orders-are-made-not-billed, D7): no total, no
+   * customer and no Paid. Its only action is Order.
+   */
+  delivery?: boolean
 }) {
   const totals = billTotals(lines, { discountPaise: discountTotalPaise })
 
@@ -84,7 +97,7 @@ export function BillComposerFooter({
         the top, so a Total row here would be the same number twice a centimetre
         apart. The panel has no other total, so it keeps this one.
       */}
-      {!editing && (
+      {!editing && !delivery && (
         <div className="flex items-baseline justify-between">
           <span className="text-sm font-semibold text-content-muted">Total</span>
           <Money paise={totals.totalPaise} display data-testid="bill-total" />
@@ -96,16 +109,28 @@ export function BillComposerFooter({
         itself, in the place it always sits. Rendering it here too would be two
         of one control — which is the failure this footer's own doc warns about.
       */}
-      {!editing && (
+      {!editing && orderLabel !== undefined && (
+        <>
+          <div>{orderLabel}</div>
+          {service}
+        </>
+      )}
+      {!editing && orderLabel === undefined && (
         <CustomerServiceRow
           customer={customer}
           onOpen={onOpenCustomer}
           service={service}
-          collectCustomerDetails={collectCustomerDetails}
+          collectCustomerDetails={collectCustomerDetails && !delivery}
         />
       )}
 
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+      <div
+        className={
+          delivery && !editing
+            ? 'grid grid-cols-1 gap-2'
+            : 'grid grid-cols-[minmax(0,1fr)_auto] gap-2'
+        }
+      >
         <Button
           size="control"
           className="w-full whitespace-nowrap text-lg"
@@ -128,7 +153,7 @@ export function BillComposerFooter({
           >
             Cancel edit
           </Button>
-        ) : (
+        ) : delivery ? null : (
           <Button
             variant="secondary"
             size="control"

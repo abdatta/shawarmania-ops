@@ -127,10 +127,10 @@ export function ManagerDayStats({ stats }: { stats: BillingDayStats }) {
 }
 
 /** The three groups' own silhouette, so nothing moves when the read lands. */
-export function ManagerDayStatsShimmer() {
+export function ManagerDayStatsShimmer({ groups = 3 }: { groups?: 2 | 3 }) {
   return (
     <LoadingRegion label="the day’s stats" className="space-y-3">
-      {[0, 1, 2].map((group) => (
+      {(groups === 2 ? [0, 1] : [0, 1, 2]).map((group) => (
         <div key={group} className="overflow-hidden rounded-xl border border-border bg-surface">
           <div className="border-b border-border px-4 py-2.5">
             <Shimmer className="h-5 w-24" />

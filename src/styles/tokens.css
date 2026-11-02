@@ -80,6 +80,17 @@
   --brand-crimson-soft: #f25e5e;
   --brand-amber-deep: #b45309;
   --brand-amber: #fbbf24;
+  /* Delivery's own colour (delivery-orders-are-made-not-billed): a hue no other
+     state on the counter wears, so a delivery order is told apart at a glance
+     [owner, 2026-11-01]. White carries on the fill in both themes. */
+  --brand-blue: #2563eb;
+  --brand-blue-deep: #1d4ed8;
+  --brand-blue-soft: #93c5fd;
+  --brand-blue-bright: #60a5fa;
+  /* What fills the Hand over box as its undo runs out: a deeper blue than the
+     card's on either theme, still under the card's own ink (owner, 2026-11-01). */
+  --brand-blue-night: #143681;
+  --brand-blue-mid: #3b82f6;
 
   /* Analytics series: distinct from status semantics, with solid fills that
      carry at least 3:1 against each theme's chart surface. */
@@ -198,6 +209,14 @@
   --kitchen-cancel: var(--brand-flame-red);
   --on-kitchen-cancel: var(--brand-white);
 
+  /* A delivery order's card wears blue wherever another card wears the orange
+     accent (owner, 2026-11-01): `.delivery-theme` swaps these in for --primary,
+     --on-primary, --accent-text and the Ready fill. */
+  --delivery-primary: var(--brand-blue);
+  --on-delivery-primary: var(--brand-white);
+  --delivery-accent-text: var(--brand-blue-deep);
+  --delivery-filled: var(--brand-blue-night);
+
   /* The staging ribbon, the same in both themes. */
   --staging-ribbon: var(--staging-blue);
   --on-staging-ribbon: var(--brand-white);
@@ -259,7 +278,25 @@
   --kitchen-cancel: var(--brand-flame-red);
   --on-kitchen-cancel: var(--brand-white);
 
+  /* Delivery's card theme: a brighter blue with dark ink, as the dark theme's
+     orange carries dark ink, and its text tone lifted to read on the card. */
+  --delivery-primary: var(--brand-blue-bright);
+  --on-delivery-primary: var(--brand-stone-900);
+  --delivery-accent-text: var(--brand-blue-soft);
+  --delivery-filled: var(--brand-blue-mid);
+
   /* The staging ribbon, the same in both themes. */
   --staging-ribbon: var(--staging-blue);
   --on-staging-ribbon: var(--brand-white);
+}
+
+/* A delivery order, on the counter (delivery-orders-are-made-not-billed): the
+   card's orange accent becomes blue, so delivery orders are picked out at a
+   glance and a card never mixes the two (owner, 2026-11-01). */
+.delivery-theme {
+  --primary: var(--delivery-primary);
+  --on-primary: var(--on-delivery-primary);
+  --accent-text: var(--delivery-accent-text);
+  --dish-ready: var(--delivery-primary);
+  --on-dish-ready: var(--on-delivery-primary);
 }

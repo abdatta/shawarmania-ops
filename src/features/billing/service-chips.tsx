@@ -92,3 +92,96 @@ export function ServiceChips({
     </div>
   )
 }
+
+/**
+ * The service row with **Delivery** beside the outlet's types
+ * (delivery-orders-are-made-not-billed, D7), or alone where it offers neither.
+ * Only the on branch of `delivery-orders` draws it, at an outlet that offers
+ * Delivery; everywhere else `ServiceChips` is today's row. Delivery is one
+ * answer among the types: choosing it clears a type and its table, and
+ * choosing a type clears it. Tapping the chosen chip again takes it back.
+ */
+export function DeliveryServiceChips({
+  settings,
+  serviceType,
+  tableNumber,
+  delivery,
+  disabled,
+  onChoose,
+  onChooseDelivery,
+  onOpenTables,
+}: {
+  settings: OutletServiceSettings
+  serviceType: ServiceType | null
+  tableNumber: number | null
+  delivery: boolean
+  disabled: boolean
+  onChoose: (serviceType: ServiceType | null) => void
+  onChooseDelivery: (delivery: boolean) => void
+  onOpenTables: () => void
+}) {
+  const offered = offeredServiceTypes(settings)
+
+  function tap(type: ServiceType) {
+    if (type === 'dine_in' && tablesOffered(settings)) {
+      onOpenTables()
+      return
+    }
+    onChoose(serviceType === type && !delivery ? null : type)
+  }
+
+  const chip = (on: boolean) =>
+    cn(
+      'inline-flex h-[var(--size-control)] select-none items-center justify-center whitespace-nowrap rounded-full px-4 font-semibold',
+      'focus-visible:focus-ring disabled:pointer-events-none disabled:opacity-50',
+      on
+        ? 'bg-primary text-on-primary hover:brightness-95'
+        : 'border border-border bg-surface text-content hover:bg-surface-raised',
+    )
+
+  return (
+    <div
+      role="group"
+      aria-label="Where the food goes"
+      className={cn(
+        'grid gap-2',
+        offered.length === 2 ? 'grid-cols-3' : offered.length === 1 ? 'grid-cols-2' : 'grid-cols-1',
+      )}
+    >
+      {offered.map((type) => {
+        const on = !delivery && serviceType === type
+        return (
+          <button
+            key={type}
+            type="button"
+            aria-pressed={on}
+            disabled={disabled}
+            data-testid={`service-chip-${type}`}
+            onClick={() => tap(type)}
+            className={chip(on)}
+          >
+            {type === 'dine_in' && on && tablesOffered(settings)
+              ? tableNumber === null
+                ? 'No table'
+                : tableLabel(tableNumber)
+              : serviceTypeLabel(type)}
+          </button>
+        )
+      })}
+      <button
+        type="button"
+        aria-pressed={delivery}
+        disabled={disabled}
+        data-testid="service-chip-delivery"
+        onClick={() => onChooseDelivery(!delivery)}
+        className={cn(
+          chip(delivery),
+          // Blue, as the card it becomes.
+          delivery && 'delivery-theme',
+        )}
+      >
+        Delivery
+      </button>
+    </div>
+  )
+}

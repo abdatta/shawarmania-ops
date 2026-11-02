@@ -173,6 +173,36 @@ export const CHECKS = [
   },
   { fg: '--kitchen-edit-text', bg: '--surface', min: AA_TEXT, note: 'kitchen edit text on a card' },
   {
+    fg: '--on-delivery-primary',
+    bg: '--delivery-primary',
+    min: AA_TEXT,
+    note: 'ink on a delivery card’s fill',
+  },
+  {
+    fg: '--delivery-primary',
+    bg: '--surface',
+    min: AA_TEXT,
+    note: 'a delivery card’s number and ticked dishes',
+  },
+  {
+    fg: '--delivery-primary',
+    bg: '--surface-raised',
+    min: AA_TEXT,
+    note: 'a delivery card’s accent on a raised ground',
+  },
+  {
+    fg: '--delivery-accent-text',
+    bg: '--surface',
+    min: AA_TEXT,
+    note: 'a delivery card’s notes',
+  },
+  {
+    fg: '--on-delivery-primary',
+    bg: '--delivery-filled',
+    min: AA_TEXT,
+    note: 'Hand over while its undo runs',
+  },
+  {
     fg: '--on-staging-ribbon',
     bg: '--staging-ribbon',
     min: AA_TEXT,

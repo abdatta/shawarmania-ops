@@ -1,4 +1,4 @@
-import { Bell, Check, CheckCheck, SquareCheck, type LucideIcon } from 'lucide-react'
+import { Bell, Bike, Check, CheckCheck, SquareCheck, type LucideIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Chip, type ChipTone } from '@/components/ui/chip'
@@ -56,6 +56,13 @@ export function DishOpenOrderSummary({
         : null
   const dishes = order.lines.filter((line) => line.kind !== 'packaging')
   const bags = order.lines.filter((line) => line.kind === 'packaging')
+  /*
+    A delivery order (delivery-orders-are-made-not-billed): no money and no
+    customer, and its Delivery chip in delivery's blue. The rest reads as any
+    order does: the blue card is for a busy counter, not this page
+    [owner, 2026-11-01]. Only `delivery-orders` on ever marks one.
+  */
+  const delivery = Boolean(order.delivery)
 
   return (
     <div className="space-y-2" data-testid={`manager-dish-order-${order.orderNumber}`}>
@@ -75,11 +82,19 @@ export function DishOpenOrderSummary({
             {place && ` · ${place}`}
           </p>
         </div>
-        <Money paise={order.totalPaise} display className="shrink-0" />
+        {!delivery && <Money paise={order.totalPaise} display className="shrink-0" />}
       </div>
 
       <div className="flex flex-wrap gap-1.5" aria-label="Status">
-        {order.status === 'paid' ? (
+        {delivery ? (
+          <Chip
+            icon={Bike}
+            className="delivery-theme text-primary"
+            data-testid={`manager-order-delivery-${order.orderNumber}`}
+          >
+            Delivery
+          </Chip>
+        ) : order.status === 'paid' ? (
           <Chip tone="good" icon={Check} data-testid={`manager-order-paid-${order.orderNumber}`}>
             Paid
           </Chip>
@@ -136,10 +151,14 @@ export function DishOpenOrderSummary({
                   <p className="text-xs font-semibold leading-snug text-accent-text">{line.note}</p>
                 )}
               </div>
-              <Money
-                paise={line.unitPricePaise * line.quantity}
-                className="text-sm font-bold text-content"
-              />
+              {delivery ? (
+                <span aria-hidden />
+              ) : (
+                <Money
+                  paise={line.unitPricePaise * line.quantity}
+                  className="text-sm font-bold text-content"
+                />
+              )}
             </li>
           )
         })}
@@ -162,7 +181,7 @@ export function DishOpenOrderSummary({
 
       <div className="flex items-center gap-2">
         <p className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-content">
-          {order.customerName || order.customerPhone ? (
+          {delivery ? null : order.customerName || order.customerPhone ? (
             <>
               <span className="truncate font-semibold">
                 {[

@@ -1,7 +1,19 @@
 import { useState } from 'react'
 import { OrderAgeRing } from '@/components/ui/order-age-ring'
-import { ArrowRight, Check, ChevronDown, ChevronUp, Pencil, X, type LucideIcon } from 'lucide-react'
+import {
+  ArrowRight,
+  Bike,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Pencil,
+  ShoppingBag,
+  UtensilsCrossed,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
 
+import { useChangeGate } from '@/change-gates/context'
 import { cn } from '@/lib/cn'
 import type { KitchenOrder } from '@/data-access/adapters'
 import {
@@ -79,7 +91,44 @@ const AMBER_TILE = 'bg-kitchen-edit text-on-kitchen-edit'
 const AMBER_BADGE =
   'ml-auto inline-flex shrink-0 items-center gap-1 rounded-md bg-kitchen-edit/15 px-2 py-0.5 font-black tracking-wide text-kitchen-edit-text'
 
+/**
+ * The counter's own icon for how an order goes (delivery-orders-are-made-not-billed):
+ * on the tag, and alone beside the number once a done ticket folds, so the
+ * kitchen still sees a delivery at a glance [owner, 2026-11-01].
+ */
+function serviceKind(order: KitchenOrder): 'delivery' | 'dine_in' | 'takeaway' | null {
+  if (order.delivery) return 'delivery'
+  if (order.tableNumber !== null || order.serviceType === 'dine_in') return 'dine_in'
+  if (order.serviceType === 'takeaway') return 'takeaway'
+  return null
+}
+
+function ServiceIcon({
+  kind,
+  size,
+  className,
+  label,
+}: {
+  kind: 'delivery' | 'dine_in' | 'takeaway'
+  size: number
+  className?: string
+  label?: string
+}) {
+  const props = {
+    size,
+    strokeWidth: 2.5,
+    ...(className ? { className } : {}),
+    ...(label ? { 'aria-label': label } : { 'aria-hidden': true }),
+  }
+  if (kind === 'delivery') return <Bike {...props} />
+  if (kind === 'dine_in') return <UtensilsCrossed {...props} />
+  return <ShoppingBag {...props} />
+}
+
 function serviceTag(order: KitchenOrder): string | null {
+  // Only `kitchen_board_v3` says so, read while `delivery-orders` is on
+  // (delivery-orders-are-made-not-billed, D7).
+  if (order.delivery) return 'DELIVERY'
   if (order.tableNumber !== null) return tableLabel(order.tableNumber).toUpperCase()
   if (order.serviceType) return serviceTypeLabel(order.serviceType).toUpperCase()
   return null
@@ -120,6 +169,9 @@ export function DishKitchenCard({
   const alerting = !done && state !== 'quiet'
   const look = alerting ? LOOK[state] : null
   const tag = serviceTag(order)
+  // `delivery-orders`: the tag carries its icon, and a folded ticket keeps it.
+  const iconsShown = useChangeGate('delivery-orders')
+  const kind = iconsShown ? serviceKind(order) : null
   const ringing = rings.left > 0 || rings.sounding
   const dotsLit = Math.min(RINGS_PER_ALERT, rings.left + (rings.sounding ? 1 : 0))
   const rows =
@@ -165,10 +217,28 @@ export function DishKitchenCard({
         <header
           className={cn('flex items-start justify-between gap-2 px-4 pt-6', collapsed && 'pb-4')}
         >
-          <span className={cn('font-display text-5xl leading-none', !dimmed && look?.number)}>
+          <span
+            className={cn(
+              'font-display text-5xl leading-none',
+              !dimmed && look?.number,
+              // A folded ticket's icon is centred on the number's height.
+              collapsed && kind && 'inline-flex items-center',
+            )}
+          >
             #{order.orderNumber}
             {(order.ticketNumber ?? 1) > 1 && (
               <span className="text-3xl"> · {order.ticketNumber}</span>
+            )}
+            {collapsed && kind && (
+              <ServiceIcon
+                kind={kind}
+                {...(tag ? { label: tag } : {})}
+                size={24}
+                className={cn(
+                  'ml-3 shrink-0',
+                  order.delivery ? 'delivery-theme text-primary' : 'text-content-muted',
+                )}
+              />
             )}
           </span>
           {onReady && state !== 'cancelled' ? (
@@ -253,7 +323,16 @@ export function DishKitchenCard({
               )}
             >
               {tag && (
-                <span className="rounded-md border-[1.5px] border-border px-2 py-0.5 text-sm font-extrabold tracking-wide">
+                <span
+                  className={cn(
+                    'rounded-md border-[1.5px] border-border px-2 py-0.5 text-sm font-extrabold tracking-wide',
+                    // Delivery's own blue, so the kitchen tells a delivery
+                    // ticket at a glance as the counter does [owner, 2026-11-01].
+                    order.delivery && 'delivery-theme border-primary bg-primary text-on-primary',
+                    kind && 'inline-flex items-center gap-1.5',
+                  )}
+                >
+                  {kind && <ServiceIcon kind={kind} size={15} />}
                   {tag}
                 </span>
               )}

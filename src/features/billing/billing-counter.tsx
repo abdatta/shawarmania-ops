@@ -1,3 +1,4 @@
+import { useChangeGate } from '@/change-gates/context'
 import { KeyRound } from 'lucide-react'
 import {
   useCallback,
@@ -69,7 +70,7 @@ import { SessionContext } from '@/session/context'
 import { CounterDeviceContext } from '@/session/counter-context'
 import { normalizeIndianPhone } from '../../../shared/phone'
 
-import { BillComposerFooter, CustomerServiceRow } from './bill-composer-footer'
+import { BillComposerFooter, CustomerRow, CustomerServiceRow } from './bill-composer-footer'
 import { BillDiscountRows } from './bill-discount-rows'
 import { CustomerDialog, type CustomerSelection } from './customer-dialog'
 import { DiscountDialog } from './discount-dialog'
@@ -80,7 +81,7 @@ import { CounterActivityRail } from './counter-activity-rail'
 import { EditingOrderPin } from './editing-order-pin'
 import { MenuGrid } from './menu-grid'
 import { CheckoutDialog } from './checkout-dialog'
-import { ServiceChips } from './service-chips'
+import { DeliveryServiceChips, ServiceChips } from './service-chips'
 import { TableDialog, type BusyTable } from './table-dialog'
 import { useCounterState } from './use-counter-state'
 import { DishNoteSheet } from './dish-note-sheet'
@@ -140,6 +141,8 @@ interface Restorable {
   serviceType: ServiceType | null
   tableNumber: number | null
   packaging: CapturedPackaging | null
+  /** A delivery order (delivery-orders-are-made-not-billed). Absent is false. */
+  delivery?: boolean
 }
 
 /**
@@ -348,6 +351,14 @@ export function BillingCounter({
   const [lines, setLines] = useState<BillLineDraft[]>([])
   const [serviceType, setServiceType] = useState<ServiceType | null>(null)
   const [tableNumber, setTableNumber] = useState<number | null>(null)
+  /*
+    A delivery order (delivery-orders-are-made-not-billed, D7): the kitchen
+    makes it and the counter hands it over without a bill. Only `delivery-orders`
+    on, at an outlet offering Delivery, ever sets it.
+  */
+  const deliveryGate = useChangeGate('delivery-orders')
+  const [delivery, setDelivery] = useState(false)
+  const deliveryOffered = deliveryGate && Boolean(serviceSettings.deliveryOffered)
   /**
    * The packaging this order carries: the price captured when it was added, and
    * the bags. Null when there is none — dine-in, removed by the biller, or an
@@ -848,6 +859,7 @@ export function BillingCounter({
     setServiceType(null)
     setTableNumber(null)
     setPackaging(null)
+    setDelivery(false)
     // The error too: it is a sentence about a bill, and it outlived the bill.
     // "That payment was not saved on this tablet. Nothing was cleared" reads as
     // a live warning over a panel the biller has just emptied themselves.
@@ -979,6 +991,7 @@ export function BillingCounter({
     setServiceType(draft.serviceType)
     setTableNumber(draft.tableNumber)
     setPackaging(draft.packaging)
+    setDelivery(Boolean(draft.delivery))
     // Restored from the draft rather than cleared. Clearing dropped every
     // bill-level discount the order carried the moment it was reopened, and the
     // revision then wrote a total the customer had never been quoted.
@@ -1010,6 +1023,7 @@ export function BillingCounter({
       serviceType,
       tableNumber,
       packaging,
+      delivery,
     }
     const saved = splitPackaging(order.lines)
     setEditingOrder(order)
@@ -1027,6 +1041,7 @@ export function BillingCounter({
       serviceType: order.serviceType ?? null,
       tableNumber: order.tableNumber ?? null,
       packaging: saved.packaging,
+      delivery: deliveryGate && Boolean(order.delivery),
     })
     setPaymentDialogOpen(false)
     setError(null)
@@ -1070,6 +1085,7 @@ export function BillingCounter({
         ...customerSnapshots(customer),
         serviceType,
         tableNumber: serviceType === 'dine_in' ? tableNumber : null,
+        ...(deliveryGate ? { delivery } : {}),
       })
       clearPanel()
       setRailSave((value) => value + 1)
@@ -1103,6 +1119,7 @@ export function BillingCounter({
         ...customerSnapshots(customer),
         serviceType,
         tableNumber: serviceType === 'dine_in' ? tableNumber : null,
+        ...(deliveryGate ? { delivery } : {}),
       })
       leaveOrderEdit()
       setRailSave((value) => value + 1)
@@ -1183,6 +1200,7 @@ export function BillingCounter({
    * else takes it off. Never blocks anything.
    */
   function markServiceType(next: ServiceType | null, table: number | null) {
+    setDelivery(false)
     setServiceType(next)
     setTableNumber(next === 'dine_in' ? table : null)
     if (packagingApplies(serviceSettings, next)) {
@@ -1233,7 +1251,34 @@ export function BillingCounter({
     ]),
   )
 
-  const serviceChips = serviceChoiceShown(serviceSettings) ? (
+  /**
+   * Mark the order Delivery, or take that back (delivery-orders-are-made-not-billed,
+   * D7): it clears the type, the table, the packaging, the customer and every
+   * discount, because a delivery order carries none of them.
+   */
+  function markDelivery(next: boolean) {
+    setDelivery(next)
+    if (!next) return
+    setServiceType(null)
+    setTableNumber(null)
+    setPackaging(null)
+    setCustomer(null)
+    setBillDiscountRules([])
+    setPointsRequested(0)
+  }
+
+  const serviceChips = deliveryOffered ? (
+    <DeliveryServiceChips
+      settings={serviceSettings}
+      serviceType={serviceType}
+      tableNumber={tableNumber}
+      delivery={delivery}
+      disabled={settling}
+      onChoose={(next) => markServiceType(next, null)}
+      onChooseDelivery={markDelivery}
+      onOpenTables={openTables}
+    />
+  ) : serviceChoiceShown(serviceSettings) ? (
     <ServiceChips
       settings={serviceSettings}
       serviceType={serviceType}
@@ -1271,8 +1316,44 @@ export function BillingCounter({
     composed, the docked card while a saved order is being edited. Built here
     because this is where the draft it edits lives.
   */
+  /*
+    The order's label. Off it heads the panel, as ever. With `delivery-orders`
+    on it sits by the service chips and Order, and the customer heads the panel:
+    90% of the last month's numbers were taken at Paid, not when the order was
+    placed, so what the biller touches to place an order is kept together, and
+    the chips never move when Delivery hides the customer and the total
+    (owner, 2026-11-01).
+  */
+  const labelInput = (
+    <>
+      <label htmlFor="order-label" className="sr-only">
+        Order label · optional
+      </label>
+      <input
+        id="order-label"
+        value={label}
+        maxLength={24}
+        onChange={(event) => setLabel(event.target.value)}
+        placeholder="Order Label"
+        className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-content focus-visible:focus-ring"
+      />
+      {label.trim() && railLabels.includes(label.trim().toLocaleLowerCase()) && (
+        <p role="status" className="mt-1 text-xs text-warning">
+          Another order is labelled {label.trim()}.
+        </p>
+      )}
+    </>
+  )
+  const customerAtTop =
+    deliveryGate && !delivery && (serviceSettings.collectCustomerDetails ?? true) ? (
+      <div className="border-b border-border px-3 py-2">
+        <CustomerRow customer={customer} onOpen={openCustomerDialog} />
+      </div>
+    ) : null
+
   const composerFooter = (
     <BillComposerFooter
+      {...(deliveryGate ? { orderLabel: labelInput } : {})}
       lines={billLines}
       collectCustomerDetails={serviceSettings.collectCustomerDetails ?? true}
       customer={customer}
@@ -1287,7 +1368,8 @@ export function BillingCounter({
       onSaveOrder={editingOrder ? saveEditedOrder : saveOrder}
       discountTotalPaise={totals.discountPaise}
       onCancelEdit={leaveOrderEdit}
-      serviceOwed={serviceChoiceRequired(serviceSettings, serviceType)}
+      serviceOwed={!delivery && serviceChoiceRequired(serviceSettings, serviceType)}
+      {...(delivery ? { delivery: true } : {})}
     />
   )
 
@@ -1387,24 +1469,11 @@ export function BillingCounter({
             <BillPanel
               lines={billLines}
               labelField={
-                <div className="border-b border-border px-3 py-2">
-                  <label htmlFor="order-label" className="sr-only">
-                    Order label · optional
-                  </label>
-                  <input
-                    id="order-label"
-                    value={label}
-                    maxLength={24}
-                    onChange={(event) => setLabel(event.target.value)}
-                    placeholder="Order Label"
-                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-content focus-visible:focus-ring"
-                  />
-                  {label.trim() && railLabels.includes(label.trim().toLocaleLowerCase()) && (
-                    <p role="status" className="mt-1 text-xs text-warning">
-                      Another order is labelled {label.trim()}.
-                    </p>
-                  )}
-                </div>
+                deliveryGate ? (
+                  customerAtTop
+                ) : (
+                  <div className="border-b border-border px-3 py-2">{labelInput}</div>
+                )
               }
               onNote={(line: BillLineDraft, made: number) => {
                 setNoteLine(line)
@@ -1412,25 +1481,28 @@ export function BillingCounter({
               }}
               onChangeQuantity={changeQuantity}
               packagingFlat={serviceSettings.packagingMode === 'per_order'}
+              {...(delivery ? { moneyHidden: true } : {})}
               discountRows={
-                <BillDiscountRows
-                  lines={lines}
-                  discounts={billDiscounts}
-                  onEditPoints={() => setPointsDialogOpen(true)}
-                  onRemovePoints={() => setPointsRequested(0)}
-                  categoryCount={(menu ?? []).length}
-                  roundingPaise={totals.roundingPaise}
-                  editable={!settling}
-                  onEdit={(index) => setDiscountDialog({ editingIndex: index })}
-                  onRemove={(index) =>
-                    setBillDiscountRules((current) =>
-                      current.filter((_, position) => position !== index),
-                    )
-                  }
-                />
+                delivery ? null : (
+                  <BillDiscountRows
+                    lines={lines}
+                    discounts={billDiscounts}
+                    onEditPoints={() => setPointsDialogOpen(true)}
+                    onRemovePoints={() => setPointsRequested(0)}
+                    categoryCount={(menu ?? []).length}
+                    roundingPaise={totals.roundingPaise}
+                    editable={!settling}
+                    onEdit={(index) => setDiscountDialog({ editingIndex: index })}
+                    onRemove={(index) =>
+                      setBillDiscountRules((current) =>
+                        current.filter((_, position) => position !== index),
+                      )
+                    }
+                  />
+                )
               }
               addDiscount={
-                lines.length > 0 ? (
+                lines.length > 0 && !delivery ? (
                   <div className="space-y-1">
                     <div
                       className={pointsShown && pointsUsed === 0 ? 'grid grid-cols-2 gap-2' : ''}
@@ -1491,9 +1563,16 @@ export function BillingCounter({
                       biller who has just learnt where the customer goes should
                       not have to go looking for it again on the way back in.
                     */
-                    footer: (
+                    footer: deliveryGate ? (
+                      <div className="space-y-3">
+                        <div>{labelInput}</div>
+                        {serviceChips}
+                      </div>
+                    ) : (
                       <CustomerServiceRow
-                        collectCustomerDetails={serviceSettings.collectCustomerDetails ?? true}
+                        collectCustomerDetails={
+                          !delivery && (serviceSettings.collectCustomerDetails ?? true)
+                        }
                         customer={customer}
                         onOpen={openCustomerDialog}
                         service={serviceChips}

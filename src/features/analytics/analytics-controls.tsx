@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ChevronDown, GitCompareArrows } from 'lucide-react'
 import { FormSheet } from '@/components/layout/form-sheet'
 import { Button } from '@/components/ui/button'
@@ -16,7 +16,16 @@ export function AnalyticsControls({
   to,
   onChange,
   windowsOf,
+  unavailable,
+  scope,
 }: {
+  /** Counter or Delivery (delivery-orders-are-made-not-billed), after Compare. */
+  scope?: ReactNode
+  /**
+   * Measures shown but not offered, and why (delivery-orders-are-made-not-billed:
+   * delivery orders carry no money).
+   */
+  unavailable?: { values: string[]; reason: string } | undefined
   grain: string
   grains: [string, string][]
   metric: string
@@ -41,6 +50,7 @@ export function AnalyticsControls({
         value={metric}
         options={metrics}
         onChange={(value) => onChange({ metric: value })}
+        {...(unavailable ? { unavailable } : {})}
       />
       <PeriodComparison
         periods={periods}
@@ -48,7 +58,11 @@ export function AnalyticsControls({
         to={to}
         onChange={(value) => onChange({ periods: String(value) })}
         windowsOf={windowsOf}
+        // Beside the Counter · Delivery pill both read as icons, so the two
+        // pickers keep their width [owner, 2026-11-01].
+        compact={scope !== undefined}
       />
+      {scope}
     </div>
   )
 }
@@ -59,7 +73,10 @@ function PeriodComparison({
   to,
   onChange,
   windowsOf,
+  compact = false,
 }: {
+  /** The icon and the count, without the word (delivery-orders-are-made-not-billed). */
+  compact?: boolean
   periods: number
   from: string
   to: string
@@ -81,7 +98,7 @@ function PeriodComparison({
       >
         <span className="flex h-8 items-center gap-1.5 rounded-full border border-border bg-surface-raised px-2.5 text-xs">
           <GitCompareArrows size={14} aria-hidden />
-          Compare
+          {!compact && 'Compare'}
           <span className="font-bold tabular-nums text-accent-text">
             {periods === 1 ? 'Off' : periods}
           </span>
@@ -130,11 +147,13 @@ function Choice({
   value,
   options,
   onChange,
+  unavailable,
 }: {
   label: string
   value: string
   options: [string, string][]
   onChange: (value: string) => void
+  unavailable?: { values: string[]; reason: string }
 }) {
   const [open, setOpen] = useState(false)
   const text = options.find(([key]) => key === value)?.[1]
@@ -152,19 +171,32 @@ function Choice({
       </Button>
       <FormSheet open={open} onClose={() => setOpen(false)} title={label}>
         <div className="grid gap-2">
-          {options.map(([key, optionText]) => (
-            <Button
-              key={key}
-              variant={key === value ? 'primary' : 'secondary'}
-              aria-pressed={key === value}
-              onClick={() => {
-                onChange(key)
-                setOpen(false)
-              }}
-            >
-              {optionText}
-            </Button>
-          ))}
+          {options.map(([key, optionText]) =>
+            unavailable?.values.includes(key) ? (
+              <Button
+                key={key}
+                variant="secondary"
+                disabled
+                aria-description={unavailable.reason}
+                className="h-auto min-h-11 flex-col gap-0.5 py-2"
+              >
+                <span>{optionText}</span>
+                <span className="text-xs font-normal">{unavailable.reason}</span>
+              </Button>
+            ) : (
+              <Button
+                key={key}
+                variant={key === value ? 'primary' : 'secondary'}
+                aria-pressed={key === value}
+                onClick={() => {
+                  onChange(key)
+                  setOpen(false)
+                }}
+              >
+                {optionText}
+              </Button>
+            ),
+          )}
         </div>
       </FormSheet>
     </>

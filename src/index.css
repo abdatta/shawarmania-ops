@@ -406,6 +406,35 @@
     animation: none;
   }
 }
+/*
+ * A delivery order's undo (delivery-orders-are-made-not-billed, owner
+ * 2026-11-01): the ticked Hand over box starts in the card's blue and a deeper
+ * blue fills it from the left over the five seconds the card stays; full, the
+ * card goes. The box's own contents sit above the fill.
+ */
+@keyframes handover-fill {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+.handover-fill {
+  position: relative;
+  overflow: hidden;
+}
+.handover-fill::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: var(--delivery-filled);
+  animation: handover-fill 5s linear forwards;
+}
+.handover-fill > * {
+  position: relative;
+}
 @keyframes dish-ready-fade-out {
   from {
     opacity: 1;

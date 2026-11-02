@@ -1,10 +1,10 @@
-import { ChevronDown, Pencil, ReceiptText } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Bike, ChevronDown, Pencil, ReceiptText } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { MemberMark } from '@/components/ui/member-mark'
 import { Money } from '@/components/ui/money'
-import type { BillingBill } from '@/data-access/adapters'
+import type { BillingBill, DeliveryHandover } from '@/data-access/adapters'
 import { formatDayTime, tableLabel } from '@/domain'
 import { cn } from '@/lib/cn'
 
@@ -23,8 +23,16 @@ export function ShiftBillList({
   onAdvanceDemoClock,
   onTakeBackPayment,
   onCancelAfterPaid,
+  deliveries,
+  onTakeBackHandover,
 }: {
   bills: BillingBill[]
+  /**
+   * The shift's handed-over delivery orders (delivery-orders-are-made-not-billed,
+   * D7), placed among the bills by time. Only the on branch passes them.
+   */
+  deliveries?: DeliveryHandover[]
+  onTakeBackHandover?: (delivery: DeliveryHandover) => void
   compact?: boolean
   onEditPayment?: (bill: BillingBill) => void
   onAdvanceDemoClock?: (milliseconds: number) => void
@@ -36,20 +44,139 @@ export function ShiftBillList({
   /** Same window, louder consequence: voids the money and cancels the order. */
   onCancelAfterPaid?: (bill: BillingBill) => void
 }) {
+  const billRow = (bill: BillingBill) => (
+    <BillRow
+      key={bill.id}
+      bill={bill}
+      compact={compact}
+      {...(onEditPayment ? { onEditPayment } : {})}
+      {...(onAdvanceDemoClock ? { onAdvanceDemoClock } : {})}
+      {...(onTakeBackPayment ? { onTakeBackPayment } : {})}
+      {...(onCancelAfterPaid ? { onCancelAfterPaid } : {})}
+    />
+  )
+  if (deliveries === undefined) {
+    return (
+      <ul className={cn('divide-y divide-border', !compact && 'rounded-xl border border-border')}>
+        {bills.map(billRow)}
+      </ul>
+    )
+  }
+  /*
+    Each handover sits before the first bill paid earlier than it, so the list
+    stays newest first without reordering the bills the adapter already ordered.
+  */
+  const waiting = [...deliveries].sort((a, b) => b.handedOverAt.localeCompare(a.handedOverAt))
+  const rows: ReactNode[] = []
+  for (const bill of bills) {
+    while (waiting.length > 0 && waiting[0]!.handedOverAt > bill.paidAt)
+      rows.push(deliveryRow(waiting.shift()!))
+    rows.push(billRow(bill))
+  }
+  for (const delivery of waiting) rows.push(deliveryRow(delivery))
   return (
     <ul className={cn('divide-y divide-border', !compact && 'rounded-xl border border-border')}>
-      {bills.map((bill) => (
-        <BillRow
-          key={bill.id}
-          bill={bill}
-          compact={compact}
-          {...(onEditPayment ? { onEditPayment } : {})}
-          {...(onAdvanceDemoClock ? { onAdvanceDemoClock } : {})}
-          {...(onTakeBackPayment ? { onTakeBackPayment } : {})}
-          {...(onCancelAfterPaid ? { onCancelAfterPaid } : {})}
-        />
-      ))}
+      {rows}
     </ul>
+  )
+
+  function deliveryRow(delivery: DeliveryHandover) {
+    return (
+      <DeliveryRow
+        key={delivery.orderId}
+        delivery={delivery}
+        compact={compact}
+        {...(onTakeBackHandover ? { onTakeBack: () => onTakeBackHandover(delivery) } : {})}
+      />
+    )
+  }
+}
+
+/**
+ * A handed-over delivery order among the shift's bills
+ * (delivery-orders-are-made-not-billed, D7): marked Delivery, with its label,
+ * time and dishes, and no amount. Take back shows only inside its window.
+ */
+function DeliveryRow({
+  delivery,
+  compact,
+  onTakeBack,
+}: {
+  delivery: DeliveryHandover
+  compact: boolean
+  onTakeBack?: () => void
+}) {
+  const open = useWindowOpen(delivery.takeBackUntil, 0)
+  const takeBackShown = onTakeBack && delivery.takeBackUntil !== null && open !== false
+  return (
+    <li data-flip-id={delivery.orderId}>
+      <details className="group" data-testid={`shift-delivery-${delivery.orderId}`}>
+        <summary
+          className={cn(
+            'flex min-h-12 cursor-pointer list-none items-center gap-2 text-content focus-visible:focus-ring',
+            compact ? 'px-1 py-2' : 'px-3 py-2.5',
+          )}
+        >
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-baseline gap-2">
+              <span className="shrink-0 font-bold">Order {delivery.orderNumber}</span>
+              {delivery.label && (
+                <span className="truncate text-xs font-semibold text-content-muted">
+                  {delivery.label}
+                </span>
+              )}
+            </div>
+            <p className="truncate text-xs text-content-muted">
+              {formatDayTime(delivery.handedOverAt)} · Handed over
+            </p>
+          </div>
+          <span
+            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-surface-raised px-2 py-0.5 text-xs font-bold text-content"
+            data-testid={`shift-delivery-tag-${delivery.orderId}`}
+          >
+            <Bike aria-hidden size={14} />
+            Delivery
+          </span>
+          <ChevronDown
+            aria-hidden
+            size={18}
+            className="shrink-0 text-content-muted transition-transform group-open:rotate-180"
+          />
+        </summary>
+
+        <div className={cn('border-t border-border bg-surface-raised', compact ? 'p-2' : 'p-3')}>
+          <ul className="divide-y divide-border">
+            {delivery.lines.map((line) => (
+              <li key={line.id} className="flex items-baseline gap-2 py-2 text-sm">
+                <span className="w-6 shrink-0 text-right font-black tabular-nums">
+                  {line.quantity}
+                </span>
+                <span className="min-w-0 flex-1 font-semibold text-content">
+                  {line.itemName}
+                  {line.note && (
+                    <span className="block text-xs font-semibold text-accent-text">
+                      {line.note}
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {takeBackShown && (
+            <div className="mt-3 flex justify-end border-t border-border pt-3">
+              <Button
+                size="phone"
+                variant="secondary"
+                data-testid={`take-back-handover-${delivery.orderId}`}
+                onClick={onTakeBack}
+              >
+                Take back
+              </Button>
+            </div>
+          )}
+        </div>
+      </details>
+    </li>
   )
 }
 
@@ -111,6 +238,15 @@ function BillRow({
                 from the bill's own snapshot: this is what the sale was.
               */}
               {bill.customerTier === 'gold' && <MemberMark className="self-center" />}
+              {/* The order's label, kept after it left the rail; never on the bill. */}
+              {bill.orderLabel && (
+                <span
+                  className="min-w-0 truncate text-xs font-semibold text-content-muted"
+                  data-testid={`shift-bill-label-${bill.id}`}
+                >
+                  {bill.orderLabel}
+                </span>
+              )}
               {onEditPayment && bill.paymentEditable && (
                 <PaymentEditIndicator
                   editableUntil={bill.paymentEditableUntil}

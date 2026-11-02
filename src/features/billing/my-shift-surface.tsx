@@ -10,6 +10,7 @@ import {
   DataActionError,
   type BillingAttentionItem,
   type BillingBill,
+  type DeliveryHandover,
   type ShiftBillingHistory,
 } from '@/data-access/adapters'
 import { formatDateTime, isCorrectableRefusal } from '@/domain'
@@ -18,7 +19,7 @@ import { newUuid } from '@/lib/uuid'
 import { ShiftBillList } from './shift-bill-list'
 import { PaymentDialog } from './payment-dialog'
 import { PaymentTotalCards } from './payment-total-cards'
-import { UnpayDialog, CancelAfterPaidDialog } from './pipeline-card'
+import { UnpayDialog, CancelAfterPaidDialog, TakeBackHandoverDialog } from './pipeline-card'
 import { useFlip } from './flip'
 import { useCounterState } from './use-counter-state'
 import { useRefreshQueue } from '@/lib/use-refresh-queue'
@@ -63,6 +64,8 @@ export function MyShiftSurface({
   const [savingPayment, setSavingPayment] = useState(false)
   const [unpayingBill, setUnpayingBill] = useState<BillingBill | null>(null)
   const [cancellingPaidBill, setCancellingPaidBill] = useState<BillingBill | null>(null)
+  /** A handover being taken back (delivery-orders-are-made-not-billed). */
+  const [takingBack, setTakingBack] = useState<DeliveryHandover | null>(null)
   // Bill rows glide when the list reorders or a row unwinds away.
   const billListRef = useRef<HTMLDivElement | null>(null)
   useFlip(billListRef, [history])
@@ -368,7 +371,7 @@ export function MyShiftSurface({
               </div>
             </article>
           ))}
-        {history.bills.length === 0 ? (
+        {history.bills.length === 0 && (history.deliveries ?? []).length === 0 ? (
           embedded ? (
             <p className="rounded-lg bg-surface-raised p-3 text-sm text-content-muted">
               No paid bills in this shift yet.
@@ -396,6 +399,15 @@ export function MyShiftSurface({
               {...(billing.advanceDemoPaymentClock && {
                 onAdvanceDemoClock: billing.advanceDemoPaymentClock,
               })}
+              {...(history.deliveries
+                ? {
+                    deliveries: history.deliveries,
+                    onTakeBackHandover: (delivery: DeliveryHandover) => {
+                      setMessage(null)
+                      setTakingBack(delivery)
+                    },
+                  }
+                : {})}
             />
           </div>
         )}
@@ -418,6 +430,21 @@ export function MyShiftSurface({
           void resolve(
             () => billing.unpayOrder(bill.orderId!, bill.id, why),
             'The payment was taken back and the order reopened.',
+          )
+        }}
+      />
+      <TakeBackHandoverDialog
+        open={takingBack !== null}
+        reference={takingBack ? `Order ${takingBack.orderNumber}` : ''}
+        busy={savingPayment}
+        onClose={() => setTakingBack(null)}
+        onConfirm={(why) => {
+          if (!takingBack) return
+          const delivery = takingBack
+          setTakingBack(null)
+          void resolve(
+            () => billing.takeBackHandover(delivery.orderId, why),
+            'The order is back on the rail.',
           )
         }}
       />

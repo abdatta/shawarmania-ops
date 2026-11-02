@@ -13,6 +13,8 @@ const ACTION_LABELS: Record<string, string> = {
   void_bill: 'Bills cancelled',
   correct_bill_payment: 'Payments corrected',
   confirm_billing_end_of_day: 'Tablet sign-offs',
+  hand_over_delivery: 'Delivery orders handed over',
+  take_back_delivery_handover: 'Handovers taken back',
 }
 
 function plainWords(value: string) {
