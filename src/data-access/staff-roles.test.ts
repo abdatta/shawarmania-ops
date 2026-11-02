@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 import { isStaffRole, type AppRole } from './adapters'
 import { Constants } from './database.types'
-import { STAFF_ROLES_BY_SENIORITY as STAFF_ROLES } from './role-includes'
+import { includes, STAFF_ROLES_BY_SENIORITY as STAFF_ROLES } from './role-includes'
 
 /**
  * The app and the database each decide who is staff, and they must decide it
@@ -59,34 +59,42 @@ describe('the app and the database agree on who is staff', () => {
   it('is spelled the same way inside attendance_elsewhere', () => {
     // Vitest runs from the repo root, which is where `supabase/` lives.
     const dir = resolve(process.cwd(), 'supabase/migrations')
-    const defining = readdirSync(dir)
+    const files = readdirSync(dir)
       .filter((f) => f.endsWith('.sql'))
       .sort()
-      // The original, which still answers a build from before the
-      // `role-includes` retirement until its cleanup. Its `_v2` asks which roles
-      // include Employee instead, and those rows are held to `STAFF_ROLES` by
-      // src/data-access/role-includes.test.ts (staff-roles-include-other-roles).
-      .filter((f) =>
-        readFileSync(`${dir}/${f}`, 'utf8').includes('function public.attendance_elsewhere('),
-      )
 
-    expect(defining.length).toBeGreaterThan(0)
+    // The body of a function as the migration that last defined it states it:
+    // later migrations replace the bodies of earlier ones, so the last one wins.
+    const lastBody = (name: string) => {
+      const header = `function public.${name}(`
+      const defining = files.filter((f) => readFileSync(`${dir}/${f}`, 'utf8').includes(header))
+      expect(defining.length, name).toBeGreaterThan(0)
+      const source = readFileSync(`${dir}/${defining[defining.length - 1]}`, 'utf8')
+      const start = source.indexOf(header)
+      return source.slice(start, source.indexOf('$$;', start))
+    }
 
-    // The last one wins: later migrations replace the bodies of earlier ones.
-    const source = readFileSync(`${dir}/${defining[defining.length - 1]}`, 'utf8')
-    const predicate = source.match(/s\.role\s+in\s+\(([^)]*)\)/)
+    // Since `role-includes`' contract the original is a call to its `_v2`, which
+    // asks which roles include the one a staff list needs (staff-roles-include-
+    // other-roles); that is the clause read here.
+    expect(lastBody('attendance_elsewhere')).toMatch(/public\.attendance_elsewhere_v2\(/)
+    const predicate = lastBody('attendance_elsewhere_v2').match(
+      /app_role_includes\(\s*s\.role\s*,\s*'([a-z_]+)'\s*\)/,
+    )
 
-    const listed = predicate?.[1]
-    if (listed === undefined) {
+    const required = predicate?.[1]
+    if (required === undefined) {
       throw new Error(
-        'No `s.role in (...)` staff check in the migration that last defined ' +
-          'attendance_elsewhere. If the predicate was deliberately rewritten, ' +
-          'rewrite this assertion with it. Do not delete it: the two statements ' +
-          'of who is staff have nothing else holding them together.',
+        'No `app_role_includes(s.role, ...)` staff check in the migration that ' +
+          'last defined attendance_elsewhere_v2. If the predicate was deliberately ' +
+          'rewritten, rewrite this assertion with it. Do not delete it: the two ' +
+          'statements of who is staff have nothing else holding them together.',
       )
     }
 
-    const roles = [...listed.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort()
-    expect(roles).toEqual([...STAFF_ROLES].sort())
+    // The staff the database admits are the roles that include that one; the
+    // rows themselves are held to the app's by src/data-access/role-includes.test.ts.
+    const admitted = [...STAFF_ROLES].filter((role) => includes(role, required as AppRole))
+    expect(admitted.sort()).toEqual([...STAFF_ROLES].sort())
   })
 })
