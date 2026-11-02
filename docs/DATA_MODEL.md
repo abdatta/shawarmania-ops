@@ -58,8 +58,7 @@ written), both non-null booleans defaulting to false. On the outlet row because
 `outlets_select` already gives it to everybody who reads them; written only
 through `set_outlet_attendance_rules(outlet, needs_manager, blocks_away)`, by the
 owner or the outlet's own franchise admins, which writes these two and nothing
-else. They do anything only while the change gate `auto-approve-at-the-shop` is
-on.
+else.
 
 **Customer collection** *(#59)* — `collect_customer_details`, a non-null boolean
 defaulting to true for existing and new outlets. The service-settings RPC also
@@ -711,11 +710,12 @@ merge and records how much history moved in each expense table.
 
 **`expense_category_choices`** (#81) — `id`, `name`, `sort_order`, `asks_note`,
 `managers_only`, `created_by`, `created_at`, `updated_by`, `updated_at`. The owners'
-list an expense's category is picked from while `expense-category-list` is on:
+list an expense's category is picked from:
 business-wide, names normalised and unique without regard to case, `sort_order`
 unique and checked at commit. Every active account reads it, and so does a live,
-proven counter or kitchen tablet while the gate is on, since a tablet's own
-identity has no profile; nobody writes it directly. `save_expense_category_choice(id, name, asks_note, managers_only)` adds
+proven counter or kitchen tablet, since a tablet's own
+identity has no profile (its policy still asks the retired `expense-category-list`
+row, which stays on until the retirement's contract migration rewrites it); nobody writes it directly. `save_expense_category_choice(id, name, asks_note, managers_only)` adds
 (a null id; it goes last and mints the suggestion) or edits, and an edit that
 renames moves the recorded expenses through `rename_expense_category` with history,
 or `merge_expense_category` where the new name is already a suggestion;
