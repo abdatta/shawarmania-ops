@@ -65,6 +65,7 @@ export const outletFixtures: Tables<'outlets'>[] = [
     // Attendance rules (#81): both off, so a check-in at the shop approves itself.
     attendance_needs_manager: false,
     attendance_blocks_away: false,
+    delivery_offered: false,
     // Points and gold on, with the owner's numbers [owner, 2026-10-06]: 5 points
     // per ₹200, up to 5% of a bill, gold at 1× with a 30% cap for six months,
     // and billers may upgrade at ₹2,000 a month. The demo walks them.
@@ -137,6 +138,7 @@ export const outletFixtures: Tables<'outlets'>[] = [
     // Attendance rules (#81): both off, so a check-in at the shop approves itself.
     attendance_needs_manager: false,
     attendance_blocks_away: false,
+    delivery_offered: false,
     ...ALL_OFF_LOYALTY_COLUMNS,
     review_ask_enabled: false,
     review_ask_url: null,
@@ -192,6 +194,7 @@ export const outletFixtures: Tables<'outlets'>[] = [
     // Attendance rules (#81): both off, so a check-in at the shop approves itself.
     attendance_needs_manager: false,
     attendance_blocks_away: false,
+    delivery_offered: false,
     ...ALL_OFF_LOYALTY_COLUMNS,
     review_ask_enabled: false,
     review_ask_url: null,

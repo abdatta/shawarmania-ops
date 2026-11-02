@@ -3,6 +3,7 @@ import type { DemoStore } from './store'
 import { periodDays, shiftDate } from '@/domain/sales-analytics'
 import { cutInstant, windowsFor } from '@/domain/revenue-figures'
 import { outletFixtures } from './fixtures/outlets'
+import { deliveryAnalyticsStore } from './delivery'
 
 const hourFormat = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Asia/Kolkata',
@@ -99,6 +100,29 @@ function readSalesAligned(
 }
 
 export function createMockAnalyticsAdapter(
+  demoStore: DemoStore,
+  allowed: string[] | null,
+): AnalyticsAdapter {
+  const counter = createScopedAnalyticsAdapter(demoStore, allowed)
+  // Delivery reads handed-over delivery orders as bills of no money
+  // (delivery-orders-are-made-not-billed, D6), built fresh for each read.
+  const delivery = () => createScopedAnalyticsAdapter(deliveryAnalyticsStore(demoStore), allowed)
+  return {
+    read: (outletId, from, to, options) =>
+      (options?.scope === 'delivery' ? delivery() : counter).read(outletId, from, to, options),
+    series: (outletId, from, to, periods, subject, options) =>
+      (options?.scope === 'delivery' ? delivery() : counter).series(
+        outletId,
+        from,
+        to,
+        periods,
+        subject,
+        options,
+      ),
+  }
+}
+
+function createScopedAnalyticsAdapter(
   store: DemoStore,
   allowed: string[] | null,
 ): AnalyticsAdapter {

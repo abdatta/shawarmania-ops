@@ -13,6 +13,7 @@ import {
   type KitchenMarks,
   type KitchenOrder,
 } from '../adapters'
+import { onDeliveryOrders } from '@/change-gates/delivery-orders'
 import type { KitchenAnswer, KitchenDishState } from '@/domain'
 import type { Database, Json } from '../database.types'
 
@@ -114,6 +115,7 @@ type DishOrderJson = Omit<OrderJson, 'lines' | 'latestAck'> & {
   sourceOrderId?: string
   readyId?: string
   ticketNumber?: number
+  delivery?: boolean
   lines: DishLineJson[]
   latestAck: (Omit<NonNullable<OrderJson['latestAck']>, 'lines'> & { lines: DishLineJson[] }) | null
 }
@@ -140,6 +142,8 @@ export function parseDishKitchenBoard(value: Json): KitchenBoard {
       orderNumber: order.orderNumber,
       serviceType: order.serviceType,
       tableNumber: order.tableNumber,
+      // Only `kitchen_board_v3` carries it (delivery-orders-are-made-not-billed).
+      ...(order.delivery ? { delivery: true } : {}),
       orderedAt: order.orderedAt,
       version: order.version,
       status: order.status,
@@ -220,7 +224,11 @@ export function createSupabaseKitchenAdapter(client: SupabaseClient<Database>): 
     },
 
     async readDishBoard(): Promise<KitchenBoard> {
-      const { data, error } = await client.rpc('kitchen_board_v2')
+      // `delivery-orders` reads `_v3`, whose cards say Delivery
+      // (delivery-orders-are-made-not-billed, D6); off, today's board.
+      const { data, error } = await client.rpc(
+        onDeliveryOrders() ? 'kitchen_board_v3' : 'kitchen_board_v2',
+      )
       if (error) throw error
       return parseDishKitchenBoard(data)
     },

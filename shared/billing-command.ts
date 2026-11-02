@@ -42,6 +42,8 @@ export type BillingCommandType =
   | 'prepare_order_lines'
   | 'void_order_payment'
   | 'cancel_paid_order'
+  | 'hand_over_delivery'
+  | 'take_back_delivery_handover'
 
 export type BillingPaymentMethod = 'cash' | 'upi'
 export type BillingPricingMode = 'no_tax'
@@ -114,6 +116,12 @@ export interface BillingDiscountSnapshot {
 
 export interface OrderContentPayload extends BillingServiceFacts {
   readonly label?: string | null
+  /**
+   * A delivery order (delivery-orders-are-made-not-billed): written, true or
+   * false, on every create and revision the `delivery` variant queues, and on
+   * none other. The server takes it off before the `_v2` checks the rest.
+   */
+  readonly delivery?: boolean
   readonly orderId: string
   readonly businessDate: string
   readonly customerId: string | null
@@ -192,6 +200,17 @@ export interface PrepareOrderLinesPayload {
   readonly lines: readonly { readonly id: string; readonly prepared: boolean }[]
 }
 
+/** Handing a delivery order to its rider, by the tablet that took it. */
+export interface HandOverDeliveryPayload {
+  readonly orderId: string
+}
+
+/** Taking a handover back within five minutes, with a reason. */
+export interface TakeBackDeliveryHandoverPayload {
+  readonly orderId: string
+  readonly reason: string
+}
+
 /** One reasoned unwind of a counter payment, by the tablet that took it. */
 export interface UnwindOrderPaymentPayload {
   readonly orderId: string
@@ -213,6 +232,8 @@ export interface BillingCommandPayloads {
   readonly prepare_order_lines: PrepareOrderLinesPayload
   readonly void_order_payment: UnwindOrderPaymentPayload
   readonly cancel_paid_order: UnwindOrderPaymentPayload
+  readonly hand_over_delivery: HandOverDeliveryPayload
+  readonly take_back_delivery_handover: TakeBackDeliveryHandoverPayload
 }
 
 /**
@@ -230,8 +251,10 @@ export interface BillingCommandPayloads {
  * or its hash.
  *
  * - `dishes` — the dish ticks' `_v2` functions (each-dish-is-ticked-off).
+ * - `delivery` — a create or revision carrying `delivery`, to the `_v3`s
+ *   (delivery-orders-are-made-not-billed). It ticks as `dishes` does.
  */
-export type BillingCommandVariant = 'dishes'
+export type BillingCommandVariant = 'dishes' | 'delivery'
 
 export interface BillingCommandEnvelope<
   TType extends BillingCommandType = BillingCommandType,
@@ -321,6 +344,8 @@ export const BILLING_COMMAND_RPC: Readonly<Record<BillingCommandType, string>> =
   prepare_order_lines: 'prepare_order_lines',
   void_order_payment: 'unpay_billing_order',
   cancel_paid_order: 'cancel_paid_billing_order',
+  hand_over_delivery: 'hand_over_delivery_order',
+  take_back_delivery_handover: 'take_back_delivery_handover',
 }
 
 /** The functions a variant replaces; every type it does not name goes where it always has. */
@@ -330,6 +355,11 @@ export const BILLING_COMMAND_VARIANT_RPC: Readonly<
   dishes: {
     create_order: 'create_billing_order_v2',
     revise_order: 'revise_billing_order_v2',
+    prepare_order_lines: 'prepare_order_lines_v2',
+  },
+  delivery: {
+    create_order: 'create_billing_order_v3',
+    revise_order: 'revise_billing_order_v3',
     prepare_order_lines: 'prepare_order_lines_v2',
   },
 }

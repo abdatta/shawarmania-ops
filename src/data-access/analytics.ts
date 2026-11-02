@@ -29,6 +29,12 @@ export interface AnalyticsAdapter {
        */
       align?: 'equal' | 'month'
       cut?: boolean
+      /**
+       * Counter orders (today's read) or delivery orders alone
+       * (delivery-orders-are-made-not-billed, D6). In `delivery` every money
+       * figure reads 0 and the screen shows it as unavailable.
+       */
+      scope?: AnalyticsScope
     },
   ): Promise<AnalyticsSnapshot>
   /** One subject's daily units and revenue across `periods` equal windows ending `to`. */
@@ -39,8 +45,58 @@ export interface AnalyticsAdapter {
     periods: number,
     subject: AnalyticsSubject,
     /** Cut earlier windows at the time it is now. */
-    options?: { cut?: boolean },
+    options?: { cut?: boolean; scope?: AnalyticsScope },
   ): Promise<AnalyticsSeries>
+}
+
+/** Which orders a figure page counts: the counter's, or delivery orders alone. Never both. */
+export type AnalyticsScope = 'counter' | 'delivery'
+
+type Row = Record<string, unknown>
+const rows = (value: unknown): Row[] => (Array.isArray(value) ? (value as Row[]) : [])
+const zeros = (value: unknown): number[] => rows(value).map(() => 0)
+
+/**
+ * A delivery-scope Sales or Items answer with its money read as zero
+ * (delivery-orders-are-made-not-billed, D6). The server returns null for every
+ * money figure of delivery orders, and the screens never show one in Delivery,
+ * so zero here only keeps the shape the validator checks. The platforms' own
+ * money (`delivery` rows) stays as it came: it is not these orders.
+ */
+export function deliveryScopeSnapshot(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value
+  const record = value as Row
+  const money = (row: Row) => ({
+    ...row,
+    revenue: 0,
+    ...('previousRevenue' in row ? { previousRevenue: 0 } : {}),
+    ...('discounts' in row ? { discounts: 0 } : {}),
+    ...('periodRevenue' in row ? { periodRevenue: zeros(row.periodUnits) } : {}),
+  })
+  return {
+    ...record,
+    categories: rows(record.categories).map(money),
+    items: rows(record.items).map(money),
+    days: rows(record.days).map(money),
+    hours: rows(record.hours).map((row) => ({ ...row, revenue: 0 })),
+    ...(record.totals === undefined
+      ? {}
+      : { totals: rows(record.totals).map((row) => ({ ...row, counter: 0, delivery: 0 })) }),
+  }
+}
+
+/** The same for a dish's or category's series. */
+export function deliveryScopeSeries(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value
+  const record = value as Row
+  return {
+    ...record,
+    revenue: zeros(record.units),
+    hourRevenue: zeros(record.hourUnits),
+    ...(record.totals === undefined
+      ? {}
+      : { totals: rows(record.totals).map((row) => ({ ...row, revenue: 0 })) }),
+  }
 }
 
 /** Fail closed on a malformed aggregate rather than displaying invented zeroes. */

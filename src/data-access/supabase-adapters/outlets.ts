@@ -1,3 +1,4 @@
+import { onDeliveryOrders } from '@/change-gates/delivery-orders'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 import {
@@ -508,12 +509,20 @@ export function createSupabaseOutletsAdapter(
     },
 
     async getServiceSettings(id) {
-      const { data, error } = await table()
-        .select(
-          'collect_customer_details, dine_in_offered, takeaway_offered, table_numbers, packaging_mode, packaging_price_paise, packaging_free_for_gold',
-        )
-        .eq('id', id)
-        .maybeSingle()
+      // `delivery-orders` reads Delivery too (delivery-orders-are-made-not-billed).
+      const { data, error } = onDeliveryOrders()
+        ? await table()
+            .select(
+              'collect_customer_details, dine_in_offered, takeaway_offered, table_numbers, packaging_mode, packaging_price_paise, packaging_free_for_gold, delivery_offered',
+            )
+            .eq('id', id)
+            .maybeSingle()
+        : await table()
+            .select(
+              'collect_customer_details, dine_in_offered, takeaway_offered, table_numbers, packaging_mode, packaging_price_paise, packaging_free_for_gold',
+            )
+            .eq('id', id)
+            .maybeSingle()
       if (error) throw error
       return data ? serviceSettingsFromRow(data) : { ...ALL_OFF_SERVICE_SETTINGS }
     },
@@ -529,18 +538,24 @@ export function createSupabaseOutletsAdapter(
       if (problem !== null) {
         throw new DataActionError(problem, SERVICE_SETTINGS_PROBLEM_MESSAGES[problem])
       }
-      const { data, error } = await client.rpc('set_outlet_service_settings', {
-        p_collect_customer_details: settings.collectCustomerDetails,
-        p_outlet: id,
-        p_dine_in_offered: settings.dineInOffered,
-        p_takeaway_offered: settings.takeawayOffered,
-        p_table_numbers: settings.tableNumbers,
-        p_packaging_mode: settings.packagingMode,
-        // The generator types every function argument as non-null; this one is
-        // null exactly when packaging is off, which the table checks.
-        p_packaging_price_paise: settings.packagingPricePaise as number,
-        p_packaging_free_for_gold: settings.packagingFreeForGold,
-      })
+      // `delivery-orders` writes Delivery too, through `_v2`
+      // (delivery-orders-are-made-not-billed, D7); off, today's call.
+      const { data, error } = await client.rpc(
+        onDeliveryOrders() ? 'set_outlet_service_settings_v2' : 'set_outlet_service_settings',
+        {
+          ...(onDeliveryOrders() ? { p_delivery_offered: settings.deliveryOffered ?? false } : {}),
+          p_collect_customer_details: settings.collectCustomerDetails,
+          p_outlet: id,
+          p_dine_in_offered: settings.dineInOffered,
+          p_takeaway_offered: settings.takeawayOffered,
+          p_table_numbers: settings.tableNumbers,
+          p_packaging_mode: settings.packagingMode,
+          // The generator types every function argument as non-null; this one is
+          // null exactly when packaging is off, which the table checks.
+          p_packaging_price_paise: settings.packagingPricePaise as number,
+          p_packaging_free_for_gold: settings.packagingFreeForGold,
+        },
+      )
       if (error) throw serviceSettingsRefusal(error, settings)
       const row = data as Tables<'outlets'>
       remember(row)

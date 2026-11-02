@@ -1,5 +1,16 @@
 import { emptyDishWorkflow, readyQuantity, workflowLines } from './dish-workflow'
 import {
+  DELIVERY_TAKE_BACK_MS,
+  applyHandover,
+  applyTakeBack,
+  deliveryDayStats,
+  deliveryHistory,
+  demoDelivery,
+  isDeliveryOrder,
+  shiftHandovers,
+} from './delivery'
+import { onDeliveryOrders } from '@/change-gates/delivery-orders'
+import {
   AWAITING_ORDER_NUMBER,
   isAwaitingOrderNumber,
   UNSENT_ORDER_REFERENCE,
@@ -127,6 +138,8 @@ interface PendingCommand {
     | 'set_order_preparation'
     | 'void_order_payment'
     | 'cancel_paid_order'
+    | 'hand_over_delivery'
+    | 'take_back_delivery_handover'
   /** When the counter accepted it — drives ordering, windows and escalation. */
   acceptedAtMs: number
   /** Mutate the store. Runs once, at delivery. Numbers are spent here only. */
@@ -174,6 +187,12 @@ export function createMockBillingAdapter(
    * a test of billing alone has none.
    */
   kitchenAcks: () => readonly { orderId: string }[] = () => [],
+  /**
+   * Whether `delivery-orders` is on (delivery-orders-are-made-not-billed). The
+   * demo passes its own switchboard; absent, the page's frozen snapshot, so a
+   * test that names no gate meets the counter as it bills today.
+   */
+  deliveryOn: () => boolean = onDeliveryOrders,
 ): BillingAdapter {
   /**
    * The dish records (each-dish-is-ticked-off). A store that was never seeded
@@ -223,6 +242,8 @@ export function createMockBillingAdapter(
     string,
     { orderId: string; billId: string | null; shiftId: string; reason: string }
   >()
+  /** Queued handovers and take-backs, by command id (delivery-orders-are-made-not-billed). */
+  const pendingDelivery = new Map<string, { orderId: string; at: string }>()
 
   const sortedPending = () => [...pending.values()].sort((a, b) => a.acceptedAtMs - b.acceptedAtMs)
 
@@ -481,6 +502,12 @@ export function createMockBillingAdapter(
       cancelledByName: actorName(row.cancelled_by),
       paidAt: row.paid_at,
       billId: row.bill_id,
+      ...(deliveryOn() && isDeliveryOrder(store, row.id)
+        ? {
+            delivery: true,
+            handedOverAt: store.dishWorkflow?.delivery?.orders[row.id]?.handedOverAt ?? null,
+          }
+        : {}),
     }
   }
 
@@ -1019,6 +1046,14 @@ export function createMockBillingAdapter(
     }
     store.orders.push(row)
     if (store.dishWorkflow) store.dishWorkflow.labels[row.id] = input.label?.trim() || null
+    if (input.delivery)
+      demoDelivery(store).orders[row.id] = {
+        markedAt: orderedAt,
+        handedOverAt: null,
+        handedOverBy: null,
+        handedOverShiftId: null,
+        priorTicks: null,
+      }
     replaceOrderLines(row.id, input.lines, input.discounts ?? [])
     markSharedTable(row)
   }
@@ -1055,6 +1090,18 @@ export function createMockBillingAdapter(
     const service = serviceOf(record.input)
     row.service_type = service.serviceType
     row.table_number = service.tableNumber
+    if ('delivery' in record.input) {
+      const delivery = demoDelivery(store)
+      if (record.input.delivery)
+        delivery.orders[row.id] ??= {
+          markedAt: row.changed_at,
+          handedOverAt: null,
+          handedOverBy: null,
+          handedOverShiftId: null,
+          priorTicks: null,
+        }
+      else delete delivery.orders[row.id]
+    }
     replaceOrderLines(row.id, record.input.lines, record.input.discounts ?? [])
     // A revision unprepares an order left with an unticked dish (D6).
     const ticks = dish()
@@ -1350,6 +1397,7 @@ export function createMockBillingAdapter(
             cancelledByName: null,
             paidAt: null,
             billId: null,
+            ...(input.delivery ? { delivery: true, handedOverAt: null } : {}),
           })
           break
         }
@@ -1371,7 +1419,23 @@ export function createMockBillingAdapter(
             discounts: structuredClone(record.input.discounts ?? []),
             roundingPaise: totalsOf(record.input.lines, record.input.discounts ?? []).roundingPaise,
             totalPaise: totalsOf(record.input.lines, record.input.discounts ?? []).totalPaise,
+            ...('delivery' in record.input ? { delivery: Boolean(record.input.delivery) } : {}),
           })
+          break
+        }
+        case 'hand_over_delivery':
+        case 'take_back_delivery_handover': {
+          const record = pendingDelivery.get(command.commandId)
+          const current = record ? overlaid.get(record.orderId) : undefined
+          if (current && record) {
+            const handing = command.type === 'hand_over_delivery'
+            overlaid.set(record.orderId, {
+              ...current,
+              status: handing ? 'handed_over' : 'open',
+              handedOverAt: handing ? record.at : null,
+              preparedAt: handing ? (current.preparedAt ?? record.at) : current.preparedAt,
+            })
+          }
           break
         }
         case 'set_order_preparation': {
@@ -1634,9 +1698,13 @@ export function createMockBillingAdapter(
   }
   // The database's definitions (design D3) over the demo's own rows. The demo
   // keeps no log of revisions, so an order it changed stands for one revised.
-  function dayStats(outletId: string, businessDate: string): BillingDayStats {
+  function dayStats(outletId: string, businessDate: string, counterOnly = false): BillingDayStats {
+    // With `delivery-orders` on, Stats → Counter leaves delivery orders out.
     const orders = store.orders.filter(
-      (order) => order.outlet_id === outletId && order.business_date === businessDate,
+      (order) =>
+        order.outlet_id === outletId &&
+        order.business_date === businessDate &&
+        !(counterOnly && isDeliveryOrder(store, order.id)),
     )
     const ids = new Set(orders.map((order) => order.id))
     const lastReady = new Map<string, number>()
@@ -1952,6 +2020,7 @@ export function createMockBillingAdapter(
         cancelledByName: null,
         paidAt: null,
         billId: null,
+        ...(input.delivery ? { delivery: true, handedOverAt: null } : {}),
       }
     },
 
@@ -2011,6 +2080,7 @@ export function createMockBillingAdapter(
         ...serviceOf(input),
         lines: structuredClone(inputCopy.lines),
         totalPaise: totalsOf(input.lines, input.discounts ?? []).totalPaise,
+        ...('delivery' in input ? { delivery: Boolean(input.delivery) } : {}),
       }
     },
 
@@ -2230,6 +2300,13 @@ export function createMockBillingAdapter(
       if (!projected) {
         throw new BillingActionError('not_found', 'That order is no longer on the pipeline.')
       }
+      // `orders_delivery_is_not_paid`: refused while the gate is on.
+      if (projected.delivery) {
+        throw new BillingActionError(
+          'delivery_not_paid',
+          'A delivery order is handed over, not paid.',
+        )
+      }
       // Ownership is per tablet, and the refusal names the till rather than
       // claiming the order does not exist: it is visible on the outlet
       // pipeline, so "not found" would be a sentence the screen contradicts.
@@ -2337,6 +2414,71 @@ export function createMockBillingAdapter(
       }
     },
 
+    async handOverOrder(orderId) {
+      const shift = requireOpenShift()
+      const projected = projectedOrders(shift.outlet_id).find((order) => order.id === orderId)
+      if (!projected || projected.deviceId !== shift.device_id) {
+        throw new BillingActionError(
+          'not_this_tablet',
+          'Only the tablet that took it can hand it over.',
+        )
+      }
+      if (!projected.delivery) {
+        throw new BillingActionError('not_delivery', 'Only a delivery order is handed over.')
+      }
+      if (projected.status !== 'open') {
+        throw new BillingActionError(
+          'order_cancelled',
+          `Order ${referenceLabel(projected)} is no longer open.`,
+        )
+      }
+      const commandId = crypto.randomUUID()
+      const at = new Date(paymentNow()).toISOString()
+      pendingDelivery.set(commandId, { orderId, at })
+      accept({
+        commandId,
+        type: 'hand_over_delivery',
+        acceptedAtMs: Date.now(),
+        apply: () => applyHandover(store, orderId, shift, at),
+      })
+      return {
+        ...projected,
+        status: 'handed_over',
+        handedOverAt: at,
+        preparedAt: projected.preparedAt ?? at,
+      }
+    },
+
+    async takeBackHandover(orderId, reason) {
+      const shift = requireOpenShift()
+      const cleanReason = requireReason(reason)
+      const projected = projectedOrders(shift.outlet_id).find((order) => order.id === orderId)
+      if (!projected || projected.deviceId !== shift.device_id || !projected.delivery) {
+        throw new BillingActionError('not_found', 'That handover is not on this tablet.')
+      }
+      if (projected.status !== 'handed_over' || !projected.handedOverAt) {
+        throw new BillingActionError('order_cancelled', 'That order is not handed over.')
+      }
+      if (Date.parse(projected.handedOverAt) + DELIVERY_TAKE_BACK_MS <= paymentNow()) {
+        throw new BillingActionError('window_expired', 'That handover can no longer be taken back.')
+      }
+      const commandId = crypto.randomUUID()
+      const at = new Date(paymentNow()).toISOString()
+      pendingDelivery.set(commandId, { orderId, at })
+      accept({
+        commandId,
+        type: 'take_back_delivery_handover',
+        acceptedAtMs: Date.now(),
+        apply: () => applyTakeBack(store, orderId, shift.person_id, cleanReason, at),
+      })
+      return { ...projected, status: 'open', handedOverAt: null }
+    },
+
+    async listDeliveryHistory(outletId, businessDate) {
+      requireManager(outletId)
+      return deliveryHistory(store, outletId, businessDate, actorName)
+    },
+
     async listShiftHistory(shiftId) {
       const shift = store.shifts.find((candidate) => candidate.id === shiftId)
       const unwoundBillIds = new Set(
@@ -2426,7 +2568,48 @@ export function createMockBillingAdapter(
           .filter((payment) => payment.method === method)
           .reduce((sum, payment) => sum + payment.amountPaise, 0),
       }))
-      return { bills, totals }
+      if (!deliveryOn()) return { bills, totals }
+      // Handovers queued and not yet delivered are this shift's too.
+      const deliveries = shiftHandovers(store, shiftId, paymentNow())
+      for (const command of sortedPending()) {
+        const record = pendingDelivery.get(command.commandId)
+        if (!record) continue
+        const index = deliveries.findIndex((delivery) => delivery.orderId === record.orderId)
+        if (command.type === 'take_back_delivery_handover') {
+          if (index >= 0) deliveries.splice(index, 1)
+          continue
+        }
+        if (index >= 0) continue
+        const order = projectedOrders(shift?.outlet_id ?? '').find(
+          (candidate) => candidate.id === record.orderId,
+        )
+        if (!order || order.status !== 'handed_over') continue
+        const until = Date.parse(record.at) + DELIVERY_TAKE_BACK_MS
+        deliveries.unshift({
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          label: order.label ?? null,
+          orderedAt: order.orderedAt,
+          handedOverAt: record.at,
+          takeBackUntil: until > paymentNow() ? new Date(until).toISOString() : null,
+          lines: order.lines
+            .filter((line) => line.kind !== 'packaging')
+            .map((line) => ({
+              id: line.orderLineId ?? line.workflowLineId ?? line.itemName,
+              itemName: line.itemName,
+              quantity: line.quantity,
+              note: line.note ?? null,
+            })),
+        })
+      }
+      return {
+        bills: bills.map((bill) => ({
+          ...bill,
+          orderLabel: bill.orderId ? (store.dishWorkflow?.labels[bill.orderId] ?? null) : null,
+        })),
+        totals,
+        deliveries,
+      }
     },
 
     // `billing_history_bills`'s answer over the demo's own bills
@@ -2465,6 +2648,13 @@ export function createMockBillingAdapter(
                 totalPaise: bill.totalPaise,
                 payments: bill.payments,
                 paymentRevision: bill.paymentRevision,
+                ...(deliveryOn()
+                  ? {
+                      orderLabel: bill.orderId
+                        ? (store.dishWorkflow?.labels[bill.orderId] ?? null)
+                        : null,
+                    }
+                  : {}),
                 cursor: { k: sortKey(bill, filter.sort), n: bill.billNumber },
               })),
         matching: matching.length,
@@ -2497,16 +2687,20 @@ export function createMockBillingAdapter(
       const cutover =
         outletFixtures.find((outlet) => outlet.id === outletId)?.business_day_cutover ?? '04:00'
       const commands = store.billingCommands.filter((command) => command.outlet_id === outletId)
+      const on = deliveryOn()
       const orders = projectedOrders(outletId)
         .filter(inPipeline)
         .filter((order) => order.businessDate === businessDate)
+        .filter((order) => !on || !order.delivery)
       const now = Date.now()
+      const seen = new Set(kitchenAcks().map((ack) => ack.orderId))
       return {
+        ...(on ? { deliveryStats: deliveryDayStats(store, outletId, businessDate, seen) } : {}),
         cashPaise: tender('cash'),
         upiPaise: tender('upi'),
         settledBills: settled.length,
         bills: bills.length,
-        stats: dayStats(outletId, businessDate),
+        stats: dayStats(outletId, businessDate, on),
         refusals: commands
           .filter(
             (command) =>

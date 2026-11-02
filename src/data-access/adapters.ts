@@ -1499,6 +1499,14 @@ export type BillStatus = Tables<'bills'>['status']
 /** A saved order as the counter and manager surfaces read it. */
 export interface BillingOrder extends ServiceFacts {
   label?: string | null
+  /**
+   * A delivery order (delivery-orders-are-made-not-billed): the kitchen makes
+   * it and the counter hands it over without a bill. It carries no service,
+   * table, customer or discount, and its total is never shown. Absent is false.
+   */
+  delivery?: boolean
+  /** When a delivery order was handed over, while it is; else absent or null. */
+  handedOverAt?: string | null
   id: Tables<'orders'>['id']
   outletId: Tables<'orders'>['outlet_id']
   deviceId: Tables<'orders'>['device_id']
@@ -1569,6 +1577,8 @@ export type BillVoidKind = NonNullable<Tables<'bills'>['void_kind']>
 
 export interface SaveOrderInput extends ServiceFacts {
   label?: string | null
+  /** A delivery order (delivery-orders-are-made-not-billed). Absent is false. */
+  delivery?: boolean
   clientId: string
   outletId: string
   shiftId: string
@@ -1584,6 +1594,12 @@ export interface SaveOrderInput extends ServiceFacts {
 }
 
 export interface BillingBill extends ServiceFacts {
+  /**
+   * The label its order carried, kept after the order left the rail
+   * (delivery-orders-are-made-not-billed, D5). Shown beside the bill in My
+   * shift and Billing history; never printed on it. Absent where unread.
+   */
+  orderLabel?: string | null
   id: Tables<'bills'>['id']
   outletId: Tables<'bills'>['outlet_id']
   billNumber: Tables<'bills'>['bill_number']
@@ -1795,7 +1811,7 @@ export interface BillingRowCursor {
  * effective payments and order time. No customer name or phone.
  */
 export type BillingBillRow = BillingBillSummary &
-  Pick<BillingBill, 'orderedAt' | 'paymentRevision' | 'payments'> & {
+  Pick<BillingBill, 'orderedAt' | 'paymentRevision' | 'payments' | 'orderLabel'> & {
     cursor: BillingRowCursor
   }
 
@@ -1829,6 +1845,83 @@ export interface BillingDayNumbers {
   unpaidPaise: number
   /** The day's billing tablets by name, for the Filter sheet. */
   tablets: string[]
+  /**
+   * The day's delivery orders' Stats (delivery-orders-are-made-not-billed, D6),
+   * read with the rest so the Counter · Delivery switch costs no request.
+   * Absent where the gate is off; `stats` then counts every order as today.
+   */
+  deliveryStats?: DeliveryDayStats
+}
+
+/**
+ * One outlet-day's delivery orders, for Stats → Delivery. Counts and the two
+ * averages; never money (delivery-orders-are-made-not-billed, D6).
+ */
+export interface DeliveryDayStats {
+  placed: number
+  updated: number
+  cancelled: number
+  handedOver: number
+  seen: number
+  ready: number
+  toReadySeconds: number | null
+  handoverSeconds: number | null
+}
+
+/**
+ * How long a handover may be taken back: five minutes, a payment take-back's
+ * window (delivery-orders-are-made-not-billed, D4). The server measures it from
+ * the stored handover time; this only says when to stop offering it.
+ */
+export const DELIVERY_TAKE_BACK_MS = 5 * 60_000
+
+/** One dish of a delivery order as My shift and Billing history list it. */
+export interface DeliveryLine {
+  id: string
+  itemName: string
+  quantity: number
+  note?: string | null
+}
+
+/**
+ * A delivery order this shift handed over, listed in My shift beside its bills
+ * (delivery-orders-are-made-not-billed, D7). No amount: a delivery order
+ * carries no money the counter can speak for.
+ */
+export interface DeliveryHandover {
+  orderId: string
+  orderNumber: number
+  label: string | null
+  orderedAt: string
+  handedOverAt: string
+  /** The end of the five-minute take-back, or null once it has passed. */
+  takeBackUntil: string | null
+  lines: DeliveryLine[]
+}
+
+/** A delivery take-back as Billing history shows it. */
+export interface DeliveryTakeBack {
+  takenBackAt: string
+  takenBackByName: string | null
+  handedOverAt: string
+  reason: string
+}
+
+/** A finished delivery order in Billing history → Delivery: handed over or cancelled. */
+export interface DeliveryHistoryOrder {
+  orderId: string
+  orderNumber: number
+  status: 'handed_over' | 'cancelled'
+  orderedAt: string
+  label: string | null
+  createdByName: string | null
+  handedOverAt: string | null
+  handedOverByName: string | null
+  cancelledAt: string | null
+  cancelledByName: string | null
+  cancelReason: string | null
+  lines: DeliveryLine[]
+  takeBacks: DeliveryTakeBack[]
 }
 
 /**
@@ -1849,6 +1942,11 @@ export const CUSTOMER_BILLS_PAGE_SIZE = 10
 export interface ShiftBillingHistory {
   bills: BillingBill[]
   totals: BillingMethodTotal[]
+  /**
+   * The shift's handed-over delivery orders (delivery-orders-are-made-not-billed),
+   * newest first. Absent where the gate is off; they add nothing to `totals`.
+   */
+  deliveries?: DeliveryHandover[]
 }
 
 /**
@@ -1973,6 +2071,7 @@ export interface BillingAdapter {
       | 'customerTier'
       | 'serviceType'
       | 'tableNumber'
+      | 'delivery'
     >,
   ): Promise<BillingOrder>
   listOpenOrders(outletId: string): Promise<BillingOrder[]>
@@ -2021,6 +2120,19 @@ export interface BillingAdapter {
    * first by the surface, because the money leaves the drawer.
    */
   cancelPaidOrder(orderId: string, reason: string): Promise<BillingOrder>
+  /**
+   * Hand this tablet's own delivery order to its rider
+   * (delivery-orders-are-made-not-billed, D4): every dish still owed is ticked,
+   * and the order leaves the rail as handed over. No bill, no money.
+   */
+  handOverOrder(orderId: string): Promise<BillingOrder>
+  /**
+   * Put a handed-over delivery order back on the rail, as it was, within five
+   * minutes of the handover and on the tablet that made it, with a reason.
+   */
+  takeBackHandover(orderId: string, reason: string): Promise<BillingOrder>
+  /** An outlet-day's handed-over and cancelled delivery orders, for Billing history. */
+  listDeliveryHistory(outletId: string, businessDate: string): Promise<DeliveryHistoryOrder[]>
   listShiftHistory(shiftId: string): Promise<ShiftBillingHistory>
   /**
    * This shift's bills as this tablet holds them now, with no request
@@ -2356,6 +2468,8 @@ export interface KitchenOrder {
   orderNumber: number
   serviceType: ServiceType | null
   tableNumber: number | null
+  /** A delivery order (delivery-orders-are-made-not-billed): the card reads Delivery. */
+  delivery?: boolean
   orderedAt: string
   /** The order's last revision or creation; an acknowledgement names it. */
   version: string

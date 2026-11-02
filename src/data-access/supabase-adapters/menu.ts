@@ -1,3 +1,4 @@
+import { onDeliveryOrders } from '@/change-gates/delivery-orders'
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 
 import {
@@ -91,6 +92,20 @@ function createdPair(value: Json): {
     category: category as unknown as Tables<'menu_categories'>,
     item: item as unknown as Tables<'menu_items'>,
   }
+}
+
+const OUTLET_MENU_COLUMNS =
+  `discount_presets, collect_customer_details, dine_in_offered, takeaway_offered, table_numbers, packaging_mode, packaging_price_paise, packaging_free_for_gold, menu_slug, ${OUTLET_LOYALTY_COLUMNS}` as const
+
+/**
+ * The outlet's choices that travel with its menu; with `delivery-orders` on,
+ * whether it offers Delivery too, so a tablet cold-started offline still does
+ * (delivery-orders-are-made-not-billed). One read either way.
+ */
+function outletMenuColumns(): typeof OUTLET_MENU_COLUMNS {
+  return (
+    onDeliveryOrders() ? `${OUTLET_MENU_COLUMNS}, delivery_offered` : OUTLET_MENU_COLUMNS
+  ) as typeof OUTLET_MENU_COLUMNS
 }
 
 export function createSupabaseMenuAdapter(
@@ -310,13 +325,7 @@ export function createSupabaseMenuAdapter(
       try {
         const [discounts, outlet] = await Promise.all([
           this.listDiscounts(outletId),
-          client
-            .from('outlets')
-            .select(
-              `discount_presets, collect_customer_details, dine_in_offered, takeaway_offered, table_numbers, packaging_mode, packaging_price_paise, packaging_free_for_gold, menu_slug, ${OUTLET_LOYALTY_COLUMNS}`,
-            )
-            .eq('id', outletId)
-            .single(),
+          client.from('outlets').select(outletMenuColumns()).eq('id', outletId).single(),
         ])
         if (outlet.error) throw menuError(outlet.error)
         const menu = {

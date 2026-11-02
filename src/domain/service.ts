@@ -48,6 +48,12 @@ export interface OutletServiceSettings {
   packagingPricePaise: number | null
   /** False whenever packaging is off. */
   packagingFreeForGold: boolean
+  /**
+   * Whether the counter offers Delivery: an order the kitchen makes and the
+   * counter hands to a rider without a bill (delivery-orders-are-made-not-billed).
+   * Read only while `delivery-orders` is on. Absent is false.
+   */
+  deliveryOffered?: boolean
 }
 
 /** What every outlet starts with, and what bills exactly as today. */

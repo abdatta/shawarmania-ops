@@ -249,6 +249,7 @@ export function createMockOutletsAdapter(
         // Nor its attendance rules: both off, as every outlet starts (#81).
         attendance_needs_manager: false,
         attendance_blocks_away: false,
+        delivery_offered: false,
         // Nor points or gold: all off, as every outlet starts (#62).
         ...ALL_OFF_LOYALTY_COLUMNS,
       }
@@ -422,6 +423,9 @@ export function createMockOutletsAdapter(
         dine_in_offered: stored.dineInOffered,
         takeaway_offered: stored.takeawayOffered,
         table_numbers: stored.tableNumbers,
+        ...(stored.deliveryOffered === undefined
+          ? {}
+          : { delivery_offered: stored.deliveryOffered }),
         packaging_mode: stored.packagingMode,
         packaging_price_paise: stored.packagingPricePaise,
         packaging_free_for_gold: stored.packagingFreeForGold,

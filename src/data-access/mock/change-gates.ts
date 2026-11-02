@@ -98,6 +98,14 @@ const WORDS: Record<
       'A set-up tablet can still open the sign-in and activation pages, and a person signing in there replaces the tablet’s login.',
     changeNumber: null,
   },
+  'delivery-orders': {
+    title: 'Delivery orders',
+    onMeans:
+      'An outlet may offer Delivery, whose orders the kitchen makes and the counter hands to a rider without a bill, labels are kept after an order leaves the rail, and Stats, Billing History, Items and Sales can show delivery orders alone.',
+    offMeans:
+      'Every order is billed or cancelled, labels go when an order leaves the rail, and no page shows delivery orders.',
+    changeNumber: 83,
+  },
 }
 
 /**

@@ -12,7 +12,9 @@ export type OutletServiceColumns = Pick<
   | 'packaging_mode'
   | 'packaging_price_paise'
   | 'packaging_free_for_gold'
->
+> &
+  // Read only while `delivery-orders` is on (delivery-orders-are-made-not-billed).
+  Partial<Pick<Tables<'outlets'>, 'delivery_offered'>>
 
 /**
  * How an outlet serves, read off its row.
@@ -29,5 +31,6 @@ export function serviceSettingsFromRow(row: OutletServiceColumns): OutletService
     packagingMode: row.packaging_mode,
     packagingPricePaise: row.packaging_price_paise,
     packagingFreeForGold: row.packaging_free_for_gold,
+    ...(row.delivery_offered ? { deliveryOffered: true } : {}),
   }
 }

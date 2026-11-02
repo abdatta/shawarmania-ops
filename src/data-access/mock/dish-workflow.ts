@@ -20,6 +20,8 @@ export interface DemoDishWorkflow {
   commands: string[]
   /** When an edit added each line, as `order_line_additions` (design R12). */
   additions?: Record<string, string>
+  /** Delivery orders and their take-backs (delivery-orders-are-made-not-billed). */
+  delivery?: import('./delivery').DemoDelivery
 }
 
 export function readyQuantity(store: DemoStore, id: string, quantity: number): number {

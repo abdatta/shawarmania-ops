@@ -1,3 +1,4 @@
+import { onDeliveryOrders } from '@/change-gates/delivery-orders'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { readProRata } from '@/domain/fixed-costs'
 import type { Database } from '../database.types'
@@ -22,7 +23,12 @@ export function createSupabaseOverviewAdapter(client: SupabaseClient<Database>):
       return (data ?? []).map((row) => row.last_seen_at)
     },
     async today(outletId) {
-      const { data, error } = await client.rpc('overview_today_v2', { p_outlet_id: outletId })
+      // `delivery-orders` reads `_v3`, whose open total leaves out open delivery
+      // orders (delivery-orders-are-made-not-billed, D6); off, today's read.
+      const { data, error } = await client.rpc(
+        onDeliveryOrders() ? 'overview_today_v3' : 'overview_today_v2',
+        { p_outlet_id: outletId },
+      )
       if (error) throw error
       return data as unknown as OverviewToday
     },
