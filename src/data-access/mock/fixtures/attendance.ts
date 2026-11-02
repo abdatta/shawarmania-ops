@@ -113,27 +113,7 @@ export interface AttendanceSeed {
    * (a-check-in-at-the-shop-approves-itself, design D4).
    */
   autoApproved?: true
-  /**
-   * A day that exists only with `auto-approve-at-the-shop` on. The month before
-   * the seeded fortnight, so the calendar opens on a month that looks like one
-   * (mostly present, a couple absent) rather than on a fortnight of derived
-   * absences, without moving any figure a test reads with the gate off.
-   */
-  onlyWhenAutoApproving?: true
-  /**
-   * What this day is with `auto-approve-at-the-shop` on. A day that waited
-   * inside the fence cannot happen then, and a normal day at the counter is
-   * approved by the fence rather than by the manager, so the seed says which it
-   * becomes. Absent: the same day either way.
-   */
-  whenAutoApproving?: Partial<Omit<AttendanceSeed, 'whenAutoApproving' | 'personId' | 'daysAgo'>>
 }
-
-/**
- * A day the fence approved, in place of the manager's tap at the counter. The
- * seed's approval is ignored on such a day: nobody approved it.
- */
-const BY_THE_FENCE = { autoApproved: true } as const
 
 const DEMO_STAFF_ID = personaFixtures.employee.profile.id
 const DEMO_MANAGER = personaFixtures.franchise_admin.profile
@@ -169,7 +149,6 @@ const EARLIER_MONTH: AttendanceSeed[] = Array.from({ length: 19 }, (_, index) =>
     status: 'present' as const,
     checkIn: { time: daysAgo === 19 ? '13:25' : `09:0${daysAgo % 10}`, ...AT_COUNTER },
     autoApproved: true as const,
-    onlyWhenAutoApproving: true as const,
   }))
 
 export const attendanceSeeds: AttendanceSeed[] = [
@@ -181,16 +160,15 @@ export const attendanceSeeds: AttendanceSeed[] = [
   // demonstrated by colleagues on the manager's day view, and by this person's
   // own day five days back.
   //
-  // A normal day: in the fence, approved by the manager standing at the counter
-  // the same morning. One tap, no reason, and that is the point of the rule.
+  // A normal day: in the fence, approved by the fence. No manager, no reason,
+  // and that is the point of the rule.
   {
     personId: DEMO_STAFF_ID,
     outletId: OUTLET_KALYANI_ID,
     daysAgo: 1,
     status: 'present',
     checkIn: { time: '09:02', ...AT_COUNTER },
-    approval: { byName: DEMO_MANAGER.full_name, time: '09:18', ...APPROVED_AT_COUNTER },
-    whenAutoApproving: BY_THE_FENCE,
+    autoApproved: true,
   },
   // A day that started outside the fence and was settled by a manager who was
   // not there either — so the row carries their reason, and the employee sees
@@ -228,9 +206,8 @@ export const attendanceSeeds: AttendanceSeed[] = [
     daysAgo: 3,
     status: 'present',
     checkIn: { time: '14:05', ...AT_COUNTER },
-    approval: { byName: DEMO_MANAGER.full_name, time: '14:19', ...APPROVED_AT_COUNTER },
     // Late and approved by the fence: late is still a tag on a present day.
-    whenAutoApproving: BY_THE_FENCE,
+    autoApproved: true,
   },
   { personId: DEMO_STAFF_ID, outletId: OUTLET_KALYANI_ID, daysAgo: 4, status: 'leave' },
   // Recorded and still waiting. Nobody approved it, so it counts as nothing —
@@ -240,11 +217,10 @@ export const attendanceSeeds: AttendanceSeed[] = [
     outletId: OUTLET_KALYANI_ID,
     daysAgo: 5,
     status: 'present',
-    checkIn: { time: '09:10', ...NEAR_COUNTER },
     // With the fence approving, only a reading away from the shop still waits,
     // and this one came in after the deadline: waiting and late are two facts,
     // and the demo shows a day carrying both [owner, 2026-10-28].
-    whenAutoApproving: { checkIn: { time: '13:40', ...DOWN_THE_ROAD } },
+    checkIn: { time: '13:40', ...DOWN_THE_ROAD },
   },
   // Late: 14:20 against Kalyani's 13:00. Approved, so it is present AND late —
   // lateness is a tag, never a status.
@@ -282,9 +258,8 @@ export const attendanceSeeds: AttendanceSeed[] = [
     daysAgo: 0,
     status: 'present',
     checkIn: { time: '08:47', ...AT_COUNTER },
-    approval: { byName: DEMO_MANAGER.full_name, time: '09:02', ...APPROVED_AT_COUNTER },
     // The manager's roll-call opens on a day the fence approved for them.
-    whenAutoApproving: BY_THE_FENCE,
+    autoApproved: true,
   },
   // Access was cut at lunchtime — the panic button — but the morning was worked
   // and the day view still shows the person (deactivation is about sign-in, not
@@ -421,11 +396,12 @@ export const attendanceSeeds: AttendanceSeed[] = [
     outletId: OUTLET_KANCHRAPARA_ID,
     daysAgo: 0,
     status: 'present',
-    checkIn: { time: '10:40', ...AT_KANCHRAPARA },
     // Still waiting with the fence approving, so the owner's walk still has
     // this arrival to settle: the phone found no position.
-    whenAutoApproving: { checkIn: { time: '10:40' } },
+    checkIn: { time: '10:40' },
   },
-  // Last, so every seed above keeps its index, and so its id, either way.
+  // The month before the seeded fortnight, so the calendar opens on a month that
+  // looks like one rather than on a fortnight of derived absences. Last, so every
+  // seed above keeps its index, and so its id.
   ...EARLIER_MONTH,
 ]

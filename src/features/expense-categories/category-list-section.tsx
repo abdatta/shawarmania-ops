@@ -27,7 +27,7 @@ interface Draft {
 
 /**
  * The owners' list an expense's category is picked from
- * (a-check-in-at-the-shop-approves-itself, design D11; `expense-category-list`).
+ * (a-check-in-at-the-shop-approves-itself, design D11).
  *
  * In the owners' order, which is the order the tiles take. A rename moves the
  * recorded expenses with it, because renaming a bucket means the same bucket;

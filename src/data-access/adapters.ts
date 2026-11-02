@@ -3021,19 +3021,13 @@ export interface ExpenseCategoryMoveResult {
 
 export interface ExpenseCategoriesAdapter {
   list(): Promise<ExpenseCategorySuggestion[]>
-  /**
-   * The names alone, in `list()`'s order, in one request: what a suggestion
-   * list needs, without counting each category's use one request at a time
-   * (the-app-asks-the-server-less, D5).
-   */
-  names(): Promise<string[]>
   rename(from: string, to: string, rewriteHistory: boolean): Promise<ExpenseCategoryMoveResult>
   merge(from: string, into: string): Promise<ExpenseCategoryMoveResult>
   retire(name: string): Promise<void>
   listOperations(): Promise<ExpenseCategoryOperation[]>
   /**
    * The owners' list, in their order: the tiles an expense's category is
-   * picked from while `expense-category-list` is on (#81, design D11).
+   * picked from (#81, design D11).
    */
   choices(): Promise<ExpenseCategoryChoice[]>
   /**

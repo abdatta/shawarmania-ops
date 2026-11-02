@@ -7,8 +7,8 @@ import { useSession } from '@/session/context'
 import { assembleRange, type DateRange, type DayRow } from './attendance-range'
 
 /**
- * One month of a person's own days, as My attendance reads them, for the
- * refreshed screens (a-check-in-at-the-shop-approves-itself, design D7–D8):
+ * One month of a person's own days, as My attendance reads them
+ * (a-check-in-at-the-shop-approves-itself, design D7–D8):
  * the month calendar, and Home's one line about the month so far.
  *
  * One read of `listHistory` for the range, again when the app returns to the

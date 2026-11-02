@@ -12,7 +12,6 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { LoadingFigures } from '@/components/ui/loading'
 import { Select } from '@/components/ui/select'
-import { useChangeGate } from '@/change-gates/context'
 import { useAdapters } from '@/data-access'
 import {
   DataActionError,
@@ -29,8 +28,6 @@ type Action =
 
 export function ExpenseCategoriesSurface() {
   const { expenseCategories: adapter } = useAdapters()
-  // The owners' list above the typed names (#81, design D11).
-  const categoryList = useChangeGate('expense-category-list')
   const [categories, setCategories] = useState<ExpenseCategorySuggestion[] | null>(null)
   const [operations, setOperations] = useState<ExpenseCategoryOperation[] | null>(null)
   const [action, setAction] = useState<Action | null>(null)
@@ -43,8 +40,7 @@ export function ExpenseCategoriesSurface() {
 
   /**
    * The list's names, offered as Merge targets beside the suggestions, so an
-   * old name folds into a choice nobody has used yet (design D11). Empty with
-   * the list off.
+   * old name folds into a choice nobody has used yet (design D11).
    */
   const [choiceNames, setChoiceNames] = useState<string[]>([])
 
@@ -52,20 +48,16 @@ export function ExpenseCategoriesSurface() {
     const [nextCategories, nextOperations, nextChoices] = await Promise.all([
       adapter.list(),
       adapter.listOperations(),
-      categoryList ? adapter.choices() : Promise.resolve([]),
+      adapter.choices(),
     ])
     setCategories(nextCategories)
     setOperations(nextOperations)
     setChoiceNames(nextChoices.map((choice) => choice.name))
-  }, [adapter, categoryList])
+  }, [adapter])
 
   useEffect(() => {
     let active = true
-    void Promise.all([
-      adapter.list(),
-      adapter.listOperations(),
-      categoryList ? adapter.choices() : Promise.resolve([]),
-    ])
+    void Promise.all([adapter.list(), adapter.listOperations(), adapter.choices()])
       .then(([nextCategories, nextOperations, nextChoices]) => {
         if (!active) return
         setCategories(nextCategories)
@@ -78,7 +70,7 @@ export function ExpenseCategoriesSurface() {
     return () => {
       active = false
     }
-  }, [adapter, categoryList])
+  }, [adapter])
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -140,17 +132,10 @@ export function ExpenseCategoriesSurface() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-3">
-      {categoryList ? (
-        <ManageCategoriesHeader />
-      ) : (
-        <PageHeader
-          title="Expense categories"
-          subtitle="Suggestions are business-wide. Recorded rows keep their own text until you deliberately rewrite history."
-        />
-      )}
-
-      {categoryList && <CategoryListSection onChanged={load} />}
-      {categoryList && <h2 className="pt-2 text-sm font-bold text-content">Recorded names</h2>}
+      {/* The owners' list above the typed names (#81, design D11). */}
+      <ManageCategoriesHeader />
+      <CategoryListSection onChanged={load} />
+      <h2 className="pt-2 text-sm font-bold text-content">Recorded names</h2>
 
       {error && (
         <p role="alert" className="text-sm font-semibold text-danger">

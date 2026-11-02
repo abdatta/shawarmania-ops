@@ -339,7 +339,7 @@ describe('Cash Expenses opens the expense list, by business date', () => {
     const group = await screen.findByTestId('expenses-day-2026-08-28')
     await user.click(within(group).getByRole('button', { name: /add expense/i }))
 
-    await user.type(await screen.findByTestId('expense-category'), 'Vegetables')
+    await user.click(await screen.findByRole('radio', { name: 'Chicken' }))
     await user.type(screen.getByTestId('expense-amount'), '240')
     // A manager chooses the method every time; this one left the drawer.
     await user.selectOptions(screen.getByTestId('expense-is-cash'), 'cash')
@@ -378,7 +378,7 @@ describe('Cash Expenses opens the expense list, by business date', () => {
 
     const group = await screen.findByTestId('expenses-day-2026-08-29')
     await user.click(within(group).getByRole('button', { name: /add expense/i }))
-    expect(await screen.findByTestId('expense-category')).toBeInTheDocument()
+    expect(await screen.findByTestId('expense-amount')).toBeInTheDocument()
 
     // **A dialog inside a dialog** (design D7). `close` does not bubble in the
     // DOM but React's synthetic system propagates it up the REACT tree, and a
@@ -392,7 +392,7 @@ describe('Cash Expenses opens the expense list, by business date', () => {
     expect(closes).toHaveLength(2)
     await user.click(closes.at(-1)!)
 
-    await waitFor(() => expect(screen.queryByTestId('expense-category')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByTestId('expense-amount')).not.toBeInTheDocument())
     expect(screen.getByTestId('expenses-breakdown')).toBeInTheDocument()
   })
 })

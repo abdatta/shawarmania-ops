@@ -105,7 +105,7 @@ describe('submitting a check-in', () => {
     })
 
     expect(rpc).toHaveBeenCalledWith(
-      'attendance_submit_attempt_v2',
+      'attendance_submit_attempt_v3',
       expect.objectContaining({
         p_business_date: '2026-08-04',
         p_attempted_at: READING.at,

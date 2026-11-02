@@ -1,11 +1,10 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { ExpenseRecord } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters, OUTLET_KALYANI_ID } from '@/data-access/mock'
-import { ChangeGatesForTest, describeChangeGate } from '@/test/change-gates'
 
 import { ExpenseList } from './expense-list'
 
@@ -37,7 +36,7 @@ const maintenance: ExpenseRecord = {
   voidedReason: null,
 }
 
-function renderList(on: boolean, mayTouchAnyRow: boolean) {
+function renderList(mayTouchAnyRow: boolean) {
   const base = createMockAdapters(mayTouchAnyRow ? 'franchise_admin' : 'employee')
   const createExpense = vi.fn(async () => maintenance)
   const updateExpense = vi.fn(async () => maintenance)
@@ -46,62 +45,46 @@ function renderList(on: boolean, mayTouchAnyRow: boolean) {
     expenses: { ...base.expenses, createExpense, updateExpense },
   }
   render(
-    <ChangeGatesForTest
-      on={{
-        'auto-approve-at-the-shop': true,
-        'refreshed-staff-screens': true,
-        'expense-category-list': on,
-      }}
-    >
-      <AdaptersContext.Provider value={adapters}>
-        <ExpenseList
-          expenses={[maintenance]}
-          outletId={OUTLET_KALYANI_ID}
-          businessDate={today}
-          currentBusinessDate={today}
-          viewer={{ id: mayTouchAnyRow ? 'manager' : 'staff', mayTouchAnyRow }}
-          heading={null}
-          emptyTitle="Nothing spent yet."
-          onChanged={() => {}}
-        />
-      </AdaptersContext.Provider>
-    </ChangeGatesForTest>,
+    <AdaptersContext.Provider value={adapters}>
+      <ExpenseList
+        expenses={[maintenance]}
+        outletId={OUTLET_KALYANI_ID}
+        businessDate={today}
+        currentBusinessDate={today}
+        viewer={{ id: mayTouchAnyRow ? 'manager' : 'staff', mayTouchAnyRow }}
+        heading={null}
+        emptyTitle="Nothing spent yet."
+        onChanged={() => {}}
+      />
+    </AdaptersContext.Provider>,
   )
   return { createExpense, updateExpense }
 }
 
-describeChangeGate('expense-category-list', (on) => {
-  it(
-    on ? 'offers staff the list, without the managers’ choices' : 'types the category',
-    async () => {
-      const user = userEvent.setup()
-      renderList(on, false)
-
-      await user.click(screen.getByTestId('add-ledger-expense'))
-      const sheet = await screen.findByRole('dialog', { name: 'Add expense' })
-
-      if (on) {
-        const tiles = await within(sheet).findAllByRole('radio')
-        expect(tiles.map((tile) => tile.textContent)).toEqual([
-          'Chicken',
-          'Raw Materials',
-          'Gas',
-          'Staff Food',
-          'Transport',
-          'Other',
-        ])
-        expect(tiles.every((tile) => tile.getAttribute('aria-checked') === 'false')).toBe(true)
-        expect(within(sheet).queryByTestId('expense-category')).not.toBeInTheDocument()
-      } else {
-        expect(within(sheet).getByTestId('expense-category')).toBeInTheDocument()
-        expect(within(sheet).queryByRole('radio')).not.toBeInTheDocument()
-      }
-    },
-  )
-
-  it.runIf(on)('refuses Other without what it was for, then records it', async () => {
+describe('the category list', () => {
+  it('offers staff the list, without the managers’ choices', async () => {
     const user = userEvent.setup()
-    const { createExpense } = renderList(on, false)
+    renderList(false)
+
+    await user.click(screen.getByTestId('add-ledger-expense'))
+    const sheet = await screen.findByRole('dialog', { name: 'Add expense' })
+
+    const tiles = await within(sheet).findAllByRole('radio')
+    expect(tiles.map((tile) => tile.textContent)).toEqual([
+      'Chicken',
+      'Raw Materials',
+      'Gas',
+      'Staff Food',
+      'Transport',
+      'Other',
+    ])
+    expect(tiles.every((tile) => tile.getAttribute('aria-checked') === 'false')).toBe(true)
+    expect(within(sheet).queryByTestId('expense-category')).not.toBeInTheDocument()
+  })
+
+  it('refuses Other without what it was for, then records it', async () => {
+    const user = userEvent.setup()
+    const { createExpense } = renderList(false)
 
     await user.click(screen.getByTestId('add-ledger-expense'))
     const sheet = await screen.findByRole('dialog', { name: 'Add expense' })
@@ -120,9 +103,9 @@ describeChangeGate('expense-category-list', (on) => {
     )
   })
 
-  it.runIf(on)('keeps an old entry’s name as a chosen tile on edit', async () => {
+  it('keeps an old entry’s name as a chosen tile on edit', async () => {
     const user = userEvent.setup()
-    const { updateExpense } = renderList(on, true)
+    const { updateExpense } = renderList(true)
 
     await user.click(screen.getByRole('button', { name: 'Actions for Maintenance' }))
     await user.click(await screen.findByTestId('edit-expense-old'))

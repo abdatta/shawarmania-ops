@@ -53,27 +53,6 @@ const WORDS: Record<
     offMeans: 'PB is not in the build code.',
     changeNumber: 75,
   },
-  'auto-approve-at-the-shop': {
-    title: 'Auto-approve at the shop',
-    onMeans:
-      'A check-in measured inside the outlet’s fence is approved at once, and each outlet’s managers choose whether every check-in still needs them and whether check-ins away from the shop are refused.',
-    offMeans: 'Every check-in waits for a manager.',
-    changeNumber: 81,
-  },
-  'refreshed-staff-screens': {
-    title: 'Refreshed staff screens',
-    onMeans:
-      'The staff phone’s Home, My attendance and Expenses, the counter’s and managers’ expense lists, and the manager’s By staff use the new layouts.',
-    offMeans: 'Every screen reads as it does today.',
-    changeNumber: 81,
-  },
-  'expense-category-list': {
-    title: 'Expense category list',
-    onMeans:
-      'An expense’s category is picked from the owners’ list, and Other asks what it was for.',
-    offMeans: 'An expense’s category is typed, with suggestions.',
-    changeNumber: 81,
-  },
   'agreed-part-months': {
     title: 'Agreed part months',
     onMeans:

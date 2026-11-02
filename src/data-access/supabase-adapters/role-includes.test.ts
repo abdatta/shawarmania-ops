@@ -2,13 +2,13 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { expect, it, vi } from 'vitest'
 
 import type { Database } from '@/data-access/database.types'
-import { createSupabaseAttendanceAdapter } from '@/data-access/supabase-adapters/attendance'
 import { createSupabaseExpensesAdapter } from '@/data-access/supabase-adapters/expenses'
 
 /**
  * Each staff check goes to its `_v2`, which asks which roles include which
  * (staff-roles-include-other-roles, design D7), with the arguments the original
- * took.
+ * took. A check-in goes to `attendance_submit_attempt_v3`, which keeps that
+ * rule (attendance-at-the-shop.test.ts).
  */
 function recordingClient() {
   const calls: { fn: string; args: unknown }[] = []
@@ -32,22 +32,6 @@ function recordingClient() {
   } as unknown as SupabaseClient<Database>
   return { client, calls }
 }
-
-it('checks in through attendance_submit_attempt_v2', async () => {
-  const { client, calls } = recordingClient()
-  const adapter = createSupabaseAttendanceAdapter(client)
-  await adapter
-    .checkIn({
-      personId: 'p',
-      outletId: 'o',
-      businessDate: '2026-10-21',
-      reading: null,
-      attemptId: 'a',
-    })
-    .catch(() => undefined)
-  expect(calls[0]?.fn).toBe('attendance_submit_attempt_v2')
-  expect(calls[0]?.args).toMatchObject({ p_attempt_id: 'a', p_outlet_id: 'o' })
-})
 
 it('names expense recorders through expense_people_v2', async () => {
   const { client, calls } = recordingClient()

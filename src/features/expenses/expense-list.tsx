@@ -13,7 +13,6 @@ import { Input } from '@/components/ui/input'
 import { LoadingList } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { Select } from '@/components/ui/select'
-import { useChangeGate } from '@/change-gates/context'
 import { useAdapters } from '@/data-access'
 import {
   DataActionError,
@@ -144,15 +143,9 @@ export function ExpenseList({
 }: ExpenseListProps) {
   const { expenses: adapter, expenseCategories: categoriesAdapter } = useAdapters()
   // Day headings, the You tag and the amount-first form
-  // (a-check-in-at-the-shop-approves-itself, design D9).
-  const refreshed = useChangeGate('refreshed-staff-screens')
-  // The category as a tile from the owners' list, Other asking what it was for
-  // (design D11). It sits in the refreshed form, so it runs only with it.
-  const categoryList = useChangeGate('expense-category-list') && refreshed
-  // A row's own date only where no heading above it already says the day.
-  const rowDates = showDates && !refreshed
+  // (a-check-in-at-the-shop-approves-itself, design D9); the category as a tile
+  // from the owners' list, Other asking what it was for (design D11).
 
-  const [categories, setCategories] = useState<string[]>([])
   /**
    * The owners' list, narrowed to what this reader may pick. Null while it
    * loads; empty when it could not be read, which falls back to the typed
@@ -174,24 +167,14 @@ export function ExpenseList({
   const [expanded, setExpanded] = useState<string | null>(null)
 
   async function loadCategories() {
-    if (categoryList) {
-      try {
-        const list = await categoriesAdapter.choices()
-        setChoices(list.filter((choice) => viewer.mayTouchAnyRow || !choice.managersOnly))
-      } catch {
-        setChoices([])
-      }
-      return
-    }
     try {
-      // The names are all a suggestion needs; `list()` also counts each
-      // category's use, one request per category (the-app-asks-the-server-less, D5).
-      setCategories(await categoriesAdapter.names())
+      const list = await categoriesAdapter.choices()
+      setChoices(list.filter((choice) => viewer.mayTouchAnyRow || !choice.managersOnly))
     } catch {
-      // Suggestions are convenience, never a write prerequisite. In an
+      // The list is convenience, never a write prerequisite. In an
       // offline-resumed counter the operator may still type the category that
       // will travel with the durable expense envelope.
-      setCategories([])
+      setChoices([])
     }
   }
 
@@ -235,7 +218,7 @@ export function ExpenseList({
 
   // Tiles once the list has loaded and holds something; the typed field
   // otherwise, as before the list existed.
-  const tiles = categoryList && choices !== null && choices.length > 0
+  const tiles = choices !== null && choices.length > 0
   const asksNote =
     tiles &&
     (choices?.some(
@@ -376,7 +359,6 @@ export function ExpenseList({
             // A heading where the day changes, on a list spanning days, so the
             // rows below it need not each repeat their date.
             const startsDay =
-              refreshed &&
               showDates &&
               (index === 0 || expenses[index - 1]?.businessDate !== expense.businessDate)
             const withdrawn = expense.voidedAt !== null
@@ -471,7 +453,7 @@ export function ExpenseList({
                               <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-content">
                                 {fixedMarks?.get(expense.id)?.label ?? expense.category}
                                 {/* The rows this reader recorded, which are the ones they can change. */}
-                                {refreshed && expense.recordedBy?.id === viewer.id && (
+                                {expense.recordedBy?.id === viewer.id && (
                                   <span
                                     data-testid={`expense-you-${expense.id}`}
                                     className="inline-flex items-center rounded-lg border border-border px-2 py-0.5 text-xs font-semibold text-content-muted"
@@ -572,15 +554,9 @@ export function ExpenseList({
                                 const mark = fixedMarks?.get(expense.id)
                                 const note = mark ? mark.note : expense.note
                                 return (
-                                  (note || rowDates) && (
+                                  note && (
                                     <span className="mt-0.5 block text-xs text-content-muted">
                                       {note}
-                                      {note && rowDates && ' · '}
-                                      {rowDates && (
-                                        <span data-testid={`ledger-expense-date-${expense.id}`}>
-                                          {formatBusinessDate(expense.businessDate)}
-                                        </span>
-                                      )}
                                     </span>
                                   )
                                 )
@@ -733,17 +709,6 @@ export function ExpenseList({
                                 <dd className="text-right">{expense.note}</dd>
                               </div>
                             )}
-                            {rowDates && (
-                              <div className="flex justify-between gap-3">
-                                <dt>Day</dt>
-                                <dd
-                                  className="text-right"
-                                  data-testid={`ledger-expense-date-${expense.id}`}
-                                >
-                                  {formatBusinessDate(expense.businessDate)}
-                                </dd>
-                              </div>
-                            )}
                           </>
                         )}
                         <div className="flex justify-between gap-3">
@@ -831,7 +796,7 @@ export function ExpenseList({
                 />
               </Field>
             </>
-          ) : refreshed ? (
+          ) : (
             <>
               <Field label="Amount (₹)" id="expense-amount">
                 <Input
@@ -856,7 +821,7 @@ export function ExpenseList({
                     onChange={(category) => setDraft({ ...draft, category })}
                   />
                 </div>
-              ) : categoryList && choices === null ? (
+              ) : choices === null ? (
                 <LoadingList
                   label="categories"
                   rows={2}
@@ -865,16 +830,14 @@ export function ExpenseList({
                   data-testid="expense-category-loading"
                 />
               ) : (
-                /* Typed, with its suggestions, where the owners' list is off:
-                   a 28-day replay of Cafe's entries found tap buttons drawn
-                   from what was typed would have held it one time in eight
-                   [owner, 2026-10-28]. The list replaced that (design D11). */
+                /* Typed, where the owners' list could not be read: an
+                   offline-resumed counter still records what left the drawer. */
                 <Field label="Category" id="expense-category">
                   <CategoryInput
                     id="expense-category"
                     label="Expense category"
                     value={draft.category}
-                    suggestions={categories}
+                    suggestions={[]}
                     testId="expense-category"
                     onChange={(category) => setDraft({ ...draft, category })}
                   />
@@ -919,70 +882,6 @@ export function ExpenseList({
                   onChange={(event) => setDraft({ ...draft, note: event.target.value })}
                 />
               </Field>
-            </>
-          ) : (
-            <>
-              <Field label="Category" id="expense-category">
-                <CategoryInput
-                  id="expense-category"
-                  label="Expense category"
-                  value={draft.category}
-                  suggestions={categories}
-                  testId="expense-category"
-                  onChange={(category) => setDraft({ ...draft, category })}
-                />
-              </Field>
-
-              <Field label="Note (optional)" id="expense-description">
-                <Input
-                  id="expense-description"
-                  value={draft.note}
-                  placeholder="e.g. 10 kg from Nadia Poultry"
-                  data-testid="expense-description"
-                  onChange={(event) => setDraft({ ...draft, note: event.target.value })}
-                />
-              </Field>
-
-              <Field label="Amount (₹)" id="expense-amount">
-                <Input
-                  id="expense-amount"
-                  required
-                  inputMode="decimal"
-                  value={draft.amount}
-                  placeholder="e.g. 2400"
-                  data-testid="expense-amount"
-                  onChange={(event) => setDraft({ ...draft, amount: event.target.value })}
-                />
-              </Field>
-
-              {viewer.mayTouchAnyRow ? (
-                <Field label="Paid with" id="expense-is-cash">
-                  <Select
-                    id="expense-is-cash"
-                    required
-                    value={draft.isCash === null ? '' : draft.isCash ? 'cash' : 'other'}
-                    data-testid="expense-is-cash"
-                    onChange={(event) =>
-                      setDraft({ ...draft, isCash: event.target.value === 'cash' })
-                    }
-                  >
-                    <option value="" disabled>
-                      Choose…
-                    </option>
-                    <option value="cash">Drawer cash</option>
-                    <option value="other">UPI / bank or collected cash</option>
-                  </Select>
-                  <p className="text-xs text-content-muted">
-                    Only cash reaches the day&rsquo;s count. Everything else is still an expense.
-                  </p>
-                </Field>
-              ) : (
-                // No field: what staff record is what left the drawer, and the
-                // database refuses anything else.
-                <p className="text-xs text-content-muted" data-testid="expense-cash-only">
-                  Drawer cash. Anything paid another way is for a manager or the owner to record.
-                </p>
-              )}
             </>
           )}
         </form>

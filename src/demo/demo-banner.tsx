@@ -2,7 +2,6 @@ import { ChevronDown, LogOut, RotateCcw, TriangleAlert, Unplug, Wifi, WifiOff } 
 import { useState, type ComponentType } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router'
 
-import { useChangeGate } from '@/change-gates/context'
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { getPartState, isRenderable } from '@/gates/registry'
 import { STAFF_ROLES_BY_SENIORITY } from '@/data-access/role-includes'
@@ -81,8 +80,6 @@ const CONNECTIVITY_STATES = Object.keys(CONNECTIVITY) as DemoConnectivityState[]
  * shorter.
  */
 export function DemoBanner() {
-  // The place switch serves the new check-in screens; off, the banner is as it was.
-  const refreshedStaffScreens = useChangeGate('refreshed-staff-screens')
   const session = useSession()
   const reset = useDemoReset()
   const connectivity = useDemoConnectivity()
@@ -121,7 +118,7 @@ export function DemoBanner() {
       */}
       <div className="ml-auto flex shrink-0 items-center gap-x-2 sm:gap-x-3">
         {/* Where the phone is, for a check-in (a-check-in-at-the-shop-approves-itself). */}
-        {refreshedStaffScreens && <DemoCheckInPlace />}
+        <DemoCheckInPlace />
 
         {/* Present exactly where a counter is on screen, and absent rather than
             inert everywhere else — see `demo-connectivity.ts` for why that is

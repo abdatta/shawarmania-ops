@@ -19,8 +19,7 @@ import { PlaceChip } from './today-pass'
 /**
  * A month on one screen, drawn as a calendar: the day numbers in a week grid,
  * each day's state in how its number is drawn, and the month's counts above it
- * doubling as the key (a-check-in-at-the-shop-approves-itself, design D8;
- * `refreshed-staff-screens`).
+ * doubling as the key (a-check-in-at-the-shop-approves-itself, design D8).
  *
  * **Never colour alone, without a letter on every day.** Every day is an open
  * ring in its status chip's colour, and the states differ by shape as well:

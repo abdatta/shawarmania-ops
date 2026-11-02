@@ -52,8 +52,7 @@ export function isUnevaluated(event: AttendanceEvent | null): boolean {
  *
  * Mirrors the database: an unapproved check-in is stored `absent`, and an
  * approval is what turns it into `present`. Since #81 the database approves a
- * check-in it measures inside the fence itself (`auto_approved`, while
- * `auto-approve-at-the-shop` is on), so only one away, with no position, or at
+ * check-in it measures inside the fence itself (`auto_approved`), so only one away, with no position, or at
  * an outlet whose managers approve every check-in is left waiting; this reads
  * the stored row either way. Reading the stored
  * status rather than re-judging the fence is what keeps this honest about

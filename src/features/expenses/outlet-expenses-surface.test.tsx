@@ -138,7 +138,7 @@ describe('the outlet expenses surface', () => {
     expect(screen.getByTestId('add-ledger-expense')).toBeInTheDocument()
 
     await userEvent.click(screen.getByTestId('add-ledger-expense'))
-    await userEvent.type(screen.getByRole('combobox', { name: 'Expense category' }), 'Vegetables')
+    await userEvent.click(await screen.findByRole('radio', { name: 'Chicken' }))
     await userEvent.type(screen.getByTestId('expense-amount'), '125')
     await userEvent.selectOptions(screen.getByTestId('expense-is-cash'), 'cash')
     await userEvent.click(screen.getByRole('button', { name: 'Record expense' }))
@@ -164,7 +164,7 @@ describe('the outlet expenses surface', () => {
       expect(method).toHaveValue('')
       expect(within(method).getByRole('option', { name: 'Choose…' })).toBeInTheDocument()
 
-      await userEvent.type(screen.getByRole('combobox', { name: 'Expense category' }), 'Salary')
+      await userEvent.click(await screen.findByRole('radio', { name: 'Wages & bonus' }))
       await userEvent.type(screen.getByTestId('expense-amount'), '15000')
       await userEvent.click(screen.getByRole('button', { name: 'Record expense' }))
       expect(await screen.findByText('Choose how it was paid.')).toBeInTheDocument()
@@ -203,7 +203,7 @@ describe('the outlet expenses surface', () => {
       expect(screen.queryByTestId('expense-is-cash')).not.toBeInTheDocument()
       expect(screen.getByTestId('expense-cash-only')).toHaveTextContent('Drawer cash')
 
-      await userEvent.type(screen.getByRole('combobox', { name: 'Expense category' }), 'Gas')
+      await userEvent.click(await screen.findByRole('radio', { name: 'Gas' }))
       await userEvent.type(screen.getByTestId('expense-amount'), '900')
       await userEvent.click(screen.getByRole('button', { name: 'Record expense' }))
       await waitFor(() => {

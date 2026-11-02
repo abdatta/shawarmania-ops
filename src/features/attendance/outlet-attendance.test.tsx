@@ -1254,7 +1254,7 @@ describe('the outlet attendance person view', () => {
       expect(Number(within(tally).getByTestId('tally-present').textContent)).toBeGreaterThan(0),
     )
     expect(Number(within(tally).getByTestId('tally-absent').textContent)).toBeGreaterThan(0)
-    expect(await screen.findByTestId('attendance-range')).toBeInTheDocument()
+    expect(await screen.findByTestId('attendance-calendar')).toBeInTheDocument()
   })
 
   it('walks to the previous month without leaving the outlet behind', async () => {
@@ -1528,12 +1528,13 @@ describe('the roll-call is the outlet’s staff', () => {
     const adapters = createMockAdapters()
     const businessDate = await todayAt(adapters, OUTLET_KALYANI_ID)
     // A manager's own arrival, recorded before the roll-call narrowed. Written
-    // through the adapter, so it is counted exactly as any other row is.
+    // through the adapter, so it is counted exactly as any other row is. With no
+    // position, so the fence cannot approve it and it waits for a manager.
     await adapters.attendance.checkIn({
       personId: DEMO_MANAGER_ID,
       outletId: OUTLET_KALYANI_ID,
       businessDate,
-      reading: { ...AT_COUNTER, accuracyMetres: AT_COUNTER.accuracy, at: new Date().toISOString() },
+      reading: null,
     })
     const user = userEvent.setup()
     atPosition(AT_COUNTER)
@@ -1827,12 +1828,13 @@ describe('a person who works at two outlets', () => {
       DEMO_TWO_OUTLETS_ACCOUNT_ID,
     )
 
-    const range = await screen.findByTestId('attendance-range')
-    const dates = within(range)
-      .getAllByTestId(/^range-day-/)
-      .map((card) => card.dataset.testid)
-    // One card per date. Assembled per outlet this list would hold each date
+    const calendar = await screen.findByTestId('attendance-calendar')
+    const dates = within(calendar)
+      .getAllByTestId(/^calendar-day-/)
+      .map((day) => day.dataset.testid)
+    // One day per date. Assembled per outlet this month would hold each date
     // twice, half of them absences on days the person was at work.
+    expect(dates.length).toBeGreaterThan(0)
     expect(new Set(dates).size).toBe(dates.length)
   })
 

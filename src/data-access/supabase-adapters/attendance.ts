@@ -1,6 +1,5 @@
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 
-import { onAutoApproveAtTheShop } from '@/change-gates/auto-approve-at-the-shop'
 import { BLOCKED_AWAY_MESSAGE } from '@/features/attendance/at-the-shop'
 import type { PositionReading } from '@/lib/geolocation'
 
@@ -634,19 +633,16 @@ export function createSupabaseAttendanceAdapter(
       attemptId = crypto.randomUUID(),
       expectedVersion = null,
     }) {
-      const { data, error } = await client.rpc(
-        // v3 approves a day at the shop and honours the outlet's rules
-        // (a-check-in-at-the-shop-approves-itself, design D3); off, today's call.
-        onAutoApproveAtTheShop() ? 'attendance_submit_attempt_v3' : 'attendance_submit_attempt_v2',
-        {
-          p_attempt_id: attemptId,
-          p_outlet_id: outletId,
-          p_business_date: businessDate,
-          p_attempted_at: reading?.at ?? new Date().toISOString(),
-          ...attemptPosition(reading),
-          ...(expectedVersion == null ? {} : { p_expected_version: expectedVersion }),
-        },
-      )
+      // v3 approves a day at the shop and honours the outlet's rules
+      // (a-check-in-at-the-shop-approves-itself, design D3).
+      const { data, error } = await client.rpc('attendance_submit_attempt_v3', {
+        p_attempt_id: attemptId,
+        p_outlet_id: outletId,
+        p_business_date: businessDate,
+        p_attempted_at: reading?.at ?? new Date().toISOString(),
+        ...attemptPosition(reading),
+        ...(expectedVersion == null ? {} : { p_expected_version: expectedVersion }),
+      })
       if (error) throw toActionError(error)
       return readOne(data.id)
     },

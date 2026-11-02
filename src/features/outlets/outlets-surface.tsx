@@ -40,7 +40,6 @@ import { Input } from '@/components/ui/input'
 import { LoadingRegion, LoadingTable, Shimmer } from '@/components/ui/loading'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 
-import { useChangeGate } from '@/change-gates/context'
 import { useAdapters, type Tables } from '@/data-access'
 import {
   DataActionError,
@@ -715,9 +714,6 @@ export function OutletPage() {
   // Points and gold, `demo` until #62's database section makes them real.
   const showLoyalty = isRenderable(getPartState('outlet-points'), session.mode)
   const showReviewAsk = isRenderable(getPartState('outlet-review-ask'), session.mode)
-  // The rules do nothing while the gate is off, so they are not offered then
-  // (a-check-in-at-the-shop-approves-itself, design D2).
-  const attendanceRules = useChangeGate('auto-approve-at-the-shop')
   /**
    * Whether this outlet has gold, as its Loyalty section last read or saved it.
    * Where that section is not shown yet, gold is as #57 and #60 left it, so
@@ -822,7 +818,7 @@ export function OutletPage() {
             A closed outlet has no counter to administer: its tablets are moved
             or removed from a trading outlet's page.
           */}
-            {shown.is_active && attendanceRules && (
+            {shown.is_active && (
               <OutletAttendanceSection
                 key={`attendance-${shown.id}`}
                 outlet={shown}

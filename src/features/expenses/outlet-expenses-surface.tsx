@@ -8,7 +8,6 @@ import { Card } from '@/components/ui/card'
 import { LoadingFigures, LoadingList, LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { DayField, PeriodBar } from '@/components/ui/period-bar'
-import { useChangeGate } from '@/change-gates/context'
 import { useAdapters } from '@/data-access'
 import type { ExpenseRecord } from '@/data-access/adapters'
 import { carryPeriod, earliestOffered, resolveBusinessDate, shiftBusinessDate } from '@/domain'
@@ -67,7 +66,6 @@ const FULL_REACH_SHAPE = {
   daysShown: 1,
   showDates: false,
   showTotals: true,
-  subtitle: 'What this outlet spent on this day.',
 } as const
 
 const STAFF_SHAPE = {
@@ -75,7 +73,6 @@ const STAFF_SHAPE = {
   daysShown: DAYS_SHOWN,
   showDates: true,
   showTotals: false,
-  subtitle: 'What this outlet spent today and yesterday.',
 } as const
 
 export function OutletExpensesSurface() {
@@ -87,12 +84,6 @@ export function OutletExpensesSurface() {
   // app_outlets_for('franchise_admin')`: policy and control ask one question.
   const fullReach = holdsRole(session, 'super_admin') || managed
   const shape = fullReach ? FULL_REACH_SHAPE : STAFF_SHAPE
-  // The heading is the explanation (owner UI convention); with the refreshed
-  // screens on there is no sentence beneath it (design D9).
-  const refreshed = useChangeGate('refreshed-staff-screens')
-  // The owners' category list, reached from where expenses are recorded, not
-  // only from the Ledger's month [owner, 2026-10-29] (design D11).
-  const categoryList = useChangeGate('expense-category-list') && refreshed
   const owner = holdsRole(session, 'super_admin')
   // The Fixed chip (fixed-costs-are-spread-over-the-month): read only for the
   // owner and a manager. Staff make no request for it.
@@ -230,11 +221,9 @@ export function OutletExpensesSurface() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <PageHeader
-        scope={outletSelector}
-        title="Expenses"
-        {...(refreshed ? {} : { subtitle: shape.subtitle })}
-      />
+      {/* The heading is the explanation (owner UI convention): no sentence
+          beneath it (a-check-in-at-the-shop-approves-itself, design D9). */}
+      <PageHeader scope={outletSelector} title="Expenses" />
       {showTabs && <ExpenseTabs current="daily" />}
 
       {error && (
@@ -302,8 +291,10 @@ export function OutletExpensesSurface() {
           }
           onChanged={() => load(businessDates)}
           fixedMarks={fullReach ? fixedMarks : undefined}
+          // The owners' category list, reached from where expenses are recorded,
+          // not only from the Ledger's month [owner, 2026-10-29] (design D11).
           action={
-            categoryList && owner ? (
+            owner ? (
               <Link
                 to="../categories"
                 relative="path"

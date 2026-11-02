@@ -86,52 +86,6 @@ export const CHANGE_GATES = {
     roundTrip: 'none: the probe changes nothing but its code in the build stamp',
   },
   /**
-   * #81: a check-in the database measures inside the outlet's own fence is
-   * approved automatically, late or not, and each outlet's managers choose
-   * whether every check-in still needs them and whether check-ins away from the
-   * shop are refused (a-check-in-at-the-shop-approves-itself, design D1–D6).
-   * Off, every check-in waits for a manager and the two settings do nothing.
-   */
-  'auto-approve-at-the-shop': {
-    kind: 'change',
-    code: 'AA',
-    change: 'a-check-in-at-the-shop-approves-itself',
-    retireBy: '2027-02-28',
-    roundTrip:
-      'none: a check-in is never queued, and a day approved while it was on is a present day today’s screens read and a manager can correct',
-  },
-  /**
-   * #81: the staff phone's Home as a pass for today, My attendance and By staff
-   * as a month calendar, and the expense list's day headings, You tag and
-   * amount-first form, on the phone, the counter and the managers' screens
-   * alike (design D7–D9). Built around a day being approved at the shop, so it
-   * runs only under `auto-approve-at-the-shop`. Off, every screen reads as
-   * before.
-   */
-  'refreshed-staff-screens': {
-    kind: 'change',
-    code: 'RS',
-    change: 'a-check-in-at-the-shop-approves-itself',
-    dependsOn: ['auto-approve-at-the-shop'],
-    retireBy: '2027-02-28',
-    roundTrip: 'none: it changes what is drawn, never what is written',
-  },
-  /**
-   * #81: an expense's category picked as a tile from the owners' list, Other
-   * asking what it was for, and the list on Expense categories (design D11).
-   * Its tiles sit in `refreshed-staff-screens`' amount-first form, so it runs
-   * only under that gate. Off, the category is typed with its suggestions.
-   */
-  'expense-category-list': {
-    kind: 'change',
-    code: 'EL',
-    change: 'a-check-in-at-the-shop-approves-itself',
-    dependsOn: ['refreshed-staff-screens'],
-    retireBy: '2027-02-28',
-    roundTrip:
-      'none: an expense picked from the list is an ordinary row with a text category, and the off path never reads the list',
-  },
-  /**
    * #79 follow-up: a fixed cost's part month costs the figure agreed for it,
    * stopping asks for the final payment, a mid-month start asks what that month
    * comes to, and a stopped cost stays in its place for the month it stopped in
@@ -197,6 +151,13 @@ export const CHANGE_GATE_KEYS = Object.keys(CHANGE_GATES) as ChangeGateKey[]
  * not tombstoned: they are unique among live gates only.
  */
 export const RETIRED_CHANGE_GATES: readonly string[] = [
+  // retire-auto-approve-at-the-shop, with the two gates that depended on it: a
+  // check-in inside the fence approves itself under the outlet's rules, the
+  // staff screens are the refreshed ones, and an expense's category is picked
+  // from the owners' list.
+  'auto-approve-at-the-shop',
+  'refreshed-staff-screens',
+  'expense-category-list',
   // retire-pro-rata-pnl: Overview and the Ledger's current month show Pro-rata
   // P&L beside P&L, and a fixed-cost payment carries the Fixed chip.
   'pro-rata-pnl',

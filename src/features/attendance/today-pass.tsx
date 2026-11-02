@@ -37,7 +37,7 @@ import { AbsenceReason, LateTag } from './evidence'
  * Today, as a pass the person carries: the date and the shop, when they are
  * expected, whether they are in and whether it counted, and one action at the
  * bottom of the card where a thumb reaches it
- * (a-check-in-at-the-shop-approves-itself, design D7; `refreshed-staff-screens`).
+ * (a-check-in-at-the-shop-approves-itself, design D7).
  *
  * Presentational. Everything that decides — reading a position, judging the
  * fence, writing — stays in `CheckInCard`, whose state this draws: a
@@ -86,7 +86,6 @@ export type PassAttempt =
     }
   | { kind: 'unlocatable'; failure: GeolocationFailureKind }
   | { kind: 'which-outlet'; failure: GeolocationFailureKind }
-  | { kind: 'confirm' }
   | { kind: 'error'; message: string }
 
 export interface TodayPassProps {
@@ -109,8 +108,6 @@ export interface TodayPassProps {
   blocksAway: (outlet: Tables<'outlets'>) => boolean
   /** This month so far, or null while it is read. */
   month: AttendanceTally | null
-  /** The retry confirmation sheet, which the card owns. */
-  confirmation: ReactNode
   onCheckIn: () => void
   onRecord: (outlet: Tables<'outlets'>, reading: PositionReading | null) => void
   onChoose: (outlet: Tables<'outlets'>) => void
@@ -245,8 +242,6 @@ export function TodayPass(props: TodayPassProps) {
         </section>
       )}
 
-      {props.confirmation}
-
       {/* Where Check in was pressed is where the day appears: the button has
           done its work, and the answer belongs where the thumb still is. */}
       {record && (
@@ -270,8 +265,8 @@ export function TodayPass(props: TodayPassProps) {
           the middle of the card, and the question follows it there. */}
       <Modal
         open={shown !== null}
-        // A dialog fires close when the app shuts it too, as it does on the way
-        // to the confirmation sheet; only a person shutting a decision is Not now.
+        // A dialog fires close when the app shuts it too; only a person shutting
+        // a decision is Not now.
         onClose={() => {
           if (!working && panel) props.onDismiss()
         }}

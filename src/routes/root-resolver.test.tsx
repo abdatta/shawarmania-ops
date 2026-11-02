@@ -140,8 +140,8 @@ describe('the application root', () => {
     const router = mountAt('/')
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/staff'))
-    expect(await screen.findByText('Hello, Synthetic Admin Kal')).toBeVisible()
-    expect(screen.getAllByRole('link', { name: 'My attendance' })).not.toHaveLength(0)
+    // The staff home, whose tab bar reaches the person's own month.
+    expect(await screen.findAllByRole('link', { name: 'My attendance' })).not.toHaveLength(0)
     expect(screen.queryAllByRole('link', { name: 'Counter' })).toHaveLength(0)
     expect(screen.queryByText(/No shift is open/)).toBeNull()
   })

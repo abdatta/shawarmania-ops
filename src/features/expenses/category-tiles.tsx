@@ -5,7 +5,7 @@ import { cn } from '@/lib/cn'
 
 /**
  * An expense's category, picked from the owners' list as tiles
- * (a-check-in-at-the-shop-approves-itself, design D11; `expense-category-list`).
+ * (a-check-in-at-the-shop-approves-itself, design D11).
  * Each is as wide as its name and they flow onto as many lines as they need,
  * each line's tiles stretching to fill it, rather than a two-column grid that
  * leaves short names floating in wide boxes [owner, 2026-10-29].

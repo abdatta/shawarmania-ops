@@ -1,5 +1,4 @@
 import { distanceMetres, resolveBusinessDate, shiftBusinessDate } from '@/domain'
-import { onAutoApproveAtTheShop } from '@/change-gates/auto-approve-at-the-shop'
 import { BLOCKED_AWAY_MESSAGE, shopVerdict } from '@/features/attendance/at-the-shop'
 import type { PositionReading } from '@/lib/geolocation'
 
@@ -121,18 +120,8 @@ export function createMockAttendanceAdapter(
      * writes them (#81). Absent, the fixture rows' own: both off.
      */
     attendanceRules?: ReadonlyMap<string, OutletAttendanceRules>
-    /**
-     * Whether `auto-approve-at-the-shop` is on. The demo answers from its own
-     * switchboard, which the walkthrough turns; absent, the page's frozen
-     * snapshot, as a real adapter reads it.
-     */
-    autoApproving?: () => boolean
   } = {},
 ): AttendanceAdapter {
-  const autoApprovingNow = options.autoApproving ?? onAutoApproveAtTheShop
-  // The seeds take their shape once, from the answer when the demo was built: a
-  // turn later keeps the demo's days, as a turn keeps its orders.
-  const autoApproving = autoApprovingNow()
   /** The outlet's fence and the rules it settles check-ins by, as they stand now. */
   const fenceOf = (outletId: string) => {
     const outlet = outletFor(outletId)
@@ -417,14 +406,7 @@ export function createMockAttendanceAdapter(
     }
   }
 
-  // With the rule on, a seed that waited inside the fence is a state that can no
-  // longer happen, so it takes the shape the seed says it has instead (#81).
-  const records: AttendanceRecord[] = attendanceSeeds
-    .filter((seed) => autoApproving || !seed.onlyWhenAutoApproving)
-    .map((seed) =>
-      autoApproving && seed.whenAutoApproving ? { ...seed, ...seed.whenAutoApproving } : seed,
-    )
-    .map(materialise)
+  const records: AttendanceRecord[] = attendanceSeeds.map(materialise)
 
   let nextId = records.length + 1
 
@@ -692,7 +674,7 @@ export function createMockAttendanceAdapter(
         )
       }
 
-      // The outlet's rules, with the gate on (#81, design D3). With Block on, a
+      // The outlet's rules (#81, design D3). With Block on, a
       // check-in away from the shop is refused before anything is written, so a
       // refused attempt id is never remembered — exactly where
       // `attendance_submit_attempt_v3` refuses it.
@@ -701,9 +683,7 @@ export function createMockAttendanceAdapter(
         .filter((id) => id !== outletId && isStaffAt(staffAccount, id))
         .map(fenceOf)
         .filter((candidate) => candidate.is_active)
-      const verdict = autoApprovingNow()
-        ? shopVerdict(reading, fenceOf(outletId), otherFences)
-        : 'wait'
+      const verdict = shopVerdict(reading, fenceOf(outletId), otherFences)
       if (verdict === 'refuse') {
         throw new AttendanceActionError('blocked_away', BLOCKED_AWAY_MESSAGE)
       }

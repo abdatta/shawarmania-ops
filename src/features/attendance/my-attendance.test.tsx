@@ -83,19 +83,28 @@ async function openEveryDay(user: ReturnType<typeof userEvent.setup>) {
   }
 }
 
+/** The pinned day, and the fixture's days counted back from it. */
+const daysBack = (count: number) =>
+  new Date(Date.UTC(2026, 6, 20 - count)).toISOString().slice(0, 10)
+
+/** Open one day of the calendar, and read what it says. */
+async function openDay(user: ReturnType<typeof userEvent.setup>, count: number) {
+  await user.click(await screen.findByTestId(`calendar-day-${daysBack(count)}`))
+  return screen.findByTestId(`calendar-detail-${daysBack(count)}`)
+}
+
 describe('my attendance', () => {
-  it('lists the employee’s own days, with the counts for the range', async () => {
-    const user = userEvent.setup()
+  it('draws the employee’s own month, with its counts', async () => {
     renderWith('employee', <MyAttendance />, createMockAdapters())
 
     const history = await screen.findByTestId('attendance-history')
-    await openEveryDay(user)
     // The fixture month: approved days, a leave day, a waiting one, a late one,
     // and days with nothing recorded at all.
-    // "Arrived" is the accessible name of the time chip row; the visible part
-    // is the time itself, since the card became chips (design D9).
-    expect(within(history).getAllByText('Arrived').length).toBeGreaterThan(0)
-    expect(within(history).getByText('Leave')).toBeInTheDocument()
+    const calendar = within(history).getByTestId('attendance-calendar')
+    const marks = within(calendar)
+      .getAllByTestId(/^calendar-day-/)
+      .map((day) => day.dataset.mark)
+    expect(marks).toEqual(expect.arrayContaining(['present', 'late', 'leave', 'waiting', 'absent']))
     expect(within(history).getByTestId('attendance-tally')).toBeInTheDocument()
     // Never a check-out, anywhere, ever again.
     expect(within(history).queryByText('Out')).not.toBeInTheDocument()
@@ -105,21 +114,23 @@ describe('my attendance', () => {
     const user = userEvent.setup()
     renderWith('employee', <MyAttendance />, createMockAdapters())
 
-    const history = await screen.findByTestId('attendance-history')
-    await openEveryDay(user)
-    expect(within(history).getAllByText(/Demo Manager, /).length).toBeGreaterThan(0)
     // The off-site approval: the reason it cost, and the fact that the manager
     // was not at the outlet — both readable by the person the day is about.
-    expect(within(history).getAllByText(/Signal drift by the main road/).length).toBeGreaterThan(0)
+    const offSite = await openDay(user, 2)
+    expect(within(offSite).getAllByText(/Demo Manager, /).length).toBeGreaterThan(0)
+    expect(within(offSite).getAllByText(/Signal drift by the main road/).length).toBeGreaterThan(0)
     // The chip names itself to a screen reader ("Approver") and shows the
     // distance to everybody else, so neither reader has to infer it from an icon.
     expect(
-      within(history)
+      within(offSite)
         .getAllByTestId('approver-place')
         .some((node) => /Approver: \d/.test(node.textContent ?? '')),
     ).toBe(true)
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+
+    const onSite = await openDay(user, 8)
     expect(
-      within(history)
+      within(onSite)
         .getAllByTestId('approver-place')
         .some((node) => /Approver: on site/.test(node.textContent ?? '')),
     ).toBe(true)
@@ -128,32 +139,30 @@ describe('my attendance', () => {
   it('shows a day nobody has approved as waiting, and a late one as late', async () => {
     renderWith('employee', <MyAttendance />, createMockAdapters())
 
-    const history = await screen.findByTestId('attendance-history')
-    expect(within(history).getAllByText('Waiting for a manager to approve').length).toBeGreaterThan(
-      0,
+    await screen.findByTestId('attendance-calendar')
+    expect(screen.getByTestId(`calendar-day-${daysBack(5)}`)).toHaveAttribute(
+      'data-mark',
+      'waiting',
     )
-    expect(within(history).getAllByTestId('late-tag').length).toBeGreaterThan(0)
+    expect(screen.getAllByTestId('late-clock').length).toBeGreaterThan(0)
   })
 
   it('derives an absent day for a date with nothing recorded, and says why it is one', async () => {
     const user = userEvent.setup()
     renderWith('employee', <MyAttendance />, createMockAdapters())
 
-    const history = await screen.findByTestId('attendance-history')
-    // No row exists for these dates. Nothing wrote them and nothing will — the
+    // No row exists for this date. Nothing wrote it and nothing will — the
     // reading is derived when the day is read (design D6).
-    const absent = within(history).getAllByTestId('derived-absent')
-    expect(absent.length).toBeGreaterThan(0)
+    await screen.findByTestId('attendance-calendar')
+    expect(screen.getByTestId(`calendar-day-${daysBack(7)}`)).toHaveAttribute('data-mark', 'absent')
 
     // And it accounts for itself when opened, addressed to the person whose pay
     // it affects rather than narrated about them. This is their own history, so
     // the subject of the sentence is the reader.
-    await openEveryDay(user)
-    expect(
-      within(history)
-        .getAllByTestId('absence-reason')
-        .some((node) => /You did not check in by \d\d:\d\d [ap]m\./.test(node.textContent ?? '')),
-    ).toBe(true)
+    const day = await openDay(user, 7)
+    expect(within(day).getByTestId('absence-reason')).toHaveTextContent(
+      /You did not check in by \d\d:\d\d [ap]m\./,
+    )
   })
 
   it('says the same thing about a day as the manager’s view does', async () => {

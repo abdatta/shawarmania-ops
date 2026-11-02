@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
 import { resolveBusinessDate } from '@/domain'
-import { describeChangeGate } from '@/test/change-gates'
 
 import { AttendanceActionError } from '../adapters'
 import { createDemoData, createMockAdapters, OUTLET_KALYANI_ID } from '.'
@@ -11,8 +10,7 @@ import { personaFixtures } from './fixtures/personas'
 /**
  * The demo's copy of the rule `attendance_submit_attempt_v3` enforces live
  * (a-check-in-at-the-shop-approves-itself, design D3–D5): a check-in at the shop
- * approves itself, the outlet's two rules, and today's behaviour with the gate
- * off.
+ * approves itself, and the outlet's two rules.
  */
 
 const EMPLOYEE = personaFixtures.employee.profile.id
@@ -30,8 +28,8 @@ const AT_COUNTER = reading(22.97505, 88.4346, 14)
 /** About 2.6 km away. */
 const FAR_AWAY = reading(22.997, 88.4346, 20)
 
-function demo(on: boolean) {
-  const data = createDemoData({ autoApproving: () => on })
+function demo() {
+  const data = createDemoData()
   return {
     staff: createMockAdapters('employee', data),
     owner: createMockAdapters('super_admin', data),
@@ -39,42 +37,33 @@ function demo(on: boolean) {
   }
 }
 
-describeChangeGate('auto-approve-at-the-shop', (on) => {
-  it(
-    on ? 'approves a check-in at the shop by itself' : 'leaves a check-in at the shop waiting',
-    async () => {
-      const { staff } = demo(on)
+describe('a check-in in the demo', () => {
+  it('approves a check-in at the shop by itself', async () => {
+    const { staff } = demo()
 
-      const day = await staff.attendance.checkIn({
-        personId: EMPLOYEE,
-        outletId: OUTLET_KALYANI_ID,
-        businessDate: today(),
-        reading: AT_COUNTER,
-      })
+    const day = await staff.attendance.checkIn({
+      personId: EMPLOYEE,
+      outletId: OUTLET_KALYANI_ID,
+      businessDate: today(),
+      reading: AT_COUNTER,
+    })
 
-      if (on) {
-        expect(day.status).toBe('present')
-        expect(day.currentAttemptId).toBeNull()
-        expect(day.approval).toBeNull()
-        expect(day.retry).toEqual({ allowed: false, reason: 'prevented' })
-        const decision = day.decisions.at(-1)
-        expect(decision).toMatchObject({
-          kind: 'auto_approved',
-          by: null,
-          byName: null,
-          newStatus: 'present',
-          fenceRadiusMetres: KALYANI.geofence_radius_m,
-        })
-      } else {
-        expect(day.status).toBe('absent')
-        expect(day.currentAttemptId).not.toBeNull()
-        expect(day.decisions).toHaveLength(0)
-      }
-    },
-  )
+    expect(day.status).toBe('present')
+    expect(day.currentAttemptId).toBeNull()
+    expect(day.approval).toBeNull()
+    expect(day.retry).toEqual({ allowed: false, reason: 'prevented' })
+    const decision = day.decisions.at(-1)
+    expect(decision).toMatchObject({
+      kind: 'auto_approved',
+      by: null,
+      byName: null,
+      newStatus: 'present',
+      fenceRadiusMetres: KALYANI.geofence_radius_m,
+    })
+  })
 
   it('leaves a check-in from away waiting, as before', async () => {
-    const { staff } = demo(on)
+    const { staff } = demo()
 
     const day = await staff.attendance.checkIn({
       personId: EMPLOYEE,
@@ -88,59 +77,44 @@ describeChangeGate('auto-approve-at-the-shop', (on) => {
     expect(day.retry.reason).toBe('outside-current')
   })
 
-  it(
-    on
-      ? 'refuses a check-in from away where the outlet blocks them, and writes nothing'
-      : 'records a check-in from away even where the outlet blocks them',
-    async () => {
-      const { staff, manager } = demo(on)
-      await manager.outlets.updateAttendanceRules(OUTLET_KALYANI_ID, {
-        needsManager: false,
-        blocksAway: true,
-      })
+  it('refuses a check-in from away where the outlet blocks them, and writes nothing', async () => {
+    const { staff, manager } = demo()
+    await manager.outlets.updateAttendanceRules(OUTLET_KALYANI_ID, {
+      needsManager: false,
+      blocksAway: true,
+    })
 
-      const attempt = staff.attendance.checkIn({
-        personId: EMPLOYEE,
-        outletId: OUTLET_KALYANI_ID,
-        businessDate: today(),
-        reading: FAR_AWAY,
-      })
+    const attempt = staff.attendance.checkIn({
+      personId: EMPLOYEE,
+      outletId: OUTLET_KALYANI_ID,
+      businessDate: today(),
+      reading: FAR_AWAY,
+    })
 
-      if (on) {
-        await expect(attempt).rejects.toMatchObject({ code: 'blocked_away' })
-        await expect(attempt).rejects.toBeInstanceOf(AttendanceActionError)
-        expect(await staff.attendance.getDay(EMPLOYEE, today())).toBeNull()
-      } else {
-        await expect(attempt).resolves.toMatchObject({ status: 'absent' })
-      }
-    },
-  )
+    await expect(attempt).rejects.toMatchObject({ code: 'blocked_away' })
+    await expect(attempt).rejects.toBeInstanceOf(AttendanceActionError)
+    expect(await staff.attendance.getDay(EMPLOYEE, today())).toBeNull()
+  })
 
-  it(
-    on
-      ? 'refuses a check-in with no position where the outlet blocks them'
-      : 'records a check-in with no position',
-    async () => {
-      const { staff, owner } = demo(on)
-      await owner.outlets.updateAttendanceRules(OUTLET_KALYANI_ID, {
-        needsManager: false,
-        blocksAway: true,
-      })
+  it('refuses a check-in with no position where the outlet blocks them', async () => {
+    const { staff, owner } = demo()
+    await owner.outlets.updateAttendanceRules(OUTLET_KALYANI_ID, {
+      needsManager: false,
+      blocksAway: true,
+    })
 
-      const attempt = staff.attendance.checkIn({
-        personId: EMPLOYEE,
-        outletId: OUTLET_KALYANI_ID,
-        businessDate: today(),
-        reading: null,
-      })
+    const attempt = staff.attendance.checkIn({
+      personId: EMPLOYEE,
+      outletId: OUTLET_KALYANI_ID,
+      businessDate: today(),
+      reading: null,
+    })
 
-      if (on) await expect(attempt).rejects.toMatchObject({ code: 'blocked_away' })
-      else await expect(attempt).resolves.toMatchObject({ status: 'absent' })
-    },
-  )
+    await expect(attempt).rejects.toMatchObject({ code: 'blocked_away' })
+  })
 
   it('leaves a check-in at the shop waiting where the outlet asks a manager for every one', async () => {
-    const { staff, manager } = demo(on)
+    const { staff, manager } = demo()
     await manager.outlets.updateAttendanceRules(OUTLET_KALYANI_ID, {
       needsManager: true,
       blocksAway: false,
@@ -160,7 +134,7 @@ describeChangeGate('auto-approve-at-the-shop', (on) => {
 
 describe('an outlet’s attendance rules in the demo', () => {
   it('are changed by the owner and the outlet’s manager, and refused to staff', async () => {
-    const { staff, owner, manager } = demo(true)
+    const { staff, owner, manager } = demo()
 
     await expect(
       manager.outlets.updateAttendanceRules(OUTLET_KALYANI_ID, {
@@ -183,7 +157,7 @@ describe('an outlet’s attendance rules in the demo', () => {
   })
 
   it('reach every role’s reading of the outlet, a role switch included', async () => {
-    const { staff, manager } = demo(true)
+    const { staff, manager } = demo()
     await manager.outlets.updateAttendanceRules(OUTLET_KALYANI_ID, {
       needsManager: false,
       blocksAway: true,
@@ -192,17 +166,8 @@ describe('an outlet’s attendance rules in the demo', () => {
     expect((await staff.outlets.getOutlet(OUTLET_KALYANI_ID))?.attendance_blocks_away).toBe(true)
   })
 
-  it('leave the seeds as they were when the gate is off', () => {
-    const off = createDemoData({ autoApproving: () => false })
-    const on = createDemoData({ autoApproving: () => true })
-    return Promise.all([
-      off.attendance.listHistory(EMPLOYEE, '2000-01-01', '2100-01-01'),
-      on.attendance.listHistory(EMPLOYEE, '2000-01-01', '2100-01-01'),
-    ]).then(([before, after]) => {
-      expect(before.some((day) => day.decisions.some((d) => d.kind === 'auto_approved'))).toBe(
-        false,
-      )
-      expect(after.some((day) => day.decisions.some((d) => d.kind === 'auto_approved'))).toBe(true)
-    })
+  it('seed days the fence approved', async () => {
+    const days = await createDemoData().attendance.listHistory(EMPLOYEE, '2000-01-01', '2100-01-01')
+    expect(days.some((day) => day.decisions.some((d) => d.kind === 'auto_approved'))).toBe(true)
   })
 })

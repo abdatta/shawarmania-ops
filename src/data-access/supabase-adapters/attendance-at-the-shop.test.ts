@@ -1,22 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { expect, it, vi } from 'vitest'
 
 import { AttendanceActionError, DataActionError } from '@/data-access/adapters'
 import type { Database } from '@/data-access/database.types'
 import { createSupabaseAttendanceAdapter } from '@/data-access/supabase-adapters/attendance'
 import { createSupabaseOutletsAdapter } from '@/data-access/supabase-adapters/outlets'
 import { BLOCKED_AWAY_MESSAGE } from '@/features/attendance/at-the-shop'
-import { describeChangeGate } from '@/test/change-gates'
-
-import { onAutoApproveAtTheShop } from '@/change-gates/auto-approve-at-the-shop'
-import { resetBootSnapshotForTests, writeSavedAnswers } from '@/change-gates/snapshot'
 
 /**
- * The `auto-approve-at-the-shop` toggle point (a-check-in-at-the-shop-approves-
- * itself, design D3): a check-in goes to `attendance_submit_attempt_v3` with
- * the gate on and to today's command with it off, with the same arguments;
- * v3's refusal reads as `blocked_away`; and the outlet's rules are saved
- * through their own command.
+ * A check-in at the shop (a-check-in-at-the-shop-approves-itself, design D3): it
+ * goes to `attendance_submit_attempt_v3`; v3's refusal reads as `blocked_away`;
+ * and the outlet's rules are saved through their own command.
  */
 function recordingClient(answer: { data: unknown; error: unknown }) {
   const calls: { fn: string; args: unknown }[] = []
@@ -42,27 +36,11 @@ function checkIn(client: SupabaseClient<Database>) {
   })
 }
 
-afterEach(() => {
-  localStorage.clear()
-  resetBootSnapshotForTests()
-})
-
-describeChangeGate('auto-approve-at-the-shop', (on) => {
-  beforeEach(() => {
-    writeSavedAnswers(localStorage, { 'auto-approve-at-the-shop': on })
-    resetBootSnapshotForTests()
-  })
-
-  it(`reads the gate as ${on ? 'on' : 'off'}`, () => {
-    expect(onAutoApproveAtTheShop()).toBe(on)
-  })
-
-  it(`checks in through ${on ? 'attendance_submit_attempt_v3' : 'today’s command'}`, async () => {
-    const { client, calls } = recordingClient(STOP)
-    await checkIn(client).catch(() => undefined)
-    expect(calls[0]?.fn).toBe(on ? 'attendance_submit_attempt_v3' : 'attendance_submit_attempt_v2')
-    expect(calls[0]?.args).toMatchObject({ p_attempt_id: 'a', p_outlet_id: 'o' })
-  })
+it('checks in through attendance_submit_attempt_v3', async () => {
+  const { client, calls } = recordingClient(STOP)
+  await checkIn(client).catch(() => undefined)
+  expect(calls[0]?.fn).toBe('attendance_submit_attempt_v3')
+  expect(calls[0]?.args).toMatchObject({ p_attempt_id: 'a', p_outlet_id: 'o' })
 })
 
 it('reads the database’s refusal from away as blocked_away, in the card’s words', async () => {

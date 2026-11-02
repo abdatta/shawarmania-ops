@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 
 import { AdaptersContext } from '@/data-access'
@@ -13,9 +14,11 @@ describe('ExpenseCategoriesSurface', () => {
     const data = createDemoData()
     const adapters = createMockAdapters('super_admin', data)
     render(
-      <AdaptersContext.Provider value={adapters}>
-        <ExpenseCategoriesSurface />
-      </AdaptersContext.Provider>,
+      <MemoryRouter>
+        <AdaptersContext.Provider value={adapters}>
+          <ExpenseCategoriesSurface />
+        </AdaptersContext.Provider>
+      </MemoryRouter>,
     )
 
     const list = await screen.findByTestId('expense-category-list')

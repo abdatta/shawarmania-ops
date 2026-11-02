@@ -146,12 +146,14 @@ describe('the outlet page’s Orders', () => {
     expect(screen.queryByTestId('service-save')).toBeNull()
   })
 
-  it('sits between Details and Tablets', async () => {
+  it('sits after Details and Attendance, before Tablets', async () => {
     renderPage(OUTLET_KALYANI_ID)
 
     await screen.findByTestId('service-orders')
     const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)
-    expect(headings.indexOf('Orders')).toBe(headings.indexOf('Details') + 1)
+    // Attendance first after Details, above Orders [owner, 2026-10-29].
+    expect(headings.indexOf('Attendance')).toBe(headings.indexOf('Details') + 1)
+    expect(headings.indexOf('Orders')).toBe(headings.indexOf('Details') + 2)
     expect(headings).not.toContain('Packaging')
   })
 
