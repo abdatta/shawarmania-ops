@@ -47,6 +47,10 @@ its own, and no migration in the code half.
 - [ ] 2.1 The readiness check (`retire-gate` §2): every registered device on the
   retirement build or later, and three services on it. No person's screen carried
   a toggle point. Record the date and the evidence.
+  - 2 November 11:17 IST, production read-only: both registered devices (Cafe
+    Laptop, Shawarma Kitchen) report `3648a1fc`, which contains `01f82d0a`.
+    Services since Deploy 41164443637: 31 October (69 bills) and 1 November (58);
+    the third is 2 November's. Nothing in production reads the key.
 
 ## 3. The contract migration
 

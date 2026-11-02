@@ -27,7 +27,14 @@
 - [x] 4.2b Pushed to `stage`, Staging green, and the owner tries the round (2026-10-31: tried; Promoted `e93d97d0`; gate on in production 23:59 IST by `change_gate_force` at the owner's word; Jayanta Da un-stopped by the agent at the owner's word and stopped by the owner: October ₹4,000, all paid)
 - [x] 4.2c The owner's production look: the paid ring stays on a stopped row, only greyed (no red cross)
 - [x] 4.2d Undo a stop (owner, 2026-10-31): *✕ Stopped · Undo* on the page, Undo asked first; `unstop_fixed_cost` (migration `20261110000000`), `stopUndo`, pgTAP, unit and browser tests
-- [ ] 4.2e Pushed to `stage`, Staging green, Promoted
-- [ ] 4.3 Promote, then turn `agreed-part-months` on; close Jayanta Da's October with Close (final payment ₹2,000, last day 28 Oct) unless it was closed with Pay first
+- [x] 4.2e Pushed to `stage`, Staging green, Promoted
+  _(Staging run 41232019986 green on `8c089c91`; Promote 41248260662 and Deploy
+  41248326810 on `3a4ff1d8`, which carries it, 31 October 22:28 UTC; migration
+  `20261110000000` is in production's history.)_
+- [x] 4.3 Promote, then turn `agreed-part-months` on; close Jayanta Da's October with Close (final payment ₹2,000, last day 28 Oct) unless it was closed with Pay first
+  _(Gate on 23:59 IST 31 October, its only event. Production, 2 November: Jayanta
+  Da stops 28 October with an October settlement of ₹4,000, paid ₹2,000 on 21 and
+  ₹2,000 on 28 October. Sohail's October settled at ₹2,400 with its payment on
+  1 November.)_
 - [ ] 4.4 Pull once (off and on), real use, then docs (`SCREENS.md`, `DATA_MODEL.md`, `TESTING.md`) and archive after #79
-- [ ] 4.5 PHASE GATE: follow-up to #79; no ROADMAP checkpoint of its own — Staging green and the owner's Promote
+- [x] 4.5 PHASE GATE: follow-up to #79; no ROADMAP checkpoint of its own — Staging green and the owner's Promote

@@ -177,6 +177,10 @@ Do not reopen that without a reason the design did not consider.
   build stamp shows `TK`.
   - Turned on 2026-11-01 07:15 IST with the shop closed; `retireBy` set to
     2026-12-27. The check on the counter laptop itself waits for it to open.
+  - Production, 2 November 11:17 IST: Cafe Laptop and Shawarma Kitchen last
+    reported on `3648a1fc` with `a-tablet-keeps-its-login` among their booted
+    gates, and the Cafe billed 58 bills on 1 November under it. The `/sign-in`
+    check by hand on the laptop is still to do.
 - [x] 9.4 The owner removes the abandoned tablets (Kalyani Counter 2, the second
   Cafe 2) from the Tablets list.
   - Done before release; the Tablets list holds only the counter, renamed

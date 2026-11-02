@@ -10,5 +10,10 @@
   _(31 October: reverted, it lists all six demo rows as dead; restored, both projects pass.
   At the mobile preset in the built-in browser, a tap on Shop rent's paid text did nothing
   before and opens its page after.)_
-- [ ] 2.2 Quick gates pass, pushed to `stage`, Staging green, and the staging build carries the commit
-- [ ] 2.3 After the owner's Promote, a tap on a row's paid line opens it on the owner's phone
+- [x] 2.2 Quick gates pass, pushed to `stage`, Staging green, and the staging build carries the commit
+  _(Staging run 41246284872 green on `3a4ff1d8`; Promote 41248260662 and Deploy
+  41248326810 on `3a4ff1d8`, 31 October 22:28 UTC.)_
+- [x] 2.3 After the owner's Promote, a tap on a row's paid line opens it on the owner's phone
+  _(2 November 11:20 IST, production build `51952434`, in the owner's signed-in
+  browser at desktop width: a tap on Shop Rent's *₹0 of ₹1,00,000 paid* opened its
+  page. The phone itself was not tapped; the mobile preset was proved in 2.1.)_

@@ -330,14 +330,22 @@ except the one widened check of D4, which the owner agreed to on 2026-10-26.
 
 ## 12. Release
 
-- [ ] 12.1 The owner approves a Promote. The build reaches the counters with
-  both gates off.
+- [x] 12.1 The owner approves a Promote. The build reaches the counters with
+  both gates off. *Promote 41014423014 and Deploy 41014535293 on `efb07212`,
+  30 October 06:31 UTC.*
 - [ ] 12.2 `/release auto-approve-at-the-shop` after the 04:00 cutover and before
   the first arrival (design, *Release*). Watch the next morning's check-ins read
   *Approved* and the waiting badge drop to away days. Pull it once, off and on.
+  *Turned on by the owner at 12:04 IST on 30 October, after that day's two
+  check-ins, with no pull. Production, 2 November: no check-in on 31 October or
+  1 November; the first under the gate, 11:14 IST on 2 November from 13 m with
+  ±56 m against a 150 m fence, is `auto_approved` and present. Neither setting has
+  been turned on.*
 - [ ] 12.3 `/release refreshed-staff-screens` at a quiet hour. Watch the counter's
   expense list through the next service and the staff phones' first check-ins.
-  Pull it once.
+  Pull it once. *RS and EL turned on by the owner at 12:04 IST on 30 October,
+  with no pull. Production, 2 November: 31 expense rows since, mostly in
+  categories from the owners' list (Raw Materials, Chicken, Staff Food, Salary).*
 
 ## 13. PHASE GATE
 

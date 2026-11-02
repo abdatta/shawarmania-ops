@@ -55,6 +55,17 @@ own, and no migration in the code half.
   retirement build or later, three services on it, and the owner's and
   managers' phones reloaded (Team is their screen). Record the date and the
   evidence.
+  - 2 November 11:17 IST, production read-only: both registered devices (Cafe
+    Laptop, Shawarma Kitchen) report `3648a1fc`, which contains `01f82d0a`.
+    Services since Deploy 41164443637: 31 October (69 bills) and 1 November (58);
+    the third is 2 November's. The owner's browser runs `51952434`; the managers'
+    phones are unconfirmed. Readers of the key in production: ten policies,
+    `assignments_insert_includes`, `assignments_update_includes`,
+    `expense_categories_insert_includes`, `expenses_insert_includes`,
+    `expenses_select_includes`, `expenses_update_includes`,
+    `menu_categories_select_includes`, `menu_discounts_select_includes`,
+    `menu_items_select_includes`, `profiles_select_includes`; no function,
+    trigger or view names it.
 
 ## 3. The contract migration
 

@@ -55,6 +55,11 @@ its own, and no migration in the code half.
   carried a toggle point the owner's phone runs, except the shared counts and the
   aggregator sync page: the owner and managers reload the app before the
   contract Promote.
+  - 2 November 11:17 IST, production read-only: both registered devices (Cafe
+    Laptop, Shawarma Kitchen) report `3648a1fc`, which contains `0488b74c`.
+    Services since Deploy 41154842156: 31 October (69 bills) and 1 November (58);
+    the third is 2 November's. The owner's browser runs `51952434`. Nothing in
+    production reads the key (functions, policies, triggers, views).
 
 ## 3. The contract migration
 
