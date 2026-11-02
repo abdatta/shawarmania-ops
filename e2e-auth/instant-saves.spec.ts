@@ -106,7 +106,10 @@ test('an order, its edit, its payment and its take-back are on screen before a s
     await expect(card).toContainText(CLASSIC, AT_ONCE)
 
     // The order's command is on its way and the server has not answered it.
-    await expect.poll(() => held.get('create_billing_order_v2') ?? 0).toBeGreaterThan(0)
+    // With `delivery-orders` on, every order is created through `_v3`.
+    const createHeld = () =>
+      (held.get('create_billing_order_v2') ?? 0) + (held.get('create_billing_order_v3') ?? 0)
+    await expect.poll(createHeld).toBeGreaterThan(0)
 
     // Save changes, before the server has numbered it: the new dish at once.
     await card.getByRole('button', { name: /^More actions for / }).click()
@@ -149,7 +152,7 @@ test('an order, its edit, its payment and its take-back are on screen before a s
     await expect(bills.locator('details')).toHaveCount(billsBefore, AT_ONCE)
 
     // All of that while the server had still not answered the order's command.
-    expect(held.get('create_billing_order_v2')).toBeGreaterThan(0)
+    expect(createHeld()).toBeGreaterThan(0)
 
     // The server, once it answers, numbers the order where it already stands.
     await restore()

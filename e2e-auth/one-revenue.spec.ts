@@ -2,10 +2,15 @@ import { expect, test } from './test'
 
 /**
  * One Revenue over the real transport (revenue-reads-the-same-everywhere):
- * Analytics reads `sales_analytics_v2` and its series v2, Month asks for
+ * Analytics reads `sales_analytics_v2` and its series v2 (`_v3` with
+ * `delivery-orders` on, which takes the same arguments and a scope), Month asks for
  * month-aligned windows cut at the server's now, Overview reads its month and
  * today without sending a date, and a failed read stays retryable.
  */
+/** The analytics read and its series, whichever version the gates ask for. */
+const ANALYTICS = /\/rest\/v1\/rpc\/sales_analytics_v[23]$/
+const SERIES = /\/rest\/v1\/rpc\/sales_analytics_series_v[23]$/
+
 async function signIn(page: import('@playwright/test').Page, username: string) {
   await page.goto('sign-in')
   await page.getByLabel('Username or email', { exact: true }).fill(username)
@@ -22,10 +27,9 @@ test('Analytics reads the v2 functions, and Month asks for aligned, cut windows'
   await signIn(page, 'owner')
 
   const items = page.waitForResponse(
-    (r) =>
-      r.url().endsWith('/rpc/sales_analytics_v2') && r.request().postDataJSON()?.p_view === 'items',
+    (r) => ANALYTICS.test(r.url()) && r.request().postDataJSON()?.p_view === 'items',
   )
-  const series = page.waitForResponse((r) => r.url().endsWith('/rpc/sales_analytics_series_v2'))
+  const series = page.waitForResponse((r) => SERIES.test(r.url()))
   await page.goto('owner/analytics/items?from=2020-01-01&to=2020-01-07')
   expect((await items).status()).toBe(200)
   const chart = await (await series).json()
@@ -34,8 +38,7 @@ test('Analytics reads the v2 functions, and Month asks for aligned, cut windows'
   await expect(page.getByTestId('items-trend-compared')).toContainText('vs 0')
 
   const sales = page.waitForResponse(
-    (r) =>
-      r.url().endsWith('/rpc/sales_analytics_v2') && r.request().postDataJSON()?.p_view === 'sales',
+    (r) => ANALYTICS.test(r.url()) && r.request().postDataJSON()?.p_view === 'sales',
   )
   await page.goto('owner/analytics/sales?from=2020-01-01&to=2020-01-07')
   const salesRead = await sales
@@ -49,9 +52,7 @@ test('Analytics reads the v2 functions, and Month asks for aligned, cut windows'
   // Waits for the Month read itself: a re-read of the earlier range can land
   // first on a slow runner.
   const month = page.waitForResponse(
-    (r) =>
-      r.url().endsWith('/rpc/sales_analytics_v2') &&
-      r.request().postDataJSON()?.p_align === 'month',
+    (r) => ANALYTICS.test(r.url()) && r.request().postDataJSON()?.p_align === 'month',
   )
   await page.getByRole('button', { name: 'This month' }).click()
   const monthRead = await month
@@ -86,7 +87,7 @@ test('Overview reads its month and today from the server, with no date sent', as
 
 test('a failed v2 read remains retryable', async ({ page }) => {
   await signIn(page, 'admin.kalyani')
-  await page.route('**/rest/v1/rpc/sales_analytics_v2', (route) =>
+  await page.route(ANALYTICS, (route) =>
     route.fulfill({
       status: 503,
       contentType: 'application/json',
@@ -95,7 +96,7 @@ test('a failed v2 read remains retryable', async ({ page }) => {
   )
   await page.goto('admin/analytics/sales')
   await expect(page.getByRole('alert')).toHaveText('Could not load analytics. Please try again.')
-  await page.unroute('**/rest/v1/rpc/sales_analytics_v2')
+  await page.unroute(ANALYTICS)
   await page.getByRole('button', { name: 'Retry' }).click()
   await expect(page.getByTestId('sales-trend-card')).toBeVisible()
 })

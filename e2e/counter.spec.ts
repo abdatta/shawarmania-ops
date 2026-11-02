@@ -132,7 +132,7 @@ test('the counter lands on the enrolled tablet itself, with a shift already open
   // The demo mounts the same shell /counter mounts, at the tablet's one address.
   await expect(page).toHaveURL(/\/demo\/biller$/)
   await expect(page.getByRole('heading', { name: 'Counter tablet' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Hand over' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Hand over', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Finish day' })).toBeVisible()
   await expect(page.getByTestId('sync-indicator')).toHaveAttribute('data-sync', 'pending')
   await expect(page.getByTestId('sync-indicator')).toContainText('1 pending')
@@ -720,7 +720,7 @@ test.describe('the counter offline', () => {
     await expect(page.getByTestId('menu-as-of')).toBeVisible()
     await expect(page.getByTestId('pipeline-as-of')).toBeVisible()
     await expect(page.getByTestId('bills-as-of')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Hand over' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Hand over', exact: true })).toBeDisabled()
 
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
     await recordPaid(page)

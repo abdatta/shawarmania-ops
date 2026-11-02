@@ -496,23 +496,26 @@ export function PipelineCard({
             heavy total inks right to its edge, so an equal gap reads tighter
             than the one between two outlined controls [owner, 2026-10-05]. */}
         <div className="flex shrink-0 self-center items-center gap-2.5">
-          <span className={cn('flex items-baseline gap-1.5', delivery && 'hidden')}>
-            {discounted && (
-              <Money
-                paise={grossPaise}
-                data-testid={`order-gross-${order.id}`}
-                className="text-xs text-content-muted line-through"
-              />
-            )}
-            <Money
-              paise={totalPaise}
-              display
-              className={cn(
-                'font-black text-content',
-                dishTicks && 'text-[1.875rem] leading-[2.125rem]',
+          {/* A delivery order carries no money, not even out of sight. */}
+          {!delivery && (
+            <span className="flex items-baseline gap-1.5">
+              {discounted && (
+                <Money
+                  paise={grossPaise}
+                  data-testid={`order-gross-${order.id}`}
+                  className="text-xs text-content-muted line-through"
+                />
               )}
-            />
-          </span>
+              <Money
+                paise={totalPaise}
+                display
+                className={cn(
+                  'font-black text-content',
+                  dishTicks && 'text-[1.875rem] leading-[2.125rem]',
+                )}
+              />
+            </span>
+          )}
           {!dishTicks && !delivery && (hasCustomer || canSetCustomer) && (
             <Button
               variant="secondary"
@@ -685,6 +688,7 @@ export function PipelineCard({
               // Handed over, it stays a moment ticked, and unticking it undoes
               // it; the word never changes, as Paid's does not.
               label="Hand over"
+              name={`Hand over ${reference}`}
               // The card's own accent, which `delivery-theme` turns blue.
               tone="primary"
               checked={handedOver}

@@ -95,12 +95,18 @@ export function StateToggle({
   onActivate,
   testId,
   filling = false,
+  name,
 }: {
   /**
    * Ticked, and filling over its undo's five seconds: a delivery order's Hand
    * over (delivery-orders-are-made-not-billed). Absent, the toggle as ever.
    */
   filling?: boolean
+  /**
+   * The button's accessible name where the word alone is not enough to tell
+   * one card's from another's; the word on screen is unchanged.
+   */
+  name?: string
   label: string
   tone: StateToggleTone
   checked: boolean
@@ -138,6 +144,7 @@ export function StateToggle({
     <button
       type="button"
       {...(testId ? { 'data-testid': testId } : {})}
+      {...(name ? { 'aria-label': name } : {})}
       aria-pressed={checked}
       data-state={checked ? 'recorded' : 'unrecorded'}
       disabled={disabled}

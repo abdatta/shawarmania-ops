@@ -291,7 +291,7 @@ test('the real tablet survives network loss and settles each local acceptance ex
   await expect(page.getByTestId('bills-as-of')).toBeVisible({ timeout: OFFLINE_READ_MS })
   // And it goes with the column it explained, rather than standing as a notice.
   await expect(page.getByTestId('offline-fill-hint')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Hand over' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Hand over', exact: true })).toBeDisabled()
   // Nothing was lost across the restart: both commands are still unsent, and
   // the counter says so as `stalled` rather than `pending` — a resumed tablet
   // deliberately does not drain until it has re-resolved itself online.
