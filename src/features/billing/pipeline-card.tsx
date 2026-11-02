@@ -87,7 +87,6 @@ export function PipelineCard({
   onCancelAfterPaid,
   onHandOver,
   onUndoHandOver,
-  fadedOut = false,
 }: {
   order: BillingOrder
   dishTicks?: boolean
@@ -150,8 +149,6 @@ export function PipelineCard({
   onHandOver?: (order: BillingOrder) => void
   /** Undo a handover while the card still shows it, for a few seconds. */
   onUndoHandOver?: (order: BillingOrder) => void
-  /** Already faded out by its own exit: the rail need not fade it again. */
-  fadedOut?: boolean
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [unpaying, setUnpaying] = useState(false)
@@ -341,7 +338,6 @@ export function PipelineCard({
   return (
     <article
       data-flip-id={order.id}
-      data-faded-out={fadedOut || undefined}
       data-testid={
         isAwaitingOrderNumber(order.orderNumber)
           ? `open-order-local-${order.id}`

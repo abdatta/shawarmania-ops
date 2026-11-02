@@ -241,8 +241,11 @@ Third demo round (2026-11-01):
 - **A handover stays on the rail for five seconds**, ticked, its word
   unchanged; unticking it is the take-back, recorded with the reason `Undone on
   the rail`. The ticked box starts in the card's blue and a deeper blue
-  (`--delivery-filled`) fills it from the left over the five seconds; full, the card fades as a kitchen ticket leaves and the others
-  close up after it. The owner chose this from five countdowns tried on a page
+  (`--delivery-filled`) fills it from the left over the five seconds; full, the card leaves as a paid card does,
+  fading while the others move into its place. (It first faded as a kitchen
+  ticket leaves, with the others closing up after a beat; on 2026-11-02 the
+  owner preferred the paid exit after seeing the two side by side.) The owner
+  chose the countdown from five tried on a page
   of their own. The card is held before the write, and its ⋮ stays in place,
   disabled, since Edit and Cancel order need an open order, so nothing on the
   card moves when it is tapped.

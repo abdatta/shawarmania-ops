@@ -258,14 +258,7 @@ export function useFlip(
       const destination = current.get(id)
       if (!destination) {
         if (from.container) activeContainers.add(from.container)
-        // A card that faded out by its own exit (a handover leaving the rail)
-        // is not drawn again to fade a second time; its siblings still glide.
-        if (
-          fadeDepartures &&
-          from.container &&
-          !from.clone.hasAttribute('data-faded-out') &&
-          typeof from.clone.animate === 'function'
-        ) {
+        if (fadeDepartures && from.container && typeof from.clone.animate === 'function') {
           stop(id)
           const parent = from.container
           const bounds = parent.getBoundingClientRect()

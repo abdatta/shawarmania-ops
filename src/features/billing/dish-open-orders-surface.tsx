@@ -25,7 +25,6 @@ import { RailScrollChip, useRailClipping } from './rail-scroll-chip'
 import { useCounterState } from './use-counter-state'
 import { useKitchenMarks } from './kitchen-marks-state'
 import { useMasonryRail } from './use-masonry-rail'
-import { KITCHEN_READY_EXIT_MS, KITCHEN_READY_GAP_MS } from '@/features/kitchen/use-kitchen-ready'
 import { useReadyRinger } from './use-ready-ringer'
 
 /**
@@ -75,8 +74,6 @@ function methodLabelOf(bill: BillingBill): string | null {
 
 /** How long a handed-over delivery order stays on the rail to be undone. */
 const HANDOVER_UNDO_MS = 5_000
-/** Its fade, then a beat before the cards around it move into its place: the kitchen's own. */
-const HANDOVER_EXIT_MS = KITCHEN_READY_EXIT_MS + KITCHEN_READY_GAP_MS
 /** The take-back's reason when the handover is undone on the rail itself. */
 const HANDOVER_UNDO_REASON = 'Undone on the rail'
 
@@ -125,9 +122,7 @@ export function DishOpenOrdersSurface({
     mistaken tap is undone where it was made, not by finding the order in My
     shift (delivery-orders-are-made-not-billed; owner, 2026-11-01).
   */
-  const [lingering, setLingering] = useState<
-    ReadonlyMap<string, { order: BillingOrder; leaving: boolean }>
-  >(new Map())
+  const [lingering, setLingering] = useState<ReadonlyMap<string, BillingOrder>>(new Map())
   const lingerTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   useEffect(() => {
     const timers = lingerTimers.current
@@ -142,22 +137,17 @@ export function DishOpenOrdersSurface({
       return next
     })
   }
-  /** Held, counting down; then fading; then gone, and only then do the others move up. */
+  /*
+    Held, counting down; then gone, leaving as a paid card does: it fades while
+    the cards around it move into its place (owner, 2026-11-02, preferring it
+    to the kitchen's fade-then-close-up after seeing the two side by side).
+  */
   const linger = (order: BillingOrder) => {
     clearTimeout(lingerTimers.current.get(order.id))
-    setLingering((held) => new Map(held).set(order.id, { order, leaving: false }))
+    setLingering((held) => new Map(held).set(order.id, order))
     lingerTimers.current.set(
       order.id,
-      setTimeout(() => {
-        setLingering((held) => {
-          const entry = held.get(order.id)
-          return entry ? new Map(held).set(order.id, { ...entry, leaving: true }) : held
-        })
-        lingerTimers.current.set(
-          order.id,
-          setTimeout(() => stopLingering(order.id), HANDOVER_EXIT_MS),
-        )
-      }, HANDOVER_UNDO_MS),
+      setTimeout(() => stopLingering(order.id), HANDOVER_UNDO_MS),
     )
   }
   const [tenders, setTenders] = useState<Map<string, string>>(new Map())
@@ -389,7 +379,7 @@ export function DishOpenOrdersSurface({
   const shared = sharedTables(orders ?? [])
   const listed = [
     ...(orders ?? []).filter((order) => !lingering.has(order.id)),
-    ...[...lingering.values()].map((entry) => entry.order),
+    ...lingering.values(),
   ]
     .filter((order) => order.status !== 'cancelled')
     /*
@@ -412,17 +402,11 @@ export function DishOpenOrdersSurface({
   /*
     The rail's layout and its glide follow what is listed, not only what was
     read: a handed-over card leaves from the hold, not from a read, and the
-    cards behind it should close up as the kitchen's do (owner, 2026-11-01).
+    cards behind it close up as they do for a paid card.
   */
   const listedKey = listed.map((order) => order.id).join(',')
   useMasonryRail(scrollerRef, true, orders, listedKey)
-  // Its fade starting is a moment to measure too: the rail's picture of the
-  // card must already say it faded, or the card is drawn again to fade twice.
-  const leavingKey = [...lingering]
-    .filter(([, entry]) => entry.leaving)
-    .map(([id]) => id)
-    .join(',')
-  useFlip(flipRootRef, [orders, listedKey, leavingKey], true)
+  useFlip(flipRootRef, [orders, listedKey], true)
   const clipping = useRailClipping(scrollerRef, [listed.length, orders])
   const scrollRailTo = (edge: 'top' | 'bottom') => {
     const scroller = scrollerRef.current
@@ -519,13 +503,7 @@ export function DishOpenOrdersSurface({
             {listed.map((order) => (
               <li
                 key={order.id}
-                className={
-                  order.id === editingOrderId
-                    ? 'invisible'
-                    : lingering.get(order.id)?.leaving
-                      ? 'kitchen-ready-exit'
-                      : undefined
-                }
+                className={order.id === editingOrderId ? 'invisible' : undefined}
                 // The scroll chip names a Ready order out of sight (D9).
                 data-ready-order={
                   order.lines.some(
@@ -552,7 +530,6 @@ export function DishOpenOrdersSurface({
               >
                 <PipelineCard
                   order={order}
-                  fadedOut={lingering.get(order.id)?.leaving ?? false}
                   dishTicks
                   bellsRinging={swinging.has(order.id)}
                   readyQuantities={marks?.readyQuantities?.[order.id] ?? {}}
@@ -606,7 +583,6 @@ export function DishOpenOrdersSurface({
                           })
                         },
                         onUndoHandOver: (target: BillingOrder) => {
-                          if (lingering.get(target.id)?.leaving) return
                           void act(() =>
                             billing.takeBackHandover(target.id, HANDOVER_UNDO_REASON),
                           ).then((result) => {
