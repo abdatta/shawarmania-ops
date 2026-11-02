@@ -21,12 +21,17 @@ const REMEMBERED = 200
  * Cards carry `data-masonry-key` (unique) and `data-masonry-group` (their
  * order). A card's first placement does not slide; later ones do, unless the
  * tablet asks for reduced motion.
+ *
+ * A card marked `data-masonry-leaving` (delivery-orders-are-made-not-billed)
+ * is fading out: it keeps the place it last had, above the others, and the
+ * cards below close up under it at once, as on the counter's rail.
  */
 export function useKitchenMasonry(ref: RefObject<HTMLDivElement | null>, revision: string) {
   const memory = useRef({
     columns: 0,
     column: new Map<string, number>(),
     group: new Map<string, string>(),
+    place: new Map<string, { left: string; top: string }>(),
   })
 
   useLayoutEffect(() => {
@@ -49,6 +54,7 @@ export function useKitchenMasonry(ref: RefObject<HTMLDivElement | null>, revisio
         known.columns = columns
         known.column.clear()
         known.group.clear()
+        known.place.clear()
       }
       const present = new Set(items.map((item, index) => item.dataset.masonryKey ?? `#${index}`))
       // A column left by a card of the same order, free for its successor.
@@ -61,6 +67,18 @@ export function useKitchenMasonry(ref: RefObject<HTMLDivElement | null>, revisio
       const bottoms = Array<number>(columns).fill(0)
       for (const [index, item] of items.entries()) {
         const key = item.dataset.masonryKey ?? `#${index}`
+        if (item.dataset.masonryLeaving === 'true') {
+          const last = known.place.get(key)
+          Object.assign(item.style, {
+            position: 'absolute',
+            width: `${width}px`,
+            ...(last ?? {}),
+            transition: '',
+            zIndex: '1',
+          })
+          continue
+        }
+        if (item.style.zIndex) item.style.zIndex = ''
         const group = item.dataset.masonryGroup ?? key
         let column = known.column.get(key)
         if (column === undefined) {
@@ -88,6 +106,13 @@ export function useKitchenMasonry(ref: RefObject<HTMLDivElement | null>, revisio
               : '',
         })
         item.dataset.masonryPlaced = 'true'
+        known.place.delete(key)
+        known.place.set(key, { left: item.style.left, top: item.style.top })
+        while (known.place.size > REMEMBERED) {
+          const oldest = known.place.keys().next().value!
+          if (present.has(oldest)) break
+          known.place.delete(oldest)
+        }
         bottoms[column] = bottoms[column]! + item.offsetHeight + gap
       }
       root.style.height = `${Math.max(0, ...bottoms) - (items.length ? gap : 0)}px`

@@ -4,6 +4,12 @@ import type { KitchenCardView } from './use-dish-kitchen-board'
 
 export const KITCHEN_READY_EXIT_MS = 320
 export const KITCHEN_READY_GAP_MS = 180
+/**
+  With `delivery-orders` on, a departing receipt fades while the cards below
+  close up, as a card leaves the counter's rail: the counter's departure fade,
+  and no gap (delivery-orders-are-made-not-billed; owner, 2026-11-02).
+*/
+export const KITCHEN_FADE_EXIT_MS = 280
 export type ReadyPhase = 'saving' | 'leaving' | 'gap'
 interface PendingReady {
   id: string
@@ -45,6 +51,7 @@ export function useKitchenReady(
   kitchen: KitchenAdapter,
   read: () => Promise<void>,
   cards: readonly KitchenCardView[],
+  fadeWhileClosing = false,
 ) {
   const [pending, setPending] = useState(new Map<string, PendingReady>())
   const [error, setError] = useState<string | null>(null)
@@ -99,6 +106,18 @@ export function useKitchenReady(
         slotOrder: before.map((slot) => slot.order.id),
       }
       next.set(id, held)
+      if (fadeWhileClosing) {
+        const fade = setTimeout(() => {
+          timers.current.delete(fade)
+          if (
+            current.current.get(id)?.id === held.id &&
+            current.current.get(id)?.phase === 'leaving'
+          )
+            remove(id)
+        }, KITCHEN_FADE_EXIT_MS)
+        timers.current.add(fade)
+        continue
+      }
       const exit = setTimeout(() => {
         timers.current.delete(exit)
         if (current.current.get(id)?.id !== held.id || current.current.get(id)?.phase !== 'leaving')

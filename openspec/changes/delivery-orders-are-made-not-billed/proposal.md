@@ -137,6 +137,15 @@ Queued work is never stranded: a delivery order, handover or take-back queued
 while on drains with the gate off, because the server accepts it whatever the
 gate says (round trip `tested`, design D9).
 
+**A follow-up rides on the same gate: the kitchen's finished receipt.** With
+the gate on, a Done receipt whose food the counter has ticked fades where it
+stood while the cards below close up at once, as a card leaves the counter's
+rail; off, it fades, shrinks, holds a blank slot and then the board closes up,
+as today. It reaches every kitchen at an outlet whose gate is on, Delivery
+offered or not (owner, 2026-11-02). The gate's sentences on the Change gates
+page were published with the migration and cannot be reworded by another, so
+they do not mention it: the release note does.
+
 ## Non-goals
 
 - **Which platform.** No Zomato/Swiggy picker; the label carries it. It can be

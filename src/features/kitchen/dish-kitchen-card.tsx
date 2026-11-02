@@ -171,6 +171,8 @@ export function DishKitchenCard({
   const tag = serviceTag(order)
   // `delivery-orders`: the tag carries its icon, and a folded ticket keeps it.
   const iconsShown = useChangeGate('delivery-orders')
+  // `delivery-orders`: a departing receipt fades while the board closes up under it.
+  const fadeWhileClosing = useChangeGate('delivery-orders')
   const kind = iconsShown ? serviceKind(order) : null
   const ringing = rings.left > 0 || rings.sounding
   const dotsLit = Math.min(RINGS_PER_ALERT, rings.left + (rings.sounding ? 1 : 0))
@@ -186,13 +188,15 @@ export function DishKitchenCard({
       className={cn(
         'relative drop-shadow-md',
         !readyPhase && alerting && shake > 0 && 'kitchen-shake',
-        readyPhase === 'leaving' && 'kitchen-ready-exit',
+        readyPhase === 'leaving' &&
+          (fadeWhileClosing ? 'kitchen-leave-fade' : 'kitchen-ready-exit'),
         readyPhase === 'gap' && 'invisible pointer-events-none',
       )}
       aria-hidden={readyPhase === 'gap' || undefined}
       // The board keeps each card in its column; a Done receipt and the ticket
       // it reopens into belong to one order, and one takes the other's place.
       data-masonry-key={order.id}
+      data-masonry-leaving={(fadeWhileClosing && readyPhase === 'leaving') || undefined}
       data-masonry-group={order.sourceOrderId ?? order.id}
     >
       <article

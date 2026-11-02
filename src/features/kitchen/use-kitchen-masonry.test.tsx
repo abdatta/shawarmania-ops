@@ -8,12 +8,16 @@ interface Card {
   key: string
   group?: string
   height: number
+  leaving?: boolean
 }
 
 /** jsdom lays nothing out, so each card says its own height and the board its width. */
 function Board({ cards }: { cards: Card[] }) {
   const grid = useRef<HTMLDivElement>(null)
-  useKitchenMasonry(grid, cards.map((card) => `${card.key}:${card.height}`).join(','))
+  useKitchenMasonry(
+    grid,
+    cards.map((card) => `${card.key}:${card.height}:${card.leaving ? 'leaving' : ''}`).join(','),
+  )
   return (
     <div
       ref={(node) => {
@@ -28,6 +32,7 @@ function Board({ cards }: { cards: Card[] }) {
           key={card.key}
           data-masonry-key={card.key}
           data-masonry-group={card.group ?? card.key}
+          data-masonry-leaving={card.leaving || undefined}
           ref={(node) => {
             if (node)
               Object.defineProperty(node, 'offsetHeight', {
@@ -116,4 +121,36 @@ it('slides a card already placed, but not one placing for the first time', () =>
   )
   expect((grid.children[0] as HTMLElement).style.transition).toContain('top')
   expect((grid.children[1] as HTMLElement).style.transition).toBe('')
+})
+
+it('keeps a leaving card where it was, above the others, while the cards below close up', () => {
+  const cards = [
+    { key: 'a', height: 100 },
+    { key: 'b', height: 300 },
+    { key: 'receipt', height: 80 },
+    { key: 'c', height: 100 },
+  ]
+  const view = render(<Board cards={cards} />)
+  const grid = view.getByTestId('grid')
+  const item = (key: string) =>
+    [...grid.children].find((el) => (el as HTMLElement).dataset.masonryKey === key) as HTMLElement
+  expect(columnOf(grid)).toEqual({ a: 0, b: 1, receipt: 0, c: 0 })
+  expect(item('receipt').style.top).toBe('116px')
+  expect(item('c').style.top).toBe('212px')
+
+  // Handed over: the board drops the receipt, then holds it again as leaving,
+  // a new element with nothing placed on it yet.
+  view.rerender(<Board cards={cards.filter((card) => card.key !== 'receipt')} />)
+  view.rerender(
+    <Board
+      cards={cards.map((card) => (card.key === 'receipt' ? { ...card, leaving: true } : card))}
+    />,
+  )
+  expect(item('receipt').style.top).toBe('116px')
+  expect(item('receipt').style.left).toBe('0px')
+  expect(item('receipt').style.zIndex).toBe('1')
+  expect(item('receipt').style.transition).toBe('')
+  // C closes up beneath it at once, sliding.
+  expect(item('c').style.top).toBe('116px')
+  expect(item('c').style.transition).toContain('top')
 })

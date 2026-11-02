@@ -393,6 +393,21 @@
 .kitchen-ready-exit {
   animation: kitchen-ready-exit 320ms ease-out both;
 }
+/*
+ * With `delivery-orders` on, a departing receipt fades as a card leaves the
+ * counter's rail, while the board closes up under it (owner, 2026-11-02).
+ */
+@keyframes kitchen-leave-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.kitchen-leave-fade {
+  animation: kitchen-leave-fade 280ms ease-out both;
+}
 @media (prefers-reduced-motion: reduce) {
   .kitchen-ready-exit {
     animation-name: dish-ready-fade-out;

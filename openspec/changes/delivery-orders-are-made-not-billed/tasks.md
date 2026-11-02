@@ -249,6 +249,12 @@ Third demo round (2026-11-01):
   of their own. The card is held before the write, and its ⋮ stays in place,
   disabled, since Edit and Cancel order need an open order, so nothing on the
   card moves when it is tapped.
+- **The kitchen's finished receipt leaves the same way** (owner, 2026-11-02,
+  after seeing today's kitchen exit beside a counter-style one). With the gate
+  on, a receipt whose food the counter has ticked fades for 280 ms where it
+  stood, above the board, while the cards below slide up their own column at
+  once: no shrink and no held blank slot. Folded into this change rather than
+  given a gate of its own; with the gate off the kitchen leaves as it did.
 - **Billing history: Bills · Delivered · Open orders · Stats.** Delivered is
   done work, as bills are. Its Handed over chip is blue. An open delivery order
   in Open orders shows no money and no customer, and only its Delivery chip is

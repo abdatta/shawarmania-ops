@@ -4,6 +4,7 @@ import { createDemoData, createMockAdapters } from '@/data-access/mock'
 import type { KitchenOrder } from '@/data-access/adapters'
 import type { KitchenCardView } from './use-dish-kitchen-board'
 import {
+  KITCHEN_FADE_EXIT_MS,
   KITCHEN_READY_EXIT_MS,
   KITCHEN_READY_GAP_MS,
   retainReadySlots,
@@ -17,7 +18,7 @@ const view = (order: KitchenOrder): KitchenCardView => ({
   shake: 0,
   rings: { left: 0, sounding: false },
 })
-async function setup() {
+async function setup(fadeWhileClosing = false) {
   const { kitchen } = createMockAdapters('biller', createDemoData({ dishWalkthrough: true }))
   const card = view(
     (await kitchen.readDishBoard()).orders.find((order) => order.orderNumber === 105)!,
@@ -26,7 +27,7 @@ async function setup() {
   const undo = vi.spyOn(kitchen, 'undoReady')
   const read = vi.fn(async () => {})
   vi.useFakeTimers()
-  const hook = renderHook(({ cards }) => useKitchenReady(kitchen, read, cards), {
+  const hook = renderHook(({ cards }) => useKitchenReady(kitchen, read, cards, fadeWhileClosing), {
     initialProps: { cards: [card] },
   })
   const doneCard = async () =>
@@ -145,4 +146,25 @@ it('cancels departure on an untick and cannot let an old timer retire a new hold
     await vi.advanceTimersByTimeAsync(120)
   })
   expect(result.current.pending.get(done.order.id)?.phase).toBe('gap')
+})
+
+it('with delivery-orders on, fades a handed-over receipt in its slot and lets it go with no gap', async () => {
+  const { result, card, rerender, doneCard } = await setup(true)
+  await act(async () => result.current.toggle(card))
+  const done = await doneCard()
+  const before = { ...card, order: { ...card.order, id: 'before' } }
+  const after = { ...card, order: { ...card.order, id: 'after' } }
+  rerender({ cards: [before, done, after] })
+  rerender({ cards: [before, after] })
+  expect(result.current.pending.get(done.order.id)?.phase).toBe('leaving')
+  expect(retainReadySlots([before, after], result.current.pending)).toEqual([before, done, after])
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(KITCHEN_FADE_EXIT_MS - 1)
+  })
+  expect(result.current.pending.get(done.order.id)?.phase).toBe('leaving')
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1)
+  })
+  expect(result.current.pending.has(done.order.id)).toBe(false)
+  expect(retainReadySlots([before, after], result.current.pending)).toEqual([before, after])
 })
