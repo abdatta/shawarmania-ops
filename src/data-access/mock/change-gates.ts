@@ -53,14 +53,6 @@ const WORDS: Record<
     offMeans: 'PB is not in the build code.',
     changeNumber: 75,
   },
-  'pro-rata-pnl': {
-    title: 'Pro-rata P&L',
-    onMeans:
-      'Overview and the Ledger’s current month show Pro-rata P&L, which charges the unpaid share of this month’s fixed costs up to today, beside P&L.',
-    offMeans:
-      'Overview and the Ledger show one P&L that counts every cost on the date it was recorded.',
-    changeNumber: 79,
-  },
   'auto-approve-at-the-shop': {
     title: 'Auto-approve at the shop',
     onMeans:

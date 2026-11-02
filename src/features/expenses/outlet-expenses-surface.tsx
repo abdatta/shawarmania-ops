@@ -95,7 +95,7 @@ export function OutletExpensesSurface() {
   const categoryList = useChangeGate('expense-category-list') && refreshed
   const owner = holdsRole(session, 'super_admin')
   // The Fixed chip (fixed-costs-are-spread-over-the-month): read only for the
-  // owner and a manager, with `pro-rata-pnl` on. Staff make no request for it.
+  // owner and a manager. Staff make no request for it.
   const fixedMarks = useFixedMarks(useOutletFixedCosts(outletId, fullReach), outletId)
   // Daily | Fixed (owner, 2026-10-19): only for the owner and a manager, and only
   // once the Fixed tab's surface is shown. Staff and the counter see this page

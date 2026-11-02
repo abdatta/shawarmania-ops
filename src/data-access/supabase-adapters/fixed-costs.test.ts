@@ -104,20 +104,12 @@ describe('Overview’s month read', () => {
     return { client: { rpc } as unknown as SupabaseClient<Database>, rpc }
   }
 
-  it('asks overview_month alone while pro-rata-pnl is off', async () => {
-    const { client, rpc } = byName({ overview_month: { data: month } })
-    const read = await createSupabaseOverviewAdapter(client).month(KAL)
-    expect(rpc).toHaveBeenCalledTimes(1)
-    expect(rpc).toHaveBeenCalledWith('overview_month', { p_outlet_id: KAL })
-    expect(read).not.toHaveProperty('fixedCosts')
-  })
-
-  it('asks overview_month as before and the fixed costs beside it when it is on, folded with the shared rules', async () => {
+  it('asks overview_month as before and the fixed costs beside it, folded with the shared rules', async () => {
     const { client, rpc } = byName({
       overview_month: { data: month },
       fixed_costs_list: { data: { today: '2026-10-18', costs: [rent] } },
     })
-    const read = await createSupabaseOverviewAdapter(client).month(KAL, { fixedCosts: true })
+    const read = await createSupabaseOverviewAdapter(client).month(KAL)
     expect(rpc).toHaveBeenCalledTimes(2)
     expect(rpc).toHaveBeenCalledWith('overview_month', { p_outlet_id: KAL })
     expect(rpc).toHaveBeenCalledWith('fixed_costs_list', { p_outlet_id: KAL })
@@ -131,17 +123,12 @@ describe('Overview’s month read', () => {
       overview_month: { data: month },
       fixed_costs_list: { data: { today: '2026-10-18', costs: [] } },
     })
-    expect(
-      (await createSupabaseOverviewAdapter(none.client).month(KAL, { fixedCosts: true }))
-        .fixedCosts,
-    ).toBeNull()
+    expect((await createSupabaseOverviewAdapter(none.client).month(KAL)).fixedCosts).toBeNull()
     const refused = byName({
       overview_month: { data: month },
       fixed_costs_list: { error: { code: '42501', message: 'denied' } },
     })
-    const read = await createSupabaseOverviewAdapter(refused.client).month(KAL, {
-      fixedCosts: true,
-    })
+    const read = await createSupabaseOverviewAdapter(refused.client).month(KAL)
     expect(read.fixedCosts).toBeNull()
     expect(read.revenuePaise).toBe(0)
   })

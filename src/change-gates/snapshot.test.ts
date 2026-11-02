@@ -76,7 +76,7 @@ describe('a gate snapshot', () => {
   it('takes saved answers and ignores keys the build does not declare', () => {
     const snapshot = on({ probe: true, 'retired-long-ago': true })
     expect(snapshot.probe).toBe(true)
-    expect(snapshot['pro-rata-pnl']).toBe(false)
+    expect(snapshot['delivery-orders']).toBe(false)
     expect(snapshot).not.toHaveProperty('retired-long-ago')
   })
 
@@ -104,11 +104,11 @@ describe('a gate snapshot', () => {
   })
 
   it('lays saved answers over a base, so the demo can start every gate on', () => {
-    const snapshot = snapshotFrom({ 'pro-rata-pnl': false }, ALL_ON) as never as Record<
+    const snapshot = snapshotFrom({ 'delivery-orders': false }, ALL_ON) as never as Record<
       string,
       boolean
     >
-    expect(snapshot['pro-rata-pnl']).toBe(false)
+    expect(snapshot['delivery-orders']).toBe(false)
     expect(snapshot.probe).toBe(true)
   })
 
@@ -117,7 +117,10 @@ describe('a gate snapshot', () => {
   })
 
   it('lists the codes of every gate on, in declaration order', () => {
-    expect(activeCodes(snapshotFrom({ probe: true, 'pro-rata-pnl': true }))).toEqual(['PB', 'PR'])
+    expect(activeCodes(snapshotFrom({ probe: true, 'delivery-orders': true }))).toEqual([
+      'PB',
+      'DO',
+    ])
     expect(activeCodes(snapshotFrom({ parent: false, child: true } as Answers))).toEqual([])
     expect(activeCodes(ALL_OFF)).toEqual([])
   })
@@ -144,7 +147,7 @@ describe('saved answers', () => {
 
   it('keeps only booleans, so half of something reads as nothing for that key', () => {
     const storage = memoryStorage({
-      [SAVED_ANSWERS_KEY]: JSON.stringify({ probe: true, 'pro-rata-pnl': 'yes' }),
+      [SAVED_ANSWERS_KEY]: JSON.stringify({ probe: true, 'delivery-orders': 'yes' }),
     })
     expect(readSavedAnswers(storage)).toEqual({ probe: true })
   })

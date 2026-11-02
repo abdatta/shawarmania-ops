@@ -34,9 +34,9 @@ import { overdueTone, overdueWords, shortMonths } from './words'
 import { NeedsAttention } from '@/features/attention/needs-attention'
 
 /**
- * The Fixed costs page, and `pro-rata-pnl`'s three toggle points: Overview's
- * P&L tile, the Ledger's month and the Fixed chip on Expenses
- * (fixed-costs-are-spread-over-the-month). Off, each reads as before.
+ * The Fixed costs page, and the three places its figures reach: Overview's P&L
+ * tile, the Ledger's month and the Fixed chip on Expenses
+ * (fixed-costs-are-spread-over-the-month).
  */
 function sessionFor(role: 'super_admin' | 'franchise_admin'): Session {
   const persona = personaFixtures[role]
@@ -51,7 +51,6 @@ function sessionFor(role: 'super_admin' | 'franchise_admin'): Session {
 }
 
 function renderWith(
-  proRata: boolean,
   node: React.ReactNode,
   adapters: DataAdapters,
   role: 'super_admin' | 'franchise_admin' = 'super_admin',
@@ -59,7 +58,7 @@ function renderWith(
 ) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <ChangeGatesForTest on={{ 'pro-rata-pnl': proRata }}>
+      <ChangeGatesForTest on={{}}>
         <SessionContext.Provider value={sessionFor(role)}>
           <AdaptersContext.Provider value={adapters}>{node}</AdaptersContext.Provider>
         </SessionContext.Provider>
@@ -112,8 +111,8 @@ const month: OverviewMonth = {
   ),
 }
 
-describeChangeGate('pro-rata-pnl', (on) => {
-  it('Overview leads with P&L (Pro-rata) and counts the unpaid share among expenses, or reads as before', async () => {
+describe('Pro-rata P&L and the Fixed chip', () => {
+  it('Overview leads with P&L (Pro-rata) and counts the unpaid share among expenses', async () => {
     const base = createMockAdapters('super_admin')
     const adapters: DataAdapters = {
       ...base,
@@ -123,27 +122,21 @@ describeChangeGate('pro-rata-pnl', (on) => {
         today: async () => ({ cashPaise: 0, upiPaise: 0, deliveryPaise: 0, openPaise: 0 }),
       },
     }
-    renderWith(on, <OutletsOverview />, adapters)
+    renderWith(<OutletsOverview />, adapters)
     const card = await screen.findByTestId(`outlet-card-${KAL}`)
     const profit = await within(card).findByTestId(`profit-${KAL}`)
-    if (on) {
-      expect(within(card).getByText('October P&L (Pro-rata)')).toBeInTheDocument()
-      // ₹1,89,806 less 18/31 of ₹3,22,700 (₹1,87,374.19) is ₹2,431.81.
-      expect(profit).toHaveTextContent('₹2,431')
-      expect(within(card).getByTestId(`pro-rata-expenses-${KAL}`)).toHaveTextContent('₹6.63L')
-      // The margin beside the figure, and ₹1,89,806 less all ₹3,22,700 beneath it.
-      expect(within(card).getByTestId(`margin-${KAL}`)).toHaveTextContent('0.4%')
-      expect(within(card).getByTestId(`covering-${KAL}`).parentElement).toHaveTextContent(
-        /· Short ₹1\.33L$/,
-      )
-    } else {
-      expect(within(card).getByText('October P&L · est.')).toBeInTheDocument()
-      expect(profit).toHaveTextContent('₹1,89,806')
-      expect(within(card).queryByTestId(`pro-rata-expenses-${KAL}`)).toBeNull()
-    }
+    expect(within(card).getByText('October P&L (Pro-rata)')).toBeInTheDocument()
+    // ₹1,89,806 less 18/31 of ₹3,22,700 (₹1,87,374.19) is ₹2,431.81.
+    expect(profit).toHaveTextContent('₹2,431')
+    expect(within(card).getByTestId(`pro-rata-expenses-${KAL}`)).toHaveTextContent('₹6.63L')
+    // The margin beside the figure, and ₹1,89,806 less all ₹3,22,700 beneath it.
+    expect(within(card).getByTestId(`margin-${KAL}`)).toHaveTextContent('0.4%')
+    expect(within(card).getByTestId(`covering-${KAL}`).parentElement).toHaveTextContent(
+      /· Short ₹1\.33L$/,
+    )
   })
 
-  it('an outlet without fixed costs keeps its tile either way', async () => {
+  it('an outlet without fixed costs keeps its P&L tile', async () => {
     const base = createMockAdapters('super_admin')
     const adapters: DataAdapters = {
       ...base,
@@ -153,16 +146,15 @@ describeChangeGate('pro-rata-pnl', (on) => {
         today: async () => ({ cashPaise: 0, upiPaise: 0, deliveryPaise: 0, openPaise: 0 }),
       },
     }
-    renderWith(on, <OutletsOverview />, adapters)
+    renderWith(<OutletsOverview />, adapters)
     const card = await screen.findByTestId(`outlet-card-${KAL}`)
     expect(await within(card).findByTestId(`profit-${KAL}`)).toHaveTextContent('₹1,89,806')
     expect(within(card).queryByText(/Pro-rata/)).toBeNull()
   })
 
-  it('the Ledger’s current month carries P&L (Pro-rata) and the Fixed chip, or reads as before', async () => {
+  it('the Ledger’s current month carries P&L (Pro-rata) and the Fixed chip', async () => {
     const user = userEvent.setup()
     renderWith(
-      on,
       <LedgerStatementSurface />,
       withFixedCosts('franchise_admin').adapters,
       'franchise_admin',
@@ -170,16 +162,11 @@ describeChangeGate('pro-rata-pnl', (on) => {
     await waitFor(() => expect(screen.getByTestId('ledger-revenue')).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'The month' }))
     await screen.findByTestId('month-profit')
-    if (on) {
-      const card = await screen.findByTestId('month-pro-rata')
-      expect(within(card).getByText('P&L (Pro-rata)')).toBeInTheDocument()
-      expect(
-        within(screen.getByTestId('month-fixed-costs')).getByText(/Nayan \(Salary\)/),
-      ).toBeInTheDocument()
-    } else {
-      expect(screen.queryByTestId('month-pro-rata')).toBeNull()
-      expect(screen.queryByText(/Fixed$/)).toBeNull()
-    }
+    const card = await screen.findByTestId('month-pro-rata')
+    expect(within(card).getByText('P&L (Pro-rata)')).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('month-fixed-costs')).getByText(/Nayan \(Salary\)/),
+    ).toBeInTheDocument()
   })
 
   it('Expenses marks a fixed-cost payment by its link and never a typed lookalike', async () => {
@@ -206,20 +193,19 @@ describeChangeGate('pro-rata-pnl', (on) => {
       isCash: false,
       note: 'Nayan [fixed]',
     })
-    renderWith(on, <OutletExpensesSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
+    renderWith(<OutletExpensesSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
     await screen.findAllByText(/Salary|Nayan/)
     await screen.findByTestId('ledger-expense-list').catch(() => null)
     // Asserted on the two rows made here, never on a count: a payment of the
     // demo's own falls in the days shown near a month's turn (found 2026-10-20).
     expect(screen.queryByTestId(`expense-fixed-${lookalike.id}`)).toBeNull()
-    if (on) expect(screen.getByTestId(`expense-fixed-${paymentId}`)).toBeInTheDocument()
-    else expect(screen.queryAllByTestId(/^expense-fixed-/)).toHaveLength(0)
+    expect(screen.getByTestId(`expense-fixed-${paymentId}`)).toBeInTheDocument()
   })
 })
 
 it('lists each fixed cost with this month, and overdue and ahead apart from it', async () => {
   const { data, adapters } = withFixedCosts()
-  renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
+  renderWith(<FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
   const list = await screen.findByTestId('fixed-cost-list')
   const santu = within(list).getByText('Santu').closest('tr')!
   expect(within(santu).getByTestId(/^status-/)).toHaveTextContent('₹10,000 paid')
@@ -248,7 +234,7 @@ it('lists each fixed cost with this month, and overdue and ahead apart from it',
 
 it('rings what is paid of what is owed, overdue included, and ticks a cost paid in full', async () => {
   const { data, adapters } = withFixedCosts()
-  renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
+  renderWith(<FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
   const list = await screen.findByTestId('fixed-cost-list')
   const ring = (name: string) =>
     within(within(list).getByText(name).closest('tr')!).getByTestId(/^paid-ring-/)
@@ -268,7 +254,7 @@ it('pays from the row, starting at what is owed, and says where it was recorded'
   const user = userEvent.setup()
   const { data, adapters } = withFixedCosts()
   const nayan = data.store.fixedCosts.find((c) => c.name === 'Nayan')!
-  renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
+  renderWith(<FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
   await user.click(await screen.findByTestId(`pay-row-${nayan.id}`))
   // The row stays lit for a moment before its sheet opens (owner, 2026-10-21).
   await screen.findByTestId('fixed-cost-pay-amount')
@@ -393,7 +379,7 @@ it('starts on Exact, and Less or More is chosen on purpose or follows what is ty
   const user = userEvent.setup()
   const { data, adapters } = withFixedCosts()
   const nayan = data.store.fixedCosts.find((c) => c.name === 'Nayan')!
-  renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
+  renderWith(<FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
   await user.click(await screen.findByTestId(`pay-row-${nayan.id}`))
   // The row stays lit for a moment before its sheet opens (owner, 2026-10-21).
   await screen.findByTestId('fixed-cost-pay-amount')
@@ -422,7 +408,7 @@ it('names the figures in every reason, and puts the switch back when the amount 
   const user = userEvent.setup()
   const { data, adapters } = withFixedCosts()
   const nayan = data.store.fixedCosts.find((c) => c.name === 'Nayan')!
-  renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
+  renderWith(<FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
   await user.click(await screen.findByTestId(`pay-row-${nayan.id}`))
   // The row stays lit for a moment before its sheet opens (owner, 2026-10-21).
   await screen.findByTestId('fixed-cost-pay-amount')
@@ -460,7 +446,7 @@ it('points a refused Save at the field it was refused for, outlined, with the me
   const user = userEvent.setup()
   const { data, adapters } = withFixedCosts()
   const nayan = data.store.fixedCosts.find((c) => c.name === 'Nayan')!
-  renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
+  renderWith(<FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
   await user.click(await screen.findByTestId(`pay-row-${nayan.id}`))
   // The row stays lit for a moment before its sheet opens (owner, 2026-10-21).
   await screen.findByTestId('fixed-cost-pay-amount')
@@ -546,7 +532,7 @@ it('offers a fixed-cost payment on Expenses only its note and its fixed cost’s
     note: 'October',
     choice: null,
   })
-  renderWith(true, <OutletExpensesSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
+  renderWith(<OutletExpensesSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
   await screen.findByTestId(`expense-fixed-${paymentId}`)
   await user.click(screen.getByRole('button', { name: 'Actions for Other' }))
   expect(screen.getByTestId(`open-fixed-cost-of-${paymentId}`)).toHaveTextContent(
@@ -597,7 +583,7 @@ describe('money owed in Needs attention (owner, 2026-10-20)', () => {
   it('lists it first, tinted, above attendance, which stays plain', async () => {
     const { adapters } = withFixedCosts()
     adapters.fixedCosts.unpaid = async () => ({ ...owed, today: '2026-11-02' })
-    renderWith(false, <NeedsAttention />, adapters)
+    renderWith(<NeedsAttention />, adapters)
     const money = await screen.findByTestId('overview-attention-fixed-costs-unpaid')
     expect(money).toHaveTextContent('₹57,300 overdue · 3 salaries, 1 rent · from October')
     expect(money).toHaveAttribute('data-tone', 'due')
@@ -610,7 +596,7 @@ describe('money owed in Needs attention (owner, 2026-10-20)', () => {
 
 it('leads the Fixed tab with what is overdue, highlighted, and badges the tab as every tab is badged', async () => {
   const { adapters } = withFixedCosts()
-  renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
+  renderWith(<FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
   const list = await screen.findByTestId('fixed-cost-list')
   const rows = within(list).getAllByRole('row').slice(1)
   // Priyanka owes last month, so her row comes first whatever the order added.
@@ -639,13 +625,7 @@ it('opens Daily on the day the address asks for, as Recorded on … · View link
   // Three days back from the demo's today: a day the page would never open on.
   const [y, m, d] = data.store.today.split('-').map(Number) as [number, number, number]
   const day = new Date(Date.UTC(y, m - 1, d - 3)).toISOString().slice(0, 10)
-  renderWith(
-    false,
-    <OutletExpensesSurface />,
-    adapters,
-    'super_admin',
-    `/?outlet=${KAL}&date=${day}`,
-  )
+  renderWith(<OutletExpensesSurface />, adapters, 'super_admin', `/?outlet=${KAL}&date=${day}`)
   await waitFor(() => expect(asked.length).toBeGreaterThan(0))
   expect(asked[0]).toEqual([day])
 })
@@ -654,7 +634,7 @@ it('keeps the row being paid, and its Pay, lit while the sheet is open', async (
   const user = userEvent.setup()
   const { data, adapters } = withFixedCosts()
   const nayan = data.store.fixedCosts.find((c) => c.name === 'Nayan')!
-  renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
+  renderWith(<FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
   const pay = await screen.findByTestId(`pay-row-${nayan.id}`)
   await user.click(pay)
   await screen.findByTestId('fixed-cost-pay-amount')
@@ -674,7 +654,7 @@ it('lights the tapped row for a moment before its sheet opens, so the tap is see
   const user = userEvent.setup()
   const { data, adapters } = withFixedCosts()
   const santu = data.store.fixedCosts.find((c) => c.name === 'Santu')!
-  renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
+  renderWith(<FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
   await user.click(await screen.findByTestId(`pay-row-${santu.id}`))
   // Lit at once, the sheet not yet open.
   expect(screen.getByTestId(`pay-row-${santu.id}`)).toHaveAttribute('data-selected', 'true')
@@ -688,7 +668,7 @@ it('tints a row tapped to open its page, and leaves its Pay alone', async () => 
   const user = userEvent.setup()
   const { data, adapters } = withFixedCosts()
   const santu = data.store.fixedCosts.find((c) => c.name === 'Santu')!
-  renderWith(false, <FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
+  renderWith(<FixedCostsSurface />, adapters, 'super_admin', `/?outlet=${KAL}`)
   await user.click(await screen.findByTestId(`open-fixed-cost-${santu.id}`))
   expect(screen.getByTestId(`pay-row-${santu.id}`).closest('tr')).toHaveClass('bg-primary/20')
   expect(screen.getByTestId(`pay-row-${santu.id}`)).not.toHaveAttribute('data-selected')

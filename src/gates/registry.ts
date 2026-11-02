@@ -341,8 +341,7 @@ const defs = {
    * money-out story and the Finances bar is full. This entry is what the tab and
    * a fixed cost's own page are gated by: owner and manager only, as the
    * database's policies are. `live` since the owner approved its screens in the
-   * demo (2026-10-19); it changes no existing figure, so it is not behind
-   * `pro-rata-pnl`, which gates only the figures that read it.
+   * demo (2026-10-19); it changes no existing figure.
    */
   'owner-fixed-costs': {
     role: 'super_admin',

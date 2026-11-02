@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import { useChangeGate } from '@/change-gates/context'
 import { useAdapters } from '@/data-access'
 import type { FixedCostsReading } from '@/data-access/fixed-costs'
 import { fixedCostLabel } from '@/domain/fixed-costs'
@@ -8,18 +7,17 @@ import { fixedCostLabel } from '@/domain/fixed-costs'
 /**
  * The outlet's fixed costs, read once for a screen that shows Pro-rata P&L or
  * the Fixed chip (fixed-costs-are-spread-over-the-month, design D9). Read only
- * while `pro-rata-pnl` is on and the caller says the reader may see them (the
- * owner or a manager); anyone else makes no request, which is what keeps the
- * counter's requests where they were.
+ * when the caller says the reader may see them (the owner or a manager); anyone
+ * else makes no request, which is what keeps the counter's requests where they
+ * were.
  */
 export function useOutletFixedCosts(
   outletId: string | null,
   enabled: boolean,
 ): FixedCostsReading | null {
   const { fixedCosts } = useAdapters()
-  const gate = useChangeGate('pro-rata-pnl')
   const [reading, setReading] = useState<{ key: string; value: FixedCostsReading } | null>(null)
-  const on = gate && enabled && outletId !== null
+  const on = enabled && outletId !== null
   useEffect(() => {
     if (!on || !outletId) return
     let active = true

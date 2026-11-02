@@ -27,7 +27,6 @@ import { PageHeader } from '@/components/layout/page-header'
 import { Card } from '@/components/ui/card'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
-import { useChangeGate } from '@/change-gates/context'
 import { useAdapters, type Tables } from '@/data-access'
 import { compactPaise, formatPaise, resolveBusinessDate } from '@/domain'
 import { outletPresence, revenueChange } from '@/domain/overview'
@@ -104,7 +103,6 @@ function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
   // P&L (Pro-rata) (fixed-costs-are-spread-over-the-month, design D9): where the
   // outlet has fixed costs this month, the tile charges the unpaid share of them
   // to date, and its Expenses line includes that share so the two still add up.
-  const proRataGate = useChangeGate('pro-rata-pnl')
   const session = useSession()
   const base = `${session.mode === 'demo' ? '/demo' : ''}/${ROLE_SEGMENTS[session.role ?? 'franchise_admin']}`
   const [now, setNow] = useState(Date.now)
@@ -122,9 +120,9 @@ function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
     [overview, outlet.id, today],
   )
   const monthRead = useCallback(
-    () => overview.month(outlet.id, { fixedCosts: proRataGate }),
+    () => overview.month(outlet.id),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `today` re-reads at the day's change
-    [overview, outlet.id, today, proRataGate],
+    [overview, outlet.id, today],
   )
   const drawerRead = useCallback(() => overview.drawer(outlet.id), [overview, outlet.id])
   const tabletsRead = useCallback(() => overview.tablets(outlet.id), [overview, outlet.id])
@@ -166,7 +164,7 @@ function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
   const todayTotal = sales.value
     ? sales.value.cashPaise + sales.value.upiPaise + sales.value.deliveryPaise
     : 0
-  const fixedCosts = proRataGate ? (m?.fixedCosts ?? null) : null
+  const fixedCosts = m?.fixedCosts ?? null
   const proRata =
     fixedCosts && m && m.profitPaise !== null ? proRataPnl(m.profitPaise, fixedCosts) : null
   const shownProfit = proRata ?? m?.profitPaise ?? null

@@ -89,7 +89,7 @@ export interface ExpenseListProps {
   /**
    * Fixed-cost payments among the rows, by expense id, from their links
    * (fixed-costs-are-spread-over-the-month). Passed only for an owner or a
-   * manager with `pro-rata-pnl` on; a row is never marked by what it says.
+   * manager; a row is never marked by what it says.
    */
   fixedMarks?: ReadonlyMap<string, FixedMark> | undefined
   /** A control beside Add, such as the owner's way to the category list. */

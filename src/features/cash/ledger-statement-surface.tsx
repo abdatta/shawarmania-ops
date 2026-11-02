@@ -686,8 +686,7 @@ function MonthReading({ month }: { month: LedgerStatementMonth }) {
    * `readMonthFigures` from the inputs `reading` came from.
    */
   const figures = month.figures
-  // Pro-rata P&L and the Fixed chip (fixed-costs-are-spread-over-the-month): read
-  // only with `pro-rata-pnl` on.
+  // Pro-rata P&L and the Fixed chip (fixed-costs-are-spread-over-the-month).
   const fixed = useOutletFixedCosts(month.outletId, true)
   const marks = useFixedMarks(fixed)
   const profitPaise = figures.profitPaise ?? 0

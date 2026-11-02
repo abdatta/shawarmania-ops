@@ -60,9 +60,8 @@ export interface OverviewAdapter {
   /** One Revenue's today: no date is sent, the server decides it. */
   today(outletId: string): Promise<OverviewToday>
   /**
-   * One Revenue's month to date and its comparison, in one read; with
-   * `fixedCosts`, the outlet's fixed costs read at today beside it, in the same
-   * read (fixed-costs-are-spread-over-the-month, while `pro-rata-pnl` is on).
+   * One Revenue's month to date and its comparison, and the outlet's fixed costs
+   * read at today beside it, in the same read (fixed-costs-are-spread-over-the-month).
    */
-  month(outletId: string, options?: { fixedCosts?: boolean }): Promise<OverviewMonth>
+  month(outletId: string): Promise<OverviewMonth>
 }

@@ -86,22 +86,6 @@ export const CHANGE_GATES = {
     roundTrip: 'none: the probe changes nothing but its code in the build stamp',
   },
   /**
-   * #79: Pro-rata P&L beside P&L on Overview and the Ledger's current month,
-   * charging the unpaid share of this month's fixed costs up to today, and the
-   * Fixed chip on a fixed-cost payment (fixed-costs-are-spread-over-the-month,
-   * design D6–D10). Built on One Revenue's figures; it depended on
-   * `one-revenue` until that gate retired and kept them for good. The Fixed
-   * costs page is a surface, not behind this gate: its payments are expense rows
-   * every figure already reads. Off, the figures read as before.
-   */
-  'pro-rata-pnl': {
-    kind: 'change',
-    code: 'PR',
-    change: 'fixed-costs-are-spread-over-the-month',
-    retireBy: '2027-02-28',
-    roundTrip: 'tested',
-  },
-  /**
    * #81: a check-in the database measures inside the outlet's own fence is
    * approved automatically, late or not, and each outlet's managers choose
    * whether every check-in still needs them and whether check-ins away from the
@@ -213,6 +197,9 @@ export const CHANGE_GATE_KEYS = Object.keys(CHANGE_GATES) as ChangeGateKey[]
  * not tombstoned: they are unique among live gates only.
  */
 export const RETIRED_CHANGE_GATES: readonly string[] = [
+  // retire-pro-rata-pnl: Overview and the Ledger's current month show Pro-rata
+  // P&L beside P&L, and a fixed-cost payment carries the Fixed chip.
+  'pro-rata-pnl',
   // retire-tablet-health: tablets count their requests and report their health
   // each minute.
   'tablet-health',
