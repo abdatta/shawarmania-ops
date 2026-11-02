@@ -77,7 +77,26 @@ immutable bill; cancellation keeps attributed history and consumes no bill numbe
 Its preparation is finished by the counter [ticking](#tick) every dish (#74) or,
 for a paid order nobody ticked, by the **day change** at the cutover ending its
 payment's business day (#69). The standalone Open orders page still ticks a whole
-order **Prepared**.
+order **Prepared**. A [delivery order](#delivery-order) is never paid: it ends
+[handed over](#handed-over) (#83).
+
+### Delivery order
+
+*(#83, gate `delivery-orders`.)* An order rung under the **Delivery** service at
+an outlet that offers it, for a Swiggy or Zomato rider. The kitchen makes it like
+any other and the counter ticks its dishes, but it carries no money: no price on
+the counter's card, no total, no customer, no discount, and it can never be paid
+or become a bill. Its revenue is read from the aggregator, never from `bills`.
+Its card and its chip are drawn in blue, where a counter order's are orange.
+
+### Handed over
+
+*(#83.)* How a [delivery order](#delivery-order) ends: once every dish is ticked,
+**Hand over** on its card gives it to the rider. The card holds for five seconds
+with the button filling, during which a tap undoes it, then leaves the rail; for
+five minutes after, **Take back** in My shift returns it with a reason. A handed-
+over order is otherwise immutable, and Billing history lists it on its
+**Delivered** tab. Its status is `handed_over`.
 
 ### Order number
 
@@ -181,7 +200,7 @@ A kitchen's acknowledgement of a card that is alerting — new, edited or cancel
 
 ### Label
 
-*(#74.)* A few optional letters typed at the top of the composer — a name, "red shirt" — that headline an order's card on the counter and nowhere else. Not a customer: it never touches the customer's name or phone, though at payment it is offered as the name for a number with none. Thrown away, in the database, when the order leaves the rail; on no receipt, bill, report or export, and never shown to a kitchen. Held in `order_labels`.
+*(#74.)* A few optional letters typed at the top of the composer — a name, "red shirt" — that headline an order's card on the counter and nowhere else. Not a customer: it never touches the customer's name or phone, though at payment it is offered as the name for a number with none. Held in `order_labels` while the order is on the rail. With `delivery-orders` on (#83) it is **kept** after the order leaves, in `kept_order_labels`, so a delivery order's aggregator reference (*SWG 3342*) and a bill's label can be found in My shift and Billing history; still on no receipt, report or export, and never shown to a kitchen. With the gate off it is thrown away, in the database, when the order leaves the rail.
 
 ### Note
 

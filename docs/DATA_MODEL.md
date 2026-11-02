@@ -301,8 +301,9 @@ Menu is per-outlet from day one. Two outlets may share item names and differ on 
 **`orders`** — `id` (client UUID), `outlet_id`, daily `order_number`, owning
 tablet, creator and counter shift, `ordered_at`, explicit `business_date`,
 customer-form snapshot and `customer_tier`, integer-paise totals, `status`
-(`open` | `paid` | `cancelled`), and separate revision, cancellation and payment
-attribution. An order's label does not live here: it is a row in `order_labels`
+(`open` | `paid` | `cancelled` | `handed_over`, the last only for a delivery
+order — see [Delivery orders](#delivery-orders-83)), and separate revision,
+cancellation and payment attribution. An order's label does not live here: it is a row in `order_labels`
 (see [Dish ticks](#dish-ticks-74)), and the nullable `orders.label` column is
 unused.
 
@@ -1505,7 +1506,9 @@ pre-#74 counter used.
 the row — and embedded in the counter's order read, so a label costs no request.
 RLS: select for a live counter shift at its own outlet, the outlet's Franchise
 Admins and the owner; **no kitchen select**; no client write. Never copied to a
-bill. **It lives only while its order is on the rail.** `orders_label_leaves_the_rail`,
+bill. **It lives only while its order is on the rail**, and with `delivery-orders` on
+is first copied to `kept_order_labels` (see [Delivery orders](#delivery-orders-83)).
+`orders_label_leaves_the_rail`,
 an `after update` trigger on `orders`, deletes the label once the order is
 cancelled, or paid with `prepared_at` set — every path that finishes an order, the
 counter's tick, a payment, the day change — and returns at once unless
@@ -1595,3 +1598,65 @@ is probed in `supabase/tests/rest/dish-ticks-isolation.test.ts`, run as its own
 `test:rls` phase: a counter shift, a kitchen shift and a Franchise Admin of one outlet hand-craft a
 read of the other outlet's rows and receive nothing, and every client role's
 direct insert, update and delete is refused.
+
+## Delivery orders *(#83)*
+
+`delivery-orders-are-made-not-billed`, gate `delivery-orders` (DO). Everything
+was added by one migration, except two statements the owner agreed to: the
+closed list in `billing_commands_command_type_check` gained two kinds, and
+`billing_order_guard` was replaced by its previous body plus two branches.
+
+**`outlets.delivery_offered`** — boolean, default false. Whether the counter
+offers the Delivery service. Written only by `set_outlet_service_settings_v2`
+(the `_v1` arguments plus `p_delivery_offered`), with the owner and that
+outlet's Franchise Admins allowed as for the other service choices.
+
+**`order_status` gains `handed_over`.** It is not `open`, so the rail, the
+kitchen board, readiness and every command requiring `open` leave a handed-over
+order alone without being changed. The guard admits `open → handed_over` and
+back only with `app.delivery_handover` set by the two functions below, only
+for an order with a `delivery_orders` row, and with nothing but the status
+changing; every other write to a handed-over order is refused, *handed-over
+orders are immutable*.
+
+**`delivery_orders`** — `order_id` (primary key), `outlet_id`, `marked_at`,
+and the handover's `handed_over_at`, `handed_over_by`, `handed_over_shift_id`,
+`handed_over_device_id`, `handover_command_id` and `handover_prior_ticks`
+(the ticks the handover added, so a take-back restores the rest), all null or
+all set. One row marks an order as a delivery order. Written by
+`create_billing_order_v3` and `revise_billing_order_v3`, which wrap the `_v2`
+functions: with `delivery: true` in the payload the content must pass
+`delivery_order_content_ok` (no service, table, customer or discount; item
+lines only). `orders_delivery_is_not_paid` refuses any payment of an order with
+a row while the gate is on.
+
+**`hand_over_delivery_order`** — a counter command (`hand_over_delivery`):
+the owning tablet's live shift, an open delivery order. It ticks whatever is
+still owed — the counter offers Hand over only once every dish is ticked, but a
+handover queued offline may land first — keeping each tick it replaced in
+`handover_prior_ticks`, then sets the handover columns and the status. **`take_back_delivery_handover`**
+(`take_back_delivery_handover`) — a reason, within a payment take-back's
+window from the handover (`billing_edit_window_end`, five minutes); writes a
+**`delivery_handover_takebacks`** row (the handover's facts, who took it back,
+when, on which shift and tablet, why), restores the prior ticks and clears the
+columns. Both are idempotent counter commands like the others.
+
+**`kept_order_labels`** — `order_id` (primary key), `outlet_id`, `label`,
+`kept_at`. `orders_label_is_kept`, before the update that takes an order off
+the rail (cancelled, handed over, or paid with `prepared_at` set), copies its
+label here while the gate is on, so `orders_label_leaves_the_rail` deleting
+the live row loses nothing.
+
+All three tables: RLS select for a live counter shift at its outlet, the
+outlet's Franchise Admins and the owner; no kitchen select; no client write.
+
+**Reads.** `kitchen_board_v3()` is `_v2` plus a `delivery` flag per order.
+`overview_today_v3`, `billing_day_numbers_v2` and `billing_day_stats_v2` leave
+open delivery orders out of the open, unpaid total; `billing_day_stats_v2` and
+`billing_day_numbers_v2` add `deliveryStats`, the Stats figures over the
+day's delivery orders alone, with handed over in place of paid. `billing_history_bills_v2` adds each bill's order label;
+`billing_history_delivery_orders(outlet, day)` lists the day's handed-over
+orders without money. `sales_analytics_v3` and `sales_analytics_series_v3` take
+`p_scope` (`counter` | `delivery`); in delivery scope money is null and only
+orders and units are answered. The app calls every new function only with the
+gate on, and the earlier ones with it off.

@@ -393,6 +393,10 @@ Finish on the owner console. The alert count has changed, because it was always 
 
 **How the mocks know.** `createDemoData({ dishTicks })` takes `'demo'` (ask the demo's own Change gates answer each call; the demo root passes this), `'on'` or `'off'`. A test or component rendered without a gate snapshot gets `'off'`, the default, so its mocks run the old path like the component does. The dish records — labels, notes, ticks, Ready and Undo — live in a typed sidecar on the store, seeded only when the demo starts with the gate on, so the schema-typed fixture rows stay valid. The counter's snapshots own labels, notes and ticks and the kitchen's own Ready and ACK; Ready records merge across tabs by command id and an Undo is never lost. The two-tab mirror is the demo's own channel and is never mounted in the live tree. No demo action writes real data.
 
+### Delivery orders *(#83)*
+
+With **Delivery orders** on in the demo's Change gates (it starts on), Kalyani offers Delivery. The rail opens with two delivery cards: one still cooking, with a *No mayo* note, and *SWG 3342* with every dish ticked, ready to hand over. Tap **Hand over** and watch the button fill for five seconds; tap again to undo, or let it go and the card leaves the rail and appears in My shift, where **Take back** returns it. Ring a new one with the blue **Delivery** chip: no total, no customer, no Paid. The **Kitchen** tab shows the blue DELIVERY tag, and the owner's Billing history has a **Delivered** tab and a Counter / Delivery pill on Stats; Items and Sales have the same pill. Turn the gate off and every one of these goes, and the demo's Kalyani offers no Delivery. `createDemoData({ deliveryOrders, deliveryWalkthrough })` takes the gate the same way `dishTicks` does; the walkthrough's seeded orders are added only for the demo root, so unit tests keep the ordinary seed.
+
 ## Menu ordering and highlights review (#68)
 
 In the Admin or Owner demo, open Menu. On a dish's actions, use Move up/down

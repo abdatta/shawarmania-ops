@@ -350,6 +350,13 @@ final figures from the payout annexure. Both are reconciled against operator
 evidence and neither is typed. Any figure quoted from `bills` as "total sales"
 understates the outlet: bills cover only Cash and UPI counter trade.
 
+**Delivery orders carry no money (#83).** With `delivery-orders` on, an
+aggregator order rung at the counter as a delivery order is handed over, never
+billed, so it adds orders and units to the counter's figures in delivery scope
+and nothing to revenue. Its prices are not checked against what the aggregator
+charged, and a delivery order rung by mistake for a walk-in cannot be paid:
+it has to be cancelled and rung again.
+
 Hyperpure supply expenses are likewise read from Hyperpure's own statement, one
 per order, and can no longer be typed. What remains not automated is a supply
 purchase paid **directly** rather than through a Zomato payout — the supplier
