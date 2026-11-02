@@ -1376,7 +1376,7 @@ for anyone. Writes go through functions that take the outlet from the fixed cost
 `expense_guard`, the link and what its answer records in one transaction,
 recomputing the answer from what is owed and refusing one the pay sheet would not
 offer. Reads: `fixed_costs_list` (everything the screens fold, one request; Overview
-asks it beside `overview_month` while *Pro-rata P&L* is on) and
+asks it beside `overview_month`) and
 `fixed_costs_unpaid` (Needs attention).
 
 ## The archived notebook
