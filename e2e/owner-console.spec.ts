@@ -66,8 +66,18 @@ test('Overview links preserve outlet and the displayed month on reload', async (
     .getByTestId(`outlet-card-${KAL}`)
     .getByRole('link', { name: /^(?!Today).*revenue/ })
     .click()
-  // The month to date, through today.
-  const month = resolveBusinessDate(new Date(), '04:00').slice(0, 7)
+  // The month to date, through today: Sales on Month, then the Ledger from P&L.
+  const today = resolveBusinessDate(new Date(), '04:00')
+  const month = today.slice(0, 7)
+  await expect(page).toHaveURL(
+    new RegExp(
+      `analytics/sales\\?outlet=${KAL}&from=${month}-01&to=${today}&grain=day&align=month`,
+    ),
+  )
+  await page.reload()
+  await expect(page.getByTestId('analytics-month')).toHaveAttribute('aria-pressed', 'true')
+  await page.goto('demo/owner')
+  await page.getByTestId(`outlet-card-${KAL}`).getByRole('link', { name: /P&L/ }).click()
   await expect(page).toHaveURL(new RegExp(`ledger\\?outlet=${KAL}&view=month&month=${month}`))
   await page.reload()
   await expect(page.getByTestId('statement-month-picker')).toHaveAttribute('data-month', month)

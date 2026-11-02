@@ -16,16 +16,21 @@ test('Overview, the Ledger month and Analytics Month show one revenue', async ({
   await expect(card.getByText(/Delivery data incomplete|Commission pending/)).toHaveCount(0)
   await expect(page.getByTestId(`comparison-${KAL}`)).toContainText(/vs \d+–\d+|No sales/)
 
+  // Revenue opens Sales on Month; P&L opens the Ledger's month.
   await page.getByTestId(`revenue-${KAL}`).click()
-  const ledger = rupees(await page.getByTestId('month-revenue-net').innerText())
-  expect(ledger).toBe(overview)
-  await expect(page.getByTestId('month-revenue-basis')).toBeVisible()
-
-  await page.goto(`demo/owner/analytics/sales?outlet=${KAL}`)
-  await page.getByRole('button', { name: 'This month' }).click()
+  await expect(page.getByRole('button', { name: 'This month' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
   await expect(page.getByTestId('sales-trend-compared')).toContainText(/^vs ₹/)
   const analytics = rupees(await page.getByTestId('sales-trend-value').innerText())
   expect(analytics).toBe(overview)
+
+  await page.goto('demo/owner')
+  await card.getByRole('link', { name: /P&L/ }).click()
+  const ledger = rupees(await page.getByTestId('month-revenue-net').innerText())
+  expect(ledger).toBe(overview)
+  await expect(page.getByTestId('month-revenue-basis')).toBeVisible()
 })
 
 test('Overview today opens Billing history, and Month steps a calendar month at a time', async ({
