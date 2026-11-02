@@ -44,13 +44,20 @@ its own, and no migration in the code half.
 
 ## 2. Wait for every tablet
 
-- [ ] 2.1 The readiness check (`retire-gate` §2): every registered device on the
+- [x] 2.1 The readiness check (`retire-gate` §2): every registered device on the
   retirement build or later, and three services on it. No person's screen carried
   a toggle point. Record the date and the evidence.
   - 2 November 11:17 IST, production read-only: both registered devices (Cafe
     Laptop, Shawarma Kitchen) report `3648a1fc`, which contains `01f82d0a`.
     Services since Deploy 41164443637: 31 October (69 bills) and 1 November (58);
     the third is 2 November's. Nothing in production reads the key.
+  - 3 November 01:31 IST, production read-only: three registered devices
+    (Cafe Laptop, Conti Kitchen, Shawarma Kitchen), all reporting `c83ec673`
+    (Deploy 41404706038, 2 November 07:11 UTC), which contains `01f82d0a`, as
+    `git merge-base --is-ancestor` against `origin/main` confirms. Three services
+    since Deploy 41164443637: 31 October (69 bills), 1 November (58) and 2 November
+    (47, the last at 22:33 IST). Still nothing reads the key, in production or
+    on a fresh reset.
 
 ## 3. The contract migration
 
@@ -58,6 +65,9 @@ its own, and no migration in the code half.
   confirming in production and on a fresh reset what reads the key, rewrites any
   reader to its on branch, drops what only the off path used, and retires the
   row; pgTAP updated; every database gate on a fresh reset; release it.
+  *(`20261113010000_contract_tablet_health.sql` retires the row: nothing read
+  the key and nothing was the off path's alone. Every database gate on a fresh
+  reset on 3 November, as `retire-fewer-requests` 3.2 records. Release left.)*
 
 ## 4. Archive
 
