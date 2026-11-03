@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 
 import type { ChangeGateKey } from '@/change-gates/gates'
+import { deactivationDay } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createDemoData, createMockAdapters } from '@/data-access/mock'
 import {
@@ -116,8 +117,10 @@ describeChangeGate('deactivate-then-leave', (on) => {
             screen.getByTestId(`deactivated-${DEMO_DEACTIVATED_BILLER_ACCOUNT_ID}`),
           ).toHaveTextContent(
             `Deactivated · ${formatBusinessDateShort(
-              createDemoData().accounts.find((a) => a.id === DEMO_DEACTIVATED_BILLER_ACCOUNT_ID)!
-                .deactivatedOn!,
+              deactivationDay(
+                createDemoData().accounts.find((a) => a.id === DEMO_DEACTIVATED_BILLER_ACCOUNT_ID)!
+                  .deactivatedAt!,
+              ),
             )}`,
           ),
         )

@@ -1,12 +1,12 @@
--- a-deactivated-person-leaves-in-two-steps (#82): Deactivate records the day,
+-- a-deactivated-person-leaves-in-two-steps (#82): Deactivate records the moment,
 -- and Remove (Mark as left, as the design first named it) is a second step
 -- taken only from a deactivated account,
--- dated by that day, freeing the person's phone (the account function frees
+-- dated by its day, freeing the person's phone (the account function frees
 -- their username). Owner access is granted and removed only in the database.
 -- change-gate: deactivate-then-leave
 --
--- Everything here is new: a nullable column no published build selects, a new
--- service-only function, and the two gates' rows, off. `mark_account_as_left`
+-- Everything here is new: a nullable column no published build selects, three
+-- new service-only functions, and the two gates' rows, off. `mark_account_as_left`
 -- is left as it is for the build that calls it. No existing row changes; the
 -- people already deactivated get their day from a reviewed data repair before
 -- the gate is turned on (design D7).
@@ -29,29 +29,54 @@ values
 grant execute on function public.app_change_gate(text) to service_role;
 
 -- ---------------------------------------------------------------------------
--- 1. The day access was switched off (design D2).
+-- 1. The moment access was switched off (design D2, D10).
 
-alter table public.profiles add column deactivated_on date;
+alter table public.profiles add column deactivated_at timestamptz;
 
-comment on column public.profiles.deactivated_on is
-  'The Asia/Kolkata business day this account was last deactivated; null while active. Written by the admin-accounts function with is_active, cleared on reactivation. Read only with deactivate-then-leave on (a-deactivated-person-leaves-in-two-steps).';
+comment on column public.profiles.deactivated_at is
+  'When this account was last deactivated, by the database clock; null while active. Stamped by the admin-accounts function with is_active, cleared on reactivation. Attendance compares it with each day''s arrival deadline, and its Kolkata date is the day shown and the day Remove ends outlets on. Read only with deactivate-then-leave on (a-deactivated-person-leaves-in-two-steps).';
 
--- The day, as the database reckons it, for the account function to stamp: the
--- browser never supplies it, and the function's own clock is not the calendar.
-create function public.app_kolkata_today()
-returns date
+-- Sign-in switched on or off, and its moment, in one statement: stamped going
+-- from active to inactive, cleared going back, untouched otherwise. The moment
+-- is the database's; the browser never supplies it.
+create function public.account_set_active(p_profile_id uuid, p_is_active boolean)
+returns void
 language sql
-stable
 set search_path = ''
 as $$
-  select (now() at time zone 'Asia/Kolkata')::date
+  update public.profiles p
+     set is_active = p_is_active,
+         deactivated_at = case
+           when p_is_active then null
+           when p.is_active then now()
+           else p.deactivated_at
+         end
+   where p.id = p_profile_id
 $$;
 
-revoke execute on function public.app_kolkata_today() from public, anon, authenticated;
-grant execute on function public.app_kolkata_today() to service_role;
+revoke execute on function public.account_set_active(uuid, boolean) from public, anon, authenticated;
+grant execute on function public.account_set_active(uuid, boolean) to service_role;
 
-comment on function public.app_kolkata_today() is
-  'Today on the Asia/Kolkata calendar, for the account function to date a deactivation (a-deactivated-person-leaves-in-two-steps, design D2).';
+comment on function public.account_set_active(uuid, boolean) is
+  'Service-only: sets is_active and stamps or clears deactivated_at by the database clock (a-deactivated-person-leaves-in-two-steps, design D2).';
+
+-- For the original Mark as left, which deactivates inside its own transaction:
+-- dates a departure of somebody still signed in as a deactivation now.
+create function public.account_stamp_deactivated(p_profile_id uuid)
+returns void
+language sql
+set search_path = ''
+as $$
+  update public.profiles p
+     set deactivated_at = coalesce(p.deactivated_at, now())
+   where p.id = p_profile_id and not p.is_active
+$$;
+
+revoke execute on function public.account_stamp_deactivated(uuid) from public, anon, authenticated;
+grant execute on function public.account_stamp_deactivated(uuid) to service_role;
+
+comment on function public.account_stamp_deactivated(uuid) is
+  'Service-only: stamps deactivated_at by the database clock on an inactive account that has none (a-deactivated-person-leaves-in-two-steps, design D2).';
 
 -- ---------------------------------------------------------------------------
 -- 2. Mark as left, from a deactivated account only (design D3).
@@ -73,15 +98,15 @@ as $$
 declare
   v_current_fingerprint text;
   v_is_active boolean;
-  v_deactivated_on date;
+  v_deactivated_at timestamptz;
   v_left_on date;
 begin
   if not public.app_change_gate('deactivate-then-leave') then
     raise exception 'deactivate-then-leave is off' using errcode = 'P0001';
   end if;
 
-  select p.is_active, p.deactivated_on
-    into v_is_active, v_deactivated_on
+  select p.is_active, p.deactivated_at
+    into v_is_active, v_deactivated_at
     from public.profiles p
    where p.id = p_profile_id
      for update;
@@ -116,16 +141,16 @@ begin
     raise exception 'owner access is changed in the database' using errcode = 'insufficient_privilege';
   end if;
 
-  -- Dated by the deactivation, not by the clean-up; Kolkata today only where
-  -- the day was never recorded.
-  v_left_on := coalesce(v_deactivated_on, current_date);
+  -- Dated by the deactivation's Kolkata day, not by the clean-up; Kolkata today
+  -- only where it was never recorded (timezone is Asia/Kolkata here).
+  v_left_on := coalesce(v_deactivated_at::date, current_date);
 
   update public.assignments a
      set ended_on = greatest(v_left_on, a.started_on)
    where a.person_id = p_profile_id and a.ended_on is null;
   update public.profiles p
      set phone = null,
-         deactivated_on = coalesce(p.deactivated_on, v_left_on)
+         deactivated_at = coalesce(p.deactivated_at, now())
    where p.id = p_profile_id;
 
   return query
@@ -141,4 +166,4 @@ grant execute on function public.mark_account_as_left_v2(uuid, uuid, text)
   to service_role;
 
 comment on function public.mark_account_as_left_v2(uuid, uuid, text) is
-  'Service-only departure of a deactivated account while deactivate-then-leave is on: ends every live assignment on the recorded deactivation day (never before its own start) and clears the phone, atomically. Refuses an active account, and an owner while owner-access-in-the-database is on.';
+  'Service-only departure of a deactivated account while deactivate-then-leave is on: ends every live assignment on the Kolkata day of the recorded deactivation (never before its own start) and clears the phone, atomically. Refuses an active account, and an owner while owner-access-in-the-database is on.';

@@ -43,18 +43,21 @@ const managerSession: Session = {
 
 const BILLER = DEMO_DEACTIVATED_BILLER_ACCOUNT_ID
 
-/** The demo, with the Biller deactivated two days before today, and today's date. */
+/**
+ * The demo, with the Biller deactivated two days before today at 15:00, after
+ * Kalyani's 13:00 deadline, and today's date.
+ */
 async function demoWith(
   on: boolean,
-  adjust?: (biller: ReturnType<typeof createDemoData>['accounts'][number]) => void,
+  adjust?: (biller: ReturnType<typeof createDemoData>['accounts'][number], today: string) => void,
 ) {
   const data = createDemoData()
   const adapters = createMockAdapters('franchise_admin', data)
   const kalyani = (await adapters.outlets.getOutlet(OUTLET_KALYANI_ID))!
   const today = resolveBusinessDate(new Date(), kalyani.business_day_cutover)
   const biller = data.accounts.find((account) => account.id === BILLER)!
-  biller.deactivatedOn = shiftBusinessDate(today, -2)
-  adjust?.(biller)
+  biller.deactivatedAt = `${shiftBusinessDate(today, -2)}T15:00:00+05:30`
+  adjust?.(biller, today)
   render(
     <MemoryRouter>
       <ChangeGatesForTest on={{ 'deactivate-then-leave': on }}>
@@ -98,6 +101,22 @@ describeChangeGate('deactivate-then-leave', (on) => {
     },
   )
 
+  it(
+    on
+      ? 'leaves out the day of somebody switched off before its deadline'
+      : 'lists somebody switched off in the morning on that day, as before',
+    async () => {
+      const user = userEvent.setup()
+      const { today } = await demoWith(on, (biller, day) => {
+        biller.deactivatedAt = `${shiftBusinessDate(day, -2)}T10:00:00+05:30`
+      })
+
+      await stepBack(user, 2, shiftBusinessDate(today, -2))
+      if (on) expect(screen.queryByTestId(`day-${BILLER}`)).not.toBeInTheDocument()
+      else expect(await screen.findByTestId(`day-${BILLER}`)).toBeInTheDocument()
+    },
+  )
+
   it('still lists a recorded day after the deactivation', async () => {
     const user = userEvent.setup()
     const { adapters, today } = await demoWith(on)
@@ -117,7 +136,7 @@ describeChangeGate('deactivate-then-leave', (on) => {
     const user = userEvent.setup()
     const { today } = await demoWith(on, (biller) => {
       biller.isActive = true
-      biller.deactivatedOn = null
+      biller.deactivatedAt = null
     })
 
     await stepBack(user, 1, shiftBusinessDate(today, -1))

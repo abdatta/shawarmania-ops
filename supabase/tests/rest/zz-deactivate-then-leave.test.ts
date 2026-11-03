@@ -266,10 +266,15 @@ describe('a deactivated person leaves in two steps, and owner access is the data
     expect(off.status).toBe(200)
     const { data: deactivated } = await service
       .from('profiles')
-      .select('deactivated_on')
+      .select('deactivated_at')
       .eq('id', person.id)
       .single()
-    expect(deactivated?.deactivated_on).toBe(kolkataToday())
+    // The database's own clock, within the minute this request took.
+    const stamped = Date.parse(deactivated!.deactivated_at!)
+    expect(Math.abs(stamped - Date.now())).toBeLessThan(60_000)
+    expect(
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(stamped)),
+    ).toBe(kolkataToday())
 
     const left = await call(managerToken, {
       action: 'mark-as-left-v2',

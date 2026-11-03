@@ -2,7 +2,7 @@
 -- a-deactivated-person-leaves-in-two-steps, behind `deactivate-then-leave` and
 -- `owner-access-in-the-database`).
 --
--- Held here: the gates' rows arrive off; `profiles.deactivated_on` is read
+-- Held here: the gates' rows arrive off; `profiles.deactivated_at` is read
 -- under `profiles_select` and nothing wider; `mark_account_as_left_v2` refuses
 -- with its gate off, refuses an active account, a stale fingerprint, a manager
 -- for somebody who also works elsewhere, and an owner while owner access is
@@ -50,9 +50,13 @@ create function pg_temp.kolkata_today() returns date
 language sql stable as $$ select (now() at time zone 'Asia/Kolkata')::date $$;
 
 /** Deactivate as the account function does: the flag and the day together. */
+/** Deactivated at 15:00 Kolkata on a given day, as the account function stamps it. */
 create function pg_temp.deactivate(p_person uuid, p_on date)
 returns void language sql as $$
-  update public.profiles set is_active = false, deactivated_on = p_on where id = p_person
+  update public.profiles
+     set is_active = false,
+         deactivated_at = (p_on + time '15:00') at time zone 'Asia/Kolkata'
+   where id = p_person
 $$;
 
 create function pg_temp.leave(p_actor uuid, p_person uuid)
@@ -76,9 +80,9 @@ select is(
   82,
   'deactivate-then-leave names its roadmap row'
 );
-select has_column('public', 'profiles', 'deactivated_on', 'profiles carries the deactivation day');
-select col_type_is('public', 'profiles', 'deactivated_on', 'date', 'the day is a date');
-select col_is_null('public', 'profiles', 'deactivated_on', 'and nullable, since an active account has none');
+select has_column('public', 'profiles', 'deactivated_at', 'profiles carries the deactivation moment');
+select col_type_is('public', 'profiles', 'deactivated_at', 'timestamp with time zone', 'the moment is a timestamp');
+select col_is_null('public', 'profiles', 'deactivated_at', 'and nullable, since an active account has none');
 
 -- ---------------------------------------------------------------------------
 -- Off: the new leave refuses, whoever asks.
@@ -190,9 +194,9 @@ select is(
   'an undated deactivation leaves on Kolkata today'
 );
 select is(
-  (select deactivated_on from public.profiles where id = :'STAFF_KPA'),
+  (select (deactivated_at at time zone 'Asia/Kolkata')::date from public.profiles where id = :'STAFF_KPA'),
   pg_temp.kolkata_today(),
-  'and the day is recorded on the account'
+  'and the moment is recorded on the account'
 );
 
 -- ---------------------------------------------------------------------------
@@ -219,16 +223,16 @@ select is(
 select pg_temp.deactivate(:'SPLIT', pg_temp.kolkata_today() - 2);
 select pg_temp.impersonate(:'FA_KAL');
 select is(
-  (select deactivated_on from public.profiles where id = :'SPLIT'),
+  (select (deactivated_at at time zone 'Asia/Kolkata')::date from public.profiles where id = :'SPLIT'),
   pg_temp.kolkata_today() - 2,
-  'a manager reads the day of somebody working at their outlet'
+  'a manager reads the moment of somebody working at their outlet'
 );
 select pg_temp.as_service();
 update public.assignments set ended_on = pg_temp.kolkata_today()
  where person_id = :'SPLIT' and outlet_id = :'KAL' and ended_on is null;
 select pg_temp.impersonate(:'FA_KAL');
 select is(
-  (select count(*) from public.profiles where id = :'SPLIT' and deactivated_on is not null),
+  (select count(*) from public.profiles where id = :'SPLIT' and deactivated_at is not null),
   0::bigint,
   'and nothing of somebody who works only at another outlet'
 );
@@ -256,11 +260,26 @@ select ok(
   has_function_privilege('service_role', 'public.app_change_gate(text)', 'execute'),
   'the account function reads the gates with the service role'
 );
-select is(public.app_kolkata_today(), pg_temp.kolkata_today(),
-  'the day the account function stamps is Kolkata today');
+-- Sign-in switched off and on, its moment by the database clock.
+select pg_temp.as_service();
+select public.account_set_active(:'STAFF_KAL', true);
+select is((select deactivated_at from public.profiles where id = :'STAFF_KAL'), null,
+  'reactivating clears the moment');
+select public.account_set_active(:'STAFF_KAL', false);
+select is((select deactivated_at from public.profiles where id = :'STAFF_KAL'), now(),
+  'deactivating stamps the database''s now');
+update public.profiles set deactivated_at = now() - interval '3 days' where id = :'STAFF_KAL';
+select public.account_set_active(:'STAFF_KAL', false);
+select is((select deactivated_at from public.profiles where id = :'STAFF_KAL'), now() - interval '3 days',
+  'deactivating somebody already inactive keeps their moment');
+update public.profiles set deactivated_at = null where id = :'STAFF_KAL';
+select public.account_stamp_deactivated(:'STAFF_KAL');
+select is((select deactivated_at from public.profiles where id = :'STAFF_KAL'), now(),
+  'the original Mark as left dates an undated departure now');
 select ok(
-  not has_function_privilege('authenticated', 'public.app_kolkata_today()', 'execute'),
-  'and only the account function asks it'
+  not has_function_privilege('authenticated', 'public.account_set_active(uuid,boolean)', 'execute')
+    and not has_function_privilege('authenticated', 'public.account_stamp_deactivated(uuid)', 'execute'),
+  'and only the account function writes it'
 );
 
 select * from finish();

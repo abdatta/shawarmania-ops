@@ -76,23 +76,19 @@ async function liveOwnerAssignmentIds(
 }
 
 /**
- * Write the account's sign-in state and the day it was switched off
- * (design D2): the day is stamped going from active to inactive, cleared going
- * back, and left alone when nothing changes. The day is the database's.
+ * Write the account's sign-in state and the moment it was switched off
+ * (design D2): stamped going from active to inactive, cleared going back, left
+ * alone when nothing changes, in one statement by the database's clock.
  */
 async function writeActive(
   service: SupabaseClient,
   target: TargetAccount,
   isActive: boolean,
 ): Promise<boolean> {
-  const patch: { is_active: boolean; deactivated_on?: string | null } = { is_active: isActive }
-  if (isActive && !target.isActive) patch.deactivated_on = null
-  if (!isActive && target.isActive) {
-    const { data: today, error } = await service.rpc('app_kolkata_today')
-    if (error || typeof today !== 'string') return false
-    patch.deactivated_on = today
-  }
-  const { error } = await service.from('profiles').update(patch).eq('id', target.id)
+  const { error } = await service.rpc('account_set_active', {
+    p_profile_id: target.id,
+    p_is_active: isActive,
+  })
   return !error
 }
 
@@ -539,14 +535,11 @@ async function markAsLeft(
       { profile_id: string; state_fingerprint: string; assignments: IntendedAssignment[] }[] | null
   )?.[0]
   if (!row) return json({ error: 'update_failed' }, 500)
-  // A departure of somebody still signed in is a deactivation on the same day,
-  // which is true, so it carries the day as Deactivate does (design D2). The
-  // departure has committed; a failed stamp leaves a day for the D7 repair.
+  // A departure of somebody still signed in is a deactivation now, which is
+  // true, so it carries the moment as Deactivate does (design D2). The
+  // departure has committed; a failed stamp leaves it for the D7 repair.
   if (target?.isActive) {
-    const { data: today } = await service.rpc('app_kolkata_today')
-    if (typeof today === 'string') {
-      await service.from('profiles').update({ deactivated_on: today }).eq('id', profileId)
-    }
+    await service.rpc('account_stamp_deactivated', { p_profile_id: profileId })
   }
   return json(
     {
@@ -595,10 +588,13 @@ async function markAsLeftV2(
     if (!isOwner(caller)) return json({ error: 'forbidden' }, 403)
     const { data: profile } = await service
       .from('profiles')
-      .select('deactivated_on')
+      .select('deactivated_at')
       .eq('id', profileId)
       .maybeSingle()
-    leftOn = (profile?.deactivated_on as string | null | undefined) ?? ''
+    const at = profile?.deactivated_at as string | null | undefined
+    leftOn = at
+      ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(at))
+      : ''
   } else {
     const { data, error } = await service.rpc('mark_account_as_left_v2', {
       p_actor_id: caller.id,

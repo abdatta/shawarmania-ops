@@ -25,10 +25,13 @@ real thing.
 The view SHALL additionally list any person carrying a recorded row on the day
 shown, whatever assignment they hold, so that every recorded day is visible and
 every count computed from rows can be settled. A person whose account is
-deactivated SHALL be listed on a day with no row only up to and including the
-business day their account was deactivated, and SHALL NOT be listed on a later
-day unless they carry a row on it. An inactive account whose deactivation day
-is not recorded SHALL be listed as an active one is.
+deactivated SHALL be listed at an outlet on a day with no row only where their
+account was deactivated after that outlet's arrival deadline on that business
+day, since before it they could still have checked in and after it they could
+not; they SHALL NOT be listed on a day with no row otherwise. An outlet with no
+arrival deadline SHALL count from the start of its business day. An inactive
+account whose moment of deactivation is not recorded SHALL be listed as an
+active one is.
 
 The count of days waiting for approval SHALL be stated on the view as a badge
 against the business day it belongs to, so a manager learns of them without
@@ -143,12 +146,25 @@ action SHALL offer nothing to open.
   on no other day
 - **THEN** the day carries its count and neither day control is marked
 
-#### Scenario: A deactivated person is listed through their deactivation day
+#### Scenario: Deactivated after the deadline, listed that day and not after
 
-- **WHEN** a Biller was deactivated on 12 October with no row on 12 or 13 October,
-  and a manager opens 12 October and then 13 October
+- **WHEN** a Biller was deactivated at 15:00 on 12 October, after their outlet's
+  13:00 deadline, with no row on 12 or 13 October, and a manager opens 12 October
+  and then 13 October
 - **THEN** the Biller is listed on 12 October, noted as deactivated, and is not
   listed on 13 October
+
+#### Scenario: Deactivated before the deadline, not listed that day
+
+- **WHEN** the Biller was instead deactivated at 10:00 on 12 October
+- **THEN** they are not listed on 12 October, since they could no longer check in
+  before the deadline
+
+#### Scenario: Deactivated in the night, the day before is theirs
+
+- **WHEN** the Biller was deactivated at 02:00 on 13 October, before the 04:00
+  cutover, so during business day 12 October
+- **THEN** they are listed on 12 October and not on 13 October
 
 #### Scenario: A real row after the deactivation day is still listed
 
@@ -166,16 +182,17 @@ action SHALL offer nothing to open.
 ### Requirement: By staff paints no day after a deactivation
 
 A person's month on By staff SHALL treat each assignment window as ending no
-later than the business day their account was deactivated, so that a day after
-it with no row SHALL read as outside their time at the outlet and never as
-absent. A recorded row on any day SHALL still be shown. A deactivated person who
+later than the last business day they could still have checked in at that
+outlet (the day they were deactivated if that was after its arrival deadline,
+else the day before), so that a later day with no row SHALL read as outside
+their time at the outlet and never as absent. A recorded row on any day SHALL still be shown. A deactivated person who
 has not left SHALL remain selectable on By staff, so their earlier months stay
 readable.
 
 #### Scenario: The month stops at the deactivation day
 
-- **WHEN** a manager opens By staff for an Employee deactivated on 12 October,
-  with no rows after the 10th
+- **WHEN** a manager opens By staff for an Employee deactivated at 15:00 on 12
+  October, with no rows after the 10th
 - **THEN** 11 and 12 October read absent, and no day from 13 October on reads
   absent
 

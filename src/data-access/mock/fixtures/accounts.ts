@@ -59,15 +59,17 @@ export const DEMO_FORMER_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000009'
 export const DEMO_DEACTIVATED_BILLER_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000017'
 
 /**
- * When each deactivated account was switched off, in business days before the
- * demo's today (a-deactivated-person-leaves-in-two-steps, design D2). Days
- * back rather than dates, as the attendance seeds are, so the demo reads the
- * same whenever it is opened; the accounts mock turns them into dates. The
- * former staff member has none: they left before the day was recorded.
+ * When each deactivated account was switched off: days before the demo's today
+ * and the Kolkata time (a-deactivated-person-leaves-in-two-steps, design D2,
+ * D10). Days back rather than dates, as the attendance seeds are, so the demo
+ * reads the same whenever it is opened; the accounts mock turns them into
+ * instants, never later than now. The Biller went at 15:00, after Kalyani's
+ * 13:00 deadline, so that day still lists them; the Prep Cook at lunchtime
+ * today. The former staff member has none: they left before it was recorded.
  */
-export const DEACTIVATED_DAYS_AGO: Readonly<Record<string, number>> = {
-  [DEMO_PREP_COOK_ACCOUNT_ID]: 0,
-  [DEMO_DEACTIVATED_BILLER_ACCOUNT_ID]: 10,
+export const DEACTIVATED_AT: Readonly<Record<string, { daysAgo: number; time: string }>> = {
+  [DEMO_PREP_COOK_ACCOUNT_ID]: { daysAgo: 0, time: '12:30' },
+  [DEMO_DEACTIVATED_BILLER_ACCOUNT_ID]: { daysAgo: 10, time: '15:00' },
 }
 
 const colleagues = [
@@ -76,7 +78,7 @@ const colleagues = [
     full_name: 'Demo Manager (Kanchrapara)',
     phone: null,
     is_active: true,
-    deactivated_on: null,
+    deactivated_at: null,
     role_title: 'Manager',
     created_at: FIXTURE_CREATED_AT,
   },
@@ -85,7 +87,7 @@ const colleagues = [
     full_name: 'Demo Griller',
     phone: null,
     is_active: true,
-    deactivated_on: null,
+    deactivated_at: null,
     role_title: 'Grill',
     created_at: FIXTURE_CREATED_AT,
   },
@@ -94,7 +96,7 @@ const colleagues = [
     full_name: 'Demo Evening Biller',
     phone: null,
     is_active: true,
-    deactivated_on: null,
+    deactivated_at: null,
     role_title: null,
     created_at: FIXTURE_CREATED_AT,
   },
@@ -105,7 +107,7 @@ const colleagues = [
     full_name: 'Demo New Starter',
     phone: null,
     is_active: true,
-    deactivated_on: null,
+    deactivated_at: null,
     role_title: 'Prep',
     created_at: FIXTURE_CREATED_AT,
   },
@@ -116,7 +118,7 @@ const colleagues = [
     full_name: 'Demo Former Staff',
     phone: null,
     is_active: false,
-    deactivated_on: null,
+    deactivated_at: null,
     role_title: 'Counter staff',
     created_at: FIXTURE_CREATED_AT,
   },
@@ -129,7 +131,7 @@ const colleagues = [
     full_name: 'Demo Morning Biller',
     phone: null,
     is_active: true,
-    deactivated_on: null,
+    deactivated_at: null,
     role_title: null,
     created_at: FIXTURE_CREATED_AT,
   },
@@ -139,7 +141,7 @@ const colleagues = [
     full_name: 'Demo Helper',
     phone: null,
     is_active: true,
-    deactivated_on: null,
+    deactivated_at: null,
     role_title: 'Prep',
     created_at: FIXTURE_CREATED_AT,
   },
@@ -148,7 +150,7 @@ const colleagues = [
     full_name: 'Demo Kanchrapara Staff',
     phone: null,
     is_active: true,
-    deactivated_on: null,
+    deactivated_at: null,
     role_title: 'Counter staff',
     created_at: FIXTURE_CREATED_AT,
   },
@@ -160,7 +162,7 @@ const colleagues = [
     full_name: 'Demo Prep Cook',
     phone: null,
     is_active: false,
-    deactivated_on: null,
+    deactivated_at: null,
     role_title: 'Prep',
     created_at: FIXTURE_CREATED_AT,
   },
@@ -169,7 +171,7 @@ const colleagues = [
     full_name: 'Demo Runner',
     phone: null,
     is_active: true,
-    deactivated_on: null,
+    deactivated_at: null,
     role_title: 'Runner',
     created_at: FIXTURE_CREATED_AT,
   },
@@ -178,7 +180,7 @@ const colleagues = [
     full_name: 'Demo Both Outlets',
     phone: null,
     is_active: true,
-    deactivated_on: null,
+    deactivated_at: null,
     role_title: 'Counter staff',
     created_at: FIXTURE_CREATED_AT,
   },
@@ -187,7 +189,7 @@ const colleagues = [
     full_name: 'Demo Returner',
     phone: null,
     is_active: true,
-    deactivated_on: null,
+    deactivated_at: null,
     role_title: 'Grill',
     created_at: FIXTURE_CREATED_AT,
   },
@@ -199,7 +201,7 @@ const colleagues = [
     full_name: 'Demo Weekend Biller',
     phone: '919800000017',
     is_active: false,
-    deactivated_on: null,
+    deactivated_at: null,
     role_title: null,
     created_at: FIXTURE_CREATED_AT,
   },

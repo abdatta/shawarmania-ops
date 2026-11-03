@@ -1440,12 +1440,12 @@ guards still hold.
   `assignments` row with `role = 'super_admin'`, `outlet_id = null` and
   `started_on` the Kolkata day, and `set_super_admin_account_email`. Their next
   session lands on the owner's shell.
-- **Remove**: `update public.assignments set ended_on = public.app_kolkata_today()
+- **Remove**: `update public.assignments set ended_on = (now() at time zone 'Asia/Kolkata')::date
   where person_id = '<id>' and role = 'super_admin' and ended_on is null;` The
   final-owner trigger refuses removing the last one.
-- **Switch an owner off**: `update public.profiles set is_active = false,
-  deactivated_on = public.app_kolkata_today() where id = '<id>';` and back with
-  `is_active = true, deactivated_on = null`.
+- **Switch an owner off**: `select public.account_set_active('<id>', false);`
+  and back with `select public.account_set_active('<id>', true);`, which stamp and
+  clear `deactivated_at` by the database clock.
 
 ## Backups
 

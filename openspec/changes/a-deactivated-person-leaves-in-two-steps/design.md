@@ -77,7 +77,7 @@ them and are offered side by side. This change gives them a fixed order:
 Nobody can reach "left" without passing through "deactivated", so an active
 person is never wiped by a mis-tap, and the cleanup is a deliberate second act.
 
-## D2. `profiles.deactivated_on`
+## D2. `profiles.deactivated_on` (superseded by D10: `deactivated_at`)
 
 A nullable `date`, the Kolkata business calendar day the account was last
 deactivated. No default and no constraint; additive.
@@ -318,6 +318,36 @@ gate off Team reads as before.
   accent's own on-colour, which the contrast check holds (dark in the dark
   theme). A deactivated person's menu is **Reactivate** and **Remove**, with no
   **Edit**.
+
+## D10. The moment, not the day (owner, 2026-11-02)
+
+After approving the demo the owner asked why somebody switched off at 10:00
+should read absent that day: they could not check in any more, though they still
+had until 13:00. And a day alone misplaces a deactivation at 02:00, which belongs
+to the previous business day under the 04:00 cutover but was dated by the
+calendar. Both are answered by storing the moment.
+
+- **One column, `profiles.deactivated_at timestamptz`**, in place of
+  `deactivated_on date`. The migration had reached only staging, which the owner
+  allowed to be patched by hand ("staging can be broken, production must be
+  fine"), so it was rewritten in place rather than added to, and production gets
+  the one column.
+- **Stamped by the database clock** through two service-only functions:
+  `account_set_active(profile, is_active)` (stamped going active → inactive,
+  cleared going back, untouched otherwise, with `is_active` in one statement) and
+  `account_stamp_deactivated(profile)` for the original Mark as left. They replace
+  `app_kolkata_today()`.
+- **The rule:** a deactivated person is listed at an outlet on a day with no row
+  only where they were switched off after that outlet's arrival deadline that
+  business day (`wasActiveOn(person, day, outlet)`); no deadline counts from the
+  day's start. By staff's window ends on the last such day; manual entry is
+  offered only on such days. The *deactivated* note shows from the Kolkata day of
+  the moment.
+- **The day still shown and used** is the Kolkata calendar day of the moment:
+  *Deactivated · 27 Oct* on Team, and the day Remove ends outlets on.
+- Production's Naresh, switched off on 27 October at a time nobody recorded, is
+  given a time that day in the repair (repair.md): before 13:00 unless the owner
+  recalls it was later, so the 27th is not his to have missed.
 
 ## Version skew
 

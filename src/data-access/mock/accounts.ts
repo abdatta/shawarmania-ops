@@ -13,6 +13,7 @@ import type {
 } from '../adapters'
 import {
   AccountActionError,
+  deactivationDay,
   deriveAccountLifecycle,
   isStaffRole,
   liveAssignments,
@@ -24,7 +25,7 @@ import { canonicalUsername } from '../../../shared/username'
 import {
   accountFixtures,
   assignmentFixtures,
-  DEACTIVATED_DAYS_AGO,
+  DEACTIVATED_AT,
   PENDING_ACCOUNT_ID,
   RESET_PENDING_ACCOUNT_ID,
 } from './fixtures/accounts'
@@ -105,7 +106,7 @@ export function createDemoAccounts(): AccountSummary[] {
         : profile.id === RESET_PENDING_ACCOUNT_ID
           ? { purpose: 'password_reset' as const, expiresAt: inSevenDays() }
           : null
-    const daysAgo = DEACTIVATED_DAYS_AGO[profile.id]
+    const switchedOff = DEACTIVATED_AT[profile.id]
     const account: AccountSummary = {
       id: profile.id,
       fullName: profile.full_name,
@@ -113,10 +114,17 @@ export function createDemoAccounts(): AccountSummary[] {
       accountEmail: isOwner ? DEMO_ACCOUNT_EMAILS.superAdmin : DEMO_ACCOUNT_EMAILS.ordinaryAccount,
       phone: profile.phone,
       isActive: profile.is_active,
-      deactivatedOn:
-        daysAgo === undefined
-          ? profile.deactivated_on
-          : shiftBusinessDate(kolkataToday(), -daysAgo),
+      deactivatedAt:
+        switchedOff === undefined
+          ? profile.deactivated_at
+          : new Date(
+              Math.min(
+                Date.now(),
+                Date.parse(
+                  `${shiftBusinessDate(kolkataToday(), -switchedOff.daysAgo)}T${switchedOff.time}:00+05:30`,
+                ),
+              ),
+            ).toISOString(),
       hasSignedIn,
       roleTitle: profile.role_title,
       assignments,
@@ -147,8 +155,8 @@ export function createMockAccountsAdapter(
 
   /** Sign-in state and its day, as the account function writes them (design D2). */
   function writeActive(account: AccountSummary, isActive: boolean): void {
-    if (isActive && !account.isActive) account.deactivatedOn = null
-    if (!isActive && account.isActive) account.deactivatedOn = kolkataToday()
+    if (isActive && !account.isActive) account.deactivatedAt = null
+    if (!isActive && account.isActive) account.deactivatedAt = new Date().toISOString()
     account.isActive = isActive
   }
 
@@ -429,13 +437,13 @@ export function createMockAccountsAdapter(
     async listRoster() {
       return structuredClone(
         accounts.map(
-          ({ id, fullName, phone, roleTitle, isActive, deactivatedOn, assignments }) => ({
+          ({ id, fullName, phone, roleTitle, isActive, deactivatedAt, assignments }) => ({
             id,
             fullName,
             phone,
             roleTitle,
             isActive,
-            deactivatedOn,
+            deactivatedAt,
             assignments,
           }),
         ),
@@ -478,7 +486,7 @@ export function createMockAccountsAdapter(
           input.role === 'super_admin' ? input.accountEmail!.trim().toLowerCase() : null,
         phone: input.phone ?? null,
         isActive: true,
-        deactivatedOn: null,
+        deactivatedAt: null,
         hasSignedIn: false,
         roleTitle: input.roleTitle ?? null,
         assignments: outletIds.map((outletId) => ({
@@ -565,11 +573,11 @@ export function createMockAccountsAdapter(
         )
       }
       // Dated by the deactivation, never before an assignment's own start.
-      const leftOn = account.deactivatedOn ?? kolkataToday()
+      const leftOn = account.deactivatedAt ? deactivationDay(account.deactivatedAt) : kolkataToday()
       for (const assignment of liveAssignments(account.assignments)) {
         assignment.endedOn = assignment.startedOn > leftOn ? assignment.startedOn : leftOn
       }
-      account.deactivatedOn = leftOn
+      account.deactivatedAt ??= new Date().toISOString()
       account.phone = null
       // The username is freed: nothing signs in with it, and anybody may take it.
       account.username = null

@@ -167,6 +167,18 @@ and new behaviour sits beside it behind `useChangeGate`.
   `npm test`, `contrast`, `build`; the database job up to the types diff.
 - [x] 13.2 Squash to 3–5 commits; push `HEAD:stage`; read the run.
 
+## 13b. The moment, not the day (design D10, owner 2026-11-02)
+
+- [x] 13b.1 `deactivated_at timestamptz` in place of `deactivated_on date`, in the
+  migration itself (it had reached staging only; staging patched by hand to
+  match). `account_set_active` and `account_stamp_deactivated` stamp it by the
+  database clock; `app_kolkata_today` goes.
+- [x] 13b.2 Attendance lists a deactivated person on a rowless day only where they
+  were switched off after that outlet's arrival deadline; By staff's window and
+  manual entry follow. Unit, pgTAP and REST tests for 10:00, 15:00 and 02:00.
+- [x] 13b.3 Lint, format, both typechecks, unit, build, the database job up to the
+  types diff, and the REST probes, locally on 2 November.
+
 ## 14. Release
 
 - [ ] 14.1 The owner approves a Promote; both gates reach production off.

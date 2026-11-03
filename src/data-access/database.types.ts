@@ -4922,7 +4922,7 @@ export type Database = {
       profiles: {
         Row: {
           created_at: string
-          deactivated_on: string | null
+          deactivated_at: string | null
           full_name: string
           id: string
           is_active: boolean
@@ -4931,7 +4931,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          deactivated_on?: string | null
+          deactivated_at?: string | null
           full_name: string
           id: string
           is_active?: boolean
@@ -4940,7 +4940,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          deactivated_on?: string | null
+          deactivated_at?: string | null
           full_name?: string
           id?: string
           is_active?: boolean
@@ -5206,6 +5206,14 @@ export type Database = {
           state_fingerprint: string
         }[]
       }
+      account_set_active: {
+        Args: { p_is_active: boolean; p_profile_id: string }
+        Returns: undefined
+      }
+      account_stamp_deactivated: {
+        Args: { p_profile_id: string }
+        Returns: undefined
+      }
       account_state_fingerprint: {
         Args: { p_profile_id: string }
         Returns: string
@@ -5312,7 +5320,6 @@ export type Database = {
       app_is_owner: { Args: never; Returns: boolean }
       app_kitchen_shift: { Args: never; Returns: string }
       app_kitchen_shift_outlet: { Args: never; Returns: string }
-      app_kolkata_today: { Args: never; Returns: string }
       app_may_hold_counter_shift: {
         Args: { outlet: string; person: string }
         Returns: boolean

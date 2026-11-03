@@ -35,7 +35,7 @@ import { signalHumanSessionInvalid } from '../../session/human-session-invalid'
 // and where they work are one answer to one question, and two round trips
 // would let the list render somebody whose placement had not arrived yet.
 const PROFILE_COLUMNS =
-  'id, full_name, phone, is_active, deactivated_on, role_title, ' +
+  'id, full_name, phone, is_active, deactivated_at, role_title, ' +
   'assignments(id, role, outlet_id, started_on, ended_on)'
 
 interface AssignmentRow {
@@ -51,7 +51,7 @@ interface ProfileRow {
   full_name: string
   phone: string | null
   is_active: boolean
-  deactivated_on: string | null
+  deactivated_at: string | null
   role_title: string | null
   assignments: AssignmentRow[] | null
 }
@@ -157,7 +157,7 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
     phone: profile.phone,
     roleTitle: profile.role_title,
     isActive: profile.is_active,
-    deactivatedOn: profile.deactivated_on,
+    deactivatedAt: profile.deactivated_at,
     assignments: toAssignments(profile.assignments),
   })
 

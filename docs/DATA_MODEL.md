@@ -102,13 +102,16 @@ keeps asking.
 `is_active` remains the answer for an outlet that traded — its staff, attendance and bills are history the business keeps. Deletion is for an outlet that should never have existed, and the app offers it only once the outlet is already marked closed.
 
 **`profiles`** — one row per person, `id` matching `auth.users.id`.
-`id`, `full_name`, `phone`, `is_active`, `deactivated_on`, `role_title`, `created_at`.
+`id`, `full_name`, `phone`, `is_active`, `deactivated_at`, `role_title`, `created_at`.
 
-`deactivated_on` *(#82)* is the Kolkata day the account was last deactivated,
-null while it is active. The account function writes it with `is_active`, from
-`app_kolkata_today()`, and clears it on reactivation; nothing else writes it, and
-it is read under `profiles_select` only with `deactivate-then-leave` on. An
-inactive account with no day was switched off before the day was recorded.
+`deactivated_at` *(#82)* is when the account was last deactivated, by the
+database clock, null while it is active. The account function writes it with
+`is_active` through `account_set_active(profile, is_active)` (stamped going
+inactive, cleared going active) and `account_stamp_deactivated(profile)` for the
+original Mark as left; nothing else writes it, and it is read under
+`profiles_select` only with `deactivate-then-leave` on. Attendance compares it
+with each day's arrival deadline; its Kolkata date is the day Team shows. An
+inactive account with none was switched off before it was recorded.
 **A left account** is inactive, holds no live assignment (each ended on its
 deactivation day by `mark_account_as_left_v2`, Team's Remove, never before its own start), has
 no phone, and its Auth alias is `<profile-id>@left.shawarmania.invalid`, outside

@@ -17,6 +17,7 @@ import { useChangeGate } from '@/change-gates/context'
 import { useAdapters, type Tables } from '@/data-access'
 import {
   DataActionError,
+  deactivationDay,
   FAILED_ACTIVATION_NOTICE,
   joinAccount,
   liveAssignments,
@@ -401,7 +402,11 @@ export function AccountsSurface() {
   const signedInRows = list.filter((row) => row.isActive)
   const deactivatedRows = list
     .filter((row) => !row.isActive && !hasLeft(row))
-    .sort((a, b) => (b.deactivatedOn ?? '').localeCompare(a.deactivatedOn ?? ''))
+    .sort(
+      (a, b) =>
+        (b.deactivatedAt ? Date.parse(b.deactivatedAt) : 0) -
+        (a.deactivatedAt ? Date.parse(a.deactivatedAt) : 0),
+    )
   const holdsOwnerAccess = (row: Pick<RosterPerson, 'assignments'>) =>
     liveAssignments(row.assignments).some((assignment) => assignment.role === 'super_admin')
 
@@ -531,8 +536,8 @@ export function AccountsSurface() {
           <span>
             {deactivateThenLeave && account.lifecycle.kind === 'deactivated' ? (
               <span data-testid={`deactivated-${row.id}`} className="font-semibold text-danger">
-                {account.deactivatedOn
-                  ? `Deactivated · ${formatBusinessDateShort(account.deactivatedOn)}`
+                {account.deactivatedAt
+                  ? `Deactivated · ${formatBusinessDateShort(deactivationDay(account.deactivatedAt))}`
                   : 'Deactivated'}
               </span>
             ) : lifecycleLabel(account) === 'Not assigned to an outlet' ? (

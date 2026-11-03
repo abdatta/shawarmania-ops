@@ -12,6 +12,7 @@ import type {
   ServiceType,
   SyncStateKind,
 } from '@/domain'
+import { instantOnBusinessDay } from '@/domain'
 import type { PositionReading } from '@/lib/geolocation'
 
 import type { BillingCommand } from '../../shared/billing-command'
@@ -370,11 +371,11 @@ export interface AccountSummary {
   phone: string | null
   isActive: boolean
   /**
-   * The Kolkata business day the account was last deactivated, null while it is
-   * active (a-deactivated-person-leaves-in-two-steps, design D2). An inactive
-   * account with no day was deactivated before the day was recorded.
+   * When the account was last deactivated, by the database clock; null while it
+   * is active (a-deactivated-person-leaves-in-two-steps, design D2, D10). An
+   * inactive account with none was deactivated before it was recorded.
    */
-  deactivatedOn: string | null
+  deactivatedAt: string | null
   /** True only after Auth records a successful sign-in for this account. */
   hasSignedIn: boolean
   /** Free-text job label ("Griller"), distinct from the app-capability role. */
@@ -416,7 +417,7 @@ export interface AccountSummary {
  */
 export type RosterPerson = Pick<
   AccountSummary,
-  'id' | 'fullName' | 'phone' | 'roleTitle' | 'isActive' | 'deactivatedOn' | 'assignments'
+  'id' | 'fullName' | 'phone' | 'roleTitle' | 'isActive' | 'deactivatedAt' | 'assignments'
 >
 
 /**
@@ -553,20 +554,40 @@ export function wasStaffAtOn(
 }
 
 /**
- * Could this person sign in on an inclusive business date, as far as anyone
- * knows (a-deactivated-person-leaves-in-two-steps, design D8)?
+ * Could this person still have checked in at this outlet on this business day
+ * (a-deactivated-person-leaves-in-two-steps, design D8, D10)?
  *
- * True while active, and for a deactivated person up to and including the day
- * they were deactivated. An inactive account with no recorded day reads true:
- * nothing is hidden that might be real (design D2). Beside `wasStaffAtOn`, and
- * asked with it: one says where somebody worked, this says until when.
+ * True while active, and for a deactivated person only where they were switched
+ * off after that day's arrival deadline: before it, they never had the chance,
+ * so the day is not theirs to have missed (owner, 2026-11-02). Somebody switched
+ * off at 10:00 is not listed that day; at 15:00 they are, and missed it. An
+ * outlet with no deadline counts from the start of its business day. An inactive
+ * account with no recorded moment reads true: nothing is hidden that might be
+ * real (design D2). Asked beside `wasStaffAtOn`: one says where somebody worked,
+ * this says until when.
  */
 export function wasActiveOn(
-  person: Pick<AccountSummary, 'isActive' | 'deactivatedOn'>,
+  person: Pick<AccountSummary, 'isActive' | 'deactivatedAt'>,
   businessDate: string,
+  outlet: Pick<Tables<'outlets'>, 'arrival_deadline' | 'business_day_cutover'>,
 ): boolean {
-  if (person.isActive || person.deactivatedOn === null) return true
-  return businessDate <= person.deactivatedOn
+  if (person.isActive || person.deactivatedAt === null) return true
+  const deadline = instantOnBusinessDay(
+    businessDate,
+    outlet.arrival_deadline ?? outlet.business_day_cutover,
+    outlet.business_day_cutover,
+  )
+  return Date.parse(person.deactivatedAt) > Date.parse(deadline)
+}
+
+/**
+ * The Kolkata calendar day of a deactivation: the day Team shows and Remove ends
+ * outlets on (design D10).
+ */
+export function deactivationDay(deactivatedAt: string): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(
+    new Date(deactivatedAt),
+  )
 }
 
 /** The one-time code, returned once and never retrievable again. */
