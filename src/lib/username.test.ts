@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   AUTH_ALIAS_SUFFIX,
+  LEFT_ALIAS_SUFFIX,
+  leftAuthAlias,
   authAliasToUsername,
   canonicalUsername,
   normalizeUsername,
@@ -48,5 +50,12 @@ describe('canonical usernames', () => {
     expect(authAliasToUsername(alias)).toBe('rahul.k')
     expect(authAliasToUsername('rahul.k@example.com')).toBeNull()
     expect(authAliasToUsername(`bad..name${AUTH_ALIAS_SUFFIX}`)).toBeNull()
+  })
+
+  it('reads a left account’s alias as no username, so the name is free', () => {
+    const alias = leftAuthAlias('10000000-0000-4000-A000-00000000000A')
+    expect(alias).toBe(`10000000-0000-4000-a000-00000000000a${LEFT_ALIAS_SUFFIX}`)
+    expect(alias.endsWith(AUTH_ALIAS_SUFFIX)).toBe(false)
+    expect(authAliasToUsername(alias)).toBeNull()
   })
 })

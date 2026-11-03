@@ -3,6 +3,8 @@ import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2'
 import {
   authAliasToUsername,
   canonicalUsername,
+  LEFT_ALIAS_SUFFIX,
+  leftAuthAlias,
   usernameToAuthAlias,
 } from '../../../shared/username.ts'
 import {
@@ -38,6 +40,60 @@ interface IntendedAssignment {
   outletId: string | null
   role: AppRole
   startedOn: string
+}
+
+/**
+ * A change gate's answer, read on every request (AGENTS.md: an Edge Function
+ * that changes behaviour reads `app_change_gate` with the service role). A read
+ * that fails is off, and off is the behaviour as it was.
+ */
+async function gateOn(service: SupabaseClient, key: string): Promise<boolean> {
+  const { data, error } = await service.rpc('app_change_gate', { p_key: key })
+  return !error && data === true
+}
+
+/**
+ * Owner access is granted and removed only in the database while
+ * `owner-access-in-the-database` is on (a-deactivated-person-leaves-in-two-steps,
+ * design D5). Every refusal is this one answer.
+ */
+const OWNER_ACCESS_IN_DATABASE = 'owner-access-in-the-database'
+const ownerAccessInDatabase = () => json({ error: 'owner_access_in_database' }, 403)
+
+/** The live Super Admin assignments a person holds, by id. */
+async function liveOwnerAssignmentIds(
+  service: SupabaseClient,
+  profileId: string,
+): Promise<string[] | null> {
+  const { data, error } = await service
+    .from('assignments')
+    .select('id')
+    .eq('person_id', profileId)
+    .eq('role', 'super_admin')
+    .is('ended_on', null)
+  if (error) return null
+  return (data ?? []).map((row) => row.id as string)
+}
+
+/**
+ * Write the account's sign-in state and the day it was switched off
+ * (design D2): the day is stamped going from active to inactive, cleared going
+ * back, and left alone when nothing changes. The day is the database's.
+ */
+async function writeActive(
+  service: SupabaseClient,
+  target: TargetAccount,
+  isActive: boolean,
+): Promise<boolean> {
+  const patch: { is_active: boolean; deactivated_on?: string | null } = { is_active: isActive }
+  if (isActive && !target.isActive) patch.deactivated_on = null
+  if (!isActive && target.isActive) {
+    const { data: today, error } = await service.rpc('app_kolkata_today')
+    if (error || typeof today !== 'string') return false
+    patch.deactivated_on = today
+  }
+  const { error } = await service.from('profiles').update(patch).eq('id', target.id)
+  return !error
 }
 
 async function currentUsername(service: SupabaseClient, profileId: string): Promise<string | null> {
@@ -111,6 +167,9 @@ async function provision(
   const requestedOutletIds = outletIds as string[]
   if (!mayProvision(caller, role, requestedOutletIds)) {
     return json({ error: 'forbidden' }, 403)
+  }
+  if (role === 'super_admin' && (await gateOn(service, OWNER_ACCESS_IN_DATABASE))) {
+    return ownerAccessInDatabase()
   }
   if (
     (role === 'super_admin' && accountEmail === null) ||
@@ -237,12 +296,11 @@ async function setActive(
   const target = await loadAccount(service, profileId)
   if (!target) return json({ error: 'not_found' }, 404)
   if (!mayManage(caller, target)) return json({ error: 'forbidden' }, 403)
+  if (isOwner(target) && (await gateOn(service, OWNER_ACCESS_IN_DATABASE))) {
+    return ownerAccessInDatabase()
+  }
 
-  const { error } = await service
-    .from('profiles')
-    .update({ is_active: isActive })
-    .eq('id', target.id)
-  if (error) return json({ error: 'update_failed' }, 500)
+  if (!(await writeActive(service, target, isActive))) return json({ error: 'update_failed' }, 500)
   return json({ profileId: target.id, isActive }, 200)
 }
 
@@ -391,6 +449,20 @@ async function editAccount(
     return json({ error: 'invalid_request' }, 400)
   }
 
+  // The intended set carries the target's owner assignments exactly as they
+  // are, or the edit grants or removes owner access (design D5).
+  if (await gateOn(service, OWNER_ACCESS_IN_DATABASE)) {
+    const held = await liveOwnerAssignmentIds(service, profileId)
+    if (held === null) return json({ error: 'lookup_failed' }, 500)
+    const intended = assignments.filter((assignment) => assignment.role === 'super_admin')
+    const same =
+      intended.length === held.length &&
+      intended.every(
+        (assignment) => assignment.assignmentId !== null && held.includes(assignment.assignmentId),
+      )
+    if (!same) return ownerAccessInDatabase()
+  }
+
   const code = generateCode()
   const { data, error } = await service.rpc('edit_account_assignment_set', {
     p_actor_id: caller.id,
@@ -450,6 +522,12 @@ async function markAsLeft(
   if (!profileId || !UUID.test(profileId) || !expectedStateFingerprint) {
     return json({ error: 'invalid_request' }, 400)
   }
+  // Read only to refuse an owner and to date the departure; a missing account
+  // is still the database's to answer, as it was.
+  const target = await loadAccount(service, profileId)
+  if (target && isOwner(target) && (await gateOn(service, OWNER_ACCESS_IN_DATABASE))) {
+    return ownerAccessInDatabase()
+  }
   const { data, error } = await service.rpc('mark_account_as_left', {
     p_actor_id: caller.id,
     p_profile_id: profileId,
@@ -461,6 +539,15 @@ async function markAsLeft(
       { profile_id: string; state_fingerprint: string; assignments: IntendedAssignment[] }[] | null
   )?.[0]
   if (!row) return json({ error: 'update_failed' }, 500)
+  // A departure of somebody still signed in is a deactivation on the same day,
+  // which is true, so it carries the day as Deactivate does (design D2). The
+  // departure has committed; a failed stamp leaves a day for the D7 repair.
+  if (target?.isActive) {
+    const { data: today } = await service.rpc('app_kolkata_today')
+    if (typeof today === 'string') {
+      await service.from('profiles').update({ deactivated_on: today }).eq('id', profileId)
+    }
+  }
   return json(
     {
       profileId: row.profile_id,
@@ -470,6 +557,89 @@ async function markAsLeft(
     },
     200,
   )
+}
+
+/**
+ * Mark as left, the second step (design D3): only from a deactivated account,
+ * dated by its deactivation, clearing the phone in the database and then moving
+ * the Auth alias out of the sign-in namespace so the username is free. The
+ * database commits first: a failed move leaves somebody left whose username is
+ * still held, which is harmless and retried by sending this again, which skips
+ * the departure it already made.
+ */
+async function markAsLeftV2(
+  service: SupabaseClient,
+  caller: Caller,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const profileId = str(body['profileId'])
+  const expectedStateFingerprint = str(body['expectedStateFingerprint'])
+  if (!profileId || !UUID.test(profileId) || !expectedStateFingerprint) {
+    return json({ error: 'invalid_request' }, 400)
+  }
+  if (!(await gateOn(service, 'deactivate-then-leave'))) {
+    return json({ error: 'not_available' }, 409)
+  }
+  const target = await loadAccount(service, profileId)
+  if (!target) return json({ error: 'not_found' }, 404)
+  if (isOwner(target) && (await gateOn(service, OWNER_ACCESS_IN_DATABASE))) {
+    return ownerAccessInDatabase()
+  }
+
+  let leftOn: string
+  let stateFingerprint: string | null = null
+  const alreadyLeft = !target.isActive && target.assignments.length === 0
+  if (alreadyLeft) {
+    // Somebody already left whose username move failed. Nothing to end again,
+    // and nobody but the owner manages a person who works nowhere.
+    if (!isOwner(caller)) return json({ error: 'forbidden' }, 403)
+    const { data: profile } = await service
+      .from('profiles')
+      .select('deactivated_on')
+      .eq('id', profileId)
+      .maybeSingle()
+    leftOn = (profile?.deactivated_on as string | null | undefined) ?? ''
+  } else {
+    const { data, error } = await service.rpc('mark_account_as_left_v2', {
+      p_actor_id: caller.id,
+      p_profile_id: profileId,
+      p_expected_fingerprint: expectedStateFingerprint,
+    })
+    if (error) {
+      const detail = `${error.message} ${error.details ?? ''}`
+      if (detail.includes('deactivate first')) return json({ error: 'account_active' }, 409)
+      if (detail.includes('deactivate-then-leave is off')) {
+        return json({ error: 'not_available' }, 409)
+      }
+      if (detail.includes('owner access is changed in the database')) {
+        return ownerAccessInDatabase()
+      }
+      return assignmentFailure(error)
+    }
+    const row = (
+      data as { profile_id: string; state_fingerprint: string; left_on: string }[] | null
+    )?.[0]
+    if (!row) return json({ error: 'update_failed' }, 500)
+    leftOn = row.left_on
+    stateFingerprint = row.state_fingerprint
+  }
+
+  const { data: authUser, error: lookupError } = await service.auth.admin.getUserById(profileId)
+  const email = authUser?.user?.email?.toLowerCase() ?? null
+  if (lookupError || !email?.endsWith(LEFT_ALIAS_SUFFIX)) {
+    const { error: moveError } = lookupError
+      ? { error: lookupError }
+      : await service.auth.admin.updateUserById(profileId, {
+          email: leftAuthAlias(profileId),
+          email_confirm: true,
+        })
+    if (moveError) {
+      // Opaque id only: no username belongs in logs.
+      console.error('left alias move failed', profileId)
+      return json({ error: 'left_username_held', profileId, leftOn }, 409)
+    }
+  }
+  return json({ profileId, leftOn, stateFingerprint }, 200)
 }
 
 async function setUsername(
@@ -549,6 +719,9 @@ async function assign(
   if (!mayAssign(caller, personId, role, outletId)) {
     return json({ error: 'forbidden' }, 403)
   }
+  if (role === 'super_admin' && (await gateOn(service, OWNER_ACCESS_IN_DATABASE))) {
+    return ownerAccessInDatabase()
+  }
 
   const code = generateCode()
   const { data, error } = await service.rpc('grant_assignment_with_invite', {
@@ -621,6 +794,9 @@ async function endAssignment(
     )
   ) {
     return json({ error: 'forbidden' }, 403)
+  }
+  if (existing.role === 'super_admin' && (await gateOn(service, OWNER_ACCESS_IN_DATABASE))) {
+    return ownerAccessInDatabase()
   }
 
   const code = generateCode()
@@ -713,6 +889,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return await editAccount(service, caller, body)
     case 'mark-as-left':
       return await markAsLeft(service, caller, body)
+    case 'mark-as-left-v2':
+      return await markAsLeftV2(service, caller, body)
     default:
       return json({ error: 'unknown_action' }, 400)
   }

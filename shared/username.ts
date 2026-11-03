@@ -1,6 +1,13 @@
 export const USERNAME_MIN_LENGTH = 3
 export const USERNAME_MAX_LENGTH = 30
 export const AUTH_ALIAS_SUFFIX = '@login.shawarmania.invalid'
+/**
+ * Where a left account's Auth alias moves (a-deactivated-person-leaves-in-two-steps,
+ * design D3): `<profile-id>@left.shawarmania.invalid`. Outside the sign-in
+ * namespace, so it never matches a sign-in, frees the username at once, and
+ * `authAliasToUsername` reads it as no username.
+ */
+export const LEFT_ALIAS_SUFFIX = '@left.shawarmania.invalid'
 
 export type UsernameError =
   | 'required'
@@ -67,6 +74,11 @@ export function authAliasToUsername(authAlias: string | null | undefined): strin
 
   const username = normalizedAlias.slice(0, -AUTH_ALIAS_SUFFIX.length)
   return canonicalUsername(username)
+}
+
+/** The alias a left account moves to. Provider plumbing only, as above. */
+export function leftAuthAlias(profileId: string): string {
+  return `${profileId.toLowerCase()}${LEFT_ALIAS_SUFFIX}`
 }
 
 export function usernameErrorMessage(error: UsernameError): string {

@@ -4922,6 +4922,7 @@ export type Database = {
       profiles: {
         Row: {
           created_at: string
+          deactivated_on: string | null
           full_name: string
           id: string
           is_active: boolean
@@ -4930,6 +4931,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deactivated_on?: string | null
           full_name: string
           id: string
           is_active?: boolean
@@ -4938,6 +4940,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deactivated_on?: string | null
           full_name?: string
           id?: string
           is_active?: boolean
@@ -5309,6 +5312,7 @@ export type Database = {
       app_is_owner: { Args: never; Returns: boolean }
       app_kitchen_shift: { Args: never; Returns: string }
       app_kitchen_shift_outlet: { Args: never; Returns: string }
+      app_kolkata_today: { Args: never; Returns: string }
       app_may_hold_counter_shift: {
         Args: { outlet: string; person: string }
         Returns: boolean
@@ -6748,6 +6752,18 @@ export type Database = {
         }
         Returns: {
           assignments: Json
+          profile_id: string
+          state_fingerprint: string
+        }[]
+      }
+      mark_account_as_left_v2: {
+        Args: {
+          p_actor_id: string
+          p_expected_fingerprint: string
+          p_profile_id: string
+        }
+        Returns: {
+          left_on: string
           profile_id: string
           state_fingerprint: string
         }[]
