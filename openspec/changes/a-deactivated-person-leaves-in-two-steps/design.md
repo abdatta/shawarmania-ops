@@ -282,6 +282,43 @@ policy; no new grant).
 
 Off: `outlet-attendance.tsx` exactly as today.
 
+## D9. The demo review (owner, 2026-11-02)
+
+The owner tried the demo with both gates on, before it was wired live, and
+changed two things. Both are on the `deactivate-then-leave` path only; with the
+gate off Team reads as before.
+
+- **Deactivate says so, where the thumb is.** The row leaving the main list
+  with nothing said read as a failure: a manager who has never opened the
+  section would not know where the person went. Deactivate, Reactivate and the
+  second step each show a bar above the tab bar for about six seconds (*Demo
+  Helper deactivated*), and Deactivate's carries **Undo**, which reactivates
+  them; the Deactivated section opens by itself. Reactivate's bar has no Undo:
+  undoing it would re-date the deactivation to today. Chosen over scrolling to
+  the row (moves the page under the reader) and leaving the row in place until
+  reload (a list that lies until refreshed).
+- **Mark as left is called Remove.** A deactivation happens on the day
+  somebody goes; the second step happens weeks later, when the manager notices
+  the pile. *Mark as left* names the event, and its dialog's date made it read
+  as a departure record. The owner proposed *Delete*; refused because nothing
+  is deleted (every bill, count and attendance row keeps pointing at the person,
+  and the database refuses to delete anybody with history), and a manager who
+  read *Delete* would hesitate over their attendance. **Remove**: menu *Remove*,
+  dialog *Remove Rahul from Team?* with the username, phone, record and rehire
+  sentences, and no date sentence, since the date is bookkeeping rather than
+  part of the decision. Its outlets still end on the deactivation day (D3).
+  Internal names (`mark-as-left-v2`, `mark_account_as_left_v2`) keep the
+  design's first name.
+- **Second look, the same day.** The section's toggle is one quiet line,
+  *Deactivated · 3 · Show*, as Fixed costs' *Stopped* line is, not a button. The
+  bar is a small pill as wide as its words, in the accent at 75%, slightly see-through like
+  an Android toast, so it never reads as part of the expanded tab bar, and it
+  fades in and out over 400 ms with no movement, as Android's toast does (the
+  owner kept the accent over Android's own surface-coloured or dark-grey pill); its text is the
+  accent's own on-colour, which the contrast check holds (dark in the dark
+  theme). A deactivated person's menu is **Reactivate** and **Remove**, with no
+  **Edit**.
+
 ## Version skew
 
 - **`profiles.deactivated_on`**: new, nullable; no published build selects it.

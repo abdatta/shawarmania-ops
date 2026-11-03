@@ -25,6 +25,16 @@ who has left **one** outlet still works at the others; somebody who holds no
 live assignment anywhere has left the business, which is derived rather than
 stored.
 
+### Deactivated, and left
+
+*(#82.)* **Deactivated** is an account that cannot sign in, switched off on a
+recorded day and still placed at its outlets, so its manager still sees it and
+can reactivate it. **Left** is the second step, taken only from deactivated, and
+named **Remove** on Team: the outlets end on that day and the username and phone
+become free. Nothing is deleted. An account is
+whether somebody may sign in, not a headcount; the day that matters is the day
+access was switched off.
+
 ### Staff role
 
 **A role a person holds to work at an outlet**: Employee or Biller today. Held

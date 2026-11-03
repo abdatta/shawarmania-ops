@@ -6,7 +6,8 @@
 > `a-release-can-be-switched-off` · **Gate**: the owner approved the Team
 > page's Deactivated section from the demo before it was wired live; a person
 > is deactivated from their row and moves to **Deactivated (n)**, where the
-> manager still sees them and can reactivate them; **Mark as left** is offered
+> manager still sees them and can reactivate them; **Remove** (first named
+> **Mark as left**; renamed in the demo review, design D9) is offered
 > only there, ends their outlets on the day they were deactivated, and frees
 > their username and phone for someone else; attendance lists a deactivated
 > person up to and including that day and not after, by day and by staff;
@@ -130,7 +131,7 @@ Granting or removing owner access becomes a written database procedure in
 
 - **`deactivate-then-leave`** (*DL*)
   - **On:** A deactivated person moves to a Deactivated section and drops out of
-    attendance after the day they were deactivated, and Mark as left is offered
+    attendance after the day they were deactivated, and Remove is offered
     only there, ending their outlets on that day and freeing their username and
     phone.
   - **Off:** Deactivated people stay in the list and in attendance, and Mark as

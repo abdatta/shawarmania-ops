@@ -1417,6 +1417,36 @@ the operator fallback rather than weakening the self-management boundary.
 
 **To remove access**: deactivate the account. Do not delete it — history references it, and reactivating is one tap if the person comes back.
 
+**Someone has left** *(with `deactivate-then-leave` on, #82)*: deactivate them
+first if they are not already, then open **Deactivated (n)** under Team and
+choose **Remove** on their row. Their outlets end on the day they were
+deactivated, and their phone and username become free. If the screen says their
+username could not be freed, they have still left; free it by hand (Auth → their
+user → email `<profile-id>@left.shawarmania.invalid`), or send *Mark as left*
+for them again as the owner (the `mark-as-left-v2` action), which retries only
+the username.
+
+### Owner access is changed in the database
+
+*(With `owner-access-in-the-database` on, #82.)* Nobody grants or removes owner
+access, or switches an owner off, from the app. The agent or the owner does it as
+the service role, **showing the owner the statement before running it on
+production**. The statements bypass the gate on purpose; the database's own
+guards still hold.
+
+- **Grant**: one transaction that adds the owner row and its private sign-in
+  email, as `grant_assignment_with_invite(person, 'super_admin', null,
+  '<their email>', '<granting owner>', '<any hash>', '1 day')` does — an
+  `assignments` row with `role = 'super_admin'`, `outlet_id = null` and
+  `started_on` the Kolkata day, and `set_super_admin_account_email`. Their next
+  session lands on the owner's shell.
+- **Remove**: `update public.assignments set ended_on = public.app_kolkata_today()
+  where person_id = '<id>' and role = 'super_admin' and ended_on is null;` The
+  final-owner trigger refuses removing the last one.
+- **Switch an owner off**: `update public.profiles set is_active = false,
+  deactivated_on = public.app_kolkata_today() where id = '<id>';` and back with
+  `is_active = true, deactivated_on = null`.
+
 ## Backups
 
 Supabase takes automated daily backups on paid plans; the free tier does not, which is worth knowing before production data matters.
@@ -1724,7 +1754,7 @@ email, or enable unreviewed authentication mail to solve the lockout.
 
 **An outlet was created by mistake** → Outlets → **Mark closed**, then **Delete**. Deletion is offered only on a closed outlet, so the reversible step comes first, and it cannot be undone. It will work only while nothing at all references the outlet; if anything does, the screen names what — staff, accounts, tablets, recorded days — and nothing is removed. Move or remove those and it becomes deletable on its own, with nothing to re-mark afterwards. **An outlet that ever traded cannot be deleted, by anyone, ever** — that is the point, not a limitation: its bills and attendance are the business's history. Mark it closed instead. And note that an outlet which has ever had a Franchise Admin cannot be emptied simply by deactivating them; see [Limitations](LIMITATIONS.md).
 
-**Someone must lose access now** → deactivate the account (Team / Access). It takes effect on their very next request, without waiting for their session to expire, and their open app ends its session and says why. Reactivating restores it; their password still works.
+**Someone must lose access now** → deactivate the account (Team / Access). It takes effect on their very next request, without waiting for their session to expire, and their open app ends its session and says why. Reactivating restores it; their password still works. The day is recorded on the account (#82); with `deactivate-then-leave` on they move to **Deactivated** and drop out of attendance after that day. An owner is switched off only in the database while `owner-access-in-the-database` is on ([Owner access is changed in the database](#owner-access-is-changed-in-the-database)).
 
 **An employee cannot check in** → in order: are they on the Team list at this outlet, active, and not departed? A departed or deactivated person keeps their history but is not offered a check-in. Then: they are outside the geofence or GPS will not fix — which no longer blocks anything, so tell them to **record it anyway** and approve it yourself; or **enter the arrival for them** (Attendance → their row): past times only, on today's business day, recorded as entered by you and settled by the act of recording it. If check-in is refused outright with a message about the outlet being closed, somebody marked it closed on Outlets; reopening it is one tap and needs nothing else.
 

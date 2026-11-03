@@ -479,7 +479,7 @@ The chips scope who is read, not how a person's history is assembled. **The by-s
 
 This reverses half of #29, which cut the outlet choice out of the by-staff axis entirely. The half that mattered stands: the axis is still chosen freely, and the read still names no outlet, so the owner's actual question — *how many days did this person work in August* — never starts by naming one shop. What changed is that a control sitting above both axes now means what its position claims.
 
-**By day** is the staff of the selected outlets for one business date: who arrived, when, from where, how accurate the reading was, whether they were late, and which days are still waiting. **Everyone currently on the outlet's staff who was assigned there on the date appears, including those with nothing recorded** — a day view that listed only the rows that exist would quietly hide the people who never arrived. **Who is on the staff is who the reader may see there**, which the database decides — not who they may manage: a person who also works at another outlet is on the roll-call of a manager who runs only this one, though Team does not offer that manager their account. A date before somebody joined is not painted as an absence. A departed person drops off the rowless day; a deactivated one still appears with the deactivation noted, because access and working there are different facts. A real historical record remains readable after its assignment ends.
+**By day** is the staff of the selected outlets for one business date: who arrived, when, from where, how accurate the reading was, whether they were late, and which days are still waiting. **Everyone currently on the outlet's staff who was assigned there on the date appears, including those with nothing recorded** — a day view that listed only the rows that exist would quietly hide the people who never arrived. **Who is on the staff is who the reader may see there**, which the database decides — not who they may manage: a person who also works at another outlet is on the roll-call of a manager who runs only this one, though Team does not offer that manager their account. A date before somebody joined is not painted as an absence. A departed person drops off the rowless day; a deactivated one still appears with the deactivation noted, because access and working there are different facts. **With `deactivate-then-leave` on (#82)** a deactivated person is listed on a rowless day only up to and including the day they were deactivated, noted on that day, and not after; one whose day was never recorded is listed as before. A real historical record remains readable after its assignment ends, and a recorded day after a deactivation is listed like any other.
 
 **Staff means staff.** A manager or the owner appears here only when they also hold an Employee assignment at the outlet; nobody records a manager's arrival, and listing them was a row to read past (#28). The one exception is somebody who **already carries a record on the day shown** — they stay listed whatever they hold, marked *not on this outlet's staff list*, and can be approved, because the waiting counts are computed from rows and a row inside a count and outside the screen would be a badge nobody could clear. They are offered no *Record arrival*: they already have one.
 
@@ -549,7 +549,7 @@ reason. Future times and times outside that outlet business date are refused.
 
 A manager can also **enter an arrival on someone's behalf** — past times only, on today's business day — for the person whose phone cannot; the event carries `manual` as its source, reads *entered by* that manager wherever it is shown, and is settled by the recording rather than queued for its own author to approve. Where several outlets are selected and the person is staff at more than one of them, the sheet asks which; where the outlet is unambiguous, nothing is asked. It is not offered at all for somebody already accounted for elsewhere that day: their day is taken, and the database would refuse a second.
 
-**By staff** is one person over **one calendar month**, defaulting to this one, with the counts: present, late, absent and waiting, drawn as the same month calendar as the person's own **My attendance**, below. It exists so somebody can work out pay by hand, which is why **each business date counts once** whatever shop it was worked at. It offers **staff only** — a range of days for somebody whose days are not tracked would be a pattern of nothing, so a non-staff person's record is read on the day it belongs to, which is where anybody settling one is already standing. Its days collapse to their headlines like the roll-call's rows.
+**By staff** is one person over **one calendar month**, defaulting to this one, with the counts: present, late, absent and waiting, drawn as the same month calendar as the person's own **My attendance**, below. It exists so somebody can work out pay by hand, which is why **each business date counts once** whatever shop it was worked at. **With `deactivate-then-leave` on (#82)** a deactivated person's month stops at the day they were deactivated: no empty day after it reads absent, and they stay on the picker until they are marked as left, so their earlier months stay readable. It offers **staff only** — a range of days for somebody whose days are not tracked would be a pattern of nothing, so a non-staff person's record is read on the day it belongs to, which is where anybody settling one is already standing. Its days collapse to their headlines like the roll-call's rows.
 
 **A month, and no second way to say what the period is.** The arrows move a month at a time and cannot reach one that has not begun. The two loose date fields that used to sit under them are gone: pay is monthly, so a tally over eleven arbitrary days is a number with nowhere to go, and every absence in the list is derived from the period's bounds — so an arbitrary span produces an arbitrary absence count that reads exactly like a meaningful one.
 
@@ -579,6 +579,35 @@ history. It is never a departure control. **Mark as left** is separate,
 destructive, and confirmed: it ends every live assignment and deactivates the
 account together. A person with no live placement reads **Not assigned to any
 outlet**.
+
+**Edit offers outlets only where they mean something** (#82). **Works at
+multiple outlets** and **Add outlet** appear only when the reader could add an
+outlet the person does not already hold, so a manager of one outlet editing an
+Employee there sees the outlet and the role and nothing to add. Editing a person
+whose only assignment is owner access shows no outlets at all: an owner works
+everywhere.
+
+**With `deactivate-then-leave` on (#82)** a person leaves in two steps.
+**Deactivate**, on the row, stops sign-in at once, records the day, and keeps
+their outlets: *Deactivate Rahul? They can't sign in from now, even if their app
+is open. They move to Deactivated, where you can reactivate or remove them.* The
+main list holds the people who may sign in; under it one quiet line,
+*Deactivated · 3 · **Show***, as Fixed costs' *Stopped* line is, opens a second table of the deactivated, newest day first,
+each reading *Deactivated · 12 Oct* (*Deactivated* alone where the day was never
+recorded). Deactivating says so in a small accent pill above the tab bar for a few
+seconds, *Rahul deactivated*, with **Undo**, and opens that section, so nobody has
+to know it is there; Reactivate and Remove say so the same way, without Undo. Its
+row menu is **Reactivate** and **Remove**: a deactivated person is not edited. **Reactivate** puts them back as
+they were and clears the day. **Remove** is offered only there, after *Remove
+Rahul from Team? Their username rahul.k and phone number become free for someone
+else. Their attendance and work stay on record. Bringing them back means adding
+them again.* Nothing is deleted. Confirming ends every live assignment on the day
+they were deactivated (never before an assignment's own start), clears the
+phone, frees the username, and takes them off Team for everybody, this manager
+included. Edit has no
+*Leaving the business*, and *Show people who have left* is gone: somebody who has
+left is not listed. A returning person is added again, with the old username if
+they want it.
 
 The list derives status from active state, successful sign-in history, live
 placements, and a live unexpired handover: **Needs setup**, **Set-up link
@@ -683,7 +712,12 @@ reloading the list.
 several outlets, issue a fresh one-time code, correct another person's
 username, deactivate/reactivate, and manage assignments. Selecting Super Admin
 hides outlets and requires that owner's real account email; every other role
-omits email entirely. Only an authorized Super Admin can see another Super
+omits email entirely. **With `owner-access-in-the-database` on (#82)** owner
+access is changed only in the database ([Operations](OPERATIONS.md#owner-access-is-changed-in-the-database)):
+Add person offers no Owner role and no email field, Edit has no Owner access
+section and carries an owner's own row through Save unchanged, and an owner's
+row offers **Edit**, **Change username**, the hand-over action and **Change
+sign-in email**, never **Deactivate**, **Reactivate** or **Remove**. Only an authorized Super Admin can see another Super
 Admin's account email or correct it, and one's own remains read-only here. The
 same email is an alternate sign-in identifier and a foundation for future
 recovery or security features.

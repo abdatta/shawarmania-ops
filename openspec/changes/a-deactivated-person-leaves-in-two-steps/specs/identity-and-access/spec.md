@@ -15,7 +15,7 @@ that have not left. The system MAY suggest and lowercase a username before
 submission, but it SHALL NOT silently choose a different available value after
 the admin submits.
 
-When a person is marked as left, their username SHALL be released: their Auth
+When a person is removed from Team, their username SHALL be released: their Auth
 alias SHALL move outside the reserved sign-in domain, so the username can never
 again sign in to the left account and is available to any new or existing
 account.
@@ -46,7 +46,7 @@ account.
 
 #### Scenario: A left person's username is given to someone else
 
-- **WHEN** `rahul.k` was marked as left and an admin adds a new person with the
+- **WHEN** `rahul.k` was removed from Team and an admin adds a new person with the
   username `rahul.k`
 - **THEN** the new account is created with `rahul.k`, and signing in as
   `rahul.k` reaches only the new account
@@ -101,7 +101,7 @@ Super Admin MAY provision, re-issue, and deactivate any account other than
 their own and other than an account holding a live Super Admin assignment. A
 Franchise Admin MAY provision Biller and Employee accounts only when every
 requested outlet is one at which the caller holds a live Franchise Admin
-assignment, and MAY re-issue, deactivate or mark as left only where every
+assignment, and MAY re-issue, deactivate or remove only where every
 outlet the target person is assigned to is one they manage. Every other
 combination SHALL be refused.
 
@@ -131,7 +131,7 @@ hand-crafted privileged request regardless of what the Team form offers.
 #### Scenario: A Franchise Admin cannot manage a person who also works elsewhere
 
 - **WHEN** a Franchise Admin attempts to deactivate, re-issue a code for, or
-  mark as left a person who also holds a live assignment at an outlet they do
+  remove a person who also holds a live assignment at an outlet they do
   not manage
 - **THEN** the request is refused, because the account is not theirs alone to
   act on
@@ -219,8 +219,8 @@ listed.
 An active person's menu SHALL offer recognizable tasks: Edit, Change username,
 Set up account or Reset password according to lifecycle state, Change sign-in
 email where permitted, and Deactivate. A deactivated person's menu SHALL offer
-Edit, Reactivate and Mark as left. A person holding a live Super Admin
-assignment SHALL be offered no Deactivate, Reactivate or Mark as left.
+Edit, Reactivate and Remove. A person holding a live Super Admin
+assignment SHALL be offered no Deactivate, Reactivate or Remove.
 
 Edit SHALL contain personal facts and authorized placement. It SHALL show one outlet and one access role for a single ordinary assignment, and SHALL progressively reveal assignment rows through a control labelled “Works at multiple outlets”. A person already holding several or mixed-role ordinary assignments SHALL open in the expanded form. The control and **Add outlet** SHALL be offered only when the reader could add an outlet the person does not already hold. Editing a person whose only assignment is Super Admin SHALL show no outlet assignment section. Edit SHALL offer no control that grants or removes owner access and no departure control. Username SHALL remain a separate credential action.
 
@@ -262,7 +262,7 @@ A newly issued handover SHALL be presented once through one reusable purpose-awa
 #### Scenario: A deactivated person moves to Deactivated
 
 - **WHEN** a manager deactivates an Employee on 12 October
-- **THEN** the Employee leaves the main list and appears under Deactivated (1) reading Deactivated · 12 Oct, still visible to that manager, with Edit, Reactivate and Mark as left
+- **THEN** the Employee leaves the main list and appears under Deactivated (1) reading Deactivated · 12 Oct, still visible to that manager, with Edit, Reactivate and Remove
 
 #### Scenario: An owner's row cannot be switched off
 
@@ -278,7 +278,7 @@ A newly issued handover SHALL be presented once through one reusable purpose-awa
 
 The people model SHALL keep whether an account may sign in and where the person works as independent facts. Deactivating an account SHALL end its open session immediately without ending assignments, and SHALL record the Asia/Kolkata business day of the deactivation on the account; reactivating SHALL clear it. Editing assignments SHALL leave active state untouched.
 
-A person leaves the business only through an explicit Mark as left action, offered and accepted only for an account already deactivated. That action SHALL require confirmation and, in one transaction, end every live assignment without deleting history, dated by the recorded deactivation day (or, where none is recorded, the current Kolkata day) and never before the assignment's own start, and clear the person's phone. The person's username SHALL then be released. Removing the final row in ordinary Edit SHALL NOT silently invoke departure.
+A person leaves the business only through an explicit Remove action, offered and accepted only for an account already deactivated. That action SHALL require confirmation and, in one transaction, end every live assignment without deleting history, dated by the recorded deactivation day (or, where none is recorded, the current Kolkata day) and never before the assignment's own start, and clear the person's phone. The person's username SHALL then be released. Removing the final row in ordinary Edit SHALL NOT silently invoke departure.
 
 #### Scenario: The panic button does not falsify placement
 
@@ -295,24 +295,24 @@ A person leaves the business only through an explicit Mark as left action, offer
 - **WHEN** an admin edits outlet or role fields
 - **THEN** no default checkbox or empty assignment set deactivates the account or ends every placement
 
-#### Scenario: An active person cannot be marked as left
+#### Scenario: An active person cannot be removed from Team
 
-- **WHEN** an authorized admin hand-crafts Mark as left for an active account
+- **WHEN** an authorized admin hand-crafts Remove for an active account
 - **THEN** the request is refused and nothing changes
 
-#### Scenario: Mark as left is dated by the deactivation
+#### Scenario: Remove is dated by the deactivation
 
-- **WHEN** a person was deactivated on 12 June and an authorized admin confirms Mark as left on 30 October
+- **WHEN** a person was deactivated on 12 June and an authorized admin confirms Remove on 30 October
 - **THEN** every live assignment ends on 12 June, the phone is cleared, the username is released, and every historical row remains readable
 
 #### Scenario: An assignment started after the deactivation ends the day it began
 
-- **WHEN** a deactivated person was given an assignment starting 20 June and is marked as left on 30 October with a deactivation day of 12 June
+- **WHEN** a deactivated person was given an assignment starting 20 June and is removed from Team on 30 October with a deactivation day of 12 June
 - **THEN** that assignment ends on 20 June, and every other live assignment ends on 12 June
 
 ### Requirement: Assignment transitions use the Kolkata calendar
 
-Every atomic assignment-set edit SHALL derive its assignment end date from Asia/Kolkata inside the database transaction. Every deactivation SHALL record its day from the Asia/Kolkata calendar computed by the database. Mark as left SHALL take its end date from that recorded day, or, where none is recorded, from Asia/Kolkata inside the transaction. All assignments ended by one transition SHALL receive the same date, except that none SHALL be dated before its own start date.
+Every atomic assignment-set edit SHALL derive its assignment end date from Asia/Kolkata inside the database transaction. Every deactivation SHALL record its day from the Asia/Kolkata calendar computed by the database. Remove SHALL take its end date from that recorded day, or, where none is recorded, from Asia/Kolkata inside the transaction. All assignments ended by one transition SHALL receive the same date, except that none SHALL be dated before its own start date.
 
 The transition date SHALL NOT be accepted from the browser or derived from the database session's UTC calendar. Existing complete-set authority, atomicity, history-retention, final-Super-Admin, private-email, and account-active-state invariants SHALL remain enforced.
 
@@ -367,7 +367,7 @@ A Franchise Admin SHALL be able to switch Employee and Biller and add, transfer,
 ### Requirement: Owner access is granted and removed only in the database
 
 No application surface and no privileged account function SHALL grant, end,
-deactivate, reactivate or mark as left a Super Admin assignment or an account
+deactivate, reactivate or remove a Super Admin assignment or an account
 holding one. The account function SHALL refuse each such request, whoever sends
 it, including a provisioning, assignment, end-assignment, edit, set-active or
 departure request. Granting and removing owner access SHALL be a written
@@ -384,7 +384,7 @@ from Team SHALL remain available.
 
 - **WHEN** the owner's own session sends, in turn, a provision with the Super
   Admin role, an assign with the Super Admin role, an end-assignment of a Super
-  Admin assignment, a set-active on an owner, and a Mark as left on an owner
+  Admin assignment, a set-active on an owner, and a Remove on an owner
 - **THEN** each is refused and no account, assignment or active state changes
 
 #### Scenario: The database procedure grants owner access
