@@ -6,13 +6,14 @@ not exist yet).
 
 | Person | Profile | Outlets | Last attendance | Last sign-in | Day agreed |
 | --- | --- | --- | --- | --- | --- |
-| Naresh | `d3807733-56ee-4025-9c86-1334092d5be8` | Kalyani ended 27 Sep; Kalyani Cafe live | 1 Oct by phone (1 Nov was a mistake, below) | 30 Jul | **27 Oct 2026, 09:00**: the owner remembered switching him off that day; the time is before the deadline unless the owner recalls later |
+| Naresh | `d3807733-56ee-4025-9c86-1334092d5be8` | Kalyani ended 27 Sep; Kalyani Cafe live | 1 Oct by phone (1 Nov was a mistake, below) | 30 Jul | **27 Oct 2026, 23:00**: switched off that night, the owner recalls |
 | Arpita | `3d432bb8-a831-49c7-bcc0-9c4db6fde189` | none live (Kalyani ended 27 Sep) | 9 Sep | 12 Aug | **9 Sep 2026, 21:00**, after her last attendance; she has left, so it is bookkeeping |
 
 Naresh's October had no phone check-ins after the 1st: attendance was not
-enforced that month (owner). The moment is recorded since design D10: before
-Kalyani Cafe's 13:00 deadline on 27 Oct his rowless days up to the 26th read
-absent and nothing shows from the 27th, as a deactivation that morning would.
+enforced that month (owner). The moment is recorded since design D10: at 23:00
+on 27 Oct, after Kalyani Cafe's 13:00 deadline and before the 04:00 cutover, so
+the 27th is his to have missed: his rowless days up to the 27th read absent and
+nothing shows from the 28th.
 
 ## Done on 2 November: Naresh's 1 Nov entry removed
 
@@ -43,7 +44,7 @@ Shown to the owner before it runs:
 
 ```sql
 begin;
-update public.profiles set deactivated_at = timestamptz '2026-10-27 09:00+05:30'
+update public.profiles set deactivated_at = timestamptz '2026-10-27 23:00+05:30'
  where id = 'd3807733-56ee-4025-9c86-1334092d5be8' and not is_active and deactivated_at is null;
 update public.profiles set deactivated_at = timestamptz '2026-09-09 21:00+05:30'
  where id = '3d432bb8-a831-49c7-bcc0-9c4db6fde189' and not is_active and deactivated_at is null;

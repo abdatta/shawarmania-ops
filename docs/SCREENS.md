@@ -595,7 +595,9 @@ main list holds the people who may sign in; under it one quiet line,
 *Deactivated · 3 · **Show***, as Fixed costs' *Stopped* line is, opens a second table of the deactivated, newest day first,
 each reading *Deactivated · 12 Oct* (*Deactivated* alone where the day was never
 recorded). Deactivating says so in a small accent pill above the tab bar for a few
-seconds, *Rahul deactivated*, with **Undo**, and opens that section, so nobody has
+seconds, *Rahul deactivated*, with **Undo**, and opens that section; while the
+change is sent the row is dimmed and reads *Deactivating…* (or *Reactivating…*,
+*Removing…*) with its menu waiting, so nobody has
 to know it is there; Reactivate and Remove say so the same way, without Undo. Its
 row menu is **Reactivate** and **Remove**: a deactivated person is not edited. **Reactivate** puts them back as
 they were and clears the day. **Remove** is offered only there, after *Remove

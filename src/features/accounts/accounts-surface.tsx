@@ -1,4 +1,4 @@
-import { Check, Users } from 'lucide-react'
+import { Check, LoaderCircle, Users } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
@@ -155,6 +155,8 @@ export function AccountsSurface() {
    * #82, 2026-11-02); nothing is deleted.
    */
   const [leaving, setLeaving] = useState<AccountSummary | null>(null)
+  /** The row whose change is on its way, and what it is doing. */
+  const [working, setWorking] = useState<{ id: string; doing: string } | null>(null)
   /**
    * What just happened to whom, said where the thumb is (owner, demo review of
    * #82): a person moved out of the main list would otherwise vanish with no
@@ -297,17 +299,37 @@ export function AccountsSurface() {
   }
 
   /** Deactivate, said and undoable, with the section they moved to opened (#82). */
+  /**
+   * One person's change, said on their own row while it is sent (owner, staging
+   * review of #82): the row dims, its status reads what is happening, and its
+   * menu waits, so a slow account function never looks like a tap that missed.
+   */
+  async function change(
+    target: AccountSummary,
+    doing: string,
+    action: () => Promise<void>,
+  ): Promise<boolean> {
+    setWorking({ id: target.id, doing })
+    try {
+      return await run(action)
+    } finally {
+      setWorking(null)
+    }
+  }
+
+  function reactivate(target: AccountSummary) {
+    void change(target, 'Reactivating…', () => adapter.setActive(target.id, true)).then((done) => {
+      if (done) setNotice({ text: `${target.fullName} reactivated` })
+    })
+  }
+
   async function deactivateAndSay(target: AccountSummary) {
     setNotice(null)
-    if (!(await run(() => adapter.setActive(target.id, false)))) return
+    if (!(await change(target, 'Deactivating…', () => adapter.setActive(target.id, false)))) {
+      return
+    }
     setShowDeactivated(true)
-    setNotice({
-      text: `${target.fullName} deactivated`,
-      undo: () =>
-        void run(() => adapter.setActive(target.id, true)).then((done) => {
-          if (done) setNotice({ text: `${target.fullName} reactivated` })
-        }),
-    })
+    setNotice({ text: `${target.fullName} deactivated`, undo: () => reactivate(target) })
   }
 
   /** One act creates a working person: account, staff facts, issued code. */
@@ -515,6 +537,17 @@ export function AccountsSurface() {
       header: 'Status',
       cell: (row) => {
         const account = row.account
+        if (working?.id === row.id) {
+          return (
+            <span
+              data-testid={`working-${row.id}`}
+              className="inline-flex items-center gap-1.5 font-semibold text-content-muted"
+            >
+              <LoaderCircle aria-hidden size={14} className="animate-spin" />
+              {working.doing}
+            </span>
+          )
+        }
         // Never a status that has not been established: until the identities
         // land there is a placeholder the height of the words it stands for.
         if (!account) {
@@ -566,7 +599,8 @@ export function AccountsSurface() {
         const account = row.account
         // The trigger's own box, empty, so a row is the same height with and
         // without its menu and nothing moves when the identities land.
-        if (!account) {
+        // The row whose change is on its way waits, menu and all.
+        if (!account || working?.id === row.id) {
           return (
             <span
               aria-hidden
@@ -599,10 +633,7 @@ export function AccountsSurface() {
                   {
                     label: 'Reactivate',
                     disabled: busy,
-                    onSelect: () =>
-                      void run(() => adapter.setActive(account.id, true)).then((done) => {
-                        if (done) setNotice({ text: `${account.fullName} reactivated` })
-                      }),
+                    onSelect: () => reactivate(account),
                   },
                   {
                     label: 'Remove',
@@ -751,6 +782,7 @@ export function AccountsSurface() {
           <DataTable
             columns={columns}
             rows={deactivateThenLeave ? signedInRows : visible}
+            rowClassName={(row) => (working?.id === row.id ? 'opacity-60' : undefined)}
             rowKey={(row) => row.id}
             empty={
               <EmptyState
@@ -780,6 +812,7 @@ export function AccountsSurface() {
                   <DataTable
                     columns={columns}
                     rows={deactivatedRows}
+                    rowClassName={(row) => (working?.id === row.id ? 'opacity-60' : undefined)}
                     rowKey={(row) => row.id}
                     empty={null}
                   />
@@ -1095,7 +1128,7 @@ export function AccountsSurface() {
           const target = leaving
           if (!target) return
           setLeaving(null)
-          void run(async () => {
+          void change(target, 'Removing…', async () => {
             await adapter.markAsLeftV2(target.id, target.stateFingerprint)
           }).then((done) => {
             if (done) setNotice({ text: `${target.fullName} removed` })

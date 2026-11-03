@@ -244,6 +244,38 @@ describeChangeGate('deactivate-then-leave', (on) => {
   }
 })
 
+describe('a change on its way, with deactivate-then-leave on', () => {
+  it('dims the row and says what it is doing until the answer comes', async () => {
+    const user = userEvent.setup()
+    const { adapters } = renderTeam('franchise_admin', { 'deactivate-then-leave': true })
+    // The account function, held open so the moment in between can be read.
+    const real = adapters.accounts.setActive.bind(adapters.accounts)
+    let answer: () => void = () => undefined
+    adapters.accounts.setActive = (id, active) =>
+      new Promise<void>((resolve) => {
+        answer = () => void real(id, active).then(resolve)
+      })
+
+    const row = await rowFor('Demo Helper')
+    await user.click(await within(row).findByRole('button', { name: /^Actions for /i }))
+    await user.click(within(row).getByRole('button', { name: 'Deactivate' }))
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Deactivate' }),
+    )
+
+    const working = await screen.findByTestId(`working-${DEMO_HELPER_ACCOUNT_ID}`)
+    expect(working).toHaveTextContent('Deactivating…')
+    expect(working.closest('tr')).toHaveClass('opacity-60')
+    expect(
+      within(working.closest('tr')!).queryByRole('button', { name: /^Actions for / }),
+    ).not.toBeInTheDocument()
+
+    answer()
+    expect(await screen.findByTestId('team-notice')).toHaveTextContent('Demo Helper deactivated')
+    expect(screen.queryByTestId(`working-${DEMO_HELPER_ACCOUNT_ID}`)).not.toBeInTheDocument()
+  })
+})
+
 describeChangeGate('owner-access-in-the-database', (on) => {
   const gates = { 'owner-access-in-the-database': on }
   /** Demo Helper, given owner access as well, so the owner has another owner to read. */

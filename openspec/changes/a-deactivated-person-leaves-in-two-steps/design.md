@@ -346,8 +346,13 @@ calendar. Both are answered by storing the moment.
 - **The day still shown and used** is the Kolkata calendar day of the moment:
   *Deactivated · 27 Oct* on Team, and the day Remove ends outlets on.
 - Production's Naresh, switched off on 27 October at a time nobody recorded, is
-  given a time that day in the repair (repair.md): before 13:00 unless the owner
-  recalls it was later, so the 27th is not his to have missed.
+  given 23:00 that day in the repair (repair.md), as the owner recalls: after the
+  deadline, so the 27th reads absent and nothing shows from the 28th.
+- **A change on its way is said on its row** (owner, staging review): staging's
+  account function takes a moment, and nothing moved until the toast. While
+  Deactivate, Reactivate or Remove is sent, that row is dimmed, its status reads
+  *Deactivating…*, *Reactivating…* or *Removing…* with a spinner, and its menu
+  waits.
 
 ## Version skew
 
