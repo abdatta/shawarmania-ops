@@ -1,6 +1,8 @@
 import { emptyDishWorkflow, seedDishWorkflow } from './dish-workflow'
 import { seedDeliveryOrders } from './delivery'
 import { onDeliveryOrders } from '@/change-gates/delivery-orders'
+import type { ChangeGateKey } from '@/change-gates/gates'
+import { bootSnapshot } from '@/change-gates/snapshot'
 import type { AppRole, AttendanceAdapter, DataAdapters } from '../adapters'
 import { createMockAnalyticsAdapter } from './analytics'
 import { assignedOutlets, outletsForRole } from '../adapters'
@@ -89,6 +91,13 @@ export interface DemoData {
    * frozen snapshot in a test that names no gate.
    */
   deliveryOn: () => boolean
+  /**
+   * Whether `deactivate-then-leave` and `owner-access-in-the-database` are on
+   * for the accounts mock (a-deactivated-person-leaves-in-two-steps): the
+   * demo's switchboard, or the page's frozen snapshot in a test that names no
+   * gate, so the mock refuses and accepts as the account function would.
+   */
+  accountGateOn: (key: ChangeGateKey) => boolean
 }
 
 export function createDemoData(
@@ -115,6 +124,8 @@ export function createDemoData(
      * the demo asks for it and a test only when it reads them.
      */
     deliveryWalkthrough?: boolean
+    /** Where the accounts mock asks whether #82's two gates are on. */
+    accountGates?: 'switchboard' | ((key: ChangeGateKey) => boolean)
   } = {},
 ): DemoData {
   const {
@@ -122,6 +133,7 @@ export function createDemoData(
     fixedCosts = false,
     deliveryOrders,
     deliveryWalkthrough = false,
+    accountGates,
     ...storeOptions
   } = options
   const store = createDemoStore({ billingLifecycle: true, ...storeOptions })
@@ -146,6 +158,10 @@ export function createDemoData(
     kitchen: createDemoKitchen(),
     changeGates,
     deliveryOn,
+    accountGateOn:
+      accountGates === 'switchboard'
+        ? (key) => changeGates.snapshot()[key]
+        : (accountGates ?? ((key) => bootSnapshot()[key])),
   }
 }
 
@@ -242,7 +258,7 @@ export function createMockAdapters(
     ),
     // The persona's role and id reach the accounts mock so it refuses a
     // manager assigning themselves exactly where the database will.
-    accounts: createMockAccountsAdapter(accounts, role, persona.profile.id),
+    accounts: createMockAccountsAdapter(accounts, role, persona.profile.id, data.accountGateOn),
     // Only the Super Admin reads waiting counts across outlets; everybody else
     // sees their own assignments' worth, exactly as the policies will answer.
     attendance:

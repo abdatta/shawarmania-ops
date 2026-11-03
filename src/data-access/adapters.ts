@@ -369,6 +369,12 @@ export interface AccountSummary {
   accountEmail: string | null
   phone: string | null
   isActive: boolean
+  /**
+   * The Kolkata business day the account was last deactivated, null while it is
+   * active (a-deactivated-person-leaves-in-two-steps, design D2). An inactive
+   * account with no day was deactivated before the day was recorded.
+   */
+  deactivatedOn: string | null
   /** True only after Auth records a successful sign-in for this account. */
   hasSignedIn: boolean
   /** Free-text job label ("Griller"), distinct from the app-capability role. */
@@ -410,7 +416,7 @@ export interface AccountSummary {
  */
 export type RosterPerson = Pick<
   AccountSummary,
-  'id' | 'fullName' | 'phone' | 'roleTitle' | 'isActive' | 'assignments'
+  'id' | 'fullName' | 'phone' | 'roleTitle' | 'isActive' | 'deactivatedOn' | 'assignments'
 >
 
 /**
@@ -546,6 +552,23 @@ export function wasStaffAtOn(
   )
 }
 
+/**
+ * Could this person sign in on an inclusive business date, as far as anyone
+ * knows (a-deactivated-person-leaves-in-two-steps, design D8)?
+ *
+ * True while active, and for a deactivated person up to and including the day
+ * they were deactivated. An inactive account with no recorded day reads true:
+ * nothing is hidden that might be real (design D2). Beside `wasStaffAtOn`, and
+ * asked with it: one says where somebody worked, this says until when.
+ */
+export function wasActiveOn(
+  person: Pick<AccountSummary, 'isActive' | 'deactivatedOn'>,
+  businessDate: string,
+): boolean {
+  if (person.isActive || person.deactivatedOn === null) return true
+  return businessDate <= person.deactivatedOn
+}
+
 /** The one-time code, returned once and never retrievable again. */
 export interface AccountHandover {
   profileId: string
@@ -626,6 +649,13 @@ export interface AccountsAdapter {
   editAccount(command: EditAccountCommand): Promise<AssignmentSetResult>
   /** End every live assignment and deactivate in the same transaction. */
   markAsLeft(profileId: string, expectedStateFingerprint: string): Promise<AssignmentSetResult>
+  /**
+   * The second step, from a deactivated account only, while
+   * `deactivate-then-leave` is on: every live assignment ends on the day they
+   * were deactivated, and their phone and username are freed (design D3).
+   * Resolves to that day.
+   */
+  markAsLeftV2(profileId: string, expectedStateFingerprint: string): Promise<{ leftOn: string }>
   /** @deprecated Use issueHandover. Retained during the Edge rollout. */
   reissue(profileId: string): Promise<IssuedCode>
   setActive(profileId: string, isActive: boolean): Promise<void>

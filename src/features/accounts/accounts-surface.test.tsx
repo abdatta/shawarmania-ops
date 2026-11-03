@@ -117,7 +117,8 @@ describe('Team task menu and lifecycle', () => {
 describe('the responsive assignment-set editor', () => {
   it('keeps a one-outlet person in the compact form until requested', async () => {
     const user = userEvent.setup()
-    renderSurface('franchise_admin')
+    // The owner, who has another outlet to add: the toggle is offered only then.
+    renderSurface('super_admin')
     await openEdit(user, 'Demo Griller')
 
     expect(screen.getByLabelText('Full name')).toHaveValue('Demo Griller')
@@ -157,7 +158,8 @@ describe('the responsive assignment-set editor', () => {
     const second = screen.getByLabelText('Outlet 2')
     expect(within(first).getAllByRole('option')).toHaveLength(1)
     expect(within(second).getAllByRole('option')).toHaveLength(1)
-    expect(screen.getByRole('button', { name: 'Add outlet' })).toBeDisabled()
+    // Nowhere left to add, so no Add outlet (a-deactivated-person-leaves-in-two-steps, D6).
+    expect(screen.queryByRole('button', { name: 'Add outlet' })).not.toBeInTheDocument()
   })
 
   it('saves a Biller promotion as one intended assignment set and retains the start date', async () => {

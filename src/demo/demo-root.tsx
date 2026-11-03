@@ -112,6 +112,7 @@ export function DemoRoot() {
         dishWalkthrough: true,
         fixedCosts: true,
         deliveryOrders: 'switchboard',
+        accountGates: 'switchboard',
         deliveryWalkthrough: true,
       }),
     // resetCount is the point of this dependency: a fresh dataset is exactly

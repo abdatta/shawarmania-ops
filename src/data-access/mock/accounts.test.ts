@@ -17,12 +17,13 @@ describe('mock accounts adapter', () => {
     const people = await adapter.listAccounts()
 
     expect(roster).toEqual(
-      people.map(({ id, fullName, phone, roleTitle, isActive, assignments }) => ({
+      people.map(({ id, fullName, phone, roleTitle, isActive, deactivatedOn, assignments }) => ({
         id,
         fullName,
         phone,
         roleTitle,
         isActive,
+        deactivatedOn,
         assignments,
       })),
     )

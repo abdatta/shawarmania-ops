@@ -22,6 +22,9 @@ import { liveAssignment, personaFixtures } from './personas'
  *     state, not a column.
  *   * `DEMO_PREP_COOK_ACCOUNT_ID` is **deactivated while still assigned** —
  *     the panic-button state. Access cut, still on today's attendance day.
+ *   * `DEMO_DEACTIVATED_BILLER_ACCOUNT_ID` was **deactivated ten days back**
+ *     and not yet marked as left: Team's Deactivated section, and the
+ *     attendance day that stops listing them after it (#82).
  *   * `DEMO_TWO_OUTLETS_ACCOUNT_ID` works at **both outlets**, and
  *     `DEMO_RETURNER_ACCOUNT_ID` **used to** work at the second one — one
  *     assignment ended, the other still running.
@@ -52,6 +55,20 @@ export const DEMO_RETURNER_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000016'
 export const DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000012'
 /** Holds no live assignment at all: the person who has left the business. */
 export const DEMO_FORMER_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000009'
+/** Deactivated ten days back, still on Kalyani: not yet marked as left (#82). */
+export const DEMO_DEACTIVATED_BILLER_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000017'
+
+/**
+ * When each deactivated account was switched off, in business days before the
+ * demo's today (a-deactivated-person-leaves-in-two-steps, design D2). Days
+ * back rather than dates, as the attendance seeds are, so the demo reads the
+ * same whenever it is opened; the accounts mock turns them into dates. The
+ * former staff member has none: they left before the day was recorded.
+ */
+export const DEACTIVATED_DAYS_AGO: Readonly<Record<string, number>> = {
+  [DEMO_PREP_COOK_ACCOUNT_ID]: 0,
+  [DEMO_DEACTIVATED_BILLER_ACCOUNT_ID]: 10,
+}
 
 const colleagues = [
   {
@@ -59,6 +76,7 @@ const colleagues = [
     full_name: 'Demo Manager (Kanchrapara)',
     phone: null,
     is_active: true,
+    deactivated_on: null,
     role_title: 'Manager',
     created_at: FIXTURE_CREATED_AT,
   },
@@ -67,6 +85,7 @@ const colleagues = [
     full_name: 'Demo Griller',
     phone: null,
     is_active: true,
+    deactivated_on: null,
     role_title: 'Grill',
     created_at: FIXTURE_CREATED_AT,
   },
@@ -75,6 +94,7 @@ const colleagues = [
     full_name: 'Demo Evening Biller',
     phone: null,
     is_active: true,
+    deactivated_on: null,
     role_title: null,
     created_at: FIXTURE_CREATED_AT,
   },
@@ -85,6 +105,7 @@ const colleagues = [
     full_name: 'Demo New Starter',
     phone: null,
     is_active: true,
+    deactivated_on: null,
     role_title: 'Prep',
     created_at: FIXTURE_CREATED_AT,
   },
@@ -95,6 +116,7 @@ const colleagues = [
     full_name: 'Demo Former Staff',
     phone: null,
     is_active: false,
+    deactivated_on: null,
     role_title: 'Counter staff',
     created_at: FIXTURE_CREATED_AT,
   },
@@ -107,6 +129,7 @@ const colleagues = [
     full_name: 'Demo Morning Biller',
     phone: null,
     is_active: true,
+    deactivated_on: null,
     role_title: null,
     created_at: FIXTURE_CREATED_AT,
   },
@@ -116,6 +139,7 @@ const colleagues = [
     full_name: 'Demo Helper',
     phone: null,
     is_active: true,
+    deactivated_on: null,
     role_title: 'Prep',
     created_at: FIXTURE_CREATED_AT,
   },
@@ -124,6 +148,7 @@ const colleagues = [
     full_name: 'Demo Kanchrapara Staff',
     phone: null,
     is_active: true,
+    deactivated_on: null,
     role_title: 'Counter staff',
     created_at: FIXTURE_CREATED_AT,
   },
@@ -135,6 +160,7 @@ const colleagues = [
     full_name: 'Demo Prep Cook',
     phone: null,
     is_active: false,
+    deactivated_on: null,
     role_title: 'Prep',
     created_at: FIXTURE_CREATED_AT,
   },
@@ -143,6 +169,7 @@ const colleagues = [
     full_name: 'Demo Runner',
     phone: null,
     is_active: true,
+    deactivated_on: null,
     role_title: 'Runner',
     created_at: FIXTURE_CREATED_AT,
   },
@@ -151,6 +178,7 @@ const colleagues = [
     full_name: 'Demo Both Outlets',
     phone: null,
     is_active: true,
+    deactivated_on: null,
     role_title: 'Counter staff',
     created_at: FIXTURE_CREATED_AT,
   },
@@ -159,7 +187,20 @@ const colleagues = [
     full_name: 'Demo Returner',
     phone: null,
     is_active: true,
+    deactivated_on: null,
     role_title: 'Grill',
+    created_at: FIXTURE_CREATED_AT,
+  },
+  {
+    // Switched off ten days back and kept on Kalyani: the manager still sees
+    // them, under Deactivated, until somebody marks them as left. Their day is
+    // set from `DEACTIVATED_DAYS_AGO`.
+    id: DEMO_DEACTIVATED_BILLER_ACCOUNT_ID,
+    full_name: 'Demo Weekend Biller',
+    phone: '919800000017',
+    is_active: false,
+    deactivated_on: null,
+    role_title: null,
     created_at: FIXTURE_CREATED_AT,
   },
 ] as const satisfies readonly Tables<'profiles'>[]
@@ -298,6 +339,14 @@ export const assignmentFixtures: Readonly<Record<string, Assignment[]>> = {
       startedOn: '2025-11-01',
       endedOn: '2026-03-31',
     },
+  ],
+  [DEMO_DEACTIVATED_BILLER_ACCOUNT_ID]: [
+    liveAssignment(
+      'da000000-0000-4000-a000-000000000024',
+      'biller',
+      OUTLET_KALYANI_ID,
+      '2026-01-10',
+    ),
   ],
 }
 

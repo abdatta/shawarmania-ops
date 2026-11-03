@@ -35,7 +35,7 @@ import { signalHumanSessionInvalid } from '../../session/human-session-invalid'
 // and where they work are one answer to one question, and two round trips
 // would let the list render somebody whose placement had not arrived yet.
 const PROFILE_COLUMNS =
-  'id, full_name, phone, is_active, role_title, ' +
+  'id, full_name, phone, is_active, deactivated_on, role_title, ' +
   'assignments(id, role, outlet_id, started_on, ended_on)'
 
 interface AssignmentRow {
@@ -51,6 +51,7 @@ interface ProfileRow {
   full_name: string
   phone: string | null
   is_active: boolean
+  deactivated_on: string | null
   role_title: string | null
   assignments: AssignmentRow[] | null
 }
@@ -96,6 +97,12 @@ const MESSAGES: Record<string, string> = {
   session_invalid: 'Your session is no longer valid. Sign in again.',
   stale_edit: 'This account changed while you were editing it. Review the latest details.',
   account_inactive: 'Reactivate this account before issuing a link.',
+  account_active: 'Deactivate this person before marking them as left.',
+  not_available: 'Mark as left is not available here yet. Reload the page.',
+  owner_access_in_database:
+    'Owner access is changed only in the database. Ask for it to be done there.',
+  left_username_held:
+    'They have left, but their username could not be freed yet. Ask for it to be freed.',
 }
 
 interface AssignmentChangeResponse {
@@ -150,6 +157,7 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
     phone: profile.phone,
     roleTitle: profile.role_title,
     isActive: profile.is_active,
+    deactivatedOn: profile.deactivated_on,
     assignments: toAssignments(profile.assignments),
   })
 
@@ -223,6 +231,15 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
         expectedStateFingerprint,
       })
       return assignmentSetResult(result)
+    },
+
+    async markAsLeftV2(profileId: string, expectedStateFingerprint: string) {
+      const result = await callAdmin<{ leftOn: string }>(client, {
+        action: 'mark-as-left-v2',
+        profileId,
+        expectedStateFingerprint,
+      })
+      return { leftOn: result.leftOn }
     },
 
     async reissue(profileId: string): Promise<IssuedCode> {

@@ -17,10 +17,14 @@ import {
   isStaffRole,
   liveAssignments,
 } from '../adapters'
+import { bootSnapshot } from '@/change-gates/snapshot'
+import type { ChangeGateKey } from '@/change-gates/gates'
+import { shiftBusinessDate } from '@/domain'
 import { canonicalUsername } from '../../../shared/username'
 import {
   accountFixtures,
   assignmentFixtures,
+  DEACTIVATED_DAYS_AGO,
   PENDING_ACCOUNT_ID,
   RESET_PENDING_ACCOUNT_ID,
 } from './fixtures/accounts'
@@ -48,6 +52,23 @@ function inSevenDays(): string {
 function today(): string {
   return new Date().toISOString().slice(0, 10)
 }
+
+/**
+ * Today on the Kolkata calendar: the day a deactivation is dated by, as the
+ * database's `app_kolkata_today()` dates it (a-deactivated-person-leaves-in-two-steps,
+ * design D2).
+ */
+function kolkataToday(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date())
+}
+
+const OWNER_ACCESS_IN_DATABASE = new AccountActionError(
+  'owner_access_in_database',
+  'Owner access is changed only in the database. Ask for it to be done there.',
+)
+
+const isOwnerAccount = (account: Pick<AccountSummary, 'assignments'>) =>
+  liveAssignments(account.assignments).some((assignment) => assignment.role === 'super_admin')
 
 function demoUsername(fullName: string): string {
   return fullName
@@ -84,6 +105,7 @@ export function createDemoAccounts(): AccountSummary[] {
         : profile.id === RESET_PENDING_ACCOUNT_ID
           ? { purpose: 'password_reset' as const, expiresAt: inSevenDays() }
           : null
+    const daysAgo = DEACTIVATED_DAYS_AGO[profile.id]
     const account: AccountSummary = {
       id: profile.id,
       fullName: profile.full_name,
@@ -91,6 +113,10 @@ export function createDemoAccounts(): AccountSummary[] {
       accountEmail: isOwner ? DEMO_ACCOUNT_EMAILS.superAdmin : DEMO_ACCOUNT_EMAILS.ordinaryAccount,
       phone: profile.phone,
       isActive: profile.is_active,
+      deactivatedOn:
+        daysAgo === undefined
+          ? profile.deactivated_on
+          : shiftBusinessDate(kolkataToday(), -daysAgo),
       hasSignedIn,
       roleTitle: profile.role_title,
       assignments,
@@ -107,7 +133,25 @@ export function createMockAccountsAdapter(
   accounts: AccountSummary[],
   role: AppRole = 'super_admin',
   viewerId: string | null = null,
+  /**
+   * Whether a change gate is on, for `deactivate-then-leave` and
+   * `owner-access-in-the-database`. The demo answers from its own switchboard;
+   * absent, the page's frozen snapshot, as a real adapter's function reads it.
+   */
+  gateOn: (key: ChangeGateKey) => boolean = (key) => bootSnapshot()[key],
 ): AccountsAdapter {
+  /** Refuse an owner change while owner access is the database's (design D5). */
+  function refuseOwnerChange(): void {
+    if (gateOn('owner-access-in-the-database')) throw OWNER_ACCESS_IN_DATABASE
+  }
+
+  /** Sign-in state and its day, as the account function writes them (design D2). */
+  function writeActive(account: AccountSummary, isActive: boolean): void {
+    if (isActive && !account.isActive) account.deactivatedOn = null
+    if (!isActive && account.isActive) account.deactivatedOn = kolkataToday()
+    account.isActive = isActive
+  }
+
   const versions = new Map(accounts.map((account) => [account.id, 0]))
   let nextId = 1
   let nextAssignmentId = 1
@@ -384,14 +428,17 @@ export function createMockAccountsAdapter(
 
     async listRoster() {
       return structuredClone(
-        accounts.map(({ id, fullName, phone, roleTitle, isActive, assignments }) => ({
-          id,
-          fullName,
-          phone,
-          roleTitle,
-          isActive,
-          assignments,
-        })),
+        accounts.map(
+          ({ id, fullName, phone, roleTitle, isActive, deactivatedOn, assignments }) => ({
+            id,
+            fullName,
+            phone,
+            roleTitle,
+            isActive,
+            deactivatedOn,
+            assignments,
+          }),
+        ),
       )
     },
 
@@ -410,6 +457,7 @@ export function createMockAccountsAdapter(
     },
 
     async provision(input: NewAccount): Promise<IssuedCode> {
+      if (input.role === 'super_admin') refuseOwnerChange()
       const id = `d1000000-0000-4000-b000-${String(nextId++).padStart(12, '0')}`
       const username = requireAvailableUsername(input.username)
       const outletIds = input.role === 'super_admin' ? [null] : input.outletIds
@@ -430,6 +478,7 @@ export function createMockAccountsAdapter(
           input.role === 'super_admin' ? input.accountEmail!.trim().toLowerCase() : null,
         phone: input.phone ?? null,
         isActive: true,
+        deactivatedOn: null,
         hasSignedIn: false,
         roleTitle: input.roleTitle ?? null,
         assignments: outletIds.map((outletId) => ({
@@ -457,6 +506,22 @@ export function createMockAccountsAdapter(
     async editAccount(command: EditAccountCommand): Promise<AssignmentSetResult> {
       const account = find(command.profileId)
       requireFingerprint(account, command.expectedStateFingerprint)
+      // The intended set carries the owner assignments exactly as they are.
+      const held = liveAssignments(account.assignments)
+        .filter((assignment) => assignment.role === 'super_admin')
+        .map((assignment) => assignment.id)
+      const intendedOwner = command.assignments.filter(
+        (assignment) => assignment.role === 'super_admin',
+      )
+      if (
+        intendedOwner.length !== held.length ||
+        intendedOwner.some(
+          (assignment) =>
+            assignment.assignmentId === null || !held.includes(assignment.assignmentId),
+        )
+      ) {
+        refuseOwnerChange()
+      }
       assertIntendedAssignments(command, account)
       ensureMayManage(account, command.assignments)
       assertFinalOwnerIsRetained(account, command.assignments)
@@ -472,13 +537,45 @@ export function createMockAccountsAdapter(
       expectedStateFingerprint: string,
     ): Promise<AssignmentSetResult> {
       const account = find(profileId)
+      if (isOwnerAccount(account)) refuseOwnerChange()
       requireFingerprint(account, expectedStateFingerprint)
       ensureMayManage(account, [])
       assertFinalOwnerIsRetained(account, [])
       for (const assignment of liveAssignments(account.assignments)) assignment.endedOn = today()
-      account.isActive = false
+      writeActive(account, false)
       touch(account)
       return assignmentResult(account, null)
+    },
+
+    async markAsLeftV2(profileId: string, expectedStateFingerprint: string) {
+      if (!gateOn('deactivate-then-leave')) {
+        throw new AccountActionError(
+          'not_available',
+          'Mark as left is not available here yet. Reload the page.',
+        )
+      }
+      const account = find(profileId)
+      if (isOwnerAccount(account)) refuseOwnerChange()
+      requireFingerprint(account, expectedStateFingerprint)
+      ensureMayManage(account, [])
+      if (account.isActive) {
+        throw new AccountActionError(
+          'account_active',
+          'Deactivate this person before marking them as left.',
+        )
+      }
+      // Dated by the deactivation, never before an assignment's own start.
+      const leftOn = account.deactivatedOn ?? kolkataToday()
+      for (const assignment of liveAssignments(account.assignments)) {
+        assignment.endedOn = assignment.startedOn > leftOn ? assignment.startedOn : leftOn
+      }
+      account.deactivatedOn = leftOn
+      account.phone = null
+      // The username is freed: nothing signs in with it, and anybody may take it.
+      account.username = null
+      account.invite = null
+      touch(account)
+      return { leftOn }
     },
 
     // Legacy actions remain during call-site cutover. They preserve the new
@@ -489,11 +586,13 @@ export function createMockAccountsAdapter(
 
     async setActive(profileId: string, isActive: boolean) {
       const account = find(profileId)
-      account.isActive = isActive
+      if (isOwnerAccount(account)) refuseOwnerChange()
+      writeActive(account, isActive)
       touch(account)
     },
 
     async grantAssignment(input) {
+      if (input.role === 'super_admin') refuseOwnerChange()
       const account = find(input.personId)
       ensureMayManage(account, [
         ...liveAssignments(account.assignments),
@@ -535,6 +634,7 @@ export function createMockAccountsAdapter(
       for (const account of accounts) {
         const assignment = account.assignments.find((candidate) => candidate.id === assignmentId)
         if (!assignment || assignment.endedOn !== null) continue
+        if (assignment.role === 'super_admin') refuseOwnerChange()
         const intended = liveAssignments(account.assignments).filter(
           (candidate) => candidate.id !== assignmentId,
         )

@@ -3,6 +3,7 @@ import {
   DEMO_GRILLER_ACCOUNT_ID,
   DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID,
   DEMO_PREP_COOK_ACCOUNT_ID,
+  DEMO_DEACTIVATED_BILLER_ACCOUNT_ID,
   DEMO_RUNNER_ACCOUNT_ID,
   DEMO_TWO_OUTLETS_ACCOUNT_ID,
 } from './accounts'
@@ -404,4 +405,14 @@ export const attendanceSeeds: AttendanceSeed[] = [
   // looks like one rather than on a fortnight of derived absences. Last, so every
   // seed above keeps its index, and so its id.
   ...EARLIER_MONTH,
+  // Worked the three days before they were deactivated ten days back, and
+  // nothing since: with `deactivate-then-leave` on, the roll-call lists them
+  // up to that day and not after (#82). Last, so every seed above keeps its id.
+  ...[11, 12, 13].map((daysAgo) => ({
+    personId: DEMO_DEACTIVATED_BILLER_ACCOUNT_ID,
+    daysAgo,
+    status: 'present' as const,
+    checkIn: { time: `09:1${daysAgo % 10}`, ...AT_COUNTER },
+    autoApproved: true as const,
+  })),
 ]

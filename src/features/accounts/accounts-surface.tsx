@@ -1,4 +1,4 @@
-import { Users } from 'lucide-react'
+import { Check, Users } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
@@ -13,6 +13,7 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { Input } from '@/components/ui/input'
 import { LoadingTable, Shimmer } from '@/components/ui/loading'
 import { Select } from '@/components/ui/select'
+import { useChangeGate } from '@/change-gates/context'
 import { useAdapters, type Tables } from '@/data-access'
 import {
   DataActionError,
@@ -26,6 +27,7 @@ import {
   type RosterPerson,
 } from '@/data-access/adapters'
 import { STAFF_ROLES_BY_SENIORITY } from '@/data-access/role-includes'
+import { formatBusinessDateShort } from '@/domain'
 import { useSession } from '@/session/context'
 import { holdsRole, ROLE_LABELS, sessionOutletsFor } from '@/session/session'
 import { validateUsername, usernameErrorMessage } from '../../../shared/username'
@@ -104,9 +106,19 @@ export function AccountsSurface() {
   const { accounts: adapter, outlets: outletsAdapter } = useAdapters()
 
   const isOwner = holdsRole(session, 'super_admin')
+  // A deactivated person moves to Deactivated, and Remove is offered only
+  // there (a-deactivated-person-leaves-in-two-steps, design D4).
+  const deactivateThenLeave = useChangeGate('deactivate-then-leave')
+  // Owner access is granted and removed only in the database (design D5).
+  const ownerAccessInDatabase = useChangeGate('owner-access-in-the-database')
   const assignableRoles = useMemo<AppRole[]>(
-    () => (isOwner ? ROLE_ORDER : [...STAFF_ROLES_BY_SENIORITY]),
-    [isOwner],
+    () =>
+      isOwner
+        ? ownerAccessInDatabase
+          ? ROLE_ORDER.filter((role) => role !== 'super_admin')
+          : ROLE_ORDER
+        : [...STAFF_ROLES_BY_SENIORITY],
+    [isOwner, ownerAccessInDatabase],
   )
 
   // Two halves, read at once and shown as each lands (people-shows-names-first,
@@ -135,6 +147,37 @@ export function AccountsSurface() {
   const [pendingDeactivation, setPendingDeactivation] = useState<AccountSummary | null>(null)
   const [failedActivations, setFailedActivations] = useState<number | null>(null)
   const [showDeparted, setShowDeparted] = useState(false)
+  const [showDeactivated, setShowDeactivated] = useState(false)
+  /**
+   * Remove, the second step, asked from the Deactivated section. Named for the
+   * clean-up it is rather than the departure it records (owner, demo review of
+   * #82, 2026-11-02); nothing is deleted.
+   */
+  const [leaving, setLeaving] = useState<AccountSummary | null>(null)
+  /**
+   * What just happened to whom, said where the thumb is (owner, demo review of
+   * #82): a person moved out of the main list would otherwise vanish with no
+   * sign of where they went. Deactivate offers Undo for as long as it shows.
+   */
+  const [notice, setNotice] = useState<{
+    text: string
+    undo?: () => void
+    /** Fading out: kept on screen for the length of its fade, then gone. */
+    leaving?: boolean
+  } | null>(null)
+  const noticeText = notice?.text ?? null
+  useEffect(() => {
+    if (noticeText === null) return
+    const fade = window.setTimeout(
+      () => setNotice((current) => current && { ...current, leaving: true }),
+      6000,
+    )
+    const gone = window.setTimeout(() => setNotice(null), 6400)
+    return () => {
+      window.clearTimeout(fade)
+      window.clearTimeout(gone)
+    }
+  }, [notice?.undo, noticeText])
 
   const [draft, setDraft] = useState<Draft>({
     fullName: '',
@@ -232,21 +275,38 @@ export function AccountsSurface() {
     [outlets],
   )
 
-  async function run(action: () => Promise<void>) {
+  /** Resolves true once the action and the re-read have both succeeded. */
+  async function run(action: () => Promise<void>): Promise<boolean> {
     setBusy(true)
     setError(null)
     try {
       await action()
       await refresh()
+      return true
     } catch (cause) {
       setError(
         cause instanceof DataActionError
           ? cause.message
           : 'That did not work. Try again in a moment.',
       )
+      return false
     } finally {
       setBusy(false)
     }
+  }
+
+  /** Deactivate, said and undoable, with the section they moved to opened (#82). */
+  async function deactivateAndSay(target: AccountSummary) {
+    setNotice(null)
+    if (!(await run(() => adapter.setActive(target.id, false)))) return
+    setShowDeactivated(true)
+    setNotice({
+      text: `${target.fullName} deactivated`,
+      undo: () =>
+        void run(() => adapter.setActive(target.id, true)).then((done) => {
+          if (done) setNotice({ text: `${target.fullName} reactivated` })
+        }),
+    })
   }
 
   /** One act creates a working person: account, staff facts, issued code. */
@@ -335,6 +395,15 @@ export function AccountsSurface() {
     liveAssignments(row.assignments).length === 0
   const departedCount = list.filter(hasLeft).length
   const visible = showDeparted ? list : list.filter((row) => !hasLeft(row))
+  // With `deactivate-then-leave` on, the main list is the people who may sign
+  // in; somebody switched off and still placed is Deactivated, newest day
+  // first; somebody who has left is not listed at all (design D4).
+  const signedInRows = list.filter((row) => row.isActive)
+  const deactivatedRows = list
+    .filter((row) => !row.isActive && !hasLeft(row))
+    .sort((a, b) => (b.deactivatedOn ?? '').localeCompare(a.deactivatedOn ?? ''))
+  const holdsOwnerAccess = (row: Pick<RosterPerson, 'assignments'>) =>
+    liveAssignments(row.assignments).some((assignment) => assignment.role === 'super_admin')
 
   function lifecycleLabel(row: AccountSummary) {
     if (row.lifecycle.kind === 'deactivated') return 'Deactivated'
@@ -460,7 +529,13 @@ export function AccountsSurface() {
         }
         return (
           <span>
-            {lifecycleLabel(account) === 'Not assigned to an outlet' ? (
+            {deactivateThenLeave && account.lifecycle.kind === 'deactivated' ? (
+              <span data-testid={`deactivated-${row.id}`} className="font-semibold text-danger">
+                {account.deactivatedOn
+                  ? `Deactivated · ${formatBusinessDateShort(account.deactivatedOn)}`
+                  : 'Deactivated'}
+              </span>
+            ) : lifecycleLabel(account) === 'Not assigned to an outlet' ? (
               <span data-testid={`departed-${row.id}`} className="font-semibold text-content-muted">
                 Not assigned to any outlet
               </span>
@@ -493,6 +568,45 @@ export function AccountsSurface() {
               data-testid={`actions-reserved-${row.id}`}
               className="ml-auto block size-[var(--size-control-phone)]"
             />
+          )
+        }
+        // An owner is never switched off or removed from here while
+        // owner access is the database's (design D5).
+        const ownerLocked = ownerAccessInDatabase && holdsOwnerAccess(account)
+        if (deactivateThenLeave && account.lifecycle.kind === 'deactivated') {
+          // A deactivated owner is the database's to change, so offers nothing.
+          if (ownerLocked) {
+            return (
+              <span
+                aria-hidden
+                data-testid={`actions-reserved-${row.id}`}
+                className="ml-auto block size-[var(--size-control-phone)]"
+              />
+            )
+          }
+          return (
+            <span className="flex justify-end">
+              <RowActionsMenu
+                label={`Actions for ${account.fullName}`}
+                // No Edit: a deactivated person is reactivated or removed, not
+                // edited (owner, demo review of #82).
+                actions={[
+                  {
+                    label: 'Reactivate',
+                    disabled: busy,
+                    onSelect: () =>
+                      void run(() => adapter.setActive(account.id, true)).then((done) => {
+                        if (done) setNotice({ text: `${account.fullName} reactivated` })
+                      }),
+                  },
+                  {
+                    label: 'Remove',
+                    disabled: busy,
+                    onSelect: () => setLeaving(account),
+                  },
+                ]}
+              />
+            </span>
           )
         }
         return (
@@ -542,17 +656,21 @@ export function AccountsSurface() {
                       },
                     ]
                   : []),
-                account.lifecycle.kind !== 'deactivated'
-                  ? {
-                      label: 'Deactivate',
-                      disabled: busy,
-                      onSelect: () => setPendingDeactivation(account),
-                    }
-                  : {
-                      label: 'Reactivate',
-                      disabled: busy,
-                      onSelect: () => void run(() => adapter.setActive(account.id, true)),
-                    },
+                ...(ownerLocked
+                  ? []
+                  : [
+                      account.lifecycle.kind !== 'deactivated'
+                        ? {
+                            label: 'Deactivate',
+                            disabled: busy,
+                            onSelect: () => setPendingDeactivation(account),
+                          }
+                        : {
+                            label: 'Reactivate',
+                            disabled: busy,
+                            onSelect: () => void run(() => adapter.setActive(account.id, true)),
+                          },
+                    ]),
               ]}
             />
           </span>
@@ -627,7 +745,7 @@ export function AccountsSurface() {
         <>
           <DataTable
             columns={columns}
-            rows={visible}
+            rows={deactivateThenLeave ? signedInRows : visible}
             rowKey={(row) => row.id}
             empty={
               <EmptyState
@@ -636,7 +754,35 @@ export function AccountsSurface() {
               />
             }
           />
-          {departedCount > 0 && (
+          {deactivateThenLeave && deactivatedRows.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {/* One quiet line, as Fixed costs' Stopped is (owner, demo review of #82). */}
+              <button
+                type="button"
+                data-testid="toggle-deactivated"
+                aria-expanded={showDeactivated}
+                aria-controls="deactivated-people"
+                onClick={() => setShowDeactivated((current) => !current)}
+                className="w-full rounded-lg px-3 py-2 text-left text-sm text-content-muted hover:bg-surface-raised focus-visible:focus-ring"
+              >
+                Deactivated · {deactivatedRows.length} ·{' '}
+                <span className="font-semibold text-accent-text">
+                  {showDeactivated ? 'Hide' : 'Show'}
+                </span>
+              </button>
+              {showDeactivated && (
+                <div id="deactivated-people" data-testid="deactivated-people">
+                  <DataTable
+                    columns={columns}
+                    rows={deactivatedRows}
+                    rowKey={(row) => row.id}
+                    empty={null}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+          {!deactivateThenLeave && departedCount > 0 && (
             <div className="mt-3">
               <Button
                 variant="ghost"
@@ -884,6 +1030,8 @@ export function AccountsSurface() {
         error={error}
         outlets={provisionableOutlets}
         isOwner={isOwner}
+        offersDeparture={!deactivateThenLeave}
+        offersOwnerAccess={!ownerAccessInDatabase}
         onClose={() => setEditing(null)}
         onSubmit={(command) => {
           const target = editing
@@ -907,11 +1055,17 @@ export function AccountsSurface() {
 
       <ConfirmDialog
         open={pendingDeactivation !== null}
-        title="Deactivate this account?"
+        title={
+          deactivateThenLeave && pendingDeactivation
+            ? `Deactivate ${pendingDeactivation.fullName}?`
+            : 'Deactivate this account?'
+        }
         consequence={
-          pendingDeactivation
-            ? `${pendingDeactivation.fullName} stops being able to read or write anything immediately, even if their app is already open. They stay on the staff list and today’s attendance — mark them as left if they no longer work here. You can reactivate them later.`
-            : ''
+          !pendingDeactivation
+            ? ''
+            : deactivateThenLeave
+              ? 'They can’t sign in from now, even if their app is open. They move to Deactivated, where you can reactivate or remove them.'
+              : `${pendingDeactivation.fullName} stops being able to read or write anything immediately, even if their app is already open. They stay on the staff list and today’s attendance — mark them as left if they no longer work here. You can reactivate them later.`
         }
         confirmLabel="Deactivate"
         danger
@@ -919,7 +1073,28 @@ export function AccountsSurface() {
         onConfirm={() => {
           const target = pendingDeactivation
           setPendingDeactivation(null)
-          if (target) void run(() => adapter.setActive(target.id, false))
+          if (!target) return
+          if (deactivateThenLeave) void deactivateAndSay(target)
+          else void run(() => adapter.setActive(target.id, false))
+        }}
+      />
+
+      <ConfirmDialog
+        open={leaving !== null}
+        title={leaving ? `Remove ${leaving.fullName} from Team?` : ''}
+        consequence={leaving ? leavingConsequence(leaving) : ''}
+        confirmLabel="Remove"
+        danger
+        onClose={() => setLeaving(null)}
+        onConfirm={() => {
+          const target = leaving
+          if (!target) return
+          setLeaving(null)
+          void run(async () => {
+            await adapter.markAsLeftV2(target.id, target.stateFingerprint)
+          }).then((done) => {
+            if (done) setNotice({ text: `${target.fullName} removed` })
+          })
         }}
       />
 
@@ -945,8 +1120,57 @@ export function AccountsSurface() {
           })
         }}
       />
+
+      {/* A small pill above the tab bar on a phone, at the foot of the window
+          wider up: as wide as what it says, in the accent, as an Android toast
+          is (owner, demo review of #82), so it never reads as part of the bar. */}
+      {notice && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(156px+env(safe-area-inset-bottom))] z-40 flex justify-center px-4 md:bottom-6">
+          <div
+            key={notice.text}
+            role="status"
+            data-testid="team-notice"
+            className={`${notice.leaving ? 'team-notice-out' : 'team-notice-in'} pointer-events-auto inline-flex max-w-full items-center gap-2 rounded-full bg-primary/75 py-1.5 pl-3 pr-1.5 text-xs font-semibold text-on-primary shadow-md`}
+          >
+            <Check aria-hidden size={14} className="shrink-0 opacity-80" />
+            <span className="min-w-0 opacity-90">{notice.text}</span>
+            {notice.undo && (
+              <button
+                type="button"
+                data-testid="team-notice-undo"
+                disabled={busy}
+                onClick={notice.undo}
+                className="rounded-full px-2.5 py-1 font-bold uppercase tracking-wide hover:bg-on-primary/15 focus-visible:focus-ring disabled:opacity-60"
+              >
+                Undo
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
+}
+
+/**
+ * What Remove will do: what becomes free, what stays, and what undoing takes.
+ * The day their outlets end is bookkeeping, not part of the decision, so it is
+ * not said (owner, demo review of #82, 2026-11-02).
+ */
+function leavingConsequence(account: AccountSummary): string {
+  const freed = account.username
+    ? account.phone
+      ? `Their username ${account.username} and phone number become free for someone else.`
+      : `Their username ${account.username} becomes free for someone else.`
+    : account.phone
+      ? 'Their phone number becomes free for someone else.'
+      : null
+  return [
+    freed,
+    'Their attendance and work stay on record. Bringing them back means adding them again.',
+  ]
+    .filter(Boolean)
+    .join(' ')
 }
 
 function Field({ label, id, children }: { label: string; id: string; children: React.ReactNode }) {
@@ -1100,6 +1324,8 @@ function EditPersonSheet({
   error,
   outlets,
   isOwner,
+  offersDeparture = true,
+  offersOwnerAccess = true,
   onClose,
   onSubmit,
   onMarkAsLeft,
@@ -1109,6 +1335,10 @@ function EditPersonSheet({
   error: string | null
   outlets: Tables<'outlets'>[]
   isOwner: boolean
+  /** *Leaving the business*, off with `deactivate-then-leave` on (design D4). */
+  offersDeparture?: boolean
+  /** The Owner access section, off with `owner-access-in-the-database` on (design D5). */
+  offersOwnerAccess?: boolean
   onClose: () => void
   onSubmit: (command: {
     profileId: string
@@ -1143,10 +1373,13 @@ function EditPersonSheet({
       startedOn: assignment.startedOn,
     })),
   )
+  // An owner works everywhere: somebody whose only assignment is owner access
+  // has no outlets to show or add (design D6).
+  const ownerOnly = ownerAssignment !== null && ordinaryAssignments.length === 0
   const [expanded, setExpanded] = useState(
-    ordinaryAssignments.length !== 1 ||
-      new Set(ordinaryAssignments.map((assignment) => assignment.role)).size > 1 ||
-      ownerAssignment !== null,
+    !ownerOnly &&
+      (ordinaryAssignments.length !== 1 ||
+        new Set(ordinaryAssignments.map((assignment) => assignment.role)).size > 1),
   )
   const [ownerAccess, setOwnerAccess] = useState(ownerAssignment !== null)
   const [ownerAccessConfirmed, setOwnerAccessConfirmed] = useState(false)
@@ -1294,7 +1527,8 @@ function EditPersonSheet({
           </section>
         )}
 
-        {!expanded && (
+        {/* Offered only where there is another outlet to add (design D6). */}
+        {!expanded && !ownerOnly && addableOutlets.length > 0 && (
           <Button
             type="button"
             variant="ghost"
@@ -1320,15 +1554,11 @@ function EditPersonSheet({
                   One role at each outlet. Change a row to promote, transfer, or move someone.
                 </p>
               </div>
-              <Button
-                type="button"
-                variant="secondary"
-                size="phone"
-                disabled={addableOutlets.length === 0}
-                onClick={addAssignment}
-              >
-                Add outlet
-              </Button>
+              {addableOutlets.length > 0 && (
+                <Button type="button" variant="secondary" size="phone" onClick={addAssignment}>
+                  Add outlet
+                </Button>
+              )}
             </div>
 
             {assignments.length === 0 ? (
@@ -1422,7 +1652,7 @@ function EditPersonSheet({
           </section>
         )}
 
-        {isOwner && (
+        {isOwner && offersOwnerAccess && (
           <section
             aria-label="Owner access"
             className="space-y-3 rounded-xl border border-border bg-surface-raised p-3"
@@ -1484,7 +1714,7 @@ function EditPersonSheet({
           </section>
         )}
 
-        {account?.lifecycle.kind !== 'deactivated' && (
+        {offersDeparture && account?.lifecycle.kind !== 'deactivated' && (
           <section className="border-t border-border pt-4">
             <h3 className="text-sm font-semibold text-danger">Leaving the business</h3>
             <p className="mt-1 text-xs text-content-muted">

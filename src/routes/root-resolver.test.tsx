@@ -59,6 +59,7 @@ const PROFILE: Profile = {
   full_name: 'Synthetic Admin Kal',
   phone: null,
   is_active: true,
+  deactivated_on: null,
   role_title: 'Manager',
   created_at: '2026-07-26T00:00:00+00:00',
 }

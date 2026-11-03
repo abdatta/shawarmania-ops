@@ -31,8 +31,10 @@ import {
   AttendanceActionError,
   isRecoverableSetRefusal,
   isStaffAt,
+  wasActiveOn,
   wasStaffAtOn,
 } from '@/data-access/adapters'
+import { useChangeGate } from '@/change-gates/context'
 import { attentionChanged } from '@/features/attention/attention'
 import {
   carryPeriod,
@@ -531,6 +533,12 @@ function OutletAxis({
   // The same counts the navigation badge and the owner's chips read, so all
   // three agree and the read is made once (design D4).
   const { counts } = useWaitingCounts()
+  // A deactivated person is listed through their deactivation day and not after
+  // (a-deactivated-person-leaves-in-two-steps, design D8).
+  const deactivateThenLeave = useChangeGate('deactivate-then-leave')
+  /** May this person be listed, or entered, on a day with nothing recorded? */
+  const listedOn = (person: RosterPerson, date: string) =>
+    !deactivateThenLeave || wasActiveOn(person, date)
 
   // Today as each selected outlet reckons it. Where the cutovers disagree the
   // later one is used, so a day that has started somewhere is openable rather
@@ -945,6 +953,8 @@ function OutletAxis({
       (outlet) => isStaffAt(person, outlet.id) && wasStaffAtOn(person, outlet.id, businessDate),
     )
     if (record === null && theirs.length === 0) return []
+    // A recorded day is never hidden; an empty one after the deactivation is.
+    if (record === null && !listedOn(person, businessDate)) return []
     const worked = outletOf(record?.outletId ?? null)
     return [
       {
@@ -952,7 +962,13 @@ function OutletAxis({
           id: person.id,
           fullName: person.fullName,
           note: person.roleTitle,
-          deactivated: !person.isActive,
+          // Noted from the day they were deactivated, not on days they could
+          // still sign in, once that day is known (design D8).
+          deactivated:
+            !person.isActive &&
+            (!deactivateThenLeave ||
+              person.deactivatedOn === null ||
+              businessDate >= person.deactivatedOn),
           offList: false,
         },
         record,
@@ -1270,7 +1286,7 @@ function OutletAxis({
         // Present list visibility and historical membership are separate
         // questions. Both must be true before an outlet can receive an entry.
         outlets={
-          manualFor
+          manualFor && listedOn(manualFor, businessDate)
             ? outlets.filter(
                 (outlet) =>
                   isStaffAt(manualFor, outlet.id) &&
@@ -2307,6 +2323,9 @@ function StaffAxis({
   onError: (message: string | null) => void
 }) {
   const { attendance } = useAdapters()
+  // A month stops at the deactivation day (a-deactivated-person-leaves-in-two-steps,
+  // design D8): no window runs past it, so no empty day after it reads absent.
+  const deactivateThenLeave = useChangeGate('deactivate-then-leave')
   const today = outlets
     .map((outlet) => resolveBusinessDate(new Date(), outlet.business_day_cutover))
     .reduce((latest, candidate) => (candidate > latest ? candidate : latest), '')
@@ -2365,13 +2384,16 @@ function StaffAxis({
       // them has one continuous month rather than two half ones.
       windows: person.assignments
         .filter((assignment) => assignment.outletId !== null)
-        .map(({ outletId, startedOn, endedOn }) => ({
-          outletId: outletId as string,
-          startedOn,
-          endedOn,
-        })),
+        .map(({ outletId, startedOn, endedOn }) => {
+          const cap = deactivateThenLeave && !person.isActive ? person.deactivatedOn : null
+          return {
+            outletId: outletId as string,
+            startedOn,
+            endedOn: cap === null ? endedOn : endedOn === null || cap < endedOn ? cap : endedOn,
+          }
+        }),
     })
-  }, [records, person, outlets, range])
+  }, [records, person, outlets, range, deactivateThenLeave])
 
   if (people.length === 0) {
     return (
