@@ -191,8 +191,12 @@ and new behaviour sits beside it behind `useChangeGate`.
   *(3 November: Naresh 27 Oct 23:00 IST, Arpita 9 Sep 21:00 IST; his 1 Nov
   mistaken entry removed on 2 November.)*
 - [ ] 14.3 `/release owner-access-in-the-database`; pull it once.
+  *(Turned on by the owner at 13:05 IST on 3 November; not yet pulled.)*
 - [ ] 14.4 `/release deactivate-then-leave`; check By day and By staff for each
   deactivated person; pull it once.
+  *(Turned on at 13:06 IST on 3 November. Production then: Naresh 27 Oct 23:00
+  with a live Kalyani Cafe assignment and no row after the 27th, Arpita left;
+  all three tablets on `0fe6beed`. Not yet pulled.)*
 
 ## 15. PHASE GATE
 
