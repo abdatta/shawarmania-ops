@@ -181,10 +181,15 @@ and new behaviour sits beside it behind `useChangeGate`.
 
 ## 14. Release
 
-- [ ] 14.1 The owner approves a Promote; both gates reach production off.
-- [ ] 14.2 The D7 repair: list production's inactive accounts with no day, with
+- [x] 14.1 The owner approves a Promote; both gates reach production off.
+  *(Promote 41595499414 and Deploy 41595619417 on `0fe6beed`, 3 November 07:20
+  UTC, with the contract migrations of retire-fewer-requests, -tablet-health and
+  -role-includes riding with it.)*
+- [x] 14.2 The D7 repair: list production's inactive accounts with no day, with
   last attendance and last sign-in; the owner reviews; write the agreed days in
   one transaction; record the list and statement in `repair.md`.
+  *(3 November: Naresh 27 Oct 23:00 IST, Arpita 9 Sep 21:00 IST; his 1 Nov
+  mistaken entry removed on 2 November.)*
 - [ ] 14.3 `/release owner-access-in-the-database`; pull it once.
 - [ ] 14.4 `/release deactivate-then-leave`; check By day and By staff for each
   deactivated person; pull it once.

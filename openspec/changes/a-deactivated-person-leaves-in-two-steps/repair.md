@@ -53,3 +53,10 @@ commit;
 
 Re-run the inactive-profiles read first: anybody deactivated between this list and
 the Promote carries no day either, and is added here before it runs.
+
+**Done on 3 November**, after Promote 41595499414 and Deploy 41595619417 on
+`0fe6beed` (07:20 UTC), the owner having agreed both moments: the
+inactive-profiles read again found the same two and nobody else, both gates off;
+the statement above ran in one transaction, each update required to touch
+exactly one row. Read back: Naresh `2026-10-27 17:30:00+00` (23:00 IST), Arpita
+`2026-09-09 15:30:00+00` (21:00 IST).
