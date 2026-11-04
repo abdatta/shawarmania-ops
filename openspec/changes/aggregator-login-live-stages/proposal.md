@@ -117,9 +117,10 @@ No gate: a clean revert, away from the counter.
   every five seconds for the four minutes a sign-in takes, once a month — which
   it already does today.
 
-The code field keeps a fallback: if a code is awaited and no live stepper is on
-screen to hold the field, today's code card renders as before, so a stepper bug
-can never strand a sign-in.
+The OTP field cannot be stranded: an open, unexpired request with no live stage
+recorded shows the steps at "Waiting for your OTP", so a failed stage write
+never leaves a run waiting with nowhere to type. The old separate card is gone
+(design D8).
 
 ## Non-goals
 

@@ -26,7 +26,7 @@
 - [x] 4.3 Fallback: today's code card when a code is awaited and no stepper holds the field.
 - [x] 4.4 Done newer than the last run suppresses the lapsed card (D7).
 - [x] 4.5 The watch also runs while a sign-in is live, at the 3 s running-read pace (design D10).
-- [x] 4.6 Component tests: walk, quiet, stopped, retry, done, Swiggy without Hyperpure, fallback card.
+- [x] 4.6 Component tests: walk, quiet, stopped, retry, done, Swiggy without Hyperpure, an open request with no recorded stage asks in the steps (the old separate card removed, design D8).
 - [x] 4.7 A live sign-in holds its page (design D11): the steps sit over an inert, dimmed page; navigation stays usable; a watched sign-in ends ticked until Done; quiet and stopped do not hold. Unit and browser tests, including leaving for Team and coming back.
 - [x] 4.8 Owner review: the first stage shows the moment Reconnect is tapped; OTP, not code, everywhere on the page; a one-line "This can take a couple of minutes."; a watched sign-in's end is said as a toast. Team's toast moved into the shared `src/components/ui/toast.tsx`, documented in DESIGN_SYSTEM and AGENTS.md, with a design-system spec delta.
 

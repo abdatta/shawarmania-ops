@@ -209,11 +209,20 @@ ends — enough to build it as its own change. An expired code stops the sign-in
 card is the resend: a fresh run with a fresh code. Revisit only after the live
 walk (task 8.4) has captured the code screen's structure.
 
-### D8. The code field cannot be stranded
+### D8. The code field cannot be stranded, and has one home
 
-The field lives inside "Waiting for your code". If a code is awaited and no
-live stepper is showing (an old row, a stage write that failed), today's
-separate code card renders as before.
+The field lives inside "Waiting for your OTP", and only there. The stage is
+written best effort, so a run can be waiting at the mailbox with no live stage
+recorded; then the steps stand at "Waiting for your OTP" on the strength of the
+open request alone.
+
+This first kept the old separate code card for that case. On 2026-11-04 it
+came back on its own, hours after a test: a refused OTP had reopened the
+request, the runner of the time died, and once the stopped sign-in aged off the
+page the card read the still-open row as an OTP wanted. Two records that can
+disagree, and a second piece of screen that appears when they do, so the card
+is gone (owner): the request counts only before its expiry, a runner's
+`stopped` closes it, and a wanted OTP is always asked for in the steps.
 
 ### D9. Fix the Zomato code-field locator
 

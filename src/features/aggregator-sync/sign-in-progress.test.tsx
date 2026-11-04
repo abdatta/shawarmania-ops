@@ -221,16 +221,22 @@ describe('the surface around a sign-in', () => {
     expect(screen.queryByTestId(/needs-reconnect-/)).not.toBeInTheDocument()
   })
 
-  it('keeps the old code card when a code is awaited and no sign-in is on screen', async () => {
+  it('asks for a wanted OTP in the steps even when no stage was recorded', async () => {
+    // The stage is written best effort; the request alone is enough to ask.
     await renderWithHealth((health) => ({
       ...health,
       signIn: null,
       awaitingOneTimePassword: { requestedAt: recently(10_000), expiresAt: recently(-200_000) },
     }))
 
-    expect(await screen.findByText('Zomato sent you an OTP')).toBeInTheDocument()
-    expect(screen.getByLabelText(/^The OTP/)).toBeInTheDocument()
-    expect(screen.queryByTestId('zomato-sign-in')).not.toBeInTheDocument()
+    const lock = await screen.findByTestId('zomato-sign-in-lock')
+    const step = within(lock)
+      .getByText('Waiting for your OTP')
+      .closest('[data-step]') as HTMLElement
+    expect(step).toHaveAttribute('data-step-state', 'current')
+    expect(within(step).getByLabelText(/^The OTP/)).toBeInTheDocument()
+    // One place asks for an OTP: there is no separate card any more.
+    expect(screen.getAllByLabelText(/^The OTP/)).toHaveLength(1)
   })
 
   it('asks for no OTP on a request whose time ran out, though its row is still open', async () => {

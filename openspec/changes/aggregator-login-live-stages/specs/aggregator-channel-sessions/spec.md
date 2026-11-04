@@ -13,9 +13,10 @@ NOT show one while no open request exists. Requests opened for a code nobody
 will send SHALL be swept on expiry exactly as today.
 
 **Where a surface shows the sign-in's progress, the code field SHALL appear as
-the content of the stage that waits for it**, rather than as a separate card
-beside that progress. Where a code is awaited and no progress is shown, the
-separate code card SHALL still appear, so a code can always be given.
+the content of the stage that waits for it**, and nowhere else. A code that is
+awaited SHALL always be asked for there: where the request is open and not past
+its expiry but no live stage is recorded, the progress SHALL stand at the stage
+that waits for the code. A request past its expiry SHALL NOT be asked for.
 
 #### Scenario: An alive-session reconnect never shows a code box
 

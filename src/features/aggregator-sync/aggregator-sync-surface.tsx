@@ -410,9 +410,22 @@ export function AggregatorSyncSurface({
   const asked = health?.awaitingOneTimePassword ?? null
   const waiting = asked && new Date(asked.expiresAt).getTime() > now ? asked : null
   /** Where a full sign-in has got to, judged against the clock (#46). */
-  const signIn: SignInView = health
+  const recordedSignIn: SignInView = health
     ? readSignIn(health.signIn, now, health.lastRunAt)
     : { kind: 'none' }
+  /*
+   * An OTP that is genuinely wanted is always asked for in the steps, never
+   * anywhere else. The stage is written best effort, so a run can be waiting
+   * at the mailbox with no live stage recorded; then the steps stand at
+   * "Waiting for your OTP" on the strength of the request alone. This replaced
+   * a separate OTP card kept for that case, which came back on its own when a
+   * stale request outlived its sign-in (owner, 2026-11-04): one screen asks for
+   * an OTP, and only while one is wanted.
+   */
+  const signIn: SignInView =
+    waiting && recordedSignIn.kind !== 'live'
+      ? { kind: 'live', stage: 'waiting_for_code' }
+      : recordedSignIn
   /*
    * A live sign-in locks this page (#46): its steps sit over the page, which
    * takes no input until they end, while the rest of the app stays reachable.
@@ -627,41 +640,6 @@ export function AggregatorSyncSurface({
               wrote={uploadWrote}
               onUpload={onUpload}
             />
-
-            {/*
-            The separate code card, kept for one case only: a code is awaited
-            and no sign-in is on screen to hold the field (a request opened
-            before #46, or a stage that could not be recorded). A code can
-            always be given.
-          */}
-            {waiting && signIn.kind === 'none' && (
-              <Card className="border-warning/60 bg-warning/5 p-4">
-                <h2 className="text-sm font-medium text-content">{config.otpHeading}</h2>
-                <p className="mt-1 text-sm text-content-muted">
-                  Check the phone the account is registered to. It expires in a few minutes.
-                </p>
-                <form onSubmit={submitCode} className="mt-3 flex flex-wrap gap-2">
-                  <label htmlFor={`${config.testIdPrefix}-otp`} className="sr-only">
-                    The OTP {config.label} sent for this outlet
-                  </label>
-                  <input
-                    id={`${config.testIdPrefix}-otp`}
-                    value={code}
-                    onChange={(changed) => setCode(changed.target.value)}
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    placeholder="000000"
-                    // 16px floor: anything smaller makes a mobile browser zoom the
-                    // viewport on focus, and this field is typed on a phone by
-                    // definition.
-                    className="w-32 rounded-md border border-border bg-surface px-3 py-2 text-base tabular-nums text-content"
-                  />
-                  <Button type="submit" disabled={busy || code.trim() === ''}>
-                    Sign back in
-                  </Button>
-                </form>
-              </Card>
-            )}
 
             {signIn.kind === 'done' && <SignedBackIn config={config} reading={health.running} />}
 
