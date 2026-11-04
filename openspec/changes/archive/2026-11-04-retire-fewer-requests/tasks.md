@@ -50,7 +50,7 @@ its own, and no migration in the code half.
 
 ## 2. Wait for every tablet
 
-- [ ] 2.1 The readiness check (`retire-gate` §2): every registered device on the
+- [x] 2.1 The readiness check (`retire-gate` §2): every registered device on the
   retirement build or later, and three services on it. No person's screen
   carried a toggle point the owner's phone runs, except the shared counts and the
   aggregator sync page: the owner and managers reload the app before the
@@ -66,7 +66,9 @@ its own, and no migration in the code half.
     `git merge-base --is-ancestor` against `origin/main` confirms. Three services
     since Deploy 41154842156: 31 October (69 bills), 1 November (58) and 2 November
     (47, the last at 22:33 IST). Still nothing reads the key, in production or
-    on a fresh reset. Left: the owner and managers reload before the Promote.
+    on a fresh reset. Whether every manager's phone reloaded before the
+    Promote was not confirmed; any that had not picks the build up on its next
+    load.
 
 ## 3. The contract migration
 
@@ -86,4 +88,7 @@ its own, and no migration in the code half.
   every REST suite passes but `account-flows`, whose four failures come from
   another worktree's unfinished `admin-accounts` that the shared Edge runtime
   serves, read from Staging instead.)*
-- [ ] 3.3 Release it through the normal path.
+- [x] 3.3 Release it through the normal path.
+  *(Promoted with `731fc8a0` above it; Deploy 41595619417 on `0fe6beed`, 3
+  November at 07:20 UTC. Read in production on 4 November: the row retired at
+  07:21 UTC and off.)*

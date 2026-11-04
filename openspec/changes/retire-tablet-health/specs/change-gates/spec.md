@@ -11,9 +11,10 @@ never fail a request.
 
 The counter and the kitchen SHALL report, once a minute and once
 immediately after boot, their build, the gates the page booted with on, and the
-window's requests, failures and slowest duration, through `report_device_health`,
-which SHALL take the device and outlet from the caller's own device session. A
-failed report SHALL be ignored.
+window's requests, failures and slowest duration, through
+`report_device_health_v2`, which records through `report_device_health` and
+SHALL take the device and outlet from the caller's own device session. No client
+SHALL call `report_device_health` itself. A failed report SHALL be ignored.
 
 #### Scenario: A report carries no customer data
 
