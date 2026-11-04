@@ -1425,8 +1425,8 @@ offered as alternatives rather than simultaneous selections.
 
 #### Scenario: The includes rows give today's answers
 
-- **WHEN** `role-includes` is on and an Employee, a Biller, a Manager and the owner each check in, record an expense, read the counter's menu and change a person's role
-- **THEN** each is admitted or refused exactly as with the gate off
+- **WHEN** an Employee, a Biller, a Manager and the owner each check in, record an expense, read the counter's menu and change a person's role
+- **THEN** each is admitted or refused exactly as when each check named its roles
 
 #### Scenario: Roles that branch
 

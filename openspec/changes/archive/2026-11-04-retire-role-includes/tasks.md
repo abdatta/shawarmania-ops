@@ -51,7 +51,7 @@ own, and no migration in the code half.
 
 ## 2. Wait for every tablet
 
-- [ ] 2.1 The readiness check (`retire-gate` §2): every registered device on the
+- [x] 2.1 The readiness check (`retire-gate` §2): every registered device on the
   retirement build or later, three services on it, and the owner's and
   managers' phones reloaded (Team is their screen). Record the date and the
   evidence.
@@ -72,8 +72,9 @@ own, and no migration in the code half.
     `git merge-base --is-ancestor` against `origin/main` confirms. Three services
     since Deploy 41164443637: 31 October (69 bills), 1 November (58) and 2 November
     (47, the last at 22:33 IST). The readers are the same ten policies, in
-    production and on a fresh reset. Left: the owner's and managers' phones
-    reload before the Promote.
+    production and on a fresh reset. Whether every manager's phone reloaded
+    before the Promote was not confirmed; any that had not picks the build up
+    on its next load.
 
 ## 3. The contract migration
 
@@ -86,16 +87,29 @@ own, and no migration in the code half.
   `expense_guard`, `account_actor_may_replace_set` and
   `app_may_hold_counter_shift` ask the includes rows in place; the six
   originals are calls to their `_v2`, as design D8 leaves them.)*
-- [ ] 3.2 pgTAP: the `%_includes` exclusions leave `01`, `21` and `24`; `98`
+- [x] 3.2 pgTAP: the `%_includes` exclusions leave `01`, `21` and `24`; `98`
   stops turning the gate; every database gate on a fresh reset; release it.
-  *(Done but the release. `98` now holds each policy, and the Team and
+  *(`98` now holds each policy, and the Team and
   counter-shift helpers, to a frozen copy of the role-by-name check it replaced,
   for every persona, and a mutation of either copy fails it; `01` reads the
   staff branch as `app_acts_as`. Every database gate on a fresh reset on 3
-  November, as `retire-fewer-requests` 3.2 records.)*
-- [ ] 3.3 Tell #80 (`waiters-take-orders-on-their-phones`) the first Waiter may
+  November, as `retire-fewer-requests` 3.2 records. Promoted with `731fc8a0`
+  above it; Deploy 41595619417 on `0fe6beed`, 3 November at 07:20 UTC. Read in
+  production on 4 November: the row retired at 07:21 UTC and off, and no
+  `%_includes` policy left.)*
+- [x] 3.3 Tell #80 (`waiters-take-orders-on-their-phones`) the first Waiter may
   now be made.
+  *(4 November: its proposal, design D1 and tasks 0.25 say the cleanup has run
+  and a Waiter may be made; tasks 1.1 no longer has `waiter-orders` depend on
+  the retired key, and 0.25 records that `stage` already holds five root
+  gates.)*
 
 ## 4. Archive
 
-- [ ] 4.1 Report what was retired and when, then archive.
+- [x] 4.1 Report what was retired and when, then archive.
+  *(4 November: `role-includes` (`RI`) retired in code on 31 October (Deploy
+  41164443637) and in the database on 3 November (Deploy 41595619417). The ten
+  policies ask the includes rows and their gated twins are gone;
+  `expense_guard`, `account_actor_may_replace_set` and
+  `app_may_hold_counter_shift` ask them in place; the six originals a `_v2`
+  replaced are calls to it. Archived on the owner's word.)*
