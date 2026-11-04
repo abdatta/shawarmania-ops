@@ -884,6 +884,7 @@ the link and the reader.
 ## Cross-cutting
 
 - **Every screen is responsive.** Manager and employee screens are phone-first; billing is tablet-first; everything is usable on a desktop browser.
+- **On a desktop, a phone-shell page is one centred column** (`max-w-2xl`), Analytics alone wider; a new page caps its own root. See [Design System → Page width](DESIGN_SYSTEM.md#page-width).
 - **The app is installable** and launches full-screen from the home screen.
 - **Rupees everywhere**, Indian digit grouping, tabular figures.
 - **Asia/Kolkata everywhere.** Business dates display as dates, never as timestamps.

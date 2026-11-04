@@ -612,7 +612,7 @@ export function ManagerBillingHistory() {
   }
 
   return (
-    <section className="space-y-4" aria-labelledby="billing-history-title">
+    <section className="mx-auto max-w-2xl space-y-4" aria-labelledby="billing-history-title">
       <PageHeader
         scope={outletSelector}
         title="Billing history"

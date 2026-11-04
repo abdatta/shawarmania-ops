@@ -213,6 +213,15 @@ Two distinct contexts, and they need different metrics:
 
 The counter numbers are larger on purpose. Billing happens fast, one-handed, sometimes with wet or greasy hands, while a customer waits. Missing a tap costs real time in front of a real queue.
 
+## Page width
+
+**Every page in the phone shell — the owner's, a manager's and a staff member's — is one centred column, `mx-auto max-w-2xl`, on its own root** [owner, 2026-11-04]. These pages are built for a phone and also opened on a laptop; on a wide screen the column stops growing at 672px and the rest is margin, so a page reads the same on both and nothing stretches into a line too long to scan. The shell's `<main>` does not cap anything, which is why each page must: a page that forgets is edge to edge on desktop and looks right on the phone it was checked on (Billing did this until owner-pages-share-one-width). Anything a page renders above its own column — the counter's approval cards on Home — carries the same cap.
+
+- **Analytics is the one exception**, at `max-w-5xl`: its charts and bars read better with the room. A new page wider than the standard column needs the same kind of reason, written beside its class.
+- **A table wider than the column scrolls sideways inside it** (the Ledger's statement does); it does not widen the page.
+- **The counter and kitchen tablets are not in this rule.** They are their own shells, laid out to the screen they live on (see [Screens](SCREENS.md)).
+- `e2e/page-width.spec.ts` opens every page in each role's rail on a 1600px screen and fails if its content is wider than the column, so a new page in the nav is checked without anyone adding it.
+
 ## Component conventions
 
 - **The app install action is chrome, not page content.** It uses the semantic

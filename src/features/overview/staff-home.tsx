@@ -45,7 +45,7 @@ export function StaffHome() {
   )
 
   return (
-    <div className="mx-auto max-w-md">
+    <div className="mx-auto max-w-2xl">
       {own.status === 'loading' && <LoadingBlock label="today" className="h-48" />}
 
       {own.status === 'error' && (

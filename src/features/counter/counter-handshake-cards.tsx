@@ -38,7 +38,7 @@ export function CounterHandshakeCards() {
   if (requests.length === 0 && shifts.length === 0 && !withdrawn) return null
 
   return (
-    <div className="mb-4 space-y-3">
+    <div className="mx-auto mb-4 max-w-2xl space-y-3">
       {withdrawn && (
         <Card data-testid="counter-request-withdrawn">
           <CardBody className="mt-0">{withdrawn}</CardBody>

@@ -312,7 +312,7 @@ function OutletMenuSurface({
   )
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-2xl">
       <PageHeader
         scope={outletSelector}
         title="Menu"

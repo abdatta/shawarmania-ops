@@ -50,7 +50,7 @@ export function OutletsOverview() {
     if (rows.value !== undefined) rememberOverviewOutletCount(rows.value.length)
   }, [rows.value])
   return (
-    <div className="mx-auto max-w-3xl space-y-3">
+    <div className="mx-auto max-w-2xl space-y-3">
       <PageHeader
         title="Overview"
         subtitle={`${new Intl.DateTimeFormat('en-IN', {

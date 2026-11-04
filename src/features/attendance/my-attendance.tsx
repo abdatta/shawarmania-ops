@@ -55,7 +55,7 @@ export function MyAttendance() {
     outlets?.find((outlet) => outlet.id === row.outletId)?.geofence_radius_m ?? 0
 
   return (
-    <div className="mx-auto max-w-md">
+    <div className="mx-auto max-w-2xl">
       {/* No Back: My attendance is a tab of its own, and Back belongs to pages
           the tab bar cannot reach. Today's date under the heading takes the
           place of a ring on today in the calendar [owner, 2026-10-28]. */}
