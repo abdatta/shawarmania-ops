@@ -279,7 +279,7 @@ answers say.
 
 ### Requirement: Tablets report their health without content
 
-When the `tablet-health` gate was on at a tablet's boot, every request the app
+Every request the app
 makes through its Supabase client SHALL be counted by resource — the table, RPC,
 Edge Function or auth endpoint — with whether it failed (a network error, a
 timeout, a 5xx, a 408 or a 429) and how long it took, over a sixty-second window.
@@ -288,19 +288,15 @@ never fail a request.
 
 The counter and the kitchen SHALL report, once a minute and once
 immediately after boot, their build, the gates the page booted with on, and the
-window's requests, failures and slowest duration, through `report_device_health`,
-which SHALL take the device and outlet from the caller's own device session. A
-failed report SHALL be ignored.
+window's requests, failures and slowest duration, through
+`report_device_health_v2`, which records through `report_device_health` and
+SHALL take the device and outlet from the caller's own device session. No client
+SHALL call `report_device_health` itself. A failed report SHALL be ignored.
 
 #### Scenario: A report carries no customer data
 
-- **WHEN** the counter looks up a customer by phone number with health reporting on
+- **WHEN** the counter looks up a customer by phone number
 - **THEN** the report names the resource it called and nothing of the number
-
-#### Scenario: Health is off by default
-
-- **WHEN** `tablet-health` is off
-- **THEN** tablets install no counting fetch and send no health report
 
 ### Requirement: The database reads a gate for triggers and policies only
 

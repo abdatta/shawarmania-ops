@@ -61,14 +61,22 @@ its own, and no migration in the code half.
 
 ## 3. The contract migration
 
-- [ ] 3.1 A migration headed `-- release: contract tablet-health` that, after
+- [x] 3.1 A migration headed `-- release: contract tablet-health` that, after
   confirming in production and on a fresh reset what reads the key, rewrites any
   reader to its on branch, drops what only the off path used, and retires the
   row; pgTAP updated; every database gate on a fresh reset; release it.
   *(`20261113010000_contract_tablet_health.sql` retires the row: nothing read
   the key and nothing was the off path's alone. Every database gate on a fresh
-  reset on 3 November, as `retire-fewer-requests` 3.2 records. Release left.)*
+  reset on 3 November, as `retire-fewer-requests` 3.2 records. Promoted with
+  `731fc8a0` above it; Deploy 41595619417 on `0fe6beed`, 3 November at 07:20
+  UTC. Read in production on 4 November: the row retired at 07:21 UTC and
+  off.)*
 
 ## 4. Archive
 
-- [ ] 4.1 Report what was retired and when, then archive.
+- [x] 4.1 Report what was retired and when, then archive.
+  *(4 November: `tablet-health` (`TH`) retired in code on 31 October (Deploy
+  41164443637) and in the database on 3 November (Deploy 41595619417). Every
+  build since counts its requests and reports each minute through
+  `report_device_health_v2` without asking a gate. Archived on the owner's
+  word.)*

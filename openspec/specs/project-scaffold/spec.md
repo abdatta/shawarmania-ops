@@ -444,7 +444,7 @@ The freshness constants SHALL be named once, in `src/lib/freshness.ts`.
 
 ### Requirement: A tablet's health report carries the gate answers
 
-With `tablet-health` on, a tablet's minute health report SHALL return every
+A tablet's minute health report SHALL return every
 live gate's answer, and the tablet SHALL treat that as its
 minute gate read. If a report fails, the tablet SHALL read the gates directly,
 so a turned gate reaches every tablet within a minute.
