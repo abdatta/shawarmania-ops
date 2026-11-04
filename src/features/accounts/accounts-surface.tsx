@@ -1,4 +1,4 @@
-import { Check, LoaderCircle, Users } from 'lucide-react'
+import { LoaderCircle, Users } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
@@ -11,6 +11,7 @@ import { AddButton } from '@/components/ui/add-button'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Input } from '@/components/ui/input'
+import { Toast, useToast } from '@/components/ui/toast'
 import { LoadingTable, Shimmer } from '@/components/ui/loading'
 import { Select } from '@/components/ui/select'
 import { useChangeGate } from '@/change-gates/context'
@@ -162,25 +163,7 @@ export function AccountsSurface() {
    * #82): a person moved out of the main list would otherwise vanish with no
    * sign of where they went. Deactivate offers Undo for as long as it shows.
    */
-  const [notice, setNotice] = useState<{
-    text: string
-    undo?: () => void
-    /** Fading out: kept on screen for the length of its fade, then gone. */
-    leaving?: boolean
-  } | null>(null)
-  const noticeText = notice?.text ?? null
-  useEffect(() => {
-    if (noticeText === null) return
-    const fade = window.setTimeout(
-      () => setNotice((current) => current && { ...current, leaving: true }),
-      6000,
-    )
-    const gone = window.setTimeout(() => setNotice(null), 6400)
-    return () => {
-      window.clearTimeout(fade)
-      window.clearTimeout(gone)
-    }
-  }, [notice?.undo, noticeText])
+  const toast = useToast()
 
   const [draft, setDraft] = useState<Draft>({
     fullName: '',
@@ -319,17 +302,17 @@ export function AccountsSurface() {
 
   function reactivate(target: AccountSummary) {
     void change(target, 'Reactivating…', () => adapter.setActive(target.id, true)).then((done) => {
-      if (done) setNotice({ text: `${target.fullName} reactivated` })
+      if (done) toast.show({ text: `${target.fullName} reactivated` })
     })
   }
 
   async function deactivateAndSay(target: AccountSummary) {
-    setNotice(null)
+    toast.clear()
     if (!(await change(target, 'Deactivating…', () => adapter.setActive(target.id, false)))) {
       return
     }
     setShowDeactivated(true)
-    setNotice({ text: `${target.fullName} deactivated`, undo: () => reactivate(target) })
+    toast.show({ text: `${target.fullName} deactivated`, undo: () => reactivate(target) })
   }
 
   /** One act creates a working person: account, staff facts, issued code. */
@@ -1131,7 +1114,7 @@ export function AccountsSurface() {
           void change(target, 'Removing…', async () => {
             await adapter.markAsLeftV2(target.id, target.stateFingerprint)
           }).then((done) => {
-            if (done) setNotice({ text: `${target.fullName} removed` })
+            if (done) toast.show({ text: `${target.fullName} removed` })
           })
         }}
       />
@@ -1159,33 +1142,7 @@ export function AccountsSurface() {
         }}
       />
 
-      {/* A small pill above the tab bar on a phone, at the foot of the window
-          wider up: as wide as what it says, in the accent, as an Android toast
-          is (owner, demo review of #82), so it never reads as part of the bar. */}
-      {notice && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(156px+env(safe-area-inset-bottom))] z-40 flex justify-center px-4 md:bottom-6">
-          <div
-            key={notice.text}
-            role="status"
-            data-testid="team-notice"
-            className={`${notice.leaving ? 'team-notice-out' : 'team-notice-in'} pointer-events-auto inline-flex max-w-full items-center gap-2 rounded-full bg-primary/75 py-1.5 pl-3 pr-1.5 text-xs font-semibold text-on-primary shadow-md`}
-          >
-            <Check aria-hidden size={14} className="shrink-0 opacity-80" />
-            <span className="min-w-0 opacity-90">{notice.text}</span>
-            {notice.undo && (
-              <button
-                type="button"
-                data-testid="team-notice-undo"
-                disabled={busy}
-                onClick={notice.undo}
-                className="rounded-full px-2.5 py-1 font-bold uppercase tracking-wide hover:bg-on-primary/15 focus-visible:focus-ring disabled:opacity-60"
-              >
-                Undo
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      <Toast toast={toast.current} busy={busy} testId="team-notice" />
     </div>
   )
 }
