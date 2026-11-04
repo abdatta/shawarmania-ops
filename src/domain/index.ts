@@ -64,6 +64,17 @@ export {
 } from './drawer'
 export { DELIVERY_CHANNELS, isDeliveryChannel, type DeliveryChannel } from './channels'
 export {
+  isSignInStage,
+  readSignIn,
+  SIGN_IN_STAGES,
+  signInSteps,
+  stepState,
+  type SignInRecord,
+  type SignInStage,
+  type SignInStep,
+  type SignInView,
+} from './sign-in-progress'
+export {
   readMonth,
   type MonthCategoryTotal,
   type MonthChannelDay,

@@ -11,6 +11,7 @@ import type {
   HyperpureHealth,
 } from '@/data-access/adapters'
 
+import { readSignIn, type SignInView } from '@/domain/sign-in-progress'
 import { attentionChanged } from '@/features/attention/attention'
 import { cn } from '@/lib/cn'
 import { RUNNING_SYNC_CHECK_MS } from '@/lib/freshness'
@@ -18,6 +19,7 @@ import { RUNNING_SYNC_CHECK_MS } from '@/lib/freshness'
 import type { AggregatorChannelConfig } from './channel-config'
 import { needsOwner } from './needs-you-count'
 import { RunHistory } from './run-history'
+import { SignedBackIn, SignInProgress } from './sign-in-progress'
 import { hasGoneQuiet, readAgainAfterHours, readsPerDayPhrase, whenItRan } from './when'
 import { SyncEventRow } from './sync-event-row'
 
@@ -180,6 +182,21 @@ export function AggregatorSyncSurface({
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   /*
+   * The clock a sign-in is judged against (#46): whether a stage has gone quiet,
+   * and how long the code has left. Held in state for the same reason as
+   * `readAgainIn` below — reading a clock during render is impure — and moved on
+   * by every read, and by a one-second tick while a sign-in is live.
+   */
+  const [now, setNow] = useState(() => Date.now())
+  /**
+   * How many codes had been refused when the owner last sent one, or null.
+   *
+   * While that count still stands the code is with the runner, so the field
+   * steps aside for "Code sent" instead of inviting a second code for the same
+   * attempt. A refusal raises the count and brings the field back.
+   */
+  const [codeSentAt, setCodeSentAt] = useState<number | null>(null)
+  /*
    * Hours until reading again could say anything new, or null if it could now.
    *
    * Held in state rather than derived at render, because deciding it needs the
@@ -228,6 +245,7 @@ export function AggregatorSyncSurface({
       config.showsHyperpure ? adapter.getHyperpureHealth() : Promise.resolve(null),
     ])
       .then(([nextHealth, nextEvents, nextHyperpure]) => {
+        setNow(Date.now())
         setHealth(nextHealth)
         setEvents(nextEvents)
         setHyperpure(nextHyperpure)
@@ -318,11 +336,14 @@ export function AggregatorSyncSurface({
     event.preventDefault()
     if (!outletId || code.trim() === '') return
     const entered = code
+    const refusedSoFar = health?.codeAttempts ?? 0
     // Cleared before it is sent, and never put in a URL or a log. It is a
     // credential passing through, and it should live on this screen for as
     // little time as possible.
     setCode('')
-    await act(() => adapter.answerOneTimePassword(outletId, entered))
+    await act(() =>
+      adapter.answerOneTimePassword(outletId, entered).then(() => setCodeSentAt(refusedSoFar)),
+    )
   }
 
   const [uploadWrote, setUploadWrote] = useState<readonly string[] | null>(null)
@@ -380,6 +401,44 @@ export function AggregatorSyncSurface({
     (config.showsHyperpure ? (hyperpure?.running ?? false) : false)
 
   const waiting = health?.awaitingOneTimePassword ?? null
+  /** Where a full sign-in has got to, judged against the clock (#46). */
+  const signIn: SignInView = health
+    ? readSignIn(health.signIn, now, health.lastRunAt)
+    : { kind: 'none' }
+  /*
+   * A live sign-in locks this page (#46): its steps sit over the page, which
+   * takes no input until they end, while the rest of the app stays reachable.
+   * Nothing about the lock lives in the page — it is read from the recorded
+   * stage — so a refresh, a second phone or a return from another page finds it
+   * exactly where the sign-in is. One this page watched to the end stays up
+   * with every step ticked until the owner says Done — even after the read it
+   * starts has overtaken it; one that finished while nobody watched is the
+   * one-line Signed back in below.
+   */
+  const [watched, setWatched] = useState<'live' | 'done' | null>(null)
+  const nextWatched =
+    signIn.kind === 'live'
+      ? 'live'
+      : signIn.kind === 'done' && watched !== null
+        ? 'done'
+        : signIn.kind === 'none' && watched === 'done'
+          ? 'done'
+          : null
+  if (nextWatched !== watched) setWatched(nextWatched)
+  const lockView: Extract<SignInView, { kind: 'live' | 'done' }> | null =
+    signIn.kind === 'live'
+      ? signIn
+      : nextWatched === 'done'
+        ? { kind: 'done', at: signIn.kind === 'done' ? signIn.at : '' }
+        : null
+  // Quiet and stopped are not under way, so they do not lock: they say so in
+  // Needs you, with Reconnect beside them.
+  const showsSignIn = signIn.kind === 'quiet' || signIn.kind === 'stopped'
+  const codeSent =
+    codeSentAt !== null &&
+    signIn.kind === 'live' &&
+    signIn.stage === 'waiting_for_code' &&
+    (health?.codeAttempts ?? 0) === codeSentAt
   const actionable = events?.filter((row) => needsOwner(row)) ?? []
   /**
    * Resolved rows that record a DECISION rather than a write.
@@ -410,10 +469,14 @@ export function AggregatorSyncSurface({
     !health.running &&
     health.syncedFrom !== null &&
     !health.hasSession
+  // A sign-in that finished after the last read means the channel is back, even
+  // though that read's own outcome still says it lapsed: the next read will say
+  // so, and until it does the card must not invite a second sign-in (#46, D7).
   const channelLapsed =
-    missingConfiguredSwiggySession ||
-    health?.lastOutcome === 'session_lapsed' ||
-    (actionable.some((row) => row.event.kind === 'session-lapsed') ?? false)
+    signIn.kind !== 'done' &&
+    (missingConfiguredSwiggySession ||
+      health?.lastOutcome === 'session_lapsed' ||
+      (actionable.some((row) => row.event.kind === 'session-lapsed') ?? false))
   const hyperpureLapsed =
     config.showsHyperpure &&
     hyperpure !== null &&
@@ -421,8 +484,11 @@ export function AggregatorSyncSurface({
     !hyperpure.running
   const reconnectCopy = reconnectCardCopy(config, channelLapsed, hyperpureLapsed, halfFailure) // The card carries the action, so the event row that would duplicate it steps
   // aside while the card is up; it resolves itself once the sign-in lands.
+  // So does a sign-in on screen (#46): live, it is the repair under way; done,
+  // the lapse it answers is over even though no read has said so yet.
   const actionableCovered = actionable.filter(
-    (row) => !(reconnectCopy !== null && row.event.kind === 'session-lapsed'),
+    (row) =>
+      !((reconnectCopy !== null || signIn.kind !== 'none') && row.event.kind === 'session-lapsed'),
   )
 
   /*
@@ -434,14 +500,50 @@ export function AggregatorSyncSurface({
    * somebody happened to reload. Keyed to the repair state, the watch survives
    * navigation and refreshes, and stops the moment both lines go quiet.
    */
-  const watchForLogin = reconnectCopy !== null || waiting !== null
+  const watchForLogin = reconnectCopy !== null || waiting !== null || signIn.kind === 'live'
+  // While a sign-in is live the watch keeps the running-read pace, so a stage
+  // reaches the screen within three seconds of being recorded (#46); otherwise
+  // the steadier five seconds that only has to catch a mailbox opening.
+  const watchEvery = signIn.kind === 'live' ? RUNNING_SYNC_CHECK_MS : 5_000
   useEffect(() => {
     if (!watchForLogin) return
     const timer = setInterval(() => {
       void refresh().catch(() => undefined)
-    }, 5_000)
+    }, watchEvery)
     return () => clearInterval(timer)
-  }, [watchForLogin, refresh])
+  }, [watchForLogin, watchEvery, refresh])
+
+  /*
+   * A live sign-in's clock: the code's countdown, and the moment a stage that
+   * stopped moving is called quiet. Only the clock — the reads stay on the
+   * five-second watch above, so this adds no request.
+   */
+  const ticking = signIn.kind === 'live'
+  useEffect(() => {
+    if (!ticking) return
+    const timer = setInterval(() => setNow(Date.now()), 1_000)
+    return () => clearInterval(timer)
+  }, [ticking])
+
+  /*
+   * A finished sign-in reads straight away (#46, D7).
+   *
+   * The owner reconnected to get their figures, and the next scheduled read can
+   * be hours off. Once per finished sign-in, keyed on when it finished, so a
+   * re-render or a remount cannot ask twice; and quietly, because a refused ask
+   * (one already running, say) changes nothing the screen is showing.
+   */
+  const readAfterSignIn = useRef<string | null>(null)
+  const finishedAt = signIn.kind === 'done' ? signIn.at : null
+  useEffect(() => {
+    if (!finishedAt || !outletId || readAfterSignIn.current === finishedAt) return
+    if (health?.running || !health?.syncedFrom) return
+    readAfterSignIn.current = finishedAt
+    void adapter
+      .requestRun(outletId)
+      .then(() => refresh())
+      .catch(() => undefined)
+  }, [finishedAt, outletId, health?.running, health?.syncedFrom, adapter, refresh])
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -462,65 +564,101 @@ export function AggregatorSyncSurface({
       {!health || !events ? (
         <LoadingBlock label="Reading the sync" />
       ) : (
-        <div className="space-y-4">
-          <HealthLine
-            config={config}
-            health={health}
-            busy={acting}
-            readAgainIn={readAgainIn}
-            onRun={() => act(() => adapter.requestRun(outletId!))}
-          />
+        <div className={cn('relative', lockView && 'min-h-[34rem]')}>
+          <div className="space-y-4" inert={lockView !== null}>
+            <HealthLine
+              config={config}
+              health={health}
+              busy={acting}
+              readAgainIn={readAgainIn}
+              onRun={() => act(() => adapter.requestRun(outletId!))}
+            />
 
-          {config.showsHyperpure && hyperpure && (
-            <HyperpureHealthLine health={hyperpure} halfFailed={halfFailure} />
-          )}
+            {config.showsHyperpure && hyperpure && (
+              <HyperpureHealthLine health={hyperpure} halfFailed={halfFailure} />
+            )}
 
-          <UploadStatement config={config} busy={acting} wrote={uploadWrote} onUpload={onUpload} />
+            <UploadStatement
+              config={config}
+              busy={acting}
+              wrote={uploadWrote}
+              onUpload={onUpload}
+            />
 
-          {waiting && (
-            <Card className="border-warning/60 bg-warning/5 p-4">
-              <h2 className="text-sm font-medium text-content">{config.otpHeading}</h2>
-              <p className="mt-1 text-sm text-content-muted">
-                Check the phone the account is registered to. It expires in a few minutes.
-              </p>
-              <form onSubmit={submitCode} className="mt-3 flex flex-wrap gap-2">
-                <label htmlFor={`${config.testIdPrefix}-otp`} className="sr-only">
-                  The one time password {config.label} sent for this outlet
-                </label>
-                <input
-                  id={`${config.testIdPrefix}-otp`}
-                  value={code}
-                  onChange={(changed) => setCode(changed.target.value)}
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  placeholder="000000"
-                  // 16px floor: anything smaller makes a mobile browser zoom the
-                  // viewport on focus, and this field is typed on a phone by
-                  // definition.
-                  className="w-32 rounded-md border border-border bg-surface px-3 py-2 text-base tabular-nums text-content"
-                />
-                <Button type="submit" disabled={busy || code.trim() === ''}>
-                  Sign back in
-                </Button>
-              </form>
-            </Card>
-          )}
+            {/*
+            The separate code card, kept for one case only: a code is awaited
+            and no sign-in is on screen to hold the field (a request opened
+            before #46, or a stage that could not be recorded). A code can
+            always be given.
+          */}
+            {waiting && signIn.kind === 'none' && (
+              <Card className="border-warning/60 bg-warning/5 p-4">
+                <h2 className="text-sm font-medium text-content">{config.otpHeading}</h2>
+                <p className="mt-1 text-sm text-content-muted">
+                  Check the phone the account is registered to. It expires in a few minutes.
+                </p>
+                <form onSubmit={submitCode} className="mt-3 flex flex-wrap gap-2">
+                  <label htmlFor={`${config.testIdPrefix}-otp`} className="sr-only">
+                    The one time password {config.label} sent for this outlet
+                  </label>
+                  <input
+                    id={`${config.testIdPrefix}-otp`}
+                    value={code}
+                    onChange={(changed) => setCode(changed.target.value)}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="000000"
+                    // 16px floor: anything smaller makes a mobile browser zoom the
+                    // viewport on focus, and this field is typed on a phone by
+                    // definition.
+                    className="w-32 rounded-md border border-border bg-surface px-3 py-2 text-base tabular-nums text-content"
+                  />
+                  <Button type="submit" disabled={busy || code.trim() === ''}>
+                    Sign back in
+                  </Button>
+                </form>
+              </Card>
+            )}
 
-          {(reconnectCopy !== null || actionableCovered.length > 0) && (
-            <section className="space-y-2">
-              <h2 className="text-xs font-medium uppercase tracking-wide text-content-muted">
-                Needs you
-              </h2>
-              {reconnectCopy !== null && (
-                <ReconnectCard copy={reconnectCopy} busy={acting} onReconnect={onReconnect} />
-              )}
-              {actionableCovered.map((row) => (
-                <Row key={row.id} row={row} />
-              ))}
-            </section>
-          )}
+            {signIn.kind === 'done' && <SignedBackIn config={config} reading={health.running} />}
 
-          {/*
+            {(reconnectCopy !== null || showsSignIn || actionableCovered.length > 0) && (
+              <section className="space-y-2">
+                <h2 className="text-xs font-medium uppercase tracking-wide text-content-muted">
+                  Needs you
+                </h2>
+                {/*
+                A live sign-in is told over the page (below), so its lapsed card
+                steps aside; one that went quiet or stopped is told here, with
+                Reconnect beside it.
+              */}
+                {showsSignIn ? (
+                  <SignInProgress
+                    config={config}
+                    view={signIn}
+                    waiting={waiting}
+                    codeAttempts={health.codeAttempts}
+                    codeSent={codeSent}
+                    code={code}
+                    now={now}
+                    busy={busy}
+                    onCode={setCode}
+                    onSubmitCode={submitCode}
+                    onReconnect={onReconnect}
+                  />
+                ) : (
+                  reconnectCopy !== null &&
+                  signIn.kind !== 'live' && (
+                    <ReconnectCard copy={reconnectCopy} busy={acting} onReconnect={onReconnect} />
+                  )
+                )}
+                {actionableCovered.map((row) => (
+                  <Row key={row.id} row={row} />
+                ))}
+              </section>
+            )}
+
+            {/*
             The decisions the owner has already taken.
 
             The merged derived list retired into two halves: anything still
@@ -535,34 +673,65 @@ export function AggregatorSyncSurface({
             and by how much, so listing them here as well would be the same fact
             twice under two headings.
           */}
-          {decided.length > 0 && (
+            {decided.length > 0 && (
+              <section className="space-y-2">
+                <h2 className="text-xs font-medium uppercase tracking-wide text-content-muted">
+                  What you decided
+                </h2>
+                {decided.map((row) => (
+                  <Row key={row.id} row={row} />
+                ))}
+              </section>
+            )}
+
             <section className="space-y-2">
               <h2 className="text-xs font-medium uppercase tracking-wide text-content-muted">
-                What you decided
+                What has happened
               </h2>
-              {decided.map((row) => (
-                <Row key={row.id} row={row} />
-              ))}
-            </section>
-          )}
-
-          <section className="space-y-2">
-            <h2 className="text-xs font-medium uppercase tracking-wide text-content-muted">
-              What has happened
-            </h2>
-            {/*
+              {/*
               Keyed, so switching channel or outlet — or a run finishing — gives
               a fresh list rather than one that has to unpick itself. A history
               that could outlive its own subject is a history that can splice two
               of them together.
             */}
-            <RunHistory
-              key={`${config.channel}:${outletId}:${historyKey}`}
-              adapter={adapter}
-              outletId={outletId!}
-              channelLabel={config.label}
-            />
-          </section>
+              <RunHistory
+                key={`${config.channel}:${outletId}:${historyKey}`}
+                adapter={adapter}
+                outletId={outletId!}
+                channelLabel={config.label}
+              />
+            </section>
+          </div>
+
+          {lockView && (
+            <div
+              className="absolute inset-0 bg-canvas/75 backdrop-blur-[2px]"
+              data-testid={`${config.testIdPrefix}-sign-in-lock`}
+            >
+              {/*
+                Sticky, so the steps stay in view however far the page was
+                scrolled. The layer takes no z-index: the app's fixed navigation
+                comes later in the document, paints above it and stays tappable.
+              */}
+              <div className="sticky top-4">
+                <SignInProgress
+                  className="rounded-xl shadow-lg"
+                  config={config}
+                  view={lockView}
+                  waiting={waiting}
+                  codeAttempts={health.codeAttempts}
+                  codeSent={codeSent}
+                  code={code}
+                  now={now}
+                  busy={busy}
+                  onCode={setCode}
+                  onSubmitCode={submitCode}
+                  onReconnect={onReconnect}
+                  onDone={() => setWatched(null)}
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -571,7 +740,9 @@ export function AggregatorSyncSurface({
   function onReconnect() {
     void act(() =>
       adapter
-        .requestReconnect(outletId!, reconnectCopy!.channel)
+        // A quiet or stopped sign-in offers Reconnect even where no lapsed card
+        // would, so it falls back to this page's own channel.
+        .requestReconnect(outletId!, reconnectCopy?.channel ?? config.channel)
         .then((result) => {
           if (result.outcome === 'dispatched') {
             reconnectAskedAtRef.current = Date.now()

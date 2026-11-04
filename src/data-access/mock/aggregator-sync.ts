@@ -1,4 +1,5 @@
 import { integrationNeedsAttention } from '@/domain/delivery-attention'
+import type { SignInStage } from '@/domain/sign-in-progress'
 import type {
   AggregatorSyncAdapter,
   AggregatorSyncEventRow,
@@ -51,6 +52,15 @@ const DEMO_READS_PER_DAY = 4
 /** Long enough to see, short enough to sit through. */
 const RUN_MILLISECONDS = 2_400
 const OTP_VALID_MILLISECONDS = 5 * 60 * 1000
+/**
+ * One stage of a demo sign-in (#46). A real one takes about a minute and a half
+ * to reach the code; the demo walks the same stages in seconds — no faster than
+ * the surface re-reads during a sign-in, so no stage is skipped on screen.
+ */
+const STAGE_MILLISECONDS = 3_000
+/** Typed into the demo's code field, this is refused — so the retry is demonstrable. */
+const DEMO_REFUSED_CODE = '000000'
+const DEMO_MAX_ATTEMPTS = 3
 
 let nextEventId = 0
 
@@ -265,6 +275,8 @@ export function createMockAggregatorSyncAdapter(
         lastOutcome: healthy ? 'ok' : 'session_lapsed',
         running: false,
         awaitingOneTimePassword: null,
+        codeAttempts: 0,
+        signIn: null,
         hasSession: healthy,
         syncedFrom: day(16),
         readsPerDay: DEMO_READS_PER_DAY,
@@ -299,6 +311,38 @@ export function createMockAggregatorSyncAdapter(
   }
 
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+  /** Record a sign-in stage the way the server does: one word and when (#46). */
+  function stage(state: OutletSyncState, reached: SignInStage): void {
+    state.health = { ...state.health, signIn: { stage: reached, at: now().toISOString() } }
+  }
+
+  /**
+   * A full sign-in, walked stage by stage (#46).
+   *
+   * The same stages a real one records, in the same order, and the code field
+   * appears only when the walk reaches "Waiting for your code" — the demo used to
+   * show it 1.2 seconds after the tap, which is where "it asks for the code
+   * before Zomato does" came from. Nothing reads as running: a real sign-in
+   * writes no run until it is over.
+   */
+  function beginSignIn(state: OutletSyncState): void {
+    state.pendingLogin = true
+    stage(state, 'starting')
+    void wait(STAGE_MILLISECONDS).then(() => stage(state, 'opening_portal'))
+    void wait(2 * STAGE_MILLISECONDS).then(() => stage(state, 'signing_in'))
+    void wait(3 * STAGE_MILLISECONDS).then(() => {
+      state.health = {
+        ...state.health,
+        awaitingOneTimePassword: {
+          requestedAt: now().toISOString(),
+          expiresAt: new Date(Date.now() + OTP_VALID_MILLISECONDS).toISOString(),
+        },
+        codeAttempts: 0,
+      }
+      stage(state, 'waiting_for_code')
+    })
+  }
 
   return {
     async getHealth(outletId) {
@@ -401,7 +445,9 @@ export function createMockAggregatorSyncAdapter(
       // follows the health from there. Awaiting it here would reintroduce the
       // exact confusion the split exists to prevent.
       void wait(RUN_MILLISECONDS).then(() => {
-        const lapsed = state.health.lastOutcome === 'session_lapsed'
+        // A session the owner has just signed back in with reads; one still
+        // signed out does not.
+        const lapsed = !state.health.hasSession
         if (lapsed) {
           // A run that cannot sign in writes nothing and says so. It never
           // writes a zero, because a zero and "no orders" are the same figure.
@@ -430,42 +476,64 @@ export function createMockAggregatorSyncAdapter(
       if (!state.health.awaitingOneTimePassword) {
         throw new Error('Nothing is waiting for a code at this outlet.')
       }
-      // Any code is accepted here. Checking one would mean faking Zomato's own
-      // answer, which teaches nothing about the screen and would have to be
-      // thrown away when the real login lands.
+      // Any code but one is accepted here. Checking codes for real would mean
+      // faking Zomato's own answer; the single refused code exists only so the
+      // retry the stepper shows can be walked (#46).
       if (code.trim() === '') throw new Error('Enter the code Zomato sent you.')
 
-      state.health = { ...state.health, awaitingOneTimePassword: null, running: true }
-      state.pendingLogin = false
+      // The runner has the code: checking it is the next stage, for a refused
+      // code and an accepted one alike.
+      const waiting = state.health.awaitingOneTimePassword
+      state.health = { ...state.health, awaitingOneTimePassword: null }
+      stage(state, 'checking_code')
 
-      // The session is back, so the row that asked for it stops asking. Kept on
-      // the page rather than removed: "Zomato signed us out on Tuesday" is worth
-      // being able to find later, and it is the same record either way.
-      state.events = state.events.map((row) =>
-        row.event.kind === 'session-lapsed' && row.resolvedAt === null
-          ? { ...row, resolvedAt: now().toISOString() }
-          : row,
-      )
-
-      void wait(RUN_MILLISECONDS).then(() => {
-        state.health = {
-          ...state.health,
-          running: false,
-          lastRunAt: now().toISOString(),
-          lastOutcome: 'ok',
-        }
-        state.events.push({
-          id: eventId(),
-          outletId,
-          at: now().toISOString(),
-          resolvedAt: null,
-          event: { kind: 'days-written', days: 7, from: day(7), to: day(1) },
+      if (code.trim() === DEMO_REFUSED_CODE) {
+        // Refused, the way Zomato refuses: back to waiting with one attempt
+        // spent, or stopped at the cap — never a tick that silently unticks.
+        void wait(STAGE_MILLISECONDS).then(() => {
+          const attempts = state.health.codeAttempts + 1
+          if (attempts >= DEMO_MAX_ATTEMPTS) {
+            state.pendingLogin = false
+            state.health = { ...state.health, codeAttempts: 0 }
+            stage(state, 'stopped')
+            return
+          }
+          state.health = {
+            ...state.health,
+            awaitingOneTimePassword: waiting,
+            codeAttempts: attempts,
+          }
+          stage(state, 'waiting_for_code')
         })
+        return
+      }
+
+      void wait(STAGE_MILLISECONDS).then(() => {
+        state.pendingLogin = false
+        state.health = { ...state.health, hasSession: true, codeAttempts: 0 }
+
+        // The session is back, so the row that asked for it stops asking. Kept on
+        // the page rather than removed: "Zomato signed us out on Tuesday" is worth
+        // being able to find later, and it is the same record either way.
+        state.events = state.events.map((row) =>
+          row.event.kind === 'session-lapsed' && row.resolvedAt === null
+            ? { ...row, resolvedAt: now().toISOString() }
+            : row,
+        )
+
         // Model A: one sign-in restores both Zomato-side channels, so the child
         // heals with the parent instead of staying lapsed behind a healthy
         // Zomato. Swiggy is the exception that named Model A's boundary: its
         // session is independent, so nothing here touches it.
-        if (channel === 'zomato') healHyperpure()
+        if (channel !== 'zomato') {
+          stage(state, 'done')
+          return
+        }
+        stage(state, 'bringing_hyperpure')
+        void wait(STAGE_MILLISECONDS).then(() => {
+          healHyperpure()
+          stage(state, 'done')
+        })
       })
     },
 
@@ -494,18 +562,7 @@ export function createMockAggregatorSyncAdapter(
 
         // Full-login rung: the code card appears (the runner opened the mailbox
         // when the login asked for it), and answering it heals both channels.
-        state.pendingLogin = true
-        state.health = { ...state.health, running: true }
-        void wait(1_200).then(() => {
-          state.health = {
-            ...state.health,
-            running: false,
-            awaitingOneTimePassword: {
-              requestedAt: now().toISOString(),
-              expiresAt: new Date(Date.now() + OTP_VALID_MILLISECONDS).toISOString(),
-            },
-          }
-        })
+        beginSignIn(state)
         return { outcome: 'dispatched' }
       }
 
@@ -516,18 +573,7 @@ export function createMockAggregatorSyncAdapter(
         if (state.health.lastOutcome !== 'session_lapsed' || state.health.awaitingOneTimePassword) {
           return { outcome: 'still_signed_in' }
         }
-        state.pendingLogin = true
-        state.health = { ...state.health, running: true }
-        void wait(1_200).then(() => {
-          state.health = {
-            ...state.health,
-            running: false,
-            awaitingOneTimePassword: {
-              requestedAt: now().toISOString(),
-              expiresAt: new Date(Date.now() + OTP_VALID_MILLISECONDS).toISOString(),
-            },
-          }
-        })
+        beginSignIn(state)
         return { outcome: 'dispatched' }
       }
 
@@ -537,18 +583,7 @@ export function createMockAggregatorSyncAdapter(
       if (state.health.lastOutcome !== 'session_lapsed' || state.health.awaitingOneTimePassword) {
         return { outcome: 'still_signed_in' }
       }
-      state.pendingLogin = true
-      state.health = { ...state.health, running: true }
-      void wait(1_200).then(() => {
-        state.health = {
-          ...state.health,
-          running: false,
-          awaitingOneTimePassword: {
-            requestedAt: now().toISOString(),
-            expiresAt: new Date(Date.now() + OTP_VALID_MILLISECONDS).toISOString(),
-          },
-        }
-      })
+      beginSignIn(state)
       return { outcome: 'dispatched' }
     },
 

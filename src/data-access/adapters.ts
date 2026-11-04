@@ -10,6 +10,7 @@ import type {
   OutletReviewAsk,
   OutletServiceSettings,
   ServiceType,
+  SignInRecord,
   SyncStateKind,
 } from '@/domain'
 import { instantOnBusinessDay } from '@/domain'
@@ -3572,6 +3573,18 @@ export interface AggregatorSyncHealth {
   running: boolean
   /** Present while the job is blocked on a one-time password for this outlet. */
   awaitingOneTimePassword: { requestedAt: string; expiresAt: string } | null
+  /**
+   * Codes the platform has already refused on the open request, 0 when none is
+   * open. Lets the code field say "that one was not accepted" (#46, design D6).
+   */
+  codeAttempts: number
+  /**
+   * Where the channel's latest full sign-in has got to, as the server recorded
+   * it (#46), or null if none has been recorded. A word and a time, never
+   * anything from the sign-in itself. The surface judges live, quiet, stopped
+   * or done from it with `readSignIn`.
+   */
+  signIn: SignInRecord | null
   /** Whether the configured channel still has captured session material, never the material itself. */
   hasSession: boolean
   /** Null until an outlet is switched on; the surface says so rather than showing nil. */

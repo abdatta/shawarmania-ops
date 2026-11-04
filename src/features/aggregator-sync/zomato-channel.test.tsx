@@ -261,6 +261,8 @@ describe('the Zomato sync surface', () => {
         lastOutcome: outcome,
         running: false,
         awaitingOneTimePassword: null,
+        codeAttempts: 0,
+        signIn: null,
         hasSession: true,
         syncedFrom: '2026-08-01',
         readsPerDay,
@@ -377,12 +379,13 @@ describe('the Zomato sync surface', () => {
 
     await user.click(await screen.findByRole('button', { name: /reconnect zomato/i }))
 
-    const field = await screen.findByLabelText(/one time password/i, {}, { timeout: 8_000 })
+    // The field arrives at its own stage, three stages after the tap (#46).
+    const field = await screen.findByLabelText(/one time password/i, {}, { timeout: 16_000 })
     // Typed on a phone by definition, so it must not trip the mobile-zoom
     // threshold and must offer the platform's own code autofill.
     expect(field).toHaveAttribute('autocomplete', 'one-time-code')
     expect(field).toHaveAttribute('inputmode', 'numeric')
-  }, 15_000)
+  }, 25_000)
 
   it('keeps watching for an opened code request while a repair is showing', async () => {
     /*

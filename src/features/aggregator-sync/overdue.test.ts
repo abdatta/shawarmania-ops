@@ -27,6 +27,8 @@ const healthy = (over: Partial<AggregatorSyncHealth> = {}): AggregatorSyncHealth
   lastOutcome: 'ok',
   running: false,
   awaitingOneTimePassword: null,
+  codeAttempts: 0,
+  signIn: null,
   hasSession: true,
   syncedFrom: '2026-08-01',
   readsPerDay: 4,

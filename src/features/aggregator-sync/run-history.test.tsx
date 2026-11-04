@@ -179,8 +179,9 @@ describe('the run history', () => {
     expect(failuresBefore).toBeGreaterThan(0)
 
     await user.click(await screen.findByTestId('needs-reconnect-swiggy'))
+    // The field arrives at its own stage, three stages after the tap (#46).
     await waitFor(() => expect(screen.getByText('Swiggy sent you a code')).toBeInTheDocument(), {
-      timeout: 8_000,
+      timeout: 16_000,
     })
     await user.type(screen.getByLabelText(/one time password.*swiggy/i), '123456')
     await user.click(screen.getByRole('button', { name: /sign back in/i }))

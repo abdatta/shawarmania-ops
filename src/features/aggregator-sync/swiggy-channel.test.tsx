@@ -83,6 +83,8 @@ describe('the Swiggy sync surface', () => {
             lastOutcome: null,
             running: false,
             awaitingOneTimePassword: null,
+            codeAttempts: 0,
+            signIn: null,
             hasSession: false,
             syncedFrom: null,
             readsPerDay: 4,
@@ -113,6 +115,8 @@ describe('the Swiggy sync surface', () => {
             lastOutcome: 'ok' as const,
             running: false,
             awaitingOneTimePassword: null,
+            codeAttempts: 0,
+            signIn: null,
             hasSession: false,
             syncedFrom: '2026-08-01',
             readsPerDay: 4,
@@ -185,10 +189,11 @@ describe('the Swiggy sync surface', () => {
 
     await user.click(await screen.findByTestId('needs-reconnect-swiggy'))
 
-    // The full-login rung opens Swiggy's mailbox and nobody else's. The card
-    // appears when the surface's own watch notices it — up to its 5s poll.
+    // The full-login rung opens Swiggy's mailbox and nobody else's. The field
+    // appears when the surface's own watch notices it.
+    // The field arrives at its own stage, three stages after the tap (#46).
     await waitFor(() => expect(screen.getByText('Swiggy sent you a code')).toBeInTheDocument(), {
-      timeout: 8_000,
+      timeout: 16_000,
     })
     await user.type(screen.getByLabelText(/one time password.*swiggy/i), '123456')
     await user.click(screen.getByRole('button', { name: /sign back in/i }))
@@ -203,10 +208,16 @@ describe('the Swiggy sync surface', () => {
       },
       { timeout: 8_000 },
     )
-    const events = await adapters.swiggySync.listEvents(OUTLET_KANCHRAPARA_ID)
-    const lapsed = events.find((row) => row.event.kind === 'session-lapsed')
-    expect(lapsed?.resolvedAt).not.toBeNull()
-  }, 20_000)
+    // Resolved when the sign-in finishes, a stage after the code is checked.
+    await waitFor(
+      async () => {
+        const events = await adapters.swiggySync.listEvents(OUTLET_KANCHRAPARA_ID)
+        const lapsed = events.find((row) => row.event.kind === 'session-lapsed')
+        expect(lapsed?.resolvedAt).not.toBeNull()
+      },
+      { timeout: 8_000 },
+    )
+  }, 40_000)
 
   it('takes a payout annexure by hand and answers in the file’s words', async () => {
     const user = userEvent.setup()

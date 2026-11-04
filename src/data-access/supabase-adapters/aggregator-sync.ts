@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { integrationNeedsAttention } from '@/domain/delivery-attention'
 import { formatBusinessDate } from '@/domain/datetime'
 import { formatPaise } from '@/domain/money'
+import { isSignInStage } from '@/domain/sign-in-progress'
 
 import type {
   AggregatorRunOutcome,
@@ -150,8 +151,9 @@ export function createSupabaseAggregatorSyncAdapter(
         .eq('channel', channel)
         .maybeSingle(),
       // Owner-only, and it answers with dates and booleans: whether a session exists,
-      // when it dies, and whether a code is being waited for. Never the session.
-      client.rpc('aggregator_credential_health', { p_channel: channel }).maybeSingle(),
+      // when it dies, and whether a code is being waited for — and, from v2 (#46),
+      // the one word saying where a sign-in has got to. Never the session.
+      client.rpc('aggregator_credential_health_v2', { p_channel: channel }).maybeSingle(),
     ])
 
     const waiting = credential.data?.awaiting_code_since
@@ -174,6 +176,11 @@ export function createSupabaseAggregatorSyncAdapter(
       // two cannot disagree about whether something is happening.
       running: run.data !== null && run.data.finished_at === null,
       awaitingOneTimePassword: waiting,
+      codeAttempts: waiting ? (credential.data?.awaiting_code_attempts ?? 0) : 0,
+      signIn:
+        credential.data?.login_stage_at && isSignInStage(credential.data.login_stage)
+          ? { stage: credential.data.login_stage, at: credential.data.login_stage_at }
+          : null,
       hasSession: credential.data?.has_session ?? false,
       syncedFrom: configured.data?.synced_from ?? null,
       readsPerDay: run.data?.reads_per_day ?? null,
