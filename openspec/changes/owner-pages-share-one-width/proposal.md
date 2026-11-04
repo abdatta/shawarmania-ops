@@ -14,6 +14,10 @@ On a laptop, Billing ran edge to edge while every other owner and manager page s
 - `docs/DESIGN_SYSTEM.md` gains a Page width section stating the rule; `docs/SCREENS.md` and `AGENTS.md` point to it, so whoever builds the next page meets it.
 - `e2e/page-width.spec.ts` opens every page in each role's rail at 1600px and fails if its content is wider than the column. It reads the pages from the rail, so a new page is checked without being listed.
 
+## Change gate
+
+No gate: a change away from the counter that a revert cleanly undoes. It narrows owner, manager and staff pages on a wide screen, is styling only, and writes nothing.
+
 ## Non-goals
 
 - The counter and kitchen tablets, which are their own shells laid out to their screens, and the Biller's Open orders.
