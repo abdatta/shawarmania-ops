@@ -69,23 +69,31 @@ export function SignInProgress({
       data-testid={`${config.testIdPrefix}-sign-in`}
       data-sign-in-state={view.kind}
     >
-      <h2 className="text-base font-semibold text-content">Signing in to {config.label}</h2>
+      <h2 className="text-lg font-semibold text-content">Signing in to {config.label}</h2>
 
       {!ended && (
         <ol className="mt-4 space-y-3.5" aria-label={`Signing in to ${config.label}`}>
           {steps.map((step) => {
             const state = done ? 'past' : current ? stepState(steps, step, current) : 'upcoming'
             const quietHere = view.kind === 'quiet' && state === 'current'
+            // The code is the owner's to give: nothing is processing, so the
+            // ring stops turning until a code is on its way.
+            const yourTurn =
+              step === 'waiting_for_code' &&
+              state === 'current' &&
+              view.kind === 'live' &&
+              waiting !== null &&
+              !codeSent
             return (
               <li
                 key={step}
-                className="text-sm"
+                className="text-base"
                 data-step={step}
                 data-step-state={quietHere ? 'quiet' : state}
                 aria-current={state === 'current' ? 'step' : undefined}
               >
                 <div className="flex items-center gap-3">
-                  <StepMark state={state} quiet={quietHere} />
+                  <StepMark state={state} quiet={quietHere} still={yourTurn} />
                   <span
                     className={cn(
                       // What is behind steps back; where it is now stands out.
@@ -117,7 +125,7 @@ export function SignInProgress({
 
       {done && (
         <div className="mt-3">
-          <p className="text-sm font-medium text-content" role="status">
+          <p className="text-base font-medium text-content" role="status">
             Signed back in to {config.label}
           </p>
           <Button
@@ -132,7 +140,7 @@ export function SignInProgress({
 
       {(view.kind === 'quiet' || view.kind === 'stopped') && (
         <div className="mt-3">
-          <p className="text-sm text-content" role="status">
+          <p className="text-base text-content" role="status">
             {view.kind === 'quiet' ? 'This sign-in has gone quiet.' : 'The sign-in stopped.'}
           </p>
           <Button
@@ -177,19 +185,29 @@ export function SignedBackIn({
 }
 
 /**
- * A step's mark: a filled tick behind, a turning ring where the sign-in is, a
- * dashed ring ahead. The ring is the one moving thing on the card, and only
- * where motion is welcome.
+ * A step's mark: the turning ring fills into a tick of the same colour, so a
+ * finished step reads as the ring completed. Ahead, a dashed ring. Where the
+ * sign-in waits on the owner the ring is still — its track alone, unbroken —
+ * because a turning ring says "not your turn yet". Turning only where motion is
+ * welcome.
  */
-function StepMark({ state, quiet }: { state: 'past' | 'current' | 'upcoming'; quiet: boolean }) {
-  if (quiet) return <CircleAlert aria-hidden className="size-5 shrink-0 text-warning" />
+function StepMark({
+  state,
+  quiet,
+  still,
+}: {
+  state: 'past' | 'current' | 'upcoming'
+  quiet: boolean
+  still: boolean
+}) {
+  if (quiet) return <CircleAlert aria-hidden className="size-6 shrink-0 text-warning" />
   if (state === 'past') {
     return (
       <span
         aria-hidden
-        className="flex size-5 shrink-0 items-center justify-center rounded-full bg-success text-on-success"
+        className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-on-primary"
       >
-        <Check className="size-3.5" strokeWidth={3} />
+        <Check className="size-4" strokeWidth={3} />
       </span>
     )
   }
@@ -197,14 +215,18 @@ function StepMark({ state, quiet }: { state: 'past' | 'current' | 'upcoming'; qu
     return (
       <span
         aria-hidden
-        className="size-5 shrink-0 rounded-full border-2 border-primary/25 border-t-primary animate-spin motion-reduce:animate-none"
+        data-mark={still ? 'still' : 'turning'}
+        className={cn(
+          'size-6 shrink-0 rounded-full border-2 border-primary/30',
+          !still && 'border-t-primary animate-spin motion-reduce:animate-none',
+        )}
       />
     )
   }
   return (
     <span
       aria-hidden
-      className="size-5 shrink-0 rounded-full border-2 border-dashed border-content-muted/50"
+      className="size-6 shrink-0 rounded-full border-2 border-dashed border-content-muted/50"
     />
   )
 }
@@ -235,7 +257,7 @@ function CodeStep({
   if (!waiting) return null
   if (codeSent) {
     return (
-      <p className="mt-2 pl-8 text-sm text-content-muted" role="status">
+      <p className="mt-2 pl-9 text-sm text-content-muted" role="status">
         Code sent
       </p>
     )
@@ -246,7 +268,7 @@ function CodeStep({
   const seconds = Math.floor((left % 60_000) / 1000)
 
   return (
-    <div className="mt-3 ml-2.5 border-l-2 border-primary/30 pl-5">
+    <div className="mt-3 ml-[11px] border-l-2 border-primary/30 pl-[21px]">
       {codeAttempts > 0 && (
         <p className="mb-2 text-sm text-danger" role="alert">
           That code was not accepted. Try the newest one.

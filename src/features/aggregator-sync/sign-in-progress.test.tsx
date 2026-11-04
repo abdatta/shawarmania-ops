@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -129,6 +129,20 @@ describe('the sign-in card', () => {
     )
     expect(screen.queryByLabelText(/one time password/i)).not.toBeInTheDocument()
     expect(screen.getByText('Code sent')).toBeInTheDocument()
+  })
+
+  it('stills the ring while the code is the owner’s to give, and turns it again once sent', () => {
+    const mark = () =>
+      document.querySelector('[data-step="waiting_for_code"] [data-mark]') as HTMLElement
+    const waiting = { expiresAt: new Date(now + 200_000).toISOString() }
+
+    renderCard({ kind: 'live', stage: 'waiting_for_code' }, { waiting })
+    expect(mark()).toHaveAttribute('data-mark', 'still')
+    expect(mark()).not.toHaveClass('animate-spin')
+    cleanup()
+
+    renderCard({ kind: 'live', stage: 'waiting_for_code' }, { waiting, codeSent: true })
+    expect(mark()).toHaveAttribute('data-mark', 'turning')
   })
 
   it('stops claiming a stage that went quiet, and offers Reconnect', async () => {
