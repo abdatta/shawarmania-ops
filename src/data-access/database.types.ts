@@ -185,6 +185,8 @@ export type Database = {
           channel: string
           created_at: string
           login_identifier_secret_id: string | null
+          login_stage: string | null
+          login_stage_at: string | null
           session_expires_at: string | null
           session_saved_at: string | null
           session_secret_id: string | null
@@ -194,6 +196,8 @@ export type Database = {
           channel: string
           created_at?: string
           login_identifier_secret_id?: string | null
+          login_stage?: string | null
+          login_stage_at?: string | null
           session_expires_at?: string | null
           session_saved_at?: string | null
           session_secret_id?: string | null
@@ -203,6 +207,8 @@ export type Database = {
           channel?: string
           created_at?: string
           login_identifier_secret_id?: string | null
+          login_stage?: string | null
+          login_stage_at?: string | null
           session_expires_at?: string | null
           session_saved_at?: string | null
           session_secret_id?: string | null
@@ -5273,6 +5279,19 @@ export type Database = {
           awaiting_code_since: string
           has_login_identifier: boolean
           has_session: boolean
+          session_expires_at: string
+        }[]
+      }
+      aggregator_credential_health_v2: {
+        Args: { p_channel: string }
+        Returns: {
+          awaiting_code_attempts: number
+          awaiting_code_expires_at: string
+          awaiting_code_since: string
+          has_login_identifier: boolean
+          has_session: boolean
+          login_stage: string
+          login_stage_at: string
           session_expires_at: string
         }[]
       }

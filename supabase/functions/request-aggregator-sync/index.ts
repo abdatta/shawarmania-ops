@@ -3,6 +3,7 @@ import { json, preflight, readJson, str } from '../_shared/http.ts'
 import { probeChannel } from '../_shared/aggregator-probe.ts'
 import { enabledRestaurantMappings } from '../_shared/restaurant-mappings.ts'
 import { decideRung } from '../_shared/reconnect-ladder.ts'
+import { recordLoginStage } from '../_shared/login-stage.ts'
 import {
   readSyncMode,
   reconnectWorkflowDispatch,
@@ -239,6 +240,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const detail = await dispatch.text()
     console.error('the reader dispatch was refused', dispatch.status, detail.slice(0, 300))
     return json({ error: 'dispatch_failed' }, 502)
+  }
+
+  // The first stage of a full sign-in (#46), recorded the moment it is
+  // dispatched: the runner spends a minute booting and installing a browser
+  // before it can say anything, and that minute is exactly when the owner needs
+  // to see that something is happening. Only the full-login rung — the
+  // capture-only repair opens no sign-in. Best effort: a stage that could not
+  // be written must not turn a dispatched sign-in into a refused one.
+  if (mode === 'reconnect' && rung === 'full_login') {
+    await recordLoginStage(service, swiggyReconnect ? 'swiggy' : 'zomato', 'starting')
   }
 
   // 204 with no body is what a successful dispatch returns, so there is no run id

@@ -2,6 +2,7 @@ import { serviceClient } from '../_shared/authority.ts'
 import { json, preflight, readJson, str } from '../_shared/http.ts'
 import { probeChannel } from '../_shared/aggregator-probe.ts'
 import { parseHyperpureRunRecord } from '../_shared/hyperpure-run-record.ts'
+import { judgeRunnerStage, recordLoginStage, stageAfterSignedIn } from '../_shared/login-stage.ts'
 
 /**
  * The reader's own door: its session, and the code it is waiting for.
@@ -36,6 +37,7 @@ type Action =
   | 'await_code'
   | 'reject_code'
   | 'finish_login'
+  | 'report_stage'
   | 'probe'
 
 const ACTIONS: readonly Action[] = [
@@ -47,6 +49,7 @@ const ACTIONS: readonly Action[] = [
   'await_code',
   'reject_code',
   'finish_login',
+  'report_stage',
   'probe',
 ]
 
@@ -238,6 +241,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       const claimed = (data as { request_id: string; code: string }[] | null) ?? []
       if (claimed.length > 0) {
+        // The runner has the code in hand and is typing it (#46).
+        await recordLoginStage(service, channel, 'checking_code', now)
         return json({
           outcome: 'collected',
           request_id: claimed[0].request_id,
@@ -309,6 +314,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
         console.error('could not record the rejection', { code: error.code })
         return json({ error: 'backend_failure' }, 503)
       }
+      // Back to waiting, visibly: the stepper shows "Checking your code"
+      // un-ticked again and says the code was not accepted, rather than a tick
+      // that silently disappears (#46, design D6). At the cap it has stopped.
+      await recordLoginStage(service, channel, exhausted ? 'stopped' : 'waiting_for_code', now)
       return json({ outcome: exhausted ? 'exhausted' : 'retry', attempts })
     }
 
@@ -328,6 +337,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
         console.error('could not close the request', { code: error.code })
         return json({ error: 'backend_failure' }, 503)
       }
+      // Signed in is Swiggy's last stage and Zomato's second-to-last: Zomato
+      // still has the Hyperpure hop to make, and its runner reports `done`
+      // after it. Anything else ended the sign-in.
+      await recordLoginStage(
+        service,
+        channel,
+        outcome === 'signed_in' ? stageAfterSignedIn(channel) : 'stopped',
+        now,
+      )
       return json({ outcome: 'closed' })
     }
 
@@ -374,12 +392,50 @@ Deno.serve(async (req: Request): Promise<Response> => {
         // 23505 is the one-open-per-channel index. A request already under way is
         // not an error: its mailbox is still the right one for this attempt.
         if ((error as { code?: string }).code === '23505') {
+          await recordLoginStage(service, channel, 'waiting_for_code', now)
           return json({ outcome: 'already_awaiting' })
         }
         console.error('could not open the auth request', error)
         return json({ error: 'backend_failure' }, 503)
       }
+      // The code field renders at this stage and nowhere earlier (#46).
+      await recordLoginStage(service, channel, 'waiting_for_code', now)
       return json({ outcome: 'opened' })
+    }
+
+    /*
+     * The runner narrating what only it can see (#46).
+     *
+     * Its own four words and nothing else — every other stage the server
+     * records itself from the calls above — and only while a sign-in is under
+     * way, so a late or replayed report cannot wake one that has ended. No free
+     * text crosses: the word is checked against a closed list here, and the
+     * column's own check refuses anything that slipped past.
+     */
+    case 'report_stage': {
+      const { data: current, error: currentError } = await service
+        .from('aggregator_channel_credentials')
+        .select('login_stage, login_stage_at')
+        .eq('channel', channel)
+        .maybeSingle()
+      if (currentError) {
+        console.error('could not read the sign-in stage', { code: currentError.code })
+        return json({ error: 'backend_failure' }, 503)
+      }
+
+      const judged = judgeRunnerStage({
+        channel,
+        stage: body['stage'],
+        current: (current?.login_stage as string | null | undefined) ?? null,
+        currentAt: (current?.login_stage_at as string | null | undefined) ?? null,
+        now,
+      })
+      if (!judged.ok)
+        return json({ error: judged.error }, judged.error === 'unknown_stage' ? 400 : 409)
+
+      const recorded = await recordLoginStage(service, channel, judged.stage, now)
+      if (!recorded) return json({ error: 'backend_failure' }, 503)
+      return json({ outcome: 'recorded' })
     }
 
     /*
