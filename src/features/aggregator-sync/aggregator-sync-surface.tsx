@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { LoadingBlock } from '@/components/ui/loading'
+import { Toast, useToast } from '@/components/ui/toast'
 import type {
   AggregatorSyncEventRow,
   AggregatorSyncHealth,
@@ -441,6 +442,31 @@ export function AggregatorSyncSurface({
         : startingSignIn
           ? { kind: 'live', stage: 'starting' }
           : null
+  /*
+   * How a sign-in this page watched ended, said as a toast (owner,
+   * 2026-11-04): the steps hold the page while it runs, and the end — signed
+   * back in, stopped, gone quiet — should not depend on looking at the right
+   * card at the right moment.
+   */
+  const toast = useToast()
+  const showToast = toast.show
+  // Remembered across the in-between reads (a refresh can pass through none),
+  // and spent on the toast, so one sign-in ends in one toast.
+  const watchedLive = useRef(false)
+  useEffect(() => {
+    if (signIn.kind === 'live') {
+      watchedLive.current = true
+      return
+    }
+    if (!watchedLive.current || signIn.kind === 'none') return
+    watchedLive.current = false
+    if (signIn.kind === 'done') showToast({ text: `Signed back in to ${config.label}` })
+    else if (signIn.kind === 'stopped') {
+      showToast({ text: `The ${config.label} sign-in stopped`, tone: 'warning' })
+    } else {
+      showToast({ text: `The ${config.label} sign-in went quiet`, tone: 'warning' })
+    }
+  }, [signIn.kind, config.label, showToast])
   // Quiet and stopped are not under way, so they do not lock: they say so in
   // Needs you, with Reconnect beside them.
   const showsSignIn = signIn.kind === 'quiet' || signIn.kind === 'stopped'
@@ -744,6 +770,8 @@ export function AggregatorSyncSurface({
           )}
         </div>
       )}
+
+      <Toast toast={toast.current} testId={`${config.testIdPrefix}-sign-in-toast`} />
     </div>
   )
 

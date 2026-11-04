@@ -366,6 +366,11 @@ describe('the surface around a sign-in', () => {
     )
     expect(screen.getByTestId('zomato-sign-in')).toHaveAttribute('data-sign-in-state', 'stopped')
     expect(screen.getByTestId('zomato-sign-in-again')).toBeEnabled()
+    // Said as a toast too, so the end is not missed.
+    expect(await screen.findByTestId('zomato-sign-in-toast')).toHaveTextContent(
+      'The Zomato sign-in stopped',
+    )
+    expect(screen.getByTestId('zomato-sign-in-toast')).toHaveAttribute('data-tone', 'warning')
   }, 15_000)
 
   it('ends a watched sign-in with every step ticked until Done, even after the read', async () => {
@@ -378,6 +383,9 @@ describe('the surface around a sign-in', () => {
 
     signIn = { stage: 'done', at: recently(0) }
     const done = await screen.findByTestId('zomato-sign-in-done', {}, { timeout: 8_000 })
+    expect(await screen.findByTestId('zomato-sign-in-toast')).toHaveTextContent(
+      'Signed back in to Zomato',
+    )
     expect(screen.getByTestId('zomato-sign-in')).toHaveAttribute('data-sign-in-state', 'done')
     for (const step of within(screen.getByTestId('zomato-sign-in')).getAllByRole('listitem')) {
       expect(step).toHaveAttribute('data-step-state', 'past')

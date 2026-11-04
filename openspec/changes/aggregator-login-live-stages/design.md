@@ -121,7 +121,7 @@ minutes of margin absorb any skew.
 
 A refused code moves `checking_code` back to `waiting_for_code`. The stepper
 shows "Checking your code" un-ticked again and, inside "Waiting for your code",
-"That code was not accepted — try the new one", from the attempts count already
+"That OTP was not accepted. Check it and try again.", from the attempts count already
 in the health read. Never a silent untick.
 
 ### D7. A `done` newer than the last failed read means signed back in
@@ -179,13 +179,33 @@ be component state a reload forgets.
 *Rejected: a popup that reopens itself but can be dismissed.* Offered first;
 the owner chose a page that cannot be used around the sign-in.
 
+### D13. A refused OTP is known in seconds, and the run waits for the next
+
+Seen live on 2026-11-04 with a deliberately wrong OTP: Zomato writes "The OTP
+entered is invalid/incorrect. Please try again." under the boxes within a
+second and a half, and leaves them up. The runner was waiting a full minute for
+a redirect that never came, then reported the refusal and **exited** — so the
+mailbox's three attempts were never real: the reopened request had nobody
+waiting on it, and the owner watched "Checking your OTP" for over a minute
+before the page said stopped.
+
+The runner now watches for that red line beside the redirect
+(`waitForCodeVerdict`), and on a refusal with attempts left it empties the
+boxes and waits for the next OTP in the same five-minute window, up to three.
+The first code's red line can still be up as the next one goes in, so it counts
+for the new code only once it has cleared and come back, or after ten seconds
+without a sign-in. A screen showing neither verdict is not retried. Swiggy's
+runner still takes one OTP per run; it has not been seen refusing one.
+
 ### D12. No "resend code"
 
 The runner deliberately never resends: one run is one code, so the mailbox's
 three-attempt cap cannot be bypassed (`swiggy-auth.mjs`), and neither portal's
 resend control has been captured, so its selector and the moment it enables
-are unknown. A wired button would be a guess until a live run records that
-screen. An expired code stops the sign-in, and **Reconnect** on the stopped
+were unknown. A wired button would be a guess until a live run records that
+screen. The 2026-11-04 run recorded it: "Not received OTP? Resend Now" under a
+30-second countdown inside Zomato's sign-in frame, greyed until the countdown
+ends — enough to build it as its own change. An expired code stops the sign-in, and **Reconnect** on the stopped
 card is the resend: a fresh run with a fresh code. Revisit only after the live
 walk (task 8.4) has captured the code screen's structure.
 

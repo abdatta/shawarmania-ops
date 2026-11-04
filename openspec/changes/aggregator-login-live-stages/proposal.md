@@ -69,11 +69,13 @@ does not have to be updated for the stepper to mean something:
 health every five seconds while a repair card is up. That read now carries the
 stage, so stages arrive within five seconds with no new transport.
 
-**The card the owner tapped becomes the stepper.** In *Needs you*, the reconnect
-card is replaced by the stage list while a sign-in is under way — past stages
-ticked, the current one live, the code field inside "Waiting for your code"
-with its countdown and the attempt it is on. There is no Reconnect button on it
-to tap twice.
+**The stages hold the page while the sign-in runs** (owner review, 2026-11-04;
+design D11). Tapping Reconnect lays the stage list over the Delivery page at
+once — past stages ticked, the current one turning, the OTP field inside
+"Waiting for your OTP" with its countdown and the attempt it is on — and the
+page beneath takes no input until the sign-in ends, while the rest of the app
+stays reachable. There is no Reconnect on it to tap twice. When a watched
+sign-in ends, the app's shared toast says how.
 
 **A sign-in that goes quiet says so.** Each stage has a ceiling longer than it
 can legitimately take; past it the stepper stops claiming the stage, says the
@@ -86,8 +88,14 @@ A `done` newer than the last failed read now counts as signed back in.
 
 **Runner (`abdatta/shawarmania-sync`):** report `opening_portal`,
 `signing_in` and Zomato's `done`; report `stopped` from a workflow step on any
-failed or cancelled login; and fix the code-screen check so it can no longer be
-satisfied by the phone field.
+failed or cancelled login; fix the code-screen check so it can no longer be
+satisfied by the phone field; know a refused Zomato OTP in seconds and wait for
+the next (design D13); and pass `HYPERPURE_OPS_OUTLET_ID` to the login so the
+Hyperpure capture riding on it records its outcome.
+
+**The toast becomes shared.** Team's toast moves, unchanged in look and
+behaviour, into `src/components/ui/toast.tsx`, which the Delivery page uses too
+and the design system now names as the one way to say what just happened.
 
 ## Change gate
 
@@ -102,8 +110,10 @@ No gate: a clean revert, away from the counter.
   it. The runner's reports are best-effort and a refused `report_stage` is
   ignored.
 - **It cannot reach the counter or kitchen.** The only screen that changes is
-  the owner's Delivery sync page. No table the counter or kitchen reads changes,
-  no shared component, and the extra load is one owner phone re-reading health
+  the owner's Delivery sync page, plus Team's toast moved into a shared
+  component with the same markup, classes and timing (Team is not on the
+  counter or kitchen either). No table the counter or kitchen reads changes, and
+  the extra load is one owner phone re-reading health
   every five seconds for the four minutes a sign-in takes, once a month — which
   it already does today.
 
@@ -118,13 +128,12 @@ can never strand a sign-in.
 - **The capture-only rung** (Hyperpure under a warm Zomato) gets no stepper. It
   opens no mailbox and takes under a minute.
 - **A warning before the monthly lapse.** Worth doing; its own change.
-- **Recording the Hyperpure capture outcome from the login** (`login.yml` does
-  not pass `HYPERPURE_OPS_OUTLET_ID`). Pre-existing, separate.
 - No change to the repair ladder, the probe, the dispatch routing, or the
   mailbox's lifetime and attempt cap.
 
 ## Docs to update before archiving
 
-`docs/SCREENS.md` (the stepper, replacing the separate code card) and
+`docs/SCREENS.md` (the stepper, replacing the separate code card),
 `docs/OPERATIONS.md` (what a sign-in looks like, what quiet and stopped mean,
-and that Zomato wants one about monthly).
+and that Zomato wants one about monthly), `docs/DESIGN_SYSTEM.md` and
+`AGENTS.md` (the shared toast).

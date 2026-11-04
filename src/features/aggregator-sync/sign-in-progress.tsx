@@ -70,6 +70,11 @@ export function SignInProgress({
       data-sign-in-state={view.kind}
     >
       <h2 className="text-lg font-semibold text-content">Signing in to {config.label}</h2>
+      {/* One line on a phone, on purpose: the steps are the point, this only
+          says they take a while (owner, 2026-11-04). */}
+      {view.kind === 'live' && (
+        <p className="mt-0.5 text-sm text-content-muted">This can take a couple of minutes.</p>
+      )}
 
       {!ended && (
         <ol className="mt-4 space-y-3.5" aria-label={`Signing in to ${config.label}`}>
@@ -271,7 +276,7 @@ function CodeStep({
     <div className="mt-3 ml-[11px] border-l-2 border-primary/30 pl-[21px]">
       {codeAttempts > 0 && (
         <p className="mb-2 text-sm text-danger" role="alert">
-          That OTP was not accepted. Try the newest one.
+          That OTP was not accepted. Check it and try again.
         </p>
       )}
       <p className="mb-2 text-sm text-content-muted">{config.otpHeading}</p>
