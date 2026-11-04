@@ -192,10 +192,10 @@ describe('the Swiggy sync surface', () => {
     // The full-login rung opens Swiggy's mailbox and nobody else's. The field
     // appears when the surface's own watch notices it.
     // The field arrives at its own stage, three stages after the tap (#46).
-    await waitFor(() => expect(screen.getByText('Swiggy sent you a code')).toBeInTheDocument(), {
+    await waitFor(() => expect(screen.getByText('Swiggy sent you an OTP')).toBeInTheDocument(), {
       timeout: 16_000,
     })
-    await user.type(screen.getByLabelText(/one time password.*swiggy/i), '123456')
+    await user.type(screen.getByLabelText(/OTP.*swiggy/i), '123456')
     await user.click(screen.getByRole('button', { name: /sign back in/i }))
 
     // The repair is real when the records say so: the health line comes back to

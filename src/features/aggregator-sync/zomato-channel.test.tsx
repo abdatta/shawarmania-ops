@@ -198,7 +198,7 @@ describe('the Zomato sync surface', () => {
     // Capture-only heals without any sign-in: the code card must never appear,
     // and the line comes back to quiet with a fresh read time.
     await waitFor(() => expect(line).toHaveTextContent(/All quiet/), { timeout: 5_000 })
-    expect(screen.queryByLabelText(/one time password/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^The OTP/)).not.toBeInTheDocument()
   })
 
   it('never shows a code card while nothing waits for one', async () => {
@@ -208,7 +208,7 @@ describe('the Zomato sync surface', () => {
     // the exact complaint this change set out to fix.
     await renderSurface(OUTLET_KANCHRAPARA_ID)
     await screen.findByTestId('hyperpure-health')
-    expect(screen.queryByLabelText(/one time password zomato sent/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/OTP zomato sent/i)).not.toBeInTheDocument()
   })
 
   it('offers Read now only when reading again could say something new', async () => {
@@ -380,7 +380,7 @@ describe('the Zomato sync surface', () => {
     await user.click(await screen.findByRole('button', { name: /reconnect zomato/i }))
 
     // The field arrives at its own stage, three stages after the tap (#46).
-    const field = await screen.findByLabelText(/one time password/i, {}, { timeout: 16_000 })
+    const field = await screen.findByLabelText(/^The OTP/, {}, { timeout: 16_000 })
     // Typed on a phone by definition, so it must not trip the mobile-zoom
     // threshold and must offer the platform's own code autofill.
     expect(field).toHaveAttribute('autocomplete', 'one-time-code')

@@ -39,7 +39,7 @@ function configFor(channel: 'zomato' | 'swiggy'): AggregatorChannelConfig {
     testIdPrefix: channel,
     attention: { source: channel === 'zomato' ? 'zomato-needs-you' : 'swiggy-needs-you' },
     pathSegment: channel === 'zomato' ? '/delivery/zomato' : '/delivery/swiggy',
-    otpHeading: `${label} sent you a code`,
+    otpHeading: `${label} sent you an OTP`,
     uploadHint: '',
     uploadAccept: '',
     lapsedTitle: '',
@@ -98,16 +98,16 @@ describe('the sign-in card', () => {
       { kind: 'live', stage: 'signing_in' },
       { waiting: { expiresAt: new Date(now + 300_000).toISOString() } },
     )
-    expect(screen.queryByLabelText(/one time password/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^The OTP/)).not.toBeInTheDocument()
   })
 
-  it('puts the code field and its countdown inside “Waiting for your code”', () => {
+  it('puts the code field and its countdown inside “Waiting for your OTP”', () => {
     renderCard(
       { kind: 'live', stage: 'waiting_for_code' },
       { waiting: { expiresAt: new Date(now + 272_000).toISOString() } },
     )
     const step = document.querySelector('[data-step="waiting_for_code"]') as HTMLElement
-    const field = within(step).getByLabelText(/one time password zomato sent/i)
+    const field = within(step).getByLabelText(/OTP zomato sent/i)
     expect(field).toHaveAttribute('autocomplete', 'one-time-code')
     expect(within(step).getByTestId('zomato-otp-left')).toHaveTextContent('4:32 left')
     expect(within(step).getByRole('button', { name: /sign back in/i })).toBeInTheDocument()
@@ -127,8 +127,8 @@ describe('the sign-in card', () => {
       { kind: 'live', stage: 'waiting_for_code' },
       { waiting: { expiresAt: new Date(now + 200_000).toISOString() }, codeSent: true },
     )
-    expect(screen.queryByLabelText(/one time password/i)).not.toBeInTheDocument()
-    expect(screen.getByText('Code sent')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/^The OTP/)).not.toBeInTheDocument()
+    expect(screen.getByText('OTP sent')).toBeInTheDocument()
   })
 
   it('stills the ring while the code is the owner’s to give, and turns it again once sent', () => {
@@ -228,8 +228,8 @@ describe('the surface around a sign-in', () => {
       awaitingOneTimePassword: { requestedAt: recently(10_000), expiresAt: recently(-200_000) },
     }))
 
-    expect(await screen.findByText('Zomato sent you a code')).toBeInTheDocument()
-    expect(screen.getByLabelText(/one time password/i)).toBeInTheDocument()
+    expect(await screen.findByText('Zomato sent you an OTP')).toBeInTheDocument()
+    expect(screen.getByLabelText(/^The OTP/)).toBeInTheDocument()
     expect(screen.queryByTestId('zomato-sign-in')).not.toBeInTheDocument()
   })
 
@@ -241,7 +241,7 @@ describe('the surface around a sign-in', () => {
     }))
 
     await screen.findByTestId('zomato-sign-in')
-    expect(screen.getAllByLabelText(/one time password/i)).toHaveLength(1)
+    expect(screen.getAllByLabelText(/^The OTP/)).toHaveLength(1)
   })
 
   it('stops asking to reconnect once a sign-in finished, and reads once per outlet', async () => {
@@ -317,6 +317,26 @@ describe('the surface around a sign-in', () => {
     // Everything else on the page takes no input until the sign-in ends.
     const page = lock.previousElementSibling as HTMLElement
     expect(page).toHaveAttribute('inert')
+  })
+
+  it('shows the first stage the moment Reconnect is tapped, before the server answers', async () => {
+    const { adapters } = await renderWithHealth((health) => health)
+    let answer: (result: { outcome: 'still_signed_in' }) => void = () => undefined
+    adapters.aggregatorSync.requestReconnect = () =>
+      new Promise((resolve) => {
+        answer = resolve
+      })
+
+    await userEvent.click(await screen.findByTestId('needs-reconnect-both'))
+    const lock = screen.getByTestId('zomato-sign-in-lock')
+    expect(within(lock).getByText('Starting the sign-in').closest('[data-step]')).toHaveAttribute(
+      'data-step-state',
+      'current',
+    )
+
+    // A reconnect that needed no sign-in after all lets go of the page.
+    answer({ outcome: 'still_signed_in' })
+    await waitFor(() => expect(screen.queryByTestId('zomato-sign-in-lock')).not.toBeInTheDocument())
   })
 
   it('does not lock the page for a sign-in that went quiet', async () => {

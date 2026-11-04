@@ -1029,17 +1029,17 @@ green Hyperpure line says nothing about Zomato.
 
 **What a full sign-in looks like** *(#46)*. The sign-in's stages appear over
 the Delivery page — Starting the sign-in, Opening the partner portal, Signing in
-as you, Waiting for your code, Checking your code, Bringing Hyperpure along
+as you, Waiting for your OTP, Checking your OTP, Bringing Hyperpure along
 (Zomato only) — each ticked as it is reached, with no second Reconnect. The page
 beneath is held until it ends; the rest of the app is not, and closing the app
 does not stop the sign-in — come back and it is where the runner has got to.
 The first stage appears at once; the portal stage about a minute later, once the
 runner has installed its browser; the code field about thirty seconds after
-that, inside *Waiting for your code*, with its countdown. A refused code puts
-the stepper back on *Waiting for your code* and says so. When it finishes every
+that, inside *Waiting for your OTP*, with its countdown. A refused OTP puts
+the stepper back on *Waiting for your OTP* and says so. When it finishes every
 stage is ticked until you tap **Done**, and a read starts by itself. There is no
-resend button: if the code never arrives, let it expire and tap **Reconnect** on
-the stopped card for a fresh code.
+resend button: if the OTP never arrives, let it expire and tap **Reconnect** on
+the stopped card for a fresh OTP.
 
 - **"This sign-in has gone quiet."** A stage stood longer than it ever takes
   (two to four minutes; six for the code, which waits on you). The runner most

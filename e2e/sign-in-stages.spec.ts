@@ -6,7 +6,7 @@ import { OUTLET_KANCHRAPARA_ID } from '../src/data-access/mock/fixtures/outlets'
  *
  * The demo walks the same stages a real sign-in records, so this is the walk
  * the owner approves: tap Reconnect, watch the card become the stage list, see
- * the code field appear only at "Waiting for your code", give a code, and end
+ * the code field appear only at "Waiting for your OTP", give a code, and end
  * signed back in with nothing asking for a second sign-in. Then the refused
  * code, because a tick that silently unticks is the one thing the stepper must
  * never do.
@@ -37,16 +37,16 @@ test('Reconnect becomes the stage list, and the code is asked for at its own sta
 
   // Before the code stage there is no code field anywhere on the page.
   await expect(step(page, 'opening_portal')).toHaveAttribute('data-step-state', /current|past/)
-  await expect(page.getByLabel(/one time password/i)).toHaveCount(0)
+  await expect(page.getByLabel(/^The OTP/)).toHaveCount(0)
 
   await expect(step(page, 'waiting_for_code')).toHaveAttribute('data-step-state', 'current', {
     timeout: 20_000,
   })
   await expect(step(page, 'signing_in')).toHaveAttribute('data-step-state', 'past')
-  const field = step(page, 'waiting_for_code').getByLabel(/one time password swiggy sent/i)
+  const field = step(page, 'waiting_for_code').getByLabel(/OTP swiggy sent/i)
   await expect(field).toBeVisible()
   await expect(page.getByTestId('swiggy-otp-left')).toContainText('left')
-  await expect(page.getByLabel(/one time password/i)).toHaveCount(1)
+  await expect(page.getByLabel(/^The OTP/)).toHaveCount(1)
 
   await field.fill('123456')
   await page.getByRole('button', { name: 'Sign back in' }).click()
@@ -81,11 +81,11 @@ test('a refused code says so and the field comes back, rather than a silent unti
   const waiting = step(page, 'waiting_for_code')
   await expect(waiting).toHaveAttribute('data-step-state', 'current', { timeout: 20_000 })
   // The demo refuses this one code, so the retry can be walked.
-  await waiting.getByLabel(/one time password/i).fill('000000')
+  await waiting.getByLabel(/^The OTP/).fill('000000')
   await page.getByRole('button', { name: 'Sign back in' }).click()
 
   await expect(waiting.getByRole('alert')).toContainText('not accepted', { timeout: 15_000 })
   await expect(waiting).toHaveAttribute('data-step-state', 'current')
   await expect(step(page, 'checking_code')).toHaveAttribute('data-step-state', 'upcoming')
-  await expect(waiting.getByLabel(/one time password/i)).toBeVisible()
+  await expect(waiting.getByLabel(/^The OTP/)).toBeVisible()
 })

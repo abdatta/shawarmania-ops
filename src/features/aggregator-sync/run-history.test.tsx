@@ -97,7 +97,7 @@ describe('the run history', () => {
     // so a run refused because the payout did not add up appeared only as a
     // disputed week, and a run waiting for a code appeared nowhere at all.
     expect(within(list).getByText('Does not add up')).toBeInTheDocument()
-    expect(within(list).getByText('Code wanted')).toBeInTheDocument()
+    expect(within(list).getByText('OTP wanted')).toBeInTheDocument()
     expect(within(list).getAllByText('Signed out').length).toBeGreaterThan(0)
     expect(within(list).getAllByText('Nothing moved').length).toBeGreaterThan(0)
   })
@@ -180,10 +180,10 @@ describe('the run history', () => {
 
     await user.click(await screen.findByTestId('needs-reconnect-swiggy'))
     // The field arrives at its own stage, three stages after the tap (#46).
-    await waitFor(() => expect(screen.getByText('Swiggy sent you a code')).toBeInTheDocument(), {
+    await waitFor(() => expect(screen.getByText('Swiggy sent you an OTP')).toBeInTheDocument(), {
       timeout: 16_000,
     })
-    await user.type(screen.getByLabelText(/one time password.*swiggy/i), '123456')
+    await user.type(screen.getByLabelText(/OTP.*swiggy/i), '123456')
     await user.click(screen.getByRole('button', { name: /sign back in/i }))
 
     await waitFor(

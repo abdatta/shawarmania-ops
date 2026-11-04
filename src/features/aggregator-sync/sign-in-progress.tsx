@@ -258,7 +258,7 @@ function CodeStep({
   if (codeSent) {
     return (
       <p className="mt-2 pl-9 text-sm text-content-muted" role="status">
-        Code sent
+        OTP sent
       </p>
     )
   }
@@ -271,13 +271,13 @@ function CodeStep({
     <div className="mt-3 ml-[11px] border-l-2 border-primary/30 pl-[21px]">
       {codeAttempts > 0 && (
         <p className="mb-2 text-sm text-danger" role="alert">
-          That code was not accepted. Try the newest one.
+          That OTP was not accepted. Try the newest one.
         </p>
       )}
       <p className="mb-2 text-sm text-content-muted">{config.otpHeading}</p>
       <form onSubmit={onSubmitCode} className="flex flex-wrap items-center gap-2">
         <label htmlFor={`${config.testIdPrefix}-otp`} className="sr-only">
-          The one time password {config.label} sent
+          The OTP {config.label} sent
         </label>
         <input
           id={`${config.testIdPrefix}-otp`}
@@ -313,9 +313,9 @@ function stepLabel(step: SignInStep, label: string): string {
     case 'signing_in':
       return 'Signing in as you'
     case 'waiting_for_code':
-      return 'Waiting for your code'
+      return 'Waiting for your OTP'
     case 'checking_code':
-      return 'Checking your code'
+      return 'Checking your OTP'
     case 'bringing_hyperpure':
       return 'Bringing Hyperpure along'
   }

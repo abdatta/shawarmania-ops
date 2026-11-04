@@ -75,7 +75,7 @@ export function useZomatoChannelConfig(): AggregatorChannelConfig {
     testIdPrefix: 'zomato',
     attention: { source: 'zomato-needs-you' },
     pathSegment: '/delivery/zomato',
-    otpHeading: 'Zomato sent you a code',
+    otpHeading: 'Zomato sent you an OTP',
     uploadHint:
       'If the automation is blocked, bring a period in by hand: a Zomato order history, the payout workbook of a week Zomato has paid, or a Hyperpure statement. A week is settled only once Zomato has paid it, exactly as the robot settles it.',
     uploadAccept: '.xlsx,.zip,.csv',
@@ -103,7 +103,7 @@ export function useSwiggyChannelConfig(): AggregatorChannelConfig {
     testIdPrefix: 'swiggy',
     attention: { source: 'swiggy-needs-you' },
     pathSegment: '/delivery/swiggy',
-    otpHeading: 'Swiggy sent you a code',
+    otpHeading: 'Swiggy sent you an OTP',
     uploadHint:
       'If the automation is blocked, bring a cycle in by hand: the payout annexure from the settlement email carries every order and reconciles itself. A Business Metrics report is read as evidence only.',
     uploadAccept: '.xlsx,.pdf,.zip,.csv',

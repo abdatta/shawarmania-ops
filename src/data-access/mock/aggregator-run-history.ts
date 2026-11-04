@@ -236,8 +236,8 @@ export function seedRunHistory({ outletId, channel, at, day }: Seed): Aggregator
     run(atOn(4, clock), 'session_lapsed', {
       detail:
         channel === 'swiggy'
-          ? 'Swiggy ended this session. It needs a one time password to get back in.'
-          : 'Zomato signed this account out. It needs a one time password to get back in.',
+          ? 'Swiggy ended this session. It needs an OTP to get back in.'
+          : 'Zomato signed this account out. It needs an OTP to get back in.',
     })
   }
 

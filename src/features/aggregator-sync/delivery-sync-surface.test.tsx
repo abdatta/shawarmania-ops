@@ -288,10 +288,10 @@ describe('the Delivery surface, as one entry over two channels', () => {
 
     await user.click(await screen.findByTestId('needs-reconnect-swiggy'))
     // The field arrives at its own stage, three stages after the tap (#46).
-    await waitFor(() => expect(screen.getByText('Swiggy sent you a code')).toBeInTheDocument(), {
+    await waitFor(() => expect(screen.getByText('Swiggy sent you an OTP')).toBeInTheDocument(), {
       timeout: 16_000,
     })
-    await user.type(screen.getByLabelText(/one time password.*swiggy/i), '123456')
+    await user.type(screen.getByLabelText(/OTP.*swiggy/i), '123456')
     await user.click(screen.getByRole('button', { name: /sign back in/i }))
     await waitFor(
       async () => {

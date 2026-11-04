@@ -114,7 +114,7 @@ function seedFor(
     })
     push(15, {
       kind: 'session-lapsed',
-      detail: 'Swiggy ended this session. It needs a one time password to get back in.',
+      detail: 'Swiggy ended this session. It needs an OTP to get back in.',
     })
     seedSwiggyExtras(push, day)
     return events
@@ -178,8 +178,8 @@ function seedFor(
       kind: 'session-lapsed',
       detail:
         channel === 'swiggy'
-          ? 'Swiggy ended this session. It needs a one time password to get back in.'
-          : 'Zomato signed this account out. It needs a one time password to get back in.',
+          ? 'Swiggy ended this session. It needs an OTP to get back in.'
+          : 'Zomato signed this account out. It needs an OTP to get back in.',
     })
   }
 

@@ -55,10 +55,10 @@ function lineFor(run: AggregatorSyncRunRow, channelLabel: string): RunLine {
     case 'session_lapsed':
       return { tag: 'Signed out', tone: 'wrong', spoken: `${channelLabel} signed us out` }
     case 'awaiting_one_time_password':
-      // "code" rather than "one time password", matching the card that asks for
+      // "OTP", the word the owner uses and the card that asks for
       // it — and deliberately not the field's own label, which names the outlet
       // and is the thing a reader is meant to type into.
-      return { tag: 'Code wanted', tone: 'attention', spoken: 'Waiting for a sign-in code' }
+      return { tag: 'OTP wanted', tone: 'attention', spoken: 'Waiting for an OTP' }
     case 'shape_changed':
       return { tag: 'Unreadable', tone: 'wrong', spoken: 'The reply could not be read' }
     case 'reconciliation_failed':

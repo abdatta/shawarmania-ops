@@ -192,7 +192,7 @@ export function AggregatorSyncSurface({
    * How many codes had been refused when the owner last sent one, or null.
    *
    * While that count still stands the code is with the runner, so the field
-   * steps aside for "Code sent" instead of inviting a second code for the same
+   * steps aside for "OTP sent" instead of inviting a second code for the same
    * attempt. A refusal raises the count and brings the field back.
    */
   const [codeSentAt, setCodeSentAt] = useState<number | null>(null)
@@ -425,12 +425,22 @@ export function AggregatorSyncSurface({
           ? 'done'
           : null
   if (nextWatched !== watched) setWatched(nextWatched)
+  /*
+   * The tap answers at once. Starting a sign-in waits on GitHub accepting the
+   * job before the server records its first stage — two or three seconds in
+   * which the page looked frozen — so a Reconnect that will sign in shows the
+   * first stage while it is asked for. A reconnect that turns out to need no
+   * sign-in, or fails, drops it when the answer comes back.
+   */
+  const [startingSignIn, setStartingSignIn] = useState(false)
   const lockView: Extract<SignInView, { kind: 'live' | 'done' }> | null =
     signIn.kind === 'live'
       ? signIn
       : nextWatched === 'done'
         ? { kind: 'done', at: signIn.kind === 'done' ? signIn.at : '' }
-        : null
+        : startingSignIn
+          ? { kind: 'live', stage: 'starting' }
+          : null
   // Quiet and stopped are not under way, so they do not lock: they say so in
   // Needs you, with Reconnect beside them.
   const showsSignIn = signIn.kind === 'quiet' || signIn.kind === 'stopped'
@@ -599,7 +609,7 @@ export function AggregatorSyncSurface({
                 </p>
                 <form onSubmit={submitCode} className="mt-3 flex flex-wrap gap-2">
                   <label htmlFor={`${config.testIdPrefix}-otp`} className="sr-only">
-                    The one time password {config.label} sent for this outlet
+                    The OTP {config.label} sent for this outlet
                   </label>
                   <input
                     id={`${config.testIdPrefix}-otp`}
@@ -738,6 +748,14 @@ export function AggregatorSyncSurface({
   )
 
   function onReconnect() {
+    // Only a channel that is signed out signs in; Hyperpure alone repairs
+    // quietly and shows no stages.
+    const signsIn =
+      reconnectCopy?.channel === 'zomato' ||
+      reconnectCopy?.channel === 'swiggy' ||
+      signIn.kind === 'quiet' ||
+      signIn.kind === 'stopped'
+    if (signsIn) setStartingSignIn(true)
     void act(() =>
       adapter
         // A quiet or stopped sign-in offers Reconnect even where no lapsed card
@@ -750,7 +768,7 @@ export function AggregatorSyncSurface({
           }
         })
         .then(() => undefined),
-    )
+    ).finally(() => setStartingSignIn(false))
   }
 
   function Row({ row }: { row: AggregatorSyncEventRow }) {
@@ -815,7 +833,7 @@ function reconnectCardCopy(
   if (hyperpureLapsed) {
     return {
       title: "Hyperpure's session ended",
-      body: 'Zomato is still signed in, so this repairs quietly — no code needed.',
+      body: 'Zomato is still signed in, so this repairs quietly — no OTP needed.',
       action: 'Reconnect Hyperpure',
       testId: 'needs-reconnect-hyperpure',
       channel: 'hyperpure',
