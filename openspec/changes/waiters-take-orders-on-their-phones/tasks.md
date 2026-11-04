@@ -23,9 +23,16 @@ new branch taken only when `useChangeGate('waiter-orders')` or
   codes `WO` and `AC` are unused and not tombstoned, and count the root gates:
   these two must fit under the limit of five. If `retire-one-revenue` has not
   landed and they do not fit, stop and tell the owner.
-- [ ] 0.25 `staff-roles-include-other-roles` is on `stage` before §6 starts, and its
+- [x] 0.25 `staff-roles-include-other-roles` is on `stage` before §6 starts, and its
   cleanup has run in production before `waiter-orders` is turned on (§11). The
   demo (§1–§5) does not wait for it.
+  *(Both done: the change is archived, and its contract migration
+  `20261113020000_contract_role_includes.sql` reached production with Deploy
+  41595619417 on 3 November 2026. A Waiter may be made. `role-includes` is
+  retired, so 1.1 cannot depend on it; on 4 November `stage` already holds five
+  root gates (`agreed-part-months`, `a-tablet-keeps-its-login`,
+  `delivery-orders`, `deactivate-then-leave`, `owner-access-in-the-database`),
+  so 0.2 stops until enough of them retire.)*
 - [ ] 0.3 Find, and note in this file, the attendance function that computes an
   inside, outside or unverifiable verdict from a reading, the column that says a
   check-in was denied, the Team path's function that writes an Employee
@@ -36,8 +43,8 @@ new branch taken only when `useChangeGate('waiter-orders')` or
 
 - [ ] 1.1 Declare `waiter-orders` (`WO`) and `any-counter-acts` (`AC`) in
   `src/change-gates/gates.ts`, `kind: 'change'`, `change:
-  'waiters-take-orders-on-their-phones'`; `waiter-orders` with `dependsOn:
-  ['role-includes']` and `any-counter-acts` with none; `retireBy` about eight
+  'waiters-take-orders-on-their-phones'`; neither with a `dependsOn`
+  (`role-includes`, which `waiter-orders` was to depend on, has retired); `retireBy` about eight
   weeks after first turned on, `roundTrip: 'tested'`, with doc comments in the
   file's voice.
 - [ ] 1.2 Migration `<ts1>_waiters_take_orders.sql`, header `-- change-gate:

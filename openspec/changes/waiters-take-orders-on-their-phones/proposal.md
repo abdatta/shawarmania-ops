@@ -3,8 +3,8 @@
 > **Model**: Opus · **Wave**: F · **Roadmap**: #80 (owner's request, 2026-10-21) ·
 > **Depends on**: #74 (the rail, labels, notes and dish ticks), #75 (change
 > gates), #35 (several tablets at one outlet), #5 (attendance and its geofence),
-> and `staff-roles-include-other-roles`, which must be released and cleaned up
-> before the first Waiter is made ·
+> and `staff-roles-include-other-roles`, released and cleaned up (its contract
+> migration reached production on 3 November 2026), so a Waiter may be made ·
 > **Gate**: the owner approved the waiter's Orders tab, its location light, the
 > counter's waiting card and the accept composer from the demo before any of it
 > was wired live; a Waiter, checked in today and confirmed inside the outlet in
@@ -172,9 +172,11 @@ without the other.
   - **Off:** Only the tablet that took an order can edit, pay, cancel or tick
     it.
 
-**`waiter-orders` depends on `role-includes`**: a Waiter is written into which
-role includes which, and the dependency keeps the change within the limit of five gates that
-depend on nothing. `any-counter-acts` depends on nothing. With `waiter-orders`
+**Neither gate depends on another.** `waiter-orders` was first written to depend
+on `role-includes`, which kept the change within the limit of five gates that
+depend on nothing; that gate retired on 3 November 2026, and a gate cannot
+depend on a retired one. So both are root gates, and they must fit under the
+limit when the change starts (tasks 0.2). With `waiter-orders`
 on and `any-counter-acts` off, a waiter's change to an order is accepted only on the tablet that took it,
 and the other tablets show its Waiting card without Accept.
 

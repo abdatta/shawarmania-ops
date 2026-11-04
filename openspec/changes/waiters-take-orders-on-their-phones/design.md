@@ -100,11 +100,12 @@ roles. This change adds the Waiter to it:
   for a person at an outlet. It is written through the existing assignment path,
   which asks the includes rows.
 
-**No Waiter is made before that change's cleanup.** Until its contract rewrites
-`expense_guard`, the old guard names Employee and Biller and would refuse a
-Waiter's expense (`staff-roles-include-other-roles`, D4). Team's Waiter choice
-is behind `waiter-orders`, and `waiter-orders` is not turned on before the
-cleanup has run (tasks 0.25).
+**That change's cleanup has run, so a Waiter may be made.** Its contract
+migration (`20261113020000_contract_role_includes.sql`, in production since 3
+November 2026) rewrote `expense_guard`, the Team helper and the counter-shift
+helper to ask the includes rows, so a Waiter's expense, assignment and lack of a
+counter shift follow from the rows alone (`staff-roles-include-other-roles`,
+D4). Team's Waiter choice is still behind `waiter-orders`.
 
 ## D2. Checked in today
 
