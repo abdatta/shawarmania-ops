@@ -233,6 +233,20 @@ describe('the surface around a sign-in', () => {
     expect(screen.queryByTestId('zomato-sign-in')).not.toBeInTheDocument()
   })
 
+  it('asks for no OTP on a request whose time ran out, though its row is still open', async () => {
+    // A run that died after a refused OTP left this open with nobody reading it
+    // (2026-11-04); the card stood on the page for hours.
+    await renderWithHealth((health) => ({
+      ...health,
+      signIn: null,
+      awaitingOneTimePassword: { requestedAt: recently(600_000), expiresAt: recently(300_000) },
+    }))
+
+    expect(await screen.findByTestId('needs-reconnect-both')).toBeInTheDocument()
+    expect(screen.queryByText('Zomato sent you an OTP')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^The OTP/)).not.toBeInTheDocument()
+  })
+
   it('shows one code field, never two, while the sign-in holds it', async () => {
     await renderWithHealth((health) => ({
       ...health,

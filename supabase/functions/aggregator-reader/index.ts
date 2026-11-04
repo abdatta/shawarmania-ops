@@ -435,6 +435,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       const recorded = await recordLoginStage(service, channel, judged.stage, now)
       if (!recorded) return json({ error: 'backend_failure' }, 503)
+
+      // A run that stopped is not reading the mailbox any more. A refused OTP
+      // reopens the request for the next attempt, so a run that died after one
+      // left it open with nobody behind it (2026-11-04). Closed here, best
+      // effort: the stop is already recorded, and the next request sweeps it.
+      if (judged.stage === 'stopped') {
+        const { error: closeError } = await service
+          .from('aggregator_auth_requests')
+          .update({ closed_at: now.toISOString(), outcome: 'abandoned' })
+          .eq('channel', channel)
+          .is('closed_at', null)
+        if (closeError) {
+          console.error('could not close the stopped sign-in request', { code: closeError.code })
+        }
+      }
       return json({ outcome: 'recorded' })
     }
 

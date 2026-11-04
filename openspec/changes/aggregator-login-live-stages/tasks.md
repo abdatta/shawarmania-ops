@@ -12,6 +12,7 @@
 - [x] 2.3 `aggregator-reader`: `waiting_for_code` on `open_code_request`; `checking_code` on a collected `await_code`; `waiting_for_code`/`stopped` on `reject_code` retry/exhausted; `stopped` on `finish_login` expired/abandoned; `bringing_hyperpure` (Zomato) or `done` (Swiggy) on `finish_login signed_in`.
 - [x] 2.4 `aggregator-reader` `report_stage`: runner words only, refused `unknown_stage`; refused `no_sign_in` unless a live sign-in is under way; Zomato-only `done`.
 - [x] 2.5 `npm run functions:typecheck` green.
+- [x] 2.6 A runner `stopped` report also closes the channel's open OTP request, and the surface ignores a request past its expiry: after a refused OTP reopened one and the old runner died, its card stood on the page for hours (2026-11-04). Replayed on the local server; unit test for the surface.
 
 ## 3. Reading it
 

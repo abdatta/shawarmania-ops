@@ -401,7 +401,14 @@ export function AggregatorSyncSurface({
     (health?.running ?? false) ||
     (config.showsHyperpure ? (hyperpure?.running ?? false) : false)
 
-  const waiting = health?.awaitingOneTimePassword ?? null
+  /*
+   * An OTP request past its own expiry is not waiting for anything, even while
+   * its row is still open: a run that died after a refused OTP reopened it and
+   * nobody closed it, and the old OTP card stood on the page for hours asking
+   * for an OTP no run would read (2026-11-04). The next request sweeps it.
+   */
+  const asked = health?.awaitingOneTimePassword ?? null
+  const waiting = asked && new Date(asked.expiresAt).getTime() > now ? asked : null
   /** Where a full sign-in has got to, judged against the clock (#46). */
   const signIn: SignInView = health
     ? readSignIn(health.signIn, now, health.lastRunAt)
