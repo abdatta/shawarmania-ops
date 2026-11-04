@@ -1,57 +1,57 @@
-## 1. Schema — the stage lives on the request already under way
+## 1. Schema — the stage lives on the channel's credentials row
 
-- [ ] 1.1 Migration on `aggregator_auth_requests`: add `stage text` (check-constrained to the closed seven-word vocabulary) and `stage_at timestamptz`, both nullable, with column comments saying a null stage is a request from before this change and renders as today's card.
-- [ ] 1.2 Confirm the existing owner-only policy is unchanged and covers both columns. **Do not widen the policy to make the stepper easier** — the `code` column's unreadability is the property this change must not weaken.
-- [ ] 1.3 Re-assert the isolation test case for `aggregator_auth_requests` against the new columns: a Franchise Admin at one outlet reads neither for another outlet's request.
-- [ ] 1.4 Confirm the existing expiry sweep is unaffected by a request carrying a stage.
-- [ ] 1.5 Regenerate `database.types.ts`.
-- [ ] 1.6 Sectional check: `npm run test:db` and `npm run test:rls` green.
+- [x] 1.1 Migration: `aggregator_channel_credentials.login_stage` (nullable, inline check on the eight words) and `login_stage_at` (nullable), with comments.
+- [x] 1.2 `aggregator_credential_health_v2(p_channel)`: v1's columns plus `login_stage`, `login_stage_at`; owner-only, `security definer`, executable by `authenticated` only. v1 untouched.
+- [x] 1.3 pgTAP: columns exist and refuse an unknown word; v2 answers the owner, refuses a manager and a biller; `authenticated` still has no select on either table.
+- [x] 1.4 Regenerate `database.types.ts`; `npm run lint:migrations` green.
 
-## 2. The reporting boundary
+## 2. The server records the stages it sees
 
-- [ ] 2.1 Add `report_stage` to `aggregator-reader`: runner-authenticated, validates `stage` against the closed vocabulary, stamps `stage` and `stage_at` on the open request for the channel.
-- [ ] 2.2 Refuse an unrecognised stage loudly rather than storing it, matching how `outcome` is handled. No free text crosses the boundary.
-- [ ] 2.3 Refuse a stage for a channel with no open request, and for a request already closed.
-- [ ] 2.4 Sectional check: edge-function tests cover a valid stage, an unknown word refused, a closed request refused, and a non-runner caller refused.
+- [x] 2.1 `_shared/login-stage.ts`: the vocabulary, the runner-reportable subset, a best-effort `recordLoginStage(service, channel, stage)`, and pure tests.
+- [x] 2.2 `request-aggregator-sync`: `starting` when the full-login rung dispatches (not capture-only, not rehearsal, not still-signed-in).
+- [x] 2.3 `aggregator-reader`: `waiting_for_code` on `open_code_request`; `checking_code` on a collected `await_code`; `waiting_for_code`/`stopped` on `reject_code` retry/exhausted; `stopped` on `finish_login` expired/abandoned; `bringing_hyperpure` (Zomato) or `done` (Swiggy) on `finish_login signed_in`.
+- [x] 2.4 `aggregator-reader` `report_stage`: runner words only, refused `unknown_stage`; refused `no_sign_in` unless a live sign-in is under way; Zomato-only `done`.
+- [x] 2.5 `npm run functions:typecheck` green.
 
-## 3. Sync repo — narrate what it already passes through
+## 3. Reading it
 
-- [ ] 3.1 Report stages from `auth.mjs` in `abdatta/shawarmania-sync` via the shared helper, at the milestones the flow already reaches: browser up, portal reached, identifier entered, code screen rendered, code accepted, signing in, Hyperpure captured.
-- [ ] 3.2 Reporting is best-effort — a failed `report_stage` call must never fail a working sign-in.
-- [ ] 3.3 Confirm no token, cookie value or code reaches a log line, workflow summary or committed file through the new calls.
-- [ ] 3.4 Sectional check: dispatch the login workflow on a branch ref and read the request row's stage advancing through the sequence.
+- [x] 3.1 `AggregatorSyncHealth.signIn: { stage, at } | null` and `codeAttempts`; live adapter reads v2.
+- [x] 3.2 `src/domain/sign-in-progress.ts`: pure `readSignIn(stage, at, now, lastRunAt)` → hidden / live / quiet / stopped / done, with the ceilings; unit tests for every branch and the 30-minute horizon.
 
-## 4. Following stages live
+## 4. The stepper
 
-- [ ] 4.1 Subscribe to `postgres_changes` on the open request row while a dispatched reconnect has one; unsubscribe when it closes.
-- [ ] 4.2 **Assert the security property**: a subscribed client receives `stage` and never `code` or session material. This is a test, not a review note.
-- [ ] 4.3 Degrade to today's behaviour when realtime never connects or drops: the existing five-second health poll still closes the loop, and no stage is shown that cannot be confirmed.
-- [ ] 4.4 Sectional check: realtime test suite green (`vitest.realtime.config.ts`).
+- [x] 4.1 `SignInProgress` replaces the reconnect card while a sign-in is live, quiet, stopped or just done; no Reconnect while live.
+- [x] 4.2 Code field and countdown inside "Waiting for your code"; "not accepted" line from attempts.
+- [x] 4.3 Fallback: today's code card when a code is awaited and no stepper holds the field.
+- [x] 4.4 Done newer than the last run suppresses the lapsed card (D7).
+- [x] 4.5 The watch also runs while a sign-in is live, at the 3 s running-read pace (design D10).
+- [x] 4.6 Component tests: walk, quiet, stopped, retry, done, Swiggy without Hyperpure, fallback card.
+- [x] 4.7 A live sign-in holds its page (design D11): the steps sit over an inert, dimmed page; navigation stays usable; a watched sign-in ends ticked until Done; quiet and stopped do not hold. Unit and browser tests, including leaving for Team and coming back.
 
-## 5. The stepper
+## 5. Demo mode
 
-- [ ] 5.1 Render the seven stages in owner words, past ticked, current live. Settle inline-on-the-Hyperpure-line versus a card between the health lines, and record the choice in `design.md`.
-- [ ] 5.2 Move the code field and its countdown inside stage four; remove the disconnected code card.
-- [ ] 5.3 Collapse the stepper into the existing quiet/ended line per outcome when the request closes. That line is unchanged.
-- [ ] 5.4 Implement the staleness rule: after the bounded silence, stop claiming the stage, say the sign-in has gone quiet, offer the owner an action. Settle the bound — it must exceed the slowest legitimate stage, which is the one waiting on a human — and record it.
-- [ ] 5.5 Settle whether a stage may go backwards (a retried identifier, a second code) and whether the stepper reruns or holds. A tick that unticks silently is not acceptable.
-- [ ] 5.6 A reconnect that needs no login shows no stepper at any point.
+- [x] 5.1 The mock walks every stage on timers for Zomato and Swiggy, code at stage four.
+- [x] 5.2 The still-alive reconnect and the capture-only repair show no stepper.
+- [x] 5.3 Demo e2e: tap Reconnect, see the stages, type a code, reach signed back in.
 
-## 6. Demo mode
+## 6. Runner (`abdatta/shawarmania-sync`)
 
-- [ ] 6.1 Walk all seven stages against mocks, like every other state this surface shows.
-- [ ] 6.2 Include the stall: a mocked sign-in that stops reporting and reaches the quiet state.
-- [ ] 6.3 Include the still-alive reconnect that shows no stepper.
-- [ ] 6.4 Confirm a demo session still cannot write to Supabase.
+- [x] 6.1 `ops.reportStage(stage, channel)`, best effort, never throws.
+- [x] 6.2 Zomato: `opening_portal`, `signing_in`, `done` after the capture.
+- [x] 6.3 Swiggy: `opening_portal`, `signing_in`.
+- [x] 6.4 `login.yml`: on failure or cancel, report `stopped`.
+- [x] 6.5 Zomato code-screen wait cannot be satisfied by the phone field; unit test.
+- [x] 6.6 No token, cookie or code reaches a log line through the new calls.
+- [x] 6.7 `login.yml` passes `HYPERPURE_OPS_OUTLET_ID` to the Zomato step, so the Hyperpure capture riding on a sign-in records its outcome (it was silently dropped, like `hyperpure.yml` and `capture-hyperpure.yml` already pass it).
 
 ## 7. Docs
 
-- [ ] 7.1 `docs/SCREENS.md`: the stepper, replacing the description of the disconnected code card.
-- [ ] 7.2 `docs/OPERATIONS.md`: what the owner sees during a sign-in, and what a stalled sign-in looks like.
-- [ ] 7.3 Merge the spec delta into `openspec/specs/aggregator-channel-sessions/spec.md`.
+- [x] 7.1 `docs/SCREENS.md`: the stepper replaces the separate code card.
+- [x] 7.2 `docs/OPERATIONS.md`: a sign-in, quiet, stopped; Zomato wants one about monthly.
 
-## 8. PHASE GATE
+## 8. Gate
 
-- [ ] 8.1 **Gate (#46):** the owner taps Reconnect, the full-login rung fires, and the screen shows where the sign-in actually is — starting, opening the partner portal, signing in as you, waiting for your code (with the input field appearing at that stage), checking your code, bringing Hyperpure along, done — each arriving within seconds of the runner reaching it and without a refresh; a runner that dies mid-stage stops claiming progress; no auth-request content beyond the stage ever reaches a client; and the four-role demo walkthrough still walks.
-- [ ] 8.2 Suite gates: lint, typecheck, format:check, unit, build, e2e, contrast, `test:db`, `test:rls` — all green, per the CI workflow file rather than a docs checklist.
-- [ ] 8.3 Report the gate honestly. A live full-login rehearsal spends a real owner code and destroys a working session; if the gate is claimed against a branch-ref dispatch rather than a natural lapse, say so.
+- [x] 8.1 Gate (#46) clause by clause, saying which test proved each.
+- [x] 8.2 CI gates per `verify.yml`: lint, format:check, typecheck, functions:typecheck, unit, build, e2e, contrast, test:db.
+- [x] 8.3 Honest note: no live OTP was spent; the live walk happens at the next real lapse (now: both channels are lapsed).
+- [ ] 8.4 The live walk: once the ops build and the runner are deployed, reconnect Zomato and Swiggy (both lapsed since 22 and 24 Oct) and watch every stage arrive on the owner's phone.

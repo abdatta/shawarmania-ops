@@ -1020,6 +1020,40 @@ before. If nothing is wrong at all, the screen says you are still signed in and
 starts nothing. The manual upload above stays valid in every state for the day
 even the fallback path is wanted.
 
+**Expect a Zomato sign-in about once a month.** The daily reads keep Zomato's
+24-hour idle clock renewed, but the session also has a hard life of roughly a
+month that no renewal extends (measured: 25 Aug → ~22 Sep, 22 Sep → 22 Oct
+2026). Swiggy's lapses on its own schedule. Hyperpure keeps working through a
+Zomato lapse because its token is captured separately and does not expire, so a
+green Hyperpure line says nothing about Zomato.
+
+**What a full sign-in looks like** *(#46)*. The sign-in's stages appear over
+the Delivery page — Starting the sign-in, Opening the partner portal, Signing in
+as you, Waiting for your code, Checking your code, Bringing Hyperpure along
+(Zomato only) — each ticked as it is reached, with no second Reconnect. The page
+beneath is held until it ends; the rest of the app is not, and closing the app
+does not stop the sign-in — come back and it is where the runner has got to.
+The first stage appears at once; the portal stage about a minute later, once the
+runner has installed its browser; the code field about thirty seconds after
+that, inside *Waiting for your code*, with its countdown. A refused code puts
+the stepper back on *Waiting for your code* and says so. When it finishes every
+stage is ticked until you tap **Done**, and a read starts by itself. There is no
+resend button: if the code never arrives, let it expire and tap **Reconnect** on
+the stopped card for a fresh code.
+
+- **"This sign-in has gone quiet."** A stage stood longer than it ever takes
+  (two to four minutes; six for the code, which waits on you). The runner most
+  likely died. Tap **Reconnect** to start again; if it goes quiet at the same
+  stage twice, read the `login` run in `abdatta/shawarmania-sync` Actions.
+- **"The sign-in stopped."** The runner said so: the code expired, three codes
+  were refused, or the portal refused the sign-in. **Reconnect** starts again.
+- Where each stage is recorded: the dispatch records *Starting*; the reader door
+  records *Waiting*, *Checking*, *Bringing Hyperpure*, Swiggy's *Done* and most
+  stops; the runner reports the portal, signing-in and Zomato's *Done*, and
+  `login.yml` reports a stop when its sign-in step fails. The stage is
+  `aggregator_channel_credentials.login_stage`, readable only through
+  `aggregator_credential_health_v2`.
+
 ### Moving a delivery feed to another outlet
 
 Done once, 2026-10-10, when Kalyani's Zomato and Swiggy listings were pointed at

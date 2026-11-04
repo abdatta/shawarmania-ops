@@ -2,153 +2,218 @@
 
 ## Context
 
-A full-login reconnect dispatches a workflow that drives a real browser through
-the Zomato partner portal. It takes about four minutes. The surface currently
-learns nothing about it until it ends, except for one moment: a code card that
-appears when `aggregator_auth_requests` opens a row.
+A full-login reconnect (Zomato or Swiggy) dispatches `login.yml` in
+`abdatta/shawarmania-sync`, which boots a runner, installs a browser (~45 s),
+walks the partner portal, waits up to five minutes for the owner's code and
+saves the session. Measured on the last real one (22 Sep): dispatch → code box
+≈ 75 s, code → saved ≈ 1–2 min including the Hyperpure hop.
 
-The 2026-08-22 rehearsal exposed what that costs. Four silent minutes, then a
-code arriving with no countdown and no context, after three earlier attempts had
-expired unclaimed. The owner cannot tell a working sign-in from a hung one, so
-the rational response to silence is to tap Reconnect again — which is the one
-action that makes it worse.
+The owner's surface learns about it through one thing: the open row in
+`aggregator_auth_requests`, exposed by `aggregator_credential_health` as
+`awaiting_code_since`, polled every five seconds while a repair card is up.
 
-The mechanism to fix this already exists in the codebase twice over. The biller
-shift handshake keeps its state in Supabase and both sides follow it live. The
-auth-request row is already the "a login is under way" record, already
-owner-scoped by RLS, already swept on expiry.
+## What the August draft got wrong
 
-## Goals / Non-Goals
+Re-checked against the code on 2026-11-03:
 
-**Goals**
+1. **"The request row is owner-only, so Realtime honours it."** The request
+   table has *no* client grant and *no* policy, on purpose — "two independent
+   refusals for the same thing" (`20260817000002`). Nobody can select it, so
+   nobody can subscribe to it, and granting a select to make Realtime work would
+   put the row with the code column in reach of a client. Realtime
+   `postgres_changes` checks the row against RLS and then sends the record; it
+   is not a column filter. The draft's transport is impossible without weakening
+   the property it says it must keep.
+2. **"Stamp the stage on the open request."** The request opens only when the
+   code screen renders — the #44 timing fix. Stages 1–3 happen before any
+   request exists, so there is nothing to stamp them on.
+3. **Swiggy.** Swiggy joined the same `login.yml`, mailbox and Reconnect card
+   (#47). The draft talked about "the Hyperpure line expanding"; the stepper has
+   to work for both channels, and Swiggy has no Hyperpure stage.
 
-- The owner can see where a sign-in is, within seconds, without refreshing.
-- The code field appears at the stage it belongs to, not as a card floating
-  beside the story.
-- A dead runner stops claiming progress.
-- Nothing beyond the stage name can reach a browser through this path.
-
-**Non-Goals**
-
-- The capture-only rung. It opens no mailbox row and has nothing to stream.
-- Run history, `What changed`, or anything on the figures. #48 and a quickfix.
-- Any change to the repair ladder, the probe, or dispatch.
+Also found: the Zomato runner's code-field locator includes
+`input[type="number"]`, which is exactly Zomato's phone field — so its
+"the code screen rendered" wait can be satisfied by the screen before it.
 
 ## Decisions
 
-### D1. Two columns on the existing request row
+### D1. The stage lives on the channel's credentials row
 
-`stage` (constrained vocabulary) and `stage_at` (timestamptz).
+`aggregator_channel_credentials.login_stage` (text, closed check) and
+`login_stage_at` (timestamptz), both nullable.
 
-*Rejected: a `aggregator_login_stages` event table, one row per transition.* It
-would give a replayable trace, which nothing asks for. The stepper renders the
-current position and the ticks behind it, both derivable from one word. An event
-table adds a policy, an isolation test case and a sweep of its own, to store
-history for a row that lives four minutes.
+- One row per channel, already the "this channel's sign-in" record, already
+  without any client grant. One sign-in per channel at a time is already
+  enforced by `login.yml`'s concurrency group, so one stage per channel is
+  the true shape.
+- Read through `aggregator_credential_health_v2`, owner-only and
+  `security definer`, returning v1's columns plus the two. The published build
+  keeps calling v1 (migrations only add).
+- The inline `check` on a new nullable column cannot refuse any write a
+  published build makes: no published build writes it.
 
-*Rejected: Supabase Broadcast instead of `postgres_changes`.* Broadcast does not
-go through RLS. On a row whose neighbouring column is a one-time code, the
-transport that enforces the policy is the only defensible one.
+*Rejected: on the auth request (the draft).* See above, point 2.
+*Rejected: a new `aggregator_login_attempts` table.* A row per attempt would
+give a trace nothing asks for and need its own grants, sweep and tests; the
+stepper needs the current position only.
 
-### D2. The stage vocabulary is closed and validated server-side
+### D2. The server records every stage it can see
 
-`report_stage` on `aggregator-reader` validates against the fixed list and
-stamps the open request for the channel. No free text crosses the boundary,
-matching how `outcome` is already handled.
+`starting` at dispatch, `waiting_for_code` when the mailbox opens,
+`checking_code` when the runner collects the code, `waiting_for_code` again on
+a rejected code that has attempts left, `stopped` when a request expires, is
+abandoned or runs out of attempts, `bringing_hyperpure` (Zomato) or `done`
+(Swiggy) on `finish_login signed_in`.
 
-**The security property this change must not weaken:** the request row's policy
-is owner-only and its `code` column is unreadable to every client. Realtime
-delivers the same columns a select would, so the property holds by construction
-— but it holds only as long as nobody widens the policy to make the stepper
-easier. A test asserts a subscribed client receives `stage` and never `code`.
+So the stepper is truthful with the runner as it is today. The runner adds only
+what the server cannot see: `opening_portal`, `signing_in`, Zomato's `done`
+after the Hyperpure hop, and `stopped` on a failure that never reached the
+mailbox.
 
-### D3. `stage_at` exists for staleness, not for display
+**Stage writes are best effort on the server too.** A failed stage write is
+logged and never fails the action it rides on — a sign-in is worth more than
+its narration.
 
-The stepper does not show times. `stage_at` answers a different question: is
-this stage still true? A runner killed mid-stage leaves its last stage frozen,
-and a stepper reading "Signing in as you" ten minutes later is a confident lie.
+### D3. Transport is the poll that already runs
 
-After a bounded silence the stepper stops claiming the stage and says the
-sign-in has gone quiet, offering what the owner can do. The bound is an open
-question below; it must be longer than the slowest legitimate stage, and the
-slowest legitimate stage is stage four, which waits on a human.
+The surface already re-reads health every 5 s while a repair card is up
+(`watchForLogin`). That read now carries the stage. Five seconds satisfies
+"within seconds"; nothing new subscribes, nothing new connects, and the request
+count is unchanged. It also keeps working through a dropped connection exactly
+as today — there is no second path to disagree with the first.
 
-*Rejected: reusing `updated_at` for this.* It moves on any write to the row,
-including one that has nothing to do with progress. A stamp that means "we
-reached a stage" has to be written only when a stage is reached.
+*Rejected: Realtime.* D1/what-went-wrong point 1. Also: one more socket on the
+owner's phone for a four-minute monthly event.
+*Rejected: Broadcast from the Edge Function.* Bypasses RLS entirely; the server
+would be choosing who hears it, by hand.
 
-### D4. The code field moves inside the stepper
+### D4. `report_stage` takes only the runner's words, only during a sign-in
 
-Today's code card is a separate element that appears when the request opens. It
-becomes stage four's own content, so the field is where the story says it should
-be. When the request closes the stepper collapses into the existing quiet/ended
-line per outcome, which is unchanged.
+`aggregator-reader` `report_stage` accepts `opening_portal`, `signing_in`,
+`done` and `stopped`; any other word — including server-only ones like
+`waiting_for_code` — is refused `unknown_stage` and not stored. It is refused
+`no_sign_in` unless the channel's current stage is a live, non-terminal one
+from the last 30 minutes, so a late or replayed report cannot wake a finished
+sign-in. `done` is accepted from Zomato only (Swiggy's comes from
+`finish_login`). Nothing but the word crosses the boundary.
 
-### D5. A dropped socket degrades to today, never to a lie
+### D5. Quiet: every stage has a ceiling
 
-If realtime never connects or drops mid-sign-in, the existing five-second health
-poll still closes the loop and the surface behaves as it does now. The stepper
-shows what it last knew and the staleness rule from D3 covers the rest. No
-retry storm, no fabricated progress.
+| Stage | Ceiling | Why |
+|---|---|---|
+| `starting` | 4 min | queue + install measured ~50 s; GitHub queues can take minutes |
+| `opening_portal` | 2 min | ~20 s measured |
+| `signing_in` | 2 min | ~10 s measured |
+| `waiting_for_code` | 6 min | the mailbox lives 5 min; the runner gives up at 5 |
+| `checking_code` | 2 min | the post-login wait is 60 s |
+| `bringing_hyperpure` | 3 min | the picker hop takes ~1 min |
 
-## Risks / Trade-offs
+Past its ceiling a stage is **quiet**: the stepper stops ticking it live, says
+"This sign-in has gone quiet" and offers Reconnect. 30 minutes after its last
+stage a sign-in is history and the surface reverts to its ordinary cards — and
+sooner for one that stopped or went quiet if a read has run since: that read's
+own outcome is the newer word on the session. A live sign-in is never hidden
+that way, because a scheduled read can run alongside it. The
+ceiling is measured on the server's `login_stage_at` against the phone's clock;
+minutes of margin absorb any skew.
 
-**Realtime is a new dependency for this surface.** Mitigated by D5: it is an
-enhancement over a poll that still runs, not a replacement for it.
+### D6. Going backwards is shown, not hidden
 
-**The stage vocabulary is a contract with a separate repo.** A runner reporting
-a word the function does not know must be rejected loudly rather than stored, or
-the stepper silently stops advancing. Validation is server-side for that reason.
+A refused code moves `checking_code` back to `waiting_for_code`. The stepper
+shows "Checking your code" un-ticked again and, inside "Waiting for your code",
+"That code was not accepted — try the new one", from the attempts count already
+in the health read. Never a silent untick.
 
-**Stages could go backwards.** A retried identifier or a second code could
-revisit an earlier stage. Whether the stepper reruns a stage or holds is an open
-question; either is acceptable, silently rendering a tick then untick is not.
+### D7. A `done` newer than the last failed read means signed back in
 
-## Migration Plan
+Today the lapsed card stays up after a successful sign-in until a scheduled
+read runs. While the latest stage is `done` and newer than the channel's last
+run, the channel is not shown as lapsed; the stepper collapses to one line —
+"Signed back in" — until the next read replaces it. Hyperpure's own line and
+the half-failure note are unchanged: they already judge Hyperpure from its own
+runs.
 
-1. Migration adds `stage` and `stage_at` to `aggregator_auth_requests`, both
-   nullable, check-constrained vocabulary, column comments. Existing RLS
-   unchanged; the isolation test case for the table is re-asserted against the
-   new columns rather than a new one added.
-2. `aggregator-reader` gains `report_stage`. Deployable before the runner uses
-   it and before the UI reads it.
-3. Sync repo reports stages. Deployable independently: an unread column breaks
-   nothing, and a stage nobody renders is inert.
-4. Surface subscribes and renders the stepper; the code card moves inside it.
+**And the surface starts that read.** Left alone, the health line would keep
+saying `Stuck` beside "Signed back in" for hours. Once per finished sign-in
+(keyed on its `done` time, so a re-render or remount cannot ask twice), the
+open page asks for an ordinary read of the outlet on screen — the same request
+**Read now** makes. A refused ask changes nothing. If the page is closed the
+next scheduled read does the same job later.
 
-Nothing is destructive. A request row written before this change carries a null
-stage and renders as today's card, which is also what happens if the runner is
-older than the UI.
+### D10. The watch keeps the running-read pace while a sign-in is live
 
-## Rejected alternatives
+The 5 s watch drops to `RUNNING_SYNC_CHECK_MS` (3 s) while a stage is live —
+the pace this surface already keeps while a read runs — so a stage is on screen
+within three seconds of being recorded, and the demo's three-second stages are
+never skipped. A one-second clock tick moves the countdown and the quiet
+judgement without any request.
 
-**Keeping the run history and the freshness stamp in this change.** They were
-added to this proposal on 2026-08-23 and split back out on 2026-08-29.
+### D11. A live sign-in holds its page, not the app
 
-The three shared a screen and a theme and nothing else: different tables
-(`aggregator_auth_requests` versus `aggregator_sync_runs` versus
-`aggregator_channel_days`), different transports — this proposal's own non-goals
-had already ruled out streaming the history — and, for the stamp, a different
-feature folder entirely (`src/features/manual-ledger/`).
+Owner review on 2026-11-04 asked for a focused, popup-like account of the
+sign-in that the page cannot be used around, while leaving every other page
+reachable — the sign-in runs on GitHub whether the app is open or not.
 
-The decisive argument was risk. This change is additive and reversible and
-cannot touch money. The history's summaries require cutting into
-`ingest_aggregator_cycle`, a `security definer` function that writes settlement
-figures. Verifying both against one gate means a working stepper can carry a
-money regression past a checkpoint. The gate was also three "and" clauses
-needing three unrelated rehearsals, which is a gate that can half-pass.
+While a stage is live, the stage list sits over the channel's page (sticky, so
+it stays in view) and the page beneath it is `inert` and dimmed. The app's own
+navigation sits outside the page and stays usable. Nothing about the hold lives
+in component state: it is read from the recorded stage, so a reload, a second
+phone or a return from Team finds it held at the stage the runner has reached.
+A sign-in this page watched to the end keeps every step ticked until **Done**,
+even after the read it starts overtakes it; one that ended unwatched is the
+one-line Signed back in. Quiet and stopped do not hold the page — nothing is
+under way, and the owner may want the page itself (Upload a statement) before
+deciding to reconnect.
 
-Ordering was decided the other way from the risk argument, deliberately: #48
-lands first because the owner wants the history sooner, and the two do not
-depend on each other. They touch opposite ends of
-`aggregator-sync-surface.tsx`; whichever is second rebases.
+**The hold can never outlive the run.** Three layers lift it: a run that ends
+well records `done` (Swiggy's through `finish_login`, Zomato's after the
+Hyperpure hop); a run that fails or is cancelled by hand on GitHub records
+`stopped` from `login.yml`'s failure-or-cancel step, and the page is free on
+the next three-second read; and a run that says nothing at all — never
+started, runner lost, door unreachable — goes quiet at its stage's ceiling (at
+most six minutes), which does not hold the page either.
 
-## Open Questions
+*Rejected: a modal `<dialog>`.* The top layer makes the whole document inert,
+navigation included, and a dismissable modal is transient: its open-ness would
+be component state a reload forgets.
+*Rejected: a popup that reopens itself but can be dismissed.* Offered first;
+the owner chose a page that cannot be used around the sign-in.
 
-- Inline on the Hyperpure line, or a card between the health lines.
-- How long silence must last before the stepper stops claiming its stage, and
-  the wording when it does. Must exceed the slowest legitimate stage, which is
-  the one waiting on a human.
-- Whether a stage may go backwards, and whether the stepper reruns or holds.
-- Whether the capture-only rung eventually wants the same treatment, once the
-  stepper exists and the cost of extending it is known.
+### D12. No "resend code"
+
+The runner deliberately never resends: one run is one code, so the mailbox's
+three-attempt cap cannot be bypassed (`swiggy-auth.mjs`), and neither portal's
+resend control has been captured, so its selector and the moment it enables
+are unknown. A wired button would be a guess until a live run records that
+screen. An expired code stops the sign-in, and **Reconnect** on the stopped
+card is the resend: a fresh run with a fresh code. Revisit only after the live
+walk (task 8.4) has captured the code screen's structure.
+
+### D8. The code field cannot be stranded
+
+The field lives inside "Waiting for your code". If a code is awaited and no
+live stepper is showing (an old row, a stage write that failed), today's
+separate code card renders as before.
+
+### D9. Fix the Zomato code-field locator
+
+The wait for the code screen now looks for the code inputs and **also**
+requires the phone field to have gone, so the identifier screen can never
+satisfy it.
+
+## Risks
+
+- **The runner and the app now share a word list across repos.** Mitigated by
+  validation at the door (D4) and by the server owning every stage it can.
+- **A stuck `starting`** if dispatch succeeded but the runner never ran: covered
+  by its ceiling (D5).
+
+## Rejected alternatives (kept so they are not re-proposed)
+
+- Keeping run history and the freshness stamp in this change — split out
+  2026-08-29: different tables and transports, and the history cut into a
+  money-writing function, so one gate could carry a money regression past a
+  stepper checkpoint.
+- A change gate. The owner-only screen and an additive migration pass both
+  clean-revert tests (proposal, *Change gate*), and D8 means a broken stepper
+  still lets a code through.
