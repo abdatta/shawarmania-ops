@@ -59,16 +59,24 @@ its own, and no migration in the code half.
 
 ## 2. Wait for every tablet
 
-- [ ] 2.1 The readiness check (`retire-gate` §2): every registered device on the
+- [x] 2.1 The readiness check (`retire-gate` §2): every registered device on the
   retirement build or later, and three services on it. Overview, the Ledger and
   Expenses' Fixed chip are the owner's and managers' screens: their phones reload
   the app before the contract Promote.
+  *(Production, read-only, 12 November 10:43 IST: Cafe Laptop, Conti Kitchen and
+  Shawarma Kitchen, every registered device, on `8b6a567f`, which contains
+  `e871b2b4`. Kalyani Cafe has traded nine services since Deploy `c83ec673`
+  (2 November 07:11 UTC): 3 to 11 November. An older build on a phone reads the
+  retired gate off and shows Overview's month without fixed costs, a reading,
+  not a write.)*
 
 ## 3. The contract migration
 
-- [ ] 3.1 A migration headed `-- release: contract pro-rata-pnl` that sets the
+- [x] 3.1 A migration headed `-- release: contract pro-rata-pnl` that sets the
   gate's `retired_at` and turns it off, after re-confirming in production and on
   a fresh reset that nothing in the database reads the key. Nothing in the
   database served only the off path, so nothing is dropped.
+  *(`20261116030000_contract_pro_rata_pnl.sql`; no reader in production on 12
+  November, and none on a fresh reset.)*
 - [ ] 3.2 Every database gate on a fresh reset; release it through the normal
   path.
