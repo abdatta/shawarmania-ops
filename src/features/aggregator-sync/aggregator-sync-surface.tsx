@@ -12,6 +12,7 @@ import type {
   HyperpureHealth,
 } from '@/data-access/adapters'
 
+import { readingWorked } from '@/domain/delivery-attention'
 import { readSignIn, type SignInView } from '@/domain/sign-in-progress'
 import { attentionChanged } from '@/features/attention/attention'
 import { cn } from '@/lib/cn'
@@ -101,7 +102,10 @@ export function channelHealthWord(
 ): readonly [string, boolean] {
   if (health.running) return ['Reading', false] as const
   if (health.lastOutcome === null) return ['Never run', false] as const
-  if (health.lastOutcome !== 'ok') return ['Stuck', true] as const
+  // The line answers whether the reads are working [owner, 2026-11-12]. A run
+  // that read fine but found a week that would not add up is working; that
+  // week asks on its own row in Needs you.
+  if (!readingWorked(health.lastOutcome)) return ['Stuck', true] as const
   // A channel not switched on here has no schedule to be late against.
   if (health.syncedFrom && hasGoneQuiet(health.lastRunAt, health.readsPerDay, now)) {
     return ['Overdue', true] as const

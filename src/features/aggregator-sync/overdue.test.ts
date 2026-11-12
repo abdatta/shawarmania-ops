@@ -109,6 +109,24 @@ describe('the word a channel health line shows', () => {
     ).toEqual(['Stuck', true])
   })
 
+  it('reads a run that worked but found a week that would not add up as the job working', () => {
+    // 2026-11-12: Swiggy signed back in and its first read worked, but one
+    // week's payout did not match. The line read "Stuck" beside a working
+    // channel. The line answers whether the reads are running [owner,
+    // 2026-11-12]; the week asks on its own row in Needs you.
+    expect(channelHealthWord(healthy({ lastOutcome: 'reconciliation_failed' }), NOW)).toEqual([
+      'All quiet',
+      false,
+    ])
+    // And it still goes Overdue when the reads stop.
+    expect(
+      channelHealthWord(
+        healthy({ lastRunAt: agesAgo(48), lastOutcome: 'reconciliation_failed' }),
+        NOW,
+      ),
+    ).toEqual(['Overdue', true])
+  })
+
   it('lets a run under way outrank being overdue', () => {
     // The read that will clear it is happening. Calling that overdue would be
     // out of date at the moment it rendered.

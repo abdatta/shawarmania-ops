@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { integrationNeedsAttention } from '@/domain/delivery-attention'
+import { integrationNeedsAttention, READING_WORKED } from '@/domain/delivery-attention'
 import { formatBusinessDate } from '@/domain/datetime'
 import { formatPaise } from '@/domain/money'
 import { isSignInStage } from '@/domain/sign-in-progress'
@@ -115,17 +115,6 @@ const DUPLICATE_FRACTION = 0.02
  * the first page carrying a month nobody scrolled to.
  */
 const RUN_PAGE = 25
-
-/**
- * The outcomes of a run that read the portal with the session it held.
- *
- * `reconciliation_failed` is one: a run only gets as far as reconciling once
- * it has read and written its weeks, so the session worked, and the week that
- * did not add up asks the owner on its own row. Treating only `ok` as proof
- * kept a lapse asking for a Reconnect the owner had just done (2026-11-12).
- * `awaiting_one_time_password`, a lapse and a changed shape prove nothing.
- */
-const READING_WORKED: readonly AggregatorRunOutcome[] = ['ok', 'reconciliation_failed']
 
 export function createSupabaseAggregatorSyncAdapter(
   client: SupabaseClient<Database>,

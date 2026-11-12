@@ -1,3 +1,18 @@
+/**
+ * The outcomes of a run that read the portal with the session it held.
+ *
+ * `reconciliation_failed` is one: a run only gets as far as reconciling once it
+ * has read and written its weeks, so the reads are working, and the week that
+ * did not add up asks the owner on its own row. Treating only `ok` as working
+ * kept a lapse asking for a Reconnect the owner had just done, and the health
+ * line reading "Stuck" beside a channel that was reading fine (2026-11-12).
+ */
+export const READING_WORKED = ['ok', 'reconciliation_failed'] as const
+
+export function readingWorked(outcome: string | null): boolean {
+  return (READING_WORKED as readonly string[]).includes(outcome ?? '')
+}
+
 /** A normal running sync is not work for a person. Failures and missing
  * credentials on a configured integration are; a never-configured one is not.
  * Stored expiry is advisory: the provider, through a failed read, decides when
