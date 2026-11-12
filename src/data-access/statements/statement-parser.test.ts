@@ -210,7 +210,8 @@ interface WorkbookOptions {
   orders?: WorkbookOrder[]
   hyperpure?: { amount: string; status?: string } | null
   tds?: string | null
-  previousWeek?: boolean
+  /** A balance carried from an earlier week, in section D. */
+  previousWeek?: { total: string; adjusted?: string; outstanding?: string }
   /** Overrides the sheet's own Total Deductions line. */
   totalDeductions?: string
   dropColumns?: string[]
@@ -332,13 +333,40 @@ function zomatoWorkbookBytes(options: WorkbookOptions = {}): Uint8Array {
     ])
     hyperpureTotal += Number(hyperpure.amount)
   }
-  const previous: string[][] = options.previousWeek
+  // Section D as the 26 Oct - 01 Nov 2026 workbook printed it: its own header
+  // naming `Order date`, `NA` for the reference and the status, and the carried
+  // balance counted inside the sheet's Total Deductions.
+  const carried = options.previousWeek
+  const previous: string[][] = carried
     ? [
-        deductionHeader('Invoice No'),
-        ['', 'Adjustment', 'NA', 'ADJ-1', '14 September 26 - 14 September 26', 'settled', '50'],
+        [
+          '',
+          'Type',
+          'NA',
+          'Invoice No/Order id',
+          'Order date',
+          'Settlement status',
+          'Total amount',
+          'Adjusted amount',
+          'Outstanding amount',
+        ],
+        [
+          '',
+          'Carry Forward payout from previous week',
+          'NA',
+          'NA',
+          '07 October 26 - 07 October 26',
+          'NA',
+          carried.total,
+          carried.adjusted ?? carried.total,
+          carried.outstanding ?? '0',
+        ],
+        ['', 'Total adjustments from previous weeks', '', '', '', '', carried.total],
       ]
     : []
-  const total = options.totalDeductions ?? String(growthTotal + hyperpureTotal)
+  const total =
+    options.totalDeductions ??
+    String(growthTotal + hyperpureTotal + (carried ? Number(carried.total) : 0))
 
   const adjustments = [
     ['', 'Addition/ Deduction Details (non-order level additions/deductions)'],
@@ -755,9 +783,32 @@ describe('the statement parser core', () => {
       )
     })
 
-    it('refuses an adjustment from a previous week rather than guessing its sign', () => {
-      expect(refusal({ previousWeek: true })).toMatch(
-        /adjustment from a previous week \(Adjustment ADJ-1\)/,
+    it('subtracts a balance carried from an earlier week, keyed as the sync keys it', () => {
+      // Measured 2026-11-12: Zomato counts the carried row inside Total
+      // Deductions and pays the week's orders less it.
+      const [cycle] = settle({ previousWeek: { total: '1010.75' } })
+      expect(cycle?.cycle_deductions).toEqual([
+        {
+          kind: 'other_adjustment',
+          period_start: '2026-10-07',
+          period_end: '2026-10-07',
+          amount_paise: -101075,
+          source_ref:
+            'zomato-workbook:previous:2026-10-07:Carry Forward payout from previous week:2026-09-21',
+        },
+      ])
+      expect(cycle?.stated_payout_paise).toBe(36012 + 16675 + 53450 - 96150 - 101075)
+      // Belongs to no trading day, so it is not an expense.
+      expect(cycle?.deductions).toEqual([
+        expect.objectContaining({ source_ref: 'hyperpure:30540356' }),
+      ])
+    })
+
+    it('refuses a carried balance with part still outstanding, naming it', () => {
+      expect(
+        refusal({ previousWeek: { total: '1010.75', adjusted: '600', outstanding: '410.75' } }),
+      ).toMatch(
+        /Carry Forward payout from previous week .*₹410\.75 of it still outstanding.*nothing was written/,
       )
     })
 

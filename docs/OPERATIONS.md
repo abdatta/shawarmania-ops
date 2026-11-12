@@ -970,8 +970,14 @@ Notes that save a support call:
 - **A Zomato workbook is refused, by reason, when it cannot be settled
   faithfully:** it names no week, it covers two restaurants, its restaurant is not
   one you may write for, its itemised deductions do not add up to its own totals
-  (both amounts are named), or it carries an adjustment from a previous week,
-  whose sign no workbook has yet proved.
+  (both amounts are named), or a balance it carries from an earlier week still
+  has part outstanding.
+- **A balance carried from an earlier week is subtracted, not refused.** A Zomato
+  week that nets negative (penalties with no sales) is never paid; Zomato takes
+  the balance from the next week that earns, listing it under *Adjustments from
+  previous weeks*. The upload, like the robot, holds it as a week-level
+  deduction under the robot's own key, never as an expense: 26 Oct - 01 Nov 2026
+  paid ₹1,174.62 less ₹1,010.75 of rejection penalties from 28 Sep and 1 Oct.
 - **A week the robot already settled is left alone.** The upload says so, and
   says whether your file agrees with the payout held, to the rupee.
 - **The upload writes only the outlets you may reach**, derived from your own

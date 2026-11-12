@@ -726,6 +726,9 @@ interface AdjustmentColumns {
   period: number
   status: number
   total: number
+  /** -1 where a table has no such column. */
+  adjusted: number
+  outstanding: number
 }
 
 /**
@@ -783,6 +786,8 @@ function parseZomatoAdjustments(
         period: at(/period|date/i),
         status: at(/^settlement status$/i),
         total: totalAt,
+        adjusted: at(/^adjusted amount$/i),
+        outstanding: at(/^outstanding amount$/i),
       }
       return
     }
@@ -803,10 +808,49 @@ function parseZomatoAdjustments(
     if (!type) return
     const amount = toPaise(cell(row, columns.total), `${type} amount`)
     const ref = present(cells[columns.ref] ?? '') || `row${index + 1}`
-    const status = (cells[columns.status] ?? '').toLowerCase()
-    if (status !== 'settled') result.pending.push(`${type} ${ref}`)
     const periodText = cells[columns.period] ?? ''
     const dated = parseZomatoPeriod(periodText)
+
+    /*
+     * A balance carried from an earlier week (design D1-D3).
+     *
+     * A week that nets negative is never paid; Zomato takes its balance from the
+     * next week that earns, and lists it only here. Its status cell reads `NA`,
+     * because a carried balance is netted rather than settled, so nothing
+     * outstanding is its proof instead. The sign was proved on the 26 Oct -
+     * 01 Nov 2026 workbook: the row is counted inside Total Deductions and the
+     * payout is the orders less it. Keyed exactly as the sync keys it, so the
+     * two paths write one row.
+     */
+    if (section === 'deductions' && group === 'previous') {
+      const outstanding =
+        columns.outstanding < 0
+          ? 0
+          : toPaise(present(cell(row, columns.outstanding)) || '0', `${type} outstanding`)
+      if (outstanding !== 0) {
+        throw new StatementShapeError(
+          `the balance ${type} (${periodText}) carried from an earlier week has ${rupees(outstanding)} of it still outstanding, which an upload cannot place yet; nothing was written`,
+        )
+      }
+      if (!dated) {
+        throw new StatementShapeError(
+          `the balance ${type} carried from an earlier week names a period this reader cannot parse: "${periodText}"`,
+        )
+      }
+      const taken =
+        columns.adjusted < 0 ? amount : toPaise(cell(row, columns.adjusted), `${type} adjusted`)
+      result.cycleDeductions.push({
+        kind: 'other_adjustment',
+        period_start: dated.start,
+        period_end: dated.end,
+        amount_paise: -taken,
+        source_ref: `zomato-workbook:previous:${dated.start}:${type}:${week.start}`,
+      })
+      return
+    }
+
+    const status = (cells[columns.status] ?? '').toLowerCase()
+    if (status !== 'settled') result.pending.push(`${type} ${ref}`)
 
     if (section === 'additions') {
       result.cycleDeductions.push({
@@ -817,14 +861,6 @@ function parseZomatoAdjustments(
         source_ref: `zomato-workbook:addition:${type}:${ref}`,
       })
       return
-    }
-    if (group === 'previous') {
-      // Zomato's own label puts these outside `Total Deductions (A)+(B)+(C)`,
-      // and no measured workbook has carried one, so their sign in the payout is
-      // unproved. Refused by name rather than guessed.
-      throw new StatementShapeError(
-        `this workbook carries an adjustment from a previous week (${type} ${ref}), which an upload cannot place yet; nothing was written`,
-      )
     }
     if (group === 'other' || (group === 'growth' && /tds/i.test(type))) {
       const tax = group === 'growth'
