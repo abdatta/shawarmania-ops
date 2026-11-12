@@ -86,7 +86,7 @@ describe('live kitchen dish contract', () => {
     expect(board.orders[0]).not.toHaveProperty('readyId')
   })
 
-  it('reads the board and marks through the _v2 functions', async () => {
+  it('reads the board through _v3 and the marks through _v2', async () => {
     const rpc = vi.fn(async (name: string) => ({
       data: name.startsWith('counter_kitchen_marks') ? marksJson : receiptBoard,
       error: null,
@@ -96,7 +96,7 @@ describe('live kitchen dish contract', () => {
     await kitchen.readDishBoard()
     await kitchen.readDishMarks()
     expect(rpc.mock.calls.map(([name]) => name)).toEqual([
-      'kitchen_board_v2',
+      'kitchen_board_v3',
       'counter_kitchen_marks_v2',
     ])
   })

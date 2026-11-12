@@ -17,7 +17,6 @@ import { SessionContext } from '@/session/context'
 import { AnalyticsRange } from './analytics-range'
 import { ItemsPanel } from './items-panel'
 import { AnalyticsControls } from './analytics-controls'
-import { useChangeGate } from '@/change-gates/context'
 import { OrderScopePill } from '@/features/billing/order-scope'
 import { useRememberedScope } from '@/features/billing/order-scope-memory'
 import { ITEM_GRAINS, ITEM_METRICS, SALES_GRAINS, SALES_METRICS } from './analytics-trend'
@@ -85,9 +84,7 @@ function OutletAnalytics({
     D7). Delivery orders carry no money, so in Delivery the measure is Orders on
     Sales and Items on Items, and the money measures say why they are unavailable.
   */
-  const deliveryGate = useChangeGate('delivery-orders')
-  const [scopeChosen, setScope] = useRememberedScope(isItems ? 'items' : 'sales')
-  const scope = deliveryGate ? scopeChosen : 'counter'
+  const [scope, setScope] = useRememberedScope(isItems ? 'items' : 'sales')
   const delivery = scope === 'delivery'
   const metric = delivery
     ? 'orders'
@@ -113,7 +110,7 @@ function OutletAnalytics({
       : 'equal'
   const cut = isSales && today !== null && to === today
   const itemsCut = isItems && today !== null && to === today
-  const readKey = `${outletId}:${from}:${to}:${kind}:${readPeriods}${isSales ? `:${align}:${cut}` : `:cut:${itemsCut}`}${deliveryGate ? `:${scope}` : ''}`
+  const readKey = `${outletId}:${from}:${to}:${kind}:${readPeriods}${isSales ? `:${align}:${cut}` : `:cut:${itemsCut}`}:${scope}`
   const data = loaded?.key === readKey ? loaded.data : null
   const [error, setError] = useState(false)
   const [retry, setRetry] = useState(0)
@@ -148,7 +145,7 @@ function OutletAnalytics({
               align: 'equal' as const,
               cut: itemsCut,
             }),
-        ...(deliveryGate ? { scope } : {}),
+        scope,
       })
       .then((next) => {
         if (alive) {
@@ -251,18 +248,9 @@ function OutletAnalytics({
         month={isSales ? { selected: align === 'month' } : null}
       />
       <AnalyticsControls
-        {...(deliveryGate
-          ? {
-              scope: (
-                <OrderScopePill
-                  scope={scope}
-                  onChange={setScope}
-                  testId="analytics-scope"
-                  compact
-                />
-              ),
-            }
-          : {})}
+        scope={
+          <OrderScopePill scope={scope} onChange={setScope} testId="analytics-scope" compact />
+        }
         {...(delivery
           ? {
               unavailable: {

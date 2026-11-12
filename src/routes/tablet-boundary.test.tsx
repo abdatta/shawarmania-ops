@@ -166,14 +166,14 @@ function watchFor(selector: string) {
 
 const PASSWORD = 'input[type=password]'
 
-async function visit(path: string, state: RealSessionState, gateOn: boolean, routes = appRoutes) {
+async function visit(path: string, state: RealSessionState, routes = appRoutes) {
   harness.state = state
   const password = watchFor(PASSWORD)
   const counterShell = watchFor('[data-testid=counter-shell]')
   const kitchenShell = watchFor('[data-testid=kitchen-shell]')
   const router = createMemoryRouter(routes, { initialEntries: [path] })
   render(
-    <ChangeGatesForTest on={{ 'a-tablet-keeps-its-login': gateOn }}>
+    <ChangeGatesForTest on={{}}>
       <RouterProvider router={router} />
     </ChangeGatesForTest>,
   )
@@ -259,7 +259,7 @@ describe('the addresses a tablet may open', () => {
   })
 })
 
-describe('with a-tablet-keeps-its-login on', () => {
+describe('a set-up tablet keeps its login', () => {
   describe.each([
     ['counter', COUNTER, 'counter-shell'],
     ['kitchen', KITCHEN, 'kitchen-shell'],
@@ -268,11 +268,10 @@ describe('with a-tablet-keeps-its-login on', () => {
       'opens %s and lands on its own branch, with no password field ever drawn',
       async (path) => {
         storeTabletSession()
-        const { router, password, counterShell, kitchenShell } = await visit(
-          path,
-          { status: 'counter', device },
-          true,
-        )
+        const { router, password, counterShell, kitchenShell } = await visit(path, {
+          status: 'counter',
+          device,
+        })
         const landing = stayFor(device, path)
           ? new URL(path, 'http://x').pathname
           : homeFor(device.device)
@@ -289,7 +288,7 @@ describe('with a-tablet-keeps-its-login on', () => {
     'holds %s behind a wait while a stored tablet session resolves, and draws no password field',
     async (path) => {
       storeTabletSession()
-      const { router, password } = await visit(path, { status: 'loading' }, true)
+      const { router, password } = await visit(path, { status: 'loading' })
       expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true')
       expect(router.state.location.pathname).toBe(new URL(path, 'http://x').pathname)
       expect(password.seen).toBe(false)
@@ -300,7 +299,7 @@ describe('with a-tablet-keeps-its-login on', () => {
     'offers a retry, not %s, when a stored tablet session cannot be confirmed',
     async (path) => {
       storeTabletSession()
-      const { password } = await visit(path, { status: 'unavailable' }, true)
+      const { password } = await visit(path, { status: 'unavailable' })
       expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
       expect(password.seen).toBe(false)
     },
@@ -309,7 +308,7 @@ describe('with a-tablet-keeps-its-login on', () => {
   it.each(['/counter', '/kitchen', '/counter/setup'])(
     'never draws a tablet screen for a person at %s',
     async (path) => {
-      const { router, counterShell, kitchenShell } = await visit(path, PERSON, true)
+      const { router, counterShell, kitchenShell } = await visit(path, PERSON)
       await waitFor(() => expect(router.state.location.pathname).toBe('/admin'))
       expect(counterShell.seen).toBe(false)
       expect(kitchenShell.seen).toBe(false)
@@ -317,14 +316,14 @@ describe('with a-tablet-keeps-its-login on', () => {
   )
 
   it.each(['/counter', '/kitchen'])('sends a signed-out visitor at %s to sign-in', async (path) => {
-    const { router, counterShell, kitchenShell } = await visit(path, { status: 'anonymous' }, true)
+    const { router, counterShell, kitchenShell } = await visit(path, { status: 'anonymous' })
     await waitFor(() => expect(router.state.location.pathname).toBe('/sign-in'))
     expect(counterShell.seen).toBe(false)
     expect(kitchenShell.seen).toBe(false)
   })
 
   it('still lets a signed-out visitor, and a fresh browser, see the sign-in form', async () => {
-    const { password } = await visit('/sign-in', { status: 'loading' }, true)
+    const { password } = await visit('/sign-in', { status: 'loading' })
     expect(password.seen).toBe(true)
   })
 })
@@ -363,7 +362,6 @@ describe('a page added after this change', () => {
     const { router, password } = await visit(
       '/forgot-password',
       { status: 'counter', device: COUNTER },
-      true,
       routes,
     )
     await waitFor(() => expect(router.state.location.pathname).toBe('/counter'))
@@ -401,49 +399,20 @@ describe('a page added after this change', () => {
     expect(realPaths(routes)).toContain('/counter/expenses')
 
     storeTabletSession()
-    const counter = await visit(
-      '/counter/expenses',
-      { status: 'counter', device: COUNTER },
-      true,
-      routes,
-    )
+    const counter = await visit('/counter/expenses', { status: 'counter', device: COUNTER }, routes)
     expect(counter.router.state.location.pathname).toBe('/counter/expenses')
     expect(screen.getByTestId('counter-expenses')).toBeInTheDocument()
     cleanup()
 
     const expenses = watchFor('[data-testid=counter-expenses]')
-    const kitchen = await visit(
-      '/counter/expenses',
-      { status: 'counter', device: KITCHEN },
-      true,
-      routes,
-    )
+    const kitchen = await visit('/counter/expenses', { status: 'counter', device: KITCHEN }, routes)
     await waitFor(() => expect(kitchen.router.state.location.pathname).toBe('/kitchen'))
     cleanup()
     localStorage.clear()
 
-    const person = await visit('/counter/expenses', PERSON, true, routes)
+    const person = await visit('/counter/expenses', PERSON, routes)
     await waitFor(() => expect(person.router.state.location.pathname).toBe('/admin'))
     expect(expenses.seen).toBe(false)
     expenses.stop()
-  })
-})
-
-describe('with a-tablet-keeps-its-login off', () => {
-  it('shows the sign-in form on a set-up tablet, as before', async () => {
-    storeTabletSession()
-    const { router, password } = await visit(
-      '/sign-in',
-      { status: 'counter', device: COUNTER },
-      false,
-    )
-    expect(router.state.location.pathname).toBe('/sign-in')
-    expect(password.seen).toBe(true)
-  })
-
-  it('shows the sign-in form while a stored tablet session resolves, as before', async () => {
-    storeTabletSession()
-    const { password } = await visit('/sign-in', { status: 'loading' }, false)
-    expect(password.seen).toBe(true)
   })
 })

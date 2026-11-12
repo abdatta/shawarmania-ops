@@ -1,9 +1,7 @@
 import {
   addMonths,
   alreadyPaidIn,
-  balance,
   lastDayOf,
-  monthCost,
   monthOf,
   payEffect,
   payPrompt,
@@ -236,20 +234,6 @@ export function createMockFixedCostsAdapter(
 
     async changeAmount(fixedCostId, fromMonth, amountPaise) {
       addAmount(find(fixedCostId), fromMonth, amountPaise)
-    },
-
-    async stop(fixedCostId, stopsOn, clearAhead) {
-      const row = find(fixedCostId)
-      if (stopsOn < row.starts_on)
-        throw new DataActionError('refused', 'It cannot stop before it started.')
-      row.stops_on = stopsOn
-      row.updated_at = now()
-      if (clearAhead) {
-        const facts = demoFixedCostFacts(store, row)
-        const last = monthOf(stopsOn)
-        const ahead = -balance(facts, last)
-        if (ahead > 0) settle(row, last, monthCost(facts, last) + ahead)
-      }
     },
 
     async close(closing) {

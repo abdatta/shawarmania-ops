@@ -53,30 +53,6 @@ const WORDS: Record<
     offMeans: 'PB is not in the build code.',
     changeNumber: 75,
   },
-  'agreed-part-months': {
-    title: 'Agreed part months',
-    onMeans:
-      'A fixed cost that starts or stops part-way through a month costs the figure agreed for that month, stopping asks for the final payment, and a stopped cost stays in its place, marked done, for the month it stopped in.',
-    offMeans:
-      'A part month costs its share by days, and stopped fixed costs sit under Stopped at the foot of the list.',
-    changeNumber: 79,
-  },
-  'a-tablet-keeps-its-login': {
-    title: 'A tablet keeps its login',
-    onMeans:
-      'A set-up tablet opens only its own counter or kitchen page, whatever address it is given, and nobody can sign in as a person on it.',
-    offMeans:
-      'A set-up tablet can still open the sign-in and activation pages, and a person signing in there replaces the tablet’s login.',
-    changeNumber: null,
-  },
-  'delivery-orders': {
-    title: 'Delivery orders',
-    onMeans:
-      'An outlet may offer Delivery, whose orders the kitchen makes and the counter hands to a rider without a bill, labels are kept after an order leaves the rail, and Stats, Billing History, Items and Sales can show delivery orders alone.',
-    offMeans:
-      'Every order is billed or cancelled, labels go when an order leaves the rail, and no page shows delivery orders.',
-    changeNumber: 83,
-  },
   'deactivate-then-leave': {
     title: 'Deactivate, then leave',
     onMeans:

@@ -1,4 +1,3 @@
-import { onDeliveryOrders } from '@/change-gates/delivery-orders'
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 
 import {
@@ -98,14 +97,12 @@ const OUTLET_MENU_COLUMNS =
   `discount_presets, collect_customer_details, dine_in_offered, takeaway_offered, table_numbers, packaging_mode, packaging_price_paise, packaging_free_for_gold, menu_slug, ${OUTLET_LOYALTY_COLUMNS}` as const
 
 /**
- * The outlet's choices that travel with its menu; with `delivery-orders` on,
- * whether it offers Delivery too, so a tablet cold-started offline still does
- * (delivery-orders-are-made-not-billed). One read either way.
+ * The outlet's choices that travel with its menu, and whether it offers
+ * Delivery too, so a tablet cold-started offline still does
+ * (delivery-orders-are-made-not-billed). One read.
  */
 function outletMenuColumns(): typeof OUTLET_MENU_COLUMNS {
-  return (
-    onDeliveryOrders() ? `${OUTLET_MENU_COLUMNS}, delivery_offered` : OUTLET_MENU_COLUMNS
-  ) as typeof OUTLET_MENU_COLUMNS
+  return `${OUTLET_MENU_COLUMNS}, delivery_offered` as typeof OUTLET_MENU_COLUMNS
 }
 
 export function createSupabaseMenuAdapter(

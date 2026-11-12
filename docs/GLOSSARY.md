@@ -92,7 +92,7 @@ order **Prepared**. A [delivery order](#delivery-order) is never paid: it ends
 
 ### Delivery order
 
-*(#83, gate `delivery-orders`.)* An order rung under the **Delivery** service at
+*(#83.)* An order rung under the **Delivery** service at
 an outlet that offers it, for a Swiggy or Zomato rider. The kitchen makes it like
 any other and the counter ticks its dishes, but it carries no money: no price on
 the counter's card, no total, no customer, no discount, and it can never be paid
@@ -210,7 +210,7 @@ A kitchen's acknowledgement of a card that is alerting — new, edited or cancel
 
 ### Label
 
-*(#74.)* A few optional letters typed at the top of the composer — a name, "red shirt" — that headline an order's card on the counter and nowhere else. Not a customer: it never touches the customer's name or phone, though at payment it is offered as the name for a number with none. Held in `order_labels` while the order is on the rail. With `delivery-orders` on (#83) it is **kept** after the order leaves, in `kept_order_labels`, so a delivery order's aggregator reference (*SWG 3342*) and a bill's label can be found in My shift and Billing history; still on no receipt, report or export, and never shown to a kitchen. With the gate off it is thrown away, in the database, when the order leaves the rail.
+*(#74.)* A few optional letters typed at the top of the composer — a name, "red shirt" — that headline an order's card on the counter and nowhere else. Not a customer: it never touches the customer's name or phone, though at payment it is offered as the name for a number with none. Held in `order_labels` while the order is on the rail. Since #83 it is **kept** after the order leaves, in `kept_order_labels`, so a delivery order's aggregator reference (*SWG 3342*) and a bill's label can be found in My shift and Billing history; still on no receipt, report or export, and never shown to a kitchen.
 
 ### Note
 

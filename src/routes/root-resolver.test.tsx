@@ -34,6 +34,8 @@ const auth = vi.hoisted(() => ({
   previewInvite: vi.fn(),
   redeemInvite: vi.fn(),
   onAuthChange: vi.fn(),
+  // Asked by the tablet boundary while a session resolves.
+  storedSessionIsDeviceNow: () => false,
   MIN_PASSWORD_LENGTH: 10,
   SignInError: class extends Error {},
   ActivationError: class extends Error {},

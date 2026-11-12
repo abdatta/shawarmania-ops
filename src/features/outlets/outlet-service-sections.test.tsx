@@ -132,7 +132,11 @@ describe('the outlet page’s Orders', () => {
     renderPage(OUTLET_KALYANI_ID)
 
     const orders = await screen.findByTestId('service-orders')
-    expect(within(orders).getAllByRole('switch')).toHaveLength(2)
+    expect(within(orders).getAllByRole('switch')).toHaveLength(3)
+    expect(within(orders).getByRole('switch', { name: 'Delivery' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
     expect(within(orders).getByRole('switch', { name: 'Dine-in and takeaway' })).toHaveAttribute(
       'aria-checked',
       'false',

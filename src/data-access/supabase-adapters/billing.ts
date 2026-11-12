@@ -1,4 +1,3 @@
-import { onDeliveryOrders } from '@/change-gates/delivery-orders'
 import { liveQuery, type Subscription } from 'dexie'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -123,22 +122,22 @@ interface HandoverOrderRow {
 const BILL_SELECT =
   '*, bill_items(*), bill_discounts(*), bill_public_links(token, revoked_at), bill_receipt_deliveries(state, failure_code), bill_payments(*), order:orders!bills_order_id_fkey(order_number, prepared_at), biller:profiles!bills_biller_profile_id_fkey(full_name), enterer:profiles!bills_entered_by_fkey(full_name), voider:profiles!bills_voided_by_fkey(id, full_name), attribution_reviews:billing_attribution_reviews(*, resolved_operator:profiles!billing_attribution_reviews_resolved_operator_id_fkey(full_name), reviewer:profiles!billing_attribution_reviews_reviewed_by_fkey(full_name))'
 
-/** With `delivery-orders` on, each bill's order brings the label it carried. */
+/** Each bill's order brings the label it carried (delivery-orders-are-made-not-billed, D6). */
 const BILL_SELECT_LABELS = BILL_SELECT.replace(
   'order:orders!bills_order_id_fkey(order_number, prepared_at)',
   'order:orders!bills_order_id_fkey(order_number, prepared_at, order_labels(label), kept_order_labels(label))',
 )
 
 function billSelect(): typeof BILL_SELECT {
-  return (onDeliveryOrders() ? BILL_SELECT_LABELS : BILL_SELECT) as typeof BILL_SELECT
+  return BILL_SELECT_LABELS as typeof BILL_SELECT
 }
 
-/** The same read with each order's delivery row, while `delivery-orders` is on. */
+/** The same read with each order's delivery row. */
 const ORDER_SELECT_DELIVERY = `${ORDER_SELECT}, delivery_orders(handed_over_at)` as const
 
 /** Which order read this page makes (delivery-orders-are-made-not-billed, D6). */
 function orderSelect(): typeof ORDER_SELECT {
-  return (onDeliveryOrders() ? ORDER_SELECT_DELIVERY : ORDER_SELECT) as typeof ORDER_SELECT
+  return ORDER_SELECT_DELIVERY as typeof ORDER_SELECT
 }
 type BillReadRow = Tables<'bills'> & {
   bill_items: Tables<'bill_items'>[]
@@ -1528,7 +1527,6 @@ export function createSupabaseBillingAdapter(
       effective = response.data as EffectivePaymentRow[]
       deviceLabels = labels
     }
-    const labels = onDeliveryOrders()
     const serverBills = rows.map((row) => {
       const bill = billView(
         row,
@@ -1540,7 +1538,6 @@ export function createSupabaseBillingAdapter(
         ),
         deviceLabels.get(row.id) ?? null,
       )
-      if (!labels) return bill
       // The order's label, kept after it left the rail; never printed on the bill.
       const order = joined(row.order)
       return {
@@ -2245,21 +2242,13 @@ export function createSupabaseBillingAdapter(
         shiftId: shift.id,
         type: 'create_order',
         createdAt: new Date().toISOString(),
-        ...(onDeliveryOrders()
-          ? {
-              // To `create_billing_order_v3` however long it waits, the gate
-              // or not (delivery-orders-are-made-not-billed, D9).
-              payload: {
-                ...orderPayload(input.clientId, input.businessDate, input),
-                delivery: Boolean(input.delivery),
-              },
-              variant: 'delivery' as const,
-            }
-          : {
-              payload: orderPayload(input.clientId, input.businessDate, input),
-              // To `create_billing_order_v2` however long it waits (design R3).
-              variant: 'dishes' as const,
-            }),
+        // To `create_billing_order_v3` however long it waits
+        // (delivery-orders-are-made-not-billed, D9).
+        payload: {
+          ...orderPayload(input.clientId, input.businessDate, input),
+          delivery: Boolean(input.delivery),
+        },
+        variant: 'delivery' as const,
       })
       await accept(command, input.outletId, input.businessDate, input.clientId)
       const localOrder: BillingOrder = {
@@ -2295,7 +2284,7 @@ export function createSupabaseBillingAdapter(
         cancelledByName: null,
         paidAt: null,
         billId: null,
-        ...(onDeliveryOrders() && input.delivery ? { delivery: true, handedOverAt: null } : {}),
+        ...(input.delivery ? { delivery: true, handedOverAt: null } : {}),
       }
       orderCache.set(input.clientId, localOrder)
       wroteLocally(input.clientId)
@@ -2313,19 +2302,11 @@ export function createSupabaseBillingAdapter(
         shiftId: shift.id,
         type: 'revise_order',
         createdAt: new Date().toISOString(),
-        ...(onDeliveryOrders()
-          ? {
-              payload: {
-                ...orderPayload(orderId, existing.businessDate, input),
-                delivery: Boolean(input.delivery),
-              },
-              variant: 'delivery' as const,
-            }
-          : {
-              payload: orderPayload(orderId, existing.businessDate, input),
-              // To `revise_billing_order_v2` however long it waits (design R3).
-              variant: 'dishes' as const,
-            }),
+        payload: {
+          ...orderPayload(orderId, existing.businessDate, input),
+          delivery: Boolean(input.delivery),
+        },
+        variant: 'delivery' as const,
       })
       await accept(command, existing.outletId, existing.businessDate, orderId)
       const revisedTotals = billTotals(input.lines, {
@@ -2344,7 +2325,7 @@ export function createSupabaseBillingAdapter(
         discounts: [...(input.discounts ?? [])],
         roundingPaise: revisedTotals.roundingPaise,
         totalPaise: revisedTotals.totalPaise,
-        ...(onDeliveryOrders() ? { delivery: Boolean(input.delivery) } : {}),
+        delivery: Boolean(input.delivery),
       }
       orderCache.set(orderId, revised)
       wroteLocally(orderId)
@@ -2653,7 +2634,6 @@ export function createSupabaseBillingAdapter(
         b.paidAt.localeCompare(a.paidAt),
       )
       shiftBillsHeld.set(shiftId, bills)
-      if (!onDeliveryOrders()) return shiftHistoryOf(bills)
       const deliveries = await readShiftHandovers(shiftId, known)
       return { ...shiftHistoryOf(bills), deliveries }
     },
@@ -2669,7 +2649,6 @@ export function createSupabaseBillingAdapter(
         await overlayDurableBills(shiftId, held, await shiftEnvelopes(shiftId), false)
       ).sort((a, b) => b.paidAt.localeCompare(a.paidAt))
       shiftBillsHeld.set(shiftId, bills)
-      if (!onDeliveryOrders()) return shiftHistoryOf(bills)
       return {
         ...shiftHistoryOf(bills),
         deliveries: overlayHandovers(
@@ -2682,30 +2661,24 @@ export function createSupabaseBillingAdapter(
     async listManagerBillRows(outletId, businessDate, filter, options) {
       // One page of what the folded cards print, sorted and filtered by the
       // server over the whole day (billing-history-reads-what-it-shows, D1).
-      // `delivery-orders` reads `_v2`, whose rows carry the order's label
-      // (delivery-orders-are-made-not-billed, D6); off, today's read.
-      const delivery = onDeliveryOrders()
-      const { data, error } = await client.rpc(
-        delivery ? 'billing_history_bills_v2' : 'billing_history_bills',
-        {
-          p_outlet_id: outletId,
-          p_business_date: businessDate,
-          p_filter: filter as unknown as Json,
-          p_limit: options?.limit ?? MANAGER_BILL_ROWS_PAGE_SIZE,
-          ...(options?.after ? { p_after: options.after as unknown as Json } : {}),
-        },
-      )
+      // `_v2`'s rows carry the order's label (delivery-orders-are-made-not-billed, D6).
+      const { data, error } = await client.rpc('billing_history_bills_v2', {
+        p_outlet_id: outletId,
+        p_business_date: businessDate,
+        p_filter: filter as unknown as Json,
+        p_limit: options?.limit ?? MANAGER_BILL_ROWS_PAGE_SIZE,
+        ...(options?.after ? { p_after: options.after as unknown as Json } : {}),
+      })
       if (error) throw actionError(error, 'Could not load billing history.')
       const page = data as unknown as {
         rows: (BillRowRead & { order_label?: string | null })[]
         matching: number
       }
       return {
-        rows: page.rows.map((row) =>
-          delivery
-            ? { ...billRowView(row), orderLabel: row.order_label ?? null }
-            : billRowView(row),
-        ),
+        rows: page.rows.map((row) => ({
+          ...billRowView(row),
+          orderLabel: row.order_label ?? null,
+        })),
         matching: page.matching,
       }
     },
@@ -2734,15 +2707,12 @@ export function createSupabaseBillingAdapter(
     },
 
     async readDayNumbers(outletId, businessDate) {
-      // `delivery-orders` reads `_v2`: Stats without delivery orders, and
-      // their own Stats beside (delivery-orders-are-made-not-billed, D6).
-      const { data, error } = await client.rpc(
-        onDeliveryOrders() ? 'billing_day_numbers_v2' : 'billing_day_numbers',
-        {
-          p_outlet_id: outletId,
-          p_business_date: businessDate,
-        },
-      )
+      // `_v2`: Stats without delivery orders, and their own Stats beside
+      // (delivery-orders-are-made-not-billed, D6).
+      const { data, error } = await client.rpc('billing_day_numbers_v2', {
+        p_outlet_id: outletId,
+        p_business_date: businessDate,
+      })
       if (error) throw actionError(error, 'Could not load the day’s figures.')
       const day = data as unknown as DayNumbersRead & { deliveryStats?: DeliveryDayStats }
       const now = Date.now()

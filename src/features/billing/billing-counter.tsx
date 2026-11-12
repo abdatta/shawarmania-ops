@@ -1,4 +1,3 @@
-import { useChangeGate } from '@/change-gates/context'
 import { KeyRound } from 'lucide-react'
 import {
   useCallback,
@@ -70,7 +69,7 @@ import { SessionContext } from '@/session/context'
 import { CounterDeviceContext } from '@/session/counter-context'
 import { normalizeIndianPhone } from '../../../shared/phone'
 
-import { BillComposerFooter, CustomerRow, CustomerServiceRow } from './bill-composer-footer'
+import { BillComposerFooter, CustomerRow } from './bill-composer-footer'
 import { BillDiscountRows } from './bill-discount-rows'
 import { CustomerDialog, type CustomerSelection } from './customer-dialog'
 import { DiscountDialog } from './discount-dialog'
@@ -353,12 +352,11 @@ export function BillingCounter({
   const [tableNumber, setTableNumber] = useState<number | null>(null)
   /*
     A delivery order (delivery-orders-are-made-not-billed, D7): the kitchen
-    makes it and the counter hands it over without a bill. Only `delivery-orders`
-    on, at an outlet offering Delivery, ever sets it.
+    makes it and the counter hands it over without a bill. Only an outlet
+    offering Delivery ever sets it.
   */
-  const deliveryGate = useChangeGate('delivery-orders')
   const [delivery, setDelivery] = useState(false)
-  const deliveryOffered = deliveryGate && Boolean(serviceSettings.deliveryOffered)
+  const deliveryOffered = Boolean(serviceSettings.deliveryOffered)
   /**
    * The packaging this order carries: the price captured when it was added, and
    * the bags. Null when there is none — dine-in, removed by the biller, or an
@@ -1041,7 +1039,7 @@ export function BillingCounter({
       serviceType: order.serviceType ?? null,
       tableNumber: order.tableNumber ?? null,
       packaging: saved.packaging,
-      delivery: deliveryGate && Boolean(order.delivery),
+      delivery: Boolean(order.delivery),
     })
     setPaymentDialogOpen(false)
     setError(null)
@@ -1085,7 +1083,7 @@ export function BillingCounter({
         ...customerSnapshots(customer),
         serviceType,
         tableNumber: serviceType === 'dine_in' ? tableNumber : null,
-        ...(deliveryGate ? { delivery } : {}),
+        delivery,
       })
       clearPanel()
       setRailSave((value) => value + 1)
@@ -1119,7 +1117,7 @@ export function BillingCounter({
         ...customerSnapshots(customer),
         serviceType,
         tableNumber: serviceType === 'dine_in' ? tableNumber : null,
-        ...(deliveryGate ? { delivery } : {}),
+        delivery,
       })
       leaveOrderEdit()
       setRailSave((value) => value + 1)
@@ -1345,7 +1343,7 @@ export function BillingCounter({
     </>
   )
   const customerAtTop =
-    deliveryGate && !delivery && (serviceSettings.collectCustomerDetails ?? true) ? (
+    !delivery && (serviceSettings.collectCustomerDetails ?? true) ? (
       <div className="border-b border-border px-3 py-2">
         <CustomerRow customer={customer} onOpen={openCustomerDialog} />
       </div>
@@ -1353,14 +1351,11 @@ export function BillingCounter({
 
   const composerFooter = (
     <BillComposerFooter
-      {...(deliveryGate ? { orderLabel: labelInput } : {})}
+      orderLabel={labelInput}
       lines={billLines}
-      collectCustomerDetails={serviceSettings.collectCustomerDetails ?? true}
-      customer={customer}
       service={serviceChips}
       settling={settling}
       editing={editingOrder !== null}
-      onOpenCustomer={openCustomerDialog}
       onPaid={() => {
         setError(null)
         setPaymentDialogOpen(true)
@@ -1468,13 +1463,7 @@ export function BillingCounter({
           <>
             <BillPanel
               lines={billLines}
-              labelField={
-                deliveryGate ? (
-                  customerAtTop
-                ) : (
-                  <div className="border-b border-border px-3 py-2">{labelInput}</div>
-                )
-              }
+              labelField={customerAtTop}
               onNote={(line: BillLineDraft, made: number) => {
                 setNoteLine(line)
                 setNoteMade(made)
@@ -1563,20 +1552,11 @@ export function BillingCounter({
                       biller who has just learnt where the customer goes should
                       not have to go looking for it again on the way back in.
                     */
-                    footer: deliveryGate ? (
+                    footer: (
                       <div className="space-y-3">
                         <div>{labelInput}</div>
                         {serviceChips}
                       </div>
-                    ) : (
-                      <CustomerServiceRow
-                        collectCustomerDetails={
-                          !delivery && (serviceSettings.collectCustomerDetails ?? true)
-                        }
-                        customer={customer}
-                        onOpen={openCustomerDialog}
-                        service={serviceChips}
-                      />
                     ),
                   }
                 : { footer: composerFooter })}

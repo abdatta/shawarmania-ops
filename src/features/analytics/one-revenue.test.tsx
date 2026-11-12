@@ -49,6 +49,7 @@ it('Sales offers Month in place of 30 days, and reads it month-aligned and cut',
     periods: 2,
     align: 'equal',
     cut: true,
+    scope: 'counter',
   })
   vi.useRealTimers()
   await userEvent.click(screen.getByRole('button', { name: 'This month' }))
@@ -58,6 +59,7 @@ it('Sales offers Month in place of 30 days, and reads it month-aligned and cut',
     periods: 2,
     align: 'month',
     cut: true,
+    scope: 'counter',
   })
 })
 
@@ -72,6 +74,7 @@ it('Items keeps its range and asks for its dish figures cut', async () => {
     periods: 2,
     align: 'equal',
     cut: true,
+    scope: 'counter',
   })
 })
 

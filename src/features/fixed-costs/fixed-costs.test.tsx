@@ -27,7 +27,7 @@ import { OutletExpensesSurface } from '@/features/expenses/outlet-expenses-surfa
 import { OutletsOverview } from '@/features/overview/outlets-overview'
 import { SessionContext } from '@/session/context'
 import { deriveSessionScope, type Session } from '@/session/session'
-import { ChangeGatesForTest, describeChangeGate } from '@/test/change-gates'
+import { ChangeGatesForTest } from '@/test/change-gates'
 import { FixedCostPage, FixedCostsSurface } from './fixed-costs-surface'
 import { currentProRata, ProRataRows } from './ledger-fixed-costs'
 import { overdueTone, overdueWords, shortMonths } from './words'
@@ -676,12 +676,12 @@ it('tints a row tapped to open its page, and leaves its Pay alone', async () => 
 })
 
 /**
- * `agreed-part-months` (part-months-cost-what-was-agreed): a part month costs
- * the figure agreed for it, stopping asks for the final payment, and a stopped
- * cost keeps its place for the month it stopped in. Off, the day share and the
- * Stopped section as before. Read on 30 October, Jayanta Da's case.
+ * Part months cost what was agreed (part-months-cost-what-was-agreed): a part
+ * month costs the figure agreed for it, stopping asks for the final payment,
+ * and a stopped cost keeps its place for the month it stopped in. Read on 30
+ * October, Jayanta Da's case.
  */
-describeChangeGate('agreed-part-months', (on) => {
+describe('a part month costs what was agreed', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-10-30T06:00:00Z')) // 30 Oct, 11:30 in Kolkata.
@@ -716,7 +716,7 @@ describeChangeGate('agreed-part-months', (on) => {
   function renderPage(adapters: DataAdapters, id: string) {
     return render(
       <MemoryRouter initialEntries={[`/fixed-costs/${id}?outlet=${KAL}`]}>
-        <ChangeGatesForTest on={{ 'agreed-part-months': on }}>
+        <ChangeGatesForTest on={{}}>
           <SessionContext.Provider value={sessionFor('super_admin')}>
             <AdaptersContext.Provider value={adapters}>
               <Routes>
@@ -732,7 +732,7 @@ describeChangeGate('agreed-part-months', (on) => {
   function renderList(adapters: DataAdapters) {
     return render(
       <MemoryRouter initialEntries={[`/?outlet=${KAL}`]}>
-        <ChangeGatesForTest on={{ 'agreed-part-months': on }}>
+        <ChangeGatesForTest on={{}}>
           <SessionContext.Provider value={sessionFor('super_admin')}>
             <AdaptersContext.Provider value={adapters}>
               <FixedCostsSurface />
@@ -743,18 +743,13 @@ describeChangeGate('agreed-part-months', (on) => {
     )
   }
 
-  it('Stop asks for the final payment and closes October at what was paid plus it, or keeps the day share', async () => {
+  it('Stop asks for the final payment and closes October at what was paid plus it', async () => {
     const user = userEvent.setup()
     const { data, adapters } = withFixedCosts()
     const id = await jayanta(adapters)
     renderPage(adapters, id)
     await user.click(await screen.findByTestId('stop-fixed-cost'))
     fireEvent.change(screen.getByLabelText('Last day'), { target: { value: '2026-10-28' } })
-    if (!on) {
-      expect(screen.queryByTestId('fixed-cost-final')).toBeNull()
-      expect(screen.getByText(/In October we pay ₹5,419\.35, then nothing more\./)).toBeVisible()
-      return
-    }
     // Empty to start, and the month said as it is typed.
     expect(screen.getByTestId('fixed-cost-final')).toHaveValue('')
     expect(screen.getByText('On top of ₹2,000 already paid in October.')).toBeVisible()
@@ -791,14 +786,6 @@ describeChangeGate('agreed-part-months', (on) => {
     const user = userEvent.setup()
     const { data, adapters } = withFixedCosts()
     const id = await jayanta(adapters)
-    if (!on) {
-      // Off, no stop leaves an Undo behind.
-      await adapters.fixedCosts.stop(id, '2026-10-28', false)
-      renderPage(adapters, id)
-      await screen.findByTestId('fixed-cost-months')
-      expect(screen.queryByTestId('unstop-fixed-cost')).toBeNull()
-      return
-    }
     // Stopped later than it was added, as a stop always is.
     vi.setSystemTime(new Date('2026-10-30T07:00:00Z'))
     await adapters.fixedCosts.close({
@@ -833,12 +820,6 @@ describeChangeGate('agreed-part-months', (on) => {
         data.store,
         data.store.fixedCosts.find((c) => c.id === id)!,
       )
-    if (!on) {
-      // The day share, untouched.
-      await adapters.fixedCosts.stop(nothing, '2026-10-28', false)
-      expect(monthCost(facts(nothing), '2026-10-01')).toBe(541_935)
-      return
-    }
     await adapters.fixedCosts.close({
       fixedCostId: nothing,
       stopsOn: '2026-10-28',
@@ -881,7 +862,6 @@ describeChangeGate('agreed-part-months', (on) => {
   it('stopping today is done at once', async () => {
     const { adapters } = withFixedCosts()
     const id = await jayanta(adapters)
-    if (!on) return
     await adapters.fixedCosts.close({
       fixedCostId: id,
       stopsOn: '2026-10-30',
@@ -900,38 +880,26 @@ describeChangeGate('agreed-part-months', (on) => {
     const user = userEvent.setup()
     const { data, adapters } = withFixedCosts()
     const id = await jayanta(adapters)
-    await adapters.fixedCosts.stop(id, '2026-10-28', false)
+    // Stopped with no closing figure, as Stop saved it before the change.
+    data.store.fixedCosts.find((c) => c.id === id)!.stops_on = '2026-10-28'
     renderList(adapters)
     const list = await screen.findByTestId('fixed-cost-list')
-    if (!on) {
-      expect(within(list).queryByText('Jayanta')).toBeNull()
-      return
-    }
     expect(within(list).queryByRole('button', { name: 'Pay Jayanta' })).toBeNull()
     await user.click(within(list).getByRole('button', { name: 'Close Jayanta' }))
     void data
   })
 
-  it('a stopped cost keeps its place this month, greyed with its paid tick, or sits under Stopped', async () => {
+  it('a stopped cost keeps its place this month, greyed with its paid tick', async () => {
     const { adapters } = withFixedCosts()
     const id = await jayanta(adapters)
-    if (on)
-      await adapters.fixedCosts.close({
-        fixedCostId: id,
-        stopsOn: '2026-10-28',
-        finalPaise: 200_000,
-        payment: { id: crypto.randomUUID(), isCash: false },
-      })
-    else await adapters.fixedCosts.stop(id, '2026-10-28', false)
+    await adapters.fixedCosts.close({
+      fixedCostId: id,
+      stopsOn: '2026-10-28',
+      finalPaise: 200_000,
+      payment: { id: crypto.randomUUID(), isCash: false },
+    })
     renderList(adapters)
     const list = await screen.findByTestId('fixed-cost-list')
-    if (!on) {
-      expect(within(list).queryByText('Jayanta')).toBeNull()
-      expect(
-        within(screen.getByRole('region', { name: 'Stopped' })).getByText('Jayanta'),
-      ).toBeVisible()
-      return
-    }
     const row = within(list).getByText('Jayanta').closest('tr')!
     expect(row).toHaveTextContent('Salary · Stopped')
     expect(row).not.toHaveTextContent('28 Oct')
@@ -956,8 +924,7 @@ describeChangeGate('agreed-part-months', (on) => {
     const names = within(list)
       .getAllByRole('link')
       .map((link) => link.querySelector('span')?.textContent)
-    if (on) expect(names.indexOf('Nayan')).toBeLessThan(names.indexOf('Santu'))
-    else expect(names).not.toContain('Nayan')
+    expect(names.indexOf('Nayan')).toBeLessThan(names.indexOf('Santu'))
   })
 
   it('a cost stopped last month waits behind one line', async () => {
@@ -966,23 +933,15 @@ describeChangeGate('agreed-part-months', (on) => {
     // Garbage, paid in full for September in the demo, stopped on its last day.
     const listed = await adapters.fixedCosts.list(KAL)
     const garbage = listed.costs.find((c) => c.name === 'Garbage')!
-    if (on)
-      await adapters.fixedCosts.close({
-        fixedCostId: garbage.id,
-        stopsOn: '2026-09-30',
-        finalPaise: 0,
-        payment: null,
-      })
-    else await adapters.fixedCosts.stop(garbage.id, '2026-09-30', false)
+    await adapters.fixedCosts.close({
+      fixedCostId: garbage.id,
+      stopsOn: '2026-09-30',
+      finalPaise: 0,
+      payment: null,
+    })
     renderList(adapters)
     const list = await screen.findByTestId('fixed-cost-list')
     expect(within(list).queryByText('Garbage')).toBeNull()
-    if (!on) {
-      expect(
-        within(screen.getByRole('region', { name: 'Stopped' })).getByText('Garbage'),
-      ).toBeVisible()
-      return
-    }
     const line = screen.getByTestId('show-stopped-fixed-costs')
     expect(line).toHaveTextContent('Stopped · 1 · Show')
     expect(screen.queryByText('Garbage')).toBeNull()
@@ -1000,11 +959,6 @@ describeChangeGate('agreed-part-months', (on) => {
     await user.selectOptions(screen.getByTestId('fixed-cost-category'), 'salary')
     await user.type(screen.getByTestId('fixed-cost-amount'), '10000')
     fireEvent.change(screen.getByTestId('fixed-cost-starts'), { target: { value: '2026-10-20' } })
-    if (!on) {
-      expect(screen.queryByTestId('fixed-cost-first-month')).toBeNull()
-      expect(screen.getByText(/we pay only for the days from/)).toBeVisible()
-      return
-    }
     expect(screen.queryByText(/we pay only for the days from/)).toBeNull()
     expect(screen.getByText('From November, ₹10,000 a month.')).toBeVisible()
     await user.click(screen.getByTestId('save-fixed-cost'))

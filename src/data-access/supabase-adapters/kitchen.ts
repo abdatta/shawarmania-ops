@@ -13,7 +13,6 @@ import {
   type KitchenMarks,
   type KitchenOrder,
 } from '../adapters'
-import { onDeliveryOrders } from '@/change-gates/delivery-orders'
 import type { KitchenAnswer, KitchenDishState } from '@/domain'
 import type { Database, Json } from '../database.types'
 
@@ -224,11 +223,8 @@ export function createSupabaseKitchenAdapter(client: SupabaseClient<Database>): 
     },
 
     async readDishBoard(): Promise<KitchenBoard> {
-      // `delivery-orders` reads `_v3`, whose cards say Delivery
-      // (delivery-orders-are-made-not-billed, D6); off, today's board.
-      const { data, error } = await client.rpc(
-        onDeliveryOrders() ? 'kitchen_board_v3' : 'kitchen_board_v2',
-      )
+      // `_v3`'s cards say Delivery (delivery-orders-are-made-not-billed, D6).
+      const { data, error } = await client.rpc('kitchen_board_v3')
       if (error) throw error
       return parseDishKitchenBoard(data)
     },

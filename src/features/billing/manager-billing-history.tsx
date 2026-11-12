@@ -41,7 +41,6 @@ import { ManagerDayStats, ManagerDayStatsShimmer } from './manager-day-stats'
 import { ManagerDeliveryHistory, ManagerDeliveryStats } from './manager-delivery-history'
 import { OrderScopePill } from './order-scope'
 import { useRememberedScope } from './order-scope-memory'
-import { useChangeGate } from '@/change-gates/context'
 import { ManagerSyncStatus } from './manager-sync-status'
 import { PaymentTotalCards } from './payment-total-cards'
 
@@ -164,11 +163,9 @@ export function ManagerBillingHistory() {
   /*
     Delivery orders are a tab of their own, not bills [owner, 2026-11-01], and
     Stats reads Counter or Delivery from a small pill, remembered
-    (delivery-orders-are-made-not-billed, D7). Off, neither exists.
+    (delivery-orders-are-made-not-billed, D7).
   */
-  const deliveryGate = useChangeGate('delivery-orders')
-  const [statsScopeChosen, setStatsScope] = useRememberedScope('stats')
-  const statsScope = deliveryGate ? statsScopeChosen : 'counter'
+  const [statsScope, setStatsScope] = useRememberedScope('stats')
   /**
    * The rows read so far, the read they answer, and how many the filter keeps
    * across every page (billing-history-reads-what-it-shows, design D1). A key
@@ -702,11 +699,7 @@ export function ManagerBillingHistory() {
           the filter rides beside Stats, and where they do not it drops to a
           line of its own, right-aligned either way. */}
       <div className="flex flex-wrap items-center gap-2" data-testid="billing-views-row">
-        <div
-          className={deliveryGate ? 'flex flex-wrap gap-1.5' : 'flex flex-wrap gap-2'}
-          role="tablist"
-          aria-label="Billing history views"
-        >
+        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Billing history views">
           {(
             [
               [
@@ -748,7 +741,7 @@ export function ManagerBillingHistory() {
             .flatMap((tab): [View, ReactNode][] =>
               // Delivered, after Bills: finished delivery orders, done as bills
               // are done, though they are not bills [owner, 2026-11-01].
-              deliveryGate && tab[0] === 'bills'
+              tab[0] === 'bills'
                 ? [
                     tab,
                     [
@@ -766,7 +759,7 @@ export function ManagerBillingHistory() {
                 variant={view === id ? 'primary' : 'secondary'}
                 size="phone"
                 // Four tabs fit a Pixel 8's width on one line (owner, 2026-11-01).
-                {...(deliveryGate ? { className: 'px-3' } : {})}
+                className="px-3"
                 role="tab"
                 aria-selected={view === id}
                 onClick={() => chooseView(id)}
@@ -936,11 +929,9 @@ export function ManagerBillingHistory() {
               Counter or Delivery rides at the right of the sync chip's line, so
               it never takes a row of its own [owner, 2026-11-01].
             */}
-            {deliveryGate && (
-              <div className="absolute right-0 top-0 flex h-9 items-center">
-                <OrderScopePill scope={statsScope} onChange={setStatsScope} testId="stats-scope" />
-              </div>
-            )}
+            <div className="absolute right-0 top-0 flex h-9 items-center">
+              <OrderScopePill scope={statsScope} onChange={setStatsScope} testId="stats-scope" />
+            </div>
             {statsScope === 'delivery' && dayNumbers.deliveryStats ? (
               <ManagerDeliveryStats stats={dayNumbers.deliveryStats} />
             ) : (

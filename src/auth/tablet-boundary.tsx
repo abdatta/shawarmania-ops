@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router'
 
-import { useChangeGate } from '@/change-gates/context'
 import { LoadingShell } from '@/components/ui/loading'
 import { storedSessionIsDeviceNow } from '@/data-access/auth'
 import { tabletKind, type CounterDevice } from '@/session/counter-session'
@@ -26,9 +25,6 @@ import { UnconfirmedSession } from './unconfirmed-session'
  * this, sends it home. A counter page added at `/counter/expenses` is open to a
  * counter tablet by where it lives, with no edit here, and closed to a kitchen
  * tablet and to people. **Tablet pages live under the tablet's home.**
- *
- * With `a-tablet-keeps-its-login` off it renders its children and nothing else,
- * which is today.
  */
 
 const SETUP_PATH = '/counter/setup'
@@ -64,10 +60,7 @@ export function TabletBoundary({
   onRetry: () => void
   children: ReactNode
 }) {
-  const on = useChangeGate('a-tablet-keeps-its-login')
   const { pathname } = useLocation()
-
-  if (!on) return children
 
   if (state.status === 'counter') {
     const device = state.device.device

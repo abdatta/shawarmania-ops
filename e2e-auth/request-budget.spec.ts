@@ -211,62 +211,61 @@ async function offerDelivery(request: APIRequestContext, offered: boolean) {
  * the screen's alone, so the window runs from the tap to ten seconds after the
  * card has gone. Three handovers, each a reading against the one budget.
  */
-test(
-  'a delivery order handed over stays within its request budget',
-  { tag: '@cg-on:delivery-orders' },
-  async ({ browser, request }) => {
-    test.setTimeout(4 * 60_000)
-    await offerDelivery(request, true)
-    const counter = await openTill(browser, request, TILL_ONE)
-    const counterRequests = countRequests(counter.context)
-    const page = counter.page
+test('a delivery order handed over stays within its request budget', async ({
+  browser,
+  request,
+}) => {
+  test.setTimeout(4 * 60_000)
+  await offerDelivery(request, true)
+  const counter = await openTill(browser, request, TILL_ONE)
+  const counterRequests = countRequests(counter.context)
+  const page = counter.page
 
-    try {
-      const ids: string[] = []
-      for (let i = 1; i <= 3; i += 1) {
-        await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
-        await page.getByTestId('service-chip-delivery').click()
-        await page.locator('#order-label').fill(`ZMT budget ${i}`)
-        ids.push(
-          await saveNewOrder(page, () => page.getByTestId('save-order').click(), {
-            timeout: 15_000,
-          }),
-        )
-      }
-      for (const id of ids) {
-        await railSettled(page)
-        await orderCard(page, id)
-          .getByRole('button', { name: /^Tick / })
-          .click()
-        await expect(orderCard(page, id).getByTestId(`hand-over-${id}`)).toBeEnabled({
+  try {
+    const ids: string[] = []
+    for (let i = 1; i <= 3; i += 1) {
+      await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
+      await page.getByTestId('service-chip-delivery').click()
+      await page.locator('#order-label').fill(`ZMT budget ${i}`)
+      ids.push(
+        await saveNewOrder(page, () => page.getByTestId('save-order').click(), {
           timeout: 15_000,
-        })
-      }
-      await railSettled(page)
-      await page.waitForTimeout(SETTLE_MS)
-
-      const readings: number[] = []
-      for (const id of ids) {
-        readings.push(
-          await counted(counterRequests, async () => {
-            const card = orderCard(page, id)
-            await card.getByTestId(`hand-over-${id}`).click()
-            await expect(card).toHaveCount(0, { timeout: 15_000 })
-            await page.waitForTimeout(ACTION_WINDOW_MS)
-          }),
-        )
-      }
-
-      console.log(`request budget readings: ${JSON.stringify({ counterHandover: readings })}`)
-      for (const count of readings) {
-        expect(
-          count,
-          `counterHandover: ${count} requests, budget ${BUDGET.counterHandover}`,
-        ).toBeLessThanOrEqual(BUDGET.counterHandover)
-      }
-    } finally {
-      await offerDelivery(request, false)
-      await counter.context.close()
+        }),
+      )
     }
-  },
-)
+    for (const id of ids) {
+      await railSettled(page)
+      await orderCard(page, id)
+        .getByRole('button', { name: /^Tick / })
+        .click()
+      await expect(orderCard(page, id).getByTestId(`hand-over-${id}`)).toBeEnabled({
+        timeout: 15_000,
+      })
+    }
+    await railSettled(page)
+    await page.waitForTimeout(SETTLE_MS)
+
+    const readings: number[] = []
+    for (const id of ids) {
+      readings.push(
+        await counted(counterRequests, async () => {
+          const card = orderCard(page, id)
+          await card.getByTestId(`hand-over-${id}`).click()
+          await expect(card).toHaveCount(0, { timeout: 15_000 })
+          await page.waitForTimeout(ACTION_WINDOW_MS)
+        }),
+      )
+    }
+
+    console.log(`request budget readings: ${JSON.stringify({ counterHandover: readings })}`)
+    for (const count of readings) {
+      expect(
+        count,
+        `counterHandover: ${count} requests, budget ${BUDGET.counterHandover}`,
+      ).toBeLessThanOrEqual(BUDGET.counterHandover)
+    }
+  } finally {
+    await offerDelivery(request, false)
+    await counter.context.close()
+  }
+})

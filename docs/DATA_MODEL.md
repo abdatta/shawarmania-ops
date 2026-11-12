@@ -1365,8 +1365,7 @@ so *carried over* needs no job on the 1st.
 
 **A month's cost** is its latest unvoided settlement, otherwise the monthly
 amount in effect × the days it runs ÷ the days in the month, rounded down to the
-paisa. With `agreed-part-months` on, the app never leaves a part month on that
-day share: the month a cost starts or stops in is settled at the figure agreed
+paisa. The app never leaves a part month on that day share: the month a cost starts or stops in is settled at the figure agreed
 for it, by the same call that sets the date, and the day share stays only as the
 fallback every published build agrees on. `fixed_cost_month_cost` and `monthCost()` in
 `src/domain/fixed-costs.ts` are held to one case table
@@ -1529,8 +1528,8 @@ pre-#74 counter used.
 the row — and embedded in the counter's order read, so a label costs no request.
 RLS: select for a live counter shift at its own outlet, the outlet's Franchise
 Admins and the owner; **no kitchen select**; no client write. Never copied to a
-bill. **It lives only while its order is on the rail**, and with `delivery-orders` on
-is first copied to `kept_order_labels` (see [Delivery orders](#delivery-orders-83)).
+bill. **It lives only while its order is on the rail**, and is first copied to
+`kept_order_labels` (see [Delivery orders](#delivery-orders-83)).
 `orders_label_leaves_the_rail`,
 an `after update` trigger on `orders`, deletes the label once the order is
 cancelled, or paid with `prepared_at` set — every path that finishes an order, the

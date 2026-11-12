@@ -379,22 +379,8 @@
   animation: dish-bell-swing 440ms ease-in-out infinite;
 }
 
-/* Counter handover retires a Done ticket after its held-slot exit. */
-@keyframes kitchen-ready-exit {
-  from {
-    opacity: 1;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.96) translateY(-4px);
-  }
-}
-.kitchen-ready-exit {
-  animation: kitchen-ready-exit 320ms ease-out both;
-}
 /*
- * With `delivery-orders` on, a departing receipt fades as a card leaves the
+ * Counter handover retires a Done ticket: it fades as a card leaves the
  * counter's rail, while the board closes up under it (owner, 2026-11-02).
  */
 @keyframes kitchen-leave-fade {
@@ -431,9 +417,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .kitchen-ready-exit {
-    animation-name: dish-ready-fade-out;
-  }
   /* The fill stays; the shine and the swing do not move. */
   .dish-ready-fill::after {
     animation: none;

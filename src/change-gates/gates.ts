@@ -86,58 +86,6 @@ export const CHANGE_GATES = {
     roundTrip: 'none: the probe changes nothing but its code in the build stamp',
   },
   /**
-   * #79 follow-up: a fixed cost's part month costs the figure agreed for it,
-   * stopping asks for the final payment, a mid-month start asks what that month
-   * comes to, and a stopped cost stays in its place for the month it stopped in
-   * (part-months-cost-what-was-agreed, design D1–D5). Off, a part month costs
-   * its share by days and stopped costs sit under Stopped at the foot.
-   */
-  'agreed-part-months': {
-    kind: 'change',
-    code: 'AM',
-    change: 'part-months-cost-what-was-agreed',
-    retireBy: '2027-02-28',
-    roundTrip:
-      'none: nothing is queued, and what it saves is a settlement, a stop date and a payment, which the off path already reads',
-  },
-  /**
-   * A set-up tablet opens only its own home and the pages beneath it, whatever
-   * address it is given, and `signIn` and `redeemInvite` refuse while the
-   * browser holds a tablet's session (a-tablet-keeps-its-login, design D1–D2).
-   * A person signing in on the counter laptop used to replace the tablet's
-   * session in the one storage slot, and signing out left it unregistered. Off,
-   * `/sign-in` and `/activate` show their forms on a tablet as before.
-   * Retirement removes the per-screen tablet redirects in `RealRoot`,
-   * `RootResolver`, `CounterRoot`, `KitchenRoot` and `CounterSetup`, which the
-   * boundary makes redundant.
-   */
-  'a-tablet-keeps-its-login': {
-    kind: 'change',
-    code: 'TK',
-    change: 'a-tablet-keeps-its-login',
-    // Eight weeks after it was first turned on in production, 2026-11-01.
-    retireBy: '2026-12-27',
-    roundTrip:
-      'none: it changes which page a tablet is shown and refuses a sign-in before it is sent; nothing is written or queued either way',
-  },
-  /**
-   * #83: an outlet may offer Delivery, whose orders the kitchen makes and the
-   * counter hands to a rider without a bill; labels are kept after an order
-   * leaves the rail; and Stats, Billing History, Items and Sales gain a Counter ·
-   * Delivery switch (delivery-orders-are-made-not-billed, design D1–D9). Off,
-   * every order is billed or cancelled, labels go when an order leaves the
-   * rail, and no page shows delivery orders. A delivery order saved while on
-   * reads as a plain open order with the gate off, so it is turned off with no
-   * delivery order on the rail.
-   */
-  'delivery-orders': {
-    kind: 'change',
-    code: 'DO',
-    change: 'delivery-orders-are-made-not-billed',
-    retireBy: '2027-02-28',
-    roundTrip: 'tested',
-  },
-  /**
    * #82: Deactivate records the day and moves the person to a Deactivated
    * section; Remove is offered only there, ends their outlets on that day
    * and frees their username and phone; attendance stops listing them after it
@@ -179,6 +127,15 @@ export const CHANGE_GATE_KEYS = Object.keys(CHANGE_GATES) as ChangeGateKey[]
  * not tombstoned: they are unique among live gates only.
  */
 export const RETIRED_CHANGE_GATES: readonly string[] = [
+  // retire-agreed-part-months: a part month costs the figure agreed for it,
+  // stopping asks for the final payment, and a stopped cost keeps its place.
+  'agreed-part-months',
+  // retire-a-tablet-keeps-its-login: a set-up tablet opens only its own home,
+  // and a person's sign-in or activation is refused over a tablet's session.
+  'a-tablet-keeps-its-login',
+  // retire-delivery-orders: an outlet may offer Delivery, whose orders the
+  // kitchen makes and the counter hands over without a bill.
+  'delivery-orders',
   // retire-auto-approve-at-the-shop, with the two gates that depended on it: a
   // check-in inside the fence approves itself under the outlet's rules, the
   // staff screens are the refreshed ones, and an expense's category is picked

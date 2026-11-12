@@ -3,13 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { createDemoData, createMockAdapters } from '@/data-access/mock'
 import type { KitchenOrder } from '@/data-access/adapters'
 import type { KitchenCardView } from './use-dish-kitchen-board'
-import {
-  KITCHEN_FADE_EXIT_MS,
-  KITCHEN_READY_EXIT_MS,
-  KITCHEN_READY_GAP_MS,
-  retainReadySlots,
-  useKitchenReady,
-} from './use-kitchen-ready'
+import { KITCHEN_FADE_EXIT_MS, retainReadySlots, useKitchenReady } from './use-kitchen-ready'
 
 afterEach(() => vi.useRealTimers())
 const view = (order: KitchenOrder): KitchenCardView => ({
@@ -18,7 +12,7 @@ const view = (order: KitchenOrder): KitchenCardView => ({
   shake: 0,
   rings: { left: 0, sounding: false },
 })
-async function setup(fadeWhileClosing = false) {
+async function setup() {
   const { kitchen } = createMockAdapters('biller', createDemoData({ dishWalkthrough: true }))
   const card = view(
     (await kitchen.readDishBoard()).orders.find((order) => order.orderNumber === 105)!,
@@ -27,7 +21,7 @@ async function setup(fadeWhileClosing = false) {
   const undo = vi.spyOn(kitchen, 'undoReady')
   const read = vi.fn(async () => {})
   vi.useFakeTimers()
-  const hook = renderHook(({ cards }) => useKitchenReady(kitchen, read, cards, fadeWhileClosing), {
+  const hook = renderHook(({ cards }) => useKitchenReady(kitchen, read, cards), {
     initialProps: { cards: [card] },
   })
   const doneCard = async () =>
@@ -53,26 +47,6 @@ it('sends Ready immediately and keeps Done indefinitely, with an unlimited Undo'
   await act(async () => result.current.toggle(done))
   expect(undo).toHaveBeenCalledWith(expect.any(String), done.order.readyId)
   expect(result.current.pending.size).toBe(0)
-})
-it('holds a handed-over middle receipt in its original slot through exit and blank gap', async () => {
-  const { result, card, rerender, doneCard } = await setup()
-  await act(async () => result.current.toggle(card))
-  const done = await doneCard()
-  const before = { ...card, order: { ...card.order, id: 'before' } }
-  const after = { ...card, order: { ...card.order, id: 'after' } }
-  rerender({ cards: [before, done, after] })
-  rerender({ cards: [before, after] })
-  expect(result.current.pending.get(done.order.id)?.phase).toBe('leaving')
-  expect(retainReadySlots([before, after], result.current.pending)).toEqual([before, done, after])
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(KITCHEN_READY_EXIT_MS)
-  })
-  expect(result.current.pending.get(done.order.id)?.phase).toBe('gap')
-  expect(retainReadySlots([before, after], result.current.pending)).toEqual([before, done, after])
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(KITCHEN_READY_GAP_MS)
-  })
-  expect(retainReadySlots([before, after], result.current.pending)).toEqual([before, after])
 })
 it('restores prior state on rejected writes and prevents repeated clicks while saving', async () => {
   const { result, card, write, undo, doneCard } = await setup()
@@ -141,15 +115,16 @@ it('cancels departure on an untick and cannot let an old timer retire a new hold
   await act(async () => {
     await vi.advanceTimersByTimeAsync(200)
   })
+  // The first hold's timer has fired and left the new one alone; the new one's lets it go.
   expect(result.current.pending.get(done.order.id)?.phase).toBe('leaving')
   await act(async () => {
     await vi.advanceTimersByTimeAsync(120)
   })
-  expect(result.current.pending.get(done.order.id)?.phase).toBe('gap')
+  expect(result.current.pending.has(done.order.id)).toBe(false)
 })
 
-it('with delivery-orders on, fades a handed-over receipt in its slot and lets it go with no gap', async () => {
-  const { result, card, rerender, doneCard } = await setup(true)
+it('fades a handed-over receipt in its slot and lets it go with no gap', async () => {
+  const { result, card, rerender, doneCard } = await setup()
   await act(async () => result.current.toggle(card))
   const done = await doneCard()
   const before = { ...card, order: { ...card.order, id: 'before' } }

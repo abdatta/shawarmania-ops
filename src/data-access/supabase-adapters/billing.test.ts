@@ -525,8 +525,11 @@ describe('the live tablet acceptance boundary', () => {
     const rows = await database.envelopes.toArray()
     expect(rows.filter((row) => row.type === 'prepare_order_lines')).toHaveLength(2)
     expect(await database.dependencies.count()).toBeGreaterThanOrEqual(2)
-    // Every order command written on the dish path names the functions it was written for.
-    for (const row of rows) expect(row.command.variant).toBe('dishes')
+    // Every order command names the functions it was written for: the delivery ones.
+    for (const row of rows)
+      expect(row.command.variant).toBe(
+        row.type === 'create_order' || row.type === 'revise_order' ? 'delivery' : 'dishes',
+      )
     expect(rows.find((row) => row.type === 'create_order')?.command.payload).toMatchObject({
       label: 'Red shirt',
       lines: [{ note: 'No sauce' }],
@@ -970,7 +973,7 @@ describe('the live tablet acceptance boundary', () => {
 
   it('uses missing-response evidence to show the queue stopped sending immediately', async () => {
     const rpc = vi.fn(async (name: string) =>
-      name === 'create_billing_order_v2'
+      name === 'create_billing_order_v3'
         ? { data: null, error: new Error('no response'), status: 0 }
         : { data: null, error: null, status: 200 },
     )
@@ -984,7 +987,7 @@ describe('the live tablet acceptance boundary', () => {
 
   it('keeps removed-tablet evidence but refuses more work after the server says it was removed', async () => {
     const rpc = vi.fn(async (name: string) =>
-      name === 'create_billing_order_v2'
+      name === 'create_billing_order_v3'
         ? {
             data: { status: 'removed_tablet', commandId: orderInput.clientId },
             error: null,
@@ -2070,7 +2073,7 @@ describe('Billing history’s reads (billing-history-reads-what-it-shows)', () =
       after: { k: 20_000, n: 3 },
     })
 
-    expect(rpc).toHaveBeenCalledWith('billing_history_bills', {
+    expect(rpc).toHaveBeenCalledWith('billing_history_bills_v2', {
       p_outlet_id: 'outlet-1',
       p_business_date: '2026-10-17',
       p_filter: filter,
@@ -2098,6 +2101,7 @@ describe('Billing history’s reads (billing-history-reads-what-it-shows)', () =
             { method: 'upi', amountPaise: 20_000 },
           ],
           paymentRevision: 0,
+          orderLabel: null,
           cursor: { k: 25_000, n: 7 },
         },
       ],
@@ -2108,7 +2112,7 @@ describe('Billing history’s reads (billing-history-reads-what-it-shows)', () =
     const rpc = vi.fn(async () => ({ data: { rows: [], matching: 0 }, error: null }))
     const billing = createSupabaseBillingAdapter(clientWithRpc(rpc))
     await billing.listManagerBillRows('outlet-1', '2026-10-17', filter, { limit: 12 })
-    expect(rpc).toHaveBeenCalledWith('billing_history_bills', {
+    expect(rpc).toHaveBeenCalledWith('billing_history_bills_v2', {
       p_outlet_id: 'outlet-1',
       p_business_date: '2026-10-17',
       p_filter: filter,
@@ -2157,7 +2161,7 @@ describe('Billing history’s reads (billing-history-reads-what-it-shows)', () =
     const billing = createSupabaseBillingAdapter(clientWithRpc(rpc))
 
     const day = await billing.readDayNumbers('outlet-1', '2026-10-17')
-    expect(rpc).toHaveBeenCalledWith('billing_day_numbers', {
+    expect(rpc).toHaveBeenCalledWith('billing_day_numbers_v2', {
       p_outlet_id: 'outlet-1',
       p_business_date: '2026-10-17',
     })

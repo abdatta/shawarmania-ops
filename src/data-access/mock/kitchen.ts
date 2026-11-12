@@ -1,6 +1,5 @@
 import { emptyDishWorkflow, readyQuantity } from './dish-workflow'
 import { isDeliveryOrder } from './delivery'
-import { onDeliveryOrders } from '@/change-gates/delivery-orders'
 import { dishOwed } from '@/domain/dish-workflow'
 import type {
   KitchenAcknowledgement,
@@ -68,8 +67,6 @@ export function createMockKitchenAdapter(
   now: () => Date = () => new Date(),
   /** Who the demo says opened its kitchen: the walkthrough's biller. */
   operatorName = 'Demo Morning Biller',
-  /** Whether `delivery-orders` is on: a delivery order's card then reads Delivery. */
-  deliveryOn: () => boolean = onDeliveryOrders,
 ): KitchenAdapter {
   function activeReadies(orderId: string) {
     return (store.dishWorkflow?.readies ?? []).filter(
@@ -191,7 +188,7 @@ export function createMockKitchenAdapter(
           ticketNumber: activeReadies(order.id).length + 1,
           serviceType: order.service_type,
           tableNumber: order.table_number,
-          ...(deliveryOn() && isDeliveryOrder(store, order.id) ? { delivery: true } : {}),
+          ...(isDeliveryOrder(store, order.id) ? { delivery: true } : {}),
           orderedAt: order.ordered_at,
           version: version(order),
           status: order.status as KitchenOrder['status'],
@@ -271,7 +268,7 @@ export function createMockKitchenAdapter(
             ticketNumber: index + 1,
             serviceType: order.service_type,
             tableNumber: order.table_number,
-            ...(deliveryOn() && isDeliveryOrder(store, order.id) ? { delivery: true } : {}),
+            ...(isDeliveryOrder(store, order.id) ? { delivery: true } : {}),
             orderedAt: order.ordered_at,
             version: version(order),
             status: order.status as KitchenOrder['status'],

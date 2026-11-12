@@ -15,7 +15,6 @@ import { Card } from '@/components/ui/card'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { MemberMark } from '@/components/ui/member-mark'
 import { Switch } from '@/components/ui/switch'
-import { useChangeGate } from '@/change-gates/context'
 import { useAdapters } from '@/data-access'
 import { DataActionError } from '@/data-access/adapters'
 import {
@@ -156,12 +155,11 @@ export function OutletServiceSections({
  * placeholder, so the page does not reflow when this arrives.
  */
 export function OutletServiceShimmer({ withDiscounts = false }: { withDiscounts?: boolean }) {
-  // `delivery-orders` adds the Delivery tile to the card (delivery-orders-are-made-not-billed).
-  const delivery = useChangeGate('delivery-orders')
+  // The card carries the Delivery tile (delivery-orders-are-made-not-billed).
   return (
     <div className="space-y-2">
       <Shimmer className="h-10 w-24" />
-      <Shimmer className={delivery ? 'h-[calc(15.5rem+2px)]' : 'h-[calc(11rem+2px)]'} />
+      <Shimmer className="h-[calc(15.5rem+2px)]" />
       {withDiscounts && <Shimmer className="h-[calc(92px+7rem)]" />}
     </div>
   )
@@ -248,7 +246,6 @@ function OrdersSection({
   const packagingOn = draft.takeawayOffered && draft.packagingMode !== 'off'
   const rupees = wholeNumber(priceText)
   // Delivery is offered beside dine-in and takeaway (delivery-orders-are-made-not-billed, D7).
-  const deliveryShown = useChangeGate('delivery-orders')
   const next: OutletServiceSettings = {
     collectCustomerDetails: draft.collectCustomerDetails,
     dineInOffered: draft.dineInOffered,
@@ -257,12 +254,12 @@ function OrdersSection({
     packagingMode: packagingOn ? draft.packagingMode : 'off',
     packagingPricePaise: packagingOn && rupees !== null ? rupees * 100 : null,
     packagingFreeForGold: packagingOn && draft.packagingFreeForGold,
-    ...(deliveryShown ? { deliveryOffered: Boolean(draft.deliveryOffered) } : {}),
+    deliveryOffered: Boolean(draft.deliveryOffered),
   }
   const dirty =
     settingsKey(next) !== settingsKey(stored) ||
     (packagingOn && rupees === null) ||
-    (deliveryShown && Boolean(next.deliveryOffered) !== Boolean(stored.deliveryOffered))
+    Boolean(next.deliveryOffered) !== Boolean(stored.deliveryOffered)
   const id = `orders-${outletId}`
   const priceCaption = draft.packagingMode === 'per_bag' ? 'Price per bag' : 'Charge per order'
 
@@ -522,23 +519,21 @@ function OrdersSection({
           )}
         </SettingTile>
 
-        {deliveryShown && (
-          <SettingTile
-            depth={1}
-            icon={Bike}
-            caption="Delivery"
-            hint={draft.deliveryOffered ? undefined : 'Made by the kitchen, never billed'}
-            control={
-              <Switch
-                checked={Boolean(draft.deliveryOffered)}
-                label="Delivery"
-                testId="service-delivery-switch"
-                disabled={busy}
-                onChange={(value) => change({ deliveryOffered: value })}
-              />
-            }
-          />
-        )}
+        <SettingTile
+          depth={1}
+          icon={Bike}
+          caption="Delivery"
+          hint={draft.deliveryOffered ? undefined : 'Made by the kitchen, never billed'}
+          control={
+            <Switch
+              checked={Boolean(draft.deliveryOffered)}
+              label="Delivery"
+              testId="service-delivery-switch"
+              disabled={busy}
+              onChange={(value) => change({ deliveryOffered: value })}
+            />
+          }
+        />
 
         <SaveBar
           dirty={dirty}
@@ -569,7 +564,6 @@ function ReadOnlyOrders({
   children?: ReactNode
 }) {
   const on = ordersOffered(stored)
-  const deliveryShown = useChangeGate('delivery-orders')
   return (
     <OutletSection id={`orders-${outletId}`} title="Orders" data-testid="service-orders">
       <Card className="space-y-2 p-3">
@@ -615,14 +609,12 @@ function ReadOnlyOrders({
             </>
           )}
         </SettingTile>
-        {deliveryShown && (
-          <SettingTile
-            depth={1}
-            icon={Bike}
-            caption="Delivery"
-            control={<Answer>{stored.deliveryOffered ? 'On' : 'Off'}</Answer>}
-          />
-        )}
+        <SettingTile
+          depth={1}
+          icon={Bike}
+          caption="Delivery"
+          control={<Answer>{stored.deliveryOffered ? 'On' : 'Off'}</Answer>}
+        />
       </Card>
       {children}
     </OutletSection>

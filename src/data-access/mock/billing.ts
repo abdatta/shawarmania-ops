@@ -9,7 +9,6 @@ import {
   isDeliveryOrder,
   shiftHandovers,
 } from './delivery'
-import { onDeliveryOrders } from '@/change-gates/delivery-orders'
 import {
   AWAITING_ORDER_NUMBER,
   isAwaitingOrderNumber,
@@ -187,12 +186,6 @@ export function createMockBillingAdapter(
    * a test of billing alone has none.
    */
   kitchenAcks: () => readonly { orderId: string }[] = () => [],
-  /**
-   * Whether `delivery-orders` is on (delivery-orders-are-made-not-billed). The
-   * demo passes its own switchboard; absent, the page's frozen snapshot, so a
-   * test that names no gate meets the counter as it bills today.
-   */
-  deliveryOn: () => boolean = onDeliveryOrders,
 ): BillingAdapter {
   /**
    * The dish records (each-dish-is-ticked-off). A store that was never seeded
@@ -502,7 +495,7 @@ export function createMockBillingAdapter(
       cancelledByName: actorName(row.cancelled_by),
       paidAt: row.paid_at,
       billId: row.bill_id,
-      ...(deliveryOn() && isDeliveryOrder(store, row.id)
+      ...(isDeliveryOrder(store, row.id)
         ? {
             delivery: true,
             handedOverAt: store.dishWorkflow?.delivery?.orders[row.id]?.handedOverAt ?? null,
@@ -1698,13 +1691,13 @@ export function createMockBillingAdapter(
   }
   // The database's definitions (design D3) over the demo's own rows. The demo
   // keeps no log of revisions, so an order it changed stands for one revised.
-  function dayStats(outletId: string, businessDate: string, counterOnly = false): BillingDayStats {
-    // With `delivery-orders` on, Stats → Counter leaves delivery orders out.
+  function dayStats(outletId: string, businessDate: string): BillingDayStats {
+    // Stats → Counter leaves delivery orders out.
     const orders = store.orders.filter(
       (order) =>
         order.outlet_id === outletId &&
         order.business_date === businessDate &&
-        !(counterOnly && isDeliveryOrder(store, order.id)),
+        !isDeliveryOrder(store, order.id),
     )
     const ids = new Set(orders.map((order) => order.id))
     const lastReady = new Map<string, number>()
@@ -2568,7 +2561,6 @@ export function createMockBillingAdapter(
           .filter((payment) => payment.method === method)
           .reduce((sum, payment) => sum + payment.amountPaise, 0),
       }))
-      if (!deliveryOn()) return { bills, totals }
       // Handovers queued and not yet delivered are this shift's too.
       const deliveries = shiftHandovers(store, shiftId, paymentNow())
       for (const command of sortedPending()) {
@@ -2648,13 +2640,9 @@ export function createMockBillingAdapter(
                 totalPaise: bill.totalPaise,
                 payments: bill.payments,
                 paymentRevision: bill.paymentRevision,
-                ...(deliveryOn()
-                  ? {
-                      orderLabel: bill.orderId
-                        ? (store.dishWorkflow?.labels[bill.orderId] ?? null)
-                        : null,
-                    }
-                  : {}),
+                orderLabel: bill.orderId
+                  ? (store.dishWorkflow?.labels[bill.orderId] ?? null)
+                  : null,
                 cursor: { k: sortKey(bill, filter.sort), n: bill.billNumber },
               })),
         matching: matching.length,
@@ -2687,20 +2675,19 @@ export function createMockBillingAdapter(
       const cutover =
         outletFixtures.find((outlet) => outlet.id === outletId)?.business_day_cutover ?? '04:00'
       const commands = store.billingCommands.filter((command) => command.outlet_id === outletId)
-      const on = deliveryOn()
       const orders = projectedOrders(outletId)
         .filter(inPipeline)
         .filter((order) => order.businessDate === businessDate)
-        .filter((order) => !on || !order.delivery)
+        .filter((order) => !order.delivery)
       const now = Date.now()
       const seen = new Set(kitchenAcks().map((ack) => ack.orderId))
       return {
-        ...(on ? { deliveryStats: deliveryDayStats(store, outletId, businessDate, seen) } : {}),
+        deliveryStats: deliveryDayStats(store, outletId, businessDate, seen),
         cashPaise: tender('cash'),
         upiPaise: tender('upi'),
         settledBills: settled.length,
         bills: bills.length,
-        stats: dayStats(outletId, businessDate, on),
+        stats: dayStats(outletId, businessDate),
         refusals: commands
           .filter(
             (command) =>

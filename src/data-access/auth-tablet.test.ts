@@ -2,8 +2,7 @@ import { readFileSync } from 'node:fs'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { resetBootSnapshotForTests, writeSavedAnswers } from '@/change-gates/snapshot'
-import { describeChangeGate } from '@/test/change-gates'
+import { resetBootSnapshotForTests } from '@/change-gates/snapshot'
 
 /**
  * A person's session never replaces a tablet's (a-tablet-keeps-its-login,
@@ -182,76 +181,46 @@ describe('the stored session, read with no request', () => {
   })
 })
 
-describeChangeGate('a-tablet-keeps-its-login', (on) => {
-  beforeEach(() => {
-    writeSavedAnswers(localStorage, { 'a-tablet-keeps-its-login': on })
-    resetBootSnapshotForTests()
-  })
-
+describe('a person’s session never replaces a tablet’s', () => {
   const fetchSpy = () => vi.spyOn(globalThis, 'fetch')
 
-  it(
-    on
-      ? 'refuses a person’s sign-in over a tablet’s session, before any request'
-      : 'sends a person’s sign-in over a tablet’s session, as before',
-    async () => {
-      storeSession(TABLET_EMAIL)
-      const before = localStorage.getItem(AUTH_STORAGE_KEY)
-      const fetch = fetchSpy()
+  it('refuses a person’s sign-in over a tablet’s session, before any request', async () => {
+    storeSession(TABLET_EMAIL)
+    const before = localStorage.getItem(AUTH_STORAGE_KEY)
+    const fetch = fetchSpy()
 
-      if (on) {
-        const refusal = signIn('biller.kalyani', 'a-long-password')
-        await expect(refusal).rejects.toBeInstanceOf(SignInError)
-        await expect(refusal).rejects.toMatchObject({
-          code: 'tablet',
-          message: 'This is a counter tablet. Sign in on your own phone.',
-        })
-        expect(supabase.signInWithPassword).not.toHaveBeenCalled()
-        expect(supabase.invoke).not.toHaveBeenCalled()
-        expect(supabase.setSession).not.toHaveBeenCalled()
-        expect(fetch).not.toHaveBeenCalled()
-        expect(localStorage.getItem(AUTH_STORAGE_KEY)).toBe(before)
-      } else {
-        await expect(signIn('biller.kalyani', 'a-long-password')).resolves.toMatchObject({
-          userId: 'person-1',
-          isDevice: false,
-        })
-        expect(supabase.signInWithPassword).toHaveBeenCalledTimes(1)
-      }
-      fetch.mockRestore()
-    },
-  )
+    const refusal = signIn('biller.kalyani', 'a-long-password')
+    await expect(refusal).rejects.toBeInstanceOf(SignInError)
+    await expect(refusal).rejects.toMatchObject({
+      code: 'tablet',
+      message: 'This is a counter tablet. Sign in on your own phone.',
+    })
+    expect(supabase.signInWithPassword).not.toHaveBeenCalled()
+    expect(supabase.invoke).not.toHaveBeenCalled()
+    expect(supabase.setSession).not.toHaveBeenCalled()
+    expect(fetch).not.toHaveBeenCalled()
+    expect(localStorage.getItem(AUTH_STORAGE_KEY)).toBe(before)
+    fetch.mockRestore()
+  })
 
-  it(
-    on
-      ? 'refuses an activation over a tablet’s session, before any request'
-      : 'sends an activation over a tablet’s session, as before',
-    async () => {
-      storeSession(TABLET_EMAIL)
-      const before = localStorage.getItem(AUTH_STORAGE_KEY)
-      const fetch = fetchSpy()
+  it('refuses an activation over a tablet’s session, before any request', async () => {
+    storeSession(TABLET_EMAIL)
+    const before = localStorage.getItem(AUTH_STORAGE_KEY)
+    const fetch = fetchSpy()
 
-      if (on) {
-        const refusal = redeemInvite('ABCD2345', 'biller.kalyani', 'a-long-password')
-        await expect(refusal).rejects.toBeInstanceOf(ActivationError)
-        await expect(refusal).rejects.toMatchObject({
-          code: 'tablet',
-          message: 'This is a counter tablet. Sign in on your own phone.',
-        })
-        expect(supabase.invoke).not.toHaveBeenCalled()
-        expect(fetch).not.toHaveBeenCalled()
-        expect(localStorage.getItem(AUTH_STORAGE_KEY)).toBe(before)
-      } else {
-        await expect(
-          redeemInvite('ABCD2345', 'biller.kalyani', 'a-long-password'),
-        ).resolves.toBeUndefined()
-        expect(supabase.invoke).toHaveBeenCalledWith('redeem-invite', expect.anything())
-      }
-      fetch.mockRestore()
-    },
-  )
+    const refusal = redeemInvite('ABCD2345', 'biller.kalyani', 'a-long-password')
+    await expect(refusal).rejects.toBeInstanceOf(ActivationError)
+    await expect(refusal).rejects.toMatchObject({
+      code: 'tablet',
+      message: 'This is a counter tablet. Sign in on your own phone.',
+    })
+    expect(supabase.invoke).not.toHaveBeenCalled()
+    expect(fetch).not.toHaveBeenCalled()
+    expect(localStorage.getItem(AUTH_STORAGE_KEY)).toBe(before)
+    fetch.mockRestore()
+  })
 
-  it('lets a person sign in where no tablet is set up, either way', async () => {
+  it('lets a person sign in where no tablet is set up', async () => {
     storeSession(null)
     await expect(signIn('biller.kalyani', 'a-long-password')).resolves.toMatchObject({
       userId: 'person-1',

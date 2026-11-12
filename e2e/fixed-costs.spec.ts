@@ -140,47 +140,45 @@ test('Overview and the Ledger carry P&L (Pro-rata), and a payment carries the Fi
   await expect(page.getByTestId('month-fixed-costs')).toContainText('Garbage')
 })
 
-test(
-  'stopping asks for the final payment and closes the month at what was paid plus it',
-  { tag: '@cg-on:agreed-part-months' },
-  async ({ page }) => {
-    await page.goto(FIXED)
-    await page.getByRole('button', { name: 'Add a fixed cost' }).click()
-    await page.getByTestId('fixed-cost-name').fill('Jayanta')
-    await page.getByTestId('fixed-cost-category').selectOption('salary')
-    await page.getByTestId('fixed-cost-amount').fill('6000')
-    const today = await page.getByTestId('fixed-cost-starts').inputValue()
-    const first = `${today.slice(0, 7)}-01`
-    await page.getByTestId('fixed-cost-starts').fill(first)
-    await page.getByTestId('save-fixed-cost').click()
-    await page.getByRole('button', { name: 'Pay Jayanta' }).click()
-    await pay(page, '2000', 'advance-this')
+test('stopping asks for the final payment and closes the month at what was paid plus it', async ({
+  page,
+}) => {
+  await page.goto(FIXED)
+  await page.getByRole('button', { name: 'Add a fixed cost' }).click()
+  await page.getByTestId('fixed-cost-name').fill('Jayanta')
+  await page.getByTestId('fixed-cost-category').selectOption('salary')
+  await page.getByTestId('fixed-cost-amount').fill('6000')
+  const today = await page.getByTestId('fixed-cost-starts').inputValue()
+  const first = `${today.slice(0, 7)}-01`
+  await page.getByTestId('fixed-cost-starts').fill(first)
+  await page.getByTestId('save-fixed-cost').click()
+  await page.getByRole('button', { name: 'Pay Jayanta' }).click()
+  await pay(page, '2000', 'advance-this')
 
-    // Stopped on the 1st, so the month is a part month whatever today is.
-    await row(page, 'Jayanta').getByText('Jayanta').click()
-    await page.getByTestId('stop-fixed-cost').click()
-    await page.getByTestId('fixed-cost-stops-on').fill(first)
-    await expect(page.getByTestId('fixed-cost-final')).toHaveValue('')
-    await page.getByTestId('fixed-cost-final').fill('2000')
-    await expect(page.getByTestId('fixed-cost-comes-to')).toContainText('comes to ₹4,000')
-    await page.getByTestId('fixed-cost-final-paid-with').selectOption('other')
-    await page.getByTestId('save-fixed-cost-stop').click()
-    await expect(page.getByTestId('fixed-cost-recorded')).toBeVisible()
-    const month = page.getByTestId(`month-${first}`)
-    await expect(month).toContainText('₹4,000')
-    await expect(month).toContainText('Paid · closing')
-    await expect(month).not.toContainText('days')
-    await expect(page.getByTestId('fixed-cost-payments')).toContainText('Final payment')
-    // Stopped is done: no Stop again, nothing to Pay.
-    await expect(page.getByTestId('fixed-cost-stopped')).toBeVisible()
-    await expect(page.getByTestId('stop-fixed-cost')).toHaveCount(0)
-    await expect(page.getByTestId('pay-fixed-cost')).toHaveCount(0)
+  // Stopped on the 1st, so the month is a part month whatever today is.
+  await row(page, 'Jayanta').getByText('Jayanta').click()
+  await page.getByTestId('stop-fixed-cost').click()
+  await page.getByTestId('fixed-cost-stops-on').fill(first)
+  await expect(page.getByTestId('fixed-cost-final')).toHaveValue('')
+  await page.getByTestId('fixed-cost-final').fill('2000')
+  await expect(page.getByTestId('fixed-cost-comes-to')).toContainText('comes to ₹4,000')
+  await page.getByTestId('fixed-cost-final-paid-with').selectOption('other')
+  await page.getByTestId('save-fixed-cost-stop').click()
+  await expect(page.getByTestId('fixed-cost-recorded')).toBeVisible()
+  const month = page.getByTestId(`month-${first}`)
+  await expect(month).toContainText('₹4,000')
+  await expect(month).toContainText('Paid · closing')
+  await expect(month).not.toContainText('days')
+  await expect(page.getByTestId('fixed-cost-payments')).toContainText('Final payment')
+  // Stopped is done: no Stop again, nothing to Pay.
+  await expect(page.getByTestId('fixed-cost-stopped')).toBeVisible()
+  await expect(page.getByTestId('stop-fixed-cost')).toHaveCount(0)
+  await expect(page.getByTestId('pay-fixed-cost')).toHaveCount(0)
 
-    // Undone, asked first: it runs again, and its final payment goes.
-    await page.getByTestId('unstop-fixed-cost').click()
-    await page.getByRole('dialog').getByRole('button', { name: 'Undo' }).click()
-    await expect(page.getByTestId('stop-fixed-cost')).toBeVisible()
-    await expect(page.getByTestId('pay-fixed-cost')).toBeVisible()
-    await expect(page.getByTestId('fixed-cost-payments')).not.toContainText('Final payment')
-  },
-)
+  // Undone, asked first: it runs again, and its final payment goes.
+  await page.getByTestId('unstop-fixed-cost').click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Undo' }).click()
+  await expect(page.getByTestId('stop-fixed-cost')).toBeVisible()
+  await expect(page.getByTestId('pay-fixed-cost')).toBeVisible()
+  await expect(page.getByTestId('fixed-cost-payments')).not.toContainText('Final payment')
+})

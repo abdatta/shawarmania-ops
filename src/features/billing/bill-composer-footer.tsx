@@ -35,32 +35,25 @@ import type { CustomerSelection } from './customer-dialog'
  */
 export function BillComposerFooter({
   lines,
-  customer,
   settling,
   editing,
-  onOpenCustomer,
   onPaid,
   onSaveOrder,
   onCancelEdit,
   discountTotalPaise = 0,
   service,
   serviceOwed = false,
-  collectCustomerDetails = true,
   delivery = false,
   orderLabel,
 }: {
   /**
-   * The order's label, with `delivery-orders` on: it sits here, by the chips and
-   * Order, and the customer row heads the panel instead (owner, 2026-11-01).
-   * Absent, this is today's footer.
+   * The order's label: it sits here, by the chips and Order, and the customer
+   * row heads the panel instead (owner, 2026-11-01).
    */
-  orderLabel?: ReactNode
+  orderLabel: ReactNode
   lines: BillLineDraft[]
-  /** What the biller decided, or null while they have decided nothing. */
-  customer: CustomerSelection | null
   settling: boolean
   editing: boolean
-  onOpenCustomer: () => void
   onPaid: () => void
   onSaveOrder: () => void
   onCancelEdit?: (() => void) | undefined
@@ -71,7 +64,7 @@ export function BillComposerFooter({
    * and charging another.
    */
   discountTotalPaise?: number
-  /** Dine-in and takeaway, where the outlet offers them, beside the customer. */
+  /** Dine-in and takeaway, where the outlet offers them, beside the label. */
   service?: ReactNode
   /**
    * Where the food goes is still unanswered and the outlet requires an answer
@@ -79,7 +72,6 @@ export function BillComposerFooter({
    * unpressed beside them are the reminder. Customer entry remains optional.
    */
   serviceOwed?: boolean
-  collectCustomerDetails?: boolean
   /**
    * A delivery order (delivery-orders-are-made-not-billed, D7): no total, no
    * customer and no Paid. Its only action is Order.
@@ -109,19 +101,11 @@ export function BillComposerFooter({
         itself, in the place it always sits. Rendering it here too would be two
         of one control — which is the failure this footer's own doc warns about.
       */}
-      {!editing && orderLabel !== undefined && (
+      {!editing && (
         <>
           <div>{orderLabel}</div>
           {service}
         </>
-      )}
-      {!editing && orderLabel === undefined && (
-        <CustomerServiceRow
-          customer={customer}
-          onOpen={onOpenCustomer}
-          service={service}
-          collectCustomerDetails={collectCustomerDetails && !delivery}
-        />
       )}
 
       <div
@@ -187,33 +171,6 @@ function customerRowLabel(customer: CustomerSelection): string {
   }
   const phone = `+91 ${formatIndianPhone(customer.phone)}`
   return customer.name === '' ? phone : `${customer.name} · ${phone}`
-}
-
-/**
- * The type chips on a row of their own, **above** the customer control
- * [owner, 2026-09-27] (each-outlet-chooses-how-it-serves): where the food goes
- * first, then who it is for. At an outlet where the counter asks nothing this
- * is the customer row alone, exactly as before.
- */
-export function CustomerServiceRow({
-  customer,
-  onOpen,
-  service,
-  collectCustomerDetails = true,
-}: {
-  customer: CustomerSelection | null
-  onOpen: () => void
-  service?: ReactNode
-  collectCustomerDetails?: boolean
-}) {
-  if (!collectCustomerDetails) return service ?? null
-  if (!service) return <CustomerRow customer={customer} onOpen={onOpen} />
-  return (
-    <div className="space-y-3" data-testid="customer-service-row">
-      {service}
-      <CustomerRow customer={customer} onOpen={onOpen} />
-    </div>
-  )
 }
 
 /**

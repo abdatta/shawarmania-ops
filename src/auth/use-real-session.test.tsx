@@ -28,6 +28,7 @@ const auth = vi.hoisted(() => ({
   proveCounterDeviceSession: vi.fn(),
   signOut: vi.fn(),
   onAuthChange: vi.fn(),
+  storedSessionIsDeviceNow: () => false,
 }))
 const resume = vi.hoisted(() => ({ readCounterResume: vi.fn() }))
 

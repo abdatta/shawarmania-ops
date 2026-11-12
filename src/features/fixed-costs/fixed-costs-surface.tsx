@@ -10,7 +10,6 @@ import {
 } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 
-import { useChangeGate } from '@/change-gates/context'
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { DataTable, type DataTableColumn } from '@/components/layout/data-table'
 import { EmptyState } from '@/components/layout/empty-state'
@@ -28,18 +27,14 @@ import { useAdapters } from '@/data-access'
 import type { FixedCostsReading } from '@/data-access/fixed-costs'
 import { formatPaise } from '@/domain'
 import {
-  activeDays,
   addMonths,
   agreedPartMonth,
   alreadyPaidIn,
-  balance,
   shortBefore,
   stopUndo,
   coverage,
-  daysInMonth,
   FIXED_COST_CATEGORIES,
   FIXED_COST_CATEGORY_LABEL,
-  isProrated,
   monthCost,
   monthOf,
   settlementFor,
@@ -148,22 +143,21 @@ export function FixedCostsSurface() {
 
   const current = reading?.key === outletId ? reading.value : null
   const month = current ? monthOf(current.today) : null
-  const agreed = useChangeGate('agreed-part-months')
-  // With agreed-part-months on, a stopped cost keeps its place for the month it
-  // stopped in, and while it is not closed or still owes (owner, 2026-10-31);
-  // after that it waits behind one line at the foot.
+  // A stopped cost keeps its place for the month it stopped in, and while it is
+  // not closed or still owes (owner, 2026-10-31); after that it waits behind one
+  // line at the foot.
   const listed = (c: FixedCostFacts, today: string) =>
     !c.stopsOn ||
-    (agreed
-      ? monthOf(c.stopsOn) === monthOf(today) || unclosed(c) || owes(thisMonthStatus(c, today))
-      : c.stopsOn >= today)
+    monthOf(c.stopsOn) === monthOf(today) ||
+    unclosed(c) ||
+    owes(thisMonthStatus(c, today))
   const [showStopped, setShowStopped] = useState(false)
   const ongoing =
     current?.costs
       .filter((c) => listed(c, current.today))
       // The read puts stopped costs last; a stopped one keeps the place it was
-      // added in (agreed-part-months), so the list is put back in that order.
-      .sort((a, b) => (agreed ? addedAt(a).localeCompare(addedAt(b)) : 0))
+      // added in, so the list is put back in that order.
+      .sort((a, b) => addedAt(a).localeCompare(addedAt(b)))
       // Overdue first (owner, 2026-10-20): the rows money is late on lead the
       // list, and keep their order among themselves.
       .sort(
@@ -245,7 +239,6 @@ export function FixedCostsSurface() {
             <CostTable
               costs={ongoing}
               today={current.today}
-              agreed={agreed}
               lit={lit}
               onPay={pay}
               onOpen={open}
@@ -257,35 +250,22 @@ export function FixedCostsSurface() {
               }
             />
           </div>
-          {stopped.length > 0 &&
-            (agreed ? (
-              // One quiet line however many pile up (owner, 2026-10-31).
-              <div data-testid="stopped-fixed-costs">
-                <button
-                  type="button"
-                  onClick={() => setShowStopped((shown) => !shown)}
-                  aria-expanded={showStopped}
-                  data-testid="show-stopped-fixed-costs"
-                  className="w-full rounded-lg px-3 py-2 text-left text-sm text-content-muted hover:bg-surface-raised focus-visible:focus-ring"
-                >
-                  Stopped · {stopped.length} ·{' '}
-                  <span className="font-semibold text-accent-text">
-                    {showStopped ? 'Hide' : 'Show'}
-                  </span>
-                </button>
-                {showStopped && (
-                  <CostTable
-                    costs={stopped}
-                    today={current.today}
-                    agreed
-                    lit={lit}
-                    onPay={pay}
-                    onOpen={open}
-                  />
-                )}
-              </div>
-            ) : (
-              <Section id="stopped-fixed-costs" title="Stopped">
+          {stopped.length > 0 && (
+            // One quiet line however many pile up (owner, 2026-10-31).
+            <div data-testid="stopped-fixed-costs">
+              <button
+                type="button"
+                onClick={() => setShowStopped((shown) => !shown)}
+                aria-expanded={showStopped}
+                data-testid="show-stopped-fixed-costs"
+                className="w-full rounded-lg px-3 py-2 text-left text-sm text-content-muted hover:bg-surface-raised focus-visible:focus-ring"
+              >
+                Stopped · {stopped.length} ·{' '}
+                <span className="font-semibold text-accent-text">
+                  {showStopped ? 'Hide' : 'Show'}
+                </span>
+              </button>
+              {showStopped && (
                 <CostTable
                   costs={stopped}
                   today={current.today}
@@ -293,8 +273,9 @@ export function FixedCostsSurface() {
                   onPay={pay}
                   onOpen={open}
                 />
-              </Section>
-            ))}
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -333,7 +314,6 @@ export function FixedCostsSurface() {
 function CostTable({
   costs,
   today,
-  agreed = false,
   lit = null,
   onPay,
   onOpen,
@@ -341,15 +321,12 @@ function CostTable({
 }: {
   costs: FixedCostFacts[]
   today: string
-  /** agreed-part-months: no day count, stopped said, done rows greyed. */
-  agreed?: boolean
   /** The row just tapped, or whose Pay sheet is open; its Pay too, if that was tapped. */
   lit?: Lit | null
   onPay: (cost: FixedCostFacts) => void
   onOpen: (cost: FixedCostFacts) => void
   empty?: ReactNode
 }) {
-  const month = monthOf(today)
   const columns: DataTableColumn<FixedCostFacts>[] = [
     {
       id: 'name',
@@ -372,9 +349,7 @@ function CostTable({
           <span className="block text-xs text-content-muted">
             {FIXED_COST_CATEGORY_LABEL[cost.category]}
             {/* Stopped is said by the row itself; its date changes nothing (owner, 2026-10-31). */}
-            {agreed
-              ? cost.stopsOn && ' · Stopped'
-              : isProrated(cost, month) && ` · ${activeDays(cost, month).count} days`}
+            {cost.stopsOn && ' · Stopped'}
           </span>
         </Link>
       ),
@@ -402,7 +377,7 @@ function CostTable({
         const status = thisMonthStatus(cost, today)
         // A stopped cost is closed and has nothing to pay; one stopped before
         // agreed-part-months offers Close, on its page (owner, 2026-10-31).
-        if (agreed && cost.stopsOn && unclosed(cost))
+        if (cost.stopsOn && unclosed(cost))
           return (
             <button
               type="button"
@@ -415,7 +390,7 @@ function CostTable({
             </button>
           )
         // Above the row's own link, so the tap pays rather than opens.
-        const payable = agreed && cost.stopsOn ? owes(status) : status.active || owes(status)
+        const payable = cost.stopsOn ? owes(status) : status.active || owes(status)
         return payable ? (
           <button
             type="button"
@@ -472,7 +447,7 @@ function CostTable({
             : 'hover:bg-surface-raised',
           // Done: greyed, still in its place, its ring still saying what was
           // paid; the grey alone says it stopped (owner, 2026-10-31).
-          agreed && isDone(cost, today) && 'opacity-50 grayscale',
+          isDone(cost, today) && 'opacity-50 grayscale',
           // Any row tints the moment it is pressed, for its Pay or its page, and
           // stays tinted through the pause and behind its sheet (owner,
           // 2026-10-21: which row was touched, seen rather than read). A tint
@@ -560,7 +535,7 @@ function unclosed(cost: FixedCostFacts): boolean {
   return cost.stopsOn !== null && !settlementFor(cost, monthOf(cost.stopsOn))
 }
 
-/** Stopped, closed, and nothing left to pay: done (agreed-part-months). */
+/** Stopped, closed, and nothing left to pay: done. */
 function isDone(cost: FixedCostFacts, today: string): boolean {
   return cost.stopsOn !== null && !unclosed(cost) && !owes(thisMonthStatus(cost, today))
 }
@@ -635,7 +610,7 @@ export function FixedCostPage() {
   const [dropping, setDropping] = useState<{ month: string; coveredPaise: number } | null>(null)
   // Undo a payment (owner, 2026-10-19): the expense, and what its answer recorded.
   const [undoing, setUndoing] = useState<FixedCostPayment | null>(null)
-  // Undo a stop, asked first (agreed-part-months, owner 2026-10-31).
+  // Undo a stop, asked first (owner, 2026-10-31).
   const [unstopping, setUnstopping] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -663,8 +638,7 @@ export function FixedCostPage() {
 
   const cost =
     reading === null ? undefined : (reading.costs.find((c) => c.id === fixedCostId) ?? null)
-  const agreed = useChangeGate('agreed-part-months')
-  // The part month whose agreed figure is being changed (agreed-part-months).
+  // The part month whose agreed figure is being changed.
   const [changing, setChanging] = useState<string | null>(null)
   const changed = () => {
     setSheet(null)
@@ -728,7 +702,6 @@ export function FixedCostPage() {
           cost={cost}
           today={reading.today}
           busy={busy}
-          agreed={agreed}
           onPay={() => setSheet('pay')}
           onStop={() => setSheet('stop')}
           onChangeAgreed={setChanging}
@@ -763,26 +736,17 @@ export function FixedCostPage() {
               onSaved={changed}
             />
           )}
-          {sheet === 'stop' &&
-            (agreed ? (
-              <CloseSheet
-                cost={cost}
-                today={reading.today}
-                onClose={() => setSheet(null)}
-                onClosed={(countsIn) => {
-                  if (countsIn) setRecorded(countsIn)
-                  changed()
-                }}
-              />
-            ) : (
-              <StopSheet
-                open
-                cost={cost}
-                today={reading.today}
-                onClose={() => setSheet(null)}
-                onStopped={changed}
-              />
-            ))}
+          {sheet === 'stop' && (
+            <CloseSheet
+              cost={cost}
+              today={reading.today}
+              onClose={() => setSheet(null)}
+              onClosed={(countsIn) => {
+                if (countsIn) setRecorded(countsIn)
+                changed()
+              }}
+            />
+          )}
           {changing && (
             <AgreedMonthSheet
               cost={cost}
@@ -845,7 +809,6 @@ function CostDetail({
   cost,
   today,
   busy,
-  agreed,
   onPay,
   onStop,
   onChangeAgreed,
@@ -857,8 +820,6 @@ function CostDetail({
   cost: FixedCostFacts
   today: string
   busy: boolean
-  /** agreed-part-months: closing and first month, Change, and Close {Month}. */
-  agreed: boolean
   onPay: () => void
   onStop: () => void
   onChangeAgreed: (month: string) => void
@@ -883,13 +844,13 @@ function CostDetail({
   const payments = [...cost.payments].sort(
     (a, b) => b.countsIn.localeCompare(a.countsIn) || b.createdAt.localeCompare(a.createdAt),
   )
-  // With agreed-part-months on, a cost is stopped the moment Stop is saved,
-  // whatever its last day (owner, 2026-10-31).
-  const stopped = cost.stopsOn !== null && (agreed || cost.stopsOn < today)
+  // A cost is stopped the moment Stop is saved, whatever its last day (owner,
+  // 2026-10-31).
+  const stopped = cost.stopsOn !== null
   // A cost stopped before agreed-part-months, its last month not yet closed.
-  const toClose = agreed && unclosed(cost)
+  const toClose = unclosed(cost)
   // A stopped cost has nothing to pay: Stop closed it (owner, 2026-10-31).
-  const payable = !agreed || !cost.stopsOn || (!toClose && owes(status))
+  const payable = !cost.stopsOn || (!toClose && owes(status))
 
   return (
     <div className="space-y-6" data-testid={`fixed-cost-${cost.id}`}>
@@ -939,8 +900,7 @@ function CostDetail({
             const future = row.month > month
             const ended = row.month < month
             const short = row.coveredPaise < row.costPaise
-            const days = activeDays(cost, row.month).count
-            const part = agreed ? agreedPartMonth(cost, row.month) : null
+            const part = agreedPartMonth(cost, row.month)
             return (
               <li
                 key={row.month}
@@ -953,13 +913,7 @@ function CostDetail({
                   </p>
                   <p className="text-xs text-content-muted">
                     {coverageWords(row.coveredPaise, row.costPaise, ended, future)}
-                    {part
-                      ? ` · ${part}`
-                      : settlement
-                        ? ' · settled'
-                        : !agreed && days < daysInMonth(row.month)
-                          ? ` · ${days} of ${daysInMonth(row.month)} days`
-                          : ''}
+                    {part ? ` · ${part}` : settlement ? ' · settled' : ''}
                   </p>
                 </div>
                 {part ? (
@@ -1087,7 +1041,7 @@ function CostDetail({
           </button>
         </div>
       )}
-      {agreed && stopped && !toClose && (
+      {stopped && !toClose && (
         // The cross says it stopped here, where nothing is about payment; Undo
         // is plain text, there when needed and never loud (owner, 2026-10-31).
         <p
@@ -1217,7 +1171,6 @@ function AddSheet({
   onAdded: () => void
 }) {
   const { fixedCosts } = useAdapters()
-  const agreed = useChangeGate('agreed-part-months')
   const [name, setName] = useState('')
   const [category, setCategory] = useState<FixedCostCategory | ''>('')
   const [amount, setAmount] = useState('')
@@ -1237,7 +1190,7 @@ function AddSheet({
     if (category === '') return attention.flag('category', 'Choose a category.')
     if (monthlyPaise === null)
       return attention.flag('amount', 'Enter the monthly amount, in rupees.')
-    if (agreed && midMonth && firstMonthPaise === null)
+    if (midMonth && firstMonthPaise === null)
       return attention.flag(
         'firstMonth',
         `Say what ${monthName(monthOf(startsOn))} comes to, in whole rupees.`,
@@ -1252,7 +1205,7 @@ function AddSheet({
         monthlyPaise,
         startsOn,
         note: note.trim() || null,
-        ...(agreed && midMonth && firstMonthPaise !== null ? { firstMonthPaise } : {}),
+        ...(midMonth && firstMonthPaise !== null ? { firstMonthPaise } : {}),
       })
       onAdded()
     } catch (cause) {
@@ -1350,13 +1303,8 @@ function AddSheet({
             data-testid="fixed-cost-starts"
             onChange={(event) => setStartsOn(event.target.value || monthOf(today))}
           />
-          {!agreed && startsOn.slice(8) !== '01' && (
-            <p className="text-xs text-content-muted">
-              In {monthName(monthOf(startsOn))} we pay only for the days from {shortDate(startsOn)}.
-            </p>
-          )}
         </Field>
-        {agreed && midMonth && (
+        {midMonth && (
           <FirstMonthField
             month={monthOf(startsOn)}
             value={firstMonth}
@@ -1415,9 +1363,8 @@ function EditSheet({
   const amountPaise = parseAmount(amount)
   const amountChanged = amountPaise !== null && amountPaise !== currentAmount
   const attention = useFieldAttention<'name' | 'amount' | 'firstMonth'>()
-  const agreed = useChangeGate('agreed-part-months')
   // A start moved to a day that is not the 1st asks what that month comes to.
-  const asksFirstMonth = agreed && startsOn !== cost.startsOn && startsOn.slice(8) !== '01'
+  const asksFirstMonth = startsOn !== cost.startsOn && startsOn.slice(8) !== '01'
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -1567,115 +1514,6 @@ function EditSheet({
             onChange={(event) => setNote(event.target.value)}
           />
         </Field>
-      </form>
-    </FormSheet>
-  )
-}
-
-function StopSheet({
-  open,
-  cost,
-  today,
-  onClose,
-  onStopped,
-}: {
-  open: boolean
-  cost: FixedCostFacts
-  today: string
-  onClose: () => void
-  onStopped: () => void
-}) {
-  const { fixedCosts } = useAdapters()
-  const [stopsOn, setStopsOn] = useState(today)
-  const [clear, setClear] = useState(true)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const stopped = { ...cost, stopsOn }
-  const ahead = -balance(stopped, monthOf(stopsOn))
-
-  async function submit(event: FormEvent) {
-    event.preventDefault()
-    setBusy(true)
-    try {
-      await fixedCosts.stop(cost.id, stopsOn, ahead > 0 && clear)
-      onStopped()
-    } catch (cause) {
-      setError(messageOf(cause, 'That did not save. Try again in a moment.'))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <FormSheet
-      open={open}
-      onClose={onClose}
-      title={`Stop ${cost.name}`}
-      error={error}
-      busy={busy}
-      footer={
-        <button
-          type="submit"
-          form="fixed-cost-stop-form"
-          disabled={busy}
-          className={`${buttonVariants({ variant: 'danger', size: 'phone' })} w-full`}
-        >
-          {busy ? 'Saving…' : 'Stop'}
-        </button>
-      }
-    >
-      <form id="fixed-cost-stop-form" onSubmit={submit} className="space-y-4" noValidate>
-        <Field label="Last day" id="fixed-cost-stops-on">
-          <Input
-            id="fixed-cost-stops-on"
-            type="date"
-            value={stopsOn}
-            min={cost.startsOn}
-            onChange={(event) => setStopsOn(event.target.value || today)}
-          />
-          <p className="text-xs text-content-muted">
-            In {monthName(monthOf(stopsOn))} we pay{' '}
-            {formatPaise(monthCost(stopped, monthOf(stopsOn)))}, then nothing more.
-          </p>
-        </Field>
-        {ahead > 0 && (
-          <fieldset className="space-y-2">
-            <legend className="mb-1 text-sm font-semibold">{formatPaise(ahead)} paid ahead</legend>
-            {[
-              {
-                value: true,
-                words: `Clear ${formatPaise(ahead)}`,
-                effect: 'Nothing is owed either way.',
-              },
-              {
-                value: false,
-                words: 'Keep it',
-                effect: 'Shown under Stopped until it is cleared.',
-              },
-            ].map((option) => (
-              <label
-                key={String(option.value)}
-                className={cn(
-                  'flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2',
-                  clear === option.value ? 'border-primary bg-primary/5' : 'border-border',
-                )}
-              >
-                <input
-                  type="radio"
-                  name="fixed-cost-stop-ahead"
-                  checked={clear === option.value}
-                  onChange={() => setClear(option.value)}
-                  className="mt-1"
-                />
-                <span>
-                  <span className="block text-sm font-semibold">{option.words}</span>
-                  <span className="block text-xs text-content-muted">{option.effect}</span>
-                </span>
-              </label>
-            ))}
-          </fieldset>
-        )}
       </form>
     </FormSheet>
   )

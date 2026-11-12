@@ -121,9 +121,8 @@ This is the workflow the billing screen must not fight:
    together, without allocating an order number. **Speed here is the product.**
 3. Customer name and phone are captured when convenient — for a walk-in queue at peak, often not at all. Both must be optional, and neither should ever block settling a bill.
 4. Aggregator orders follow the same order → prepare → full-payment path, with
-   the rider collecting, or use pay-now when appropriate. With the
-   `delivery-orders` gate on, an outlet that offers **Delivery** instead rings
-   them as delivery orders (#83): made by the kitchen and ticked dish by dish
+   the rider collecting, or use pay-now when appropriate. An outlet that offers
+   **Delivery** instead rings them as delivery orders (#83): made by the kitchen and ticked dish by dish
    like any order, then **handed over** to the rider with no bill and no money,
    because the aggregator's own records are where that revenue is read from.
 5. At close, the manager counts the drawer and reconciles against what the app expected.

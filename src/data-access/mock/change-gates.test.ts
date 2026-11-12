@@ -59,11 +59,11 @@ describe('the demo’s change gates', () => {
 
   it('forget every turn on reset, back to everything on', () => {
     const storage = memoryStorage()
-    createDemoChangeGates({ storage }).turn('delivery-orders', false, null)
+    createDemoChangeGates({ storage }).turn('deactivate-then-leave', false, null)
     forgetDemoGateTurns(storage)
     expect(storage.items.has(DEMO_GATES_KEY)).toBe(false)
     expect(storage.items.has(DEMO_TURNS_KEY)).toBe(false)
-    expect(createDemoChangeGates({ storage }).snapshot()['delivery-orders']).toBe(true)
+    expect(createDemoChangeGates({ storage }).snapshot()['deactivate-then-leave']).toBe(true)
   })
 
   it('show one tablet in each state the gate page can draw', () => {

@@ -6,7 +6,6 @@ import { LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { useAdapters } from '@/data-access'
 import type { KitchenCategory } from '@/data-access/adapters'
 import { formatTime } from '@/domain'
-import { useChangeGate } from '@/change-gates/context'
 import { cn } from '@/lib/cn'
 import { useCounterDevice } from '@/session/counter-context'
 
@@ -87,9 +86,8 @@ export function DishKitchenBoardScreen({ player }: { player?: TunePlayer }) {
     () => (board?.sort === 'newest_first' ? [...cards].reverse() : cards),
     [board?.sort, cards],
   )
-  // `delivery-orders`: a departing receipt fades while the board closes up under it.
-  const fadeWhileClosing = useChangeGate('delivery-orders')
-  const ready = useKitchenReady(kitchen, read, baseOrdered, fadeWhileClosing)
+  // A departing receipt fades while the board closes up under it.
+  const ready = useKitchenReady(kitchen, read, baseOrdered)
   /*
     Hold a departing Done ticket in its original slot through the fade and gap.
     A Done or an Undo still saving is held too, until the board shows what it
@@ -120,7 +118,7 @@ export function DishKitchenBoardScreen({ player }: { player?: TunePlayer }) {
         (card) =>
           `${card.order.id}:${card.shake}` +
           // A receipt that starts or stops leaving changes the layout under it.
-          (fadeWhileClosing ? `:${ready.pending.get(card.order.id)?.phase ?? ''}` : ''),
+          `:${ready.pending.get(card.order.id)?.phase ?? ''}`,
       )
       .join(',')}`,
   )

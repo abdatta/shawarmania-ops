@@ -1659,7 +1659,7 @@ counter's user agent, followed by a `/logout`, is the cause: the person's
 sign-in replaced the tablet's session in the browser's one slot. The old
 tablet's session cannot be handed back, so set the laptop up again and
 **remove the abandoned row** from the outlet's Tablets list. Remind staff that
-attendance goes on their own phones. With `a-tablet-keeps-its-login` on, a
+attendance goes on their own phones. Since `a-tablet-keeps-its-login`, a
 set-up tablet never shows the sign-in form, so this should not recur
 (Kalyani Cafe, 14, 25 and 30 October 2026).
 

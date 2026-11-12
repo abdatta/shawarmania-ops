@@ -1,6 +1,5 @@
 import { emptyDishWorkflow, seedDishWorkflow } from './dish-workflow'
 import { seedDeliveryOrders } from './delivery'
-import { onDeliveryOrders } from '@/change-gates/delivery-orders'
 import type { ChangeGateKey } from '@/change-gates/gates'
 import { bootSnapshot } from '@/change-gates/snapshot'
 import type { AppRole, AttendanceAdapter, DataAdapters } from '../adapters'
@@ -86,12 +85,6 @@ export interface DemoData {
    */
   changeGates: DemoChangeGates
   /**
-   * Whether `delivery-orders` is on for the demo's mocks
-   * (delivery-orders-are-made-not-billed): the demo's switchboard, or the page's
-   * frozen snapshot in a test that names no gate.
-   */
-  deliveryOn: () => boolean
-  /**
    * Whether `deactivate-then-leave` and `owner-access-in-the-database` are on
    * for the accounts mock (a-deactivated-person-leaves-in-two-steps): the
    * demo's switchboard, or the page's frozen snapshot in a test that names no
@@ -116,8 +109,6 @@ export function createDemoData(
      * when it reads them; every other test's figures stay what they were.
      */
     fixedCosts?: boolean
-    /** Where the billing, kitchen and analytics mocks ask whether `delivery-orders` is on. */
-    deliveryOrders?: 'switchboard' | (() => boolean)
     /**
      * Seed the delivery walkthrough (delivery-orders-are-made-not-billed): Kalyani
      * offers Delivery and carries delivery orders. They take order numbers, so
@@ -131,7 +122,6 @@ export function createDemoData(
   const {
     dishWalkthrough = false,
     fixedCosts = false,
-    deliveryOrders,
     deliveryWalkthrough = false,
     accountGates,
     ...storeOptions
@@ -142,10 +132,6 @@ export function createDemoData(
     seedDishWorkflow(store)
     if (deliveryWalkthrough) seedDeliveryOrders(store)
   } else emptyDishWorkflow(store)
-  const deliveryOn =
-    deliveryOrders === 'switchboard'
-      ? () => changeGates.snapshot()['delivery-orders']
-      : (deliveryOrders ?? onDeliveryOrders)
   if (fixedCosts) seedDemoFixedCosts(store)
   return {
     accounts: createDemoAccounts(),
@@ -157,7 +143,6 @@ export function createDemoData(
     counter: createDemoCounter(),
     kitchen: createDemoKitchen(),
     changeGates,
-    deliveryOn,
     accountGateOn:
       accountGates === 'switchboard'
         ? (key) => changeGates.snapshot()[key]
@@ -282,12 +267,11 @@ export function createMockAdapters(
       // The demo's stand-in for the ledger triggers on `bills` (#62, D6, D11).
       createDemoLoyaltyHooks(data.customers, store),
       () => [...data.kitchen.acks, ...Object.values(data.kitchen.stationAcks ?? {}).flat()],
-      data.deliveryOn,
     ),
     // The role scopes the tablet list as `counter_devices_select` will, and the
     // persona's name stands in for the username the tablet types — demo mode has
     // no usernames, and a handshake with nobody to name is not a handshake.
-    kitchen: createMockKitchenAdapter(store, data.kitchen, undefined, undefined, data.deliveryOn),
+    kitchen: createMockKitchenAdapter(store, data.kitchen),
     changeGates: createMockChangeGatesAdapter(data.changeGates, role),
     counter: createMockCounterAdapter(
       data.counter,

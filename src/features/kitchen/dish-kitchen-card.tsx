@@ -13,7 +13,6 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
-import { useChangeGate } from '@/change-gates/context'
 import { cn } from '@/lib/cn'
 import type { KitchenOrder } from '@/data-access/adapters'
 import {
@@ -161,7 +160,7 @@ export function DishKitchenCard({
 }) {
   const done = Boolean(order.readyId)
   const saving = readyPhase === 'saving'
-  const departing = readyPhase === 'leaving' || readyPhase === 'gap'
+  const departing = readyPhase === 'leaving'
   const [expanded, setExpanded] = useState(false)
   const collapsed = done && !expanded
   const dimmed = done || Boolean(readyPhase)
@@ -169,11 +168,8 @@ export function DishKitchenCard({
   const alerting = !done && state !== 'quiet'
   const look = alerting ? LOOK[state] : null
   const tag = serviceTag(order)
-  // `delivery-orders`: the tag carries its icon, and a folded ticket keeps it.
-  const iconsShown = useChangeGate('delivery-orders')
-  // `delivery-orders`: a departing receipt fades while the board closes up under it.
-  const fadeWhileClosing = useChangeGate('delivery-orders')
-  const kind = iconsShown ? serviceKind(order) : null
+  // The tag carries its icon, and a folded ticket keeps it.
+  const kind = serviceKind(order)
   const ringing = rings.left > 0 || rings.sounding
   const dotsLit = Math.min(RINGS_PER_ALERT, rings.left + (rings.sounding ? 1 : 0))
   const rows =
@@ -188,15 +184,13 @@ export function DishKitchenCard({
       className={cn(
         'relative drop-shadow-md',
         !readyPhase && alerting && shake > 0 && 'kitchen-shake',
-        readyPhase === 'leaving' &&
-          (fadeWhileClosing ? 'kitchen-leave-fade' : 'kitchen-ready-exit'),
-        readyPhase === 'gap' && 'invisible pointer-events-none',
+        // A departing receipt fades while the board closes up under it.
+        readyPhase === 'leaving' && 'kitchen-leave-fade',
       )}
-      aria-hidden={readyPhase === 'gap' || undefined}
       // The board keeps each card in its column; a Done receipt and the ticket
       // it reopens into belong to one order, and one takes the other's place.
       data-masonry-key={order.id}
-      data-masonry-leaving={(fadeWhileClosing && readyPhase === 'leaving') || undefined}
+      data-masonry-leaving={readyPhase === 'leaving' || undefined}
       data-masonry-group={order.sourceOrderId ?? order.id}
     >
       <article
@@ -274,7 +268,7 @@ export function DishKitchenCard({
               )}
               <button
                 type="button"
-                disabled={disabled || saving || readyPhase === 'leaving' || readyPhase === 'gap'}
+                disabled={disabled || saving || readyPhase === 'leaving'}
                 onClick={(event) => {
                   event.stopPropagation()
                   onReady()

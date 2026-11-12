@@ -111,7 +111,6 @@ export function DemoRoot() {
         matureHistory: true,
         dishWalkthrough: true,
         fixedCosts: true,
-        deliveryOrders: 'switchboard',
         accountGates: 'switchboard',
         deliveryWalkthrough: true,
       }),

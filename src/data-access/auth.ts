@@ -2,7 +2,6 @@ import { FunctionsFetchError, isAuthRetryableFetchError } from '@supabase/supaba
 
 import type { Assignment } from './adapters'
 import type { Tables } from './database.types'
-import { onATabletKeepsItsLogin } from '@/change-gates/a-tablet-keeps-its-login'
 import type { CounterDevice, CounterShift, TabletKind } from '@/session/counter-session'
 import { getSupabaseClient } from './supabase'
 import { authAliasToUsername, usernameToAuthAlias } from '../../shared/username'
@@ -156,12 +155,11 @@ function tabletRefusal(kind: TabletKind): string {
 }
 
 /**
- * With `a-tablet-keeps-its-login` on, the kind of tablet whose session a
- * person's sign-in or activation would replace, so it is refused before any
- * request. Off, null, which is today.
+ * The kind of tablet whose session a person's sign-in or activation would
+ * replace, so it is refused before any request (a-tablet-keeps-its-login,
+ * design D2).
  */
 async function tabletHoldingThisBrowser(): Promise<TabletKind | null> {
-  if (!onATabletKeepsItsLogin()) return null
   return storedSessionIsDevice()
 }
 

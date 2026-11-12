@@ -84,8 +84,6 @@ export interface FixedCostsAdapter {
   update(fixedCostId: string, details: FixedCostDetails): Promise<void>
   /** Edit: a new monthly amount from a month on. */
   changeAmount(fixedCostId: string, fromMonth: string, amountPaise: number): Promise<void>
-  /** Stop from a date; `clearAhead` settles the last month to clear a paid-ahead balance. */
-  stop(fixedCostId: string, stopsOn: string, clearAhead: boolean): Promise<void>
   /**
    * Stop, closing every month through the stop month: the stop month costs what
    * was paid plus the final payment, and nothing is left to pay (agreed-part-months).

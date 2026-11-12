@@ -80,65 +80,47 @@ async function removeTablet(request: APIRequestContext, token: string, deviceId:
   expect(removed.ok(), 'could not remove the test tablet').toBe(true)
 }
 
-test(
-  'a set-up counter tablet opens sign-in and activation and lands on the counter, still itself',
-  { tag: '@cg-on:a-tablet-keeps-its-login' },
-  async ({ browser, request }) => {
-    const token = await adminToken(request)
-    const { context, page, session, label } = await setUpTablet(browser, request, token)
-    try {
-      // Watched over the whole visit, not read at the end: a flash is the bug.
-      await page.addInitScript(() => {
-        const seen = { password: false }
-        ;(window as unknown as { __passwordSeen: typeof seen }).__passwordSeen = seen
-        new MutationObserver(() => {
-          if (document.querySelector('input[type=password]')) seen.password = true
-        }).observe(document, { childList: true, subtree: true })
-      })
+test('a set-up counter tablet opens sign-in and activation and lands on the counter, still itself', async ({
+  browser,
+  request,
+}) => {
+  const token = await adminToken(request)
+  const { context, page, session, label } = await setUpTablet(browser, request, token)
+  try {
+    // Watched over the whole visit, not read at the end: a flash is the bug.
+    await page.addInitScript(() => {
+      const seen = { password: false }
+      ;(window as unknown as { __passwordSeen: typeof seen }).__passwordSeen = seen
+      new MutationObserver(() => {
+        if (document.querySelector('input[type=password]')) seen.password = true
+      }).observe(document, { childList: true, subtree: true })
+    })
 
-      for (const address of ['sign-in', 'activate?code=x', 'owner', 'no-such-page']) {
-        await page.goto(address)
-        await expect(page).toHaveURL(/\/counter$/)
-        await expect(page.getByText(label, { exact: true })).toBeVisible()
-        expect(
-          await page.evaluate(
-            () =>
-              (window as unknown as { __passwordSeen: { password: boolean } }).__passwordSeen
-                .password,
-          ),
-          `a password field was drawn at /${address}`,
-        ).toBe(false)
-      }
-
-      // The same session, and it still works as the tablet.
-      const after = await storedSession(page)
-      expect(after.user.id).toBe(session.user.id)
-      const own = await request.get(`${SUPABASE_URL}/rest/v1/counter_devices`, {
-        headers: { apikey: LOCAL_ANON_KEY, authorization: `Bearer ${after.access_token}` },
-        params: { id: `eq.${session.user.id}`, select: 'id' },
-      })
-      expect(own.ok()).toBe(true)
-      expect(await own.json()).toEqual([{ id: session.user.id }])
-    } finally {
-      await context.close()
-      await removeTablet(request, token, session.user.id)
+    for (const address of ['sign-in', 'activate?code=x', 'owner', 'no-such-page']) {
+      await page.goto(address)
+      await expect(page).toHaveURL(/\/counter$/)
+      await expect(page.getByText(label, { exact: true })).toBeVisible()
+      expect(
+        await page.evaluate(
+          () =>
+            (window as unknown as { __passwordSeen: { password: boolean } }).__passwordSeen
+              .password,
+        ),
+        `a password field was drawn at /${address}`,
+      ).toBe(false)
     }
-  },
-)
 
-test(
-  'a set-up counter tablet still draws the sign-in form, as before',
-  { tag: '@cg-off:a-tablet-keeps-its-login' },
-  async ({ browser, request }) => {
-    const token = await adminToken(request)
-    const { context, page, session } = await setUpTablet(browser, request, token)
-    try {
-      await page.goto('sign-in')
-      await expect(page).toHaveURL(/\/sign-in$/)
-      await expect(page.locator('input[type=password]')).toBeVisible()
-    } finally {
-      await context.close()
-      await removeTablet(request, token, session.user.id)
-    }
-  },
-)
+    // The same session, and it still works as the tablet.
+    const after = await storedSession(page)
+    expect(after.user.id).toBe(session.user.id)
+    const own = await request.get(`${SUPABASE_URL}/rest/v1/counter_devices`, {
+      headers: { apikey: LOCAL_ANON_KEY, authorization: `Bearer ${after.access_token}` },
+      params: { id: `eq.${session.user.id}`, select: 'id' },
+    })
+    expect(own.ok()).toBe(true)
+    expect(await own.json()).toEqual([{ id: session.user.id }])
+  } finally {
+    await context.close()
+    await removeTablet(request, token, session.user.id)
+  }
+})

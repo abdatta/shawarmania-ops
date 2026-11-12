@@ -82,15 +82,6 @@ export function createSupabaseFixedCostsAdapter(
       if (error) throw toFixedCostError(error)
     },
 
-    async stop(fixedCostId, stopsOn, clearAhead) {
-      const { error } = await client.rpc('stop_fixed_cost', {
-        p_fixed_cost_id: fixedCostId,
-        p_stops_on: stopsOn,
-        p_clear_ahead: clearAhead,
-      })
-      if (error) throw toFixedCostError(error)
-    },
-
     async close(closing) {
       const { error } = await client.rpc('stop_fixed_cost_v3', {
         p_fixed_cost_id: closing.fixedCostId,
