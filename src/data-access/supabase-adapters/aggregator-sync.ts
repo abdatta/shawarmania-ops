@@ -116,6 +116,17 @@ const DUPLICATE_FRACTION = 0.02
  */
 const RUN_PAGE = 25
 
+/**
+ * The outcomes of a run that read the portal with the session it held.
+ *
+ * `reconciliation_failed` is one: a run only gets as far as reconciling once
+ * it has read and written its weeks, so the session worked, and the week that
+ * did not add up asks the owner on its own row. Treating only `ok` as proof
+ * kept a lapse asking for a Reconnect the owner had just done (2026-11-12).
+ * `awaiting_one_time_password`, a lapse and a changed shape prove nothing.
+ */
+const READING_WORKED: readonly AggregatorRunOutcome[] = ['ok', 'reconciliation_failed']
+
 export function createSupabaseAggregatorSyncAdapter(
   client: SupabaseClient<Database>,
   { channel = 'zomato' }: { channel?: 'zomato' | 'swiggy' } = {},
@@ -231,7 +242,7 @@ export function createSupabaseAggregatorSyncAdapter(
         .in('outcome', ['session_lapsed', 'shape_changed'])
         .order('started_at', { ascending: false })
         .limit(20),
-      // When reading last worked. One successful run ends every failure older
+      // When reading last worked. One run that read ends every failure older
       // than it — they were all symptoms of the one dead session — which is the
       // newest-run-wins rule the tab's badge has counted by all along; without
       // it here the badge says quiet while the page below keeps asking. A
@@ -241,7 +252,7 @@ export function createSupabaseAggregatorSyncAdapter(
         .select('started_at')
         .eq('outlet_id', outletId)
         .eq('channel', channel)
-        .eq('outcome', 'ok')
+        .in('outcome', READING_WORKED)
         .eq('rehearsal', false)
         .order('started_at', { ascending: false })
         .limit(1)
@@ -427,8 +438,8 @@ export function createSupabaseAggregatorSyncAdapter(
    * and a run holding for a code have both been invisible. There is no filter
    * on outcome here at all.
    *
-   * **And no healing.** `events()` drops failures older than the newest `ok`
-   * run and should keep doing so: that is what stops *Needs you* asking for a
+   * **And no healing.** `events()` resolves failures older than the newest
+   * run that read (`READING_WORKED`) and should keep doing so: that is what stops *Needs you* asking for a
    * repair that has already happened. Doing it here would delete the record of
    * an outage at the moment the outage ended.
    */

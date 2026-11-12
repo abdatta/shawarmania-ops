@@ -28,16 +28,21 @@ const LAPSED = {
   detail: null,
 }
 /** A success that postdates the failure: the moment every older failure is over. */
-const OK = { started_at: '2026-08-23T06:37:14.513Z' }
+const OK = { started_at: '2026-08-23T06:37:14.513Z', outcome: 'ok' }
 
 /**
  * A PostgREST builder that answers by what was asked. The runs table is asked
  * two different questions, told apart by their own filters rather than by call
- * order — the failures query carries the `in` filter, the recovery query the
- * `outcome=ok` one — so reordering the implementation's queries cannot silently
- * flip what the stub answers.
+ * order — the failures query asks for the two failure words, the recovery
+ * query for real runs only — so reordering the implementation's queries cannot
+ * silently flip what the stub answers. The recovery row is answered only when
+ * its outcome passes the query's own outcome filter, the way the database would,
+ * so which outcomes count as recovery is decided by the adapter, not the stub.
  */
-function clientWith(failureRows: unknown[], recovered: unknown) {
+function clientWith(
+  failureRows: unknown[],
+  recovered: { started_at: string; outcome: string } | null,
+) {
   const queries: Array<{ table: string; filters: string[] }> = []
   const client = {
     from(table: string) {
@@ -47,7 +52,14 @@ function clientWith(failureRows: unknown[], recovered: unknown) {
         if (filters.includes('outcome in session_lapsed,shape_changed')) {
           return { data: failureRows, error: null }
         }
-        if (filters.includes('outcome=ok')) return { data: recovered, error: null }
+        if (filters.includes('rehearsal=false')) {
+          const asked = filters.find((filter) => filter.startsWith('outcome'))
+          const allowed = asked?.startsWith('outcome=')
+            ? [asked.slice('outcome='.length)]
+            : (asked?.slice('outcome in '.length).split(',') ?? [])
+          const matches = recovered !== null && allowed.includes(recovered.outcome)
+          return { data: matches ? recovered : null, error: null }
+        }
         return { data: [], error: null }
       }
       const builder: Record<string, unknown> = {
@@ -100,7 +112,10 @@ describe('when a failure is over', () => {
   })
 
   it('leaves a failure that is newer than every success standing', async () => {
-    const { adapter } = clientWith([LAPSED], { started_at: '2026-08-23T03:00:00.000Z' })
+    const { adapter } = clientWith([LAPSED], {
+      started_at: '2026-08-23T03:00:00.000Z',
+      outcome: 'ok',
+    })
     const [row] = await adapter.listEvents('o-1')
 
     expect(row!.resolvedAt).toBeNull()
@@ -119,8 +134,33 @@ describe('when a failure is over', () => {
 
     expect(queries).toContainEqual({
       table: 'aggregator_sync_runs',
-      filters: expect.arrayContaining(['outcome=ok', 'rehearsal=false']),
+      filters: expect.arrayContaining(['rehearsal=false']),
     })
+  })
+
+  it('resolves a lapse once a later read got through, even if a week would not reconcile', async () => {
+    // Measured live 2026-11-12: the owner signed back into Zomato, both reads
+    // after it used the new session and wrote their weeks, and both ended
+    // reconciliation_failed over one disputed payout. The page kept asking for
+    // a Reconnect the owner had just done, because only an `ok` healed. The
+    // disputed week is its own row and still asks; the lapse is over.
+    const { adapter } = clientWith([LAPSED], {
+      started_at: OK.started_at,
+      outcome: 'reconciliation_failed',
+    })
+    const [row] = await adapter.listEvents('o-1')
+
+    expect(row!.resolvedAt).toBe(OK.started_at)
+  })
+
+  it('does not count a run that stopped for a code as reading again', async () => {
+    const { adapter } = clientWith([LAPSED], {
+      started_at: OK.started_at,
+      outcome: 'awaiting_one_time_password',
+    })
+    const [row] = await adapter.listEvents('o-1')
+
+    expect(row!.resolvedAt).toBeNull()
   })
 })
 
