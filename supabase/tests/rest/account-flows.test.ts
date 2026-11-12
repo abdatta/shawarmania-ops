@@ -1421,105 +1421,32 @@ describe('usernames and private Super Admin account emails', () => {
   })
 })
 
-describe('Super Admin account-email invariants over the privileged boundary', () => {
-  it('requires the email, keeps it private, and cleans up a duplicate refusal', async () => {
-    const username = freshUsername('owner')
-    const accountEmail = `probe.owner.${RUN}.${seq++}@example.com`
-    const missing = await adminAccounts(superAdminToken, {
-      action: 'provision',
-      fullName: 'Probe Owner Missing Email',
-      username,
-      role: 'super_admin',
-      outletIds: [],
-    })
-    expect(missing.status).toBe(400)
-
-    const created = await adminAccounts<Provisioned>(superAdminToken, {
+/**
+ * Owner access is the database's (a-deactivated-person-leaves-in-two-steps,
+ * design D5): the function refuses to provision or assign it, with or without
+ * the private email it once required.
+ */
+describe('owner access over the privileged boundary', () => {
+  it('refuses to provision an owner or grant owner access', async () => {
+    const provisioned = await adminAccounts<{ error: string }>(superAdminToken, {
       action: 'provision',
       fullName: 'Probe Owner',
-      username,
+      username: freshUsername('owner'),
       role: 'super_admin',
       outletIds: [],
-      accountEmail,
+      accountEmail: `probe.owner.${RUN}.${seq++}@example.com`,
     })
-    expect(created.status).toBe(201)
+    expect(provisioned).toMatchObject({ status: 403, body: { error: 'owner_access_in_database' } })
 
-    const identifiers = await adminAccounts<{
-      identifiers: Record<string, { username: string; accountEmail: string | null }>
-    }>(superAdminToken, { action: 'identifiers' })
-    expect(identifiers.body.identifiers[created.body.profileId]).toEqual(
-      expect.objectContaining({ username, accountEmail }),
-    )
-
-    const duplicateUsername = freshUsername('owndup')
-    const duplicate = await adminAccounts<{ error: string }>(superAdminToken, {
-      action: 'provision',
-      fullName: 'Probe Owner Duplicate Email',
-      username: duplicateUsername,
-      role: 'super_admin',
-      outletIds: [],
-      accountEmail,
-    })
-    expect(duplicate).toMatchObject({
-      status: 409,
-      body: { error: 'email_unavailable' },
-    })
-
-    const retried = await adminAccounts<Provisioned>(superAdminToken, {
-      action: 'provision',
-      fullName: 'Probe Owner Retry',
-      username: duplicateUsername,
-      role: 'super_admin',
-      outletIds: [],
-      accountEmail: `probe.owner.retry.${RUN}.${seq++}@example.com`,
-    })
-    expect(retried.status).toBe(201)
-  })
-
-  it('cannot grant the owner role without its email, and retains it when that role ends', async () => {
-    const { username, result } = await provisionAs(superAdminToken)
-    expect((await redeem({ code: result.body.code, password: NEW_PASSWORD })).status).toBe(204)
-    const refused = await adminAccounts(superAdminToken, {
+    const { result } = await provisionAs(superAdminToken)
+    const granted = await adminAccounts<{ error: string }>(superAdminToken, {
       action: 'assign',
       personId: result.body.profileId,
       role: 'super_admin',
       outletId: null,
+      accountEmail: `probe.grant.${RUN}.${seq++}@example.com`,
     })
-    expect(refused.status).toBe(400)
-
-    const ownerRowsBefore = await clientWithToken(superAdminToken)
-      .from('assignments')
-      .select('id')
-      .eq('person_id', result.body.profileId)
-      .eq('role', 'super_admin')
-      .is('ended_on', null)
-    expect(ownerRowsBefore.data).toEqual([])
-
-    const accountEmail = `probe.grant.${RUN}.${seq++}@example.com`
-    const granted = await adminAccounts<AssignmentChanged>(superAdminToken, {
-      action: 'assign',
-      personId: result.body.profileId,
-      role: 'super_admin',
-      outletId: null,
-      accountEmail,
-    })
-    expect(granted.status).toBe(201)
-
-    const ended = await adminAccounts(superAdminToken, {
-      action: 'end-assignment',
-      assignmentId: granted.body.assignmentId,
-    })
-    expect(ended.status).toBe(200)
-
-    const identifiers = await adminAccounts<{
-      identifiers: Record<string, { username: string; accountEmail: string | null }>
-    }>(superAdminToken, { action: 'identifiers' })
-    expect(identifiers.body.identifiers[result.body.profileId]).toEqual(
-      expect.objectContaining({ username, accountEmail: null }),
-    )
-
-    const retained = await emailSignIn(accountEmail, NEW_PASSWORD, '198.51.100.45')
-    expect(retained.status).toBe(200)
+    expect(granted).toMatchObject({ status: 403, body: { error: 'owner_access_in_database' } })
   })
 })
 
