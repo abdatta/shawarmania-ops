@@ -51,9 +51,14 @@ its own, and no migration in the code half. Retired together with
     migration.
 - [x] 1.5 `docs/` (DATA_MODEL, OPERATIONS, ROLES_AND_PERMISSIONS, SCREENS) no
   longer calls the behaviour gated. No spec named the gate.
-- [ ] 1.6 `npm run lint`, `format:check`, `typecheck`, `contrast`, `test`,
+- [x] 1.6 `npm run lint`, `format:check`, `typecheck`, `contrast`, `test`,
   `build`, `lint:change-gates`, `functions:typecheck`; the database and browser
   suites on Staging.
+  _(12 November: every local gate green, 3,359 unit tests; Staging run
+  43202647663 green on `40a52498`, every database, demo and auth browser job,
+  publish and smoke. The first run, on `7d60c505`, caught two account-flow
+  REST probes still granting owner access through the function; they now
+  expect the refusal.)_
 - [ ] 1.7 Release: push to `stage`, Staging green, the owner promotes. The row is
   left on, so a page on an older build keeps the behaviour it has.
 
