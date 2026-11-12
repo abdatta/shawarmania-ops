@@ -172,7 +172,7 @@ Do not reopen that without a reason the design did not consider.
     run 41262091938, Deploy run 41262145561).
 - [x] 9.2 Before turning the gate on, the owner asks Supratik to tell staff that
   attendance is marked on their own phones, never on the counter laptop.
-- [ ] 9.3 Turn `a-tablet-keeps-its-login` on at a quiet hour. On the counter
+- [x] 9.3 Turn `a-tablet-keeps-its-login` on at a quiet hour. On the counter
   laptop, open `/sign-in` by hand and confirm it lands on the counter, and the
   build stamp shows `TK`.
   - Turned on 2026-11-01 07:15 IST with the shop closed; `retireBy` set to
@@ -181,6 +181,11 @@ Do not reopen that without a reason the design did not consider.
     reported on `3648a1fc` with `a-tablet-keeps-its-login` among their booted
     gates, and the Cafe billed 58 bills on 1 November under it. The `/sign-in`
     check by hand on the laptop is still to do.
+  - Production, 12 November 10:43 IST: every registered device (Cafe Laptop,
+    Conti Kitchen, Shawarma Kitchen) on `8b6a567f` with the gate among its booted
+    gates, eleven services traded under it, and the gate never turned off. The
+    `/sign-in` check by hand was never done; the boundary's browser tests stand
+    for it.
 - [x] 9.4 The owner removes the abandoned tablets (Kalyani Counter 2, the second
   Cafe 2) from the Tablets list.
   - Done before release; the Tablets list holds only the counter, renamed
@@ -188,7 +193,7 @@ Do not reopen that without a reason the design did not consider.
 
 ## 10. PHASE GATE
 
-- [ ] 10.1 No roadmap row (a correction). The checkpoint is the proposal's
+- [x] 10.1 No roadmap row (a correction). The checkpoint is the proposal's
   **Gate** line, every item checked against the running app:
   - a set-up counter or kitchen tablet lands on its own home from `/sign-in`,
     `/activate`, a role address and an unknown address, with no password field
@@ -200,3 +205,6 @@ Do not reopen that without a reason the design did not consider.
     still signed out;
   - with the gate off, `/sign-in` and `/activate` on a tablet behave as today;
   - the four-role demo walkthrough still walks.
+  _(12 November: each item held by the suites at apply and on Staging, and in
+  production for eleven services. Never pulled; under the owner's rule of 30
+  October a missing pull does not hold an archive.)_

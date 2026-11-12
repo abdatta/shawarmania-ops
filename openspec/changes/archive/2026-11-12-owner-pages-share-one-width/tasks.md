@@ -11,5 +11,8 @@
   _(4 November: reverted, owner and admin fail on Billing at 1,395px; restored, all three shells pass.)_
 - [x] 2.2 Overview, Team, Menu and Billing looked at in the browser at desktop width: nothing wraps or crowds at the narrower column
   _(4 November, 1440px demo: Billing sits in the column; Overview's revenue line stays on one line; Menu is unchanged. Team's Works at wraps a long outlet name onto a second line, which reads cleanly.)_
-- [ ] 2.3 Quick gates pass, pushed to `stage`, Staging green, and the staging build carries the commit
-- [ ] 2.4 After the owner's Promote, Billing on the owner's laptop stops at the column
+- [x] 2.3 Quick gates pass, pushed to `stage`, Staging green, and the staging build carries the commit
+- [x] 2.4 After the owner's Promote, Billing on the owner's laptop stops at the column
+  _(`088bf93f` reached production with Deploy `96a1ab1b`, 4 November 16:32 UTC.
+  12 November, production's demo at 1,600px: the owner's Billing holds its
+  content in one centred 588px column.)_

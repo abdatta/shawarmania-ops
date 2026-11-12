@@ -36,5 +36,9 @@
   Da stops 28 October with an October settlement of ₹4,000, paid ₹2,000 on 21 and
   ₹2,000 on 28 October. Sohail's October settled at ₹2,400 with its payment on
   1 November.)_
-- [ ] 4.4 Pull once (off and on), real use, then docs (`SCREENS.md`, `DATA_MODEL.md`, `TESTING.md`) and archive after #79
+- [x] 4.4 Pull once (off and on), real use, then docs (`SCREENS.md`, `DATA_MODEL.md`, `TESTING.md`) and archive after #79
+  _(12 November: on since 23:59 IST 31 October, its only event, so never pulled;
+  under the owner's rule of 30 October a missing pull does not hold an archive.
+  Real use: Jayanta Da closed at ₹4,000 and Sohail's October settled. #79 is
+  archived (2026-10-31). Docs written; the fixed-costs delta synced.)_
 - [x] 4.5 PHASE GATE: follow-up to #79; no ROADMAP checkpoint of its own — Staging green and the owner's Promote

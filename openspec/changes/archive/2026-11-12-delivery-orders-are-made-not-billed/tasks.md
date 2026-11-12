@@ -333,16 +333,21 @@ Third demo round (2026-11-01):
 
 ## 10. Release
 
-- [ ] 10.1 The owner approves a Promote at a quiet hour; the build reaches the
+- [x] 10.1 The owner approves a Promote at a quiet hour; the build reaches the
   counters off.
-- [ ] 10.2 `/release delivery-orders`, with Kalyani Cafe's Delivery still off;
+- [x] 10.2 `/release delivery-orders`, with Kalyani Cafe's Delivery still off;
   then Delivery on for the Cafe. Watch the first service's delivery orders
   through the kitchen, handover and My shift. Pull it once, off and on, with no
   delivery order on the rail.
+  _(Deploys `51952434` and `c83ec673`, 2 November; gate on at 11:15 IST that day,
+  its only event, and Kalyani Cafe offers Delivery. By 12 November production
+  held 82 delivery orders, 78 handed over, 2 handovers taken back, and 78 kept
+  labels. Never pulled; under the owner's rule of 30 October a missing pull does
+  not hold an archive.)_
 
 ## 11. PHASE GATE
 
-- [ ] 11.1 The checkpoint in ROADMAP.md row #83 holds, every item checked
+- [x] 11.1 The checkpoint in ROADMAP.md row #83 holds, every item checked
   against the running app:
   - the owner approved the demo before it was wired live, and agreed to the
     guard replacement;
@@ -360,3 +365,5 @@ Third demo round (2026-11-01):
     delivery work drains;
   - the gate was turned on in production and pulled once;
   - the four-role demo walkthrough still walks.
+  _(12 November: every item but the pull held by the suites and by ten services
+  of production use; the pull is waived as above.)_

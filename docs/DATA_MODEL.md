@@ -1365,7 +1365,10 @@ so *carried over* needs no job on the 1st.
 
 **A month's cost** is its latest unvoided settlement, otherwise the monthly
 amount in effect × the days it runs ÷ the days in the month, rounded down to the
-paisa. `fixed_cost_month_cost` and `monthCost()` in
+paisa. With `agreed-part-months` on, the app never leaves a part month on that
+day share: the month a cost starts or stops in is settled at the figure agreed
+for it, by the same call that sets the date, and the day share stays only as the
+fallback every published build agrees on. `fixed_cost_month_cost` and `monthCost()` in
 `src/domain/fixed-costs.ts` are held to one case table
 (`src/domain/fixed-cost-cases.json`, `npm run lint:fixed-costs`).
 
@@ -1383,7 +1386,15 @@ outlet's expense. **The owner and the outlet's manager only**, on an active
 account: no branch for a counter shift, a Biller or an Employee, and no delete
 for anyone. Writes go through functions that take the outlet from the fixed cost
 (`create_fixed_cost`, `update_fixed_cost`, `change_fixed_cost_amount`,
-`stop_fixed_cost`, `settle_fixed_cost_month`, `undo_fixed_cost_payment`);
+`stop_fixed_cost`, `settle_fixed_cost_month`, `undo_fixed_cost_payment`, and
+the gate's `create_fixed_cost_v2` and `update_fixed_cost_v2`, which settle a
+mid-month first month at the figure typed; `stop_fixed_cost_v3`, which closes
+the cost, settling every month through the stop month and recording the final
+payment, if any, on the last day, and refuses a cost already closed; and
+`unstop_fixed_cost`, which voids what the stop wrote and undoes its final payment
+in one transaction, keeping a first month agreed when the cost was added).
+`fixed_cost_already_paid_in(id, month)` is the SQL copy of `alreadyPaidIn`: what
+payments leave for a month once every earlier month is paid;
 `record_fixed_cost_payment` writes the expense under the caller's own policy and
 `expense_guard`, the link and what its answer records in one transaction,
 recomputing the answer from what is owed and refusing one the pay sheet would not
