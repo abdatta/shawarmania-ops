@@ -221,18 +221,6 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
       return assignmentSetResult(result)
     },
 
-    async markAsLeft(
-      profileId: string,
-      expectedStateFingerprint: string,
-    ): Promise<AssignmentSetResult> {
-      const result = await callAdmin<AssignmentSetWireResult>(client, {
-        action: 'mark-as-left',
-        profileId,
-        expectedStateFingerprint,
-      })
-      return assignmentSetResult(result)
-    },
-
     async markAsLeftV2(profileId: string, expectedStateFingerprint: string) {
       const result = await callAdmin<{ leftOn: string }>(client, {
         action: 'mark-as-left-v2',

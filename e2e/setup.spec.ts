@@ -1,7 +1,6 @@
 import { type Page } from '@playwright/test'
 import { expect, test } from './test'
 import { E2E_ORIGIN } from '../ports'
-import { DEMO_HELPER_ACCOUNT_ID } from '../src/data-access/mock/fixtures/accounts'
 
 /**
  * The setup walk: creating an outlet, and creating a person — through a real
@@ -94,52 +93,6 @@ test('creating a person is one act that ends in a working handover', async ({ pa
   await expect(row).toBeVisible()
   await expect(row).toContainText('Shawarmania Kalyani')
 })
-
-test(
-  'the people states each say what is wrong and what to do',
-  { tag: '@cg-off:deactivate-then-leave' },
-  async ({ page }) => {
-    await page.goto('demo/admin/team')
-
-    // Ordinary staff have a username and no email-dependent repair state.
-    await expect(page.getByTestId(`username-${DEMO_HELPER_ACCOUNT_ID}`)).toContainText(
-      'demo.helper',
-    )
-    await expect(page.getByRole('row', { name: /Demo Helper/ })).not.toContainText(
-      'Needs an address',
-    )
-
-    // Provisioned, activated by nobody yet.
-    await expect(page.getByRole('row', { name: /Demo New Starter/ })).toContainText(
-      'Set-up link issued',
-    )
-
-    // Access cut without leaving: still on the list, plainly marked.
-    await expect(page.getByRole('row', { name: /Demo Prep Cook/ })).toContainText('Deactivated')
-
-    // Somebody who works nowhere is on no manager's list at all: a manager's
-    // Team is the people live at their outlets (people-shows-names-first, D2),
-    // which is also all the database lets them read.
-    await expect(page.getByText('Demo Former Staff')).toHaveCount(0)
-    await expect(page.getByTestId('toggle-departed')).toHaveCount(0)
-
-    // And the person who left one outlet is still on the working list, because
-    // they still work at the other.
-    await expect(page.getByRole('row', { name: /Demo Returner/ })).toContainText(
-      'Shawarmania Kalyani',
-    )
-
-    // The owner's list is everyone, so there somebody who works nowhere is off the
-    // working list and one tap away — records kept, clutter gone. Its lifecycle
-    // still states the stronger truth: sign-in is deactivated, not merely that no
-    // outlet is assigned.
-    await page.goto('demo/owner/team')
-    await expect(page.getByRole('row', { name: /Demo Helper/ })).toBeVisible()
-    await expect(page.getByText('Demo Former Staff')).toHaveCount(0)
-    await page.getByTestId('toggle-departed').click()
-    await expect(page.getByRole('row', { name: /Demo Former Staff/ })).toContainText('Deactivated')
-  },
-)
 
 test('the whole setup walk stays inside the app origin', async ({ page, baseURL }) => {
   // The demo tree is structurally incapable of reaching a backend, and the

@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createDemoData, createMockAdapters, OUTLET_KALYANI_ID } from '@/data-access/mock'
@@ -10,14 +10,13 @@ import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { formatBusinessDate, resolveBusinessDate, shiftBusinessDate } from '@/domain'
 import { SessionContext } from '@/session/context'
 import { deriveSessionScope, type Session } from '@/session/session'
-import { ChangeGatesForTest, describeChangeGate } from '@/test/change-gates'
 
 import { OutletAttendance } from './outlet-attendance'
 
 /**
  * Attendance lists a deactivated person through the day they were deactivated
  * and not after (a-deactivated-person-leaves-in-two-steps, design D8), on By day
- * and on By staff's month. Off, they are listed every day as before.
+ * and on By staff's month.
  *
  * The clock is pinned mid-month, so the days around the deactivation sit in
  * the month By staff opens on whatever day this runs.
@@ -48,7 +47,6 @@ const BILLER = DEMO_DEACTIVATED_BILLER_ACCOUNT_ID
  * Kalyani's 13:00 deadline, and today's date.
  */
 async function demoWith(
-  on: boolean,
   adjust?: (biller: ReturnType<typeof createDemoData>['accounts'][number], today: string) => void,
 ) {
   const data = createDemoData()
@@ -60,13 +58,11 @@ async function demoWith(
   adjust?.(biller, today)
   render(
     <MemoryRouter>
-      <ChangeGatesForTest on={{ 'deactivate-then-leave': on }}>
-        <SessionContext.Provider value={managerSession}>
-          <AdaptersContext.Provider value={adapters}>
-            <OutletAttendance />
-          </AdaptersContext.Provider>
-        </SessionContext.Provider>
-      </ChangeGatesForTest>
+      <SessionContext.Provider value={managerSession}>
+        <AdaptersContext.Provider value={adapters}>
+          <OutletAttendance />
+        </AdaptersContext.Provider>
+      </SessionContext.Provider>
     </MemoryRouter>,
   )
   return { adapters, today }
@@ -82,44 +78,32 @@ async function stepBack(user: ReturnType<typeof userEvent.setup>, days: number, 
   )
 }
 
-describeChangeGate('deactivate-then-leave', (on) => {
-  it(
-    on
-      ? 'lists a deactivated person on their deactivation day, noted, and not the day after'
-      : 'lists a deactivated person every day, as before',
-    async () => {
-      const user = userEvent.setup()
-      const { today } = await demoWith(on)
+describe('a deactivated person in attendance', () => {
+  it('lists a deactivated person on their deactivation day, noted, and not the day after', async () => {
+    const user = userEvent.setup()
+    const { today } = await demoWith()
 
-      await stepBack(user, 1, shiftBusinessDate(today, -1))
-      if (on) expect(screen.queryByTestId(`day-${BILLER}`)).not.toBeInTheDocument()
-      else expect(await screen.findByTestId(`day-${BILLER}`)).toBeInTheDocument()
+    await stepBack(user, 1, shiftBusinessDate(today, -1))
+    expect(screen.queryByTestId(`day-${BILLER}`)).not.toBeInTheDocument()
 
-      await stepBack(user, 1, shiftBusinessDate(today, -2))
-      const card = await screen.findByTestId(`day-${BILLER}`)
-      expect(card).toHaveTextContent('deactivated')
-    },
-  )
+    await stepBack(user, 1, shiftBusinessDate(today, -2))
+    const card = await screen.findByTestId(`day-${BILLER}`)
+    expect(card).toHaveTextContent('deactivated')
+  })
 
-  it(
-    on
-      ? 'leaves out the day of somebody switched off before its deadline'
-      : 'lists somebody switched off in the morning on that day, as before',
-    async () => {
-      const user = userEvent.setup()
-      const { today } = await demoWith(on, (biller, day) => {
-        biller.deactivatedAt = `${shiftBusinessDate(day, -2)}T10:00:00+05:30`
-      })
+  it('leaves out the day of somebody switched off before its deadline', async () => {
+    const user = userEvent.setup()
+    const { today } = await demoWith((biller, day) => {
+      biller.deactivatedAt = `${shiftBusinessDate(day, -2)}T10:00:00+05:30`
+    })
 
-      await stepBack(user, 2, shiftBusinessDate(today, -2))
-      if (on) expect(screen.queryByTestId(`day-${BILLER}`)).not.toBeInTheDocument()
-      else expect(await screen.findByTestId(`day-${BILLER}`)).toBeInTheDocument()
-    },
-  )
+    await stepBack(user, 2, shiftBusinessDate(today, -2))
+    expect(screen.queryByTestId(`day-${BILLER}`)).not.toBeInTheDocument()
+  })
 
   it('still lists a recorded day after the deactivation', async () => {
     const user = userEvent.setup()
-    const { adapters, today } = await demoWith(on)
+    const { adapters, today } = await demoWith()
     await adapters.attendance.recordManualEntry({
       personId: BILLER,
       enteredBy: managerSession.userId,
@@ -134,7 +118,7 @@ describeChangeGate('deactivate-then-leave', (on) => {
 
   it('lists somebody reactivated on every day again', async () => {
     const user = userEvent.setup()
-    const { today } = await demoWith(on, (biller) => {
+    const { today } = await demoWith((biller) => {
       biller.isActive = true
       biller.deactivatedAt = null
     })
@@ -143,27 +127,21 @@ describeChangeGate('deactivate-then-leave', (on) => {
     expect(await screen.findByTestId(`day-${BILLER}`)).toBeInTheDocument()
   })
 
-  it(
-    on
-      ? 'stops By staff’s month at the deactivation day'
-      : 'paints By staff’s days after the deactivation absent',
-    async () => {
-      const user = userEvent.setup()
-      const { today } = await demoWith(on)
-      await user.click(await screen.findByTestId('axis-staff'))
-      await user.selectOptions(await screen.findByTestId('person-picker'), BILLER)
-      await screen.findByTestId('attendance-calendar')
+  it('stops By staff’s month at the deactivation day', async () => {
+    const user = userEvent.setup()
+    const { today } = await demoWith()
+    await user.click(await screen.findByTestId('axis-staff'))
+    await user.selectOptions(await screen.findByTestId('person-picker'), BILLER)
+    await screen.findByTestId('attendance-calendar')
 
-      // The deactivation day itself still reads absent: nothing was recorded.
-      await waitFor(() =>
-        expect(screen.getByTestId(`calendar-day-${shiftBusinessDate(today, -2)}`)).toHaveAttribute(
-          'data-mark',
-          'absent',
-        ),
-      )
-      const after = screen.queryByTestId(`calendar-day-${shiftBusinessDate(today, -1)}`)
-      if (on) expect(after).not.toBeInTheDocument()
-      else expect(after).toHaveAttribute('data-mark', 'absent')
-    },
-  )
+    // The deactivation day itself still reads absent: nothing was recorded.
+    await waitFor(() =>
+      expect(screen.getByTestId(`calendar-day-${shiftBusinessDate(today, -2)}`)).toHaveAttribute(
+        'data-mark',
+        'absent',
+      ),
+    )
+    const after = screen.queryByTestId(`calendar-day-${shiftBusinessDate(today, -1)}`)
+    expect(after).not.toBeInTheDocument()
+  })
 })

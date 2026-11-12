@@ -669,12 +669,10 @@ export interface AccountsAdapter {
   issueHandover(profileId: string): Promise<AccountHandover>
   /** Replace profile facts and the complete intended live assignment set atomically. */
   editAccount(command: EditAccountCommand): Promise<AssignmentSetResult>
-  /** End every live assignment and deactivate in the same transaction. */
-  markAsLeft(profileId: string, expectedStateFingerprint: string): Promise<AssignmentSetResult>
   /**
-   * The second step, from a deactivated account only, while
-   * `deactivate-then-leave` is on: every live assignment ends on the day they
-   * were deactivated, and their phone and username are freed (design D3).
+   * The second step, from a deactivated account only: every live assignment
+   * ends on the day they were deactivated, and their phone and username are
+   * freed (design D3).
    * Resolves to that day.
    */
   markAsLeftV2(profileId: string, expectedStateFingerprint: string): Promise<{ leftOn: string }>
@@ -688,7 +686,7 @@ export interface AccountsAdapter {
     outletId: string | null
     accountEmail?: string | null
   }): Promise<IssuedCode | null>
-  /** @deprecated Use editAccount or markAsLeft. */
+  /** @deprecated Use editAccount or markAsLeftV2. */
   endAssignment(assignmentId: string): Promise<IssuedCode | null>
   /**
    * Correct the username an account signs in with. Any outstanding one-time

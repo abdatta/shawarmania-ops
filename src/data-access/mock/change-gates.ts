@@ -53,21 +53,6 @@ const WORDS: Record<
     offMeans: 'PB is not in the build code.',
     changeNumber: 75,
   },
-  'deactivate-then-leave': {
-    title: 'Deactivate, then leave',
-    onMeans:
-      'A deactivated person moves to a Deactivated section and drops out of attendance after the day they were deactivated, and Remove is offered only there, ending their outlets on that day and freeing their username and phone.',
-    offMeans:
-      'Deactivated people stay in the list and in attendance, and Mark as left is in Edit and ends outlets on the day it is pressed.',
-    changeNumber: 82,
-  },
-  'owner-access-in-the-database': {
-    title: 'Owner access in the database',
-    onMeans:
-      'Nobody grants or removes owner access, or deactivates an owner, from the app; the account function refuses it.',
-    offMeans: 'The owner grants and removes owner access from Team, as today.',
-    changeNumber: 82,
-  },
 }
 
 /**

@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { ChangeGateKey } from '@/change-gates/gates'
 import { shiftBusinessDate } from '@/domain'
-import { describeChangeGate } from '@/test/change-gates'
 
 import { deactivationDay, liveAssignments, wasActiveOn } from '../adapters'
 import { createDemoAccounts, createMockAccountsAdapter } from './accounts'
@@ -16,8 +14,8 @@ import { personaFixtures } from './fixtures/personas'
 
 /**
  * A deactivated person leaves in two steps (a-deactivated-person-leaves-in-two-steps):
- * `wasActiveOn`, and the demo's copy of what the account function does with
- * `deactivate-then-leave` and `owner-access-in-the-database` (design D2, D3, D5).
+ * `wasActiveOn`, and the demo's copy of what the account function does: the
+ * second step, and owner access kept to the database (design D2, D3, D5).
  */
 
 const kolkataToday = () =>
@@ -55,24 +53,16 @@ describe('wasActiveOn', () => {
   })
 })
 
-function adapterWith(
-  on: Partial<Record<ChangeGateKey, boolean>>,
-  role: 'super_admin' | 'franchise_admin' = 'super_admin',
-) {
+function adapterWith(role: 'super_admin' | 'franchise_admin' = 'super_admin') {
   const accounts = createDemoAccounts()
-  const adapter = createMockAccountsAdapter(
-    accounts,
-    role,
-    personaFixtures[role].profile.id,
-    (key) => on[key] === true,
-  )
+  const adapter = createMockAccountsAdapter(accounts, role, personaFixtures[role].profile.id)
   const find = (id: string) => accounts.find((account) => account.id === id)!
   return { adapter, find }
 }
 
 describe('a deactivation in the demo', () => {
   it('records the day, and reactivating clears it', async () => {
-    const { adapter, find } = adapterWith({})
+    const { adapter, find } = adapterWith()
     await adapter.setActive(DEMO_HELPER_ACCOUNT_ID, false)
     expect(deactivationDay(find(DEMO_HELPER_ACCOUNT_ID).deactivatedAt!)).toBe(kolkataToday())
     // Their outlet stays: deactivating is about sign-in, not placement.
@@ -93,21 +83,9 @@ describe('a deactivation in the demo', () => {
   })
 })
 
-describeChangeGate('deactivate-then-leave', (on) => {
-  if (!on) {
-    it('refuses the new Mark as left', async () => {
-      const { adapter, find } = adapterWith({})
-      const biller = find(DEMO_DEACTIVATED_BILLER_ACCOUNT_ID)
-      await expect(adapter.markAsLeftV2(biller.id, biller.stateFingerprint)).rejects.toMatchObject({
-        code: 'not_available',
-      })
-      expect(liveAssignments(biller.assignments)).toHaveLength(1)
-    })
-    return
-  }
-
+describe('Mark as left, the second step', () => {
   it('refuses somebody still active: deactivate first', async () => {
-    const { adapter, find } = adapterWith({ 'deactivate-then-leave': true })
+    const { adapter, find } = adapterWith()
     const helper = find(DEMO_HELPER_ACCOUNT_ID)
     await expect(adapter.markAsLeftV2(helper.id, helper.stateFingerprint)).rejects.toMatchObject({
       code: 'account_active',
@@ -115,7 +93,7 @@ describeChangeGate('deactivate-then-leave', (on) => {
   })
 
   it('ends their outlets on the day they were deactivated and frees username and phone', async () => {
-    const { adapter, find } = adapterWith({ 'deactivate-then-leave': true }, 'franchise_admin')
+    const { adapter, find } = adapterWith('franchise_admin')
     const biller = find(DEMO_DEACTIVATED_BILLER_ACCOUNT_ID)
     const day = deactivationDay(biller.deactivatedAt!)
 
@@ -128,7 +106,7 @@ describeChangeGate('deactivate-then-leave', (on) => {
   })
 
   it('lets a new person take the username a leaver held', async () => {
-    const { adapter, find } = adapterWith({ 'deactivate-then-leave': true })
+    const { adapter, find } = adapterWith()
     const biller = find(DEMO_DEACTIVATED_BILLER_ACCOUNT_ID)
     const username = biller.username!
     await adapter.markAsLeftV2(biller.id, biller.stateFingerprint)
@@ -144,9 +122,9 @@ describeChangeGate('deactivate-then-leave', (on) => {
   })
 })
 
-describeChangeGate('owner-access-in-the-database', (on) => {
-  it(on ? 'refuses an owner provisioned from the app' : 'provisions an owner', async () => {
-    const { adapter } = adapterWith({ 'owner-access-in-the-database': on })
+describe('owner access is the database’s', () => {
+  it('refuses an owner provisioned from the app', async () => {
+    const { adapter } = adapterWith()
     const provisioning = adapter.provision({
       fullName: 'Second Owner',
       username: 'second.owner',
@@ -154,35 +132,30 @@ describeChangeGate('owner-access-in-the-database', (on) => {
       role: 'super_admin',
       outletIds: [],
     })
-    if (on) await expect(provisioning).rejects.toMatchObject({ code: 'owner_access_in_database' })
-    else await expect(provisioning).resolves.toMatchObject({ username: 'second.owner' })
+    await expect(provisioning).rejects.toMatchObject({ code: 'owner_access_in_database' })
   })
 
-  it(
-    on ? 'refuses owner access granted by an edit' : 'grants owner access by an edit',
-    async () => {
-      const { adapter, find } = adapterWith({ 'owner-access-in-the-database': on })
-      const helper = find(DEMO_HELPER_ACCOUNT_ID)
-      const [kalyani] = liveAssignments(helper.assignments)
-      const editing = adapter.editAccount({
-        profileId: helper.id,
-        expectedStateFingerprint: helper.stateFingerprint,
-        fullName: helper.fullName,
-        phone: helper.phone,
-        roleTitle: helper.roleTitle,
-        accountEmail: 'helper.owner@example.com',
-        assignments: [
-          {
-            assignmentId: kalyani!.id,
-            outletId: kalyani!.outletId,
-            role: kalyani!.role,
-            startedOn: kalyani!.startedOn,
-          },
-          { assignmentId: null, outletId: null, role: 'super_admin', startedOn: kolkataToday() },
-        ],
-      })
-      if (on) await expect(editing).rejects.toMatchObject({ code: 'owner_access_in_database' })
-      else await expect(editing).resolves.toMatchObject({ profileId: helper.id })
-    },
-  )
+  it('refuses owner access granted by an edit', async () => {
+    const { adapter, find } = adapterWith()
+    const helper = find(DEMO_HELPER_ACCOUNT_ID)
+    const [kalyani] = liveAssignments(helper.assignments)
+    const editing = adapter.editAccount({
+      profileId: helper.id,
+      expectedStateFingerprint: helper.stateFingerprint,
+      fullName: helper.fullName,
+      phone: helper.phone,
+      roleTitle: helper.roleTitle,
+      accountEmail: 'helper.owner@example.com',
+      assignments: [
+        {
+          assignmentId: kalyani!.id,
+          outletId: kalyani!.outletId,
+          role: kalyani!.role,
+          startedOn: kalyani!.startedOn,
+        },
+        { assignmentId: null, outletId: null, role: 'super_admin', startedOn: kolkataToday() },
+      ],
+    })
+    await expect(editing).rejects.toMatchObject({ code: 'owner_access_in_database' })
+  })
 })

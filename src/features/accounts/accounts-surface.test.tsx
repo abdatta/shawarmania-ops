@@ -228,59 +228,9 @@ describe('the responsive assignment-set editor', () => {
       within(screen.getByLabelText('Outlet')).queryByText('Shawarmania Kanchrapara'),
     ).not.toBeInTheDocument()
   })
-
-  it('keeps owner access in a guarded separate subflow with private email', async () => {
-    const user = userEvent.setup()
-    renderSurface('super_admin')
-    await openEdit(user, 'Demo Helper')
-
-    await user.click(screen.getByRole('button', { name: 'Grant owner access' }))
-    expect(screen.getByRole('heading', { name: 'Owner access' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Private sign-in email')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
-
-    await user.type(screen.getByLabelText('Private sign-in email'), 'helper@example.com')
-    await user.click(
-      screen.getByLabelText('I understand this grants owner access across all outlets.'),
-    )
-    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
-  })
 })
 
 describe('explicit departure and failures', () => {
-  it('does not make departure a default Save consequence', async () => {
-    const user = userEvent.setup()
-    const adapters = createMockAdapters('franchise_admin')
-    const leave = vi.spyOn(adapters.accounts, 'markAsLeft')
-    renderSurface('franchise_admin', adapters)
-    await openEdit(user, 'Demo Griller')
-
-    expect(screen.getByRole('button', { name: 'Mark as left' })).toBeInTheDocument()
-    expect(
-      within(screen.getByRole('dialog', { name: /Edit Demo Griller/ })).queryByRole('checkbox'),
-    ).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Save' }))
-    expect(leave).not.toHaveBeenCalled()
-  })
-
-  it('requires an explicit destructive confirmation to mark someone as left', async () => {
-    const user = userEvent.setup()
-    const adapters = createMockAdapters('franchise_admin')
-    const leave = vi.spyOn(adapters.accounts, 'markAsLeft')
-    renderSurface('franchise_admin', adapters)
-    await openEdit(user, 'Demo Griller')
-
-    await user.click(screen.getByRole('button', { name: 'Mark as left' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Mark this person as left?' })
-    expect(dialog).toHaveTextContent('every current outlet assignment')
-    expect(leave).not.toHaveBeenCalled()
-    await user.click(within(dialog).getByRole('button', { name: 'Mark as left' }))
-
-    await waitFor(() =>
-      expect(leave).toHaveBeenCalledWith(DEMO_GRILLER_ACCOUNT_ID, expect.any(String)),
-    )
-  })
-
   it('keeps a stale edit open and names the need to reload', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters('franchise_admin')

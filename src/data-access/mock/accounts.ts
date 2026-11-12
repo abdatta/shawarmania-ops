@@ -18,8 +18,6 @@ import {
   isStaffRole,
   liveAssignments,
 } from '../adapters'
-import { bootSnapshot } from '@/change-gates/snapshot'
-import type { ChangeGateKey } from '@/change-gates/gates'
 import { shiftBusinessDate } from '@/domain'
 import { canonicalUsername } from '../../../shared/username'
 import {
@@ -141,16 +139,10 @@ export function createMockAccountsAdapter(
   accounts: AccountSummary[],
   role: AppRole = 'super_admin',
   viewerId: string | null = null,
-  /**
-   * Whether a change gate is on, for `deactivate-then-leave` and
-   * `owner-access-in-the-database`. The demo answers from its own switchboard;
-   * absent, the page's frozen snapshot, as a real adapter's function reads it.
-   */
-  gateOn: (key: ChangeGateKey) => boolean = (key) => bootSnapshot()[key],
 ): AccountsAdapter {
-  /** Refuse an owner change while owner access is the database's (design D5). */
+  /** Refuse an owner change: owner access is the database's (design D5). */
   function refuseOwnerChange(): void {
-    if (gateOn('owner-access-in-the-database')) throw OWNER_ACCESS_IN_DATABASE
+    throw OWNER_ACCESS_IN_DATABASE
   }
 
   /** Sign-in state and its day, as the account function writes them (design D2). */
@@ -540,28 +532,7 @@ export function createMockAccountsAdapter(
       return assignmentResult(account, replacementHandover)
     },
 
-    async markAsLeft(
-      profileId: string,
-      expectedStateFingerprint: string,
-    ): Promise<AssignmentSetResult> {
-      const account = find(profileId)
-      if (isOwnerAccount(account)) refuseOwnerChange()
-      requireFingerprint(account, expectedStateFingerprint)
-      ensureMayManage(account, [])
-      assertFinalOwnerIsRetained(account, [])
-      for (const assignment of liveAssignments(account.assignments)) assignment.endedOn = today()
-      writeActive(account, false)
-      touch(account)
-      return assignmentResult(account, null)
-    },
-
     async markAsLeftV2(profileId: string, expectedStateFingerprint: string) {
-      if (!gateOn('deactivate-then-leave')) {
-        throw new AccountActionError(
-          'not_available',
-          'Mark as left is not available here yet. Reload the page.',
-        )
-      }
       const account = find(profileId)
       if (isOwnerAccount(account)) refuseOwnerChange()
       requireFingerprint(account, expectedStateFingerprint)

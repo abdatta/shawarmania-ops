@@ -35,7 +35,6 @@ import {
   wasActiveOn,
   wasStaffAtOn,
 } from '@/data-access/adapters'
-import { useChangeGate } from '@/change-gates/context'
 import { attentionChanged } from '@/features/attention/attention'
 import {
   carryPeriod,
@@ -537,10 +536,9 @@ function OutletAxis({
   // A deactivated person is listed on a day with nothing recorded only where they
   // were switched off after that outlet's arrival deadline
   // (a-deactivated-person-leaves-in-two-steps, design D8, D10).
-  const deactivateThenLeave = useChangeGate('deactivate-then-leave')
   /** May this person be listed, or entered, at this outlet on a day with nothing recorded? */
   const listedAt = (person: RosterPerson, date: string, outlet: Tables<'outlets'>) =>
-    !deactivateThenLeave || wasActiveOn(person, date, outlet)
+    wasActiveOn(person, date, outlet)
 
   // Today as each selected outlet reckons it. Where the cutovers disagree the
   // later one is used, so a day that has started somewhere is openable rather
@@ -971,8 +969,7 @@ function OutletAxis({
           // still sign in, once that day is known (design D8).
           deactivated:
             !person.isActive &&
-            (!deactivateThenLeave ||
-              person.deactivatedAt === null ||
+            (person.deactivatedAt === null ||
               businessDate >= deactivationDay(person.deactivatedAt)),
           offList: false,
         },
@@ -2331,7 +2328,6 @@ function StaffAxis({
   const { attendance } = useAdapters()
   // A month stops at the deactivation day (a-deactivated-person-leaves-in-two-steps,
   // design D8): no window runs past it, so no empty day after it reads absent.
-  const deactivateThenLeave = useChangeGate('deactivate-then-leave')
   const today = outlets
     .map((outlet) => resolveBusinessDate(new Date(), outlet.business_day_cutover))
     .reduce((latest, candidate) => (candidate > latest ? candidate : latest), '')
@@ -2394,7 +2390,7 @@ function StaffAxis({
           // The last day they could have checked in here: the business day they
           // were switched off on if it was after its deadline, else the one before.
           const outlet = outlets.find((candidate) => candidate.id === outletId)
-          const at = deactivateThenLeave && !person.isActive ? person.deactivatedAt : null
+          const at = !person.isActive ? person.deactivatedAt : null
           let cap: string | null = null
           if (at !== null && outlet) {
             const day = resolveBusinessDate(at, outlet.business_day_cutover)
@@ -2407,7 +2403,7 @@ function StaffAxis({
           }
         }),
     })
-  }, [records, person, outlets, range, deactivateThenLeave])
+  }, [records, person, outlets, range])
 
   if (people.length === 0) {
     return (

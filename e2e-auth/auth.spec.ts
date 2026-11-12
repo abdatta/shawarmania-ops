@@ -476,123 +476,71 @@ test.describe('provisioning and admin-issued reset', () => {
     await resetLoginContext.close()
   })
 
-  test(
-    'an owner safely promotes, expands, and marks a person as left',
-    { tag: '@cg-off:deactivate-then-leave' },
-    async ({ page, context }) => {
-      const person = freshPerson('transition')
-      await signIn(page, PERSONAS.owner.username)
-      await page.goto('owner/team')
-      const issued = await provisionEmployee(page, person)
-      await issued.panel.getByRole('button', { name: 'Done' }).click()
-
-      let row = page.getByRole('row', { name: new RegExp(person.name) })
-      await row.getByRole('button', { name: /^Actions for / }).click()
-      await row.getByRole('button', { name: 'Edit' }).click()
-      let editor = page.getByRole('dialog', { name: new RegExp(`Edit ${person.name}`) })
-      await editor.getByLabel('Access role').selectOption('biller')
-
-      await context.setOffline(true)
-      await editor.getByRole('button', { name: 'Save' }).click()
-      await expect(editor.getByTestId('form-sheet-error')).toBeVisible()
-      await expect(page).toHaveURL(/\/owner\/team$/)
-      await context.setOffline(false)
-
-      await editor.getByRole('button', { name: 'Save' }).click()
-      await expect(editor).toHaveCount(0)
-      row = page.getByRole('row', { name: new RegExp(person.name) })
-      await expect(row).toContainText('Biller')
-      await expect(row).toContainText('Set-up link issued')
-
-      await row.getByRole('button', { name: /^Actions for / }).click()
-      await row.getByRole('button', { name: 'Edit' }).click()
-      editor = page.getByRole('dialog', { name: new RegExp(`Edit ${person.name}`) })
-      await editor.getByRole('button', { name: 'Works at multiple outlets' }).click()
-      await editor.getByRole('button', { name: 'Add outlet' }).click()
-      await editor
-        .getByLabel('Outlet 2', { exact: true })
-        .selectOption({ label: 'Shawarmania Kanchrapara' })
-      await editor.getByRole('button', { name: 'Save' }).click()
-      await expect(editor).toHaveCount(0)
-      row = page.getByRole('row', { name: new RegExp(person.name) })
-      await expect(row).toContainText('Shawarmania Kalyani')
-      await expect(row).toContainText('Shawarmania Kanchrapara')
-
-      await row.getByRole('button', { name: /^Actions for / }).click()
-      await row.getByRole('button', { name: 'Edit' }).click()
-      editor = page.getByRole('dialog', { name: new RegExp(`Edit ${person.name}`) })
-      await editor.getByRole('button', { name: 'Mark as left' }).click()
-      const confirmation = page.getByRole('dialog', { name: 'Mark this person as left?' })
-      await expect(confirmation).toContainText('every current outlet assignment')
-      await confirmation.getByRole('button', { name: 'Mark as left' }).click()
-      await expect(page.getByRole('row', { name: new RegExp(person.name) })).toHaveCount(0)
-    },
-  )
-
-  test(
-    'owner access is granted and removed only through the guarded editor flow',
-    { tag: '@cg-off:owner-access-in-the-database' },
-    async ({ page }) => {
-      const person = freshPerson('ownerguard')
-      await signIn(page, PERSONAS.owner.username)
-      await page.goto('owner/team')
-      const issued = await provisionEmployee(page, person)
-      await issued.panel.getByRole('button', { name: 'Done' }).click()
-
-      let row = page.getByRole('row', { name: new RegExp(person.name) })
-      await row.getByRole('button', { name: /^Actions for / }).click()
-      await row.getByRole('button', { name: 'Edit' }).click()
-      let editor = page.getByRole('dialog', { name: new RegExp(`Edit ${person.name}`) })
-      await editor.getByRole('button', { name: 'Grant owner access' }).click()
-      await editor.getByLabel('Private sign-in email').fill(`${person.username}@example.com`)
-      await editor.getByLabel('I understand this grants owner access across all outlets.').check()
-      await editor.getByRole('button', { name: 'Save' }).click()
-      await expect(editor).toHaveCount(0)
-      row = page.getByRole('row', { name: new RegExp(person.name) })
-      await expect(row).toContainText('All outlets')
-      await expect(row).toContainText('Owner')
-
-      await row.getByRole('button', { name: /^Actions for / }).click()
-      await row.getByRole('button', { name: 'Edit' }).click()
-      editor = page.getByRole('dialog', { name: new RegExp(`Edit ${person.name}`) })
-      await editor.getByRole('button', { name: 'Remove owner access' }).click()
-      await editor.getByRole('button', { name: 'Save' }).click()
-      await expect(editor).toHaveCount(0)
-      row = page.getByRole('row', { name: new RegExp(person.name) })
-      await expect(row).not.toContainText('All outlets')
-      await expect(row).toContainText('Shawarmania Kalyani')
-    },
-  )
-})
-
-test(
-  'deactivation ends an open username session immediately',
-  { tag: '@cg-off:deactivate-then-leave' },
-  async ({ page, browser }) => {
-    const person = freshPerson('doomed')
+  test('an owner safely promotes and expands a person', async ({ page, context }) => {
+    const person = freshPerson('transition')
     await signIn(page, PERSONAS.owner.username)
     await page.goto('owner/team')
     const issued = await provisionEmployee(page, person)
-    const activated = await activate(browser, issued.link, person.username)
-    await expect(activated.page).toHaveURL(/\/staff$/)
-
     await issued.panel.getByRole('button', { name: 'Done' }).click()
-    const row = page.getByRole('row', { name: new RegExp(person.name) })
-    await row.getByRole('button', { name: /^Actions for / }).click()
-    await row.getByRole('button', { name: 'Deactivate' }).click()
-    const dialog = page.getByRole('dialog')
-    await expect(dialog).toContainText('immediately')
-    await dialog.getByRole('button', { name: 'Deactivate' }).click()
-    await expect(row).toContainText('Deactivated')
 
-    await activated.page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
-    await expect(activated.page).toHaveURL(/\/sign-in$/)
-    await expect(activated.page.getByTestId('session-ended')).toContainText(
-      'Your account has been deactivated',
-    )
-    await activated.context.close()
-  },
-)
+    let row = page.getByRole('row', { name: new RegExp(person.name) })
+    await row.getByRole('button', { name: /^Actions for / }).click()
+    await row.getByRole('button', { name: 'Edit' }).click()
+    let editor = page.getByRole('dialog', { name: new RegExp(`Edit ${person.name}`) })
+    await editor.getByLabel('Access role').selectOption('biller')
+
+    await context.setOffline(true)
+    await editor.getByRole('button', { name: 'Save' }).click()
+    await expect(editor.getByTestId('form-sheet-error')).toBeVisible()
+    await expect(page).toHaveURL(/\/owner\/team$/)
+    await context.setOffline(false)
+
+    await editor.getByRole('button', { name: 'Save' }).click()
+    await expect(editor).toHaveCount(0)
+    row = page.getByRole('row', { name: new RegExp(person.name) })
+    await expect(row).toContainText('Biller')
+    await expect(row).toContainText('Set-up link issued')
+
+    await row.getByRole('button', { name: /^Actions for / }).click()
+    await row.getByRole('button', { name: 'Edit' }).click()
+    editor = page.getByRole('dialog', { name: new RegExp(`Edit ${person.name}`) })
+    await editor.getByRole('button', { name: 'Works at multiple outlets' }).click()
+    await editor.getByRole('button', { name: 'Add outlet' }).click()
+    await editor
+      .getByLabel('Outlet 2', { exact: true })
+      .selectOption({ label: 'Shawarmania Kanchrapara' })
+    await editor.getByRole('button', { name: 'Save' }).click()
+    await expect(editor).toHaveCount(0)
+    row = page.getByRole('row', { name: new RegExp(person.name) })
+    await expect(row).toContainText('Shawarmania Kalyani')
+    await expect(row).toContainText('Shawarmania Kanchrapara')
+  })
+})
+
+test('deactivation ends an open username session immediately', async ({ page, browser }) => {
+  const person = freshPerson('doomed')
+  await signIn(page, PERSONAS.owner.username)
+  await page.goto('owner/team')
+  const issued = await provisionEmployee(page, person)
+  const activated = await activate(browser, issued.link, person.username)
+  await expect(activated.page).toHaveURL(/\/staff$/)
+
+  await issued.panel.getByRole('button', { name: 'Done' }).click()
+  const row = page.getByRole('row', { name: new RegExp(person.name) })
+  await row.getByRole('button', { name: /^Actions for / }).click()
+  await row.getByRole('button', { name: 'Deactivate' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toContainText('even if their app is open')
+  await dialog.getByRole('button', { name: 'Deactivate' }).click()
+  await expect(page.getByTestId('team-notice')).toContainText(`${person.name} deactivated`)
+
+  await activated.page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+  await expect(activated.page).toHaveURL(/\/sign-in$/)
+  await expect(activated.page.getByTestId('session-ended')).toContainText(
+    'Your account has been deactivated',
+  )
+  await activated.context.close()
+})
 
 test('demo mode remains isolated beside a real username session', async ({ page }) => {
   await signIn(page, PERSONAS.owner.username)

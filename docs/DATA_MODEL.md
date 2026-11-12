@@ -108,8 +108,7 @@ keeps asking.
 database clock, null while it is active. The account function writes it with
 `is_active` through `account_set_active(profile, is_active)` (stamped going
 inactive, cleared going active) and `account_stamp_deactivated(profile)` for the
-original Mark as left; nothing else writes it, and it is read under
-`profiles_select` only with `deactivate-then-leave` on. Attendance compares it
+original Mark as left; nothing else writes it. Attendance compares it
 with each day's arrival deadline; its Kolkata date is the day Team shows. An
 inactive account with none was switched off before it was recorded.
 **A left account** is inactive, holds no live assignment (each ended on its

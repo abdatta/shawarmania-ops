@@ -47,17 +47,11 @@ interface IntendedAssignment {
  * that changes behaviour reads `app_change_gate` with the service role). A read
  * that fails is off, and off is the behaviour as it was.
  */
-async function gateOn(service: SupabaseClient, key: string): Promise<boolean> {
-  const { data, error } = await service.rpc('app_change_gate', { p_key: key })
-  return !error && data === true
-}
-
 /**
- * Owner access is granted and removed only in the database while
- * `owner-access-in-the-database` is on (a-deactivated-person-leaves-in-two-steps,
- * design D5). Every refusal is this one answer.
+ * Owner access is granted and removed only in the database
+ * (a-deactivated-person-leaves-in-two-steps, design D5). Every refusal is this
+ * one answer.
  */
-const OWNER_ACCESS_IN_DATABASE = 'owner-access-in-the-database'
 const ownerAccessInDatabase = () => json({ error: 'owner_access_in_database' }, 403)
 
 /** The live Super Admin assignments a person holds, by id. */
@@ -164,7 +158,7 @@ async function provision(
   if (!mayProvision(caller, role, requestedOutletIds)) {
     return json({ error: 'forbidden' }, 403)
   }
-  if (role === 'super_admin' && (await gateOn(service, OWNER_ACCESS_IN_DATABASE))) {
+  if (role === 'super_admin') {
     return ownerAccessInDatabase()
   }
   if (
@@ -292,7 +286,7 @@ async function setActive(
   const target = await loadAccount(service, profileId)
   if (!target) return json({ error: 'not_found' }, 404)
   if (!mayManage(caller, target)) return json({ error: 'forbidden' }, 403)
-  if (isOwner(target) && (await gateOn(service, OWNER_ACCESS_IN_DATABASE))) {
+  if (isOwner(target)) {
     return ownerAccessInDatabase()
   }
 
@@ -447,17 +441,15 @@ async function editAccount(
 
   // The intended set carries the target's owner assignments exactly as they
   // are, or the edit grants or removes owner access (design D5).
-  if (await gateOn(service, OWNER_ACCESS_IN_DATABASE)) {
-    const held = await liveOwnerAssignmentIds(service, profileId)
-    if (held === null) return json({ error: 'lookup_failed' }, 500)
-    const intended = assignments.filter((assignment) => assignment.role === 'super_admin')
-    const same =
-      intended.length === held.length &&
-      intended.every(
-        (assignment) => assignment.assignmentId !== null && held.includes(assignment.assignmentId),
-      )
-    if (!same) return ownerAccessInDatabase()
-  }
+  const held = await liveOwnerAssignmentIds(service, profileId)
+  if (held === null) return json({ error: 'lookup_failed' }, 500)
+  const intended = assignments.filter((assignment) => assignment.role === 'super_admin')
+  const same =
+    intended.length === held.length &&
+    intended.every(
+      (assignment) => assignment.assignmentId !== null && held.includes(assignment.assignmentId),
+    )
+  if (!same) return ownerAccessInDatabase()
 
   const code = generateCode()
   const { data, error } = await service.rpc('edit_account_assignment_set', {
@@ -521,7 +513,7 @@ async function markAsLeft(
   // Read only to refuse an owner and to date the departure; a missing account
   // is still the database's to answer, as it was.
   const target = await loadAccount(service, profileId)
-  if (target && isOwner(target) && (await gateOn(service, OWNER_ACCESS_IN_DATABASE))) {
+  if (target && isOwner(target)) {
     return ownerAccessInDatabase()
   }
   const { data, error } = await service.rpc('mark_account_as_left', {
@@ -570,12 +562,9 @@ async function markAsLeftV2(
   if (!profileId || !UUID.test(profileId) || !expectedStateFingerprint) {
     return json({ error: 'invalid_request' }, 400)
   }
-  if (!(await gateOn(service, 'deactivate-then-leave'))) {
-    return json({ error: 'not_available' }, 409)
-  }
   const target = await loadAccount(service, profileId)
   if (!target) return json({ error: 'not_found' }, 404)
-  if (isOwner(target) && (await gateOn(service, OWNER_ACCESS_IN_DATABASE))) {
+  if (isOwner(target)) {
     return ownerAccessInDatabase()
   }
 
@@ -715,7 +704,7 @@ async function assign(
   if (!mayAssign(caller, personId, role, outletId)) {
     return json({ error: 'forbidden' }, 403)
   }
-  if (role === 'super_admin' && (await gateOn(service, OWNER_ACCESS_IN_DATABASE))) {
+  if (role === 'super_admin') {
     return ownerAccessInDatabase()
   }
 
@@ -791,7 +780,7 @@ async function endAssignment(
   ) {
     return json({ error: 'forbidden' }, 403)
   }
-  if (existing.role === 'super_admin' && (await gateOn(service, OWNER_ACCESS_IN_DATABASE))) {
+  if (existing.role === 'super_admin') {
     return ownerAccessInDatabase()
   }
 

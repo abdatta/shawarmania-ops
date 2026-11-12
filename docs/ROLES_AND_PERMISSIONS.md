@@ -471,10 +471,10 @@ the caller's own session, never from the request:
 |---|---|---|
 | Create an account | any role; account email required only for Super Admin | Biller / Employee at one or more managed outlets |
 | Edit facts / assignment set | another account; any permitted role and outlet | Biller / Employee only, and only when the complete current and intended sets are within managed outlets |
-| Mark as left (with `deactivate-then-leave` on, #82: **Remove**) | any account but their own; preserves history. Remove: only a deactivated account, dated by its deactivation, freeing username and phone; never an owner while `owner-access-in-the-database` is on | own-outlet Billers and Employees, on the same terms |
+| Remove (#82: leaving, the second step) | any account but their own; preserves history. Only a deactivated account, dated by its deactivation, freeing username and phone; never an owner | own-outlet Billers and Employees, on the same terms |
 | Issue setup / reset handover | any account but their own; purpose follows successful-sign-in history | own-outlet Billers and Employees |
-| Deactivate / reactivate | any account but their own; never an owner while `owner-access-in-the-database` is on (#82) | own-outlet Billers and Employees |
-| Grant or remove owner access | from Team; only in the database while `owner-access-in-the-database` is on (#82) | never |
+| Deactivate / reactivate | any account but their own; never an owner (#82) | own-outlet Billers and Employees |
+| Grant or remove owner access | only in the database, never from Team (#82) | never |
 | See / correct username | any managed account, plus own read-only username | own-outlet Billers and Employees, plus own read-only username |
 | See / correct Super Admin account email | own read-only; another Super Admin editable | never |
 
@@ -500,12 +500,10 @@ another Super Admin or an operator is the fallback if that value is wrong.
 title, account email where permitted, and the complete intended assignment set
 are changed atomically after the caller's authority is re-derived. Username,
 active state, handover issuance, and departure remain distinct guarded actions.
-**Mark as left** is the only departure transition: after confirmation it ends
-all live assignments and deactivates sign-in atomically, without deleting
-history. Ordinary editing never deactivates an account or treats an empty set
-as departure.
+Ordinary editing never deactivates an account or treats an empty set as
+departure.
 
-**With `deactivate-then-leave` on (#82) departure is a second step, Remove.** Every
+**Departure is a second step, Remove (#82).** Every
 deactivation records its Kolkata day on the account, as the database reckons it,
 and reactivating clears it. Remove (`mark-as-left-v2`, through
 `mark_account_as_left_v2`) refuses an account that is still active, so nobody
@@ -513,7 +511,7 @@ reaches "left" without passing through "deactivated"; it ends each live
 assignment on that recorded day, or on its own start if it began later, clears the
 phone, and then moves the Auth alias to `<profile-id>@left.shawarmania.invalid`,
 which frees the username. A manager acts on exactly the people they may manage
-today. With `owner-access-in-the-database` on, the account function refuses, with
+today. The account function refuses, with
 `owner_access_in_database`, every request that would provision, assign, end,
 switch off or mark as left owner access, and any edit whose intended set adds or
 omits an owner row; changing an owner's private sign-in email stays. Each

@@ -85,34 +85,6 @@ export const CHANGE_GATES = {
       'the gate system’s own tests and the staging smoke run turn it to prove a turn reaches every tablet, and no product gate can be turned for that',
     roundTrip: 'none: the probe changes nothing but its code in the build stamp',
   },
-  /**
-   * #82: Deactivate records the day and moves the person to a Deactivated
-   * section; Remove is offered only there, ends their outlets on that day
-   * and frees their username and phone; attendance stops listing them after it
-   * (a-deactivated-person-leaves-in-two-steps, design D1–D4, D8). Off, Team and
-   * Attendance read as before and Mark as left is in Edit.
-   */
-  'deactivate-then-leave': {
-    kind: 'change',
-    code: 'DL',
-    change: 'a-deactivated-person-leaves-in-two-steps',
-    retireBy: '2027-03-31',
-    roundTrip:
-      'none: nothing is queued, and a person left while it was on is an inactive account with ended assignments, no phone and no username, which the off path already reads as somebody who has left',
-  },
-  /**
-   * #82: nobody grants or removes owner access, or deactivates an owner, from
-   * Team, and the account function refuses it (design D5). Off, the owner
-   * grants and removes owner access from Team as before.
-   */
-  'owner-access-in-the-database': {
-    kind: 'change',
-    code: 'OD',
-    change: 'a-deactivated-person-leaves-in-two-steps',
-    retireBy: '2027-03-31',
-    roundTrip:
-      'none: it changes what Team offers and what the account function accepts, and writes nothing',
-  },
 } as const satisfies Record<string, ChangeGateDeclaration>
 
 export type ChangeGateKey = keyof typeof CHANGE_GATES
@@ -127,6 +99,12 @@ export const CHANGE_GATE_KEYS = Object.keys(CHANGE_GATES) as ChangeGateKey[]
  * not tombstoned: they are unique among live gates only.
  */
 export const RETIRED_CHANGE_GATES: readonly string[] = [
+  // retire-deactivate-then-leave: a deactivated person moves to Deactivated,
+  // Remove is offered only there, and attendance stops after their day.
+  'deactivate-then-leave',
+  // retire-owner-access-in-the-database: nobody grants or removes owner access,
+  // or deactivates an owner, from the app.
+  'owner-access-in-the-database',
   // retire-agreed-part-months: a part month costs the figure agreed for it,
   // stopping asks for the final payment, and a stopped cost keeps its place.
   'agreed-part-months',

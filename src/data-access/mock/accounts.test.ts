@@ -154,19 +154,4 @@ describe('mock accounts adapter', () => {
       }),
     ).rejects.toMatchObject({ code: 'stale_edit' })
   })
-
-  it('marks a person as left only through the explicit transition', async () => {
-    const accounts = createDemoAccounts()
-    const adapter = createMockAccountsAdapter(accounts)
-    const before = (await adapter.listAccounts()).find(
-      (person) => person.id === DEMO_HELPER_ACCOUNT_ID,
-    )
-    if (!before) throw new Error('fixture must include the reset account')
-
-    const result = await adapter.markAsLeft(before.id, before.stateFingerprint)
-    expect(result.assignments.every((assignment) => assignment.endedOn !== null)).toBe(true)
-    const after = (await adapter.listAccounts()).find((person) => person.id === before.id)
-    expect(after?.isActive).toBe(false)
-    expect(after?.lifecycle.kind).toBe('deactivated')
-  })
 })

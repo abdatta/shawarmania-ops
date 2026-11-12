@@ -14,7 +14,6 @@ import { Input } from '@/components/ui/input'
 import { Toast, useToast } from '@/components/ui/toast'
 import { LoadingTable, Shimmer } from '@/components/ui/loading'
 import { Select } from '@/components/ui/select'
-import { useChangeGate } from '@/change-gates/context'
 import { useAdapters, type Tables } from '@/data-access'
 import {
   DataActionError,
@@ -108,19 +107,12 @@ export function AccountsSurface() {
   const { accounts: adapter, outlets: outletsAdapter } = useAdapters()
 
   const isOwner = holdsRole(session, 'super_admin')
-  // A deactivated person moves to Deactivated, and Remove is offered only
-  // there (a-deactivated-person-leaves-in-two-steps, design D4).
-  const deactivateThenLeave = useChangeGate('deactivate-then-leave')
-  // Owner access is granted and removed only in the database (design D5).
-  const ownerAccessInDatabase = useChangeGate('owner-access-in-the-database')
+  // Owner access is granted and removed only in the database
+  // (a-deactivated-person-leaves-in-two-steps, design D5).
   const assignableRoles = useMemo<AppRole[]>(
     () =>
-      isOwner
-        ? ownerAccessInDatabase
-          ? ROLE_ORDER.filter((role) => role !== 'super_admin')
-          : ROLE_ORDER
-        : [...STAFF_ROLES_BY_SENIORITY],
-    [isOwner, ownerAccessInDatabase],
+      isOwner ? ROLE_ORDER.filter((role) => role !== 'super_admin') : [...STAFF_ROLES_BY_SENIORITY],
+    [isOwner],
   )
 
   // Two halves, read at once and shown as each lands (people-shows-names-first,
@@ -143,12 +135,10 @@ export function AccountsSurface() {
   const [correcting, setCorrecting] = useState<AccountSummary | null>(null)
   const [emailTarget, setEmailTarget] = useState<AccountSummary | null>(null)
   const [editing, setEditing] = useState<AccountSummary | null>(null)
-  const [markingLeft, setMarkingLeft] = useState<AccountSummary | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [pendingDeactivation, setPendingDeactivation] = useState<AccountSummary | null>(null)
   const [failedActivations, setFailedActivations] = useState<number | null>(null)
-  const [showDeparted, setShowDeparted] = useState(false)
   const [showDeactivated, setShowDeactivated] = useState(false)
   /**
    * Remove, the second step, asked from the Deactivated section. Named for the
@@ -399,11 +389,9 @@ export function AccountsSurface() {
   // saying so, because leaving ONE outlet is not leaving.
   const hasLeft = (row: Pick<RosterPerson, 'assignments'>) =>
     liveAssignments(row.assignments).length === 0
-  const departedCount = list.filter(hasLeft).length
-  const visible = showDeparted ? list : list.filter((row) => !hasLeft(row))
-  // With `deactivate-then-leave` on, the main list is the people who may sign
-  // in; somebody switched off and still placed is Deactivated, newest day
-  // first; somebody who has left is not listed at all (design D4).
+  // The main list is the people who may sign in; somebody switched off and
+  // still placed is Deactivated, newest day first; somebody who has left is not
+  // listed at all (a-deactivated-person-leaves-in-two-steps, design D4).
   const signedInRows = list.filter((row) => row.isActive)
   const deactivatedRows = list
     .filter((row) => !row.isActive && !hasLeft(row))
@@ -550,7 +538,7 @@ export function AccountsSurface() {
         }
         return (
           <span>
-            {deactivateThenLeave && account.lifecycle.kind === 'deactivated' ? (
+            {account.lifecycle.kind === 'deactivated' ? (
               <span data-testid={`deactivated-${row.id}`} className="font-semibold text-danger">
                 {account.deactivatedAt
                   ? `Deactivated · ${formatBusinessDateShort(deactivationDay(account.deactivatedAt))}`
@@ -560,8 +548,6 @@ export function AccountsSurface() {
               <span data-testid={`departed-${row.id}`} className="font-semibold text-content-muted">
                 Not assigned to any outlet
               </span>
-            ) : account.lifecycle.kind === 'deactivated' ? (
-              <span className="font-semibold text-danger">Deactivated</span>
             ) : (
               <span className="text-content-muted">{lifecycleLabel(account)}</span>
             )}
@@ -592,10 +578,10 @@ export function AccountsSurface() {
             />
           )
         }
-        // An owner is never switched off or removed from here while
-        // owner access is the database's (design D5).
-        const ownerLocked = ownerAccessInDatabase && holdsOwnerAccess(account)
-        if (deactivateThenLeave && account.lifecycle.kind === 'deactivated') {
+        // An owner is never switched off or removed from here: owner access
+        // is the database's (design D5).
+        const ownerLocked = holdsOwnerAccess(account)
+        if (account.lifecycle.kind === 'deactivated') {
           // A deactivated owner is the database's to change, so offers nothing.
           if (ownerLocked) {
             return (
@@ -678,17 +664,11 @@ export function AccountsSurface() {
                 ...(ownerLocked
                   ? []
                   : [
-                      account.lifecycle.kind !== 'deactivated'
-                        ? {
-                            label: 'Deactivate',
-                            disabled: busy,
-                            onSelect: () => setPendingDeactivation(account),
-                          }
-                        : {
-                            label: 'Reactivate',
-                            disabled: busy,
-                            onSelect: () => void run(() => adapter.setActive(account.id, true)),
-                          },
+                      {
+                        label: 'Deactivate',
+                        disabled: busy,
+                        onSelect: () => setPendingDeactivation(account),
+                      },
                     ]),
               ]}
             />
@@ -764,7 +744,7 @@ export function AccountsSurface() {
         <>
           <DataTable
             columns={columns}
-            rows={deactivateThenLeave ? signedInRows : visible}
+            rows={signedInRows}
             rowClassName={(row) => (working?.id === row.id ? 'opacity-60' : undefined)}
             rowKey={(row) => row.id}
             empty={
@@ -774,7 +754,7 @@ export function AccountsSurface() {
               />
             }
           />
-          {deactivateThenLeave && deactivatedRows.length > 0 && (
+          {deactivatedRows.length > 0 && (
             <div className="mt-3 space-y-2">
               {/* One quiet line, as Fixed costs' Stopped is (owner, demo review of #82). */}
               <button
@@ -801,20 +781,6 @@ export function AccountsSurface() {
                   />
                 </div>
               )}
-            </div>
-          )}
-          {!deactivateThenLeave && departedCount > 0 && (
-            <div className="mt-3">
-              <Button
-                variant="ghost"
-                size="phone"
-                data-testid="toggle-departed"
-                onClick={() => setShowDeparted((current) => !current)}
-              >
-                {showDeparted
-                  ? 'Hide people who have left'
-                  : `Show people who have left (${departedCount})`}
-              </Button>
             </div>
           )}
         </>
@@ -1051,8 +1017,6 @@ export function AccountsSurface() {
         error={error}
         outlets={provisionableOutlets}
         isOwner={isOwner}
-        offersDeparture={!deactivateThenLeave}
-        offersOwnerAccess={!ownerAccessInDatabase}
         onClose={() => setEditing(null)}
         onSubmit={(command) => {
           const target = editing
@@ -1069,24 +1033,15 @@ export function AccountsSurface() {
             setEditing(null)
           })
         }}
-        onMarkAsLeft={() => {
-          if (editing) setMarkingLeft(editing)
-        }}
       />
 
       <ConfirmDialog
         open={pendingDeactivation !== null}
-        title={
-          deactivateThenLeave && pendingDeactivation
-            ? `Deactivate ${pendingDeactivation.fullName}?`
-            : 'Deactivate this account?'
-        }
+        title={pendingDeactivation ? `Deactivate ${pendingDeactivation.fullName}?` : ''}
         consequence={
-          !pendingDeactivation
-            ? ''
-            : deactivateThenLeave
-              ? 'They can’t sign in from now, even if their app is open. They move to Deactivated, where you can reactivate or remove them.'
-              : `${pendingDeactivation.fullName} stops being able to read or write anything immediately, even if their app is already open. They stay on the staff list and today’s attendance — mark them as left if they no longer work here. You can reactivate them later.`
+          pendingDeactivation
+            ? 'They can’t sign in from now, even if their app is open. They move to Deactivated, where you can reactivate or remove them.'
+            : ''
         }
         confirmLabel="Deactivate"
         danger
@@ -1095,8 +1050,7 @@ export function AccountsSurface() {
           const target = pendingDeactivation
           setPendingDeactivation(null)
           if (!target) return
-          if (deactivateThenLeave) void deactivateAndSay(target)
-          else void run(() => adapter.setActive(target.id, false))
+          void deactivateAndSay(target)
         }}
       />
 
@@ -1115,29 +1069,6 @@ export function AccountsSurface() {
             await adapter.markAsLeftV2(target.id, target.stateFingerprint)
           }).then((done) => {
             if (done) toast.show({ text: `${target.fullName} removed` })
-          })
-        }}
-      />
-
-      <ConfirmDialog
-        open={markingLeft !== null}
-        title="Mark this person as left?"
-        consequence={
-          markingLeft
-            ? `${markingLeft.fullName} will lose sign-in access and every current outlet assignment. Their completed work and assignment history stay on record. This cannot be done by ordinary Save.`
-            : ''
-        }
-        confirmLabel="Mark as left"
-        danger
-        onClose={() => setMarkingLeft(null)}
-        onConfirm={() => {
-          const target = markingLeft
-          if (!target) return
-          setMarkingLeft(null)
-          void run(async () => {
-            await adapter.markAsLeft(target.id, target.stateFingerprint)
-
-            setEditing(null)
           })
         }}
       />
@@ -1319,21 +1250,14 @@ function EditPersonSheet({
   error,
   outlets,
   isOwner,
-  offersDeparture = true,
-  offersOwnerAccess = true,
   onClose,
   onSubmit,
-  onMarkAsLeft,
 }: {
   account: AccountSummary | null
   busy: boolean
   error: string | null
   outlets: Tables<'outlets'>[]
   isOwner: boolean
-  /** *Leaving the business*, off with `deactivate-then-leave` on (design D4). */
-  offersDeparture?: boolean
-  /** The Owner access section, off with `owner-access-in-the-database` on (design D5). */
-  offersOwnerAccess?: boolean
   onClose: () => void
   onSubmit: (command: {
     profileId: string
@@ -1349,7 +1273,6 @@ function EditPersonSheet({
       startedOn: string
     }>
   }) => void
-  onMarkAsLeft: () => void
 }) {
   const [fullName, setFullName] = useState(account?.fullName ?? '')
   const [phone, setPhone] = useState(account?.phone ?? '')
@@ -1376,14 +1299,12 @@ function EditPersonSheet({
       (ordinaryAssignments.length !== 1 ||
         new Set(ordinaryAssignments.map((assignment) => assignment.role)).size > 1),
   )
-  const [ownerAccess, setOwnerAccess] = useState(ownerAssignment !== null)
-  const [ownerAccessConfirmed, setOwnerAccessConfirmed] = useState(false)
-  const [accountEmail, setAccountEmail] = useState(account?.accountEmail ?? '')
+  // Owner access is the database's (design D5): Edit keeps what they hold.
+  const ownerAccess = ownerAssignment !== null
   const editableRoles = isOwner ? ORDINARY_ROLES : STAFF_ROLES_BY_SENIORITY
   const selectedOutletIds = new Set(assignments.map((assignment) => assignment.outletId))
 
   const addableOutlets = outlets.filter((outlet) => !selectedOutletIds.has(outlet.id))
-  const ownerAccessChanged = ownerAccess !== (ownerAssignment !== null)
   const intendedAssignments = [
     ...assignments.map((assignment) => ({ ...assignment, outletId: assignment.outletId || null })),
     ...(ownerAccess
@@ -1398,9 +1319,7 @@ function EditPersonSheet({
       : []),
   ]
   const hasValidAssignments =
-    intendedAssignments.length > 0 &&
-    assignments.every((assignment) => assignment.outletId !== '') &&
-    (!ownerAccess || !ownerAccessChanged || (ownerAccessConfirmed && accountEmail.trim() !== ''))
+    intendedAssignments.length > 0 && assignments.every((assignment) => assignment.outletId !== '')
 
   function updateAssignment(index: number, patch: Partial<AssignmentDraft>) {
     setAssignments((current) =>
@@ -1434,9 +1353,8 @@ function EditPersonSheet({
       fullName: fullName.trim(),
       phone: phone.trim() || null,
       roleTitle: roleTitle.trim() || null,
-      // A private email survives owner removal. Its own credential action can
-      // correct it; ordinary placement editing never silently blanks it.
-      accountEmail: accountEmail.trim().toLowerCase() || account.accountEmail,
+      // Its own credential action changes a private email; Save never does.
+      accountEmail: account.accountEmail,
       assignments: intendedAssignments,
     })
   }
@@ -1644,87 +1562,6 @@ function EditPersonSheet({
                 )
               })
             )}
-          </section>
-        )}
-
-        {isOwner && offersOwnerAccess && (
-          <section
-            aria-label="Owner access"
-            className="space-y-3 rounded-xl border border-border bg-surface-raised p-3"
-          >
-            {ownerAccess ? (
-              <>
-                <div className="space-y-1">
-                  <h3 className="text-sm font-semibold text-content">Owner access</h3>
-                  <p className="text-xs text-content-muted">
-                    Owners can work across every outlet. This is separate from outlet roles.
-                  </p>
-                </div>
-                <Field label="Private sign-in email" id="edit-owner-email">
-                  <Input
-                    id="edit-owner-email"
-                    type="email"
-                    inputMode="email"
-                    autoCapitalize="none"
-
-                    value={accountEmail}
-                    onChange={(event) => setAccountEmail(event.target.value)}
-                  />
-                </Field>
-                {ownerAccessChanged && (
-                  <label className="flex items-start gap-2 text-sm text-content">
-                    <input
-                      type="checkbox"
-                      className="mt-1 size-4 accent-primary"
-                      checked={ownerAccessConfirmed}
-                      onChange={(event) => setOwnerAccessConfirmed(event.target.checked)}
-                    />
-                    I understand this grants owner access across all outlets.
-                  </label>
-                )}
-                {ownerAssignment && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="phone"
-                    onClick={() => {
-                      setOwnerAccess(false)
-                      setOwnerAccessConfirmed(false)
-                    }}
-                  >
-                    Remove owner access
-                  </Button>
-                )}
-              </>
-            ) : (
-              <Button
-                type="button"
-                variant="secondary"
-                size="phone"
-                onClick={() => setOwnerAccess(true)}
-              >
-                Grant owner access
-              </Button>
-            )}
-          </section>
-        )}
-
-        {offersDeparture && account?.lifecycle.kind !== 'deactivated' && (
-          <section className="border-t border-border pt-4">
-            <h3 className="text-sm font-semibold text-danger">Leaving the business</h3>
-            <p className="mt-1 text-xs text-content-muted">
-              This ends every current assignment and sign-in access. It is never the result of
-              ordinary Save.
-            </p>
-            <Button
-              type="button"
-              variant="danger"
-              size="phone"
-              className="mt-3"
-              onClick={onMarkAsLeft}
-            >
-              Mark as left
-            </Button>
           </section>
         )}
       </form>
