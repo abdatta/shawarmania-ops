@@ -47,24 +47,38 @@ dependant with the gate it depends on.
 - [x] 1.5 The `attendance-and-location` and `outlet-expenses` deltas; `docs/`
   (BUSINESS_CONTEXT, DATA_MODEL, ROLES_AND_PERMISSIONS, SCREENS) no longer calls
   the behaviour gated.
-- [ ] 1.6 `npm run lint`, `format:check`, `typecheck`, `contrast`, `test`,
+- [x] 1.6 `npm run lint`, `format:check`, `typecheck`, `contrast`, `test`,
   `build`, `lint:change-gates`; the database and browser suites on Staging.
-- [ ] 1.7 Release: push to `stage`, Staging green, the owner promotes. The rows
+- [x] 1.7 Release: push to `stage`, Staging green, the owner promotes. The rows
   are left on, so a tablet on an older build keeps the behaviour it has.
+  *(`b377929e`..`106dd273` reached production with Deploy `0fe6beed`, 3 November
+  07:20 UTC, its Staging run green; ticked on 12 November.)*
 
 ## 2. Wait for every tablet
 
-- [ ] 2.1 The readiness check (`retire-gate` §2): every registered device on the
+- [x] 2.1 The readiness check (`retire-gate` §2): every registered device on the
   retirement build or later, and three services on it. The staff phones, the
   owner's and the managers' screens carry these toggle points too: their phones
   reload the app before the contract Promote.
+  *(Production, read-only, 12 November 10:43 IST: Cafe Laptop, Conti Kitchen and
+  Shawarma Kitchen, every registered device, on `8b6a567f`, which contains it.
+  Kalyani Cafe has traded eight services since Deploy `0fe6beed` (3 November
+  07:20 UTC): 4 to 11 November. An older build left on a person's phone loses
+  nothing it needs: with the rows retired it reads the gates off, checks in
+  through `attendance_submit_attempt_v2`, which stays, and types a category.)*
 
 ## 3. The contract migration
 
-- [ ] 3.1 A migration headed `-- release: contract` for each key, EL's first. Re-run
+- [x] 3.1 A migration headed `-- release: contract` for each key, EL's first. Re-run
   the reader query in production and on a fresh reset first; on 2 November
   `attendance_submit_attempt_v3(…)` read `auto-approve-at-the-shop` and the policy
   `expense_category_choices.expense_category_choices_select_tablet` read
   `expense-category-list`. Rewrite each to its on branch, then retire the rows.
+  *(12 November: the same two readers in production and on a fresh reset, and
+  production's v3 body matched the migration's. `20261116000000` (EL: the policy
+  keeps its on branch), `20261116010000` (RS: the row), `20261116020000` (AA: v3
+  keeps the block and the settle with no gate read). Nothing is dropped. The
+  pgTAP files and the REST probe no longer turn the gates: they assert the rows
+  retired and the readers gate-free.)*
 - [ ] 3.2 Every database gate on a fresh reset; release it through the normal
   path.

@@ -727,8 +727,7 @@ list an expense's category is picked from:
 business-wide, names normalised and unique without regard to case, `sort_order`
 unique and checked at commit. Every active account reads it, and so does a live,
 proven counter or kitchen tablet, since a tablet's own
-identity has no profile (its policy still asks the retired `expense-category-list`
-row, which stays on until the retirement's contract migration rewrites it); nobody writes it directly. `save_expense_category_choice(id, name, asks_note, managers_only)` adds
+identity has no profile; nobody writes it directly. `save_expense_category_choice(id, name, asks_note, managers_only)` adds
 (a null id; it goes last and mints the suggestion) or edits, and an edit that
 renames moves the recorded expenses through `rename_expense_category` with history,
 or `merge_expense_category` where the new name is already a suggestion;

@@ -1,7 +1,8 @@
 -- a-check-in-at-the-shop-approves-itself (#81): a check-in measured inside the
 -- outlet's own fence is approved by the database, an outlet's managers choose
 -- whether every check-in still needs them and whether away check-ins are
--- refused, and with `auto-approve-at-the-shop` off v3 is v2.
+-- refused. `auto-approve-at-the-shop` and `refreshed-staff-screens` are retired
+-- by their contract migrations, so v3 no longer asks the gate.
 --
 -- Most cases go through `pg_temp.check_in`, which checks in, reads what the day
 -- became, and rolls the check-in back, so one person can try every case on the
@@ -91,11 +92,17 @@ $$;
 -- 0. The gates and the shapes.
 
 select is((select enabled from public.change_gates where key = 'auto-approve-at-the-shop'), false,
-  'auto-approve-at-the-shop is inserted off');
+  'auto-approve-at-the-shop reads off');
+select isnt((select retired_at from public.change_gates where key = 'auto-approve-at-the-shop'), null,
+  'because its contract migration retired it');
+select ok(
+  (select p.prosrc not like '%app_change_gate%' from pg_proc p
+    where p.oid = 'public.attendance_submit_attempt_v3(uuid, uuid, date, timestamptz, double precision, double precision, numeric, integer)'::regprocedure),
+  'and v3 no longer asks it');
 select is((select code from public.change_gates where key = 'auto-approve-at-the-shop'), 'AA',
   'its code is AA');
-select is((select enabled from public.change_gates where key = 'refreshed-staff-screens'), false,
-  'refreshed-staff-screens is inserted off');
+select isnt((select retired_at from public.change_gates where key = 'refreshed-staff-screens'), null,
+  'refreshed-staff-screens is retired too');
 select is(
   (select depends_on from public.change_gate_dependencies where gate_key = 'refreshed-staff-screens'),
   'auto-approve-at-the-shop',
@@ -105,37 +112,7 @@ select ok(
   'every outlet starts with both rules off');
 
 -- ---------------------------------------------------------------------------
--- 1. Gate off: v3 is v2, case for case.
-
-create temp table cases (label text, person uuid, outlet uuid, lat float8, lng float8, accuracy numeric)
-  on commit drop;
-insert into cases values
-  ('inside',                 :'EMP_KAL', :'KAL', 22.9750,   88.4345, 12),
-  ('31 m at ±104 m',         :'EMP_KAL', :'KAL', 22.975279, 88.4345, 104),
-  ('2.6 km away',            :'EMP_KAL', :'KAL', 22.9984,   88.4345, 20),
-  ('no position',            :'EMP_KAL', :'KAL', null,      null,    null),
-  ('two outlets, inside one', :'TWO_OUTLETS', :'KAL', 22.9750, 88.4345, 12);
-grant select on cases to authenticated;
-
-select is(
-  (select string_agg(label || ': ' || pg_temp.check_in(person, outlet, lat, lng, accuracy), '; ' order by label)
-     from cases),
-  (select string_agg(label || ': absent waiting', '; ' order by label) from cases),
-  'with the gate off every check-in waits for a manager, inside the fence or not');
-
-select pg_temp.rules(:'KAL', false, true);
-select is(
-  (select string_agg(label || ': ' || pg_temp.check_in(person, outlet, lat, lng, accuracy), '; ' order by label)
-     from cases),
-  (select string_agg(label || ': ' || pg_temp.check_in(person, outlet, lat, lng, accuracy, 'attendance_submit_attempt_v2'), '; ' order by label)
-     from cases),
-  'with the gate off v3 answers every case as v2 does, Block on included');
-select pg_temp.rules(:'KAL', false, false);
-
--- ---------------------------------------------------------------------------
--- 2. Gate on: what counts.
-
-update public.change_gates set enabled = true where key = 'auto-approve-at-the-shop';
+-- 1. What counts.
 
 select is(pg_temp.check_in(:'EMP_KAL', :'KAL', 22.9750, 88.4345, 12), 'present auto_approved',
   'a check-in inside the fence is approved at once');
@@ -200,7 +177,7 @@ select is(pg_temp.check_in(:'EMP_KAL', :'KAL', 22.9750, 88.4345, 12), 'absent wa
 select pg_temp.rules(:'KAL', false, false);
 
 -- ---------------------------------------------------------------------------
--- 3. Gate on: Block.
+-- 2. Block.
 
 select pg_temp.rules(:'KAL', false, true);
 select is(pg_temp.check_in(:'EMP_KAL', :'KAL', 22.9984, 88.4345, 20),

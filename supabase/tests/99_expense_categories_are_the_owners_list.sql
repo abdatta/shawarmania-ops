@@ -48,16 +48,10 @@ select pg_temp.impersonate(:'BILLER_KAL');
 select is((select count(*) from public.expense_category_choices), 7::bigint,
   'a Biller reads the list');
 -- The tablet's own identity has no profile; it read nothing until the second
--- policy (production, 2026-10-30), which admits it only while the gate is on.
-select pg_temp.impersonate(:'DEVICE');
-select is((select count(*) from public.expense_category_choices), 0::bigint,
-  'the counter tablet, signed in as itself, reads nothing while the gate is off');
-reset role;
-update public.change_gates set enabled = true
- where key in ('auto-approve-at-the-shop', 'refreshed-staff-screens', 'expense-category-list');
+-- policy (production, 2026-10-30), which no longer asks the retired gate.
 select pg_temp.impersonate(:'DEVICE');
 select is((select count(*) from public.expense_category_choices), 7::bigint,
-  'the counter tablet, signed in as itself, reads the list while the gate is on');
+  'the counter tablet, signed in as itself, reads the list');
 reset role;
 update public.counter_devices set removed_at = now() where id = :'DEVICE';
 select pg_temp.impersonate(:'DEVICE');
@@ -65,8 +59,6 @@ select is((select count(*) from public.expense_category_choices), 0::bigint,
   'a removed tablet reads nothing');
 reset role;
 update public.counter_devices set removed_at = null where id = :'DEVICE';
-update public.change_gates set enabled = false
- where key in ('auto-approve-at-the-shop', 'refreshed-staff-screens', 'expense-category-list');
 select pg_temp.impersonate(:'DEACTIVATED');
 select is((select count(*) from public.expense_category_choices), 0::bigint,
   'a deactivated account reads nothing');
@@ -223,11 +215,16 @@ $q$, 'an expense under a name off the list is still recorded');
 reset role;
 
 -- ---------------------------------------------------------------------------
--- The gate's row, off, depending on the refreshed screens.
+-- The gate's row, retired by its contract migration, still depending on the
+-- refreshed screens.
 
-select is(
-  (select enabled from public.change_gates where key = 'expense-category-list'), false,
-  'the gate is declared off');
+select isnt(
+  (select retired_at from public.change_gates where key = 'expense-category-list'), null,
+  'the gate is retired');
+select ok(
+  (select coalesce(pg_get_expr(polqual, polrelid), '') not like '%app_change_gate%'
+     from pg_policy where polname = 'expense_category_choices_select_tablet'),
+  'and the tablet''s policy no longer asks it');
 select is(
   (select depends_on from public.change_gate_dependencies where gate_key = 'expense-category-list'),
   'refreshed-staff-screens', 'and depends on the refreshed screens');

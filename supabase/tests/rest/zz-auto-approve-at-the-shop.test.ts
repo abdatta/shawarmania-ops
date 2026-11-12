@@ -13,9 +13,10 @@
  *   * **an auto-approved day reads back with its decision** to the person
  *     whose day it is.
  *
- * It turns `auto-approve-at-the-shop` on, so it runs in the change-gate phase
- * (`vitest.change-gates.config.ts`), and puts the gate and Kalyani's rules back
- * afterwards. The check-in it keeps is a Biller's, acting as an Employee, whom
+ * `auto-approve-at-the-shop` is retired by its contract migration, so the rule
+ * holds with no gate to turn. It still runs in the change-gate phase
+ * (`vitest.change-gates.config.ts`), alone, because it changes Kalyani's rules
+ * and puts them back afterwards. The check-in it keeps is a Biller's, acting as an Employee, whom
  * no other attendance suite checks in.
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
@@ -31,7 +32,6 @@ const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0'
 const PASSWORD = 'shawarmania-local'
 const KAL = '00000000-0000-4000-a000-000000000001'
-const GATE = 'auto-approve-at-the-shop'
 
 type Client = SupabaseClient<Database>
 
@@ -39,12 +39,6 @@ function client(key = SUPABASE_ANON_KEY): Client {
   return createClient<Database>(SUPABASE_URL, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   })
-}
-
-function service(): Client {
-  const key = process.env['SUPABASE_SERVICE_ROLE_KEY']
-  if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required to turn the gate')
-  return client(key)
 }
 
 async function signIn(alias: string): Promise<Client> {
@@ -55,15 +49,6 @@ async function signIn(alias: string): Promise<Client> {
   })
   if (error) throw new Error(`could not sign in ${alias}: ${error.message}`)
   return opened
-}
-
-async function turn(enabled: boolean, reason: string) {
-  const { error } = await service().rpc('change_gate_force', {
-    p_key: GATE,
-    p_enabled: enabled,
-    p_reason: reason,
-  })
-  if (error) throw error
 }
 
 /** A check-in by hand: the RPC the adapter sends, with no adapter in between. */
@@ -80,7 +65,6 @@ function checkIn(as: Client, lat: number, lng: number) {
   })
 }
 
-let gateWasOn = false
 let owner: ReturnType<typeof createSupabaseOutletsAdapter>
 let kalyaniManager: ReturnType<typeof createSupabaseOutletsAdapter>
 let otherManagerClient: Client
@@ -88,15 +72,6 @@ let otherManager: ReturnType<typeof createSupabaseOutletsAdapter>
 let staff: Client
 
 beforeAll(async () => {
-  const { data, error } = await service()
-    .from('change_gates')
-    .select('enabled')
-    .eq('key', GATE)
-    .single()
-  if (error) throw error
-  gateWasOn = data.enabled
-  await turn(true, 'zz-auto-approve-at-the-shop: on for the REST probe')
-
   owner = createSupabaseOutletsAdapter(await signIn('owner'))
   kalyaniManager = createSupabaseOutletsAdapter(await signIn('admin.kalyani'))
   otherManagerClient = await signIn('admin.kanchrapara')
@@ -106,7 +81,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await owner.updateAttendanceRules(KAL, { needsManager: false, blocksAway: false })
-  await turn(gateWasOn, 'zz-auto-approve-at-the-shop: restored after the REST probe')
 })
 
 describe('an outlet’s attendance rules, over REST', () => {

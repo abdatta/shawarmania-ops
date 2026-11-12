@@ -26,7 +26,7 @@ export default defineConfig({
     environment: 'node',
     include: [
       'supabase/tests/rest/zz-change-gates.test.ts',
-      // Turns auto-approve-at-the-shop on and a rule at Kalyani, then restores both.
+      // Turns a rule on at Kalyani, then restores it.
       'supabase/tests/rest/zz-auto-approve-at-the-shop.test.ts',
     ],
     fileParallelism: false,
