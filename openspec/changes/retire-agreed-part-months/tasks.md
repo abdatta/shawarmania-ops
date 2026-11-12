@@ -32,8 +32,10 @@ its own, and no migration in the code half.
   left it. The `@cg-on` tag drops from `e2e/fixed-costs.spec.ts`.
 - [x] 1.5 The `fixed-costs` delta; `docs/` (DATA_MODEL, SCREENS) no longer calls
   the behaviour gated.
-- [ ] 1.6 `npm run lint`, `format:check`, `typecheck`, `contrast`, `test`,
+- [x] 1.6 `npm run lint`, `format:check`, `typecheck`, `contrast`, `test`,
   `build`, `lint:change-gates`; the database and browser suites on Staging.
+  *(12 November: every local gate green, 3,374 unit tests; Staging run
+  43178344123 green on `aa102720`, every database, demo and auth browser job.)*
 - [ ] 1.7 Release: push to `stage`, Staging green, the owner promotes. The row is
   left on, so a page on an older build keeps the behaviour it has.
 

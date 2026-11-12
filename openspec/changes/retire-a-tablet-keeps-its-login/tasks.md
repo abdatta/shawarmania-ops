@@ -35,8 +35,10 @@ its own, and no migration in the code half.
   `storedSessionIsDeviceNow`, which the boundary asks of every real route.
 - [x] 1.5 `docs/` (ARCHITECTURE, OPERATIONS, SCREENS, SECURITY_AND_PRIVACY) no
   longer calls the behaviour gated. No spec named the gate.
-- [ ] 1.6 `npm run lint`, `format:check`, `typecheck`, `contrast`, `test`,
+- [x] 1.6 `npm run lint`, `format:check`, `typecheck`, `contrast`, `test`,
   `build`, `lint:change-gates`; the auth suite whole on Staging (routing).
+  *(12 November: every local gate green, 3,374 unit tests; Staging run
+  43178344123 green on `aa102720`, every database, demo and auth browser job.)*
 - [ ] 1.7 Release: push to `stage`, Staging green, the owner promotes.
 
 ## 2. Wait for every tablet

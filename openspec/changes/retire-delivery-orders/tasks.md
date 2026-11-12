@@ -46,8 +46,10 @@ its own, and no migration in the code half. Counter and kitchen runtime.
   `sales-analytics` and `service-and-packaging` deltas; `docs/`
   (BUSINESS_CONTEXT, DATA_MODEL, GLOSSARY, LIMITATIONS, ROLES_AND_PERMISSIONS,
   SCREENS, SECURITY_AND_PRIVACY, TESTING) no longer calls the behaviour gated.
-- [ ] 1.7 `npm run lint`, `format:check`, `typecheck`, `contrast`, `test`,
+- [x] 1.7 `npm run lint`, `format:check`, `typecheck`, `contrast`, `test`,
   `build`, `lint:change-gates`; the database and browser suites on Staging.
+  *(12 November: every local gate green, 3,374 unit tests; Staging run
+  43178344123 green on `aa102720`, every database, demo and auth browser job.)*
 - [ ] 1.8 Release: push to `stage`, Staging green, the owner promotes. The row is
   left on, so a tablet on an older build keeps the behaviour it has.
 
