@@ -289,7 +289,7 @@ any expense is.
 
 ### Requirement: An expense list reads by day and marks the reader's own rows
 
-While `refreshed-staff-screens` is on, wherever an expense list shows more than one
+Wherever an expense list shows more than one
 business date, its rows SHALL be grouped under the day (**Today**,
 **Yesterday**, or the date) instead of repeating the date on every row. A list
 of one business date SHALL be unchanged. Every row recorded by the reader SHALL
@@ -308,8 +308,8 @@ sentence SHALL sit under the Expenses heading.
 
 ### Requirement: Adding an expense asks the amount first
 
-While `refreshed-staff-screens` is on, the expense form SHALL ask the amount first, then
-the category in the existing typed field with its suggestions, then the
+The expense form SHALL ask the amount first, then
+the category from the owners' list, then the
 payment method
 where the reader chooses one, then the optional note, whose example SHALL read
 *What was it for?*. The form SHALL still ask for no more than four fields, and
@@ -318,13 +318,14 @@ the method SHALL still start unchosen for the owner and a manager.
 #### Scenario: Staff add an expense
 
 - **WHEN** a Biller, an Employee or the counter tablet opens the expense form
-- **THEN** the amount is the first field, the category is the typed field with its suggestions, and the note's example reads "What was it for?"
+- **THEN** the amount is the first field, the category follows it as tiles from the owners' list, and the note's example reads "What was it for?"
 
 ### Requirement: An expense's category is chosen from the owners' list
 
-While `expense-category-list` is on, the expense form SHALL offer the category as
-tiles from a business-wide list the owners keep, in their order, instead of the
-typed field. A choice marked as asking what it was for SHALL make the note
+The expense form SHALL offer the category as
+tiles from a business-wide list the owners keep, in their order. Where the list
+cannot be read, the form SHALL fall back to a typed field, so a counter that
+resumed offline can still record what left the drawer. A choice marked as asking what it was for SHALL make the note
 required, and the form SHALL refuse to save without it. Choices marked for
 managers and owners SHALL NOT be offered to an Employee, a Biller or the counter
 tablet. Editing an expense whose category is not on the list SHALL offer its
@@ -334,7 +335,7 @@ because it is off the list.
 
 #### Scenario: Staff pick a category
 
-- **WHEN** an Employee opens the expense form with `expense-category-list` on
+- **WHEN** an Employee opens the expense form
 - **THEN** the categories are tiles from the owners' list, without the managers-and-owners choices, and no tile is chosen
 
 #### Scenario: Other asks what it was for

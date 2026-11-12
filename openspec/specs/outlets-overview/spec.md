@@ -165,7 +165,9 @@ has none, the tile SHALL read as it does without fixed costs. The tile's
 placeholder SHALL reserve the shape of whichever form arrives.
 
 The card SHALL make no more requests than it does without fixed costs: the
-fixed-cost figures SHALL arrive with the month's existing read.
+fixed-cost figures SHALL arrive with the month's existing read. That read SHALL
+always carry the outlet's fixed costs, and no screen SHALL ask for the month
+without them.
 
 #### Scenario: An outlet with fixed costs
 
@@ -177,3 +179,9 @@ fixed-cost figures SHALL arrive with the month's existing read.
 
 - **WHEN** an outlet has no fixed cost this month
 - **THEN** its tile is unchanged
+
+#### Scenario: The month is never read without its fixed costs
+
+- **WHEN** the owner opens Overview
+- **THEN** each card asks for the outlet's fixed costs beside its month, whether
+  or not the outlet has any

@@ -36,8 +36,10 @@ its own, and no migration in the code half.
   `build`, `lint:change-gates`; the database and browser suites on Staging.
   *(12 November: every local gate green, 3,374 unit tests; Staging run
   43178344123 green on `aa102720`, every database, demo and auth browser job.)*
-- [ ] 1.7 Release: push to `stage`, Staging green, the owner promotes. The row is
+- [x] 1.7 Release: push to `stage`, Staging green, the owner promotes. The row is
   left on, so a page on an older build keeps the behaviour it has.
+  *(Promote run 43190557656 moved `main` to `f632cc42`; Deploy run 43190699464
+  green at 22:52 IST on 12 November, migrate included.)*
 
 ## 2. Wait for every tablet
 

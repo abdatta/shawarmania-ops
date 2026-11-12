@@ -247,11 +247,6 @@ outside attempt SHALL be approved automatically under the same rule.
 - **WHEN** a person assigned to two outlets retries at the other assigned outlet for the same business date
 - **THEN** the new attempt may become the one awaiting review or the one that counts, but the person still has exactly one attendance outcome for that date
 
-#### Scenario: With the gate off every check-in waits
-
-- **WHEN** `auto-approve-at-the-shop` is off and an Employee checks in inside the fence, whichever build the phone runs
-- **THEN** the attempt is recorded and waits for a manager, exactly as before this change
-
 ### Requirement: A self check-in uses one database-authored arrival instant
 
 Every phone self check-in attempt SHALL take its arrival instant from the database
@@ -2266,8 +2261,7 @@ Employee, a Biller and a counter device SHALL NOT. The outlet's position and
 geofence radius SHALL remain changeable by the owner alone.
 
 The settings SHALL appear on the outlet's own page, in an Attendance section,
-to the owner and that outlet's managers, and SHALL take effect only while
-`auto-approve-at-the-shop` is on.
+to the owner and that outlet's managers.
 
 #### Scenario: A manager requires approval of every check-in
 
@@ -2288,11 +2282,6 @@ to the owner and that outlet's managers, and SHALL take effect only while
 
 - **WHEN** a Franchise Admin sends any request changing their outlet's position or geofence radius
 - **THEN** the database refuses it
-
-#### Scenario: The settings do nothing with the gate off
-
-- **WHEN** `auto-approve-at-the-shop` is off and an outlet blocks away check-ins
-- **THEN** a check-in outside the fence is recorded and waits for a manager, as before this change
 
 ### Requirement: A check-in away from the shop can be refused
 
@@ -2329,8 +2318,7 @@ A day whose latest decision is `auto_approved` SHALL read **Present** with
 *Auto-approved at the shop* and its time, and no approver, on the manager's roll-call,
 the person view and the person's own history. It SHALL NOT be counted as waiting
 or carry an attention badge. A manager SHALL be able to correct it as any
-settled day, with a reason. This SHALL hold with `auto-approve-at-the-shop` off, for
-days auto-approved while it was on.
+settled day, with a reason.
 
 #### Scenario: The manager reads an auto-approved day
 
@@ -2342,14 +2330,9 @@ days auto-approved while it was on.
 - **WHEN** a Franchise Admin corrects an auto-approved day to absent with a reason
 - **THEN** the correction is appended, the day is absent, and the person reads the reason
 
-#### Scenario: The gate is turned off after days were auto-approved
-
-- **WHEN** `auto-approve-at-the-shop` is turned off
-- **THEN** days already auto-approved at the shop still read present and auto-approved, and remain correctable
-
 ### Requirement: The person's own screens speak in plain words
 
-While `refreshed-staff-screens` is on, the person's Home and My attendance SHALL:
+The person's Home and My attendance SHALL:
 - name the outlet and the date with its weekday;
 - show the arrival deadline before the check-in;
 - describe their evidence as *At the shop*, *a distance away*, or *No
@@ -2378,7 +2361,7 @@ direct response to the same check-in, and use the best reading.
 
 ### Requirement: A month of attendance reads as a calendar
 
-While `refreshed-staff-screens` is on, My attendance and the manager's By staff SHALL show
+My attendance and the manager's By staff SHALL show
 one month as a calendar of days. Each day's state SHALL be drawn by shape as
 well as colour (a ring, a ring with a clock, a ring with a slash, a dashed ring, a
 bare number), each ring in the colour of the day's status chip, never by colour alone, and SHALL be named to a screen reader. Opening a day SHALL show its detail

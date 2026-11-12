@@ -80,5 +80,8 @@ dependant with the gate it depends on.
   keeps the block and the settle with no gate read). Nothing is dropped. The
   pgTAP files and the REST probe no longer turn the gates: they assert the rows
   retired and the readers gate-free.)*
-- [ ] 3.2 Every database gate on a fresh reset; release it through the normal
+- [x] 3.2 Every database gate on a fresh reset; release it through the normal
   path.
+  *(Promote run 43190557656 moved `main` to `f632cc42`; Deploy run 43190699464
+  green at 22:52 IST on 12 November: production lists the migration and the
+  row reads retired.)*

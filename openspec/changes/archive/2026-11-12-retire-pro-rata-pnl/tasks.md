@@ -78,5 +78,8 @@ its own, and no migration in the code half.
   database served only the off path, so nothing is dropped.
   *(`20261116030000_contract_pro_rata_pnl.sql`; no reader in production on 12
   November, and none on a fresh reset.)*
-- [ ] 3.2 Every database gate on a fresh reset; release it through the normal
+- [x] 3.2 Every database gate on a fresh reset; release it through the normal
   path.
+  *(Promote run 43190557656 moved `main` to `f632cc42`; Deploy run 43190699464
+  green at 22:52 IST on 12 November: production lists the migration and the
+  row reads retired.)*
