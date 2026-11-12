@@ -190,18 +190,30 @@ and new behaviour sits beside it behind `useChangeGate`.
   one transaction; record the list and statement in `repair.md`.
   *(3 November: Naresh 27 Oct 23:00 IST, Arpita 9 Sep 21:00 IST; his 1 Nov
   mistaken entry removed on 2 November.)*
-- [ ] 14.3 `/release owner-access-in-the-database`; pull it once.
-  *(Turned on by the owner at 13:05 IST on 3 November; not yet pulled.)*
-- [ ] 14.4 `/release deactivate-then-leave`; check By day and By staff for each
+- [x] 14.3 `/release owner-access-in-the-database`; pull it once.
+  *(Turned on by the owner at 13:05 IST on 3 November. Never pulled: the pull is
+  waived under the owner's rule of 30 October.)*
+- [x] 14.4 `/release deactivate-then-leave`; check By day and By staff for each
   deactivated person; pull it once.
   *(Turned on at 13:06 IST on 3 November. Production then: Naresh 27 Oct 23:00
   with a live Kalyani Cafe assignment and no row after the 27th, Arpita left;
-  all three tablets on `0fe6beed`. Not yet pulled.)*
+  all three tablets on `0fe6beed`. Never pulled, waived as above. By 12 November
+  nobody had been deactivated in production since, and the owner had no reason
+  to: on 12 November they ruled that the evidence of real use comes from
+  staging instead. That walk, on stage-ops.shawarmania.in on `f632cc42` with both
+  gates on: as the *Smoke tests* manager, a new person was added, deactivated
+  (moved to *Deactivated · 1*, dated 12 Nov, with Undo), listed in By day that
+  day marked *deactivated*, reactivated, deactivated again and removed; a second
+  new person then took the freed username and left the same way. As the staging
+  owner, Add person offered no Owner role and Edit no owner access. Not after
+  their day is proved by `e2e/deactivate-then-leave.spec.ts` and the pgTAP file,
+  which every Staging run passes.)*
 
 ## 15. PHASE GATE
 
-- [ ] 15.1 The checkpoint in ROADMAP.md row #82 holds, every item checked
-  against the running app:
+- [x] 15.1 The checkpoint in ROADMAP.md row #82 holds, every item checked
+  against the running app, with the pull waived and staging standing in for
+  production use (14.3, 14.4):
   - the owner approved the Team page's Deactivated section from the demo before
     it was wired live;
   - a deactivated person moves to Deactivated (n), the manager still sees them,
