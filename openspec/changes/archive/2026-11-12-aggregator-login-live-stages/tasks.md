@@ -57,4 +57,7 @@
 - [x] 8.1 Gate (#46) clause by clause, saying which test proved each.
 - [x] 8.2 CI gates per `verify.yml`: lint, format:check, typecheck, functions:typecheck, unit, build, e2e, contrast, test:db.
 - [x] 8.3 Honest note: no live OTP was spent; the live walk happens at the next real lapse (now: both channels are lapsed).
-- [ ] 8.4 The live walk: once the ops build and the runner are deployed, reconnect Zomato and Swiggy (both lapsed since 22 and 24 Oct) and watch every stage arrive on the owner's phone.
+- [x] 8.4 The live walk: once the ops build and the runner are deployed, reconnect Zomato and Swiggy (both lapsed since 22 and 24 Oct) and watch every stage arrive on the owner's phone.
+  *(12 November: the owner reconnected Zomato (signed in 21:06 IST) and Swiggy
+  (signed in 23:22 IST, after two codes expired unanswered) and saw every stage
+  arrive on their phone; read from `aggregator_auth_requests`.)*
