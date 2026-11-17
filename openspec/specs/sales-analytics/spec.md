@@ -235,7 +235,7 @@ Items and Sales SHALL each remember, the same way as the date shortcut, whether 
 
 ### Requirement: Items and Sales show counter or delivery orders, never both
 
-While `delivery-orders` is on, Items and Sales SHALL offer a **Counter ·
+Items and Sales SHALL offer a **Counter ·
 Delivery** switch, Counter by default and remembered per page on the device.
 Counter SHALL read exactly as before. Delivery SHALL count only handed-over
 delivery orders, by the order's business date for Day and Week and its

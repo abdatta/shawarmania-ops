@@ -320,9 +320,8 @@ only its readiness, preserving counter handover and making only unhanded food
 owed again. A failed write SHALL restore the previous state and report the error.
 There SHALL be no progress countdown or outline on the ticket.
 
-Counter handover SHALL remove a Done ticket with a soft fade and small shrink in
-its original slot, then hold a brief blank slot before other cards close the gap.
-Reduced motion SHALL use only the fade. Unticking SHALL restore it as gray and
+Counter handover SHALL remove a Done ticket as *A finished receipt fades while
+the board closes up* requires. Unticking SHALL restore it as gray and
 Done, rather than making the kitchen cook it again. Each Ready receipt SHALL
 remain distinct from later cooking tickets of the same order.
 
@@ -396,11 +395,11 @@ order that was not undone. So:
 #### Scenario: Handover and untick
 
 - **WHEN** the counter ticks all items in a Done ticket, then unticks one on an unfinished order
-- **THEN** the Done ticket departs with a held blank slot and returns gray, collapsed, and still undoable
+- **THEN** the Done ticket fades out while the board closes up, and returns gray, collapsed, and still undoable
 
 ### Requirement: A delivery ticket says Delivery
 
-While `delivery-orders` is on, a kitchen card for a delivery order SHALL show
+A kitchen card for a delivery order SHALL show
 **Delivery** where a service would be named, and SHALL otherwise behave as any
 card: it rings until acknowledged, is marked Ready, and shows no label, price
 or customer. A handed-over delivery order SHALL leave the board as a finished
@@ -418,13 +417,12 @@ order does, and SHALL NOT ring as a cancellation.
 
 ### Requirement: A finished receipt fades while the board closes up
 
-While `delivery-orders` is on, counter handover SHALL remove a Done ticket by
+Counter handover SHALL remove a Done ticket by
 fading it where it stood, above the other cards, while the cards below close
 the gap at once, as a card leaves the counter's rail: no shrink and no held
-blank slot. Reduced motion SHALL keep the fade and drop the slide. With the
-gate off, the ticket SHALL leave as `kitchen-display` otherwise requires.
+blank slot. Reduced motion SHALL keep the fade and drop the slide.
 
 #### Scenario: The counter ticks the last dish of a Done receipt
 
-- **WHEN** `delivery-orders` is on and the counter ticks the last dish a kitchen's Done receipt covers
+- **WHEN** the counter ticks the last dish a kitchen's Done receipt covers
 - **THEN** the receipt fades in its slot over the board while the card below it slides up its column in the same moment

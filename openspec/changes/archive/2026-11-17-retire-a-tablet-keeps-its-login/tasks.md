@@ -58,8 +58,11 @@ its own, and no migration in the code half.
   Nothing in the database reads the key (re-run the reader query first), so it
   retires the row only. *(`20261117010000`; the reader query found nothing in
   production or on a reset.)*
-- [ ] 3.2 Every database gate on a fresh reset; release it through the normal
+- [x] 3.2 Every database gate on a fresh reset; release it through the normal
   path.
   *(15 November: a fresh reset passes every pgTAP file, 103 files and 4,379
   tests, and the change-gates REST suite; `lint:migrations` and
   `lint:change-gates` green; the reader query finds nothing for the key.)*
+  *(Promote run 43997094683 moved `main` to `cef7bb68`; Deploy run 43997193183
+  green at 07:12 IST on 17 November, migrate included. Read in production
+  after it: the row is retired at 07:10 IST.)*

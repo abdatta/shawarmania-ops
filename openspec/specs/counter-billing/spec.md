@@ -2408,7 +2408,7 @@ everyone else, including a manager's crafted request for another outlet.
 
 ### Requirement: The composer offers Delivery and shows it no money
 
-While `delivery-orders` is on at an outlet offering Delivery, the composer's
+At an outlet offering Delivery, the composer's
 service row SHALL offer **Delivery** beside the outlet's other service choices,
 or alone when it offers none. Choosing Delivery SHALL clear any table and
 packaging. With Delivery chosen the composer SHALL show no total, no customer
@@ -2444,7 +2444,7 @@ reasoned confirmation. The shift's Cash and UPI totals SHALL NOT change.
 
 ### Requirement: Stats and Billing History show counter or delivery, never both
 
-While `delivery-orders` is on, Billing's Stats and Billing History SHALL offer a
+Billing's Stats and Billing History SHALL offer a
 **Counter · Delivery** switch, Counter by default, remembered per page on the
 device. Counter SHALL read as before, except that Stats leaves delivery orders
 out of every order count and time. Delivery SHALL show, for the chosen outlet

@@ -59,8 +59,10 @@ its own, and no migration in the code half. Retired together with
   publish and smoke. The first run, on `7d60c505`, caught two account-flow
   REST probes still granting owner access through the function; they now
   expect the refusal.)_
-- [ ] 1.7 Release: push to `stage`, Staging green, the owner promotes. The row is
+- [x] 1.7 Release: push to `stage`, Staging green, the owner promotes. The row is
   left on, so a page on an older build keeps the behaviour it has.
+  *(Promote run 43997094683 moved `main` to `cef7bb68`; Deploy run 43997193183
+  green at 07:12 IST on 17 November. The row stays on.)*
 
 ## 2. Wait for every tablet
 

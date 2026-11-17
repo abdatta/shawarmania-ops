@@ -378,12 +378,11 @@ or the moment it is both paid and prepared, whether by the counter or by the day
 change — and SHALL accept no other change to it on a paid or cancelled order. The
 label SHALL NOT be copied to a bill, a receipt or any report.
 
-While `delivery-orders` is on, the database SHALL keep a copy of the label, as
-it stood, in the same write that takes the order off the rail, including a
+The database SHALL keep a copy of the label, as it stood, in the same write that takes the order off the rail, including a
 handover. My shift and Billing History SHALL show that kept label beside its
 order or bill. A kept label SHALL NOT be written to a bill, a receipt, an SMS, a
 public bill link or an export, and SHALL NOT be used as, or offered as, a
-customer's name. A label cleared before the gate was on SHALL NOT be recovered.
+customer's name. A label cleared before labels were kept SHALL NOT be recovered.
 
 #### Scenario: Cleared on finishing
 
@@ -392,13 +391,13 @@ customer's name. A label cleared before the gate was on SHALL NOT be recovered.
 
 #### Scenario: Kept on finishing
 
-- **WHEN** `delivery-orders` is on and a labelled order is paid and its last dish is then ticked
+- **WHEN** a labelled order is paid and its last dish is then ticked
 - **THEN** the rail no longer shows it, and My shift shows the bill with that label
 
 #### Scenario: Cleared by the day change
 
 - **WHEN** the day change finishes a paid, labelled order nobody ticked
-- **THEN** its label becomes null with its preparation, and while `delivery-orders` is on a copy is kept
+- **THEN** its label becomes null with its preparation, and a copy is kept
 
 #### Scenario: Kept while cooking
 
@@ -460,13 +459,12 @@ quantity SHALL be the sum of its Readies not undone, capped at the line's quanti
 
 ### Requirement: A delivery order is made by the kitchen and never billed
 
-While `delivery-orders` is on, an open order at an outlet offering Delivery MAY
+An open order at an outlet offering Delivery MAY
 be marked a **delivery order** when it is created or revised. A delivery order
 SHALL take the day's next order number and enter the preparation pipeline like
 any order. It SHALL carry no service type, table, packaging line, discount or
 customer, and the database SHALL refuse a command that gives it any of them. It
-SHALL never be paid: the database SHALL refuse payment of a delivery order
-while the gate is on. While it is open, a revision MAY mark it a delivery order
+SHALL never be paid: the database SHALL refuse payment of a delivery order. While it is open, a revision MAY mark it a delivery order
 or an ordinary one.
 
 A delivery order's paise totals exist only because its lines snapshot the
@@ -479,7 +477,7 @@ counter's prices. No read SHALL sum, show or export them.
 
 #### Scenario: A hand-crafted payment
 
-- **WHEN** a request pays an open delivery order while the gate is on
+- **WHEN** a request pays an open delivery order
 - **THEN** the database refuses it, no bill is created and no bill number is consumed
 
 #### Scenario: A delivery order with a discount

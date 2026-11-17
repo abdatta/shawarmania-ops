@@ -196,8 +196,7 @@ SHALL refuse anyone else before any expense is written. Nothing SHALL be deleted
 
 ### Requirement: A part month costs the figure agreed for it
 
-While `agreed-part-months` is on, a fixed cost that starts or stops part-way
-through a month SHALL cost, for that month, the figure agreed for it, recorded
+A fixed cost that starts or stops part-way through a month SHALL cost, for that month, the figure agreed for it, recorded
 as that month's settlement when the start or stop is saved. Adding or editing a
 fixed cost to start on a day other than the 1st SHALL require what that month
 comes to, in whole rupees. No screen SHALL show a count of days for a fixed
@@ -216,8 +215,7 @@ and by its stop day.
 
 ### Requirement: Stopping closes a fixed cost
 
-While `agreed-part-months` is on, stopping a fixed cost SHALL ask for any final
-payment at close in whole rupees, starting empty, 0 for none, on top of what
+Stopping a fixed cost SHALL ask for any final payment at close in whole rupees, starting empty, 0 for none, on top of what
 payments already leave for the stop month once every earlier month is paid.
 The stop month SHALL then cost that amount plus the final payment, every
 earlier month left short SHALL be settled at what it covered, and a final
@@ -255,8 +253,7 @@ confirmation, taking back the closing figures and the final payment it wrote.
 
 ### Requirement: A stopped cost stays in its place for the month it stopped in
 
-While `agreed-part-months` is on, the Fixed list SHALL keep a stopped fixed cost
-in its place while its stop month is the current month or while it is not
+The Fixed list SHALL keep a stopped fixed cost in its place while its stop month is the current month or while it is not
 closed, saying that it stopped but not when. Once Stop is saved it SHALL be
 shown as done, greyed with no Pay, its paid ring unchanged. After its stop month it
 SHALL leave the list for one line at the foot that shows the stopped costs when
