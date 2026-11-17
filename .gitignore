@@ -61,3 +61,6 @@ test-results/
 
 # Local Browser-pane server config: machine-specific absolute paths.
 .claude/launch.json
+
+# Codex attachments uploaded from remote devices
+/.codex-remote-attachments/
