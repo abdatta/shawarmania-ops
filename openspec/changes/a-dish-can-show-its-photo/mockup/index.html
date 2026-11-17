@@ -1,0 +1,2744 @@
+<!doctype html>
+<!--
+  The dish-photo layout and large view approved by the owner on 2026-11-16
+  (change a-dish-can-show-its-photo). Built from the live Kalyani Cafe menu
+  page of that day, with sample photos from Wikimedia Commons linked, not
+  copied (freely licensed; not for production use). Open it in a browser at
+  phone width. Fonts load only when served from shawarmania.in, so a local
+  copy falls back to system fonts; the layout is unaffected.
+-->
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#14100B" />
+    <title>Mock-up: Menu — Kalyani Cafe · Shawarmania</title>
+    <meta
+      name="description"
+      content="The Kalyani Cafe menu, with today's prices and what is available right now."
+    />
+    <link rel="canonical" href="https://shawarmania.in/menu/kalyani-cafe/" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link
+      rel="preload"
+      href="https://shawarmania.in/menu/_/fonts/lilita-one.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <style>
+      @font-face {
+        font-family: 'Lilita One';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url('https://shawarmania.in/menu/_/fonts/lilita-one.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Nunito Sans Variable';
+        font-style: normal;
+        font-weight: 400 800;
+        font-display: swap;
+        src: url('https://shawarmania.in/menu/_/fonts/nunito-sans.woff2') format('woff2');
+      }
+      :root {
+        color-scheme: dark;
+        --bg: #14100b;
+        --bg-raised: #1e1710;
+        --bg-overlay: rgb(20 16 11 / 0.82);
+        --cream: #f5e4c7;
+        --cream-dim: #c9b795;
+        --cream-faint: rgb(245 228 199 / 0.45);
+        --flame-gold: #ffc53d;
+        --flame-orange: #f97316;
+        --flame-red: #dc2626;
+        --gradient-flame: linear-gradient(100deg, #ffc53d 0%, #f97316 52%, #dc2626 100%);
+        --color-veg: #16a34a;
+        --color-nonveg: #b91c1c;
+        --font-display: 'Lilita One', 'Arial Rounded MT Bold', system-ui, sans-serif;
+        --font-text: 'Nunito Sans Variable', 'Nunito Sans', system-ui, sans-serif;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+
+        scroll-padding-top: 4.5rem;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--cream);
+        font-family: var(--font-text);
+        font-size: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+        line-height: 1.45;
+        padding: 0 16px;
+      }
+      main,
+      .masthead,
+      .docfoot {
+        max-width: 40rem;
+        margin: 0 auto;
+      }
+      .masthead {
+        display: flex;
+        justify-content: center;
+        padding: 1.625rem 0 0;
+      }
+      .masthead a {
+        display: inline-flex;
+      }
+      .masthead img {
+        display: block;
+        width: auto;
+        height: 5.5rem;
+      }
+      h1 {
+        font-family: var(--font-display);
+        font-weight: 400;
+        font-size: clamp(2.75rem, 2rem + 4vw, 4rem);
+        line-height: 1;
+        letter-spacing: 0.005em;
+        text-align: center;
+        margin: 1rem 0 0;
+      }
+      h1::after {
+        content: '';
+        display: block;
+        width: 4.5rem;
+        height: 4px;
+        margin: 1rem auto 0;
+        border-radius: 999px;
+        background: var(--gradient-flame);
+      }
+      .outlet {
+        margin: 0.625rem 0 0;
+        text-align: center;
+        color: var(--cream-dim);
+        font-weight: 700;
+        font-size: 0.9375rem;
+        letter-spacing: 0.04em;
+      }
+      .chips {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        margin: 1.625rem -16px 0;
+        padding: 0.625rem 16px;
+        background: var(--bg-overlay);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border-bottom: 1px solid rgb(245 228 199 / 0.1);
+      }
+      .chips ul {
+        position: relative;
+        display: flex;
+        gap: 0.375rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      .chips ul::-webkit-scrollbar {
+        display: none;
+      }
+      .chips a {
+        position: relative;
+        z-index: 1;
+        display: inline-flex;
+        align-items: center;
+        min-height: 40px;
+        padding: 0 1rem;
+        border: 1px solid rgb(245 228 199 / 0.2);
+        border-radius: 999px;
+        background: rgb(245 228 199 / 0.05);
+        color: var(--cream);
+        font-size: 0.875rem;
+        font-weight: 700;
+        white-space: nowrap;
+        text-decoration: none;
+        transition:
+          color 260ms cubic-bezier(0.22, 1, 0.36, 1),
+          border-color 260ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .chips a:hover {
+        border-color: var(--flame-gold);
+        color: var(--flame-gold);
+      }
+      .chips a[aria-current],
+      .chips a[aria-current]:hover {
+        border-color: transparent;
+        color: #201404;
+      }
+      .chip-pill {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 0;
+        border-radius: 999px;
+        background: var(--gradient-flame);
+        pointer-events: none;
+      }
+      .spy-ready .chip-pill {
+        transition:
+          transform 420ms cubic-bezier(0.22, 1, 0.36, 1),
+          width 420ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .course h2 {
+        font-family: var(--font-display);
+        font-weight: 400;
+        font-size: clamp(1.75rem, 1.4rem + 1.6vw, 2.25rem);
+        line-height: 1.08;
+        letter-spacing: 0.005em;
+        color: var(--flame-gold);
+        margin: 2.625rem 0 0.375rem;
+      }
+      .dishes {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .dish {
+        padding: 1rem 0;
+        border-bottom: 1px solid rgb(245 228 199 / 0.08);
+      }
+      .dish:last-child {
+        border-bottom: 0;
+      }
+      .line {
+        display: flex;
+        align-items: baseline;
+        gap: 1rem;
+      }
+      .dish h3 {
+        flex: 1;
+        margin: 0;
+        font-size: 1.0625rem;
+        font-weight: 800;
+        line-height: 1.3;
+      }
+      .price {
+        flex: none;
+        font-family: var(--font-display);
+        font-size: 1.25rem;
+        color: var(--flame-gold);
+        font-variant-numeric: tabular-nums;
+      }
+      .rupee {
+        margin-right: 0.08em;
+        font-family: var(--font-text);
+        font-weight: 700;
+        font-size: 0.85em;
+      }
+      .desc {
+        margin: 0.375rem 0 0;
+        color: var(--cream-dim);
+        font-size: 0.9375rem;
+        padding-right: 3.5rem;
+      }
+      .dish.off h3,
+      .dish.off .desc {
+        color: var(--cream-faint);
+      }
+      .dish.off .diet {
+        opacity: 0.5;
+      }
+      .unavailable {
+        flex: none;
+        padding: 0.1em 0.6em;
+        border: 1px solid rgb(245 228 199 / 0.25);
+        border-radius: 999px;
+        color: var(--cream-dim);
+        font-size: 0.75rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+      }
+      .diet {
+        display: inline-block;
+        position: relative;
+        width: 0.95rem;
+        height: 0.95rem;
+        margin-right: 0.5rem;
+        vertical-align: -0.1rem;
+        border: 1.5px solid currentColor;
+        border-radius: 2px;
+        background: #fff;
+      }
+      .diet::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        margin: auto;
+        background: currentColor;
+      }
+      .diet.veg {
+        color: var(--color-veg);
+      }
+      .diet.veg::after {
+        width: 0.45rem;
+        height: 0.45rem;
+        border-radius: 50%;
+      }
+      .diet.nonveg {
+        color: var(--color-nonveg);
+      }
+      .diet.nonveg::after {
+        width: 0.55rem;
+        height: 0.48rem;
+        clip-path: polygon(50% 0, 100% 100%, 0 100%);
+      }
+      .docfoot {
+        margin-top: 4.25rem;
+        padding: 1.625rem 0 2.625rem;
+        border-top: 1px solid rgb(245 228 199 / 0.12);
+        color: var(--cream-faint);
+        font-size: 0.75rem;
+      }
+      .docfoot a {
+        color: var(--cream-dim);
+        text-underline-offset: 0.2em;
+      }
+      a:focus-visible {
+        outline: 2px solid var(--flame-gold);
+        outline-offset: 3px;
+        border-radius: 0.375rem;
+      }
+      .sheet {
+        text-align: center;
+        padding: 2rem 0;
+      }
+      .sheet h1 {
+        font-size: clamp(1.75rem, 1.4rem + 2vw, 2.5rem);
+      }
+      .sheet p {
+        color: var(--cream-dim);
+        margin: 1.625rem 0 0;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .chips a,
+        .spy-ready .chip-pill {
+          transition: none;
+        }
+      }
+      .rv [hidden],
+      .rv[hidden] {
+        display: none !important;
+      }
+      html.rv-lock {
+        overflow: hidden;
+      }
+      body.rv-docked {
+        padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+      }
+      .rv-pop {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+      }
+      .rv-backdrop {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(30rem 22rem at 70% 25%, rgb(249 115 22 / 0.22), transparent 70%),
+          radial-gradient(26rem 20rem at 15% 85%, rgb(127 29 29 / 0.4), transparent 70%),
+          rgb(10 8 5 / 0.72);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        animation: rv-fade 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+      .rv-frame {
+        position: relative;
+        width: min(23rem, 100%);
+        padding: 2px;
+        border-radius: 1.5rem;
+        overflow: hidden;
+        isolation: isolate;
+        box-shadow:
+          0 30px 80px rgb(0 0 0 / 0.6),
+          0 0 60px rgb(249 115 22 / 0.25);
+        animation: rv-pop 700ms cubic-bezier(0.34, 1.56, 0.64, 1) 80ms both;
+      }
+      .rv-frame::before {
+        content: '';
+        position: absolute;
+        inset: -60%;
+        z-index: -1;
+        background: conic-gradient(
+          from 0deg,
+          #ffc53d,
+          #f97316,
+          #dc2626,
+          #7f1d1d,
+          #dc2626,
+          #f97316,
+          #ffc53d
+        );
+        animation: rv-spin 4s linear infinite;
+      }
+      .rv-card {
+        position: relative;
+        overflow: hidden;
+        padding: 2.25rem 1.5rem 1.5rem;
+        border-radius: calc(1.5rem - 2px);
+        background:
+          radial-gradient(18rem 12rem at 80% 0%, rgb(249 115 22 / 0.28), transparent 70%),
+          radial-gradient(14rem 10rem at 0% 100%, rgb(127 29 29 / 0.45), transparent 70%),
+          var(--bg-raised);
+        text-align: center;
+      }
+      .rv-embers {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+      .rv-embers i {
+        position: absolute;
+        bottom: -10px;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #ffc53d;
+        box-shadow: 0 0 10px 2px rgb(249 115 22 / 0.8);
+        opacity: 0;
+        animation: rv-ember 3.2s ease-in infinite;
+      }
+      .rv-embers i:nth-child(1) {
+        left: 8%;
+        animation-delay: 0.2s;
+      }
+      .rv-embers i:nth-child(2) {
+        left: 22%;
+        animation-delay: 1.4s;
+        width: 4px;
+        height: 4px;
+      }
+      .rv-embers i:nth-child(3) {
+        left: 38%;
+        animation-delay: 0.8s;
+        background: #f97316;
+      }
+      .rv-embers i:nth-child(4) {
+        left: 55%;
+        animation-delay: 2.1s;
+        width: 4px;
+        height: 4px;
+      }
+      .rv-embers i:nth-child(5) {
+        left: 70%;
+        animation-delay: 0.5s;
+        background: #f97316;
+      }
+      .rv-embers i:nth-child(6) {
+        left: 84%;
+        animation-delay: 1.7s;
+      }
+      .rv-embers i:nth-child(7) {
+        left: 94%;
+        animation-delay: 2.6s;
+        width: 4px;
+        height: 4px;
+        background: #dc2626;
+      }
+      .rv-close {
+        position: absolute;
+        top: 0.625rem;
+        right: 0.625rem;
+        z-index: 2;
+        display: grid;
+        place-items: center;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        background: rgb(20 16 11 / 0.6);
+        color: var(--cream);
+        cursor: pointer;
+        transition:
+          transform 180ms cubic-bezier(0.34, 1.3, 0.64, 1),
+          color 180ms;
+      }
+      .rv-close:hover {
+        transform: scale(1.08);
+        color: var(--flame-gold);
+      }
+      .rv-close svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        transform: rotate(-90deg);
+      }
+      .rv-ring-track {
+        fill: none;
+        stroke: rgb(245 228 199 / 0.15);
+        stroke-width: 2.5;
+      }
+      .rv-ring-arc {
+        fill: none;
+        stroke: url(#rv-flame);
+        stroke-width: 2.5;
+        stroke-linecap: round;
+        stroke-dasharray: 113.1;
+        animation: rv-count 5s linear 600ms both;
+      }
+      .rv-paused .rv-ring-arc {
+        animation-play-state: paused;
+      }
+      .rv-close b {
+        position: relative;
+        font-size: 1.25rem;
+        line-height: 1;
+        font-weight: 400;
+      }
+      .rv-stars {
+        display: flex;
+        justify-content: center;
+        gap: 0.25rem;
+        margin: 0.5rem 0 0.875rem;
+      }
+      .rv-stars svg {
+        width: 1.875rem;
+        height: 1.875rem;
+        fill: #ffc53d;
+        filter: drop-shadow(0 0 8px rgb(255 197 61 / 0.55));
+        animation: rv-star 550ms cubic-bezier(0.34, 1.9, 0.64, 1) both;
+      }
+      .rv-stars svg:nth-child(1) {
+        animation-delay: 380ms;
+      }
+      .rv-stars svg:nth-child(2) {
+        animation-delay: 450ms;
+      }
+      .rv-stars svg:nth-child(3) {
+        animation-delay: 520ms;
+      }
+      .rv-stars svg:nth-child(4) {
+        animation-delay: 590ms;
+      }
+      .rv-stars svg:nth-child(5) {
+        animation-delay: 660ms;
+      }
+      .rv-rise {
+        animation: rv-rise 600ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
+      }
+      .rv-kicker {
+        margin: 0;
+        color: var(--flame-gold);
+        font-size: 0.8125rem;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        animation-delay: 300ms;
+      }
+      .rv-title {
+        margin: 0.375rem 0 0;
+        font-family: var(--font-display);
+        font-weight: 400;
+        font-size: clamp(2.25rem, 1.8rem + 2.5vw, 2.75rem);
+        line-height: 0.98;
+        text-transform: uppercase;
+      }
+      .rv-title span {
+        display: block;
+        animation: rv-rise 700ms cubic-bezier(0.34, 1.6, 0.64, 1) both;
+      }
+      .rv-title span:nth-child(1) {
+        animation-delay: 380ms;
+      }
+      .rv-title span:nth-child(2) {
+        animation-delay: 500ms;
+        width: fit-content;
+        margin: 0 auto;
+        background: var(--gradient-flame);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      .rv-text {
+        margin: 0.875rem 0 0;
+        color: var(--cream-dim);
+        font-size: 0.9375rem;
+        animation-delay: 620ms;
+      }
+      .rv-text strong {
+        color: var(--cream);
+      }
+      .rv-cta {
+        position: relative;
+        overflow: hidden;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        width: 100%;
+        min-height: 3.25rem;
+        margin-top: 1.375rem;
+        padding: 0 1rem;
+        white-space: nowrap;
+        border-radius: 999px;
+        background: var(--gradient-flame);
+        color: #201404;
+        font-weight: 800;
+        font-size: 1.0625rem;
+        text-decoration: none;
+        box-shadow: 0 10px 28px rgb(249 115 22 / 0.45);
+        animation:
+          rv-rise 600ms cubic-bezier(0.34, 1.4, 0.64, 1) 740ms both,
+          rv-throb 2.4s ease-in-out 1.6s infinite;
+      }
+      .rv-cta::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          105deg,
+          transparent 35%,
+          rgb(255 255 255 / 0.55) 50%,
+          transparent 65%
+        );
+        transform: translateX(-120%);
+        animation: rv-shine 2.4s ease-in-out 1.2s infinite;
+      }
+      .rv-g {
+        display: grid;
+        place-items: center;
+        width: 1.75rem;
+        height: 1.75rem;
+        border-radius: 50%;
+        background: #fff;
+        flex: none;
+      }
+      .rv-g svg {
+        width: 1.05rem;
+        height: 1.05rem;
+      }
+      .rv-fine {
+        margin: 0.875rem 0 0;
+        color: var(--cream-dim);
+        font-size: 0.9375rem;
+        font-weight: 600;
+        text-wrap: balance;
+        animation-delay: 820ms;
+      }
+      .rv-fine strong {
+        color: var(--flame-gold);
+        font-weight: 800;
+      }
+      .rv-tang-title {
+        margin-top: 1rem;
+      }
+      .rv-tang-title span:nth-child(1) {
+        font-size: 0.72em;
+        color: var(--cream);
+      }
+      .rv-tang-title span:nth-child(3) {
+        animation-delay: 620ms;
+        width: fit-content;
+        margin: 0 auto;
+        background: var(--gradient-flame);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      .rv-tang-title span:nth-child(2) {
+        margin-top: 0.08em;
+      }
+      .rv-tang-rule {
+        display: block;
+        width: 3.5rem;
+        height: 3px;
+        margin: 1rem auto 0;
+        border-radius: 999px;
+        background: var(--gradient-flame);
+        animation-delay: 700ms;
+      }
+      .rv-tang-title .rv-tang-sauce {
+        margin-top: 0.5rem;
+        color: var(--cream);
+        font-family: var(--font-text);
+        font-size: 1.1875rem;
+        font-weight: 600;
+        line-height: 1.3;
+        text-transform: none;
+        text-wrap: balance;
+        animation-delay: 760ms;
+      }
+      .rv-tang-sauce strong {
+        color: var(--flame-gold);
+        font-weight: 800;
+      }
+      .rv-tang-enjoy {
+        margin: 0.75rem 0 0;
+        color: var(--cream-dim);
+        font-size: 0.9375rem;
+        font-weight: 600;
+        white-space: nowrap;
+        animation-delay: 880ms;
+      }
+      @media (max-width: 374px) {
+        .rv-tang-title {
+          font-size: 1.875rem;
+        }
+        .rv-tang-title .rv-tang-sauce {
+          font-size: 1.0625rem;
+        }
+        .rv-tang-enjoy {
+          font-size: 0.875rem;
+        }
+      }
+      .rv-out .rv-backdrop {
+        animation: rv-fade 380ms cubic-bezier(0.22, 1, 0.36, 1) reverse both;
+      }
+      .rv-out .rv-frame {
+        animation: rv-dock 420ms cubic-bezier(0.55, 0, 0.75, 0) both;
+      }
+      .rv-bar {
+        position: fixed;
+        left: 50%;
+        bottom: max(12px, env(safe-area-inset-bottom));
+        z-index: 40;
+        display: flex;
+        align-items: center;
+        width: min(23rem, calc(100% - 32px));
+        min-height: 3.25rem;
+        border-radius: 999px;
+        overflow: hidden;
+        background: var(--gradient-flame);
+        color: #201404;
+        box-shadow:
+          0 10px 28px rgb(249 115 22 / 0.45),
+          0 14px 34px rgb(0 0 0 / 0.5);
+        transform: translateX(-50%);
+        animation: rv-bar-in 600ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+      }
+      .rv-bar::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          105deg,
+          transparent 35%,
+          rgb(255 255 255 / 0.55) 50%,
+          transparent 65%
+        );
+        transform: translateX(-120%);
+        animation: rv-shine 2.4s ease-in-out 1.2s infinite;
+        pointer-events: none;
+      }
+      .rv-bar-link {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.625rem;
+        min-width: 0;
+        min-height: 3.25rem;
+        padding: 0 1.25rem;
+        color: inherit;
+        font-weight: 800;
+        font-size: 1.0625rem;
+        white-space: nowrap;
+        text-decoration: none;
+      }
+      .rv-go {
+        flex: none;
+        display: grid;
+        place-items: center;
+        animation: rv-sway 2.4s ease-in-out infinite;
+      }
+      .rv-go svg {
+        width: 1.375rem;
+        height: 1.375rem;
+      }
+      @media (max-width: 374px) {
+        .rv-cta {
+          gap: 0.4rem;
+          padding: 0 0.75rem;
+          font-size: 0.9375rem;
+        }
+        .rv-cta .rv-g,
+        .rv-bar-link .rv-g {
+          width: 1.5rem;
+          height: 1.5rem;
+        }
+        .rv-bar-link .rv-g svg {
+          width: 0.9rem;
+          height: 0.9rem;
+        }
+        .rv-cta .rv-go svg,
+        .rv-bar-link .rv-go svg {
+          width: 1.125rem;
+          height: 1.125rem;
+        }
+        .rv-bar-link {
+          gap: 0.4rem;
+          padding: 0 0.875rem 0 0.75rem;
+          font-size: 0.875rem;
+        }
+      }
+      @media (max-width: 339px) {
+        .rv-cta {
+          font-size: 0.875rem;
+          padding: 0 0.625rem;
+        }
+      }
+      .rv button:focus-visible,
+      .rv a:focus-visible {
+        outline: 2px solid var(--flame-gold);
+        outline-offset: 3px;
+      }
+      .rv-bar a:focus-visible {
+        outline-color: #201404;
+        outline-offset: -4px;
+        border-radius: 999px;
+      }
+      @keyframes rv-fade {
+        from {
+          opacity: 0;
+        }
+      }
+      @keyframes rv-pop {
+        from {
+          opacity: 0;
+          transform: scale(0.55) rotate(8deg) translateY(40px);
+        }
+      }
+      @keyframes rv-spin {
+        to {
+          transform: rotate(1turn);
+        }
+      }
+      @keyframes rv-count {
+        from {
+          stroke-dashoffset: 0;
+        }
+        to {
+          stroke-dashoffset: 113.1;
+        }
+      }
+      @keyframes rv-star {
+        from {
+          opacity: 0;
+          transform: scale(0) rotate(-40deg);
+        }
+      }
+      @keyframes rv-rise {
+        from {
+          opacity: 0;
+          transform: translateY(26px);
+        }
+      }
+      @keyframes rv-sway {
+        0%,
+        100% {
+          transform: translateX(-1px);
+        }
+        50% {
+          transform: translateX(3px);
+        }
+      }
+      @keyframes rv-throb {
+        50% {
+          transform: scale(1.035);
+          box-shadow: 0 14px 36px rgb(249 115 22 / 0.65);
+        }
+      }
+      @keyframes rv-shine {
+        0% {
+          transform: translateX(-120%);
+        }
+        55%,
+        100% {
+          transform: translateX(120%);
+        }
+      }
+      @keyframes rv-ember {
+        0% {
+          opacity: 0;
+          transform: translateY(0) scale(1);
+        }
+        15% {
+          opacity: 0.9;
+        }
+        100% {
+          opacity: 0;
+          transform: translateY(-26rem) translateX(12px) scale(0.3);
+        }
+      }
+      @keyframes rv-dock {
+        to {
+          opacity: 0;
+          transform: translateY(42vh) scale(0.25);
+        }
+      }
+      @keyframes rv-bar-in {
+        from {
+          opacity: 0;
+          transform: translateX(-50%) translateY(120%) scale(0.9);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .rv-backdrop,
+        .rv-frame,
+        .rv-stars svg,
+        .rv-rise,
+        .rv-title span,
+        .rv-cta,
+        .rv-cta::after,
+        .rv-bar,
+        .rv-bar::after,
+        .rv-go,
+        .rv-embers i,
+        .rv-frame::before,
+        .rv-out .rv-backdrop,
+        .rv-out .rv-frame {
+          animation: none;
+        }
+        .rv-embers {
+          display: none;
+        }
+      }
+      /* -- mock-up: dish photos ------------------------------------------- */
+      .mock-tag {
+        position: fixed;
+        bottom: 0.75rem;
+        left: 0.75rem;
+        z-index: 5;
+        padding: 0.25rem 0.6rem;
+        border-radius: 999px;
+        background: var(--bg-raised);
+        border: 1px solid rgb(245 228 199 / 0.2);
+        color: var(--cream-dim);
+        font-size: 0.6875rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      /* The photo floats left: the name/price line sits beside it, the description wraps on under it. */
+      .dish.has-photo {
+        display: flow-root;
+      }
+      .dish.has-photo .desc {
+        padding-right: 0;
+      }
+      .thumb {
+        position: relative;
+        float: left;
+        width: 5.5rem;
+        aspect-ratio: 1;
+        margin: 0.125rem 0.875rem 0.375rem 0;
+        padding: 0;
+        border: 0;
+        border-radius: 0.875rem;
+        overflow: hidden;
+        background: var(--bg-raised);
+        cursor: zoom-in;
+        box-shadow:
+          0 0 0 1px rgb(245 228 199 / 0.1),
+          0 6px 18px rgb(0 0 0 / 0.35);
+        transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+        -webkit-tap-highlight-color: transparent;
+      }
+      .thumb:active {
+        transform: scale(0.95);
+      }
+      .thumb img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .thumb:hover img {
+        transform: scale(1.05);
+      }
+      .dish.off .thumb img {
+        filter: grayscale(1) brightness(0.6);
+      }
+      .thumb:focus-visible {
+        outline: 2px solid var(--flame-gold);
+        outline-offset: 3px;
+      }
+      /* The hint: a small expand mark in the corner, glass-dark so it never fights the food. */
+      .expand {
+        position: absolute;
+        right: 0.3rem;
+        bottom: 0.3rem;
+        display: grid;
+        place-items: center;
+        width: 1.375rem;
+        height: 1.375rem;
+        border-radius: 999px;
+        background: rgb(20 16 11 / 0.55);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        box-shadow: 0 0 0 1px rgb(245 228 199 / 0.18);
+      }
+      .expand svg {
+        width: 0.6875rem;
+        height: 0.6875rem;
+        fill: none;
+        stroke: var(--cream);
+        stroke-width: 1.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      /* The open photo: grows out of the thumbnail, the dish's details rise in under it. */
+      .viewer {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display: grid;
+        place-items: center;
+        padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+      }
+      .viewer[hidden] {
+        display: none;
+      }
+      .viewer-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgb(10 8 5 / 0.86);
+        backdrop-filter: blur(14px) saturate(1.2);
+        -webkit-backdrop-filter: blur(14px) saturate(1.2);
+      }
+      .viewer-sheet {
+        position: relative;
+        width: min(100%, 34rem);
+      }
+      .viewer-photo {
+        display: block;
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        object-fit: cover;
+        border-radius: 1.25rem;
+        box-shadow:
+          0 24px 60px rgb(0 0 0 / 0.55),
+          0 0 0 1px rgb(245 228 199 / 0.1);
+        will-change: transform, clip-path;
+      }
+      .viewer-info {
+        padding: 1.125rem 0.25rem 0;
+      }
+      .viewer-info .line h3 {
+        flex: 1;
+        margin: 0;
+        font-family: var(--font-display);
+        font-weight: 400;
+        font-size: 1.625rem;
+        line-height: 1.1;
+      }
+      .viewer-info .line h3 .diet {
+        vertical-align: 0.15rem;
+      }
+      .viewer-info .price {
+        font-size: 1.625rem;
+      }
+      .viewer-info .desc {
+        padding-right: 0;
+        margin-top: 0.5rem;
+        font-size: 1rem;
+      }
+      .viewer-close {
+        position: absolute;
+        top: -0.75rem;
+        right: -0.25rem;
+        width: 2.5rem;
+        height: 2.5rem;
+        padding: 0;
+        border: 0;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        background: rgb(30 23 16 / 0.8);
+        box-shadow: 0 0 0 1px rgb(245 228 199 / 0.2);
+        color: var(--cream);
+        transform: translateY(-100%);
+      }
+      .viewer-close svg {
+        width: 0.875rem;
+        height: 0.875rem;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="mock-tag">Mock-up · sample photos</div>
+    <div class="rv" id="rv" hidden>
+      <div class="rv-pop" role="dialog" aria-modal="true" aria-labelledby="rv-title">
+        <div class="rv-backdrop"></div>
+        <div class="rv-frame">
+          <div class="rv-card">
+            <div class="rv-embers" aria-hidden="true">
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            </div>
+            <button type="button" class="rv-close" aria-label="Close">
+              <svg viewBox="0 0 44 44" aria-hidden="true">
+                <defs>
+                  <linearGradient id="rv-flame" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="#ffc53d" />
+                    <stop offset="0.52" stop-color="#f97316" />
+                    <stop offset="1" stop-color="#dc2626" />
+                  </linearGradient>
+                </defs>
+                <circle class="rv-ring-track" cx="22" cy="22" r="18" />
+                <circle class="rv-ring-arc" cx="22" cy="22" r="18" />
+              </svg>
+              <b aria-hidden="true">×</b>
+            </button>
+            <h2 class="rv-title rv-tang-title" id="rv-title">
+              <span>Our shawarmas are</span><span>intentionally</span><span>tangy</span
+              ><span class="rv-tang-sauce">thanks to our <strong>signature sauces</strong></span>
+            </h2>
+            <i class="rv-tang-rule rv-rise" aria-hidden="true"></i>
+            <p class="rv-tang-enjoy rv-rise">Enjoy the distinctive flavour!</p>
+          </div>
+        </div>
+      </div>
+      <div class="rv-bar" role="complementary" aria-label="Leave a Google review" hidden>
+        <a
+          class="rv-bar-link"
+          href="https://g.page/r/Cef3CrZy-ZyuEBE/review"
+          target="_blank"
+          rel="noopener"
+          ><span class="rv-g" aria-hidden="true"
+            ><svg viewBox="0 0 48 48">
+              <path
+                fill="#EA4335"
+                d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"
+              />
+              <path
+                fill="#4285F4"
+                d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.8c4.3-4 6.9-9.9 6.9-17.2z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M10.5 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s.9 7.4 2.6 10.6l7.9-6z"
+              />
+              <path
+                fill="#34A853"
+                d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.8c-2.2 1.5-5 2.3-8.5 2.3-6.2 0-11.5-4.2-13.4-9.8l-7.9 6C6.6 42.6 14.6 48 24 48z"
+              /></svg></span
+          ><span>Leave a review. Get 5% off!</span
+          ><span class="rv-go" aria-hidden="true"
+            ><svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="3"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M5 12h14M13 6l6 6-6 6" /></svg></span
+        ></a>
+      </div>
+    </div>
+    <script>
+      ;(function () {
+        var root = null
+        if (!root) return
+        var html = document.documentElement
+        var pop = root.querySelector('.rv-pop')
+        var bar = root.querySelector('.rv-bar')
+        var ring = root.querySelector('.rv-ring-arc')
+        var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        var state = 'pop'
+        function dock() {
+          if (state !== 'pop') return
+          state = 'bar'
+          pop.classList.add('rv-out')
+          html.classList.remove('rv-lock')
+          setTimeout(
+            function () {
+              pop.hidden = true
+              bar.hidden = false
+              document.body.classList.add('rv-docked')
+            },
+            reduce ? 0 : 400,
+          )
+        }
+        root.hidden = false
+        // The outlet keeps only the banner: no popup, no countdown.
+        if (!pop) {
+          state = 'bar'
+          bar.hidden = false
+          document.body.classList.add('rv-docked')
+          return
+        }
+        html.classList.add('rv-lock')
+        ring.addEventListener('animationend', dock)
+        root.querySelector('.rv-close').addEventListener('click', dock)
+        root.querySelector('.rv-backdrop').addEventListener('click', dock)
+        var cta = root.querySelector('.rv-cta')
+        if (cta)
+          cta.addEventListener('click', function () {
+            setTimeout(dock, 200)
+          })
+        document.addEventListener('keydown', function (event) {
+          if (event.key === 'Escape') dock()
+        })
+        // A menu opened in a background tab should still get its five seconds.
+        function onVisibility() {
+          root.classList.toggle('rv-paused', document.hidden)
+        }
+        document.addEventListener('visibilitychange', onVisibility)
+        onVisibility()
+      })()
+    </script>
+    <header class="masthead">
+      <a href="https://shawarmania.in/"
+        ><img
+          src="https://shawarmania.in/menu/_/logo.png"
+          alt="Shawarmania — home"
+          width="226"
+          height="162"
+      /></a>
+    </header>
+    <main>
+      <h1>Menu</h1>
+      <p class="outlet">Kalyani Cafe</p>
+      <nav class="chips" aria-label="Menu sections">
+        <ul>
+          <li><a href="#highlights">Highlights</a></li>
+          <li><a href="#soup">Soup</a></li>
+          <li><a href="#shawarmas">Shawarmas</a></li>
+          <li><a href="#burritos">Burritos</a></li>
+          <li><a href="#indo-chinese">Indo Chinese</a></li>
+          <li><a href="#noodles">Noodles</a></li>
+          <li><a href="#burgers">Burgers</a></li>
+          <li><a href="#main-course">Main Course</a></li>
+          <li><a href="#appetizers">Appetizers</a></li>
+          <li><a href="#desserts">Desserts</a></li>
+          <li><a href="#tea-coffee">Tea &amp; Coffee</a></li>
+          <li><a href="#mocktails">Mocktails</a></li>
+          <li><a href="#water">Water</a></li>
+          <li><a href="#add-on">Add On</a></li>
+          <li><a href="#delivery">Delivery</a></li>
+        </ul>
+      </nav>
+      <section class="course" id="highlights" aria-labelledby="highlights-h">
+        <h2 id="highlights-h">Highlights</h2>
+        <ul class="dishes">
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Chicken Shawarma Salad
+              </h3>
+              <span class="price"><span class="rupee">₹</span>220</span>
+            </div>
+            <p class="desc">
+              Juicy shawarma chicken over crisp greens for a lighter, protein-packed plate.
+            </p>
+          </li>
+          <li class="dish has-photo">
+            <button
+              type="button"
+              class="thumb"
+              data-full="https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c8/Fried_chicken_burger_.jpg/960px-Fried_chicken_burger_.jpg"
+              aria-label="See a photo of Nashville Chicken Burger"
+            >
+              <img
+                src="https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c8/Fried_chicken_burger_.jpg/960px-Fried_chicken_burger_.jpg"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                width="640"
+                height="480"
+              /><span class="expand" aria-hidden="true"
+                ><svg viewBox="0 0 16 16">
+                  <path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9" /></svg
+              ></span>
+            </button>
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Nashville Chicken Burger
+              </h3>
+              <span class="price"><span class="rupee">₹</span>300</span>
+            </div>
+            <p class="desc">
+              Crispy chicken glazed in fiery Nashville sauce, tucked into buttery brioche with
+              fries.
+            </p>
+          </li>
+          <li class="dish has-photo">
+            <button
+              type="button"
+              class="thumb"
+              data-full="https://thumb.wikimedia.org/wikipedia/commons/thumb/6/60/Burrito.JPG/960px-Burrito.JPG"
+              aria-label="See a photo of Fat Chicken Burrito"
+            >
+              <img
+                src="https://thumb.wikimedia.org/wikipedia/commons/thumb/6/60/Burrito.JPG/960px-Burrito.JPG"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                width="640"
+                height="480"
+              /><span class="expand" aria-hidden="true"
+                ><svg viewBox="0 0 16 16">
+                  <path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9" /></svg
+              ></span>
+            </button>
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Fat Chicken Burrito
+              </h3>
+              <span class="price"><span class="rupee">₹</span>300</span>
+            </div>
+            <p class="desc">
+              fire-grilled shredded chicken wrapped in a warm flour tortilla with seasoned rice,
+              savory rajma beans, mild roasted-tomato salsa
+            </p>
+          </li>
+        </ul>
+      </section>
+      <section class="course" id="soup" aria-labelledby="soup-h">
+        <h2 id="soup-h">Soup</h2>
+        <ul class="dishes">
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Veg Clear Soup
+              </h3>
+              <span class="price"><span class="rupee">₹</span>120</span>
+            </div>
+          </li>
+          <li class="dish has-photo">
+            <button
+              type="button"
+              class="thumb"
+              data-full="https://upload.wikimedia.org/wikipedia/commons/8/86/Chicken_Noodle_Soup_US.jpg"
+              aria-label="See a photo of Protein Chicken Soup"
+            >
+              <img
+                src="https://upload.wikimedia.org/wikipedia/commons/8/86/Chicken_Noodle_Soup_US.jpg"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                width="640"
+                height="480"
+              /><span class="expand" aria-hidden="true"
+                ><svg viewBox="0 0 16 16">
+                  <path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9" /></svg
+              ></span>
+            </button>
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Protein Chicken Soup
+              </h3>
+              <span class="price"><span class="rupee">₹</span>160</span>
+            </div>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Chicken Manchow Soup
+              </h3>
+              <span class="price"><span class="rupee">₹</span>170</span>
+            </div>
+          </li>
+        </ul>
+      </section>
+      <section class="course" id="shawarmas" aria-labelledby="shawarmas-h">
+        <h2 id="shawarmas-h">Shawarmas</h2>
+        <ul class="dishes">
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >The Grand Shawarma Thali
+              </h3>
+              <span class="price"><span class="rupee">₹</span>400</span>
+            </div>
+            <p class="desc">
+              Go big with our ultimate chicken shawarma platter! Flame-grilled, spiced chicken
+              shawarma served over fragrant basmati rice, paired with creamy hummus, crisp veggies,
+              and bold garlic sauce. Comes with two pieces of traditional Saaj bread for the
+              ultimate dipping experience.
+            </p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Shawarma Rice
+              </h3>
+              <span class="price"><span class="rupee">₹</span>300</span>
+            </div>
+            <p class="desc">
+              Golden Shawarma Rice Juicy, marinated chicken shawarma strips piled high on aromatic,
+              turmeric-infused basmati rice
+            </p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Shawarmania Mutton Shawarma
+              </h3>
+              <span class="price"><span class="rupee">₹</span>250</span>
+            </div>
+            <p class="desc">
+              Succulent mutton, bold spices &amp; signature flavours in every bite.
+            </p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Chicken Shawarma Salad
+              </h3>
+              <span class="price"><span class="rupee">₹</span>220</span>
+            </div>
+            <p class="desc">
+              Juicy shawarma chicken over crisp greens for a lighter, protein-packed plate.
+            </p>
+          </li>
+          <li class="dish has-photo">
+            <button
+              type="button"
+              class="thumb"
+              data-full="https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8e/Chicken_Shawarma_Wrap_-_Lavash_2024-09-11.jpg/960px-Chicken_Shawarma_Wrap_-_Lavash_2024-09-11.jpg"
+              aria-label="See a photo of Lebanese Chicken Shawarma"
+            >
+              <img
+                src="https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8e/Chicken_Shawarma_Wrap_-_Lavash_2024-09-11.jpg/960px-Chicken_Shawarma_Wrap_-_Lavash_2024-09-11.jpg"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                width="640"
+                height="480"
+              /><span class="expand" aria-hidden="true"
+                ><svg viewBox="0 0 16 16">
+                  <path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9" /></svg
+              ></span>
+            </button>
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Lebanese Chicken Shawarma
+              </h3>
+              <span class="price"><span class="rupee">₹</span>220</span>
+            </div>
+            <p class="desc">
+              Tender chicken paired with silky hummus &amp; tahini for a Lebanese touch.
+            </p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Taco Chicken Shawarma
+              </h3>
+              <span class="price"><span class="rupee">₹</span>220</span>
+            </div>
+            <p class="desc">A bold meeting of Mexican taco flavours and our signature shawarma.</p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Double Chicken Shawarma
+              </h3>
+              <span class="price"><span class="rupee">₹</span>200</span>
+            </div>
+            <p class="desc">Twice the chicken. Twice the indulgence. Made for serious cravings.</p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Cheesy Paneer Shawarma
+              </h3>
+              <span class="price"><span class="rupee">₹</span>200</span>
+            </div>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Cheese Chicken Shawarma
+              </h3>
+              <span class="price"><span class="rupee">₹</span>180</span>
+            </div>
+            <p class="desc">
+              Our signature chicken shawarma finished with a generous mozzarella melt.
+            </p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Paneer Shawarma
+              </h3>
+              <span class="price"><span class="rupee">₹</span>170</span>
+            </div>
+          </li>
+          <li class="dish has-photo">
+            <button
+              type="button"
+              class="thumb"
+              data-full="https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5d/Handmade_Chicken_Shawarma_Wrap_-_Lavash.jpg/960px-Handmade_Chicken_Shawarma_Wrap_-_Lavash.jpg"
+              aria-label="See a photo of Mayonnaise Chicken Shawarma"
+            >
+              <img
+                src="https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5d/Handmade_Chicken_Shawarma_Wrap_-_Lavash.jpg/960px-Handmade_Chicken_Shawarma_Wrap_-_Lavash.jpg"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                width="640"
+                height="480"
+              /><span class="expand" aria-hidden="true"
+                ><svg viewBox="0 0 16 16">
+                  <path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9" /></svg
+              ></span>
+            </button>
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Mayonnaise Chicken Shawarma
+              </h3>
+              <span class="price"><span class="rupee">₹</span>160</span>
+            </div>
+            <p class="desc">
+              Creamy, indulgent &amp; subtly sweet with our signature chicken filling.
+            </p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Peri Peri Chicken Shawarma
+              </h3>
+              <span class="price"><span class="rupee">₹</span>150</span>
+            </div>
+            <p class="desc">
+              Our signature chicken shawarma with a fiery peri peri finish in crispy saaj bread.
+            </p>
+          </li>
+          <li class="dish has-photo">
+            <button
+              type="button"
+              class="thumb"
+              data-full="https://thumb.wikimedia.org/wikipedia/commons/thumb/9/90/Chicken_Shawarma.jpg/960px-Chicken_Shawarma.jpg"
+              aria-label="See a photo of Classic Chicken Shawarma"
+            >
+              <img
+                src="https://thumb.wikimedia.org/wikipedia/commons/thumb/9/90/Chicken_Shawarma.jpg/960px-Chicken_Shawarma.jpg"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                width="640"
+                height="480"
+              /><span class="expand" aria-hidden="true"
+                ><svg viewBox="0 0 16 16">
+                  <path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9" /></svg
+              ></span>
+            </button>
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Classic Chicken Shawarma
+              </h3>
+              <span class="price"><span class="rupee">₹</span>140</span>
+            </div>
+            <p class="desc">Our signature chicken shawarma in crispy saaj bread.</p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >The Indian Shawarma
+              </h3>
+              <span class="price"><span class="rupee">₹</span>170</span>
+            </div>
+            <p class="desc">
+              The Indian Shawarma is made with Rumali Roti Inspired from Indian bread along with our
+              Shawarma and signature sauces
+            </p>
+          </li>
+        </ul>
+      </section>
+      <section class="course" id="burritos" aria-labelledby="burritos-h">
+        <h2 id="burritos-h">Burritos</h2>
+        <ul class="dishes">
+          <li class="dish has-photo">
+            <button
+              type="button"
+              class="thumb"
+              data-full="https://thumb.wikimedia.org/wikipedia/commons/thumb/6/60/Burrito.JPG/960px-Burrito.JPG"
+              aria-label="See a photo of Fat Chicken Burrito"
+            >
+              <img
+                src="https://thumb.wikimedia.org/wikipedia/commons/thumb/6/60/Burrito.JPG/960px-Burrito.JPG"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                width="640"
+                height="480"
+              /><span class="expand" aria-hidden="true"
+                ><svg viewBox="0 0 16 16">
+                  <path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9" /></svg
+              ></span>
+            </button>
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Fat Chicken Burrito
+              </h3>
+              <span class="price"><span class="rupee">₹</span>300</span>
+            </div>
+            <p class="desc">
+              fire-grilled shredded chicken wrapped in a warm flour tortilla with seasoned rice,
+              savory rajma beans, mild roasted-tomato salsa
+            </p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Spicy Paneer Burrito
+              </h3>
+              <span class="price"><span class="rupee">₹</span>320</span>
+            </div>
+            <p class="desc">
+              fire-grilled shredded paneer cubes wrapped in a warm flour tortilla with seasoned
+              rice, savory pinto beans, mild roasted-tomato salsa
+            </p>
+          </li>
+        </ul>
+      </section>
+      <section class="course" id="indo-chinese" aria-labelledby="indo-chinese-h">
+        <h2 id="indo-chinese-h">Indo Chinese</h2>
+        <ul class="dishes">
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Veg Fried Rice
+              </h3>
+              <span class="price"><span class="rupee">₹</span>150</span>
+            </div>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Chicken Fried Rice
+              </h3>
+              <span class="price"><span class="rupee">₹</span>200</span>
+            </div>
+          </li>
+          <li class="dish off has-photo">
+            <button
+              type="button"
+              class="thumb"
+              data-full="https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ec/CHILLI_CHICKEN.jpg/960px-CHILLI_CHICKEN.jpg"
+              aria-label="See a photo of Chilli Chicken"
+            >
+              <img
+                src="https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ec/CHILLI_CHICKEN.jpg/960px-CHILLI_CHICKEN.jpg"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                width="640"
+                height="480"
+              /><span class="expand" aria-hidden="true"
+                ><svg viewBox="0 0 16 16">
+                  <path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9" /></svg
+              ></span>
+            </button>
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Chilli Chicken
+              </h3>
+              <span class="unavailable">Unavailable</span>
+            </div>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Chilli Panner
+              </h3>
+              <span class="price"><span class="rupee">₹</span>250</span>
+            </div>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Crispy Chicken
+              </h3>
+              <span class="price"><span class="rupee">₹</span>180</span>
+            </div>
+          </li>
+        </ul>
+      </section>
+      <section class="course" id="noodles" aria-labelledby="noodles-h">
+        <h2 id="noodles-h">Noodles</h2>
+        <ul class="dishes">
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Veg Hakka Noodles
+              </h3>
+              <span class="price"><span class="rupee">₹</span>150</span>
+            </div>
+          </li>
+          <li class="dish has-photo">
+            <button
+              type="button"
+              class="thumb"
+              data-full="https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/Hot_and_spicy_hakka_noodles_in_West_Bengal%2C_India%2C_photographed_on_December_5%2C_2023.jpg/960px-Hot_and_spicy_hakka_noodles_in_West_Bengal%2C_India%2C_photographed_on_December_5%2C_2023.jpg"
+              aria-label="See a photo of Chicken Hakka Noodles"
+            >
+              <img
+                src="https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/Hot_and_spicy_hakka_noodles_in_West_Bengal%2C_India%2C_photographed_on_December_5%2C_2023.jpg/960px-Hot_and_spicy_hakka_noodles_in_West_Bengal%2C_India%2C_photographed_on_December_5%2C_2023.jpg"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                width="640"
+                height="480"
+              /><span class="expand" aria-hidden="true"
+                ><svg viewBox="0 0 16 16">
+                  <path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9" /></svg
+              ></span>
+            </button>
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Chicken Hakka Noodles
+              </h3>
+              <span class="price"><span class="rupee">₹</span>180</span>
+            </div>
+          </li>
+        </ul>
+      </section>
+      <section class="course" id="burgers" aria-labelledby="burgers-h">
+        <h2 id="burgers-h">Burgers</h2>
+        <ul class="dishes">
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Smashed Mutton Burger
+              </h3>
+              <span class="price"><span class="rupee">₹</span>380</span>
+            </div>
+            <p class="desc">
+              Hand-smashed mutton, aromatic spices &amp; signature sauce in a buttery brioche with
+              fries.
+            </p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Messy Chicken Burger
+              </h3>
+              <span class="price"><span class="rupee">₹</span>320</span>
+            </div>
+            <p class="desc">
+              Smashed chicken, fresh crunch &amp; a lavish pour of house cheese sauce. Will make
+              your hands messy with fries.
+            </p>
+          </li>
+          <li class="dish has-photo">
+            <button
+              type="button"
+              class="thumb"
+              data-full="https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c8/Fried_chicken_burger_.jpg/960px-Fried_chicken_burger_.jpg"
+              aria-label="See a photo of Nashville Chicken Burger"
+            >
+              <img
+                src="https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c8/Fried_chicken_burger_.jpg/960px-Fried_chicken_burger_.jpg"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                width="640"
+                height="480"
+              /><span class="expand" aria-hidden="true"
+                ><svg viewBox="0 0 16 16">
+                  <path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9" /></svg
+              ></span>
+            </button>
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Nashville Chicken Burger
+              </h3>
+              <span class="price"><span class="rupee">₹</span>300</span>
+            </div>
+            <p class="desc">
+              Crispy chicken glazed in fiery Nashville sauce, tucked into buttery brioche with
+              fries.
+            </p>
+          </li>
+          <li class="dish has-photo">
+            <button
+              type="button"
+              class="thumb"
+              data-full="https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a4/Chargrilled_Chicken_Burger_-_Leon.jpg/960px-Chargrilled_Chicken_Burger_-_Leon.jpg"
+              aria-label="See a photo of Smashed Chicken Burger"
+            >
+              <img
+                src="https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a4/Chargrilled_Chicken_Burger_-_Leon.jpg/960px-Chargrilled_Chicken_Burger_-_Leon.jpg"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                width="640"
+                height="480"
+              /><span class="expand" aria-hidden="true"
+                ><svg viewBox="0 0 16 16">
+                  <path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9" /></svg
+              ></span>
+            </button>
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Smashed Chicken Burger
+              </h3>
+              <span class="price"><span class="rupee">₹</span>270</span>
+            </div>
+            <p class="desc">
+              Crispy-edged smashed chicken, fresh vegetables &amp; our signature house sauces with
+              fries.
+            </p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Smashed Veg Burger
+              </h3>
+              <span class="price"><span class="rupee">₹</span>200</span>
+            </div>
+          </li>
+        </ul>
+      </section>
+      <section class="course" id="main-course" aria-labelledby="main-course-h">
+        <h2 id="main-course-h">Main Course</h2>
+        <ul class="dishes">
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Chicken Steak
+              </h3>
+              <span class="price"><span class="rupee">₹</span>400</span>
+            </div>
+            <p class="desc">
+              Succulent chicken breast with herb rice, silky mash, sautéed vegetables &amp; house
+              gravy.
+            </p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Paneer Steak
+              </h3>
+              <span class="price"><span class="rupee">₹</span>400</span>
+            </div>
+            <p class="desc">
+              Spiced paneer paired with herb rice, creamy mash, vegetables &amp; house gravy.
+            </p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Lemon Butter Garlic Fish
+              </h3>
+              <span class="price"><span class="rupee">₹</span>400</span>
+            </div>
+            <p class="desc">Grilled Vetki Fish with lemon butter sauce and herb rice</p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Fish &amp; Chips
+              </h3>
+              <span class="price"><span class="rupee">₹</span>400</span>
+            </div>
+            <p class="desc">Golden battered fish with crisp, chunky potato wedges.</p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Chicken Roulade
+              </h3>
+              <span class="price"><span class="rupee">₹</span>350</span>
+            </div>
+            <p class="desc">
+              Crisp chicken revealing a rich garlic-herb butter centre, served with herb rice &amp;
+              vegetables.
+            </p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Chicken Katsu Rice
+              </h3>
+              <span class="price"><span class="rupee">₹</span>300</span>
+            </div>
+            <p class="desc">Golden chicken katsu over fragrant herb rice with savoury curry.</p>
+          </li>
+        </ul>
+      </section>
+      <section class="course" id="appetizers" aria-labelledby="appetizers-h">
+        <h2 id="appetizers-h">Appetizers</h2>
+        <ul class="dishes">
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Nashville Chicken Wings
+              </h3>
+              <span class="price"><span class="rupee">₹</span>270</span>
+            </div>
+            <p class="desc">
+              Crispy wings lacquered in our fiery Nashville house sauce. (4 pieces)
+            </p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Chicken Sausage &amp; Ham
+              </h3>
+              <span class="price"><span class="rupee">₹</span>270</span>
+            </div>
+            <p class="desc">
+              A protein-packed pairing of juicy savory chicken sausage and tender, mild chicken ham
+            </p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Chicken Nachos
+              </h3>
+              <span class="price"><span class="rupee">₹</span>240</span>
+            </div>
+            <p class="desc">
+              Crispy tortilla chips layered with seasoned chicken, molten cheese &amp; fresh
+              toppings.
+            </p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Cilantro Fish Sticks
+              </h3>
+              <span class="price"><span class="rupee">₹</span>200</span>
+            </div>
+            <p class="desc">
+              Crispy fish with fragrant cilantro, wrapped in a golden crumb. (4 pieces)
+            </p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Scotch Chicken &amp; Egg
+              </h3>
+              <span class="price"><span class="rupee">₹</span>200</span>
+            </div>
+            <p class="desc">A whole egg wrapped in seasoned chicken, crumbed &amp; fried golden.</p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Chicken Nuggets
+              </h3>
+              <span class="price"><span class="rupee">₹</span>180</span>
+            </div>
+            <p class="desc">
+              Tender seasoned chicken encased in a delicate golden crunch. (6 pieces)
+            </p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Cheese Balls
+              </h3>
+              <span class="price"><span class="rupee">₹</span>140</span>
+            </div>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Peri Peri French Fries
+              </h3>
+              <span class="price"><span class="rupee">₹</span>140</span>
+            </div>
+            <p class="desc">Golden fries tossed with our signature fiery peri peri seasoning.</p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Chicken Strips
+              </h3>
+              <span class="price"><span class="rupee">₹</span>180</span>
+            </div>
+          </li>
+        </ul>
+      </section>
+      <section class="course" id="desserts" aria-labelledby="desserts-h">
+        <h2 id="desserts-h">Desserts</h2>
+        <ul class="dishes">
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Lotus Biscoff Cheesecake
+              </h3>
+              <span class="price"><span class="rupee">₹</span>300</span>
+            </div>
+            <p class="desc">
+              Velvety cheesecake layered with the unmistakable caramelised charm of Biscoff.
+            </p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Hot Fudge Brownie
+              </h3>
+              <span class="price"><span class="rupee">₹</span>200</span>
+            </div>
+            <p class="desc">Warm, decadent brownie crowned with a luxurious hot fudge pour.</p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Chocolate Taco Cake
+              </h3>
+              <span class="price"><span class="rupee">₹</span>150</span>
+            </div>
+            <p class="desc">
+              A playful chocolate creation with crisp taco-style shells and indulgent cake.
+            </p>
+          </li>
+        </ul>
+      </section>
+      <section class="course" id="tea-coffee" aria-labelledby="tea-coffee-h">
+        <h2 id="tea-coffee-h">Tea &amp; Coffee</h2>
+        <ul class="dishes">
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Cold Coffee with Ice Cream
+              </h3>
+              <span class="price"><span class="rupee">₹</span>170</span>
+            </div>
+            <p class="desc">Velvety chilled coffee crowned with a scoop of creamy indulgence.</p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Hot Chocolate
+              </h3>
+              <span class="price"><span class="rupee">₹</span>150</span>
+            </div>
+          </li>
+          <li class="dish has-photo">
+            <button
+              type="button"
+              class="thumb"
+              data-full="https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6a/Masala_Chai.jpg/960px-Masala_Chai.jpg"
+              aria-label="See a photo of Milk Tea"
+            >
+              <img
+                src="https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6a/Masala_Chai.jpg/960px-Masala_Chai.jpg"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                width="640"
+                height="480"
+              /><span class="expand" aria-hidden="true"
+                ><svg viewBox="0 0 16 16">
+                  <path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9" /></svg
+              ></span>
+            </button>
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Milk Tea
+              </h3>
+              <span class="price"><span class="rupee">₹</span>40</span>
+            </div>
+            <p class="desc">A comforting classic, brewed rich and smooth.</p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Green Tea
+              </h3>
+              <span class="price"><span class="rupee">₹</span>60</span>
+            </div>
+            <p class="desc">Delicate, refreshing and wonderfully light.</p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Lemon Honey Tea
+              </h3>
+              <span class="price"><span class="rupee">₹</span>60</span>
+            </div>
+            <p class="desc">Bright lemon and mellow honey in a soothing brew.</p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Makaibari Spring Tea
+              </h3>
+              <span class="price"><span class="rupee">₹</span>100</span>
+            </div>
+            <p class="desc">A delicate premium brew from the celebrated Makaibari estate.</p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Kashmiri Kawa Tea
+              </h3>
+              <span class="price"><span class="rupee">₹</span>100</span>
+            </div>
+            <p class="desc">Fragrant Kashmiri tea kissed with warming aromatic spices and Kesar.</p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Black Coffee
+              </h3>
+              <span class="price"><span class="rupee">₹</span>60</span>
+            </div>
+            <p class="desc">Bold, aromatic and beautifully uncomplicated.</p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Milk Coffee
+              </h3>
+              <span class="price"><span class="rupee">₹</span>70</span>
+            </div>
+            <p class="desc">Smooth espresso-style coffee softened with creamy milk.</p>
+          </li>
+        </ul>
+      </section>
+      <section class="course" id="mocktails" aria-labelledby="mocktails-h">
+        <h2 id="mocktails-h">Mocktails</h2>
+        <ul class="dishes">
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Cold Blue
+              </h3>
+              <span class="price"><span class="rupee">₹</span>130</span>
+            </div>
+            <p class="desc">A vibrant, icy-blue refresher with bright fruity notes.</p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Mango Crush
+              </h3>
+              <span class="price"><span class="rupee">₹</span>130</span>
+            </div>
+            <p class="desc">Luscious mango blended into a bright, refreshing cooler.</p>
+          </li>
+          <li class="dish has-photo">
+            <button
+              type="button"
+              class="thumb"
+              data-full="https://thumb.wikimedia.org/wikipedia/commons/thumb/6/69/Virgin_Mojito_02.jpg/960px-Virgin_Mojito_02.jpg"
+              aria-label="See a photo of Virgin Mojito"
+            >
+              <img
+                src="https://thumb.wikimedia.org/wikipedia/commons/thumb/6/69/Virgin_Mojito_02.jpg/960px-Virgin_Mojito_02.jpg"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                width="640"
+                height="480"
+              /><span class="expand" aria-hidden="true"
+                ><svg viewBox="0 0 16 16">
+                  <path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9" /></svg
+              ></span>
+            </button>
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Virgin Mojito
+              </h3>
+              <span class="price"><span class="rupee">₹</span>130</span>
+            </div>
+            <p class="desc">Fresh mint, zesty lime and sparkling refreshment.</p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Masala Cold Drinks
+              </h3>
+              <span class="price"><span class="rupee">₹</span>120</span>
+            </div>
+            <p class="desc">Fizzy favourites elevated with a punch of Indian masala.</p>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Fresh Lime Soda
+              </h3>
+              <span class="price"><span class="rupee">₹</span>100</span>
+            </div>
+            <p class="desc">Bright, bubbly and refreshing with freshly squeezed lime.</p>
+          </li>
+        </ul>
+      </section>
+      <section class="course" id="water" aria-labelledby="water-h">
+        <h2 id="water-h">Water</h2>
+        <ul class="dishes">
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Water
+              </h3>
+              <span class="price"><span class="rupee">₹</span>10</span>
+            </div>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Water
+              </h3>
+              <span class="price"><span class="rupee">₹</span>20</span>
+            </div>
+          </li>
+        </ul>
+      </section>
+      <section class="course" id="add-on" aria-labelledby="add-on-h">
+        <h2 id="add-on-h">Add On</h2>
+        <ul class="dishes">
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Mayonnaise
+              </h3>
+              <span class="price"><span class="rupee">₹</span>10</span>
+            </div>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Cheese
+              </h3>
+              <span class="price"><span class="rupee">₹</span>20</span>
+            </div>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Tortilla Bread
+              </h3>
+              <span class="price"><span class="rupee">₹</span>10</span>
+            </div>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Packaging
+              </h3>
+              <span class="price"><span class="rupee">₹</span>10</span>
+            </div>
+          </li>
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span
+                  class="diet nonveg"
+                  role="img"
+                  aria-label="Non-vegetarian"
+                  title="Non-vegetarian"
+                ></span
+                >Chicken
+              </h3>
+              <span class="price"><span class="rupee">₹</span>30</span>
+            </div>
+          </li>
+        </ul>
+      </section>
+      <section class="course" id="delivery" aria-labelledby="delivery-h">
+        <h2 id="delivery-h">Delivery</h2>
+        <ul class="dishes">
+          <li class="dish">
+            <div class="line">
+              <h3>
+                <span class="diet veg" role="img" aria-label="Vegetarian" title="Vegetarian"></span
+                >Delivery Charges
+              </h3>
+              <span class="price"><span class="rupee">₹</span>25</span>
+            </div>
+          </li>
+        </ul>
+      </section>
+    </main>
+    <footer class="docfoot">
+      <p><a href="/">Shawarmania</a> · <a href="/privacy/">Privacy</a></p>
+      <p>Operated by De &amp; Datta LLP</p>
+    </footer>
+    <script>
+      ;(function () {
+        var nav = document.querySelector('.chips')
+        var strip = nav && nav.querySelector('ul')
+        if (!nav || !strip) return
+        var chips = Array.prototype.slice.call(nav.querySelectorAll('a[href^="#"]'))
+        var sections = chips.map(function (a) {
+          return document.getElementById(a.hash.slice(1))
+        })
+        var reduce = window.matchMedia('(prefers-reduced-motion: reduce)')
+        var behavior = function () {
+          return reduce.matches ? 'auto' : 'smooth'
+        }
+        var pill = document.createElement('li')
+        pill.className = 'chip-pill'
+        pill.setAttribute('aria-hidden', 'true')
+        strip.insertBefore(pill, strip.firstChild)
+        var current = -1,
+          locked = false,
+          unlockTimer = 0,
+          queued = false
+        function place() {
+          var chip = chips[current]
+          if (!chip) return
+          pill.style.width = chip.offsetWidth + 'px'
+          pill.style.transform = 'translateX(' + chip.offsetLeft + 'px)'
+        }
+        function activate(i) {
+          if (i === current) return
+          current = i
+          chips.forEach(function (a, j) {
+            if (j === i) a.setAttribute('aria-current', 'location')
+            else a.removeAttribute('aria-current')
+          })
+          place()
+          var chip = chips[i]
+          strip.scrollTo({
+            left: chip.offsetLeft - (strip.clientWidth - chip.offsetWidth) / 2,
+            behavior: behavior(),
+          })
+        }
+        function update() {
+          if (locked) return
+          var line = nav.getBoundingClientRect().bottom + 24,
+            index = 0
+          for (var i = 0; i < sections.length; i++) {
+            if (sections[i] && sections[i].getBoundingClientRect().top <= line) index = i
+            else break
+          }
+          if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4)
+            index = sections.length - 1
+          activate(index)
+        }
+        function unlockSoon() {
+          clearTimeout(unlockTimer)
+          unlockTimer = setTimeout(function () {
+            locked = false
+            update()
+          }, 160)
+        }
+        function onScroll() {
+          if (locked) unlockSoon()
+          if (queued) return
+          queued = true
+          requestAnimationFrame(function () {
+            queued = false
+            update()
+          })
+        }
+        chips.forEach(function (a, i) {
+          a.addEventListener('click', function (event) {
+            var section = sections[i]
+            if (!section) return
+            event.preventDefault()
+            activate(i)
+            locked = true
+            unlockSoon()
+            section.scrollIntoView({ behavior: behavior(), block: 'start' })
+            history.replaceState(null, '', a.hash)
+          })
+        })
+        window.addEventListener('scroll', onScroll, { passive: true })
+        window.addEventListener('resize', function () {
+          place()
+          onScroll()
+        })
+        update()
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(place)
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            nav.classList.add('spy-ready')
+          })
+        })
+      })()
+    </script>
+
+    <div class="viewer" id="viewer" hidden role="dialog" aria-modal="true" aria-label="Dish photo">
+      <div class="viewer-backdrop"></div>
+      <div class="viewer-sheet">
+        <button type="button" class="viewer-close" aria-label="Close">
+          <svg viewBox="0 0 14 14"><path d="M2 2l10 10M12 2 2 12" /></svg>
+        </button>
+        <img class="viewer-photo" alt="" />
+        <div class="viewer-info"></div>
+      </div>
+    </div>
+    <script>
+      ;(function () {
+        var v = document.getElementById('viewer'),
+          photo = v.querySelector('.viewer-photo'),
+          info = v.querySelector('.viewer-info')
+        var sheet = v.querySelector('.viewer-sheet'),
+          backdrop = v.querySelector('.viewer-backdrop'),
+          close = v.querySelector('.viewer-close')
+        var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
+        var from = null,
+          busy = false,
+          EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'
+
+        // The transform and clip that make the big photo sit exactly over the thumbnail.
+        function overThumb() {
+          var t = from.getBoundingClientRect(),
+            f = photo.getBoundingClientRect()
+          var s = Math.max(t.width / f.width, t.height / f.height)
+          var ix = (f.width - t.width / s) / 2,
+            iy = (f.height - t.height / s) / 2
+          var dx = t.left + t.width / 2 - (f.left + f.width / 2),
+            dy = t.top + t.height / 2 - (f.top + f.height / 2)
+          return {
+            transform: 'translate(' + dx + 'px,' + dy + 'px) scale(' + s + ')',
+            clipPath: 'inset(' + iy + 'px ' + ix + 'px round ' + 14 / s + 'px)',
+          }
+        }
+        var open = { transform: 'none', clipPath: 'inset(0px 0px round 20px)' }
+
+        function show(btn) {
+          if (busy) return
+          from = btn
+          var dish = btn.closest('.dish')
+          info.innerHTML = ''
+          info.appendChild(dish.querySelector('.line').cloneNode(true))
+          var d = dish.querySelector('.desc')
+          if (d) info.appendChild(d.cloneNode(true))
+          photo.src = btn.dataset.full
+          v.hidden = false
+          document.documentElement.style.overflow = 'hidden'
+          if (reduce) return
+          busy = true
+          var start = overThumb()
+          from.style.visibility = 'hidden'
+          backdrop.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, easing: 'ease-out' })
+          close.animate([{ opacity: 0 }, { opacity: 1 }], {
+            duration: 300,
+            delay: 180,
+            fill: 'backwards',
+          })
+          info.animate(
+            [
+              { opacity: 0, transform: 'translateY(12px)' },
+              { opacity: 1, transform: 'none' },
+            ],
+            { duration: 380, delay: 140, easing: EASE, fill: 'backwards' },
+          )
+          photo.animate([start, open], { duration: 460, easing: EASE }).onfinish = function () {
+            busy = false
+          }
+        }
+
+        function hide() {
+          if (v.hidden || busy) return
+          function done() {
+            v.hidden = true
+            document.documentElement.style.overflow = ''
+            if (from) from.style.visibility = ''
+            busy = false
+          }
+          if (reduce) return done()
+          busy = true
+          var end = overThumb()
+          backdrop.animate([{ opacity: 1 }, { opacity: 0 }], {
+            duration: 300,
+            easing: 'ease-in',
+            fill: 'forwards',
+          })
+          info.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, fill: 'forwards' })
+          close.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, fill: 'forwards' })
+          photo.animate([open, end], { duration: 360, easing: EASE, fill: 'forwards' }).onfinish =
+            function () {
+              done()
+              photo
+                .getAnimations()
+                .concat(info.getAnimations(), close.getAnimations(), backdrop.getAnimations())
+                .forEach(function (a) {
+                  a.cancel()
+                })
+            }
+        }
+
+        document.addEventListener('click', function (e) {
+          var b = e.target.closest('[data-full]')
+          if (b) return show(b)
+          if (!v.hidden && v.contains(e.target)) hide()
+        })
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape') hide()
+        })
+      })()
+    </script>
+  </body>
+</html>
