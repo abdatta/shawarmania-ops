@@ -4,9 +4,9 @@
 > `billing-live`, #61 `the-menu-is-public`, #68 `the-menu-orders-and-highlights`,
 > #75 `a-release-can-be-switched-off` · **Child**: the brand site's
 > `the-table-menu-shows-photos` (repo `shawarmania`) · **Gate**: the owner
-> approved the Menu editor's photo field from the demo before it was wired
-> live; a manager adds, changes and removes a dish's photo from the dish's own
-> editor with no SQL, and another outlet's manager is refused by the database,
+> approved the Menu editor's photo field and cropper from the demo before it
+> was wired live; a manager frames a dish's large photo and square thumbnail,
+> re-frames, changes and removes it from the dish's own editor with no SQL, and another outlet's manager is refused by the database,
 > by hand-crafted request, for both the photo row and the stored file; the
 > customer menu at `shawarmania.in/menu/<slug>/` shows each photographed dish
 > with its photo on the left, its name and price on one line beside it and its
@@ -35,15 +35,49 @@ finished as one with many.
 
 ## What changes
 
-**In ops, a dish's editor gets a Photo field.** The manager opens a dish in
-Menu, picks a photo from the phone's camera or gallery, sees it framed the way
-the customer will, and saves. The photo can be changed or removed the same way.
-The app shrinks the photo on the phone before it is sent (about 120 KB for the
-large view and 15 KB for the thumbnail), so a manager on mobile data is not
-uploading a 4 MB camera file and storage stays tiny. Menu's item rows show a
-small thumbnail beside a dish that has a photo, so a manager can see at a glance
-which dishes still need one. Billers cannot add or change photos; they cannot
-edit the menu today either.
+**In ops, a dish's editor gets a Photo field, with a cropper.** The manager
+opens a dish in Menu, picks a photo from the phone's camera or gallery, and
+frames it in two steps:
+
+```
+ Step 1 · Large photo          [ 4:3 ]  1:1   4:5
+ ┌──────────────────────────────┐
+ │ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │  ← dimmed: cut off
+ │ ░░┌────────────────────┐░░░░ │
+ │ ░░│                    │░░░░ │  drag to move
+ │ ░░│   what customers   │░░░░ │  pinch or slider to zoom
+ │ ░░│      will see      │░░░░ │
+ │ ░░└────────────────────┘░░░░ │
+ └──────────────────────────────┘
+                     [ Next ]
+
+ Step 2 · Menu thumbnail (square)
+   the same photo in a square frame, starting centred on step 1's framing
+                     [ Done ]
+```
+
+1. **The large photo**, shown when a customer taps the dish, in one of three
+   shapes the manager picks: **4:3** landscape, **1:1** square or **4:5**
+   portrait (a tall burger or a drink suits portrait).
+2. **The menu thumbnail**, always square, framed separately, so it can zoom
+   into the best part of the dish rather than the middle of the large photo.
+
+In both steps the frame keeps its shape; the manager drags the photo to move it
+and pinches (or uses a slider) to zoom, and the photo cannot be dragged out of
+the frame, so there is never an empty edge. **Adjust** reopens the cropper on
+the same photo later, at the framing last saved, with no need to pick the photo
+again. The photo can be changed or removed the same way.
+
+**Photos stay high quality.** The large photo is kept at 1600 px on its long
+side and the thumbnail at 400 px, both at quality 92 and 90, which on any phone
+screen cannot be told from the original. A 2560 px copy of the original is kept
+too, only so the photo can be re-cropped; customers never see it. The phone
+does this work before uploading, so a manager on mobile data sends about 1.5 MB
+rather than a 4 MB camera file.
+
+Menu's item rows show a small thumbnail beside a dish that has a photo, so a
+manager can see at a glance which dishes still need one. Billers cannot add or
+change photos; they cannot edit the menu today either.
 
 **On the customer menu, a photographed dish reads like this** (approved by the
 owner on 2026-11-16 from a mock-up of the real Kalyani Cafe page):
@@ -61,7 +95,8 @@ owner on 2026-11-16 from a mock-up of the real Kalyani Cafe page):
  our signature shawarma.
 ```
 
-- The photo sits on the **left**, a rounded square about 88 px wide.
+- The photo sits on the **left**, the manager's square thumbnail, about 88 px
+  wide with rounded corners.
 - The **name and price keep their one line**. A long name wraps; the price stays
   at the right edge, in the same column as every other price on the page.
 - The **description starts beside the photo and continues underneath it**, so
@@ -72,8 +107,9 @@ owner on 2026-11-16 from a mock-up of the real Kalyani Cafe page):
 - A small **expand mark** (two diagonal arrows in a dark glass circle) sits in
   the photo's bottom-right corner, and the photo dips slightly when pressed, so
   the customer knows it opens.
-- **Tapping the photo opens it large**: it grows out of its thumbnail to nearly
-  the full width, the menu blurs and darkens behind it, and the dish's name (in
+- **Tapping the photo opens it large**, in the shape the manager chose: it
+  grows out of its thumbnail to nearly the full width (a portrait photo is
+  capped so the dish's name and price stay on screen), the menu blurs and darkens behind it, and the dish's name (in
   the brand display face), price and full description rise in underneath. A
   round × above the photo, a tap anywhere else, Escape, or the phone's Back
   button closes it, and it shrinks back into its thumbnail. With reduced motion
@@ -84,9 +120,11 @@ owner on 2026-11-16 from a mock-up of the real Kalyani Cafe page):
 **Storage stays free.** Photos are kept in Supabase Storage in a private,
 per-outlet bucket. Customers never fetch them from Supabase: the brand site's
 Worker fetches a photo once, and Cloudflare's edge cache serves it to every
-customer after that. About 80 dishes at roughly 135 KB each is about 11 MB,
-against the Free plan's 1 GB; Supabase egress is one fetch per photo per
-Cloudflare location.
+customer after that. About 80 dishes at roughly 1.5 MB each (all three copies)
+is about 120 MB, against the Free plan's 1 GB; Supabase egress is one fetch per
+photo per Cloudflare location, and the kept original is never fetched for a
+customer. A customer scrolling the menu downloads only thumbnails (about 30 KB
+each); the large photo (300 to 400 KB) loads only when tapped.
 
 ## Non-goals
 
@@ -94,9 +132,10 @@ Cloudflare location.
   The counter reads its menu on a money-critical path (#10, #34) and this change
   does not touch it.
 - More than one photo per dish, video, or a gallery.
-- Choosing the crop by dragging or zooming. The photo is centre-cropped to 4:3,
-  and the preview shows exactly what the customer will see; a manager who
-  dislikes the framing picks another photo. Revisit if managers ask.
+- Free-form crop shapes, rotation, filters or brightness fixes. The cropper
+  frames a photo; it does not edit one. A dark or blurry photo stays dark or
+  blurry; if that becomes common, a short "how to shoot a dish" tip beside
+  **Add** is the next step.
 - Cleaning up files left behind by an interrupted upload. They are a few
   hundred KB at worst; a sweep is a later chore if the bucket ever grows.
 - Purging Cloudflare's copy of a replaced photo. A replaced photo gets a new
@@ -122,7 +161,7 @@ Worker renders the page byte for byte as it does now. The Worker's photo route
 answers 404 for a photo it has not already cached, and no page links one.
 
 **What the on path persists, and Off living with it.** A photo is a row in a new
-table and two files in a new bucket. Nothing the old path reads changes: not
+table and three files in a new bucket (large, thumbnail, kept original). Nothing the old path reads changes: not
 `menu_items` (so no counter re-reads its menu when a photo changes), not the
 outbox, not the tablets' browser storage. Turned off, photos sit untouched;
 turned back on, they all return. Round trip `none:`.
@@ -155,4 +194,11 @@ The reasons and the rejected alternatives are in `design.md`.
   inside a page that scrolls down).
 - A subtle, clearly tappable hint on the photo, and a large view that "looks
   gorgeous".
+- A cropper, not a centre crop: the manager frames the large photo in one of
+  4:3, 1:1 or 4:5, then the square thumbnail separately, and can re-frame
+  later. The owner asked for this after the first write-up and approved the
+  two-step design ("lgtm").
+- High quality over small files: the owner wants a photo that "feels high
+  quality to the customer". 1600 px at quality 92 for the large photo, 400 px
+  at 90 for the thumbnail, a 2560 px original kept for re-cropping.
 - The mock-up the owner approved is kept at `mockup/index.html` in this folder.

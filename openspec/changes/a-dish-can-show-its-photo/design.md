@@ -4,17 +4,20 @@
 
 ```
  Manager's phone (ops, Menu → dish editor)
-   pick photo → centre-crop 4:3 → encode large (1200×900) + small (360×360)
-   → upload both to Storage: menu-photos/<outlet_id>/<key>.<ext>, <key>-sm.<ext>
-   → set_menu_item_photo(item_id, key, format)          (refuses while DP off)
+   pick photo → keep a 2560 px original
+   → crop step 1: large photo, 4:3 | 1:1 | 4:5   → encode, 1600 px long side
+   → crop step 2: square thumbnail                → encode, 400 × 400
+   → upload to Storage, bucket menu-photos, folder <outlet_id>/:
+        <key>.<ext>  <key>-sm.<ext>  <source_key>-src.<ext>
+   → set_menu_item_photo(...)                    (refuses while DP off)
                                 │
                      public.menu_item_photos  (one row per photographed dish)
                                 │
  Brand-site Worker (shawarmania repo)
-   GET /menu/<slug>/  → public_menu_v2(slug)  → items carry "photo": key | null
+   GET /menu/<slug>/  → public_menu_v2(slug)  → items carry "photo": {key, format, aspect} | null
    GET /menu/<slug>/photo/<key>[-sm].<ext>
         edge cache hit → serve
-        miss → public_menu_photo(slug, key) → object name | null
+        miss → public_menu_photo(slug, key) → object base name | null
              → fetch from Storage with the service-role key → cache 1 year → serve
 ```
 
@@ -25,7 +28,8 @@ Two repos, one switch: everything the customer sees depends on what
 
 ### D1. Supabase Storage behind the Worker's cache
 
-The bucket is `menu-photos`, **private**, with `file_size_limit` 1 MB and
+The bucket is `menu-photos`, **private**, with `file_size_limit` 4 MB (room for
+the kept original as JPEG; the large photo is typically 300 to 400 KB) and
 `allowed_mime_types` `image/webp, image/jpeg`. A customer never fetches from
 Supabase: the Worker already holds `OPS_SERVICE_ROLE_KEY` for `public_menu`, so
 on an edge-cache miss it reads the object with that key and caches the response
@@ -33,11 +37,14 @@ with `Cache-Control: public, max-age=31536000, immutable`. Photos are addressed
 by content hash (D3), so a cached copy never goes stale; a changed photo is a
 new address.
 
-**Budget.** ~80 dishes × (≈120 KB large + ≈15 KB small) ≈ 11 MB of storage
-against the Free plan's 1 GB. Egress is one fetch per photo per Cloudflare
-location that serves a customer, a few hundred MB a year at worst, against the
-Free plan's 5 GB a month. This sits beside #54's receipt decision, which kept
-Supabase out of serving bytes for the same reason.
+**Budget.** About 1.5 MB per photographed dish across its three files (large
+≈350 KB, thumbnail ≈30 KB, original ≈1 MB); ~80 dishes ≈ 120 MB, against the
+Free plan's 1 GB. Egress is one fetch of the large photo and the thumbnail per
+Cloudflare location that serves a customer; the original is never served to a
+customer and is read only when a manager re-crops. Even a few hundred
+locations-times-photos a month sit well inside the Free plan's 5 GB. This sits
+beside #54's receipt decision, which kept Supabase out of serving bytes for the
+same reason.
 
 **Rejected:**
 
@@ -54,20 +61,35 @@ Supabase out of serving bytes for the same reason.
   ever becomes a cost.
 - **A public bucket.** Simpler (no Worker fetch with a key), but the photo URLs
   would be direct Supabase URLs that any visitor or scraper could hit, which
-  puts egress outside the cache's control, and it would expose the outlet's id
-  in every image address.
+  puts egress outside the cache's control, it would expose the outlet's id in
+  every image address, and it would make the kept originals public too.
 - **Supabase image transformations** (resize on the fly). A Pro-plan feature,
   and resizing once on the manager's phone is cheaper than resizing on every
   cache miss.
 
 ### D2. Photos are their own table, not a column on `menu_items`
 
-`public.menu_item_photos (item_id uuid primary key references menu_items,
-outlet_id uuid not null references outlets, photo_key text not null,
-photo_format text not null, updated_at timestamptz, updated_by uuid)`.
-`photo_key` is 64 lowercase hex characters; `photo_format` is `webp` or `jpeg`.
-A trigger refuses a row whose `outlet_id` is not its item's outlet, the same way
-`menu_items` checks its category.
+```
+public.menu_item_photos (
+  item_id        uuid primary key references menu_items,
+  outlet_id      uuid not null references outlets,
+  photo_key      text not null,   -- 64 lowercase hex (D3)
+  photo_format   text not null,   -- 'webp' | 'jpeg'
+  aspect         text not null,   -- '4:3' | '1:1' | '4:5', the large photo's shape
+  source_key     text not null,   -- 64 lowercase hex, the kept original
+  source_format  text not null,   -- 'webp' | 'jpeg'
+  large_crop     jsonb not null,  -- {x, y, w, h} as fractions of the original
+  thumb_crop     jsonb not null,  -- the same, for the square thumbnail
+  updated_at     timestamptz not null default now(),
+  updated_by     uuid
+)
+```
+
+Check constraints hold the formats, the aspect set and each crop's four numbers
+within 0..1 (this is a new table, so a constraint here is allowed). A trigger
+refuses a row whose `outlet_id` is not its item's outlet, the same way
+`menu_items` checks its category. The crops are stored so **Adjust** reopens
+the cropper at the framing last saved.
 
 **Why not a column.** The counter subscribes to changes on `menu_items` and
 re-reads its whole menu on each one (menu-management, *The live counter prefers
@@ -77,51 +99,123 @@ and change the shape of what the tablets cache, which is exactly the "reaches
 the counter" condition the gate rules exist for. A separate table is invisible
 to the counter.
 
-### D3. A photo is named by the hash of its large image
+### D3. A photo is named by the hash of what customers see
 
-The phone computes SHA-256 over the encoded large image; that hex string is the
-key. Objects are `<outlet_id>/<key>.<ext>` and `<outlet_id>/<key>-sm.<ext>`.
+`photo_key` is SHA-256 over the encoded large photo's bytes followed by the
+encoded thumbnail's bytes, so re-framing **either** of them gives a new key.
+`source_key` is SHA-256 over the kept original's bytes. Objects:
 
-- Content addressing makes the Worker's year-long cache safe: the bytes behind
-  an address never change.
-- The public page shows `/menu/<slug>/photo/<key>.<ext>`, which reveals no id.
-  The public menu has promised "no ids" since #61, and this keeps it.
-- Re-uploading the same photo is a no-op on storage (upsert to the same name).
+- `<outlet_id>/<photo_key>.<ext>`, the large photo
+- `<outlet_id>/<photo_key>-sm.<ext>`, the thumbnail
+- `<outlet_id>/<source_key>-src.<ext>`, the kept original
 
-### D4. The phone does the image work
+Content addressing makes the Worker's year-long cache safe: the bytes behind an
+address never change. The public page shows `/menu/<slug>/photo/<photo_key>.<ext>`,
+which reveals no id (the public menu has promised "no ids" since #61). A
+re-crop with **Adjust** reuses the original, so only the two small files are
+uploaded again.
 
-On pick (`<input type="file" accept="image/*">`, which offers camera and
-gallery):
+### D4. The phone does the image work, at high quality
 
-1. Decode with `createImageBitmap(file, { imageOrientation: 'from-image' })` so
-   a portrait phone photo is not sideways.
-2. Centre-crop to 4:3 and draw at 1200×900 (smaller sources are not scaled up;
-   the crop is kept at its native size).
-3. Encode with `canvas.toBlob(..., 'image/webp', 0.82)`. If the browser hands
-   back anything other than WebP (older Safari), encode `image/jpeg` at 0.85
-   instead and record the format.
-4. The small image is the centre square of that 4:3 crop at 360×360 (88 CSS px
-   × up to 4× density), same format, quality 0.8.
-5. Refuse anything that still exceeds 1 MB, which should not happen, with a
-   plain sentence.
+The owner wants a photo that "feels high quality to the customer", so these are
+set for quality first; the files stay small only because no phone screen can
+show more than this.
 
-A 360 px thumbnail is what keeps a 30-photo menu light on a customer's mobile
-data; the large image loads only when a photo is opened.
+1. **Pick** with `<input type="file" accept="image/*">`, which offers camera and
+   gallery. Decode with `createImageBitmap(file, { imageOrientation:
+   'from-image' })` so a portrait phone photo is upright.
+2. **Keep the original**: scale so the long side is at most 2560 px (never up),
+   encode WebP at quality 0.92. This is what the cropper shows and what every
+   crop is cut from, now and on any later **Adjust**.
+3. **Large photo**: cut `large_crop` from the original at the chosen aspect;
+   output 1600 px on the long side (1600×1200, 1600×1600 or 1280×1600), or the
+   crop's own pixel size if smaller (never scaled up); WebP at 0.92.
+4. **Thumbnail**: cut `thumb_crop` (square) from the original; output 400×400
+   (88 CSS px at up to 4.5× density, so sharp on the best phone screens); WebP
+   at 0.90.
+5. **WebP fallback**: if `canvas.toBlob(..., 'image/webp', q)` hands back
+   anything other than WebP (older Safari), encode `image/jpeg` at the same
+   quality and record the format.
+6. Draw with `imageSmoothingQuality = 'high'`; when shrinking by more than
+   half, halve in steps so fine detail (crumbs, char marks, herbs) does not
+   alias.
+7. **A small photo** (its crop under 800 px on the long side) is allowed, and
+   the editor says plainly that it may look soft when opened large.
 
-### D5. Writes go through two functions, gated
+A 400 px thumbnail at ~30 KB is what keeps a 30-photo menu light on a
+customer's mobile data; the large photo loads only when it is opened.
 
-- `set_menu_item_photo(p_item_id uuid, p_key text, p_format text)`:
-  security definer; refuses unless `app_change_gate('dish-photos')`; refuses a
-  caller who may not edit that item's outlet's menu (the same entitlement as
-  editing the item); refuses a removed item; refuses unless both objects exist
-  in `storage.objects` under that outlet; upserts the row; returns the previous
-  key so the client can delete the old files.
+**Rejected: uploading the camera file untouched.** 3 to 6 MB per photo, sent
+over the manager's mobile data, stored at four times the size, and shrunk by
+the customer's phone anyway; no visible gain.
+
+### D5. The cropper
+
+```
+ Step 1 · Large photo          [ 4:3 ]  1:1   4:5
+ ┌──────────────────────────────┐
+ │ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+ │ ░░┌────────────────────┐░░░░ │   the frame stays put and keeps its shape;
+ │ ░░│                    │░░░░ │   the photo moves and zooms under it
+ │ ░░│                    │░░░░ │
+ │ ░░└────────────────────┘░░░░ │
+ └──────────────────────────────┘
+   zoom  ─────●──────────
+   [ Back ]                 [ Next ]
+
+ Step 2 · Menu thumbnail                (square)
+   the same, with a square frame, starting centred on step 1's frame
+   [ Back ]                 [ Done ]
+```
+
+- It opens in a full-screen sheet over the dish editor, on a dark backdrop, so
+  the photo is judged as the customer will see it.
+- **Shapes**: a three-way choice for step 1, 4:3 by default, or 4:5 when the
+  original is portrait. Changing shape keeps the centre of the current frame.
+- **Moving and zooming**: drag (one finger or mouse) to move; pinch, the
+  slider, or the mouse wheel to zoom; arrow keys move and `+`/`-` zoom for a
+  keyboard. The photo always covers the frame: it cannot be dragged or zoomed
+  out so far that an edge shows. Zoom stops at the point where the crop would
+  be under 400 px, so the large photo cannot be zoomed into mush.
+- A rule-of-thirds grid shows while a finger is down, and hides after.
+- **Done** returns to the dish editor, which shows the result as the customer
+  will: the square thumbnail and the large photo side by side.
+- **Adjust** (in the dish editor, for a saved photo) reopens the cropper on the
+  kept original at the saved crops and shape.
+
+**Use `react-easy-crop`** (MIT, small, touch pinch, fixed aspect, keeps the
+photo covering the frame) unless its bundle size or its styling fights the
+design system, in which case an in-house pointer-events cropper with the same
+behaviour. Record which in this file at apply time. The output crop is taken as
+fractions of the original so it survives the original being re-scaled.
+
+**Rejected:**
+
+- **Centre crop with no choice** (the first write-up). The owner asked for the
+  manager to choose the framing.
+- **One crop for both uses** (the thumbnail as the middle of the large photo).
+  The thumbnail is small; the best square is often a close-up the large frame
+  should not be.
+- **Free-form crop shapes.** The menu's rows need a square, and three
+  named shapes keep the large view looking deliberate across the menu.
+
+### D6. Writes go through two functions, gated
+
+- `set_menu_item_photo(p_item_id uuid, p_key text, p_format text, p_aspect
+  text, p_source_key text, p_source_format text, p_large_crop jsonb,
+  p_thumb_crop jsonb)`: security definer; refuses unless
+  `app_change_gate('dish-photos')`; refuses a caller who may not edit that
+  item's outlet's menu (the same entitlement as editing the item); refuses a
+  removed item; refuses unless all three objects exist in `storage.objects`
+  under that outlet; upserts the row; returns the previous `photo_key`,
+  `photo_format`, `source_key` and `source_format` so the client can delete the
+  old files.
 - `clear_menu_item_photo(p_item_id uuid)`: same checks, deletes the row,
-  returns the previous key.
+  returns the same previous values.
 
-The client deletes the replaced or removed files after the function succeeds.
-If that delete fails, a stray file remains, which nothing links (non-goal:
-sweep).
+The client deletes the replaced or removed files after the function succeeds
+(the original only when its key changed). If that delete fails, a stray file
+remains, which nothing links (non-goal: sweep).
 
 **RLS.** `menu_item_photos`: select for anyone who may read that outlet's menu
 (billers included, harmlessly), no direct insert, update or delete for
@@ -132,47 +226,46 @@ outlet; insert, update, select and delete are granted to the owner everywhere
 and to a manager at an outlet they are assigned to; a malformed path is granted
 to nobody. Isolation tests cover both the table and the bucket (tasks 3.x).
 
-### D6. The public read is new functions, never an edited one
+### D7. The public read is new functions, never an edited one
 
 - `public_menu_v2(p_slug text)`: `public_menu`'s exact body with one added item
-  field, `photo`, which is `jsonb_build_object('key', key, 'format', format)`
-  when `app_change_gate('dish-photos')` is on and the item has a photo, and
-  `null` otherwise. Same null answer for an unknown address, a closed outlet and
-  an empty menu; same service-role-only grant. Highlights items carry the same
-  field.
-- `public_menu_photo(p_slug text, p_key text)` returns the object's base name
-  (`<outlet_id>/<key>`) and format only when the gate is on, the outlet trades,
-  and the key is the current photo of an active item in an active category
-  there. Anything else, including a key that was replaced or belongs to another
-  outlet, is null. Service role only.
+  field, `photo`, which is `{ key, format, aspect }` when
+  `app_change_gate('dish-photos')` is on and the item has a photo, and `null`
+  otherwise. Same null answer for an unknown address, a closed outlet and an
+  empty menu; same service-role-only grant. Highlights items carry the same
+  field. The original's key and the crops are never sent.
+- `public_menu_photo(p_slug text, p_key text)` returns the object base name
+  (`<outlet_id>/<photo_key>`) and format only when the gate is on, the outlet
+  trades, and the key is the current `photo_key` of an active item in an active
+  category there. A `source_key` never matches, so the kept original cannot be
+  fetched through the Worker. Anything else, including a key that was replaced
+  or belongs to another outlet, is null. Service role only.
 
 `public_menu` itself is not touched; the published Worker keeps calling it.
 
-### D7. The ops editor
+### D8. The ops editor
 
 ```
  Edit dish                                   ×
- ┌──────────────────────────┐
- │                          │   Photo
- │      [photo, 4:3]        │   [ Change ]  [ Remove ]
- │                          │
- └──────────────────────────┘
+ ┌──────────┐  ┌──────────────────────┐
+ │  thumb   │  │     large photo      │   Photo
+ │  (1:1)   │  │   (its own shape)    │   [ Adjust ] [ Change ] [ Remove ]
+ └──────────┘  └──────────────────────┘
  Name   [ Fat Chicken Burrito         ]
  ...the existing fields, unchanged...
 ```
 
-With no photo, the frame is a dashed 4:3 tile with one verb button, **Add**
-(owner UI conventions: verb-only buttons, no subtitle). The preview is the 4:3
-crop the customer's large view will show, with the square thumbnail's edges
-marked faintly inside it, so the manager sees both framings.
+With no photo, the field is a dashed tile with one verb button, **Add** (owner
+UI conventions: verb-only buttons, no subtitle). **Add** and **Change** pick a
+photo and open the cropper; **Adjust** reopens it on the saved original.
 
 Nothing uploads until **Save**. Save writes the dish's existing fields first,
-by the path it uses today, then uploads the photo and calls the function. If
-the photo step fails, the dish's other edits are already saved and the sheet
-says **Photo not saved** with **Retry**; it does not roll the dish back. Remove
-marks the photo for removal and Save clears it. Cancel discards a picked photo
-that was never uploaded. The photo needs a connection; the Menu editor is
-already online-only.
+by the path it uses today, then uploads the photo files and calls the function,
+with progress on the button. If the photo step fails, the dish's other edits
+are already saved and the sheet says **Photo not saved** with **Retry**; it
+does not roll the dish back. Remove marks the photo for removal and Save clears
+it. Cancel discards a picked or re-cropped photo that was never uploaded. The
+photo needs a connection; the Menu editor is already online-only.
 
 Menu's item rows show a 32 px rounded thumbnail before the name for a dish with
 a photo, and nothing for one without (no placeholder, so the rows read as today
@@ -180,27 +273,36 @@ where nothing is set).
 
 All of this renders only when `useChangeGate('dish-photos')` is on.
 
-### D8. The customer page (the child change implements it)
+### D9. The customer page (the child change implements it)
 
-From the approved mock-up, `mockup/index.html`:
+From the approved mock-up, `mockup/index.html` (which predates the cropper, so
+its thumbnails are centre crops of one 4:3 photo and its large view is always
+4:3):
 
 - `.dish.has-photo` is `display: flow-root`; the thumbnail button floats left
-  (5.5 rem square, 0.875 rem radius, a 1 px cream hairline and a soft shadow);
-  the existing `.line` (a flex container, so it stays beside the float) keeps
-  name and price on one line; `.desc` wraps around the float and on beneath it.
+  (5.5 rem square, 0.875 rem radius, a 1 px cream hairline and a soft shadow)
+  and shows the `-sm` file; the existing `.line` (a flex container, so it stays
+  beside the float) keeps name and price on one line; `.desc` wraps around the
+  float and on beneath it.
 - The expand mark: a 1.375 rem circle at the photo's bottom-right, background
   `rgb(20 16 11 / 0.55)` with a 4 px backdrop blur, a cream hairline, and a
   stroked two-arrow glyph. `:active` scales the photo to 0.95.
-- The large view grows from the thumbnail: the big image is laid out in place,
-  then animated from the thumbnail's rectangle with a uniform scale plus a
-  `clip-path: inset(...)` that crops it to the thumbnail's square, to
-  `transform: none` and the full rounded rectangle, over ≈460 ms on
-  `cubic-bezier(0.22, 1, 0.36, 1)`. Closing runs it backwards. The backdrop is
-  `rgb(10 8 5 / 0.86)` with a 14 px blur; name, price and description fade up
-  140 ms after it starts. Back closes it (the view pushes a history entry).
-  `prefers-reduced-motion` skips every animation.
+- The large view shows the large file at its `aspect`, full width up to 34 rem,
+  with its height capped (about 62% of the screen) so a 4:5 photo still leaves
+  the name and price in view. It grows from the thumbnail: the large image is
+  laid out in place, then animated from the thumbnail's rectangle with a
+  uniform scale plus a `clip-path: inset(...)` cropping it to the thumbnail's
+  square, to `transform: none` and the full rounded rectangle, over ≈460 ms on
+  `cubic-bezier(0.22, 1, 0.36, 1)`. Because the thumbnail is now its own crop,
+  the thumbnail image is laid over the growing photo and fades out over the
+  first ~150 ms, so the change of framing reads as a dissolve, not a jump.
+  Closing runs it backwards. The backdrop is `rgb(10 8 5 / 0.86)` with a 14 px
+  blur; name, price and description fade up 140 ms after it starts. Back closes
+  it (the view pushes a history entry). `prefers-reduced-motion` skips every
+  animation.
 - Thumbnails are `loading="lazy"` with width and height set so nothing shifts;
-  the large image loads on open.
+  the large image loads on open, with the thumbnail shown in its place until it
+  arrives.
 - The viewer's markup and script are emitted only when the page has at least
   one photo, so a menu with none is the page it is today.
 
@@ -227,9 +329,10 @@ needs a connection; the counter's offline paths are untouched.
 
 ## Risks
 
-- **Large camera files on a low-end phone.** Decoding a 12 MP photo can take a
-  second or two. The Save button shows progress; nothing blocks the rest of the
-  form.
+- **Large camera files on a low-end phone.** Decoding a 12 MP photo and
+  encoding three files can take a few seconds. Preparing the original starts
+  as soon as the photo is picked, behind the cropper; Save shows progress;
+  nothing blocks the rest of the form.
 - **A Cloudflare edge serving a removed photo for a while.** Only by its old
   address, which no page links after the menu's cache minute.
 - **Supabase plan changes.** If prod moves to Pro on 31 Dec the budget only

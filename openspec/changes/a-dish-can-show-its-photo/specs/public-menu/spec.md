@@ -15,8 +15,9 @@ SHALL use the same existing section shape and each active item SHALL carry its
 name, description, price in integer paise, veg flag, whether it is available,
 and (from `public_menu_v2`) its photo — and nothing else:
 no ids, no other outlet fields, no discounts. An item's photo SHALL be its
-content key and image format while the `dish-photos` gate is on and the item has
-a photo, and null otherwise. A removed item SHALL be absent; an
+content key, image format and large-photo shape (4:3, 1:1 or 4:5) while the
+`dish-photos` gate is on and the item has a photo, and null otherwise; the kept
+original and the crops SHALL NOT be sent. A removed item SHALL be absent; an
 unavailable item SHALL be present and flagged, because the customer should see
 what is off today rather than wonder where it went. Beside the sections it SHALL
 carry `review`: the outlet's review link, review discount percentage and whether
@@ -65,8 +66,9 @@ from Supabase.
 
 `public_menu_photo` SHALL be executable by the service role only, and SHALL
 answer null alike for a key that does not exist, was replaced, belongs to
-another outlet, belongs to a removed dish, or is asked for while the gate is
-off.
+another outlet, belongs to a removed dish, names a kept original, or is asked
+for while the gate is off. A dish's kept original SHALL never be served to a
+customer.
 
 #### Scenario: A customer opens a menu with photos
 - **WHEN** a photographed dish's page is served
@@ -86,8 +88,8 @@ off.
 
 ### Requirement: A photographed dish reads photo first, price in its place
 
-On the customer menu, a dish with a photo SHALL show the photo on the left as a
-rounded square; its name and price SHALL stay on one line beside it, the price
+On the customer menu, a dish with a photo SHALL show its square thumbnail on
+the left with rounded corners; its name and price SHALL stay on one line beside it, the price
 right-aligned in the same column as every other price on the page, the name
 wrapping if long; and its description SHALL wrap beside the photo and continue
 beneath it. A dish without a photo SHALL read exactly as it did before this
@@ -95,8 +97,9 @@ change. Highlights SHALL use the same rows as every other section. A sold-out
 dish SHALL keep its photo, greyed.
 
 The photo SHALL carry a small, unobtrusive expand mark and SHALL respond to a
-press, and tapping it SHALL open the photo large with the dish's name, price and
-description, closed by a close button, a tap outside, Escape or the phone's Back
+press, and tapping it SHALL open the large photo, in the shape its manager
+chose and with its height capped so the dish's name and price stay in view,
+with the dish's name, price and description, closed by a close button, a tap outside, Escape or the phone's Back
 button. The opening and closing SHALL animate from and to the thumbnail, and
 SHALL NOT animate under a reduced-motion preference. A menu with no photos SHALL
 carry none of this markup or script.
