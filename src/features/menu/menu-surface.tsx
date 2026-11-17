@@ -1,6 +1,7 @@
 import { Ban, Check, Share2, Sparkles, UtensilsCrossed } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 
+import { useChangeGate } from '@/change-gates/context'
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { EmptyState } from '@/components/layout/empty-state'
 import { FormSheet } from '@/components/layout/form-sheet'
@@ -23,6 +24,7 @@ import {
   type MenuCategoryWithItems,
   type MenuDiscount,
   type MenuHighlights,
+  type MenuItemPhoto,
 } from '@/data-access/adapters'
 import { matchCategory, paiseToRupees, rupeesToPaise, type CategoryMatch } from '@/domain'
 import { useOutletScope } from '@/features/outlet-scope'
@@ -33,6 +35,10 @@ import { useSession } from '@/session/context'
 
 import { MenuDiscountsCard } from './menu-discounts'
 import { MenuHighlightsCard } from './menu-highlights'
+import { MenuPhotoField } from './photo/menu-photo-field'
+import { UNCHANGED, type PhotoDraft } from './photo/photo-draft'
+import { PhotoPrepareError } from './photo/prepare-photo'
+import { savePhotoDraft, type PhotoSaveProgress } from './photo/save-photo'
 
 interface ItemDraft {
   categoryName: string
@@ -74,6 +80,9 @@ function OutletMenuSurface({
   const presentation = isRenderable(getPartState('menu-presentation'), session.mode)
     ? adapter.presentation
     : undefined
+  // Dish photos (#84): off, the editor and the rows are exactly as before.
+  const photosOn = useChangeGate('dish-photos')
+  const photos = photosOn ? adapter.photos : undefined
   const [menu, setMenu] = useState<MenuCategoryWithItems[] | null>(null)
   const [highlights, setHighlights] = useState<MenuHighlights | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -89,6 +98,13 @@ function OutletMenuSurface({
   const [revealedItem, setRevealedItem] = useState<string | null>(null)
   const [revealedCategory, setRevealedCategory] = useState<string | null>(null)
   const [publicMenuSlug, setPublicMenuSlug] = useState<string | null>(null)
+  const [photoList, setPhotoList] = useState<ReadonlyMap<string, MenuItemPhoto>>(new Map())
+  const [photoDraft, setPhotoDraft] = useState<PhotoDraft>(UNCHANGED)
+  const [photoProgress, setPhotoProgress] = useState<PhotoSaveProgress | null>(null)
+  const [photoFailed, setPhotoFailed] = useState<string | null>(null)
+  // The dish a failed photo belongs to, saved already: Retry and a second Save
+  // change it rather than create it again.
+  const [photoItem, setPhotoItem] = useState<Tables<'menu_items'> | null>(null)
   const publicMenuUrl = publicMenuLink(publicMenuSlug)
   // The link and nothing else [owner, 2026-09-29].
   const menuShare = useShareLink(publicMenuUrl)
@@ -97,31 +113,35 @@ function OutletMenuSurface({
     if (!outletId) return []
     // One read, because a discount that is current while the menu beside it is
     // stale prices a line wrong.
-    const [next, nextHighlights] = await Promise.all([
+    const [next, nextHighlights, nextPhotos] = await Promise.all([
       adapter.readOutletMenu(outletId),
       presentation?.readHighlights(outletId) ?? Promise.resolve(null),
+      photos?.listPhotos(outletId) ?? Promise.resolve(null),
     ])
     setMenu(next.categories)
     setHighlights(nextHighlights)
     setDiscounts(next.discounts)
     setPublicMenuSlug(next.publicMenuSlug ?? null)
+    if (nextPhotos) setPhotoList(new Map(nextPhotos.map((photo) => [photo.itemId, photo])))
     return next.categories
-  }, [adapter, outletId, presentation])
+  }, [adapter, outletId, presentation, photos])
 
   useEffect(() => {
     let active = true
     void (async () => {
       try {
         if (!outletId) return
-        const [next, nextHighlights] = await Promise.all([
+        const [next, nextHighlights, nextPhotos] = await Promise.all([
           adapter.readOutletMenu(outletId),
           presentation?.readHighlights(outletId) ?? Promise.resolve(null),
+          photos?.listPhotos(outletId) ?? Promise.resolve(null),
         ])
         if (active) {
           setMenu(next.categories)
           setHighlights(nextHighlights)
           setDiscounts(next.discounts)
           setPublicMenuSlug(next.publicMenuSlug ?? null)
+          if (nextPhotos) setPhotoList(new Map(nextPhotos.map((photo) => [photo.itemId, photo])))
         }
       } catch {
         if (active) setError('Could not load the menu. Try again in a moment.')
@@ -130,7 +150,7 @@ function OutletMenuSurface({
     return () => {
       active = false
     }
-  }, [adapter, outletId, presentation])
+  }, [adapter, outletId, presentation, photos])
 
   const categories = useMemo(() => menu ?? [], [menu])
   const suggestions = useMemo(() => categories.map(({ category }) => category.name), [categories])
@@ -157,10 +177,17 @@ function OutletMenuSurface({
     }
   }
 
+  function resetPhoto() {
+    setPhotoDraft(UNCHANGED)
+    setPhotoFailed(null)
+    setPhotoItem(null)
+  }
+
   function openAdd() {
     setEditing(null)
     setDraft(EMPTY_DRAFT)
     setError(null)
+    resetPhoto()
     setItemFormOpen(true)
   }
 
@@ -175,6 +202,7 @@ function OutletMenuSurface({
       isVeg: item.is_veg,
     })
     setError(null)
+    resetPhoto()
     setItemFormOpen(true)
   }
 
@@ -213,16 +241,19 @@ function OutletMenuSurface({
     if (!outletId) return
     const chosenCategory = categoryOverride ?? draft.categoryName
     const pricePaise = rupeesToPaise(Number(draft.price.trim()))
+    // A dish saved before its photo failed is changed, not created again.
+    const target = editing ?? photoItem
     await run(async () => {
-      if (editing) {
-        const item = await adapter.updateItemWithCategory(editing.id, {
+      let saved: Tables<'menu_items'>
+      if (target) {
+        saved = await adapter.updateItemWithCategory(target.id, {
           categoryName: chosenCategory,
           name: draft.name,
           pricePaise,
           description: draft.description,
           isVeg: draft.isVeg,
         })
-        setRevealedItem(item.id)
+        setRevealedItem(saved.id)
       } else {
         const created = await adapter.createItemWithCategory({
           outletId,
@@ -232,14 +263,74 @@ function OutletMenuSurface({
           description: draft.description,
           isVeg: draft.isVeg,
         })
+        saved = created.item
         setRevealedCategory(created.category.id)
         setRevealedItem(created.item.id)
       }
       setPendingMatches(null)
+      // The photo goes after the dish's own fields, which stay saved if it fails.
+      if (photos && photoDraft.kind !== 'unchanged') {
+        setPhotoItem(saved)
+        const sent = await sendPhoto(saved)
+        await load()
+        if (!sent) return
+      }
       setItemFormOpen(false)
       await load()
     })
   }
+
+  async function sendPhoto(item: Tables<'menu_items'>): Promise<boolean> {
+    if (!photos) return true
+    setPhotoFailed(null)
+    try {
+      await savePhotoDraft(
+        photos,
+        item.id,
+        photoDraft,
+        photoList.get(item.id) ?? null,
+        setPhotoProgress,
+      )
+      setPhotoDraft(UNCHANGED)
+      return true
+    } catch (cause) {
+      setPhotoFailed(
+        cause instanceof DataActionError || cause instanceof PhotoPrepareError
+          ? cause.message
+          : 'Check the connection and try again.',
+      )
+      return false
+    } finally {
+      setPhotoProgress(null)
+    }
+  }
+
+  async function retryPhoto() {
+    const item = photoItem
+    if (!item) return
+    await run(async () => {
+      const sent = await sendPhoto(item)
+      await load()
+      if (sent) setItemFormOpen(false)
+    })
+  }
+
+  function closeItemForm() {
+    setItemFormOpen(false)
+    resetPhoto()
+  }
+
+  const editingPhoto = photos ? (photoList.get((editing ?? photoItem)?.id ?? '') ?? null) : null
+
+  const saveLabel = !busy
+    ? editing
+      ? 'Save changes'
+      : 'Create item'
+    : photoProgress?.stage === 'sending'
+      ? `Sending photo ${photoProgress.done} of ${photoProgress.total}…`
+      : photoProgress?.stage === 'preparing'
+        ? 'Preparing photo…'
+        : 'Saving…'
 
   async function renameCategory(event: FormEvent) {
     event.preventDefault()
@@ -445,6 +536,17 @@ function OutletMenuSurface({
                         className={`flex min-w-0 flex-1 items-center gap-3 ${!item.is_available ? 'opacity-70' : ''}`}
                       >
                         <VegMarker isVeg={item.is_veg} />
+                        {photos && photoList.has(item.id) && (
+                          <img
+                            src={photoList.get(item.id)!.thumbUrl}
+                            alt=""
+                            loading="lazy"
+                            width={32}
+                            height={32}
+                            data-testid={`menu-photo-row-${item.id}`}
+                            className="size-8 shrink-0 rounded-md object-cover"
+                          />
+                        )}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <p className="truncate text-sm font-semibold text-content">
@@ -556,7 +658,7 @@ function OutletMenuSurface({
         busy={busy}
         key={editing?.id ?? 'new-item'}
         open={itemFormOpen}
-        onClose={() => setItemFormOpen(false)}
+        onClose={closeItemForm}
         title={editing ? `Edit ${editing.name}` : 'Add item'}
         error={error}
         footer={
@@ -566,11 +668,40 @@ function OutletMenuSurface({
             disabled={busy}
             className={`${buttonVariants({ size: 'phone' })} w-full`}
           >
-            {busy ? 'Saving…' : editing ? 'Save changes' : 'Create item'}
+            {saveLabel}
           </button>
         }
       >
         <form id="menu-item-form" onSubmit={submitItem} className="space-y-4" noValidate>
+          {photos && (
+            <MenuPhotoField
+              saved={editingPhoto}
+              draft={photoDraft}
+              onDraftChange={(next) => {
+                setPhotoDraft(next)
+                setPhotoFailed(null)
+              }}
+              disabled={busy}
+            />
+          )}
+          {photos && photoFailed && (
+            <div
+              role="alert"
+              data-testid="menu-photo-failed"
+              className="space-y-2 rounded-lg border border-danger bg-surface-raised p-3 text-sm"
+            >
+              <p className="font-semibold text-danger">Photo not saved</p>
+              <p className="text-content">{photoFailed} The dish’s other changes are saved.</p>
+              <Button
+                variant="secondary"
+                size="phone"
+                disabled={busy}
+                onClick={() => void retryPhoto()}
+              >
+                Retry
+              </Button>
+            </div>
+          )}
           <Field label="Name" id="menu-item-name">
             <Input
               id="menu-item-name"

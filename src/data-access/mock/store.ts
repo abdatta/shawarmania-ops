@@ -22,6 +22,7 @@ import type {
   ExpenseCategoryChoice,
   MenuDiscount,
   MenuHighlights,
+  MenuItemPhoto,
   OutletAttendanceRules,
   PaymentAllocation,
 } from '../adapters'
@@ -96,6 +97,11 @@ export interface DemoStore {
   menuItems: Tables<'menu_items'>[]
   /** Ordered merchandising references; items keep their real categories. */
   menuHighlights: Map<string, MenuHighlights>
+  /**
+   * Owned by the menu adapter: each photographed dish's photo, by item id (#84).
+   * Its files are object URLs in this tab's memory; nothing is written anywhere.
+   */
+  menuPhotos: Map<string, MenuItemPhoto>
   /** Owned by the menu adapter: the discounts running across part of the menu. */
   menuDiscounts: MenuDiscount[]
   /**
@@ -1487,6 +1493,7 @@ export function createDemoStore(
     menuCategories: structuredClone(menuCategoryFixtures),
     menuItems,
     menuHighlights: new Map(),
+    menuPhotos: new Map(),
     // A discount the owner is running, so the demo shows the feature rather than
     // hiding it: fifteen percent across the Shawarma category at Kalyani.
     menuDiscounts: structuredClone(menuDiscountFixtures),

@@ -42,6 +42,9 @@
   --color-on-kitchen-cancel: var(--on-kitchen-cancel);
   --color-staging-ribbon: var(--staging-ribbon);
   --color-on-staging-ribbon: var(--on-staging-ribbon);
+  --color-photo-stage: var(--photo-stage);
+  --color-on-photo-stage: var(--on-photo-stage);
+  --color-photo-stage-dim: var(--photo-stage-dim);
 
   --font-sans: 'Nunito Sans Variable', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Lilita One', ui-sans-serif, system-ui, sans-serif;

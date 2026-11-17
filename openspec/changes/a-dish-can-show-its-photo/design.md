@@ -189,6 +189,48 @@ design system, in which case an in-house pointer-events cropper with the same
 behaviour. Record which in this file at apply time. The output crop is taken as
 fractions of the original so it survives the original being re-scaled.
 
+**Chosen at apply time (2026-11-16): the in-house cropper**, in
+`src/features/menu/photo/` (`crop-geometry.ts` for the rules,
+`photo-cropper.tsx` for the screen). `react-easy-crop` (6.2.5) was the first
+choice and lost on three counts:
+
+- **Its styling fights the design system.** It injects its own stylesheet at
+  run time, with its own colours for the dimmed area, the frame and the grid.
+  Here those are semantic tokens (`--photo-stage`, `--on-photo-stage`,
+  `--photo-stage-dim`), the same in both themes and gated by the contrast
+  check; overriding an injected sheet would be a second set of colours to keep
+  in step.
+- **The test that matters could not be written against it.** "The output crop
+  matches what the frame showed" needs the frame's and the photo's positions;
+  `react-easy-crop` measures both from layout and image load, which jsdom has
+  neither of, so the test would assert against mocks of its internals. The
+  in-house cropper keeps the framing itself as its state (a rectangle in the
+  original's pixels), draws the photo from it, and its tests read the positions
+  it gives the frame and the photo straight off the page.
+- **It covers less of D5 than it seems.** Zooming by key, the
+  grid-while-a-finger-is-down, the zoom stop at 400 px and
+  the thumbnail starting inside step 1's frame are ours to write either way.
+
+The in-house cropper is about 680 lines with comments (geometry and screen) and no
+dependency: pointer events for
+one-finger drag and two-finger pinch (iOS Safari 13+ and every Android Chrome
+have them), a non-passive wheel listener, arrow keys and `+`/`-`, and a range
+input for the slider. Every rule (covering the frame, the zoom stop, zoom about
+the fingers, a new shape keeping the centre and zoom, the thumbnail's starting
+square) is a pure function with its own unit test.
+
+**Two details settled while building it.**
+
+- **The cropper does not wait for the encoder.** Picking a photo decodes it
+  upright and knows the kept original's size at once (`fitWithin(…, 2560)`), so
+  the cropper opens on the picked file itself while the 2560 px original
+  encodes behind it; Save waits for that encoding if it has not finished. The
+  framings are in the kept original's pixels throughout, so the zoom stop is
+  measured where it matters.
+- **A failed photo in the demo is an offline one.** The mock refuses an upload
+  while the browser is offline, which is how the browser suite and a walkthrough
+  show **Photo not saved** and **Retry** without a test-only switch.
+
 **Rejected:**
 
 - **Centre crop with no choice** (the first write-up). The owner asked for the

@@ -53,6 +53,13 @@ const WORDS: Record<
     offMeans: 'PB is not in the build code.',
     changeNumber: 75,
   },
+  'dish-photos': {
+    title: 'Dish photos',
+    onMeans:
+      'Managers add, change and remove a dish’s photo in Menu, and the customer menu shows each photographed dish’s photo and opens it large when tapped.',
+    offMeans: 'Menu has no photo field and the customer menu shows no photos, as today.',
+    changeNumber: 84,
+  },
 }
 
 /**

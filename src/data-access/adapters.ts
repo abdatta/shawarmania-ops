@@ -1301,9 +1301,88 @@ export interface MenuPresentationAdapter {
   reorderItems(categoryId: string, itemIds: string[]): Promise<void>
 }
 
+/** A dish photo's large shape (a-dish-can-show-its-photo, design D5). */
+export type MenuPhotoAspect = '4:3' | '1:1' | '4:5'
+
+/** How a photo's files are encoded: WebP wherever the browser can encode it. */
+export type MenuPhotoFormat = 'webp' | 'jpeg'
+
+/**
+ * A framing, as fractions of the kept original (0..1), so it survives the
+ * original being re-scaled and reopens the cropper exactly where it was left.
+ */
+export interface MenuPhotoCrop {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+/** One photographed dish, as the editor reads it. */
+export interface MenuItemPhoto {
+  itemId: string
+  /** SHA-256 of the large photo's bytes followed by the thumbnail's (design D3). */
+  key: string
+  format: MenuPhotoFormat
+  aspect: MenuPhotoAspect
+  /** SHA-256 of the kept original, which only the cropper ever reads. */
+  sourceKey: string
+  sourceFormat: MenuPhotoFormat
+  largeCrop: MenuPhotoCrop
+  thumbCrop: MenuPhotoCrop
+  /** Addresses the editor can draw: short-lived in production, in memory in the demo. */
+  largeUrl: string
+  thumbUrl: string
+  sourceUrl: string
+}
+
+/** One encoded file, ready to upload. */
+export interface MenuPhotoFile {
+  blob: Blob
+  format: MenuPhotoFormat
+}
+
+/**
+ * What Save sends for a photo: the two files customers see, and the original
+ * the framings were cut from. On **Adjust** the original is the saved one, so
+ * `source.blob` is null and only the two small files travel.
+ */
+export interface MenuPhotoUpload {
+  key: string
+  aspect: MenuPhotoAspect
+  large: MenuPhotoFile
+  thumb: MenuPhotoFile
+  largeCrop: MenuPhotoCrop
+  thumbCrop: MenuPhotoCrop
+  source: { key: string; format: MenuPhotoFormat; blob: Blob | null }
+}
+
+/**
+ * Dish photos (#84), behind the `dish-photos` change gate. Kept apart from the
+ * menu rows on purpose: a photo never changes the menu the counter reads.
+ */
+export interface MenuPhotoAdapter {
+  /** The outlet's photographed dishes, removed dishes left out. */
+  listPhotos(outletId: string): Promise<MenuItemPhoto[]>
+  /**
+   * Upload the files, then set the dish's photo. `onProgress` hears each file
+   * as it lands, `(done, total)`. Refused for a biller, another outlet, a
+   * removed dish, and while the gate is off.
+   */
+  setPhoto(
+    itemId: string,
+    upload: MenuPhotoUpload,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<MenuItemPhoto>
+  /** Take the dish's photo off. Refused for the same callers `setPhoto` refuses. */
+  clearPhoto(itemId: string): Promise<void>
+}
+
 export interface MenuAdapter {
   /** Item ordering and outlet-local highlights (#68), rendered through its part gate. */
   presentation?: MenuPresentationAdapter
+  /** Dish photos (#84), rendered only while `dish-photos` is on. Absent where not yet built. */
+  photos?: MenuPhotoAdapter
   /**
    * The outlet's menu, categories in sort order with their items in sort order.
    *

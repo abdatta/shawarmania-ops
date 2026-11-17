@@ -85,6 +85,21 @@ export const CHANGE_GATES = {
       'the gate system’s own tests and the staging smoke run turn it to prove a turn reaches every tablet, and no product gate can be turned for that',
     roundTrip: 'none: the probe changes nothing but its code in the build stamp',
   },
+  /**
+   * #84: a manager frames a dish's photo in the Menu editor (a large photo in
+   * 4:3, 1:1 or 4:5 and a separate square thumbnail), and the customer menu
+   * shows it and opens it large (a-dish-can-show-its-photo, design D1–D9). Off,
+   * Menu has no photo field and the customer menu shows no photos. Photos live
+   * in their own table and bucket, so the counter's menu never changes.
+   */
+  'dish-photos': {
+    kind: 'change',
+    code: 'DP',
+    change: 'a-dish-can-show-its-photo',
+    retireBy: '2027-02-15',
+    roundTrip:
+      'none: the off path never reads menu_item_photos or the menu-photos bucket; photos wait untouched for the gate to return',
+  },
 } as const satisfies Record<string, ChangeGateDeclaration>
 
 export type ChangeGateKey = keyof typeof CHANGE_GATES

@@ -220,6 +220,14 @@
   /* The staging ribbon, the same in both themes. */
   --staging-ribbon: var(--staging-blue);
   --on-staging-ribbon: var(--brand-white);
+
+  /* The dish-photo cropper's stage (a-dish-can-show-its-photo, D5): the brand
+     site's own dark ground in both themes, so a photo is framed against what a
+     customer sees it on. The part of the photo a framing cuts off is the stage
+     at 72%, over the photo. */
+  --photo-stage: var(--brand-bg);
+  --on-photo-stage: var(--brand-cream);
+  --photo-stage-dim: color-mix(in srgb, var(--brand-bg) 72%, transparent);
 }
 
 /* ── Semantic layer: dark — for phones in the evening ──────────────────── */
@@ -288,6 +296,14 @@
   /* The staging ribbon, the same in both themes. */
   --staging-ribbon: var(--staging-blue);
   --on-staging-ribbon: var(--brand-white);
+
+  /* The dish-photo cropper's stage (a-dish-can-show-its-photo, D5): the brand
+     site's own dark ground in both themes, so a photo is framed against what a
+     customer sees it on. The part of the photo a framing cuts off is the stage
+     at 72%, over the photo. */
+  --photo-stage: var(--brand-bg);
+  --on-photo-stage: var(--brand-cream);
+  --photo-stage-dim: color-mix(in srgb, var(--brand-bg) 72%, transparent);
 }
 
 /* A delivery order, on the counter (delivery-orders-are-made-not-billed): the

@@ -14,6 +14,7 @@ import {
   type NewMenuItemWithCategory,
 } from '../adapters'
 import { outletFixtures } from './fixtures/outlets'
+import { createMockMenuPhotoAdapter } from './menu-photos'
 import type { DemoStore } from './store'
 
 /**
@@ -143,6 +144,7 @@ export function createMockMenuAdapter(
   }
 
   return {
+    photos: createMockMenuPhotoAdapter(store, mayWrite, reachableOutlets),
     presentation: {
       async readHighlights(outletId) {
         if (reachableOutlets && !reachableOutlets.includes(outletId)) {

@@ -6,42 +6,42 @@ every visual question on the customer page.
 
 ## 1. The gate, off
 
-- [ ] 1.1 Declare `dish-photos` (*DP*) in `src/change-gates/gates.ts`: change
+- [x] 1.1 Declare `dish-photos` (*DP*) in `src/change-gates/gates.ts`: change
   `a-dish-can-show-its-photo`, `retireBy` 2027-02-15, `roundTrip` `none: the off
   path never reads menu_item_photos or the menu-photos bucket; photos wait
   untouched for the gate to return`.
-- [ ] 1.2 Migration: the `change_gates` row, off, with the proposal's On and Off
+- [x] 1.2 Migration: the `change_gates` row, off, with the proposal's On and Off
   sentences, change number 84. Run `npm run lint:migrations` and
   `npm run lint:change-gates`.
 
 ## 2. The editor against the mock (demo first)
 
-- [ ] 2.1 Extend the menu adapter type with a photo per item (key, format,
+- [x] 2.1 Extend the menu adapter type with a photo per item (key, format,
   aspect, source key and format, both crops, display URLs) and set/clear
   operations; implement them in the mock adapter, holding images as object URLs
   in memory and never writing anywhere. Mock tests, including read-only refusal
   for a biller.
-- [ ] 2.2 The image preparation module (design D4): orientation; the 2560 px
+- [x] 2.2 The image preparation module (design D4): orientation; the 2560 px
   original; the large photo at 1600 px for each of 4:3, 1:1 and 4:5 and the
   400×400 thumbnail, each cut from crop fractions, never scaled up; stepped
   downscaling; quality 0.92 / 0.90; WebP with a JPEG fallback; the two SHA-256
   keys; the small-crop warning. Unit-test it with a portrait, a landscape, a
   small and a square source, crops at the edges, and a canvas that cannot
   encode WebP.
-- [ ] 2.3 The cropper (design D5): choose `react-easy-crop` or the in-house
+- [x] 2.3 The cropper (design D5): choose `react-easy-crop` or the in-house
   fallback and record the choice and why in `design.md`; the two steps, the
   shape choice and its portrait default, drag, pinch, slider, wheel and
   keyboard, the photo always covering the frame, the zoom stop, the
   rule-of-thirds grid, Back/Next/Done, and reopening at saved crops for
   **Adjust**. Component tests for each, including that the output crop matches
   what the frame showed.
-- [ ] 2.4 The Photo field in the dish editor (design D8): dashed tile with
+- [x] 2.4 The Photo field in the dish editor (design D8): dashed tile with
   **Add**; the thumbnail and large photo side by side; **Adjust**, **Change**,
   **Remove**; save order with progress, and **Photo not saved** with **Retry**;
   Cancel discards. Row thumbnails in Menu. All behind
   `useChangeGate('dish-photos')`; `describeChangeGate` unit tests in both
   states.
-- [ ] 2.5 Browser tests in demo: add with each shape, adjust, change, remove,
+- [x] 2.5 Browser tests in demo: add with each shape, adjust, change, remove,
   cancel, a failed upload keeping the other edits. Tag them
   `@cg-on:dish-photos`. Check phone and tablet in both themes, the cropper by
   touch emulation; run `npm run contrast`.

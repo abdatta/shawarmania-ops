@@ -208,6 +208,12 @@ export const CHECKS = [
     min: AA_TEXT,
     note: 'Staging on the staging ribbon',
   },
+  {
+    fg: '--on-photo-stage',
+    bg: '--photo-stage',
+    min: AA_TEXT,
+    note: 'the dish-photo cropper’s words on its dark stage',
+  },
 
   // A pipeline card's two state controls (#55) are identified by the colour of
   // the box they carry while unchecked, drawn straight onto the raised card. So
