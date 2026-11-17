@@ -57,14 +57,26 @@ its own, and no migration in the code half. Counter and kitchen runtime.
 
 ## 2. Wait for every tablet
 
-- [ ] 2.1 The readiness check (`retire-gate` §2): every registered device on the
+- [x] 2.1 The readiness check (`retire-gate` §2): every registered device on the
   retirement build or later, and three services on it.
+  *(15 November, read in production: Cafe Laptop, Conti Kitchen and Shawarma
+  Kitchen, the only registered devices, all on `960ce0f1`, which contains the
+  retirement's `f632cc42`; Kalyani Cafe traded 12, 13 and 14 November after
+  Deploy 43190699464 put it live at 14:51 IST on 12 November.)*
 
 ## 3. The contract migration
 
-- [ ] 3.1 A migration headed `-- release: contract delivery-orders`. Run the
+- [x] 3.1 A migration headed `-- release: contract delivery-orders`. Run the
   reader query in production and on a fresh reset first: the order commands, the
   payment guard and the label trigger are the likely readers. Rewrite each to
   its on branch, then retire the row; update the pgTAP file that turns it.
+  *(`20261117020000`. The readers were `order_delivery_is_not_paid()` and
+  `order_label_is_kept()`; production's bodies matched `20261112000000`, and
+  both keep their on branch. `billing_order_guard()` matched only through a
+  comment. Nothing is dropped. The pgTAP file asserts the row retired and the
+  triggers gate-free, and its off-path cases are gone.)*
 - [ ] 3.2 Every database gate on a fresh reset; release it through the normal
   path.
+  *(15 November: a fresh reset passes every pgTAP file, 103 files and 4,379
+  tests, and the change-gates REST suite; `lint:migrations` and
+  `lint:change-gates` green; the reader query finds nothing for the key.)*

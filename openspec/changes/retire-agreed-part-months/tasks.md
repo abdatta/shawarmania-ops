@@ -43,17 +43,27 @@ its own, and no migration in the code half.
 
 ## 2. Wait for every tablet
 
-- [ ] 2.1 The readiness check (`retire-gate` §2): every registered device on the
+- [x] 2.1 The readiness check (`retire-gate` §2): every registered device on the
   retirement build or later, and three services on it. Fixed costs are the
   owner's and managers' screens, so their phones reload the app before the
   contract Promote.
+  *(15 November, read in production: Cafe Laptop, Conti Kitchen and Shawarma
+  Kitchen, the only registered devices, all on `960ce0f1`, which contains the
+  retirement's `f632cc42`; Kalyani Cafe traded 12, 13 and 14 November after
+  Deploy 43190699464 put it live at 14:51 IST on 12 November.)*
 
 ## 3. The contract migration
 
-- [ ] 3.1 A migration headed `-- release: contract agreed-part-months`. Re-run the
+- [x] 3.1 A migration headed `-- release: contract agreed-part-months`. Re-run the
   reader query in production and on a fresh reset first; rewrite any reader to
   its on branch, then retire the row. `stop_fixed_cost` and `stop_fixed_cost_v2`
   are called by no build from this one on, so the migration may drop them once
   no older build is left; `fixed_cost_month_cost` keeps its day-share fallback.
+  *(`20261117000000`. Nothing reads the key, in production or on a reset, so it
+  retires the row only. `stop_fixed_cost` and `_v2` stay for a Republish, as
+  the check-in's v1 and v2 did in `auto-approve-at-the-shop`'s contract.)*
 - [ ] 3.2 Every database gate on a fresh reset; release it through the normal
   path.
+  *(15 November: a fresh reset passes every pgTAP file, 103 files and 4,379
+  tests, and the change-gates REST suite; `lint:migrations` and
+  `lint:change-gates` green; the reader query finds nothing for the key.)*

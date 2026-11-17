@@ -45,13 +45,21 @@ its own, and no migration in the code half.
 
 ## 2. Wait for every tablet
 
-- [ ] 2.1 The readiness check (`retire-gate` §2): every registered device on the
+- [x] 2.1 The readiness check (`retire-gate` §2): every registered device on the
   retirement build or later, and three services on it.
+  *(15 November, read in production: Cafe Laptop, Conti Kitchen and Shawarma
+  Kitchen, the only registered devices, all on `960ce0f1`, which contains the
+  retirement's `f632cc42`; Kalyani Cafe traded 12, 13 and 14 November after
+  Deploy 43190699464 put it live at 14:51 IST on 12 November.)*
 
 ## 3. The contract migration
 
-- [ ] 3.1 A migration headed `-- release: contract a-tablet-keeps-its-login`.
+- [x] 3.1 A migration headed `-- release: contract a-tablet-keeps-its-login`.
   Nothing in the database reads the key (re-run the reader query first), so it
-  retires the row only.
+  retires the row only. *(`20261117010000`; the reader query found nothing in
+  production or on a reset.)*
 - [ ] 3.2 Every database gate on a fresh reset; release it through the normal
   path.
+  *(15 November: a fresh reset passes every pgTAP file, 103 files and 4,379
+  tests, and the change-gates REST suite; `lint:migrations` and
+  `lint:change-gates` green; the reader query finds nothing for the key.)*

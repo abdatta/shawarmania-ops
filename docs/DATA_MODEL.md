@@ -1622,7 +1622,8 @@ direct insert, update and delete is refused.
 
 ## Delivery orders *(#83)*
 
-`delivery-orders-are-made-not-billed`, gate `delivery-orders` (DO). Everything
+`delivery-orders-are-made-not-billed`, gate `delivery-orders` (DO), retired by
+`20261117020000_contract_delivery_orders`. Everything
 was added by one migration, except two statements the owner agreed to: the
 closed list in `billing_commands_command_type_check` gained two kinds, and
 `billing_order_guard` was replaced by its previous body plus two branches.
@@ -1649,7 +1650,7 @@ all set. One row marks an order as a delivery order. Written by
 functions: with `delivery: true` in the payload the content must pass
 `delivery_order_content_ok` (no service, table, customer or discount; item
 lines only). `orders_delivery_is_not_paid` refuses any payment of an order with
-a row while the gate is on.
+a row.
 
 **`hand_over_delivery_order`** — a counter command (`hand_over_delivery`):
 the owning tablet's live shift, an open delivery order. It ticks whatever is
@@ -1665,7 +1666,7 @@ columns. Both are idempotent counter commands like the others.
 **`kept_order_labels`** — `order_id` (primary key), `outlet_id`, `label`,
 `kept_at`. `orders_label_is_kept`, before the update that takes an order off
 the rail (cancelled, handed over, or paid with `prepared_at` set), copies its
-label here while the gate is on, so `orders_label_leaves_the_rail` deleting
+label here, so `orders_label_leaves_the_rail` deleting
 the live row loses nothing.
 
 All three tables: RLS select for a live counter shift at its outlet, the
@@ -1679,5 +1680,5 @@ day's delivery orders alone, with handed over in place of paid. `billing_history
 `billing_history_delivery_orders(outlet, day)` lists the day's handed-over
 orders without money. `sales_analytics_v3` and `sales_analytics_series_v3` take
 `p_scope` (`counter` | `delivery`); in delivery scope money is null and only
-orders and units are answered. The app calls every new function only with the
-gate on, and the earlier ones with it off.
+orders and units are answered. The app calls the new functions; the earlier
+ones stay for a build from before the retirement.

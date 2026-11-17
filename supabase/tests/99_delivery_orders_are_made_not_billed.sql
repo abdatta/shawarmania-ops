@@ -11,9 +11,8 @@
 --     refuse a service, table, packaging, bill discount or customer;
 --   * a handover ticks only what is owed, a take-back puts back only that, and
 --     the window is a payment take-back's five minutes;
---   * paying a delivery order is refused while the gate is on, and allowed off;
---   * a label is kept when an order leaves the rail, the last one wins, and
---     nothing is kept while the gate is off;
+--   * paying a delivery order is refused;
+--   * a label is kept when an order leaves the rail, and the last one wins;
 --   * the reads leave delivery orders out of counter figures, count them alone
 --     in delivery figures, and never carry their money.
 begin;
@@ -39,15 +38,6 @@ returns void language plpgsql as $$
 begin
   execute 'reset role';
   perform set_config('request.jwt.claims', '', true);
-end;
-$$;
-
-create function pg_temp.gate(p_on boolean)
-returns void language plpgsql as $$
-begin
-  execute 'reset role';
-  perform set_config('request.jwt.claims', '', true);
-  update public.change_gates set enabled = p_on where key = 'delivery-orders';
 end;
 $$;
 
@@ -212,10 +202,17 @@ create function pg_temp.card(p_order uuid) returns jsonb language sql as $$
 $$;
 
 -- ---------------------------------------------------------------------------
--- 1. The gate, the shapes, off.
+-- 1. The gate, retired, and the shapes.
 
 select is((select enabled from public.change_gates where key = 'delivery-orders'), false,
-  'delivery-orders is declared, off');
+  'delivery-orders reads off');
+select isnt((select retired_at from public.change_gates where key = 'delivery-orders'), null,
+  'because its contract migration retired it');
+select ok(
+  (select bool_and(p.prosrc not like '%app_change_gate%') from pg_proc p
+    where p.oid in ('public.order_delivery_is_not_paid()'::regprocedure,
+                    'public.order_label_is_kept()'::regprocedure)),
+  'and neither trigger asks it');
 select is((select code from public.change_gates where key = 'delivery-orders'), 'DO',
   'its code is DO');
 select ok('handed_over' = any(enum_range(null::public.order_status)::text[]),
@@ -231,7 +228,6 @@ select ok((select relrowsecurity from pg_class where oid = 'public.delivery_hand
 select ok((select relrowsecurity from pg_class where oid = 'public.kept_order_labels'::regclass),
   'kept_order_labels has RLS');
 
-select pg_temp.gate(true);
 select pg_temp.impersonate(:'COUNTER');
 
 -- ---------------------------------------------------------------------------
@@ -299,7 +295,7 @@ select is((select service_type::text from public.orders where id = :'C1'), 'take
   'and it is takeaway');
 
 -- ---------------------------------------------------------------------------
--- 4. A delivery order is not paid while the gate is on.
+-- 4. A delivery order is not paid.
 
 select throws_ok($$ select pg_temp.pay('d8300000-0000-4000-a000-000000000001') $$, '42501',
   'a delivery order is handed over, not paid', 'paying a delivery order is refused');
@@ -424,23 +420,6 @@ select is((select count(*) from public.order_labels where order_id = :'C2')::int
 select ok(not exists (select 1 from public.bills b join public.bill_items i on i.bill_id = b.id
                        where b.order_id in (:'C1', :'C2', :'D1') and i.item_name in ('Asha', 'SWG 77')),
   'no label reaches a bill');
-
-select pg_temp.gate(false);
-select pg_temp.impersonate(:'COUNTER');
-select is(pg_temp.send('create_billing_order_v3', pg_temp.payload(:'D3', 1, 0) || '{"label":"Off"}'),
-  'accepted', 'with the gate off, a labelled order');
-select is(pg_temp.cancel(:'D3'), 'accepted', 'is cancelled');
-select is((select count(*) from public.kept_order_labels where order_id = :'D3')::integer, 0,
-  'and its label is not kept');
-
--- Off, the off path may bill an open delivery order, as the proposal says.
-select is(pg_temp.send('create_billing_order_v3', pg_temp.delivery(pg_temp.payload(:'D4', 1, 0))),
-  'accepted', 'a delivery order queued while on lands with the gate off');
-select is(pg_temp.pay(:'D4'), 'accepted', 'and the off path may bill it');
-select is(pg_temp.send('create_billing_order_v3', pg_temp.delivery(pg_temp.payload(:'D5', 1, 0))),
-  'accepted', 'another lands off');
-select is(pg_temp.hand_over(:'D5'), 'accepted', 'and a handover queued while on lands off too');
-select pg_temp.gate(true);
 
 -- ---------------------------------------------------------------------------
 -- 9. Who sees the three tables.
