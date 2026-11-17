@@ -5,7 +5,8 @@
 > #75 `a-release-can-be-switched-off` · **Child**: the brand site's
 > `the-table-menu-shows-photos` (repo `shawarmania`) · **Gate**: the owner
 > approved the Menu editor's photo field and cropper from the demo before it
-> was wired live; a manager frames a dish's large photo and square thumbnail,
+> was wired live; a manager frames a dish's large photo, and with it its square
+> thumbnail (or the thumbnail separately when wanted),
 > re-frames, changes and removes it from the dish's own editor with no SQL, and another outlet's manager is refused by the database,
 > by hand-crafted request, for both the photo row and the stored file; the
 > customer menu at `shawarmania.in/menu/<slug>/` shows each photographed dish
@@ -37,36 +38,45 @@ finished as one with many.
 
 **In ops, a dish's editor gets a Photo field, with a cropper.** The manager
 opens a dish in Menu, picks a photo from the phone's camera or gallery, and
-frames it in two steps:
+frames it once:
 
 ```
- Step 1 · Large photo          [ 4:3 ]  1:1   4:5
+ Frame the photo        [▭ Wide]  [□ Square]  [▯ Tall]
  ┌──────────────────────────────┐
  │ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │  ← dimmed: cut off
  │ ░░┌────────────────────┐░░░░ │
- │ ░░│                    │░░░░ │  drag to move
- │ ░░│   what customers   │░░░░ │  pinch or slider to zoom
- │ ░░│      will see      │░░░░ │
+ │ ░░│ ┌ ─ ─ ─ ─ ─ ─ ─ ┐  │░░░░ │  drag to move
+ │ ░░│   Thumbnail        │░░░░ │  pinch or slider to zoom
+ │ ░░│ └ ─ ─ ─ ─ ─ ─ ─ ┘  │░░░░ │
  │ ░░└────────────────────┘░░░░ │
  └──────────────────────────────┘
-                     [ Next ]
-
- Step 2 · Menu thumbnail (square)
-   the same photo in a square frame, starting centred on step 1's framing
-                     [ Done ]
+   Frame the thumbnail separately ›
+   [ Back ]                 [ Done ]
 ```
 
-1. **The large photo**, shown when a customer taps the dish, in one of three
-   shapes the manager picks: **4:3** landscape, **1:1** square or **4:5**
-   portrait (a tall burger or a drink suits portrait).
-2. **The menu thumbnail**, always square, framed separately, so it can zoom
-   into the best part of the dish rather than the middle of the large photo.
+Each photographed dish has **two pictures**, both cut from that one framing
+unless the manager asks for more:
 
-In both steps the frame keeps its shape; the manager drags the photo to move it
-and pinches (or uses a slider) to zoom, and the photo cannot be dragged out of
-the frame, so there is never an empty edge. **Adjust** reopens the cropper on
-the same photo later, at the framing last saved, with no need to pick the photo
-again. The photo can be changed or removed the same way.
+1. **The large photo**, shown when a customer taps the dish, in one of three
+   shapes: **Wide** (4:3), **Square** (1:1) or **Tall** (4:5, for a tall burger
+   or a drink). The shape is picked for the manager, Tall for a portrait photo
+   and Wide otherwise; the three tabs, each a word and a small outline of the
+   shape, change it in one tap. The tabs are a choice of one shape, not three
+   versions: a customer only ever sees the one picked.
+2. **The menu thumbnail**, always square: by default the largest square inside
+   the frame, centred, drawn in the frame as a dashed square labelled
+   **Thumbnail** so it is never a surprise. **Frame the thumbnail separately**
+   opens a second, square frame for a manager who wants it zoomed into the
+   best part of the dish; a thumbnail framed there stays as framed, even when
+   the large photo is moved later, until **Match the photo** puts it back
+   inside the frame.
+
+The frame keeps its shape; the manager drags the photo to move it and pinches
+(or uses a slider) to zoom, and the photo cannot be dragged out of the frame,
+so there is never an empty edge. **Done** finishes in one step. **Adjust**
+reopens the cropper on the same photo later, at the framing last saved, with
+no need to pick the photo again. The photo can be changed or removed the same
+way.
 
 **Photos stay high quality.** The large photo is kept at 1600 px on its long
 side and the thumbnail at 400 px, both at quality 92 and 90, which on any phone
@@ -198,6 +208,14 @@ The reasons and the rejected alternatives are in `design.md`.
   4:3, 1:1 or 4:5, then the square thumbnail separately, and can re-frame
   later. The owner asked for this after the first write-up and approved the
   two-step design ("lgtm").
+- Revised 2026-11-17, from the demo screenshots: one framing by default, not
+  two. The thumbnail is the largest square inside the frame, shown in it, and
+  framing it separately is optional, now or on a later Adjust. A thumbnail
+  framed separately stays as framed when the large photo moves, until **Match
+  the photo**; the owner preferred that to the thumbnail quietly snapping
+  back. The shape tabs read **Wide**, **Square** and **Tall** with a small
+  outline of each shape, so a manager knows what each is before tapping it;
+  the ratios are kept for screen readers only.
 - High quality over small files: the owner wants a photo that "feels high
   quality to the customer". 1600 px at quality 92 for the large photo, 400 px
   at 90 for the thumbnail, a 2560 px original kept for re-cropping.

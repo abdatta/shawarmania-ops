@@ -32,7 +32,9 @@ import {
 } from './crop-geometry'
 
 /**
- * The two-step cropper (a-dish-can-show-its-photo, design D5).
+ * The cropper (a-dish-can-show-its-photo, design D5): one framing makes the
+ * large photo and, as the largest square inside it, the thumbnail; framing the
+ * thumbnail separately is one tap away.
  *
  * In-house rather than `react-easy-crop`; the reasons are in the change's
  * design.md. The frame keeps its shape and stays put; the photo moves and
@@ -61,10 +63,25 @@ interface PhotoCropperProps {
 
 type Step = 'large' | 'thumb'
 
-const ASPECT_LABEL: Record<MenuPhotoAspect, string> = {
-  '4:3': 'Landscape 4:3',
-  '1:1': 'Square 1:1',
-  '4:5': 'Portrait 4:5',
+/**
+ * Each shape in a word and a drawn outline, so a manager knows what it is
+ * before tapping it; the ratio is for screen readers (owner, 2026-11-17).
+ */
+const SHAPES: Record<MenuPhotoAspect, { word: string; outline: string }> = {
+  '4:3': { word: 'Wide', outline: 'h-3 w-4' },
+  '1:1': { word: 'Square', outline: 'size-3.5' },
+  '4:5': { word: 'Tall', outline: 'h-4 w-3.5' },
+}
+
+/** Whether a saved thumbnail is the square inside the saved frame, to a thousandth. */
+function followsFrame(thumb: CropRect, large: CropRect, image: ImageSize) {
+  const square = squareWithin(large, image)
+  return (['x', 'y', 'w', 'h'] as const).every(
+    (side) =>
+      Math.abs(thumb[side] - square[side]) /
+        (side === 'x' || side === 'w' ? image.width : image.height) <
+      0.001,
+  )
 }
 
 export function PhotoCropper({
@@ -109,12 +126,17 @@ function CropperSteps({
       ? fromFractions(initial.largeCrop, image, ASPECT_RATIO[initial.aspect])
       : centredCrop(image, ASPECT_RATIO[aspect]),
   )
-  const [thumb, setThumb] = useState<CropRect | null>(() =>
-    initial ? fromFractions(initial.thumbCrop, image, 1) : null,
-  )
-  // The large framing the thumbnail was last set against. Changing the large
-  // photo re-centres the thumbnail on it; leaving it alone keeps the square.
-  const [thumbFor, setThumbFor] = useState<CropRect | null>(() => (initial ? large : null))
+  // One framing makes both pictures (owner, 2026-11-17): null is a thumbnail
+  // that follows the frame, the largest square inside it. A thumbnail the
+  // manager framed separately is kept here, and stays put when the frame moves.
+  const [thumb, setThumb] = useState<CropRect | null>(() => {
+    if (!initial) return null
+    const saved = fromFractions(initial.thumbCrop, image, 1)
+    return followsFrame(saved, large, image) ? null : saved
+  })
+  // The square being framed in the thumbnail step, and whether it was moved.
+  const [thumbWork, setThumbWork] = useState<CropRect | null>(null)
+  const [thumbMoved, setThumbMoved] = useState(false)
 
   function changeAspect(next: MenuPhotoAspect) {
     if (next === aspect) return
@@ -122,47 +144,68 @@ function CropperSteps({
     setAspect(next)
   }
 
-  function next() {
-    if (!thumb || thumbFor !== large) {
-      setThumb(squareWithin(large, image))
-      setThumbFor(large)
-    }
+  function openThumb() {
+    setThumbWork(thumb ?? squareWithin(large, image))
+    setThumbMoved(false)
     setStep('thumb')
   }
 
+  /** The thumbnail step's square, kept if it was moved. */
+  function keptThumb() {
+    return thumbMoved && thumbWork ? thumbWork : thumb
+  }
+
+  function backFromThumb() {
+    setThumb(keptThumb())
+    setStep('large')
+  }
+
+  function matchPhoto() {
+    setThumb(null)
+    setStep('large')
+  }
+
   function done() {
-    if (!thumb) return
+    const chosen = step === 'thumb' ? keptThumb() : thumb
     onDone({
       aspect,
       largeCrop: toFractions(large, image),
-      thumbCrop: toFractions(thumb, image),
+      thumbCrop: toFractions(chosen ?? squareWithin(large, image), image),
     })
   }
 
   const onLarge = step === 'large'
   return (
     <div className="flex h-full flex-col" data-testid="photo-cropper">
-      <header className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4">
+      <header className="space-y-3 px-4 pt-4">
         <h2 className="text-base font-bold" data-testid="cropper-title">
-          {onLarge ? 'Step 1 · Large photo' : 'Step 2 · Menu thumbnail'}
+          {onLarge ? 'Frame the photo' : 'Thumbnail'}
         </h2>
         {onLarge && (
-          <div role="group" aria-label="Shape" className="flex gap-1">
+          <div role="group" aria-label="Shape" className="grid grid-cols-3 gap-2">
             {ASPECTS.map((choice) => (
               <button
                 key={choice}
                 type="button"
                 aria-pressed={aspect === choice}
-                aria-label={ASPECT_LABEL[choice]}
+                aria-label={`${SHAPES[choice].word}, ${choice}`}
                 onClick={() => changeAspect(choice)}
                 className={cn(
-                  'min-h-[var(--size-control-phone)] rounded-lg border px-3 text-sm font-semibold',
+                  'inline-flex min-h-[var(--size-control-phone)] items-center justify-center gap-2 rounded-lg border px-2 text-sm font-semibold',
                   aspect === choice
                     ? 'border-on-photo-stage bg-on-photo-stage text-photo-stage'
                     : 'border-on-photo-stage/40 text-on-photo-stage',
                 )}
               >
-                {choice}
+                <span
+                  aria-hidden
+                  data-testid={`shape-outline-${choice}`}
+                  className={cn(
+                    'shrink-0 rounded-[2px] border-2 border-current',
+                    SHAPES[choice].outline,
+                  )}
+                />
+                {SHAPES[choice].word}
               </button>
             ))}
           </div>
@@ -172,46 +215,55 @@ function CropperSteps({
       {onLarge ? (
         <CropStage
           key={`large-${aspect}`}
-          label="Large photo"
+          label="Photo"
           imageUrl={imageUrl}
           image={image}
           ratio={ASPECT_RATIO[aspect]}
           rect={large}
           onChange={setLarge}
+          thumbnail={thumb ? null : squareWithin(large, image)}
         />
       ) : (
-        thumb && (
+        thumbWork && (
           <CropStage
             key="thumb"
-            label="Menu thumbnail"
+            label="Thumbnail"
             imageUrl={imageUrl}
             image={image}
             ratio={1}
-            rect={thumb}
+            rounded
+            rect={thumbWork}
             onChange={(rect) => {
-              setThumb(rect)
+              setThumbWork(rect)
+              setThumbMoved(true)
             }}
           />
         )
       )}
 
-      <footer className="flex items-center justify-between gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-        <Button
-          variant="secondary"
-          size="phone"
-          onClick={onLarge ? onCancel : () => setStep('large')}
-        >
-          Back
-        </Button>
+      <div className="flex justify-center px-4 pb-2">
         {onLarge ? (
-          <Button size="phone" onClick={next}>
-            Next
-          </Button>
+          <button
+            type="button"
+            onClick={openThumb}
+            className="min-h-[var(--size-control-phone)] px-2 text-sm font-semibold underline underline-offset-4"
+          >
+            {thumb ? 'Change the thumbnail ›' : 'Frame the thumbnail separately ›'}
+          </button>
         ) : (
-          <Button size="phone" onClick={done}>
-            Done
+          <Button variant="secondary" size="phone" onClick={matchPhoto}>
+            Match the photo
           </Button>
         )}
+      </div>
+
+      <footer className="flex items-center justify-between gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <Button variant="secondary" size="phone" onClick={onLarge ? onCancel : backFromThumb}>
+          Back
+        </Button>
+        <Button size="phone" onClick={done}>
+          Done
+        </Button>
       </footer>
     </div>
   )
@@ -247,9 +299,22 @@ interface CropStageProps {
   ratio: number
   rect: CropRect
   onChange: (rect: CropRect) => void
+  /** The thumbnail this framing gives, drawn in it as a dashed square. */
+  thumbnail?: CropRect | null
+  /** The thumbnail's own frame, rounded as the menu row draws it. */
+  rounded?: boolean
 }
 
-function CropStage({ label, imageUrl, image, ratio, rect, onChange }: CropStageProps) {
+function CropStage({
+  label,
+  imageUrl,
+  image,
+  ratio,
+  rect,
+  onChange,
+  thumbnail,
+  rounded,
+}: CropStageProps) {
   const [stageRef, stage] = useStageSize()
   const frame = frameSize(stage, ratio)
   const frameLeft = (stage.width - frame.width) / 2
@@ -437,10 +502,26 @@ function CropStage({ label, imageUrl, image, ratio, rect, onChange }: CropStageP
           aria-hidden
           className={cn(
             'pointer-events-none absolute border border-on-photo-stage/80 shadow-[0_0_0_100vmax_var(--photo-stage-dim)]',
-            ratio === 1 && label === 'Menu thumbnail' ? 'rounded-2xl' : 'rounded-sm',
+            rounded ? 'rounded-2xl' : 'rounded-sm',
           )}
           style={{ left: frameLeft, top: frameTop, width: frame.width, height: frame.height }}
         >
+          {thumbnail && (
+            <span
+              data-testid="crop-thumbnail"
+              className="absolute rounded-xl border-2 border-dashed border-on-photo-stage/90"
+              style={{
+                left: (thumbnail.x - rect.x) * scale,
+                top: (thumbnail.y - rect.y) * scale,
+                width: thumbnail.w * scale,
+                height: thumbnail.h * scale,
+              }}
+            >
+              <span className="absolute top-1.5 left-1.5 rounded-md bg-photo-stage-dim px-1.5 py-0.5 text-xs font-semibold">
+                Thumbnail
+              </span>
+            </span>
+          )}
           {interacting &&
             thirds.map((at) => (
               <span key={at}>

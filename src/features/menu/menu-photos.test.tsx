@@ -99,12 +99,11 @@ async function openClassic(user: ReturnType<typeof userEvent.setup>) {
   return screen.findByRole('dialog', { name: /Edit Classic Chicken Shawarma/ })
 }
 
-/** Pick a photo, then Next and Done through the cropper with its starting framings. */
+/** Pick a photo and frame it once: Done with the cropper's starting framing. */
 async function pickAndFrame(user: ReturnType<typeof userEvent.setup>, shape?: string) {
   await user.upload(screen.getByTestId('menu-photo-input'), camera())
   await screen.findByTestId('photo-cropper')
   if (shape) await user.click(screen.getByRole('button', { name: shape }))
-  await user.click(screen.getByRole('button', { name: 'Next' }))
   await user.click(screen.getByRole('button', { name: 'Done' }))
   await waitFor(() => expect(screen.queryByTestId('photo-cropper')).not.toBeInTheDocument())
 }
@@ -154,7 +153,7 @@ describeChangeGate('dish-photos', (on) => {
     expect(within(sheet).getByTestId('menu-photo-empty')).toBeVisible()
     expect(within(sheet).getByRole('button', { name: 'Add photo' })).toBeVisible()
 
-    await pickAndFrame(user, 'Portrait 4:5')
+    await pickAndFrame(user, 'Tall, 4:5')
 
     expect(within(sheet).getByTestId('menu-photo-thumb')).toBeVisible()
     expect(within(sheet).getByTestId('menu-photo-large')).toHaveStyle({ aspectRatio: String(0.8) })
@@ -205,12 +204,11 @@ describeChangeGate('dish-photos', (on) => {
 
     await user.click(within(sheet).getByRole('button', { name: 'Adjust' }))
     await screen.findByTestId('photo-cropper')
-    expect(screen.getByRole('button', { name: 'Landscape 4:3' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Wide, 4:3' })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
-    await user.click(screen.getByRole('button', { name: 'Square 1:1' }))
-    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await user.click(screen.getByRole('button', { name: 'Square, 1:1' }))
     await user.click(screen.getByRole('button', { name: 'Done' }))
     await user.click(within(sheet).getByRole('button', { name: 'Save changes' }))
 

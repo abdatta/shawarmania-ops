@@ -151,27 +151,52 @@ the customer's phone anyway; no visible gain.
 
 ### D5. The cropper
 
+**One framing by default** (owner, 2026-11-17, revising the two-step design
+of 2026-11-16 after seeing it in the demo):
+
 ```
- Step 1 · Large photo          [ 4:3 ]  1:1   4:5
+ Frame the photo        [▭ Wide]  [□ Square]  [▯ Tall]
  ┌──────────────────────────────┐
  │ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
  │ ░░┌────────────────────┐░░░░ │   the frame stays put and keeps its shape;
- │ ░░│                    │░░░░ │   the photo moves and zooms under it
- │ ░░│                    │░░░░ │
+ │ ░░│ ┌ ─ ─ ─ ─ ─ ─ ─ ┐  │░░░░ │   the photo moves and zooms under it
+ │ ░░│   Thumbnail        │░░░░ │
+ │ ░░│ └ ─ ─ ─ ─ ─ ─ ─ ┘  │░░░░ │   the dashed square is the thumbnail
  │ ░░└────────────────────┘░░░░ │
  └──────────────────────────────┘
    zoom  ─────●──────────
-   [ Back ]                 [ Next ]
+   Frame the thumbnail separately ›
+   [ Back ]                 [ Done ]
 
- Step 2 · Menu thumbnail                (square)
-   the same, with a square frame, starting centred on step 1's frame
+ Thumbnail                          (only when asked for)
+   a square frame, starting on the dashed square
+   [ Match the photo ]
    [ Back ]                 [ Done ]
 ```
 
 - It opens in a full-screen sheet over the dish editor, on a dark backdrop, so
   the photo is judged as the customer will see it.
-- **Shapes**: a three-way choice for step 1, 4:3 by default, or 4:5 when the
-  original is portrait. Changing shape keeps the centre of the current frame.
+- **One framing makes both pictures.** The manager frames the large photo and
+  taps **Done**. The thumbnail is the largest square inside that frame,
+  centred, and the frame shows it as a dashed square labelled **Thumbnail**, so
+  what the menu row will show is never a surprise.
+- **Shapes**: three tabs, each a word and a small outline drawn at its shape:
+  **Wide** (4:3), **Square** (1:1), **Tall** (4:5). The word says what the shape
+  is before it is tapped; the ratio is in each tab's accessible name ("Wide,
+  4:3") and nowhere else, because a ratio means little to a manager. Tall is
+  picked for a portrait original and Wide otherwise, so a manager need not touch
+  them. They choose one shape; a customer sees only the one picked. Changing
+  shape keeps the centre and zoom of the current frame.
+- **Frame the thumbnail separately** opens a square frame starting on the
+  dashed square, for a thumbnail zoomed into the best part of the dish. Once
+  moved there, the thumbnail is the manager's: moving the large frame later
+  (now or on Adjust) leaves it where it was, and the large frame then shows no
+  dashed square. **Match the photo** in that square frame puts it back to
+  following the large frame. Rejected: snapping it back whenever the large frame
+  moves, which quietly undoes a deliberate choice.
+- Whether a saved thumbnail follows the frame is not stored: on **Adjust** it
+  follows when its saved framing is the largest centred square inside the
+  saved large framing (to a thousandth), and is the manager's otherwise.
 - **Moving and zooming**: drag (one finger or mouse) to move; pinch, the
   slider, or the mouse wheel to zoom; arrow keys move and `+`/`-` zoom for a
   keyboard. The photo always covers the frame: it cannot be dragged or zoomed
@@ -209,7 +234,7 @@ choice and lost on three counts:
   it gives the frame and the photo straight off the page.
 - **It covers less of D5 than it seems.** Zooming by key, the
   grid-while-a-finger-is-down, the zoom stop at 400 px and
-  the thumbnail starting inside step 1's frame are ours to write either way.
+  the thumbnail starting inside the large frame are ours to write either way.
 
 The in-house cropper is about 680 lines with comments (geometry and screen) and no
 dependency: pointer events for
@@ -235,9 +260,13 @@ square) is a pure function with its own unit test.
 
 - **Centre crop with no choice** (the first write-up). The owner asked for the
   manager to choose the framing.
-- **One crop for both uses** (the thumbnail as the middle of the large photo).
-  The thumbnail is small; the best square is often a close-up the large frame
-  should not be.
+- **One crop for both uses, with no way out** (the thumbnail always the middle
+  of the large photo). The thumbnail is small; the best square is often a
+  close-up the large frame should not be. One framing is now the default, and
+  framing the thumbnail separately stays one tap away.
+- **Two framings every time** (the design approved on 2026-11-16). Seen in the
+  demo, it asked every manager for a second framing most dishes do not need
+  (owner, 2026-11-17).
 - **Free-form crop shapes.** The menu's rows need a square, and three
   named shapes keep the large view looking deliberate across the menu.
 

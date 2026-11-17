@@ -5,14 +5,20 @@
 While the `dish-photos` gate is on, an authorised manager SHALL add, change and
 remove a dish's photo in that dish's editor, entirely through the application.
 
-The manager SHALL choose the framing. A cropper SHALL ask for the large photo
-first, in a shape the manager picks from 4:3, 1:1 and 4:5, then for the square
-menu thumbnail separately; in each, the frame SHALL keep its shape while the
-manager moves and zooms the photo under it, by touch, mouse or keyboard, and
-the photo SHALL always cover the frame. The editor SHALL then show the
-thumbnail and the large photo as the customer will see them. **Adjust** SHALL
-reopen the cropper on the same photo at the framing last saved, without the
-photo being picked again.
+The manager SHALL choose the framing, once by default. A cropper SHALL ask
+for one framing of the large photo, in a shape the manager may change among
+**Wide** (4:3), **Square** (1:1) and **Tall** (4:5), each named by that word and
+a drawn outline of the shape before it is chosen, with Tall picked for a
+portrait photo and Wide otherwise. The square menu thumbnail SHALL be the
+largest square inside that framing, centred, shown in the frame while framing,
+unless the manager chooses to frame the thumbnail separately; a thumbnail framed
+separately SHALL stay as framed when the large framing changes, until the
+manager matches it to the photo again. In every frame, the frame SHALL keep its
+shape while the manager moves and zooms the photo under it, by touch, mouse or
+keyboard, and the photo SHALL always cover the frame. The editor SHALL then
+show the thumbnail and the large photo as the customer will see them.
+**Adjust** SHALL reopen the cropper on the same photo at the framing last
+saved, without the photo being picked again.
 
 The phone SHALL prepare the files before they are sent, for quality first:
 oriented upright; the large photo at up to 1600 px on its long side and the
@@ -35,9 +41,13 @@ cause any counter to re-read it.
 With the gate off, the editor and the item rows SHALL be as they were before
 this change, and the database SHALL refuse to set or clear a photo.
 
-#### Scenario: A manager adds a photo
-- **WHEN** a manager picks a portrait camera photo for a dish, frames the large photo as 4:5 and the thumbnail on the dish's best part, and saves
-- **THEN** the dish's large photo and thumbnail are exactly those framings, upright, its row shows the thumbnail, and the customer menu shows it within the cache minute
+#### Scenario: A manager adds a photo with one framing
+- **WHEN** a manager picks a portrait camera photo for a dish, frames it once in the Tall shape the cropper picked, taps Done and saves
+- **THEN** the dish's large photo is exactly that framing, upright, its thumbnail is the largest centred square inside it, its row shows the thumbnail, and the customer menu shows it within the cache minute
+
+#### Scenario: A manager frames the thumbnail separately
+- **WHEN** a manager frames the thumbnail separately on the dish's best part, and later moves the large framing with Adjust
+- **THEN** the thumbnail stays on that part, and becomes the square inside the large framing again only when the manager matches it to the photo
 
 #### Scenario: A manager re-frames a saved photo
 - **WHEN** a manager taps Adjust on a dish's photo

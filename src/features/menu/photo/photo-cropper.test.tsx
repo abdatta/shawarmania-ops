@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -46,6 +46,21 @@ function shown(image: ImageSize): MenuPhotoCrop {
   return { x: x / image.width, y: y / image.height, w: w / image.width, h: h / image.height }
 }
 
+/** The dashed thumbnail square inside the frame, in the photo's own fractions. */
+function thumbnailShown(image: ImageSize): MenuPhotoCrop {
+  const frame = shown(image)
+  const box = screen.getByTestId('crop-frame')
+  const square = screen.getByTestId('crop-thumbnail')
+  const perPixelX = frame.w / px(box.style.width)
+  const perPixelY = frame.h / px(box.style.height)
+  return {
+    x: frame.x + px(square.style.left) * perPixelX,
+    y: frame.y + px(square.style.top) * perPixelY,
+    w: px(square.style.width) * perPixelX,
+    h: px(square.style.height) * perPixelY,
+  }
+}
+
 function expectCovered(image: ImageSize) {
   const crop = shown(image)
   expect(crop.x).toBeGreaterThanOrEqual(-1e-6)
@@ -69,17 +84,32 @@ function drag(dx: number, dy: number, pointerId = 1) {
 }
 
 describe('PhotoCropper', () => {
-  it('starts a landscape photo in 4:3 and a portrait one in 4:5', () => {
+  it('names each shape in a word with its outline, the ratio for screen readers', () => {
     renderCropper(landscape)
-    expect(screen.getByRole('button', { name: 'Landscape 4:3' })).toHaveAttribute(
+    const tabs = within(screen.getByRole('group', { name: 'Shape' })).getAllByRole('button')
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['Wide', 'Square', 'Tall'])
+    expect(tabs.map((tab) => tab.getAttribute('aria-label'))).toEqual([
+      'Wide, 4:3',
+      'Square, 1:1',
+      'Tall, 4:5',
+    ])
+    for (const aspect of ['4:3', '1:1', '4:5']) {
+      expect(screen.getByTestId(`shape-outline-${aspect}`)).toBeInTheDocument()
+    }
+    expect(screen.queryByText(/4:3|1:1|4:5/)).not.toBeInTheDocument()
+  })
+
+  it('starts a landscape photo Wide', () => {
+    renderCropper(landscape)
+    expect(screen.getByRole('button', { name: 'Wide, 4:3' })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
   })
 
-  it('starts a portrait photo in 4:5', () => {
+  it('starts a portrait photo Tall', () => {
     renderCropper(portrait)
-    expect(screen.getByRole('button', { name: 'Portrait 4:5' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Tall, 4:5' })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
@@ -89,7 +119,7 @@ describe('PhotoCropper', () => {
 
   it('keeps the frame’s shape and the frame’s centre when the shape changes', async () => {
     const { user } = renderCropper()
-    await user.click(screen.getByRole('button', { name: 'Square 1:1' }))
+    await user.click(screen.getByRole('button', { name: 'Square, 1:1' }))
     const frame = screen.getByTestId('crop-frame')
     expect(px(frame.style.width)).toBeCloseTo(px(frame.style.height))
     const crop = shown(landscape)
@@ -97,29 +127,84 @@ describe('PhotoCropper', () => {
     expect(crop.y + crop.h / 2).toBeCloseTo(0.5)
   })
 
-  it('hands back exactly what the frames showed, after a drag, a zoom and the thumbnail', async () => {
+  it('makes both pictures from one framing: Done, with the thumbnail the dashed square', async () => {
     const { user, onDone } = renderCropper()
+    expect(screen.getByTestId('cropper-title')).toHaveTextContent('Frame the photo')
     fireEvent.change(screen.getByRole('slider', { name: 'Zoom' }), { target: { value: '2' } })
     drag(-60, 25)
     const large = shown(landscape)
+    const dashed = thumbnailShown(landscape)
+    // The dashed square is the largest square inside the frame, on its centre.
+    expect(dashed.h).toBeCloseTo(large.h)
+    expect(dashed.x + dashed.w / 2).toBeCloseTo(large.x + large.w / 2)
+    expect(within(screen.getByTestId('crop-thumbnail')).getByText('Thumbnail')).toBeVisible()
 
-    await user.click(screen.getByRole('button', { name: 'Next' }))
-    expect(screen.getByTestId('cropper-title')).toHaveTextContent('Step 2 · Menu thumbnail')
-    // The thumbnail starts as the largest square inside the large frame, on its centre.
-    const startSquare = shown(landscape)
-    expect(startSquare.x + startSquare.w / 2).toBeCloseTo(large.x + large.w / 2)
-    expect(startSquare.h).toBeCloseTo(large.h)
-
-    fireEvent.change(screen.getByRole('slider', { name: 'Zoom' }), { target: { value: '3' } })
-    drag(40, -10)
-    const thumb = shown(landscape)
     await user.click(screen.getByRole('button', { name: 'Done' }))
 
     expect(onDone).toHaveBeenCalledTimes(1)
     const framing = onDone.mock.calls[0]![0]
     expect(framing.aspect).toBe('4:3')
     expectSameCrop(framing.largeCrop, large)
+    expectSameCrop(framing.thumbCrop, dashed)
+  })
+
+  it('frames the thumbnail separately, handing back exactly what its frame showed', async () => {
+    const { user, onDone } = renderCropper()
+    fireEvent.change(screen.getByRole('slider', { name: 'Zoom' }), { target: { value: '1.5' } })
+    const large = shown(landscape)
+    const dashed = thumbnailShown(landscape)
+
+    await user.click(screen.getByRole('button', { name: 'Frame the thumbnail separately ›' }))
+    expect(screen.getByTestId('cropper-title')).toHaveTextContent('Thumbnail')
+    expect(screen.queryByRole('group', { name: 'Shape' })).not.toBeInTheDocument()
+    // It starts on the dashed square.
+    expectSameCrop(shown(landscape), dashed)
+
+    fireEvent.change(screen.getByRole('slider', { name: 'Zoom' }), { target: { value: '3' } })
+    drag(40, -10)
+    const thumb = shown(landscape)
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+
+    const framing = onDone.mock.calls[0]![0]
+    expectSameCrop(framing.largeCrop, large)
     expectSameCrop(framing.thumbCrop, thumb)
+  })
+
+  it('keeps a separately framed thumbnail when the frame moves, until Match the photo', async () => {
+    const { user, onDone } = renderCropper()
+    await user.click(screen.getByRole('button', { name: 'Frame the thumbnail separately ›' }))
+    fireEvent.change(screen.getByRole('slider', { name: 'Zoom' }), { target: { value: '2.5' } })
+    drag(30, 30)
+    const thumb = shown(landscape)
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+
+    // Back on the frame: no dashed square, and the link says the thumbnail is its own.
+    expect(screen.getByTestId('cropper-title')).toHaveTextContent('Frame the photo')
+    expect(screen.queryByTestId('crop-thumbnail')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Change the thumbnail ›' })).toBeVisible()
+    fireEvent.change(screen.getByRole('slider', { name: 'Zoom' }), { target: { value: '1.8' } })
+    drag(-80, 0)
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    expectSameCrop(onDone.mock.calls[0]![0].thumbCrop, thumb)
+
+    // Match the photo puts it back inside the frame.
+    await user.click(screen.getByRole('button', { name: 'Change the thumbnail ›' }))
+    await user.click(screen.getByRole('button', { name: 'Match the photo' }))
+    expect(screen.getByTestId('cropper-title')).toHaveTextContent('Frame the photo')
+    const dashed = thumbnailShown(landscape)
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    expectSameCrop(onDone.mock.calls[1]![0].thumbCrop, dashed)
+  })
+
+  it('leaves the thumbnail following the frame when its step is opened and left alone', async () => {
+    const { user, onDone } = renderCropper()
+    await user.click(screen.getByRole('button', { name: 'Frame the thumbnail separately ›' }))
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByTestId('crop-thumbnail')).toBeInTheDocument()
+    drag(-100, 0)
+    const dashed = thumbnailShown(landscape)
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    expectSameCrop(onDone.mock.calls[0]![0].thumbCrop, dashed)
   })
 
   it('cannot be dragged so far that an edge shows', () => {
@@ -184,47 +269,48 @@ describe('PhotoCropper', () => {
     expect(screen.queryByTestId('crop-grid')).not.toBeInTheDocument()
   })
 
-  it('goes Back from the thumbnail to the large photo, and Back from there cancels', async () => {
+  it('goes Back from the thumbnail to the frame, and Back from there cancels', async () => {
     const { user, onCancel, onDone } = renderCropper()
-    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await user.click(screen.getByRole('button', { name: 'Frame the thumbnail separately ›' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByTestId('cropper-title')).toHaveTextContent('Step 1 · Large photo')
+    expect(screen.getByTestId('cropper-title')).toHaveTextContent('Frame the photo')
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(onCancel).toHaveBeenCalled()
     expect(onDone).not.toHaveBeenCalled()
   })
 
-  it('reopens at the saved shape and framings for Adjust', async () => {
+  it('reopens at a saved shape and framing whose thumbnail follows it', async () => {
     const saved: PhotoFraming = {
       aspect: '4:5',
       largeCrop: { x: 0.3, y: 0.1, w: 0.45, h: 0.75 },
-      thumbCrop: { x: 0.4, y: 0.3, w: 0.3, h: 0.4 },
+      // The largest square inside it, centred: 1152 px wide, so 1152 x 1152.
+      thumbCrop: { x: 0.3, y: 0.175, w: 0.45, h: 0.6 },
     }
     const { user, onDone } = renderCropper(landscape, saved)
-    expect(screen.getByRole('button', { name: 'Portrait 4:5' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Tall, 4:5' })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
     expectSameCrop(shown(landscape), saved.largeCrop)
-    await user.click(screen.getByRole('button', { name: 'Next' }))
-    expectSameCrop(shown(landscape), saved.thumbCrop)
+    expectSameCrop(thumbnailShown(landscape), saved.thumbCrop)
     await user.click(screen.getByRole('button', { name: 'Done' }))
     expectSameCrop(onDone.mock.calls[0]![0].largeCrop, saved.largeCrop)
     expectSameCrop(onDone.mock.calls[0]![0].thumbCrop, saved.thumbCrop)
   })
 
-  it('re-centres the thumbnail when the large framing changed since', async () => {
+  it('reopens a separately framed thumbnail as the manager’s, kept as the frame moves', async () => {
     const saved: PhotoFraming = {
       aspect: '4:3',
       largeCrop: { x: 0, y: 0, w: 1, h: 1 },
-      thumbCrop: { x: 0, y: 0, w: 0.2, h: 0.2667 },
+      thumbCrop: { x: 0.1, y: 0.2, w: 0.3, h: 0.4 },
     }
-    const { user } = renderCropper(landscape, saved)
-    drag(10, 0)
+    const { user, onDone } = renderCropper(landscape, saved)
+    expect(screen.queryByTestId('crop-thumbnail')).not.toBeInTheDocument()
     fireEvent.change(screen.getByRole('slider', { name: 'Zoom' }), { target: { value: '2' } })
-    const large = shown(landscape)
-    await user.click(screen.getByRole('button', { name: 'Next' }))
-    const square = shown(landscape)
-    expect(square.x + square.w / 2).toBeCloseTo(large.x + large.w / 2)
+    drag(10, 0)
+    await user.click(screen.getByRole('button', { name: 'Change the thumbnail ›' }))
+    expectSameCrop(shown(landscape), saved.thumbCrop)
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    expectSameCrop(onDone.mock.calls[0]![0].thumbCrop, saved.thumbCrop)
   })
 })

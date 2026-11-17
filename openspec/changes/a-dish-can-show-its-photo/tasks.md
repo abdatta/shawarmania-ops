@@ -45,6 +45,11 @@ every visual question on the customer page.
   cancel, a failed upload keeping the other edits. Tag them
   `@cg-on:dish-photos`. Check phone and tablet in both themes, the cropper by
   touch emulation; run `npm run contrast`.
+- [x] 2.7 Owner revision, 2026-11-17 (design D5): one framing by default, the
+  thumbnail the dashed square inside it; **Frame the thumbnail separately**
+  and **Match the photo**; a separately framed thumbnail kept when the large
+  frame moves; shape tabs reading **Wide**, **Square**, **Tall** with a drawn
+  outline. Its component and browser tests, then new screenshots for 2.6.
 - [ ] 2.6 **Owner checkpoint**: show the owner the editor and cropper in demo
   with the gate on (screenshots or the staging site), and record their approval
   or requested changes in `design.md` before live work starts.

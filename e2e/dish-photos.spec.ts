@@ -60,8 +60,8 @@ async function pick(page: Page, file: Awaited<ReturnType<typeof photo>>) {
 
 async function frame(page: Page, shape?: string) {
   if (shape) await page.getByRole('button', { name: shape }).click()
-  await page.getByRole('button', { name: 'Next' }).click()
-  await expect(page.getByTestId('cropper-title')).toHaveText('Step 2 · Menu thumbnail')
+  await expect(page.getByTestId('cropper-title')).toHaveText('Frame the photo')
+  await expect(page.getByTestId('crop-thumbnail')).toBeVisible()
   await page.getByRole('button', { name: 'Done' }).click()
   await expect(page.getByTestId('photo-cropper')).toBeHidden()
 }
@@ -81,9 +81,9 @@ test.beforeEach(async ({ page }) => {
 
 test('adds a photo in each shape, adjusts, changes and removes it', ON, async ({ page }) => {
   const shapes = [
-    ['Classic Chicken Shawarma', 'Landscape 4:3', 4 / 3, [2400, 1800]],
-    ['Paneer Shawarma', 'Square 1:1', 1, [2000, 1500]],
-    ['Smashed Veg Burger', 'Portrait 4:5', 4 / 5, [1500, 2000]],
+    ['Classic Chicken Shawarma', 'Wide, 4:3', 4 / 3, [2400, 1800]],
+    ['Paneer Shawarma', 'Square, 1:1', 1, [2000, 1500]],
+    ['Smashed Veg Burger', 'Tall, 4:5', 4 / 5, [1500, 2000]],
   ] as const
   for (const [dish, shape, ratio, [width, height]] of shapes) {
     const sheet = await openEditor(page, dish)
@@ -101,7 +101,7 @@ test('adds a photo in each shape, adjusts, changes and removes it', ON, async ({
   const before = await rowPhoto(page, 'Classic Chicken Shawarma').getAttribute('src')
   let sheet = await openEditor(page, 'Classic Chicken Shawarma')
   await sheet.getByRole('button', { name: 'Adjust' }).click()
-  await expect(page.getByRole('button', { name: 'Landscape 4:3' })).toHaveAttribute(
+  await expect(page.getByRole('button', { name: 'Wide, 4:3' })).toHaveAttribute(
     'aria-pressed',
     'true',
   )
@@ -143,6 +143,40 @@ test('Cancel discards a picked photo', ON, async ({ page }) => {
   const again = await openEditor(page, 'Classic Chicken Shawarma')
   await expect(again.getByTestId('menu-photo-empty')).toBeVisible()
 })
+
+test(
+  'frames the thumbnail separately and keeps it through a later Adjust',
+  ON,
+  async ({ page }) => {
+    let sheet = await openEditor(page, 'Classic Chicken Shawarma')
+    await pick(page, await photo(page, 2400, 1800))
+    await page.getByRole('button', { name: 'Frame the thumbnail separately ›' }).click()
+    await expect(page.getByTestId('cropper-title')).toHaveText('Thumbnail')
+    await page.getByTestId('crop-stage').focus()
+    for (const key of ['+', '+', '+', 'ArrowRight']) await page.keyboard.press(key)
+    await page.getByRole('button', { name: 'Done' }).click()
+    await expect(page.getByTestId('photo-cropper')).toBeHidden()
+    await save(sheet)
+
+    // Moving the large frame on Adjust leaves the thumbnail as the manager framed it.
+    sheet = await openEditor(page, 'Classic Chicken Shawarma')
+    await sheet.getByRole('button', { name: 'Adjust' }).click()
+    await expect(page.getByTestId('crop-thumbnail')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Change the thumbnail ›' })).toBeVisible()
+    await page.getByTestId('crop-stage').focus()
+    await page.keyboard.press('+')
+    await page.getByRole('button', { name: 'Done' }).click()
+    await save(sheet)
+
+    // Saved and reopened, it is still the manager's; Match the photo puts the
+    // dashed square back.
+    sheet = await openEditor(page, 'Classic Chicken Shawarma')
+    await sheet.getByRole('button', { name: 'Adjust' }).click()
+    await page.getByRole('button', { name: 'Change the thumbnail ›' }).click()
+    await page.getByRole('button', { name: 'Match the photo' }).click()
+    await expect(page.getByTestId('crop-thumbnail')).toBeVisible()
+  },
+)
 
 test('a failed upload keeps the dish’s other edits and retries', ON, async ({ page, context }) => {
   const sheet = await openEditor(page, 'Classic Chicken Shawarma')
@@ -241,7 +275,8 @@ for (const viewport of [
           expect(box.x).toBeGreaterThanOrEqual(0)
           expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1)
         }
-        await expect(page.getByRole('button', { name: 'Next' })).toBeInViewport()
+        await expect(page.getByRole('button', { name: 'Done' })).toBeInViewport()
+        await expect(page.getByRole('group', { name: 'Shape' })).toBeInViewport()
         await testInfo.attach(`cropper-${viewport.name}-${theme}`, {
           body: await page.screenshot(),
           contentType: 'image/png',
