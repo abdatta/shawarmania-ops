@@ -12,4 +12,5 @@
   _(12 November: before 1.3 both new tests failed; after it, 33 of 33 pass.)_
 - [x] 2.2 `npm test`, `npm run lint`, `npm run typecheck`, `npm run build` green; pushed to `stage`, Staging green
   _(12 November: 3,377 unit tests, lint, both typechecks and the build green locally; Staging run 43184358794 green on `f632cc42`.)_
-- [ ] 2.3 After the owner's Promote, a real 26 Oct – 01 Nov 2026 workbook upload reports the week already settled and agreeing (the sync settled it first)
+- [x] 2.3 After the owner's Promote, a real 26 Oct – 01 Nov 2026 workbook upload reports the week already settled and agreeing (the sync settled it first)
+  _(Waived by the owner, 16 November, with no upload made. Live with Deploy 43190699464 on 12 November; the sync reconciled the week at ₹163.87 on both sides, read in production on 15 November.)_
