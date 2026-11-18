@@ -13,7 +13,7 @@ import type {
   SignInRecord,
   SyncStateKind,
 } from '@/domain'
-import { instantOnBusinessDay } from '@/domain'
+import { instantOnBusinessDay, resolveBusinessDate } from '@/domain'
 import type { PositionReading } from '@/lib/geolocation'
 
 import type { BillingCommand } from '../../shared/billing-command'
@@ -589,6 +589,19 @@ export function deactivationDay(deactivatedAt: string): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(
     new Date(deactivatedAt),
   )
+}
+
+/**
+ * The business day of a deactivation at an outlet: the day attendance notes it
+ * from. Not `deactivationDay`, which is the calendar day and belongs to Team and
+ * Remove: somebody switched off at 00:55, during late service, was switched off
+ * on the business day still running, and its roll-call says so.
+ */
+export function deactivationBusinessDay(
+  deactivatedAt: string,
+  outlet: Pick<Tables<'outlets'>, 'business_day_cutover'>,
+): string {
+  return resolveBusinessDate(deactivatedAt, outlet.business_day_cutover)
 }
 
 /** The one-time code, returned once and never retrievable again. */

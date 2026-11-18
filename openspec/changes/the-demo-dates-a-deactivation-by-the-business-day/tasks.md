@@ -23,3 +23,11 @@
 - [x] 3.5 `npm test` twice on the real clock inside the window (01:20 and 01:50 IST): 3,362 and then 3,363 of 3,364 pass, every attendance, accounts and demo-mock test among them. `running-sync-check.test.tsx` failed both times and `menu-surface.test.tsx` timed out once; both pass alone. The first measures 2.4 s of real time against a three-second timer and the second ran out its 20 s under load, so neither reads a date or this change. Not investigated further.
 - [ ] 3.6 Before the Promote, because this touches the demo's mock: the browser suites, which the push to `stage` runs. Not run locally. The database gates prove nothing here, since no migration, policy or function changes.
 - [ ] 3.7 Pushed to `stage` when the owner asks, Staging green, and the staging build carries the commit.
+
+## 4. The roll-call's own note (owner, 18 November: fix it here)
+
+- [x] 4.1 `adapters.ts`: `deactivationBusinessDay`, the business day of the moment by an outlet's cutover. `outlet-attendance.tsx`: the By day note counts from it, by the outlet the row belongs to, and from the calendar day only where a row has no outlet in scope.
+- [x] 4.2 `features/attendance/deactivate-then-leave.test.tsx`: switched off at 02:00, noted on the business day before and not listed the day after. Fails with 4.1's screen change reverted (listed, no note); passes with it.
+- [x] 4.3 Spec delta: one added requirement in `attendance-and-location`. `docs/SCREENS.md`: the 02:00 switch-off is noted on the day it belongs to.
+- [x] 4.4 `npm run build` (which typechecks), `npm run lint`, and the three touched test files once (96 tests). In the built demo at 02:11 IST, inside the window: Demo Helper deactivated from Team reads *Deactivated · 19 Nov* there and *Prep · deactivated* on tonight's roll-call, business day 18 November. No further sweep or full run, on the owner's word; the push to `stage` runs the rest.
+- [ ] 4.5 After the Promote: a person deactivated late at night reads *deactivated* on that night's roll-call. Nobody has to stage it; it shows the first time it happens.

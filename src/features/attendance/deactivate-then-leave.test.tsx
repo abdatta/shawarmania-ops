@@ -101,6 +101,22 @@ describe('a deactivated person in attendance', () => {
     expect(screen.queryByTestId(`day-${BILLER}`)).not.toBeInTheDocument()
   })
 
+  it('notes somebody switched off in the night on the business day still running', async () => {
+    const user = userEvent.setup()
+    // 02:00 on yesterday's calendar date, before the 04:00 cutover: the business
+    // day two back. Dated by the calendar, that day listed them with no note.
+    const { today } = await demoWith((biller, day) => {
+      biller.deactivatedAt = `${shiftBusinessDate(day, -1)}T02:00:00+05:30`
+    })
+
+    await stepBack(user, 1, shiftBusinessDate(today, -1))
+    expect(screen.queryByTestId(`day-${BILLER}`)).not.toBeInTheDocument()
+
+    await stepBack(user, 1, shiftBusinessDate(today, -2))
+    const card = await screen.findByTestId(`day-${BILLER}`)
+    expect(card).toHaveTextContent('deactivated')
+  })
+
   it('still lists a recorded day after the deactivation', async () => {
     const user = userEvent.setup()
     const { adapters, today } = await demoWith()

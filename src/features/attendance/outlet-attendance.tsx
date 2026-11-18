@@ -31,6 +31,7 @@ import {
   AttendanceActionError,
   isRecoverableSetRefusal,
   isStaffAt,
+  deactivationBusinessDay,
   deactivationDay,
   wasActiveOn,
   wasStaffAtOn,
@@ -959,6 +960,7 @@ function OutletAxis({
     )
     if (record === null && theirs.length === 0) return []
     const worked = outletOf(record?.outletId ?? null)
+    const outlet = worked ?? theirs[0] ?? null
     return [
       {
         person: {
@@ -966,11 +968,16 @@ function OutletAxis({
           fullName: person.fullName,
           note: person.roleTitle,
           // Noted from the day they were deactivated, not on days they could
-          // still sign in, once that day is known (design D8).
+          // still sign in, once that day is known (design D8). That day is the
+          // business day of the moment at the row's outlet: a switch-off after
+          // midnight and before the cutover is noted on the day still running.
           deactivated:
             !person.isActive &&
             (person.deactivatedAt === null ||
-              businessDate >= deactivationDay(person.deactivatedAt)),
+              businessDate >=
+                (outlet
+                  ? deactivationBusinessDay(person.deactivatedAt, outlet)
+                  : deactivationDay(person.deactivatedAt))),
           offList: false,
         },
         record,
@@ -978,7 +985,7 @@ function OutletAxis({
           accountedForElsewhere: day?.elsewhere.includes(person.id) ?? false,
         }),
         late: record !== null && worked !== null && isLate(record, worked.business_day_cutover),
-        outlet: worked ?? theirs[0] ?? null,
+        outlet,
       },
     ]
   })
