@@ -21,8 +21,8 @@
 - [x] 3.3 The machine's time zone, by reading rather than running (the owner's call, 18 November): the fix and its tests take no local or UTC date. The day comes from `resolveBusinessDate` (Asia/Kolkata by name), instants are written with `+05:30`, and the pinned instants are absolute, so Los Angeles, UTC on CI and India read the same.
 - [x] 3.4 `npm run format:check` and `npm run lint` (no errors); `npm run build`; the built demo opened at 01:46 IST, inside the window: the Prep Cook reads *Prep · deactivated* today, and the Biller is present on 7 November, listed absent and deactivated on the 8th, and gone from the 9th.
 - [x] 3.5 `npm test` twice on the real clock inside the window (01:20 and 01:50 IST): 3,362 and then 3,363 of 3,364 pass, every attendance, accounts and demo-mock test among them. `running-sync-check.test.tsx` failed both times and `menu-surface.test.tsx` timed out once; both pass alone. The first measures 2.4 s of real time against a three-second timer and the second ran out its 20 s under load, so neither reads a date or this change. Not investigated further.
-- [ ] 3.6 Before the Promote, because this touches the demo's mock: the browser suites, which the push to `stage` runs. Not run locally. The database gates prove nothing here, since no migration, policy or function changes.
-- [ ] 3.7 Pushed to `stage` when the owner asks, Staging green, and the staging build carries the commit.
+- [x] 3.6 Before the Promote, because this touches the demo's mock: the browser suites, which the push to `stage` ran green (Staging run 44416616604, 18 November). Not run locally. The database gates prove nothing here, since no migration, policy or function changes.
+- [x] 3.7 Pushed to `stage` on the owner's word, rebased onto it as `4ce5c4ee`; Staging run 44416616604 green, and the staging bundle carries `4ce5c4ee`.
 
 ## 4. The roll-call's own note (owner, 18 November: fix it here)
 
