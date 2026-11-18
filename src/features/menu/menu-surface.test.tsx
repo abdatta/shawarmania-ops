@@ -510,6 +510,35 @@ describe('MenuSurface — the manager', () => {
   })
 })
 
+describe('MenuSurface — a long description', () => {
+  it('wraps in a box that grows, and still saves as one line', async () => {
+    const user = userEvent.setup()
+    const { adapters } = renderMenu()
+    await screen.findByTestId('menu-list')
+    await user.click(screen.getByRole('button', { name: 'Actions for Classic Chicken Shawarma' }))
+    await user.click(screen.getByTestId(`edit-${MENU_ITEM_CLASSIC_ID}`))
+
+    const description = screen.getByLabelText('Description (optional)')
+    // A text area, so a long description wraps instead of running sideways.
+    expect(description.tagName).toBe('TEXTAREA')
+
+    await user.clear(description)
+    await user.click(description)
+    // A pasted line break becomes a space: the counter, the receipt and the
+    // customer menu have only ever shown a description on one line.
+    await user.paste('Crispy chicken,\nfresh vegetables')
+    expect(description).toHaveValue('Crispy chicken, fresh vegetables')
+
+    // Enter saves, as it did in the one-line box, and adds no line break.
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    const classic = (await adapters.menu.listMenu(OUTLET_KALYANI_ID))
+      .flatMap((entry) => entry.items)
+      .find((item) => item.id === MENU_ITEM_CLASSIC_ID)!
+    expect(classic.description).toBe('Crispy chicken, fresh vegetables')
+  })
+})
+
 /**
  * The Biller's read-only copy of this screen is retired — the Counter's own menu
  * column answers "is that still on?" without leaving the till, so there is no

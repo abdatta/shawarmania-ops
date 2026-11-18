@@ -14,6 +14,7 @@ import { Card } from '@/components/ui/card'
 import { CategoryInput } from '@/components/ui/category-input'
 import { CategoryMatchDialog } from '@/components/ui/category-match-dialog'
 import { Input } from '@/components/ui/input'
+import { TextArea } from '@/components/ui/text-area'
 import { LoadingList, LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { RevealAdded } from '@/components/ui/reveal-added'
@@ -738,8 +739,9 @@ function OutletMenuSurface({
             )}
           </Field>
           <Field label="Description (optional)" id="menu-item-description">
-            <Input
+            <TextArea
               id="menu-item-description"
+              singleLine
               value={draft.description}
               onChange={(event) => setDraft({ ...draft, description: event.target.value })}
             />
