@@ -18,7 +18,7 @@ import {
   isStaffRole,
   liveAssignments,
 } from '../adapters'
-import { shiftBusinessDate } from '@/domain'
+import { instantOnBusinessDay, resolveBusinessDate, shiftBusinessDate } from '@/domain'
 import { canonicalUsername } from '../../../shared/username'
 import {
   accountFixtures,
@@ -27,6 +27,7 @@ import {
   PENDING_ACCOUNT_ID,
   RESET_PENDING_ACCOUNT_ID,
 } from './fixtures/accounts'
+import { OUTLET_KALYANI_ID, outletFixtures } from './fixtures/outlets'
 
 /**
  * The mock accounts adapter. Fixtures in, promises out, no I/O anywhere: the
@@ -59,6 +60,27 @@ function today(): string {
  */
 function kolkataToday(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date())
+}
+
+/**
+ * The moment a `DEACTIVATED_AT` seed stands for: that time on the business day
+ * `daysAgo` back from the demo's today, never later than now.
+ *
+ * The demo's today is Kalyani's business day, as the attendance mock reckons
+ * it, and not the Kolkata calendar day. The two differ from midnight to the
+ * cutover, and the attendance seeds these sit beside count business days: dated
+ * by the calendar, "lunchtime today" fell on a day the roll-call had not reached
+ * yet, so for those hours the Prep Cook lost their deactivated note and the
+ * Biller's last day slid one day off their recorded ones.
+ */
+function seededDeactivation(seed: { daysAgo: number; time: string }): string {
+  const cutover =
+    outletFixtures.find((outlet) => outlet.id === OUTLET_KALYANI_ID)?.business_day_cutover ??
+    '04:00:00'
+  const day = shiftBusinessDate(resolveBusinessDate(new Date(), cutover), -seed.daysAgo)
+  return new Date(
+    Math.min(Date.now(), Date.parse(instantOnBusinessDay(day, seed.time, cutover))),
+  ).toISOString()
 }
 
 const OWNER_ACCESS_IN_DATABASE = new AccountActionError(
@@ -113,16 +135,7 @@ export function createDemoAccounts(): AccountSummary[] {
       phone: profile.phone,
       isActive: profile.is_active,
       deactivatedAt:
-        switchedOff === undefined
-          ? profile.deactivated_at
-          : new Date(
-              Math.min(
-                Date.now(),
-                Date.parse(
-                  `${shiftBusinessDate(kolkataToday(), -switchedOff.daysAgo)}T${switchedOff.time}:00+05:30`,
-                ),
-              ),
-            ).toISOString(),
+        switchedOff === undefined ? profile.deactivated_at : seededDeactivation(switchedOff),
       hasSignedIn,
       roleTitle: profile.role_title,
       assignments,

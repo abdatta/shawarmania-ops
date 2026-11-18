@@ -179,6 +179,29 @@ describe('the outlet attendance day', () => {
     expect(within(card).getByText(/deactivated/)).toBeInTheDocument()
   })
 
+  // The same reading with the clock pinned, because the case above runs at
+  // whatever hour the suite does and failed only from midnight to the 04:00
+  // cutover: the demo's today is a business day, still yesterday's date for
+  // those hours, and the deactivation had been seeded by the calendar. Only
+  // `Date` is faked; timers stay real.
+  it.each([
+    ['after midnight, before the cutover', '2026-11-19T00:55:00+05:30'],
+    ['at midday, before the seeded lunchtime', '2026-11-18T12:12:00+05:30'],
+    ['late in the evening', '2026-11-18T23:30:00+05:30'],
+  ])('notes a deactivated person on the day, %s', async (_when, now) => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(now))
+    try {
+      renderDay()
+
+      const card = await screen.findByTestId(`day-${DEMO_PREP_COOK_ACCOUNT_ID}`)
+      expect(within(card).getByText(/Demo Prep Cook/)).toBeInTheDocument()
+      expect(within(card).getByText(/deactivated/)).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('distinguishes arrivals waiting for approval, and counts them', async () => {
     renderDay()
 

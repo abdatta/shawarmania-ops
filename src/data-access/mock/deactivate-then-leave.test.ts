@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import { shiftBusinessDate } from '@/domain'
+import { resolveBusinessDate, shiftBusinessDate } from '@/domain'
 
 import { deactivationDay, liveAssignments, wasActiveOn } from '../adapters'
 import { createDemoAccounts, createMockAccountsAdapter } from './accounts'
@@ -72,14 +72,36 @@ describe('a deactivation in the demo', () => {
     expect(find(DEMO_HELPER_ACCOUNT_ID).deactivatedAt).toBeNull()
   })
 
-  it('carries the deactivated Biller’s day, ten days back', () => {
-    const accounts = createDemoAccounts()
-    const biller = accounts.find((account) => account.id === DEMO_DEACTIVATED_BILLER_ACCOUNT_ID)!
-    expect(biller.isActive).toBe(false)
-    expect(deactivationDay(biller.deactivatedAt!)).toBe(shiftBusinessDate(kolkataToday(), -10))
-    const prepCook = accounts.find((a) => a.id === DEMO_PREP_COOK_ACCOUNT_ID)!
-    expect(deactivationDay(prepCook.deactivatedAt!)).toBe(kolkataToday())
-    expect(Date.parse(prepCook.deactivatedAt!)).toBeLessThanOrEqual(Date.now())
+  // The demo's today is Kalyani's business day, which from midnight to the 04:00
+  // cutover is still yesterday's date. The seeds count back from that day, as
+  // the attendance seeds beside them do; counted from the calendar, the Prep
+  // Cook's "lunchtime today" landed on a day the roll-call had not reached and
+  // the Biller's last day slid one off. The clock is pinned on both sides of
+  // midnight because the suite's own hour is what hid this.
+  it.each([
+    ['in the afternoon', '2026-11-18T15:30:00+05:30', '2026-11-18'],
+    ['after midnight, before the cutover', '2026-11-19T00:55:00+05:30', '2026-11-18'],
+    ['in the morning, before the seeded lunchtime', '2026-11-19T09:00:00+05:30', '2026-11-19'],
+  ])('dates the seeded deactivations by the demo’s business day, %s', (_when, now, today) => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(now))
+    try {
+      const accounts = createDemoAccounts()
+      const biller = accounts.find((account) => account.id === DEMO_DEACTIVATED_BILLER_ACCOUNT_ID)!
+      expect(biller.isActive).toBe(false)
+      // Ten business days back, at 15:00: the day after their last recorded one.
+      expect(biller.deactivatedAt).toBe(
+        new Date(`${shiftBusinessDate(today, -10)}T15:00:00+05:30`).toISOString(),
+      )
+      const prepCook = accounts.find((a) => a.id === DEMO_PREP_COOK_ACCOUNT_ID)!
+      // On the day the roll-call opens on, by the business day and by the
+      // calendar day the note is drawn from, and never in the future.
+      expect(resolveBusinessDate(prepCook.deactivatedAt!, '04:00:00')).toBe(today)
+      expect(deactivationDay(prepCook.deactivatedAt!)).toBe(today)
+      expect(Date.parse(prepCook.deactivatedAt!)).toBeLessThanOrEqual(Date.now())
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

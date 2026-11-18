@@ -59,11 +59,12 @@ export const DEMO_FORMER_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000009'
 export const DEMO_DEACTIVATED_BILLER_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000017'
 
 /**
- * When each deactivated account was switched off: days before the demo's today
- * and the Kolkata time (a-deactivated-person-leaves-in-two-steps, design D2,
- * D10). Days back rather than dates, as the attendance seeds are, so the demo
- * reads the same whenever it is opened; the accounts mock turns them into
- * instants, never later than now. The Biller went at 15:00, after Kalyani's
+ * When each deactivated account was switched off: business days before the
+ * demo's today and the Kolkata time (a-deactivated-person-leaves-in-two-steps,
+ * design D2, D10). Days back rather than dates, and business days rather than
+ * calendar ones, as the attendance seeds are, so the demo reads the same
+ * whenever it is opened, the hours after midnight included; the accounts mock
+ * turns them into instants, never later than now. The Biller went at 15:00, after Kalyani's
  * 13:00 deadline, so that day still lists them; the Prep Cook at lunchtime
  * today. The former staff member has none: they left before it was recorded.
  */
