@@ -177,7 +177,7 @@ function CropperSteps({
   const onLarge = step === 'large'
   return (
     <div className="flex h-full flex-col" data-testid="photo-cropper">
-      <header className="space-y-3 px-4 pt-4">
+      <header className="space-y-3 px-4 pt-4 pb-4">
         <h2 className="text-base font-bold" data-testid="cropper-title">
           {onLarge ? 'Frame the photo' : 'Thumbnail'}
         </h2>
@@ -482,7 +482,7 @@ function CropStage({
         onPointerUp={onPointerEnd}
         onPointerCancel={onPointerEnd}
         onKeyDown={onKeyDown}
-        className="relative min-h-0 flex-1 cursor-grab touch-none overflow-hidden outline-none select-none focus-visible:ring-2 focus-visible:ring-focus-ring active:cursor-grabbing"
+        className="group relative min-h-0 flex-1 cursor-grab touch-none overflow-hidden outline-none select-none active:cursor-grabbing"
       >
         <img
           src={imageUrl}
@@ -501,7 +501,9 @@ function CropStage({
           data-testid="crop-frame"
           aria-hidden
           className={cn(
-            'pointer-events-none absolute border border-on-photo-stage/80 shadow-[0_0_0_100vmax_var(--photo-stage-dim)]',
+            // Keyboard focus is shown on the frame itself, which is what the keys
+            // move, not as a ring around the whole stage (owner, 2026-11-17).
+            'pointer-events-none absolute border border-on-photo-stage/80 shadow-[0_0_0_100vmax_var(--photo-stage-dim)] group-focus-visible:border-2 group-focus-visible:border-on-photo-stage',
             rounded ? 'rounded-2xl' : 'rounded-sm',
           )}
           style={{ left: frameLeft, top: frameTop, width: frame.width, height: frame.height }}
