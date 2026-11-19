@@ -62,6 +62,19 @@ async function row(client: SupabaseClient<Database>) {
   return data
 }
 
+/**
+ * The counter's menu with each dish's save time left out: every Save in the
+ * editor re-saves the dish's own fields, as it always has, which stamps
+ * `updated_at`. What must not change is anything the counter shows or prices
+ * from. That a photo write leaves the dish row itself untouched is held by
+ * pgTAP (99_a_dish_can_show_its_photo.sql).
+ */
+function withoutSaveStamps<T>(menu: T): T {
+  return JSON.parse(JSON.stringify(menu), (key, value: unknown) =>
+    key === 'updated_at' ? undefined : value,
+  ) as T
+}
+
 async function openEditor(page: Page) {
   await page
     .getByRole('button', { name: 'Actions for Classic Chicken Shawarma', exact: true })
@@ -79,7 +92,9 @@ test('a manager adds, adjusts, changes and removes a dish photo, and another out
     throw new Error('This probe needs the local stack')
   const manager = await signedIn('admin.kalyani@login.shawarmania.invalid')
   const stranger = await signedIn('admin.kanchrapara@login.shawarmania.invalid')
-  const counterMenu = await createSupabaseMenuAdapter(manager).readOutletMenu(KAL)
+  const counterMenu = withoutSaveStamps(
+    await createSupabaseMenuAdapter(manager).readOutletMenu(KAL),
+  )
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
 
@@ -182,7 +197,9 @@ test('a manager adds, adjusts, changes and removes a dish photo, and another out
     await expect(page.getByTestId(`menu-photo-row-${CLASSIC}`)).toHaveCount(0)
 
     // None of it reached the menu the counter reads.
-    expect(await createSupabaseMenuAdapter(manager).readOutletMenu(KAL)).toEqual(counterMenu)
+    expect(withoutSaveStamps(await createSupabaseMenuAdapter(manager).readOutletMenu(KAL))).toEqual(
+      counterMenu,
+    )
     expect(errors).toEqual([])
   } finally {
     await manager.rpc('clear_menu_item_photo', { p_item_id: CLASSIC })

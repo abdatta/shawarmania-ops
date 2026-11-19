@@ -182,8 +182,14 @@ select throws_ok(format('select pg_temp.set_photo(%L, %L)', :'DISH',
     'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd'),
   '22023', null, 'a key whose files were never uploaded is refused');
 
+create temp table dish_before on commit drop as
+  select * from public.menu_items where id = :'DISH';
+grant select on dish_before to authenticated;
 select is(pg_temp.set_photo(:'DISH', :'K1'), null::jsonb,
   'the manager sets the dish''s first photo, and there was none before');
+select is((select to_jsonb(m) from public.menu_items m where m.id = :'DISH'),
+          (select to_jsonb(b) from dish_before b),
+  'setting a photo leaves the dish''s own row exactly as it was, so no counter re-reads its menu');
 select is((select photo_key from public.menu_item_photos where item_id = :'DISH'), :'K1',
   'the row holds the key');
 
