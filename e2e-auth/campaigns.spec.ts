@@ -19,7 +19,10 @@ import { OUTLET_KALYANI } from './tills'
  * this one waiting ahead of its own.
  *
  * The seed's `Test Customer (Synthetic)` has bills at Kalyani from today and
- * two days ago, so the last thirty days at Kalyani find them.
+ * two days ago, so the last thirty days at Kalyani find them. They are found
+ * by the list's search, not by reading the list: the list loads a page at a
+ * time, most orders first, and specs that run before this one on the same
+ * stack add customers ahead of them (staging run 44556801404).
  */
 
 const RUN = Date.now().toString(36).slice(-6)
@@ -79,9 +82,12 @@ test('the owner writes, filters, submits, pauses and stops a campaign', async ({
     await kalyani.click()
   }
   const people = page.getByTestId('audience-people')
+  const search = page.getByTestId('audience-search')
+  await search.fill(SHARED)
   await expect(people).toContainText(SHARED)
   // A name and four digits; never the number.
   await expect(people).not.toContainText('9000000001')
+  await search.fill('')
   await page.getByTestId('audience-filter').click()
   await page
     .getByRole('dialog', { name: 'Filter customers' })
@@ -90,7 +96,9 @@ test('the owner writes, filters, submits, pauses and stops a campaign', async ({
     .click()
   await page.getByTestId('audience-filter-done').click()
   await expect(page.getByTestId('audience-filter-summary')).toHaveText('Last 30 days')
+  await search.fill(SHARED)
   await expect(people).toContainText(SHARED)
+  await search.fill('')
   await page.getByTestId('audience-select-all').check()
   await expect(page.getByTestId('audience-sheet-count')).not.toHaveText('0 selected')
   await page.getByTestId('audience-done').click()
@@ -117,9 +125,10 @@ test('the owner writes, filters, submits, pauses and stops a campaign', async ({
   await expect(page.getByTestId('campaign-state')).toHaveText('stopped')
 
   await page.getByRole('button', { name: 'Back' }).click()
+  // By its own name: a retry's first attempt may have left a Monsoon of its own.
   await expect(
-    page.getByTestId('campaign-list').getByRole('link', { name: /Monsoon/ }),
-  ).toContainText(name)
+    page.getByTestId('campaign-list').getByRole('link').filter({ hasText: name }),
+  ).toBeVisible()
 })
 
 test('a manager has no Campaigns entry, and a typed address is not a page', async ({ page }) => {
