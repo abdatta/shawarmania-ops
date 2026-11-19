@@ -20,13 +20,16 @@ import { OUTLET_KALYANI } from './tills'
  *
  * The seed's `Test Customer (Synthetic)` has bills at Kalyani from today and
  * two days ago, so the last thirty days at Kalyani find them. They are found
- * by the list's search, not by reading the list: the list loads a page at a
- * time, most orders first, and specs that run before this one on the same
- * stack add customers ahead of them (staging run 44556801404).
+ * by the list's search, by their number, not by reading the list or by name:
+ * the list loads a page at a time, most orders first, and specs that run
+ * before this one on the same stack add customers ahead of them (staging run
+ * 44556801404); and a billing spec rings that number under another name,
+ * which the customer's saved name then is (run 44559955525, gates on).
  */
 
 const RUN = Date.now().toString(36).slice(-6)
-const SHARED = 'Test Customer (Synthetic)'
+/** The seed customer's number, which no spec changes. Only its last four may be shown. */
+const SHARED_NUMBER = '9000000001'
 
 /** A 1×1 PNG: the page draws it again as a JPEG before uploading. */
 const PIXEL = Buffer.from(
@@ -83,10 +86,10 @@ test('the owner writes, filters, submits, pauses and stops a campaign', async ({
   }
   const people = page.getByTestId('audience-people')
   const search = page.getByTestId('audience-search')
-  await search.fill(SHARED)
-  await expect(people).toContainText(SHARED)
-  // A name and four digits; never the number.
-  await expect(people).not.toContainText('9000000001')
+  await search.fill(SHARED_NUMBER)
+  // Found, shown by its last four digits, and never by the whole number.
+  await expect(people).toContainText('0001')
+  await expect(people).not.toContainText(SHARED_NUMBER)
   await search.fill('')
   await page.getByTestId('audience-filter').click()
   await page
@@ -96,8 +99,8 @@ test('the owner writes, filters, submits, pauses and stops a campaign', async ({
     .click()
   await page.getByTestId('audience-filter-done').click()
   await expect(page.getByTestId('audience-filter-summary')).toHaveText('Last 30 days')
-  await search.fill(SHARED)
-  await expect(people).toContainText(SHARED)
+  await search.fill(SHARED_NUMBER)
+  await expect(people).toContainText('0001')
   await search.fill('')
   await page.getByTestId('audience-select-all').check()
   await expect(page.getByTestId('audience-sheet-count')).not.toHaveText('0 selected')
