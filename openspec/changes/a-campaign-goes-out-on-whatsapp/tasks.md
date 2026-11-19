@@ -264,7 +264,13 @@ customer.
 
 ## 5. Staging rehearsal
 
-- [ ] 5.1 Push to `stage`; read the Staging run green.
+- [x] 5.1 Push to `stage`; read the Staging run green.
+      *(2026-11-19: run 44562987411 on `45ed67ae`, all 25 jobs green, staging
+      migrated and published. Two runs before it failed only the owner's new
+      campaign browser spec, in the fourth auth shard: the seed customer it
+      looked for had been pushed off the list's first page, then renamed, by
+      specs that run earlier there; it now searches by number. The smoke job
+      failed once at a staging sign-in and passed on a rerun.)*
 - [ ] 5.2 On the staging project, with a WhatsApp account that is **not** the
       business number as the sender and the owners' own numbers as the only
       customers: link by QR code shown through a temporary link; send a test; schedule
