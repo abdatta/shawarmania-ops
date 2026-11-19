@@ -37,6 +37,7 @@ import { useSession } from '@/session/context'
 import { MenuDiscountsCard } from './menu-discounts'
 import { MenuHighlightsCard } from './menu-highlights'
 import { MenuPhotoField } from './photo/menu-photo-field'
+import { MenuPhotoViewer } from './photo/menu-photo-viewer'
 import { UNCHANGED, type PhotoDraft } from './photo/photo-draft'
 import { PhotoPrepareError } from './photo/prepare-photo'
 import { savePhotoDraft, type PhotoSaveProgress } from './photo/save-photo'
@@ -106,6 +107,9 @@ function OutletMenuSurface({
   // The dish a failed photo belongs to, saved already: Retry and a second Save
   // change it rather than create it again.
   const [photoItem, setPhotoItem] = useState<Tables<'menu_items'> | null>(null)
+  // The dish whose saved photo is open, enlarged, from its row.
+  const [viewing, setViewing] = useState<Tables<'menu_items'> | null>(null)
+  const viewingPhoto = viewing ? photoList.get(viewing.id) : undefined
   const publicMenuUrl = publicMenuLink(publicMenuSlug)
   // The link and nothing else [owner, 2026-09-29].
   const menuShare = useShareLink(publicMenuUrl)
@@ -538,15 +542,24 @@ function OutletMenuSurface({
                       >
                         <VegMarker isVeg={item.is_veg} />
                         {photos && photoList.has(item.id) && (
-                          <img
-                            src={photoList.get(item.id)!.thumbUrl}
-                            alt=""
-                            loading="lazy"
-                            width={32}
-                            height={32}
-                            data-testid={`menu-photo-row-${item.id}`}
-                            className="size-8 shrink-0 rounded-md object-cover"
-                          />
+                          // The saved photo, enlarged, without opening the
+                          // editor (owner, 2026-11-18).
+                          <button
+                            type="button"
+                            aria-label={`Photo of ${item.name}`}
+                            onClick={() => setViewing(item)}
+                            className="-my-1.5 shrink-0 rounded-lg p-1.5 focus-visible:focus-ring"
+                          >
+                            <img
+                              src={photoList.get(item.id)!.thumbUrl}
+                              alt=""
+                              loading="lazy"
+                              width={32}
+                              height={32}
+                              data-testid={`menu-photo-row-${item.id}`}
+                              className="size-8 rounded-md object-cover"
+                            />
+                          </button>
                         )}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
@@ -757,6 +770,14 @@ function OutletMenuSurface({
           </label>
         </form>
       </FormSheet>
+
+      {photos && viewing && viewingPhoto && (
+        <MenuPhotoViewer
+          photo={viewingPhoto}
+          dishName={viewing.name}
+          onClose={() => setViewing(null)}
+        />
+      )}
 
       {/* Mounted only while there is something to ask, so its selection starts
           empty every time it opens. */}

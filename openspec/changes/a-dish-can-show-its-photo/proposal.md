@@ -86,7 +86,10 @@ does this work before uploading, so a manager on mobile data sends about 1.5 MB
 rather than a 4 MB camera file.
 
 Menu's item rows show a small thumbnail beside a dish that has a photo, so a
-manager can see at a glance which dishes still need one. Billers cannot add or
+manager can see at a glance which dishes still need one. Tapping it shows the
+photo enlarged, with a switch between the **Large photo** customers open and
+the **Thumbnail** beside the dish, so a saved photo is looked at without
+opening the editor (owner, 2026-11-18). Billers cannot add or
 change photos; they cannot edit the menu today either.
 
 **On the customer menu, a photographed dish reads like this** (approved by the
@@ -216,6 +219,9 @@ The reasons and the rejected alternatives are in `design.md`.
   back. The shape tabs read **Wide**, **Square** and **Tall** with a small
   outline of each shape, so a manager knows what each is before tapping it;
   the ratios are kept for screen readers only.
+- Approved 2026-11-18 from the staging demo: the cropper ("lgtm"), and the
+  editor once a saved photo can be looked at from its Menu row, enlarged, with
+  a switch between the large photo and the thumbnail.
 - High quality over small files: the owner wants a photo that "feels high
   quality to the customer". 1600 px at quality 92 for the large photo, 400 px
   at 90 for the thumbnail, a 2560 px original kept for re-cropping.

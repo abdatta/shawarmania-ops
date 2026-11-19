@@ -50,7 +50,10 @@ every visual question on the customer page.
   and **Match the photo**; a separately framed thumbnail kept when the large
   frame moves; shape tabs reading **Wide**, **Square**, **Tall** with a drawn
   outline. Its component and browser tests, then new screenshots for 2.6.
-- [ ] 2.6 **Owner checkpoint**: show the owner the editor and cropper in demo
+- [x] 2.8 Owner request, 2026-11-18 (design D8): a row's thumbnail opens the
+  saved photo enlarged, with **Large photo** and **Thumbnail** tabs. Component
+  tests in both gate states, the browser spec, and screenshots.
+- [x] 2.6 **Owner checkpoint**: show the owner the editor and cropper in demo
   with the gate on (screenshots or the staging site), and record their approval
   or requested changes in `design.md` before live work starts.
 

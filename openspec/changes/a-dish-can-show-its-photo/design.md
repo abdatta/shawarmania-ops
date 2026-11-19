@@ -342,6 +342,42 @@ Menu's item rows show a 32 px rounded thumbnail before the name for a dish with
 a photo, and nothing for one without (no placeholder, so the rows read as today
 where nothing is set).
 
+**Tapping a row's thumbnail shows the saved photo enlarged** (owner,
+2026-11-18: a saved photo could be looked at only by opening the editor):
+
+```
+ ┌──────────────────────────────────┐
+ │ Classic Chicken Shawarma       × │
+ │ [ Large photo ]  [ Thumbnail ]   │
+ │ ┌──────────────────────────────┐ │
+ │ │                              │ │
+ │ │     the large photo, in      │ │
+ │ │     its own shape            │ │
+ │ │                              │ │
+ │ └──────────────────────────────┘ │
+ │ Wide · opens when a customer     │
+ │ taps the dish                    │
+ └──────────────────────────────────┘
+```
+
+- A pop-up on the cropper's dark stage, so the photo is seen against the
+  ground customers see it on, opening on the **Large photo** in its shape.
+- Two tabs switch it with the **Thumbnail**, shown enlarged as a square with
+  the rounded corners of the menu row. Two, not three: those are the two
+  pictures a customer can see. The kept original is the cropper's alone.
+- A line under the picture says what it is in the customer's terms: the
+  shape's word and where it appears. The pop-up shows; it does not edit.
+  **Adjust**, **Change** and **Remove** stay in the dish editor, one tap away
+  in the row's menu.
+- The thumbnail is a button named "Photo of <dish>", with the row's height as
+  its tap area. It exists only while the gate is on, like the thumbnail.
+
+**Owner checkpoint (task 2.6), 2026-11-18.** From the staging demo the owner
+approved the cropper ("cropper lgtm") and the editor on one condition, that a
+saved photo opens enlarged from its Menu row with a switch between its
+versions. That preview is built above (task 2.8) and shown to the owner in
+screenshots; with it the UI is approved, and live work (section 3) may start.
+
 All of this renders only when `useChangeGate('dish-photos')` is on.
 
 ### D9. The customer page (the child change implements it)

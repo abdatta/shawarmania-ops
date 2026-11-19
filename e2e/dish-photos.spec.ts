@@ -95,6 +95,17 @@ test('adds a photo in each shape, adjusts, changes and removes it', ON, async ({
     await expect(sheet.getByTestId('menu-photo-thumb')).toBeVisible()
     await save(sheet)
     await expect(rowPhoto(page, dish)).toBeVisible()
+
+    // The saved photo opens enlarged from its row, in its shape.
+    await page.getByRole('button', { name: `Photo of ${dish}` }).click()
+    const viewer = page.getByRole('dialog', { name: `Photo of ${dish}` })
+    const shown = await viewer.getByTestId('viewer-large').boundingBox()
+    expect(shown!.width / shown!.height).toBeCloseTo(ratio, 1)
+    await viewer.getByRole('button', { name: 'Thumbnail' }).click()
+    const square = await viewer.getByTestId('viewer-thumb').boundingBox()
+    expect(square!.width / square!.height).toBeCloseTo(1, 1)
+    await viewer.getByRole('button', { name: 'Close' }).click()
+    await expect(viewer).toBeHidden()
   }
 
   // Adjust: the saved shape comes back, and a new framing is a new photo.

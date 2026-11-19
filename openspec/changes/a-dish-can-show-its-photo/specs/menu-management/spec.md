@@ -32,7 +32,9 @@ fields, and a failed photo upload SHALL NOT undo those fields: the editor SHALL
 say the photo was not saved and offer to retry. **Remove** SHALL take the photo
 off on Save; **Cancel** SHALL discard a photo picked but not saved. Menu's item
 rows SHALL show a small thumbnail beside a dish that has a photo and nothing
-beside one that does not.
+beside one that does not, and tapping that thumbnail SHALL show the saved photo
+enlarged, switching between the large photo and the thumbnail, without opening
+the editor.
 
 A dish's photo SHALL be stored apart from the dish row itself, so that adding,
 changing or removing a photo does not change the menu the counter reads or

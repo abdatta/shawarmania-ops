@@ -140,10 +140,43 @@ describeChangeGate('dish-photos', (on) => {
       expect(document.querySelectorAll('[data-testid^="menu-photo-row-"]')).toHaveLength(1)
     } else {
       expect(screen.queryByTestId(`menu-photo-row-${MENU_ITEM_CLASSIC_ID}`)).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Photo of Classic Chicken Shawarma' })).toBeNull()
     }
   })
 
   if (!on) return
+
+  it('opens a saved photo enlarged from its row, and switches to the thumbnail', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+    const saved = await adapters.menu.photos!.setPhoto(MENU_ITEM_CLASSIC_ID, upload())
+    const { user } = renderMenu(true, adapters)
+    await screen.findByTestId('menu-list')
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Photo of Classic Chicken Shawarma' }),
+    )
+    const viewer = await screen.findByRole('dialog', { name: 'Photo of Classic Chicken Shawarma' })
+    // The large photo first, named by its shape and where customers see it.
+    expect(within(viewer).getByTestId('viewer-large')).toHaveAttribute('src', saved.largeUrl)
+    expect(within(viewer).getByRole('button', { name: 'Large photo' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(within(viewer).getByTestId('viewer-caption')).toHaveTextContent(
+      'Wide · opens when a customer taps the dish',
+    )
+    // It shows; it does not edit.
+    expect(within(viewer).queryByRole('button', { name: 'Adjust' })).toBeNull()
+
+    await user.click(within(viewer).getByRole('button', { name: 'Thumbnail' }))
+    expect(within(viewer).getByTestId('viewer-thumb')).toHaveAttribute('src', saved.thumbUrl)
+    expect(within(viewer).getByTestId('viewer-caption')).toHaveTextContent(
+      'Square · beside the dish on the menu',
+    )
+
+    await user.click(within(viewer).getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
 
   it('adds a photo: a dashed tile with Add, the two framings shown, saved after the dish', async () => {
     const { user, adapters } = renderMenu(true)
