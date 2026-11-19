@@ -1,5 +1,5 @@
 /**
- * This app's own ports — `7412`–`7416`, reserved as a block.
+ * This app's own ports — `7412`–`7418`, reserved as a block.
  *
  * **Vite's defaults are not usable on a machine with more than one Vite app.**
  * Dev defaults to 5173 and preview to 4173, and on a collision Vite silently
@@ -24,7 +24,7 @@
  * Playwright configs need it too and importing the Vite config would pull in
  * every plugin and shell out to `git` just to read a number.
  *
- * **The five are separate on purpose.** See `playwright.auth.config.ts` on why
+ * **The five the app uses are separate on purpose.** See `playwright.auth.config.ts` on why
  * sharing a port between a preview left open and a suite that must rebuild
  * produces a test result that depends on what ran before it.
  *
@@ -56,6 +56,19 @@ export const PORTS = {
   e2e: 7415,
   /** The auth E2E suite (`playwright.auth.config.ts`), which needs a real backend. */
   e2eAuth: 7416,
+  /**
+   * Not the app's: the campaign sender's linking page (`tools/campaign-sender`),
+   * which shows a WhatsApp QR code on `127.0.0.1` while a laptop is being
+   * linked. The sender is its own package and cannot import this file, so it
+   * carries the number as `LINK_PAGE_PORT` and a test holds the two together.
+   */
+  campaignSenderLink: 7417,
+  /**
+   * The campaign sender's own page on the laptop: what it is doing, and Send
+   * batch. `CONTROL_PAGE_PORT` there. **Never the same port as the linking
+   * page above**, which is sometimes put on a public address for a few minutes.
+   */
+  campaignSender: 7418,
 } as const
 
 /**
