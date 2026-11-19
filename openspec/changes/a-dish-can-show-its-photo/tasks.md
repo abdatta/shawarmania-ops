@@ -97,10 +97,13 @@ every visual question on the customer page.
 
 ## 5. The brand site (child change, repo `shawarmania`)
 
-- [ ] 5.1 *(built 2026-11-18 on the brand repo's branch
+- [x] 5.1 *(built on the brand repo's branch
   `claude/the-table-menu-shows-photos`, commit 7ce5e5d, Worker tests 220
-  passed; not released: its push to `main` is live at once and waits for the
-  owner's word)* In `shawarmania`, apply its change `the-table-menu-shows-photos`:
+  passed; released 2026-11-19 on the owner's word by a push to its `main`,
+  after ops was promoted (fb228662). With no photos the live menu was byte for
+  byte the morning's page; the owner then had five of Supratik's photos added in
+  production, served as WebP with `CF-Cache-Status: HIT` on the second fetch)*
+  In `shawarmania`, apply its change `the-table-menu-shows-photos`:
   the Worker calls `public_menu_v2` with fallback to `public_menu`, accepts the
   `photo` field, serves `/menu/<slug>/photo/<key>[-sm].<format>` through
   `public_menu_photo` and the edge cache, and renders design D9. Its own tests
