@@ -5,6 +5,8 @@ import { Modal } from '@/components/ui/modal'
 import type { MenuItemPhoto, MenuPhotoAspect } from '@/data-access/adapters'
 import { cn } from '@/lib/cn'
 
+import { ASPECT_RATIO } from './crop-geometry'
+
 /**
  * A saved photo, enlarged from its Menu row (a-dish-can-show-its-photo, design
  * D8; owner, 2026-11-18): the large photo customers open, and the thumbnail
@@ -78,10 +80,14 @@ export function MenuPhotoViewer({ photo, dishName, onClose }: MenuPhotoViewerPro
           src={large ? photo.largeUrl : photo.thumbUrl}
           alt={large ? `${dishName}, large photo` : `${dishName}, thumbnail`}
           data-testid={large ? 'viewer-large' : 'viewer-thumb'}
-          className={cn(
-            'mx-auto block h-auto max-w-full',
-            large ? 'max-h-[62dvh] w-auto rounded-xl' : 'w-[min(100%,20rem)] rounded-[1.75rem]',
-          )}
+          className={cn('mx-auto block h-auto', large ? 'rounded-xl' : 'rounded-[1.75rem]')}
+          // One rule for every version (owner, 2026-11-18): the pop-up's full
+          // width, unless the screen is too short for the shape, when it narrows
+          // to stay in view. Set before the image loads, so nothing jumps.
+          style={{
+            width: `min(100%, calc(62dvh * ${large ? ASPECT_RATIO[photo.aspect] : 1}))`,
+            aspectRatio: large ? ASPECT_RATIO[photo.aspect] : 1,
+          }}
         />
 
         <p className="text-center text-sm" data-testid="viewer-caption">

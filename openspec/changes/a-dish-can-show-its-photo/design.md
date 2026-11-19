@@ -363,7 +363,12 @@ where nothing is set).
 - A pop-up on the cropper's dark stage, so the photo is seen against the
   ground customers see it on, opening on the **Large photo** in its shape.
 - Two tabs switch it with the **Thumbnail**, shown enlarged as a square with
-  the rounded corners of the menu row. Two, not three: those are the two
+  the rounded corners of the menu row. Every version takes the pop-up's full
+  width, and narrows only where the screen is too short for its shape (a Tall
+  photo on a landscape tablet), so the space around a photo is the same
+  whichever is shown (owner, 2026-11-18). The thumbnail is drawn from its
+  400 px file, so enlarged on a dense phone screen it is a little softer than
+  the large photo; customers only ever see it at 88 px. Two, not three: those are the two
   pictures a customer can see. The kept original is the cropper's alone.
 - A line under the picture says what it is in the customer's terms: the
   shape's word and where it appears. The pop-up shows; it does not edit.
