@@ -3989,6 +3989,335 @@ export type Database = {
           },
         ]
       }
+      marketing_campaign_batches: {
+        Row: {
+          batch_no: number
+          campaign_id: string
+          finished_at: string | null
+          released_at: string | null
+          released_by: string | null
+          state: Database["public"]["Enums"]["marketing_batch_state"]
+        }
+        Insert: {
+          batch_no: number
+          campaign_id: string
+          finished_at?: string | null
+          released_at?: string | null
+          released_by?: string | null
+          state?: Database["public"]["Enums"]["marketing_batch_state"]
+        }
+        Update: {
+          batch_no?: number
+          campaign_id?: string
+          finished_at?: string | null
+          released_at?: string | null
+          released_by?: string | null
+          state?: Database["public"]["Enums"]["marketing_batch_state"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_campaign_batches_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketing_campaign_batches_released_by_fkey"
+            columns: ["released_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketing_campaign_recipients: {
+        Row: {
+          batch_no: number
+          campaign_id: string
+          claimed_at: string | null
+          customer_id: string
+          delivered_at: string | null
+          failure_code: string | null
+          position: number
+          read_at: string | null
+          sent_at: string | null
+          state: Database["public"]["Enums"]["marketing_recipient_state"]
+          wa_message_id: string | null
+        }
+        Insert: {
+          batch_no: number
+          campaign_id: string
+          claimed_at?: string | null
+          customer_id: string
+          delivered_at?: string | null
+          failure_code?: string | null
+          position: number
+          read_at?: string | null
+          sent_at?: string | null
+          state?: Database["public"]["Enums"]["marketing_recipient_state"]
+          wa_message_id?: string | null
+        }
+        Update: {
+          batch_no?: number
+          campaign_id?: string
+          claimed_at?: string | null
+          customer_id?: string
+          delivered_at?: string | null
+          failure_code?: string | null
+          position?: number
+          read_at?: string | null
+          sent_at?: string | null
+          state?: Database["public"]["Enums"]["marketing_recipient_state"]
+          wa_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_campaign_recipients_batch_fkey"
+            columns: ["campaign_id", "batch_no"]
+            isOneToOne: false
+            referencedRelation: "marketing_campaign_batches"
+            referencedColumns: ["campaign_id", "batch_no"]
+          },
+          {
+            foreignKeyName: "marketing_campaign_recipients_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketing_campaign_recipients_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketing_campaign_tests: {
+        Row: {
+          body: string
+          campaign_id: string
+          claimed_at: string | null
+          failure_code: string | null
+          id: string
+          image_path: string | null
+          phone: string
+          queued_at: string
+          queued_by: string
+          sent_at: string | null
+          seq: number
+          state: Database["public"]["Enums"]["marketing_recipient_state"]
+          wa_message_id: string | null
+        }
+        Insert: {
+          body: string
+          campaign_id: string
+          claimed_at?: string | null
+          failure_code?: string | null
+          id?: string
+          image_path?: string | null
+          phone: string
+          queued_at?: string
+          queued_by: string
+          sent_at?: string | null
+          seq?: never
+          state?: Database["public"]["Enums"]["marketing_recipient_state"]
+          wa_message_id?: string | null
+        }
+        Update: {
+          body?: string
+          campaign_id?: string
+          claimed_at?: string | null
+          failure_code?: string | null
+          id?: string
+          image_path?: string | null
+          phone?: string
+          queued_at?: string
+          queued_by?: string
+          sent_at?: string | null
+          seq?: never
+          state?: Database["public"]["Enums"]["marketing_recipient_state"]
+          wa_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_campaign_tests_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketing_campaign_tests_queued_by_fkey"
+            columns: ["queued_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketing_campaigns: {
+        Row: {
+          audience: Json | null
+          batch_size: number | null
+          body: string
+          created_at: string
+          created_by: string
+          finish_notice_sent_at: string | null
+          finished_at: string | null
+          id: string
+          image_path: string | null
+          name: string
+          not_before: string | null
+          paused_reason: string | null
+          scheduled_at: string | null
+          scheduled_by: string | null
+          state: Database["public"]["Enums"]["marketing_campaign_state"]
+          test_phones: string[]
+        }
+        Insert: {
+          audience?: Json | null
+          batch_size?: number | null
+          body?: string
+          created_at?: string
+          created_by: string
+          finish_notice_sent_at?: string | null
+          finished_at?: string | null
+          id?: string
+          image_path?: string | null
+          name: string
+          not_before?: string | null
+          paused_reason?: string | null
+          scheduled_at?: string | null
+          scheduled_by?: string | null
+          state?: Database["public"]["Enums"]["marketing_campaign_state"]
+          test_phones?: string[]
+        }
+        Update: {
+          audience?: Json | null
+          batch_size?: number | null
+          body?: string
+          created_at?: string
+          created_by?: string
+          finish_notice_sent_at?: string | null
+          finished_at?: string | null
+          id?: string
+          image_path?: string | null
+          name?: string
+          not_before?: string | null
+          paused_reason?: string | null
+          scheduled_at?: string | null
+          scheduled_by?: string | null
+          state?: Database["public"]["Enums"]["marketing_campaign_state"]
+          test_phones?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketing_campaigns_scheduled_by_fkey"
+            columns: ["scheduled_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketing_sender: {
+        Row: {
+          batch_size: number
+          halt_reason: string | null
+          id: boolean
+          installation_id: string | null
+          last_seen_at: string | null
+          linked_number_last4: string | null
+          max_gap_seconds: number
+          min_gap_seconds: number
+          status: Database["public"]["Enums"]["marketing_sender_status"]
+          window_end: string
+          window_start: string
+        }
+        Insert: {
+          batch_size?: number
+          halt_reason?: string | null
+          id?: boolean
+          installation_id?: string | null
+          last_seen_at?: string | null
+          linked_number_last4?: string | null
+          max_gap_seconds?: number
+          min_gap_seconds?: number
+          status?: Database["public"]["Enums"]["marketing_sender_status"]
+          window_end?: string
+          window_start?: string
+        }
+        Update: {
+          batch_size?: number
+          halt_reason?: string | null
+          id?: boolean
+          installation_id?: string | null
+          last_seen_at?: string | null
+          linked_number_last4?: string | null
+          max_gap_seconds?: number
+          min_gap_seconds?: number
+          status?: Database["public"]["Enums"]["marketing_sender_status"]
+          window_end?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
+      marketing_stopped: {
+        Row: {
+          campaign_id: string | null
+          customer_id: string
+          recorded_by: string | null
+          source: Database["public"]["Enums"]["marketing_stop_source"]
+          stopped_at: string
+        }
+        Insert: {
+          campaign_id?: string | null
+          customer_id: string
+          recorded_by?: string | null
+          source: Database["public"]["Enums"]["marketing_stop_source"]
+          stopped_at?: string
+        }
+        Update: {
+          campaign_id?: string | null
+          customer_id?: string
+          recorded_by?: string | null
+          source?: Database["public"]["Enums"]["marketing_stop_source"]
+          stopped_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_stopped_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketing_stopped_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: true
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketing_stopped_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       menu_categories: {
         Row: {
           id: string
@@ -5985,6 +6314,63 @@ export type Database = {
         Returns: boolean
       }
       billing_validate_totals: { Args: { p_payload: Json }; Returns: boolean }
+      campaign_audience_count: { Args: { p_audience: Json }; Returns: number }
+      campaign_audience_list: {
+        Args: { p_audience: Json; p_offset?: number; p_search?: string }
+        Returns: {
+          customer_id: string
+          name: string
+          phone_last4: string
+        }[]
+      }
+      campaign_claim_next: {
+        Args: { p_batch_no: number; p_campaign_id: string }
+        Returns: Json
+      }
+      campaign_claim_next_test: { Args: never; Returns: Json }
+      campaign_finish_notices: { Args: never; Returns: Json }
+      campaign_mark_finish_notice: {
+        Args: { p_campaign_id: string }
+        Returns: boolean
+      }
+      campaign_outstanding_message_ids: { Args: never; Returns: string[] }
+      campaign_reading: { Args: { p_campaign_id: string }; Returns: Json }
+      campaign_record_stop: { Args: { p_phone: string }; Returns: boolean }
+      campaign_release_stale_claims: { Args: never; Returns: number }
+      campaign_report_receipts: {
+        Args: { p_receipts: Json }
+        Returns: undefined
+      }
+      campaign_report_result: {
+        Args: {
+          p_campaign_id: string
+          p_customer_id: string
+          p_failure_code?: string
+          p_message_id?: string
+          p_state: Database["public"]["Enums"]["marketing_recipient_state"]
+        }
+        Returns: boolean
+      }
+      campaign_report_test_result: {
+        Args: {
+          p_failure_code?: string
+          p_message_id?: string
+          p_state: Database["public"]["Enums"]["marketing_recipient_state"]
+          p_test_id: string
+        }
+        Returns: boolean
+      }
+      campaign_sender_tick: {
+        Args: {
+          p_halt_reason?: string
+          p_installation_id?: string
+          p_linked_number_last4?: string
+          p_status: Database["public"]["Enums"]["marketing_sender_status"]
+        }
+        Returns: Json
+      }
+      campaign_test_number_suggestions: { Args: never; Returns: string[] }
+      campaigns_overview: { Args: never; Returns: Json }
       cancel_billing_order: {
         Args: {
           p_command_id?: string
@@ -6859,6 +7245,95 @@ export type Database = {
           state_fingerprint: string
         }[]
       }
+      marketing_audience: {
+        Args: { p_audience: Json; p_picked: boolean; p_search: string }
+        Returns: {
+          customer_id: string
+          name: string
+          phone_last4: string
+          seq: number
+        }[]
+      }
+      marketing_audience_whole: {
+        Args: { p_max: number; p_value: Json }
+        Returns: number
+      }
+      marketing_campaign_counts: {
+        Args: { p_batch_no: number; p_campaign_id: string }
+        Returns: Json
+      }
+      marketing_campaign_summary: {
+        Args: { p_campaign_id: string }
+        Returns: Json
+      }
+      marketing_next_waiting_batch: {
+        Args: never
+        Returns: {
+          batch_no: number
+          campaign_id: string
+          campaign_name: string
+          recipients: number
+        }[]
+      }
+      marketing_queue_tests: {
+        Args: {
+          p_body: string
+          p_campaign_id: string
+          p_image_path: string
+          p_phones: string[]
+        }
+        Returns: number
+      }
+      marketing_sender_reading: { Args: never; Returns: Json }
+      marketing_settle_finished: { Args: never; Returns: undefined }
+      marketing_stopped_add: {
+        Args: { p_phone: string }
+        Returns: {
+          campaign_name: string
+          customer_id: string
+          name: string
+          phone_last4: string
+          recorded_by_name: string
+          source: Database["public"]["Enums"]["marketing_stop_source"]
+          stopped_at: string
+        }[]
+      }
+      marketing_stopped_list: {
+        Args: never
+        Returns: {
+          campaign_name: string
+          customer_id: string
+          name: string
+          phone_last4: string
+          recorded_by_name: string
+          source: Database["public"]["Enums"]["marketing_stop_source"]
+          stopped_at: string
+        }[]
+      }
+      marketing_stopped_remove: {
+        Args: { p_customer_id: string }
+        Returns: undefined
+      }
+      marketing_stopped_rows: {
+        Args: { p_customer_id: string }
+        Returns: {
+          campaign_name: string
+          customer_id: string
+          name: string
+          phone_last4: string
+          recorded_by_name: string
+          source: Database["public"]["Enums"]["marketing_stop_source"]
+          stopped_at: string
+        }[]
+      }
+      marketing_test_phone: { Args: { p_input: string }; Returns: string }
+      marketing_window_at: {
+        Args: { p_at: string; p_end: string; p_start: string }
+        Returns: {
+          is_open: boolean
+          opens_at: string
+        }[]
+      }
       may_reach_menu_photo: { Args: { object_name: string }; Returns: boolean }
       may_reach_operator_statement: {
         Args: { object_name: string }
@@ -6931,6 +7406,10 @@ export type Database = {
       overview_today: { Args: { p_outlet_id: string }; Returns: Json }
       overview_today_v2: { Args: { p_outlet_id: string }; Returns: Json }
       overview_today_v3: { Args: { p_outlet_id: string }; Returns: Json }
+      pause_campaign: {
+        Args: { p_campaign_id: string; p_reason?: string }
+        Returns: undefined
+      }
       pay_billing_now: {
         Args: {
           p_command_id?: string
@@ -7177,6 +7656,10 @@ export type Database = {
         Args: { p_person_id: string; p_request_id: string }
         Returns: string
       }
+      release_campaign_batch: {
+        Args: { p_batch_no: number; p_campaign_id: string }
+        Returns: boolean
+      }
       remove_counter_device: {
         Args: { p_device_id: string; p_removed_by: string }
         Returns: string
@@ -7253,6 +7736,7 @@ export type Database = {
         }
         Returns: string
       }
+      resume_campaign: { Args: { p_campaign_id: string }; Returns: undefined }
       retire_expense_category: { Args: { p_name: string }; Returns: undefined }
       retire_menu_item: { Args: { p_item_id: string }; Returns: undefined }
       revenue_compared_windows: {
@@ -7411,6 +7895,15 @@ export type Database = {
         Args: { p_channel: string; p_expires_at: string; p_session: string }
         Returns: undefined
       }
+      save_campaign_draft: {
+        Args: {
+          p_audience: Json
+          p_body: string
+          p_campaign_id: string
+          p_name: string
+        }
+        Returns: undefined
+      }
       save_expense_category_choice: {
         Args: {
           p_asks_note: boolean
@@ -7420,9 +7913,19 @@ export type Database = {
         }
         Returns: string
       }
+      schedule_campaign: { Args: { p_campaign_id: string }; Returns: undefined }
+      send_campaign_test: { Args: { p_campaign_id: string }; Returns: number }
       set_aggregator_login_identifier: {
         Args: { p_channel: string; p_identifier: string }
         Returns: undefined
+      }
+      set_campaign_image: {
+        Args: { p_campaign_id: string; p_image_path: string }
+        Returns: undefined
+      }
+      set_campaign_test_numbers: {
+        Args: { p_campaign_id: string; p_phones: string[] }
+        Returns: string[]
       }
       set_change_gate: {
         Args: { p_enabled: boolean; p_key: string; p_reason: string }
@@ -7792,6 +8295,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      stop_campaign: { Args: { p_campaign_id: string }; Returns: undefined }
       stop_fixed_cost: {
         Args: {
           p_clear_ahead: boolean
@@ -7868,6 +8372,16 @@ export type Database = {
           p_name: string
           p_note: string
           p_starts_on: string
+        }
+        Returns: undefined
+      }
+      update_marketing_sender_settings: {
+        Args: {
+          p_batch_size: number
+          p_max_gap_seconds: number
+          p_min_gap_seconds: number
+          p_window_end: string
+          p_window_start: string
         }
         Returns: undefined
       }
@@ -7963,6 +8477,28 @@ export type Database = {
       gold_grant_route: "management" | "counter"
       inventory_unit: "kg" | "litre" | "packet" | "piece"
       line_kind: "item" | "packaging"
+      marketing_batch_state: "waiting" | "released" | "done"
+      marketing_campaign_state:
+        | "draft"
+        | "scheduled"
+        | "paused"
+        | "stopped"
+        | "done"
+      marketing_recipient_state:
+        | "waiting"
+        | "sending"
+        | "sent"
+        | "unsure"
+        | "failed"
+        | "not_on_whatsapp"
+        | "stopped"
+      marketing_sender_status:
+        | "idle"
+        | "sending"
+        | "outside_hours"
+        | "not_linked"
+        | "halted"
+      marketing_stop_source: "reply" | "owner"
       movement_type: "added" | "used" | "wasted" | "correction"
       order_status: "open" | "paid" | "cancelled" | "handed_over"
       packaging_mode: "off" | "per_bag" | "per_order"
@@ -8133,6 +8669,31 @@ export const Constants = {
       gold_grant_route: ["management", "counter"],
       inventory_unit: ["kg", "litre", "packet", "piece"],
       line_kind: ["item", "packaging"],
+      marketing_batch_state: ["waiting", "released", "done"],
+      marketing_campaign_state: [
+        "draft",
+        "scheduled",
+        "paused",
+        "stopped",
+        "done",
+      ],
+      marketing_recipient_state: [
+        "waiting",
+        "sending",
+        "sent",
+        "unsure",
+        "failed",
+        "not_on_whatsapp",
+        "stopped",
+      ],
+      marketing_sender_status: [
+        "idle",
+        "sending",
+        "outside_hours",
+        "not_linked",
+        "halted",
+      ],
+      marketing_stop_source: ["reply", "owner"],
       movement_type: ["added", "used", "wasted", "correction"],
       order_status: ["open", "paid", "cancelled", "handed_over"],
       packaging_mode: ["off", "per_bag", "per_order"],

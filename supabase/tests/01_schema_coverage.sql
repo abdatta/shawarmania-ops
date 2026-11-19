@@ -99,6 +99,16 @@ classified as (
       -- and written by no client.
       when tbl in ('staff_roles', 'staff_role_includes')
         then 'global'
+      -- WhatsApp campaigns (a-campaign-goes-out-on-whatsapp, #85): a campaign
+      -- belongs to the business and its audience is drawn from the one customer
+      -- directory, so these six sit beside `customers` and are held to what it
+      -- is held to: no client privilege, no policy, owner-only functions.
+      -- Section 9 below is the catalog half; who is refused, by name, is
+      -- `99_whatsapp_campaigns_are_the_owners.sql`.
+      when tbl in ('marketing_campaigns', 'marketing_campaign_batches',
+                   'marketing_campaign_recipients', 'marketing_stopped',
+                   'marketing_sender', 'marketing_campaign_tests')
+        then 'global'
       -- Tenant-less: belongs to no outlet at all, because the thing it counts
       -- happens before anybody has an outlet. Listed by name rather than
       -- inferred, so the next table with no outlet_id still has to be argued
@@ -433,6 +443,35 @@ select is(
        or has_table_privilege('anon', t.tbl, v.verb)),
   0,
   'no client session may write a change gate, its dependencies or its history'
+);
+
+-- ---------------------------------------------------------------------------
+-- 9. What the campaign tables cost. Business-wide like `customers`, and they
+-- reach every customer the business has: who may be messaged, who said stop.
+-- So the same two locks, each a catalog fact: no policy on any of the five, and
+-- no client role holding any verb. A later migration that grants one "just for
+-- the list page" fails here by name.
+
+select is(
+  (select count(*)::integer from pg_policies
+    where schemaname = 'public'
+      and tablename in ('marketing_campaigns', 'marketing_campaign_batches',
+                        'marketing_campaign_recipients', 'marketing_stopped',
+                        'marketing_sender', 'marketing_campaign_tests')),
+  0,
+  'no campaign table carries a policy: the owner-only functions are the only way in'
+);
+
+select is(
+  (select count(*)::integer
+     from unnest(array['public.marketing_campaigns', 'public.marketing_campaign_batches',
+                       'public.marketing_campaign_recipients', 'public.marketing_stopped',
+                       'public.marketing_sender', 'public.marketing_campaign_tests']) as t (tbl),
+          unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']) as v (verb)
+    where has_table_privilege('authenticated', t.tbl, v.verb)
+       or has_table_privilege('anon', t.tbl, v.verb)),
+  0,
+  'no client session holds any privilege on a campaign table'
 );
 
 select * from finish();
