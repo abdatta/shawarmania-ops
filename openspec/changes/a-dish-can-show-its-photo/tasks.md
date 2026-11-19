@@ -90,14 +90,17 @@ every visual question on the customer page.
   delete the previous files after success (the original only when its key
   changed); display URLs and the original for **Adjust** from short-lived
   signed URLs. Keep the approved UI unchanged.
-- [ ] 4.2 Auth e2e against a real backend: a manager round-trips add, adjust,
+- [x] 4.2 Auth e2e against a real backend: a manager round-trips add, adjust,
   replace and remove; the files exist and the old ones are gone; the counter's
   menu query and its realtime subscription see no change. Tag
   `@cg-on:dish-photos`.
 
 ## 5. The brand site (child change, repo `shawarmania`)
 
-- [ ] 5.1 In `shawarmania`, apply its change `the-table-menu-shows-photos`:
+- [ ] 5.1 *(built 2026-11-18 on the brand repo's branch
+  `claude/the-table-menu-shows-photos`, commit 7ce5e5d, Worker tests 220
+  passed; not released: its push to `main` is live at once and waits for the
+  owner's word)* In `shawarmania`, apply its change `the-table-menu-shows-photos`:
   the Worker calls `public_menu_v2` with fallback to `public_menu`, accepts the
   `photo` field, serves `/menu/<slug>/photo/<key>[-sm].<format>` through
   `public_menu_photo` and the edge cache, and renders design D9. Its own tests
@@ -116,7 +119,7 @@ every visual question on the customer page.
   `docs/SECURITY_AND_PRIVACY.md`, `docs/OPERATIONS.md` (storage budget, the
   cache path, how to look at the bucket), `docs/DEMO_MODE.md`,
   `docs/TESTING.md`.
-- [ ] 6.2 `npm run format`, then every local gate in AGENTS.md, including the
+- [x] 6.2 `npm run format`, then every local gate in AGENTS.md, including the
   database job up to the types diff; push to `stage` and read the run for the
   browser suites, both gate states.
 - [ ] 6.3 On staging: with the gate off the editor and the customer menu are as
