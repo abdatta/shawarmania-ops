@@ -46,6 +46,7 @@ import {
   POINTS_SWITCHED_ON_DAYS_AGO,
   SEEDED_GOLD_MONTHS,
 } from './fixtures/customers'
+import { crowdFixtures } from './fixtures/customer-crowd'
 import { menuItemFixtures } from './fixtures/menu'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID, outletFixtures } from './fixtures/outlets'
 import { DEMO_BILLER_ID, DEMO_OWNER_ID, personaFixtures } from './fixtures/personas'
@@ -133,7 +134,7 @@ export interface DemoPointsEntry {
 }
 
 /** One visit before the demo store's four trading days — see `customerVisitSeeds`. */
-interface DemoCustomerVisit {
+export interface DemoCustomerVisit {
   customerId: string
   /** Where it was bought, which is what every per-outlet reading narrows by. */
   outletId: string
@@ -181,7 +182,13 @@ function demoToday(): string {
 /** The rule every seeded outlet ran: the owner's defaults, 5 points per ₹200. */
 const SEEDED_RULES = withPointsSwitched(ALL_OFF_LOYALTY_SETTINGS, true)
 
-export function createDemoCustomers(today: string = demoToday()): DemoCustomers {
+export function createDemoCustomers(
+  today: string = demoToday(),
+  options: {
+    /** Add the crowd of customers last seen a while ago (`fixtures/customer-crowd.ts`). */
+    crowd?: boolean
+  } = {},
+): DemoCustomers {
   const businessDate = (daysAgo: number) => shiftBusinessDate(today, -daysAgo)
   const customers: DemoCustomers = {
     today,
@@ -219,6 +226,29 @@ export function createDemoCustomers(today: string = demoToday()): DemoCustomers 
       voided: seed.voided === true,
     })),
     servedAtThisOutlet: customerFixtures.map((row) => row.phone),
+  }
+  // Appended after the named customers' visits, so the bill ids those already
+  // carry are unchanged; not added to `servedAtThisOutlet`, so the till's
+  // partial-number suggestion reads as it always has.
+  if (options.crowd) {
+    for (const person of crowdFixtures()) {
+      customers.byPhone.set(person.phone, {
+        id: person.id,
+        phone: person.phone,
+        name: person.name,
+        createdAt: person.createdAt,
+      })
+      for (const visit of person.visits) {
+        customers.olderVisits.push({
+          customerId: person.id,
+          outletId: visit.outletId,
+          businessDate: businessDate(visit.daysAgo),
+          paidAt: instantAt(businessDate(visit.daysAgo), visit.time),
+          totalPaise: visit.totalPaise,
+          voided: false,
+        })
+      }
+    }
   }
   seedPointsLedger(customers, businessDate)
   return customers
@@ -573,7 +603,7 @@ function olderVisitBill(
 }
 
 /** The spell in force at this outlet at an instant, if any. There is at most one. */
-function currentSpell(
+export function currentSpell(
   customers: DemoCustomers,
   customerId: string,
   outletId: string,
@@ -601,7 +631,7 @@ function currentTier(
  * bill is theirs by its link, or — for a sale the demo counter settled without
  * one, which the real server links from the phone it carries — by that phone.
  */
-function allVisits(
+export function allVisits(
   customers: DemoCustomers,
   store: Pick<DemoStore, 'bills'>,
   profile: DemoCustomerProfile,
@@ -664,7 +694,7 @@ function eligibleHere(
  * nobody is gold there — a spell granted while it was on stays on the record,
  * and counts again only if gold comes back on before the spell's own end.
  */
-function goldOnAt(
+export function goldOnAt(
   store: Partial<Pick<DemoStore, 'loyaltySettings'>> | undefined,
   outletId: string,
 ) {

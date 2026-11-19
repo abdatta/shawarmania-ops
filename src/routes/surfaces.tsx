@@ -7,6 +7,9 @@ import { BillingCounter } from '@/features/billing/billing-counter'
 import { ManagerBillingHistory } from '@/features/billing/manager-billing-history'
 import { MyShiftSurface } from '@/features/billing/my-shift-surface'
 import { OpenOrdersSurface } from '@/features/billing/open-orders-surface'
+import { CampaignPage } from '@/features/campaigns/campaign-page'
+import { CampaignsSurface } from '@/features/campaigns/campaigns-surface'
+import { StoppedSurface } from '@/features/campaigns/stopped-surface'
 import { CashDrawerSurface } from '@/features/cash/cash-drawer-surface'
 import { CustomersSurface } from '@/features/customers/customers-surface'
 import { LedgerStatementSurface } from '@/features/cash/ledger-statement-surface'
@@ -72,6 +75,34 @@ export const roleSurfaceRoutes: RouteObject[] = [
     element: (
       <GatedSurface path="customers">
         <CustomersSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    // WhatsApp campaigns, for the owners (#85). The stopped list and a
+    // campaign's own page are gated against the list's path, as an outlet's
+    // page is: the gate is a question about the surface. `stopped` and `new`
+    // are declared before the parameter so neither is read as a campaign's id.
+    path: 'campaigns',
+    element: (
+      <GatedSurface path="campaigns">
+        <CampaignsSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    path: 'campaigns/stopped',
+    element: (
+      <GatedSurface path="campaigns">
+        <StoppedSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    path: 'campaigns/:campaignId',
+    element: (
+      <GatedSurface path="campaigns">
+        <CampaignPage />
       </GatedSurface>
     ),
   },

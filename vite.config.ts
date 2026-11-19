@@ -147,7 +147,13 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.mjs'],
+    include: [
+      'src/**/*.test.{ts,tsx}',
+      'scripts/**/*.test.mjs',
+      // The campaign sender's decisions, which import nothing but Node. Its
+      // WhatsApp adapter is outside this run and outside the PWA build.
+      'tools/campaign-sender/src/core/**/*.test.ts',
+    ],
     /**
      * Above Vitest's 5s default, and not because anything here is slow.
      *

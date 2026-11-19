@@ -285,10 +285,12 @@ describe('gate registry', () => {
       'Menu',
     ])
     // Customers reads regulars and spend, so it is analytics [owner, 2026-10-09].
+    // Campaigns sits beside Customers: the same people, and what they were sent.
     expect(analytics?.kind === 'group' && analytics.children.map((c) => c.nav?.label)).toEqual([
       'Items',
       'Sales',
       'Customers',
+      'Campaigns',
     ])
   })
 
@@ -527,6 +529,58 @@ describe('recording an expense stays reachable for every role that spends', () =
       (surface) => surface.nav?.label === 'Expenses',
     )
     expect(expenses).toHaveLength(1)
+  })
+})
+
+/**
+ * Campaigns (a-campaign-goes-out-on-whatsapp, #85) are the owner's, in the
+ * demo and for real.
+ *
+ * A campaign belongs to the business and its audience is every outlet's
+ * customers, so there is no manager's copy of the surface to gate: the absence
+ * of an `admin-campaigns` entry is the rule, and this is what says so if
+ * somebody adds one.
+ */
+describe('campaigns are the owner’s, beside Customers, and nobody else’s', () => {
+  const labels = (roles: Parameters<typeof visibleSurfaces>[0], mode: 'demo' | 'real') =>
+    visibleSurfaces(roles, mode).map((surface) => surface.nav?.label)
+
+  it('declares the surface for the Super Admin and for no other role', () => {
+    const campaigns = surfaces.filter((surface) => surface.path.startsWith('campaigns'))
+    expect(campaigns.map((surface) => [surface.id, surface.role])).toEqual([
+      ['owner-campaigns', 'super_admin'],
+    ])
+  })
+
+  it('draws it in the owner’s Analytics group, straight after Customers, in the demo', () => {
+    const tree = navTree(
+      visibleSurfaces(['super_admin', 'franchise_admin'], 'demo', ['super_admin']),
+    )
+    const analytics = tree.find((node) => node.kind === 'group' && node.group.id === 'analytics')
+    expect(analytics?.kind === 'group' && analytics.children.map((c) => c.nav?.label)).toEqual([
+      'Items',
+      'Sales',
+      'Customers',
+      'Campaigns',
+    ])
+  })
+
+  it('gives a manager, a biller and an employee no Campaigns entry in the demo', () => {
+    for (const roles of [['franchise_admin'], ['biller'], ['employee']] as const) {
+      expect(labels(roles, 'demo')).not.toContain('Campaigns')
+    }
+    // A manager who is also staff reaches no more of it.
+    expect(labels(['franchise_admin', 'biller', 'employee'], 'demo')).not.toContain('Campaigns')
+  })
+
+  it('is live for the owner and for no real manager, biller or employee', () => {
+    const surface = surfaces.find((candidate) => candidate.id === 'owner-campaigns')
+    expect(surface?.state).toBe('live')
+    expect(labels(['super_admin', 'franchise_admin'], 'real')).toContain('Campaigns')
+    for (const roles of [['franchise_admin'], ['biller'], ['employee']] as const) {
+      expect(labels(roles, 'real')).not.toContain('Campaigns')
+    }
+    expect(labels(['franchise_admin', 'biller', 'employee'], 'real')).not.toContain('Campaigns')
   })
 })
 

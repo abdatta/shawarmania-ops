@@ -21,7 +21,7 @@ import {
  * tapped — nothing is saved, so there is nothing to Save or Cancel — and Done
  * closes it.
  */
-function Option({
+export function Option({
   selected,
   onClick,
   children,
@@ -49,7 +49,7 @@ function Option({
   )
 }
 
-function Group({ label, children }: { label: string; children: React.ReactNode }) {
+export function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <section className="space-y-2" aria-label={label}>
       <h3 className="text-sm font-bold uppercase tracking-wide text-content-muted">{label}</h3>

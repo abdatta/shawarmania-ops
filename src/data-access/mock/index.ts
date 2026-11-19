@@ -9,6 +9,7 @@ import { DEMO_OUTLET_ID, DEMO_SECOND_OUTLET_ID } from './store'
 import { createDemoAccounts, createMockAccountsAdapter } from './accounts'
 import { createMockAttendanceAdapter } from './attendance'
 import { createMockBillingAdapter } from './billing'
+import { createDemoCampaigns, createMockCampaignsAdapter, type DemoCampaigns } from './campaigns'
 import { createMockCashDrawerAdapter } from './cash-drawer'
 import { createDemoCounter, createMockCounterAdapter, type DemoCounter } from './counter'
 import {
@@ -82,6 +83,13 @@ export interface DemoData {
    * owner stays turned at the counter.
    */
   changeGates: DemoChangeGates
+  /**
+   * The campaigns, their recipients, the stopped list and what the demo says
+   * the sender is doing (a-campaign-goes-out-on-whatsapp). Session-scoped, so a
+   * campaign scheduled in a walkthrough is still there after a role switch and
+   * back.
+   */
+  campaigns: DemoCampaigns
 }
 
 export function createDemoData(
@@ -106,12 +114,19 @@ export function createDemoData(
      * the demo asks for it and a test only when it reads them.
      */
     deliveryWalkthrough?: boolean
+    /**
+     * Add the crowd of customers last seen a while ago (#85), so choosing a
+     * campaign's customers has a list to scroll. Only the demo root asks; a
+     * test that does not reads the seven named customers alone.
+     */
+    customerCrowd?: boolean
   } = {},
 ): DemoData {
   const {
     dishWalkthrough = false,
     fixedCosts = false,
     deliveryWalkthrough = false,
+    customerCrowd = false,
     ...storeOptions
   } = options
   const store = createDemoStore({ billingLifecycle: true, ...storeOptions })
@@ -127,10 +142,11 @@ export function createDemoData(
     attendance: createMockAttendanceAdapter({ attendanceRules: store.attendanceRules }),
     // Measured against the store's own today, so the customers' thirty days
     // and the bills they are counted from agree about which day it is.
-    customers: createDemoCustomers(store.today),
+    customers: createDemoCustomers(store.today, { crowd: customerCrowd }),
     counter: createDemoCounter(),
     kitchen: createDemoKitchen(),
     changeGates,
+    campaigns: createDemoCampaigns(),
   }
 }
 
@@ -298,6 +314,16 @@ export function createMockAdapters(
       role,
       persona.profile.id,
       role === 'super_admin' ? null : outletsForRole(persona.assignments, 'franchise_admin'),
+    ),
+    // Owners only, refused here for everybody the database will refuse. It
+    // reads the same customers and bills the Customers surface does, so an
+    // audience count is a count of people that surface can show.
+    campaigns: createMockCampaignsAdapter(
+      data.campaigns,
+      data.customers,
+      store,
+      role,
+      persona.profile.id,
     ),
     // Both enforce the boundary the RLS policies will: only the Super Admin
     // reads across outlets, and asking for somebody else's returns nothing.

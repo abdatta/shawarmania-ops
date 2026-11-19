@@ -4,6 +4,7 @@ import { useLocation, useParams } from 'react-router'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { enterDemoScope, exitDemoScope } from '@/data-access/demo-scope'
 import { createDemoData, createMockAdapters, personaFixtures } from '@/data-access/mock'
+import { setDemoSenderScene, type DemoSenderScene } from '@/data-access/mock/campaigns'
 import { forgetDemoGateTurns } from '@/data-access/mock/change-gates'
 import { trackAdapterWrites } from '@/data-access/track-adapter-writes'
 import { getPartState, isRenderable } from '@/gates/registry'
@@ -18,6 +19,7 @@ import { DemoCounter } from './demo-counter'
 import { DemoKitchen } from './demo-kitchen'
 import { announceDemoReset, mirrorDemoOrders } from './demo-orders-mirror'
 import { DemoResetContext } from './demo-reset'
+import { DemoSenderContext } from './demo-sender-context'
 
 /**
  * The demo branch's provider stack (design D1/D8). The role comes from the
@@ -112,6 +114,7 @@ export function DemoRoot() {
         dishWalkthrough: true,
         fixedCosts: true,
         deliveryWalkthrough: true,
+        customerCrowd: true,
       }),
     // resetCount is the point of this dependency: a fresh dataset is exactly
     // what a reset is.
@@ -145,6 +148,25 @@ export function DemoRoot() {
     [data, gateTurns],
   )
 
+  /**
+   * What the demo says the campaign sender is doing (#85). Switching it is a
+   * change to the demo's data, so the surfaces restart and read it afresh, as
+   * they do after a gate turn; the data itself stays.
+   */
+  const [senderTurns, setSenderTurns] = useState(0)
+  const sender = useMemo(
+    () => ({
+      scene: data.campaigns.scene,
+      set(scene: DemoSenderScene) {
+        setDemoSenderScene(data.campaigns, scene)
+        setSenderTurns((count) => count + 1)
+      },
+    }),
+    // senderTurns is the point of this dependency: a switch is a new scene.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data, senderTurns],
+  )
+
   // A counter in one tab rings a kitchen in another (#70): the demo's orders are
   // mirrored between same-origin demo tabs. Demo only; real tablets meet at the
   // server and nowhere else.
@@ -173,7 +195,10 @@ export function DemoRoot() {
             would reload the data and leave a half-filled form open over it,
             which is not "the same place every walkthrough starts". */}
         <ChangeGatesContext.Provider value={gates}>
-          <AdaptersContext.Provider key={`${resetCount}-${gateTurns}`} value={adapters}>
+          <AdaptersContext.Provider
+            key={`${resetCount}-${gateTurns}-${senderTurns}`}
+            value={adapters}
+          >
             {/*
             The Biller is a tablet, not a phone, and since this change it is the
             *enrolled* tablet's own shell rather than a role-shell imitation of
@@ -210,7 +235,9 @@ export function DemoRoot() {
                 </>
               )
             ) : (
-              <PhoneShell banner={<DemoBanner />} />
+              <DemoSenderContext.Provider value={sender}>
+                <PhoneShell banner={<DemoBanner />} />
+              </DemoSenderContext.Provider>
             )}
           </AdaptersContext.Provider>
         </ChangeGatesContext.Provider>

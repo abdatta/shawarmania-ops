@@ -3450,6 +3450,8 @@ export interface DataAdapters {
   expenseCategories: ExpenseCategoriesAdapter
   /** An outlet's fixed costs and what pays them (#79). */
   fixedCosts: import('./fixed-costs').FixedCostsAdapter
+  /** WhatsApp campaigns, the sender line and the stopped list, for the owners (#85). */
+  campaigns: import('./campaigns').CampaignsAdapter
   insights: InsightsAdapter
   addressLookup: AddressLookupAdapter
   /** The drawer as a continuous balance, observed at instants (#11). */

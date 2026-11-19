@@ -12,6 +12,7 @@ import { ROLE_LABELS, ROLE_SEGMENTS, type Role } from '@/session/session'
 import { DemoCheckInPlace } from './demo-check-in-place'
 import { useDemoConnectivity, type DemoConnectivityState } from './demo-connectivity'
 import { useDemoReset } from './demo-reset'
+import { DemoSender } from './demo-sender'
 
 /** The roles the switcher offers, the staff ones read from which includes which. */
 const ROLES: Role[] = ['super_admin', 'franchise_admin', ...STAFF_ROLES_BY_SENIORITY]
@@ -119,6 +120,9 @@ export function DemoBanner() {
       <div className="ml-auto flex shrink-0 items-center gap-x-2 sm:gap-x-3">
         {/* Where the phone is, for a check-in (a-check-in-at-the-shop-approves-itself). */}
         <DemoCheckInPlace />
+
+        {/* What the campaign sender is doing, on the Campaigns pages (#85). */}
+        <DemoSender />
 
         {/* Present exactly where a counter is on screen, and absent rather than
             inert everywhere else — see `demo-connectivity.ts` for why that is

@@ -31,6 +31,14 @@ interface FormSheetProps {
    * button and Escape are the sheet's own business and are left as they are.
    */
   busy?: boolean
+  /**
+   * The sheet's content scrolls a part of itself, not the whole body: the
+   * customer picker keeps its search and filters still and scrolls the list.
+   * The sheet then takes its full height on a phone too, and the body is a
+   * column for the content to lay out in rather than a scrolling box. Without
+   * it the body scrolls as it always has.
+   */
+  scrollsItself?: boolean
 }
 
 /**
@@ -46,6 +54,7 @@ export function FormSheet({
   footer,
   error,
   busy = false,
+  scrollsItself = false,
 }: FormSheetProps) {
   return (
     <Modal
@@ -59,14 +68,28 @@ export function FormSheet({
         'sm:rounded-none sm:border-l sm:border-t-0'
       }
     >
-      <div className="flex h-full max-h-[85dvh] flex-col sm:max-h-none">
+      <div
+        className={
+          scrollsItself
+            ? 'flex h-[85dvh] flex-col sm:h-full'
+            : 'flex h-full max-h-[85dvh] flex-col sm:max-h-none'
+        }
+      >
         <div className="flex items-center justify-between border-b border-border px-4 py-2">
           <h2 className="text-base font-semibold text-content">{title}</h2>
           <Button variant="ghost" size="phone" aria-label="Close" onClick={onClose}>
             <X aria-hidden size={18} />
           </Button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
+        <div
+          className={
+            scrollsItself
+              ? 'relative flex min-h-0 flex-1 flex-col p-4'
+              : 'min-h-0 flex-1 overflow-y-auto p-4'
+          }
+        >
+          {children}
+        </div>
         {(error || footer) && (
           <div className="border-t border-border p-4">
             {error && (

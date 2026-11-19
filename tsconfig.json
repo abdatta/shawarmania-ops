@@ -36,6 +36,7 @@
     "e2e-auth",
     "e2e-staging",
     "supabase/tests/rest",
+    "tools/campaign-sender/src/core",
     "ports.ts",
     "vite.config.ts",
     "playwright.config.ts",

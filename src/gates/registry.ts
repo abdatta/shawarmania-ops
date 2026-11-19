@@ -7,6 +7,7 @@ import {
   IndianRupee,
   Home,
   LayoutDashboard,
+  Megaphone,
   NotepadText,
   Settings2,
   Store,
@@ -229,6 +230,33 @@ const defs = {
     role: 'super_admin',
     path: 'customers',
     nav: { label: 'Customers', icon: Contact, order: 3, group: 'analytics' },
+    state: 'live',
+  },
+  /**
+   * WhatsApp campaigns to the business's customers
+   * (a-campaign-goes-out-on-whatsapp, #85): a list, a page per campaign, and
+   * the stopped list.
+   *
+   * **Beside Customers**, because it is the same people: Customers says who
+   * they are, this says what they were sent.
+   *
+   * **The owner's only, and there is no `admin-campaigns`.** A campaign belongs
+   * to the business and its audience is drawn from every outlet's customers, so
+   * a manager, a biller, an employee and a tablet have no entry and no route,
+   * and the database refuses each of them every table and function behind it
+   * (design D13). A franchise's own campaigns wait for a franchise to ask.
+   *
+   * `live` (task 3.3): the owner approved the pages in the demo (task 1.6),
+   * and the database and the adapter behind them are real. Nothing here sends.
+   * The app never does: it queues, and the program on the owner's laptop sends.
+   * The demo keeps its mock, which has no laptop, so the demo sends nothing.
+   * No change gate: a new surface reached only by the owner, which a revert
+   * takes out of the nav whole.
+   */
+  'owner-campaigns': {
+    role: 'super_admin',
+    path: 'campaigns',
+    nav: { label: 'Campaigns', icon: Megaphone, order: 4, group: 'analytics' },
     state: 'live',
   },
   /**

@@ -326,7 +326,7 @@ export function useOutletScope(
  * anything. The current choice is `disabled` rather than clearable, which says
  * before the press what a swallowed press would only say after it.
  */
-function OutletChips({
+export function OutletChips({
   outlets,
   chosen,
   onToggle,

@@ -9,6 +9,7 @@ import {
 import { createSupabaseAccountsAdapter } from './accounts'
 import { createSupabaseAttendanceAdapter } from './attendance'
 import { createSupabaseBillingAdapter } from './billing'
+import { createSupabaseCampaignsAdapter } from './campaigns'
 import { createSupabaseCashDrawerAdapter } from './cash-drawer'
 import { createSupabaseCounterAdapter } from './counter'
 import { createSupabaseKitchenAdapter } from './kitchen'
@@ -82,6 +83,9 @@ export function createSupabaseAdapters(
     expenses: createSupabaseExpensesAdapter(client, counterSession),
     expenseCategories: createSupabaseExpenseCategoriesAdapter(client),
     fixedCosts: createSupabaseFixedCostsAdapter(client),
+    // The owners' WhatsApp campaigns (#85): every call is an owner-only
+    // function, refused in the database for anybody else.
+    campaigns: createSupabaseCampaignsAdapter(client),
     // Legacy outlet-day insights remain unavailable in live mode. Overview
     // reads its own compact financial adapter above.
     insights: createSupabaseInsightsAdapter(),
