@@ -866,6 +866,161 @@ expenses and its cash count from away, as for any outlet, and mark the outlet
 closed once its last sheet is in; paper bills can still be entered for its
 trading days afterwards.
 
+## WhatsApp campaigns: the sender on the laptop *(#85)*
+
+The app never sends a campaign. An owner writes and submits it on the
+Campaigns page; a program on the owner's own Windows laptop, **the sender**
+(`tools/campaign-sender`), sends it from a linked WhatsApp account, one
+customer a minute, a batch of 100 at a time, each batch released by an owner
+on that laptop. The design and every decision behind it are in
+`openspec/changes/a-campaign-goes-out-on-whatsapp/design.md`.
+
+**One sender, either database.** The same program sends for staging or for
+production: whichever database it is signed in to. A laptop holds one
+sign-in per data folder. Switching is `npm run sign-out` and then
+`npm run sign-in -- <the other>`.
+
+### Install, once
+
+Node 22.6 or later. In a clone of this repository:
+
+```bash
+cd tools/campaign-sender
+npm ci
+npm run check
+```
+
+`check` proves the laptop can reach WhatsApp without touching any account.
+
+**The data folder** is `%LOCALAPPDATA%\shawarmania-campaign-sender`, or the
+folder named by `CAMPAIGN_SENDER_DATA_DIR`. It holds the WhatsApp login,
+WhatsApp's contact mappings for the account (customers' numbers among them),
+the database session and the sender's log. **Whoever copies it has the
+WhatsApp account.** It stays on the laptop: never in the repository, never in
+a folder OneDrive or another cloud drive mirrors, never sent anywhere.
+
+On the owner's laptop today there are two: the default folder is linked to
+the owner's personal number, for trying things; the business number is
+linked in `%LOCALAPPDATA%\shawarmania-campaign-sender-business`. Every command
+below acts on the default folder unless `CAMPAIGN_SENDER_DATA_DIR` is set:
+
+```powershell
+$env:CAMPAIGN_SENDER_DATA_DIR = "$env:LOCALAPPDATA\shawarmania-campaign-sender-business"
+```
+
+### Link the WhatsApp account
+
+```bash
+npm run link
+```
+
+It shows WhatsApp's QR code at `http://127.0.0.1:7417` and opens it. On the
+phone: WhatsApp → Linked devices → Link a device → scan. The code changes
+every 20 to 60 seconds and the page keeps up by itself.
+
+**The phone in another country:** put that page on a temporary public link
+and send it to the person holding the phone, and nobody else (whoever scans it
+links their own WhatsApp to this laptop). With Cloudflare's free tunnel:
+
+```bash
+cloudflared tunnel --config <an empty file> --url http://127.0.0.1:7417
+```
+
+The empty `--config` matters on a laptop that has a `config.yml` in
+`%USERPROFILE%\.cloudflared` for something else: without it every page reads
+"not found". The new address may not open on this laptop for a minute; it
+opens elsewhere. Stop the tunnel as soon as the link is made.
+
+### Sign in to a database
+
+```bash
+npm run sign-in -- staging
+npm run sign-in -- production
+```
+
+It reads which database from the app itself (the staging or production
+site), then asks for an owner's username or email and password; the password
+is not shown. An account that is not an owner is refused and not kept. The
+session renews itself. `npm run status` says which database a folder is
+signed in to.
+
+### Run it
+
+```bash
+npm start
+```
+
+Signed in, this is the sender: a page at `http://127.0.0.1:7418` (what it is
+doing, India's time, sent today, **Send batch**), an icon in the tray (coloured
+by what it is doing; on Windows 11 drag it out of the `^` overflow once), and
+a card pinned above the taskbar when a batch waits, a batch finishes, or
+something is wrong. The card stays until Open or Later; Later puts that one
+away, and a click on the icon brings it back. **The card has no Send button:
+Open goes to the page.** Ctrl+C stops the sender; the link is kept.
+
+Not signed in, `npm start` only holds the WhatsApp link, as it always did.
+
+**Start with Windows**, once a folder is linked and signed in:
+
+```bash
+npm run install-startup
+```
+
+It puts one small script in your own Startup folder (no administrator
+needed): from the next logon the sender starts with no window, on that folder,
+and writes what it prints to `sender.log` there. `npm run uninstall-startup`
+removes it.
+
+### A campaign, end to end
+
+1. An owner writes it on the Campaigns page, adds **test numbers** if wanted
+   (any number, up to five; numbers used before are offered), and presses
+   **Send test** to see it on their own phone. Test messages need no release:
+   the sender sends them whenever it is on, even at night in India.
+2. Submit. The customers are fixed and cut into batches; the test numbers get
+   it first, by themselves.
+3. The laptop's card says **Batch 1 is waiting**. Open → **Send batch**.
+4. One customer at a time, 45 to 90 seconds apart, only between 10:00 and
+   21:00 in India. Closing the lid is fine: it carries on when the laptop
+   wakes, and a customer cut off mid-message is marked *unsure* and never sent
+   again.
+5. Each next batch waits for its own Send batch.
+6. When the campaign finishes, the owner who submitted it gets its totals on
+   WhatsApp, if their account carries a phone.
+
+**Pause, Resume and Stop are on the campaign's page in the app**, for any
+owner, from any phone; the sender obeys before its next message. A customer
+who replies STOP is put on the stopped list by the sender, and is in no later
+audience.
+
+### When it halts
+
+If WhatsApp logs the device out, refuses the account or restricts it, the
+sender stops, says why on the laptop and in the app, and sends nothing until
+told. **Read what it says before anything else.** On the phone, open WhatsApp
+and look for a restriction notice and at Linked devices. Then:
+
+```bash
+npm run restart
+```
+
+clears the halt, after asking. If the laptop is no longer under Linked devices,
+`npm run unlink` and link again. After a restriction, send nothing from the
+account by any means until the phone shows none.
+
+### Rehearsing without a database
+
+`npm run rehearse` runs the same sender against a stand-in queue in one file
+and reaches one number only, the one in `test-recipient.txt` in the data
+folder. `npm start -- --only-test-recipient` does the same against a real
+database: whatever the database hands over, only that number is sent to.
+
+### Reverting the app
+
+Reverting the web build does not stop the sender, which is not part of it and
+would still act on a released batch. **Stop the campaign in the app, or quit
+the sender on the laptop, and then revert.**
+
 ## Kitchen tablets *(#70)*
 
 **Setting one up.** On the outlet's page, **Tablets → Set up**, name it, choose *Use this tablet for:* **Kitchen**, and type the code on the tablet as for any counter. It opens on the kitchen's shift-start screen; somebody who may hold a counter shift starts one from their phone.
