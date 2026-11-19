@@ -4145,6 +4145,70 @@ export type Database = {
           },
         ]
       }
+      menu_item_photos: {
+        Row: {
+          aspect: string
+          item_id: string
+          large_crop: Json
+          outlet_id: string
+          photo_format: string
+          photo_key: string
+          source_format: string
+          source_key: string
+          thumb_crop: Json
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          aspect: string
+          item_id: string
+          large_crop: Json
+          outlet_id: string
+          photo_format: string
+          photo_key: string
+          source_format: string
+          source_key: string
+          thumb_crop: Json
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          aspect?: string
+          item_id?: string
+          large_crop?: Json
+          outlet_id?: string
+          photo_format?: string
+          photo_key?: string
+          source_format?: string
+          source_key?: string
+          thumb_crop?: Json
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_item_photos_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_item_photos_outlet_id_item_id_fkey"
+            columns: ["outlet_id", "item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["outlet_id", "id"]
+          },
+          {
+            foreignKeyName: "menu_item_photos_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       menu_items: {
         Row: {
           category_id: string
@@ -5976,6 +6040,7 @@ export type Database = {
           request_id: string
         }[]
       }
+      clear_menu_item_photo: { Args: { p_item_id: string }; Returns: Json }
       confirm_billing_end_of_day: {
         Args: {
           p_command_id?: string
@@ -6794,6 +6859,7 @@ export type Database = {
           state_fingerprint: string
         }[]
       }
+      may_reach_menu_photo: { Args: { object_name: string }; Returns: boolean }
       may_reach_operator_statement: {
         Args: { object_name: string }
         Returns: boolean
@@ -6801,6 +6867,35 @@ export type Database = {
       menu_discount_within_cheapest_item: {
         Args: { p_discount_id: string }
         Returns: undefined
+      }
+      menu_photo_crop_ok: { Args: { crop: Json }; Returns: boolean }
+      menu_photo_item_for_change: {
+        Args: { p_item_id: string }
+        Returns: {
+          category_id: string
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          is_available: boolean
+          is_veg: boolean
+          name: string
+          outlet_id: string
+          price_paise: number
+          sort_order: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "menu_items"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      menu_photo_outlet: { Args: { object_name: string }; Returns: string }
+      menu_photo_previous: {
+        Args: { p_row: Database["public"]["Tables"]["menu_item_photos"]["Row"] }
+        Returns: Json
       }
       menu_slug_from: { Args: { p_text: string }; Returns: string }
       merge_expense_category: {
@@ -6920,6 +7015,11 @@ export type Database = {
         }[]
       }
       public_menu: { Args: { p_slug: string }; Returns: Json }
+      public_menu_photo: {
+        Args: { p_key: string; p_slug: string }
+        Returns: Json
+      }
+      public_menu_v2: { Args: { p_slug: string }; Returns: Json }
       read_aggregator_login_identifier: {
         Args: { p_channel: string }
         Returns: string
@@ -7334,6 +7434,19 @@ export type Database = {
       }
       set_menu_highlights: {
         Args: { p_item_ids: string[]; p_outlet_id: string; p_title: string }
+        Returns: Json
+      }
+      set_menu_item_photo: {
+        Args: {
+          p_aspect: string
+          p_format: string
+          p_item_id: string
+          p_key: string
+          p_large_crop: Json
+          p_source_format: string
+          p_source_key: string
+          p_thumb_crop: Json
+        }
         Returns: Json
       }
       set_outlet_attendance_rules: {

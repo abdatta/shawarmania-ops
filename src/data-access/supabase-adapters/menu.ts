@@ -15,6 +15,7 @@ import {
 import type { Database, Json, Tables } from '../database.types'
 import { loyaltySettingsFromRow, OUTLET_LOYALTY_COLUMNS } from '../outlet-loyalty-row'
 import { serviceSettingsFromRow } from '../outlet-service-row'
+import { createSupabaseMenuPhotoAdapter } from './menu-photos'
 import type { CounterResumeCoordinator, CounterResumeRecord } from '@/outbox'
 
 function menuError(error: PostgrestError): MenuActionError {
@@ -129,6 +130,8 @@ export function createSupabaseMenuAdapter(
   }
 
   return {
+    // Dish photos (#84): rendered only while dish-photos is on.
+    photos: createSupabaseMenuPhotoAdapter(client),
     presentation: {
       async readHighlights(outletId) {
         const { data, error } = await client.rpc('read_menu_highlights', { p_outlet_id: outletId })

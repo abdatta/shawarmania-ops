@@ -312,6 +312,16 @@ flag and availability — nothing about a person, no ids, no discounts. A closed
 outlet, an empty menu and an invented address answer alike, so the page does not
 reveal which outlets exist but are not trading.
 
+**Dish photos are public by design; their bucket is not.** A photo a manager
+adds is shown to anyone reading the menu, so nothing in one may be private.
+The bucket `menu-photos` is private: customers never fetch from Supabase.
+The Worker reads a file with the service-role key only when
+`public_menu_photo` names it — the current photo of an active dish at a trading
+outlet, while `dish-photos` is on — so a guessed key, a replaced photo and the
+kept originals (used only for re-framing) are never served. Photo addresses
+carry a content hash, never an outlet or dish id. Inside ops, the bucket's
+policies admit the owner and that outlet's manager only, while the gate is on.
+
 **The customer's bill receipt** is the one that needs a design:
 `shawarmania.in/bill?t=<token>` is opened by whoever holds the link. Everything below
 is about it not becoming a door.

@@ -418,6 +418,10 @@ shortcuts inline, then Save or Cancel. Orders uses a sibling card with
 its own Save; saving or cancelling either preserves the other card's draft.
 Saving confirms the result in place and briefly glows the saved card, like Orders; Cancel restores the saved shortcuts. Menu has no preset controls. The `menu-presentation` part gate is live; the same approved controls use the mock in demo and outlet-scoped database commands in real mode. The existing shortcut adapter persists its settings separately from Orders' service choices. Highlights use the public reader's existing section format, leaving the brand Worker unchanged.
 
+## Dish photos (#84)
+
+With `dish-photos` on, which the demo starts with, Menu's dish editor has the Photo field and cropper, and rows show thumbnails that open enlarged. The mock keeps every file as an object URL in this tab's memory and writes nothing anywhere, so a demo photo lasts until the tab closes or the demo resets. It refuses what the database will: a biller, another outlet's dish, a removed dish, a malformed key or framing. A failed upload is shown by going offline (the browser's own offline state): Save keeps the dish's other edits and offers **Retry**.
+
 ## Extending it
 
 When a new surface is added:

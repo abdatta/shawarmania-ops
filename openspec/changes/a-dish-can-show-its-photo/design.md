@@ -91,6 +91,13 @@ refuses a row whose `outlet_id` is not its item's outlet, the same way
 `menu_items` checks its category. The crops are stored so **Adjust** reopens
 the cropper at the framing last saved.
 
+**Built with a composite foreign key, not a trigger** (apply time, 2026-11-18):
+`(outlet_id, item_id)` references `menu_items(outlet_id, id)`, the unique pair
+#68 added for highlights, so a row naming another outlet is refused by the key
+itself, even for a privileged write, with no trigger to keep in step. A file's
+extension is its format word, `.webp` or `.jpeg`, so the app, the function's
+file check and the Worker's route cannot disagree about `.jpg`.
+
 **Why not a column.** The counter subscribes to changes on `menu_items` and
 re-reads its whole menu on each one (menu-management, *The live counter prefers
 the latest reachable menu*), and caches that menu in IndexedDB for offline
@@ -287,6 +294,13 @@ square) is a pure function with its own unit test.
 The client deletes the replaced or removed files after the function succeeds
 (the original only when its key changed). If that delete fails, a stray file
 remains, which nothing links (non-goal: sweep).
+
+**Built (2026-11-18):** the four storage policies also require
+`app_change_gate('dish-photos')`, so with the gate off no client reaches the
+bucket at all (the release lint asks this of any policy on an existing table,
+and it is right here). Storage refuses a direct SQL `DELETE`, so pgTAP checks
+the delete policy's predicate and the authenticated suite proves the delete
+through the Storage API.
 
 **RLS.** `menu_item_photos`: select for anyone who may read that outlet's menu
 (billers included, harmlessly), no direct insert, update or delete for

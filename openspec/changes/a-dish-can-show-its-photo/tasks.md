@@ -59,7 +59,7 @@ every visual question on the customer page.
 
 ## 3. Storage, table and functions
 
-- [ ] 3.1 Write failing pgTAP and RLS tests first for everything below:
+- [x] 3.1 Write failing pgTAP and RLS tests first for everything below:
   isolation for `menu_item_photos` (another outlet's manager cannot select,
   and nobody can write it directly) and for the `menu-photos` bucket (another
   outlet's manager cannot upload, read or delete; a biller cannot write; a
@@ -67,25 +67,25 @@ every visual question on the customer page.
   refusing while the gate is off, for a biller, for another outlet, for a
   removed dish, and for a key whose three files are not all present under
   that outlet; the table's checks refusing a bad format, aspect or crop.
-- [ ] 3.2 Migration: the private `menu-photos` bucket (4 MB, `image/webp`,
+- [x] 3.2 Migration: the private `menu-photos` bucket (4 MB, `image/webp`,
   `image/jpeg`), its four storage policies modelled on
   `20260819000006_operator_statements_bucket.sql`, the table (design D2) with
   its checks, trigger and RLS, and `set_menu_item_photo` /
   `clear_menu_item_photo` (design D6). `npm run lint:migrations`.
-- [ ] 3.3 Migration: `public_menu_v2` (design D7: `public_menu`'s body plus the
+- [x] 3.3 Migration: `public_menu_v2` (design D7: `public_menu`'s body plus the
   `photo` field `{key, format, aspect}`, null while the gate is off) and
   `public_menu_photo`, both service role only. Tests: exact field projection
   including highlights and that no source key or crop is sent, null for
   unknown, closed and empty alike, refusal for `anon` and `authenticated`,
   `public_menu` unchanged byte for byte, and every null case of
   `public_menu_photo` from the spec, a kept original's key included.
-- [ ] 3.4 Regenerate `src/data-access/database.types.ts` from a fresh reset and
+- [x] 3.4 Regenerate `src/data-access/database.types.ts` from a fresh reset and
   read the diff: a stray CLI telemetry line can land in the file, and is not
   the migration's fault.
 
 ## 4. The live editor
 
-- [ ] 4.1 The live adapter: upload the three files with the user's session
+- [x] 4.1 The live adapter: upload the three files with the user's session
   (upsert; on **Adjust** only the two new ones), call the set/clear function,
   delete the previous files after success (the original only when its key
   changed); display URLs and the original for **Adjust** from short-lived
@@ -112,7 +112,7 @@ every visual question on the customer page.
 
 ## 6. Docs and verification
 
-- [ ] 6.1 Update `docs/DATA_MODEL.md`, `docs/SCREENS.md`,
+- [x] 6.1 Update `docs/DATA_MODEL.md`, `docs/SCREENS.md`,
   `docs/SECURITY_AND_PRIVACY.md`, `docs/OPERATIONS.md` (storage budget, the
   cache path, how to look at the bucket), `docs/DEMO_MODE.md`,
   `docs/TESTING.md`.

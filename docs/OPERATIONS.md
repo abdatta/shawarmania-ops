@@ -441,6 +441,21 @@ then says the menu was not found, exactly as for an address nobody holds.
 
 Managers use item Move up/down and Edit highlights in Menu to save outlet-local ordering and a named selection. After the ops migration and app release, the existing Worker consumes nonempty highlights as its first ordinary-shaped section; no brand-site deployment or credential change is required. Dishes remain in their categories, and an empty selection publishes no section. Changes become visible on the next cache miss within the existing minute; an ops outage continues to use the Worker's existing last-good fallback. Whole-bill discount shortcuts are configured in the outlet's Orders settings, with their own Save, independently of service settings. A highlight title never creates a discount.
 
+**Dish photos** (#84, behind `dish-photos`). A manager's photo is three files in
+the private Storage bucket `menu-photos`, under the outlet's folder: the large
+photo (~350 KB), the thumbnail (~30 KB) and the kept original (~1 MB, for
+re-framing only). About 80 photographed dishes is ~120 MB against the Free
+plan's 1 GB. A customer never fetches from Supabase: the Worker serves
+`/menu/<slug>/photo/<key>[-sm].<format>` from Cloudflare's edge cache, and on a
+miss asks `public_menu_photo`, reads the file with the service-role key and
+caches it for a year (the address is a content hash, so it never goes stale),
+so Supabase serves each photo once per edge. A changed photo reaches the page
+within the menu's cache minute, as a new address. To look at the bucket, open
+Storage → `menu-photos` in the project's dashboard; a file no row names is a
+leftover from an interrupted upload or a failed delete, harmless and safe to
+remove. Turning `dish-photos` off takes every photo off the page and the field
+out of the editor; the rows and files stay, and return when it is turned on.
+
 ## The customer's receipt link *(#54)*
 
 The receipt page is **not deployed from this repo.** It is a Cloudflare Worker
