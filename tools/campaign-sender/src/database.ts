@@ -257,8 +257,6 @@ export function databaseQueue(
     pauseCampaign: async (campaignId, reason) => {
       await call(client, 'pause_campaign', { p_campaign_id: campaignId, p_reason: reason })
     },
-    recordStop: async (phoneDigits) =>
-      (await call(client, 'campaign_record_stop', { p_phone: phoneDigits })) === true,
     finishNotices: async () => readFinishNotices(await call(client, 'campaign_finish_notices')),
     markFinishNotice: async (campaignId) => {
       await call(client, 'campaign_mark_finish_notice', { p_campaign_id: campaignId })

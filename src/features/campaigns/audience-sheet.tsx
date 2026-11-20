@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FormSheet } from '@/components/layout/form-sheet'
 import { Button } from '@/components/ui/button'
 import { LoadingRegion, LoadingTable, Shimmer } from '@/components/ui/loading'
+import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { useAdapters, type Tables } from '@/data-access'
 import {
   isPicked,
@@ -13,12 +15,18 @@ import {
   type CampaignAudiencePerson,
   type CampaignAudienceSort,
 } from '@/data-access/campaigns'
-import { formatPaise, parseCustomerQuery } from '@/domain'
+import {
+  formatBusinessDateShort,
+  formatPaise,
+  parseCustomerQuery,
+  resolveBusinessDate,
+  shiftBusinessDate,
+} from '@/domain'
 import { Group, Option } from '@/features/billing/bill-filter-sheet'
 import { OutletChips, useOutletScope } from '@/features/outlet-scope'
 import { cn } from '@/lib/cn'
 
-import { count, messageOf } from './words'
+import { count, messageOf, stretchWords } from './words'
 
 /**
  * Choosing the customers a campaign goes to
@@ -38,7 +46,11 @@ import { count, messageOf } from './words'
  * - **Filters** are one choice each from a short list, two to a row, and
  *   nothing is typed [owner: keep the selectors simple]. Outlet (only where
  *   there is more than one, and opening on the one last used), order, when
- *   they last ordered, what they spent and gold or not are always there; the
+ *   they last ordered, what they spent and gold or not are always there. When
+ *   they last ordered can also be **between two dates**, with **Not back
+ *   since** leaving out whoever ordered after the second [owner, 2026-11-20:
+ *   to win back a past stretch's customers]; its two dates are picked from a
+ *   calendar, never typed. The
  *   number of orders and whether they were sent a campaign before sit behind
  *   **More filters**.
  * - **Select all N** picks everybody the filters match, N of them, and keeps
@@ -84,7 +96,30 @@ const ORDERED: readonly Choice[] = [
     value: coded('not_within', days),
     label: orderedLabel('not_within', days),
   })),
+  { value: 'between', label: 'Between dates' },
 ]
+
+/** The "Last ordered" filter as one phrase, or null for any time. */
+function orderedText(ordered: CampaignAudience['ordered']): string | null {
+  if (ordered.kind === 'any') return null
+  if (ordered.kind !== 'between') return orderedLabel(ordered.kind, ordered.days)
+  const stretch = `Ordered ${stretchWords(ordered.from, ordered.to)}`
+  return ordered.notSince ? `${stretch}, not back since` : stretch
+}
+
+/**
+ * The stretch "Between dates" opens on: sixty business dates back to
+ * thirty. Something to move, not a suggestion of
+ * who to send to; nothing is chosen until Done.
+ */
+function firstStretch(today: string): CampaignAudience['ordered'] {
+  return {
+    kind: 'between',
+    from: shiftBusinessDate(today, -60),
+    to: shiftBusinessDate(today, -30),
+    notSince: false,
+  }
+}
 
 const spentLabel = (paise: number) => `${formatPaise(paise)} or more`
 
@@ -139,7 +174,9 @@ function withCurrent(choices: readonly Choice[], value: string, label: string): 
 }
 
 const orderedValue = (audience: CampaignAudience) =>
-  audience.ordered.kind === 'any' ? 'any' : coded(audience.ordered.kind, audience.ordered.days)
+  audience.ordered.kind === 'any' || audience.ordered.kind === 'between'
+    ? audience.ordered.kind
+    : coded(audience.ordered.kind, audience.ordered.days)
 
 const ordersValue = (audience: CampaignAudience) =>
   audience.orders.kind === 'any' ? 'any' : coded(audience.orders.kind, audience.orders.count)
@@ -175,9 +212,7 @@ function withoutFilters(audience: CampaignAudience): CampaignAudience {
 /** The filters in force, as the Filter button's line says them; null with none. */
 function filterSummary(audience: CampaignAudience): string | null {
   const words = [
-    audience.ordered.kind === 'any'
-      ? null
-      : `${orderedLabel(audience.ordered.kind, audience.ordered.days)}`,
+    orderedText(audience.ordered),
     audience.spentAtLeastPaise === null ? null : `Spent ${spentLabel(audience.spentAtLeastPaise)}`,
     audience.gold === 'any' ? null : GOLD.find((choice) => choice.value === audience.gold)?.label,
     audience.orders.kind === 'any'
@@ -442,6 +477,11 @@ export function AudienceSheet({
           {filtering && (
             <FiltersSheet
               audience={audience}
+              today={resolveBusinessDate(
+                new Date(),
+                shops?.find((shop) => shop.id === audience.outletId)?.business_day_cutover ??
+                  '04:00',
+              )}
               onChange={(next) => setHeld(next)}
               onClose={() => setFiltering(false)}
             />
@@ -458,10 +498,13 @@ export function AudienceSheet({
  */
 function FiltersSheet({
   audience,
+  today,
   onChange,
   onClose,
 }: {
   audience: CampaignAudience
+  /** The outlet's business date now: the last date a stretch can end on. */
+  today: string
   onChange: (audience: CampaignAudience) => void
   onClose: () => void
 }) {
@@ -505,15 +548,16 @@ function FiltersSheet({
       <div className="space-y-5" data-testid="audience-filter-sheet">
         {choose(
           'Last ordered',
-          withCurrent(
-            ORDERED,
-            orderedValue(audience),
-            audience.ordered.kind === 'any'
-              ? ''
-              : orderedLabel(audience.ordered.kind, audience.ordered.days),
-          ),
+          withCurrent(ORDERED, orderedValue(audience), orderedText(audience.ordered) ?? ''),
           orderedValue(audience),
           (next) => {
+            if (next === 'between') {
+              // Tapped again, the stretch already set is kept.
+              return {
+                ordered:
+                  audience.ordered.kind === 'between' ? audience.ordered : firstStretch(today),
+              }
+            }
             const { kind, amount } = decoded(next)
             return {
               ordered:
@@ -522,6 +566,13 @@ function FiltersSheet({
                   : { kind: 'any' },
             }
           },
+        )}
+        {audience.ordered.kind === 'between' && (
+          <Stretch
+            ordered={audience.ordered}
+            today={today}
+            onChange={(ordered) => onChange({ ...audience, ordered })}
+          />
         )}
         {choose(
           'Spent',
@@ -577,6 +628,76 @@ function FiltersSheet({
         )}
       </div>
     </FormSheet>
+  )
+}
+
+/**
+ * The two dates of "Between dates" and its Not back since switch.
+ *
+ * Each date is a calendar, never typed, and neither can pass the other: moving
+ * one past the other brings the other along, so the stretch is never empty or
+ * backwards, which the database would refuse. Nothing ends after today.
+ */
+function Stretch({
+  ordered,
+  today,
+  onChange,
+}: {
+  ordered: Extract<CampaignAudience['ordered'], { kind: 'between' }>
+  today: string
+  onChange: (ordered: CampaignAudience['ordered']) => void
+}) {
+  const { from, to, notSince } = ordered
+  const valid = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && value <= today
+  const sinceLabel = `Not back since ${formatBusinessDateShort(to)}`
+  return (
+    <div className="space-y-3" data-testid="audience-stretch">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label htmlFor="audience-stretch-from" className="block text-sm font-semibold">
+            From
+          </label>
+          <Input
+            id="audience-stretch-from"
+            type="date"
+            value={from}
+            max={today}
+            data-testid="audience-stretch-from"
+            onChange={(event) => {
+              const next = event.target.value
+              if (!valid(next)) return
+              onChange({ ...ordered, from: next, to: next > to ? next : to })
+            }}
+          />
+        </div>
+        <div className="space-y-1">
+          <label htmlFor="audience-stretch-to" className="block text-sm font-semibold">
+            To
+          </label>
+          <Input
+            id="audience-stretch-to"
+            type="date"
+            value={to}
+            max={today}
+            data-testid="audience-stretch-to"
+            onChange={(event) => {
+              const next = event.target.value
+              if (!valid(next)) return
+              onChange({ ...ordered, to: next, from: next < from ? next : from })
+            }}
+          />
+        </div>
+      </div>
+      <div className="flex min-h-11 items-center justify-between gap-3">
+        <span className="text-sm font-semibold text-content">{sinceLabel}</span>
+        <Switch
+          checked={notSince}
+          label={sinceLabel}
+          testId="audience-not-since"
+          onChange={(next) => onChange({ ...ordered, notSince: next })}
+        />
+      </div>
+    </div>
   )
 }
 

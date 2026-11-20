@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import {
   CAMPAIGN_MESSAGE_MAX,
   CAMPAIGN_NAME_MAX,
-  CAMPAIGN_STOP_LINE,
   campaignBodyProblem,
   campaignGreetingName,
   previewCampaignMessage,
@@ -17,47 +16,43 @@ import {
  * as they type, and the text the sender hands to WhatsApp.
  */
 
-const stop = `\n\n${CAMPAIGN_STOP_LINE}`
-
 describe('renderCampaignMessage: {name}', () => {
   it('puts the saved name where {name} stands', () => {
     expect(renderCampaignMessage('Hi {name}, the new menu is here.', 'Moumita').text).toBe(
-      `Hi Moumita, the new menu is here.${stop}`,
+      `Hi Moumita, the new menu is here.`,
     )
   })
 
   it('fills every {name}, however a phone capitalised it', () => {
     expect(renderCampaignMessage('{Name}! Yes, { name }.', 'Arjun Das').text).toBe(
-      `Arjun Das! Yes, Arjun Das.${stop}`,
+      `Arjun Das! Yes, Arjun Das.`,
     )
   })
 
   it('gives a customer with no saved name the greeting without one', () => {
     expect(renderCampaignMessage('Hi {name}, the new menu is here.', null).text).toBe(
-      `Hi, the new menu is here.${stop}`,
+      `Hi, the new menu is here.`,
     )
-    expect(renderCampaignMessage('Hello {name}!', null).text).toBe(`Hello!${stop}`)
+    expect(renderCampaignMessage('Hello {name}!', null).text).toBe(`Hello!`)
   })
 
   it('starts the line with a capital when the missing name opened it', () => {
     expect(renderCampaignMessage('{name}, your table is waiting.', null).text).toBe(
-      `Your table is waiting.${stop}`,
+      `Your table is waiting.`,
     )
     expect(renderCampaignMessage('Offer!\n{name}: come by today.', '   ').text).toBe(
-      `Offer!\nCome by today.${stop}`,
+      `Offer!\nCome by today.`,
     )
   })
 
   it('leaves no empty bold behind when the missing name was formatted', () => {
-    expect(renderCampaignMessage('Hi *{name}*, welcome back.', null).text).toBe(
-      `Hi, welcome back.${stop}`,
-    )
+    expect(renderCampaignMessage('Hi *{name}*, welcome back.', null).text).toBe(`Hi, welcome back.`)
   })
 
   it('keeps formatting characters inside a name from formatting the message', () => {
     // A name saved before #56 may be an order label, typed with anything in it.
     const { text } = renderCampaignMessage('Hi {name}, 20% off today.', '*Raj_ ~K~ `x`')
-    expect(text).toBe(`Hi Raj K x, 20% off today.${stop}`)
+    expect(text).toBe(`Hi Raj K x, 20% off today.`)
     const [greeting] = previewCampaignMessage(text)
     expect(greeting).toEqual([{ text: 'Hi Raj K x, 20% off today.' }])
   })
@@ -65,7 +60,7 @@ describe('renderCampaignMessage: {name}', () => {
   it('treats a name that is only formatting characters as no name', () => {
     expect(campaignGreetingName('**__**')).toBeNull()
     expect(renderCampaignMessage('Hi {name}!', '**')).toEqual({
-      text: `Hi!${stop}`,
+      text: `Hi!`,
       tooLong: false,
     })
   })
@@ -85,24 +80,23 @@ describe('renderCampaignMessage: {name}', () => {
   })
 })
 
-describe('renderCampaignMessage: the stop line and the length', () => {
-  it('always ends with the stop line, one blank line below the body', () => {
-    expect(renderCampaignMessage('  New menu today.  \n\n', null).text).toBe(
-      `New menu today.${stop}`,
-    )
+describe('renderCampaignMessage: nothing added, and the length', () => {
+  it('is the body, trimmed, with nothing added under it', () => {
+    // Until 2026-11-20 a stop line was added under every message.
+    expect(renderCampaignMessage('  New menu today.  \n\n', null).text).toBe('New menu today.')
+    expect(renderCampaignMessage('Hi {name}', 'Moumita').text).not.toMatch(/STOP/i)
   })
 
   it('reports an over-long message and does not cut it', () => {
-    const body = 'x'.repeat(CAMPAIGN_MESSAGE_MAX)
+    const body = 'x'.repeat(CAMPAIGN_MESSAGE_MAX + 1)
     const rendered = renderCampaignMessage(body, null)
     expect(rendered.tooLong).toBe(true)
-    // Cutting it could cut the stop line off; a message that long is refused.
-    expect(rendered.text.endsWith(CAMPAIGN_STOP_LINE)).toBe(true)
-    expect(rendered.text).toHaveLength(body.length + stop.length)
+    // A message that long is refused, never cut.
+    expect(rendered.text).toBe(body)
   })
 
   it('judges a body by the longest name it could be sent with', () => {
-    const room = CAMPAIGN_MESSAGE_MAX - stop.length
+    const room = CAMPAIGN_MESSAGE_MAX
     // Fits with no name, and would not with a long one.
     const tight = `${'x'.repeat(room - '{name}'.length - 3)}{name}`
     expect(renderCampaignMessage(tight, null).tooLong).toBe(false)

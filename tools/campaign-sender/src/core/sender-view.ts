@@ -215,7 +215,6 @@ export function viewAfterEvent(
     case 'send_unclear':
     case 'report_refused':
     case 'receipts':
-    case 'stop_reply':
     case 'finish_notice':
       break
   }

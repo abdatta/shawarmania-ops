@@ -13,7 +13,7 @@ import {
  *
  * Drawn from `shared/campaign-message`, the function the sender sends with, so
  * the bubble cannot show a message the customer would not get: the name filled
- * in, the stop line under it, WhatsApp's own formatting.
+ * in and WhatsApp's own formatting.
  *
  * It reads as a message received, the plain bubble on WhatsApp's chat ground,
  * in the app's own surface tokens so both themes are the ones the validator
@@ -65,7 +65,7 @@ export function MessageBubble({
         )}
         <div className="px-3 py-2 text-sm leading-relaxed text-content">
           {empty && (
-            // Nothing written yet: the stop line alone would read as the message.
+            // Nothing written yet: an empty bubble would read as a fault.
             <p className="text-content-muted">Your message</p>
           )}
           {lines.map((line, index) => (

@@ -845,12 +845,6 @@ function sayEvent(event: SenderEvent): void {
           ? `${at}  A campaign is finished. Its totals went to the owner who submitted it.`
           : `${at}  A campaign is finished, and its totals could not be sent. Tried again next start.`,
       )
-    case 'stop_reply':
-      return say(
-        event.stopped
-          ? `${at}  A customer replied STOP. They are on the stopped list now.`
-          : `${at}  Somebody replied STOP who was not sent a campaign lately. Nothing changed.`,
-      )
     case 'receipts':
       return say(
         `${at}  Receipts recorded: ${event.delivered} delivered, ${event.read} read, ${event.rejected} refused.`,

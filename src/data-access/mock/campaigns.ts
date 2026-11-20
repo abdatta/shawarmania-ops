@@ -131,8 +131,8 @@ interface BatchSeed {
   releasedAgoMs: number
   /** Positions in the batch (0-based) that came to something other than `sent`. */
   outcomes?: Record<number, 'not_on_whatsapp' | 'unsure' | 'failed'>
-  /** Positions that got the message and replied STOP to it. */
-  repliedStop?: number[]
+  /** Positions that got the message and then asked an owner to stop them. */
+  askedToStop?: number[]
   /** How many were sent; the rest wait. Defaults to the whole batch. */
   sent?: number
 }
@@ -208,8 +208,8 @@ export function createDemoCampaigns(now: number = Date.now()): DemoCampaigns {
   const campaigns: MarketingCampaignRow[] = []
   const batches: MarketingCampaignBatchRow[] = []
   const recipients: MarketingCampaignRecipientRow[] = []
-  /** The recipients who got a message and replied STOP to it. */
-  const repliers: MarketingCampaignRecipientRow[] = []
+  /** The recipients who got a message and then asked an owner to stop them. */
+  const askers: MarketingCampaignRecipientRow[] = []
 
   // ── Weekend combo: done, with its receipts ────────────────────────────────
   const doneRegulars = [
@@ -219,10 +219,10 @@ export function createDemoCampaigns(now: number = Date.now()): DemoCampaigns {
   ].map(customerIdForPhone)
   const doneCustomer = (position: number) => doneRegulars[position - 1] ?? pastCustomerId(position)
   const doneBatches: BatchSeed[] = [
-    { size: 100, releasedAgoMs: 12 * DAY, outcomes: { 41: 'not_on_whatsapp' }, repliedStop: [77] },
+    { size: 100, releasedAgoMs: 12 * DAY, outcomes: { 41: 'not_on_whatsapp' }, askedToStop: [77] },
     { size: 100, releasedAgoMs: 11 * DAY, outcomes: { 12: 'unsure' } },
     { size: 100, releasedAgoMs: 10 * DAY, outcomes: { 58: 'not_on_whatsapp' } },
-    { size: 100, releasedAgoMs: 10 * DAY - 4 * HOUR, outcomes: { 90: 'failed' }, repliedStop: [3] },
+    { size: 100, releasedAgoMs: 10 * DAY - 4 * HOUR, outcomes: { 90: 'failed' }, askedToStop: [3] },
     { size: 18, releasedAgoMs: 9 * DAY },
   ]
   campaigns.push({
@@ -267,7 +267,7 @@ export function createDemoCampaigns(now: number = Date.now()): DemoCampaigns {
     )
     const rows = seedBatch(DEMO_CAMPAIGN_DONE_ID, index + 1, position, doneCustomer, seed, now)
     recipients.push(...rows)
-    repliers.push(...(seed.repliedStop ?? []).flatMap((at) => rows[at] ?? []))
+    askers.push(...(seed.askedToStop ?? []).flatMap((at) => rows[at] ?? []))
     position += seed.size
   })
 
@@ -302,12 +302,12 @@ export function createDemoCampaigns(now: number = Date.now()): DemoCampaigns {
     finish_notice_sent_at: null,
   })
   const sendingBatches: BatchSeed[] = [
-    { size: 100, releasedAgoMs: 2 * DAY, outcomes: { 23: 'not_on_whatsapp' }, repliedStop: [60] },
+    { size: 100, releasedAgoMs: 2 * DAY, outcomes: { 23: 'not_on_whatsapp' }, askedToStop: [60] },
     {
       size: 100,
       releasedAgoMs: DAY + 2 * HOUR,
       outcomes: { 37: 'unsure' },
-      repliedStop: [8, 71, 95],
+      askedToStop: [8, 71, 95],
     },
     { size: 100, releasedAgoMs: SCENE_BATCH_SENT * MINUTE, sent: SCENE_BATCH_SENT },
     ...Array.from({ length: 7 }, () => ({ size: 100, releasedAgoMs: 0, sent: 0 })),
@@ -328,7 +328,7 @@ export function createDemoCampaigns(now: number = Date.now()): DemoCampaigns {
     )
     const rows = seedBatch(DEMO_CAMPAIGN_SENDING_ID, batchNo, position, sendingCustomer, seed, now)
     recipients.push(...rows)
-    repliers.push(...(seed.repliedStop ?? []).flatMap((at) => rows[at] ?? []))
+    askers.push(...(seed.askedToStop ?? []).flatMap((at) => rows[at] ?? []))
     position += seed.size
   })
 
@@ -352,7 +352,8 @@ export function createDemoCampaigns(now: number = Date.now()): DemoCampaigns {
     finish_notice_sent_at: null,
   })
 
-  // ── The stopped list: everybody who replied STOP, and one added by hand ───
+  // ── The stopped list: everybody an owner added by hand ────────────────────
+  // Nobody replies STOP: the sender reads no replies (design, *No stop line*).
   const pastCustomers = new Map<string, { name: string | null; phoneLast4: string }>()
   const stopped: MarketingStoppedRow[] = []
   const names: (string | null)[] = [
@@ -363,20 +364,20 @@ export function createDemoCampaigns(now: number = Date.now()): DemoCampaigns {
     'Ayesha Khatun',
     'Debolina Paul',
   ]
-  repliers.forEach((row, index) => {
+  askers.forEach((row, index) => {
     pastCustomers.set(row.customer_id, {
       name: names[index % names.length] ?? null,
       phoneLast4: String(2310 + index * 137).slice(-4),
     })
     stopped.push({
       customer_id: row.customer_id,
-      // A reply some hours after the message arrived.
+      // Asked some hours after the message arrived, and added by an owner.
       stopped_at: new Date(
         Date.parse(row.sent_at ?? ago(now, DAY)) + (2 + index) * HOUR,
       ).toISOString(),
-      source: 'reply',
-      campaign_id: row.campaign_id,
-      recorded_by: null,
+      source: 'owner',
+      campaign_id: null,
+      recorded_by: DEMO_OWNER_ID,
     })
   })
   stopped.push({
@@ -808,6 +809,8 @@ export function createMockCampaignsAdapter(
     profile: DemoCustomerProfile
     orders: number
     lastDate: string
+    /** The business date of every settled bill here. */
+    dates: string[]
     spendPaise: number
   }
 
@@ -828,6 +831,7 @@ export function createMockCampaignsAdapter(
         {
           profile,
           orders: here.length,
+          dates: here.map((visit) => visit.businessDate),
           lastDate: here.reduce(
             (latest, visit) => (visit.businessDate > latest ? visit.businessDate : latest),
             '',
@@ -842,7 +846,12 @@ export function createMockCampaignsAdapter(
   const passes =
     (audience: CampaignAudience, sent: Map<string, string>, now: number) =>
     (entry: Candidate): boolean => {
-      if (audience.ordered.kind !== 'any') {
+      if (audience.ordered.kind === 'between') {
+        const { from, to, notSince } = audience.ordered
+        // Both dates included; not since is no settled bill after the second.
+        if (!entry.dates.some((date) => date >= from && date <= to)) return false
+        if (notSince && entry.lastDate > to) return false
+      } else if (audience.ordered.kind !== 'any') {
         // A bill on the business date exactly that many days back is within it.
         const within = entry.lastDate >= shiftBusinessDate(customers.today, -audience.ordered.days)
         if (within !== (audience.ordered.kind === 'within')) return false

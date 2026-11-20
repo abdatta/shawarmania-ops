@@ -21,7 +21,8 @@ hold a policy or a grant on the tables themselves.
 ### Requirement: An audience is chosen by filters that count, and never suggested
 
 The system SHALL let an owner choose a campaign's audience at one outlet by how
-recently a customer ordered, how many times, whether they are a gold member
+recently a customer ordered, or whether they ordered between two dates and not
+since, how many times, whether they are a gold member
 there, how much they have spent, and when they were last sent a campaign, with
 one sort order. It SHALL show the matching customers as a list, by name and
 the last four digits of their number, with the filters and a search by name or
@@ -51,6 +52,20 @@ return a full phone number.
   outlet's current business date, rung after midnight
 - **THEN** "ordered in the last 30 days" includes that customer
 
+#### Scenario: Customers from a past stretch who have not come back
+
+- **WHEN** an owner chooses "Between dates" from the 1st to the 30th of a past
+  month, turns on "Not back since", and selects all
+- **THEN** the audience is every customer with a settled bill at the outlet on a
+  business date in that stretch, both days included, and none after it; a
+  cancelled bill since does not count as coming back
+
+#### Scenario: A stretch that ends before it starts
+
+- **WHEN** an audience is sent whose first date is after its second, or a date
+  that does not exist
+- **THEN** the database refuses it, and never reads it as no filter
+
 #### Scenario: The audience read is asked for numbers
 
 - **WHEN** an owner's session calls the audience read
@@ -61,15 +76,21 @@ return a full phone number.
 The system SHALL keep a list of customers who must not be sent campaigns. A
 customer on it SHALL be excluded when an audience is counted, when a campaign is
 scheduled and again when a recipient is about to be sent to, whatever the
-filters say. A reply of STOP from a campaign recipient's own number SHALL add
-that customer. An owner SHALL be able to add and remove a customer by hand. The
-list SHALL NOT affect receipts or points.
+filters say. An owner SHALL be able to add and remove a customer by hand. The
+list SHALL NOT affect receipts or points. A campaign message SHALL be the body
+as written, with no stop line added, and the sender SHALL NOT read incoming
+messages, a reply of STOP included [owner, 2026-11-20].
 
-#### Scenario: A reply of STOP
+#### Scenario: A customer asks not to be messaged
 
-- **WHEN** a customer who was sent a campaign replies "stop" in any letter case
-- **THEN** that customer is on the stopped list and no later audience counts
-  them
+- **WHEN** an owner adds a customer's number to the stopped list
+- **THEN** no later audience counts them
+
+#### Scenario: A customer replies STOP
+
+- **WHEN** a customer replies "stop" to a campaign
+- **THEN** the sender does nothing with it, and the customer is stopped only if
+  an owner adds them
 
 #### Scenario: Stopped after scheduling, before their turn
 

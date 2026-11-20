@@ -60,13 +60,6 @@ export interface LinkConnection {
    * receipts the moment a connection is made.
    */
   onReceipt: (listener: ReceiptListener) => void
-  /**
-   * Told the phone number, as digits, of whoever replied STOP to this account,
-   * and of nobody else: every other incoming message is dropped unread by the
-   * link itself (design D11). Like receipts, the first listener is handed what
-   * came before it asked.
-   */
-  onStopReply?: (listener: (phoneDigits: string) => void) => void
 }
 
 export interface LinkHandlers {
@@ -234,12 +227,6 @@ export interface CampaignQueue {
   outstandingMessageIds: () => Promise<string[]>
   /** The sender pausing a campaign itself, with the reason the page shows. */
   pauseCampaign: (campaignId: string, reason: SenderPauseReason) => Promise<void>
-  /**
-   * A reply of STOP from this number. True when it was a customer sent a
-   * campaign in the last thirty days, who is now on the stopped list; false
-   * for anybody else, which changes nothing.
-   */
-  recordStop: (phoneDigits: string) => Promise<boolean>
   /** Finished campaigns, last week's, whose owner has not been sent their totals. */
   finishNotices: () => Promise<FinishNotice[]>
   /** The owner was sent the totals. */

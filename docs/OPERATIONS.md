@@ -989,9 +989,10 @@ removes it.
    WhatsApp, if their account carries a phone.
 
 **Pause, Resume and Stop are on the campaign's page in the app**, for any
-owner, from any phone; the sender obeys before its next message. A customer
-who replies STOP is put on the stopped list by the sender, and is in no later
-audience.
+owner, from any phone; the sender obeys before its next message. Messages
+carry no stop line and the sender reads no replies: a customer who asks not to
+be messaged, at the counter or by replying, is added to **Stopped** in the app
+by an owner, and is in no later audience.
 
 ### When it halts
 

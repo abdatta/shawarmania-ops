@@ -35,8 +35,8 @@ type Field = 'name' | 'body' | 'audience' | 'tests'
  * message, one optional image and the customers it goes to.
  *
  * **The bubble under the text box is the message**, drawn as it is typed by the
- * function the sender will send with, so the partner sees the name filled in,
- * the formatting and the stop line before anybody else does. The name it is
+ * function the sender will send with, so the partner sees the name filled in
+ * and the formatting before anybody else does. The name it is
  * filled in with is the reader's own first name. Where the message greets by
  * name, the bubble can be flipped to a customer who never gave one.
  *

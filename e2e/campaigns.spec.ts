@@ -53,9 +53,7 @@ test('the owner writes, submits, pauses and stops a campaign, and sends nothing'
   await page.getByTestId('campaign-name').fill('Monsoon')
   await page.getByTestId('campaign-body').fill('Hi {name}, *hot* rolls on a rainy day.')
   await expect(page.getByTestId('message-bubble')).toContainText('Hi Demo, hot rolls')
-  await expect(page.getByTestId('message-bubble')).toContainText(
-    'Reply STOP to stop these messages.',
-  )
+  await expect(page.getByTestId('message-bubble')).not.toContainText('STOP')
   await page.getByTestId('choose-audience').click()
   // The customers are the sheet: there as it opens, by name and last four
   // digits, nobody ticked, and more as the list is scrolled.

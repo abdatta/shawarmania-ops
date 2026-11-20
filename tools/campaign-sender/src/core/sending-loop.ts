@@ -86,8 +86,6 @@ export type SenderEvent =
   | { kind: 'paused_by_sender'; campaignId: string; reason: SenderPauseReason }
   | { kind: 'batch_finished'; batchNo: number }
   | { kind: 'receipts'; delivered: number; read: number; rejected: number }
-  /** A reply of STOP was passed to the database. `stopped`: it was a recent recipient. */
-  | { kind: 'stop_reply'; stopped: boolean }
   /** The owner who submitted a campaign was sent its totals, or could not be. */
   | { kind: 'finish_notice'; sent: boolean }
 
@@ -231,21 +229,6 @@ export async function runSender(deps: SenderDeps): Promise<SenderEnd> {
       }
       if (sent) await ask(() => queue.markFinishNotice(notice.campaignId))
       tell({ kind: 'finish_notice', sent })
-    }
-  }
-
-  /** Numbers that replied STOP, held only until the database has been told. */
-  const stopReplies: string[] = []
-  const heardStop = (phoneDigits: string): void => {
-    stopReplies.push(phoneDigits)
-    wake.abort()
-  }
-  const handOverStops = async (): Promise<void> => {
-    while (stopReplies.length > 0) {
-      const phone = stopReplies[0] as string
-      const stopped = await ask(() => queue.recordStop(phone))
-      stopReplies.shift()
-      tell({ kind: 'stop_reply', stopped })
     }
   }
 
@@ -417,7 +400,6 @@ export async function runSender(deps: SenderDeps): Promise<SenderEnd> {
           // Only now: the first listener is handed everything WhatsApp was
           // holding, and it can be matched only once the ids are known.
           via.onReceipt(hear)
-          via.onStopReply?.(heardStop)
           readyFor = seen
         }
 
@@ -432,7 +414,6 @@ export async function runSender(deps: SenderDeps): Promise<SenderEnd> {
         }
 
         await handOverReceipts()
-        await handOverStops()
 
         const tick: TickResult = await ask(() => queue.tick(status))
         unreachableFor = 0
@@ -603,7 +584,6 @@ export async function runSender(deps: SenderDeps): Promise<SenderEnd> {
   try {
     await settleOwed()
     await handOverReceipts()
-    await handOverStops()
     if (linkEnd.kind === 'halted') await ask(() => queue.tick('halted', linkEnd.reason))
   } catch {
     // The database is unreachable. A halt is already recorded on the laptop.

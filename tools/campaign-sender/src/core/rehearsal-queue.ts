@@ -80,8 +80,6 @@ export interface RehearsalState {
   recipients: RehearsalRow[]
   /** Messages to the rehearsal's own test number, sent with no release. */
   tests?: RehearsalTest[]
-  /** How many replies of STOP came from the rehearsal's recipient. Never a number. */
-  stopReplies?: number
 }
 
 export interface RehearsalTest {
@@ -416,20 +414,6 @@ export function rehearsalQueue(
       state.batch.state = 'released'
       store.save(state)
       return true
-    },
-
-    // The rehearsal's one recipient is a recent recipient once anything has
-    // gone to them; the database's answer for anybody else is false.
-    recordStop: async () => {
-      const state = store.load()
-      const recent =
-        state.recipients.some((row) => row.state === 'sent') ||
-        testsOf(state).some((test) => test.state === 'sent')
-      if (recent) {
-        state.stopReplies = (state.stopReplies ?? 0) + 1
-        store.save(state)
-      }
-      return recent
     },
 
     // A rehearsal has no owner's account to tell.

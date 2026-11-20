@@ -71,7 +71,6 @@ import {
   writeCredsAtomically,
 } from './core/creds-file.ts'
 import { authFolder, writeHalt } from './core/data-folder.ts'
-import { isLidJid, isStopReply, phoneOfJid, senderPhone } from './core/stop-reply.ts'
 import {
   classifyDisconnect,
   MESSAGE_REFUSED_AS_RESTRICTED,
@@ -423,36 +422,7 @@ function connectOnce(
       })
     }
 
-    // Replies of STOP, and nothing else (D11). Every other incoming message is
-    // dropped here, unread past the one question, and nothing is kept.
-    const stopListeners: Array<(phoneDigits: string) => void> = []
-    const heldStops: string[] = []
-    if (options.onSession) {
-      socket.ev.on('messages.upsert', ({ messages, type }) => {
-        if (type !== 'notify') return
-        for (const message of messages) {
-          const text =
-            message.message?.conversation ?? message.message?.extendedTextMessage?.text ?? null
-          if (!isStopReply(text)) continue
-          const { key } = message
-          const known = senderPhone(key)
-          const found =
-            known !== null
-              ? Promise.resolve(known)
-              : !key.fromMe && isLidJid(key.remoteJid)
-                ? socket.signalRepository.lidMapping
-                    .getPNForLID(key.remoteJid as string)
-                    .then((pn) => phoneOfJid(pn))
-                    .catch(() => null)
-                : Promise.resolve(null)
-          void found.then((phone) => {
-            if (!phone) return
-            if (stopListeners.length === 0) heldStops.push(phone)
-            for (const listener of stopListeners) listener(phone)
-          })
-        }
-      })
-    }
+    // Incoming messages are never read: nothing listens for them (D11).
 
     const session: Session = {
       resolve: async (phoneDigits) => {
@@ -486,10 +456,6 @@ function connectOnce(
         for (const [messageId, status, code] of heldReceipts.splice(0)) {
           listener(messageId, status, code)
         }
-      },
-      onStopReply: (listener) => {
-        stopListeners.push(listener)
-        for (const phone of heldStops.splice(0)) listener(phone)
       },
     }
 

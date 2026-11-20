@@ -288,6 +288,22 @@ describe('an audience in words', () => {
     ])
   })
 
+  it('says a stretch of dates, and not back since its last', () => {
+    const year = new Date().getFullYear()
+    expect(
+      audienceWords({
+        ...everybodyAt('o1'),
+        ordered: { kind: 'between', from: `${year}-09-01`, to: `${year}-09-30`, notSince: true },
+      }),
+    ).toEqual(['ordered 01 Sept to 30 Sept', 'not back since 30 Sept', 'most orders first'])
+    expect(
+      audienceWords({
+        ...everybodyAt('o1'),
+        ordered: { kind: 'between', from: '2025-12-24', to: '2025-12-24', notSince: false },
+      }),
+    ).toEqual(['ordered on 24 Dec 2025', 'most orders first'])
+  })
+
   it('says customers ticked one by one as that, not as filters', () => {
     expect(
       audienceWords({

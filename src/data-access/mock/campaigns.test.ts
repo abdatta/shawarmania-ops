@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { shiftBusinessDate } from '@/domain'
+
 import type { AppRole } from '../adapters'
 import { everybodyAt, nobodyAt, type CampaignAudience } from '../campaigns'
 import { createDemoData, createMockAdapters } from './index'
@@ -99,7 +101,8 @@ describe('the demo scenario', () => {
     ])
     expect(campaign.sendingBatchNo).toBe(3)
     expect(campaign.batches[2]).toMatchObject({ sent: 47, toGo: 53 })
-    expect(campaign.counts.stopped).toBe(4)
+    // Asked to be stopped after their message: sent to, and on the list, not counted here.
+    expect(campaign.counts.stopped).toBe(0)
   })
 
   it('finishes the done campaign with nothing left to go', async () => {
@@ -225,6 +228,29 @@ describe('an audience', () => {
       orders: { kind: 'at_most', count: 2 },
     })
     expect(atLeast + atMost).toBe(all)
+  })
+
+  it('finds who ordered between two dates, and who has not been back since', async () => {
+    const { data, campaigns } = demo()
+    const today = data.customers.today
+    const all = await campaigns.audienceCount(kalyani)
+    const between = (from: string, to: string, notSince = false) =>
+      campaigns.audienceCount({ ...kalyani, ordered: { kind: 'between', from, to, notSince } })
+
+    // All time is everybody, and nobody has ordered after today.
+    expect(await between('2000-01-01', today)).toBe(all)
+    expect(await between('2000-01-01', today, true)).toBe(all)
+    // The last seven days, both ends included, is "within 7 days".
+    expect(await between(shiftBusinessDate(today, -7), today)).toBe(
+      await campaigns.audienceCount({ ...kalyani, ordered: { kind: 'within', days: 7 } }),
+    )
+    // Not since a week ago is everybody who has not ordered in the last six days.
+    expect(await between('2000-01-01', shiftBusinessDate(today, -7), true)).toBe(
+      await campaigns.audienceCount({ ...kalyani, ordered: { kind: 'not_within', days: 6 } }),
+    )
+    // Not since only ever narrows.
+    const stretch = [shiftBusinessDate(today, -60), shiftBusinessDate(today, -14)] as const
+    expect(await between(...stretch, true)).toBeLessThanOrEqual(await between(...stretch))
   })
 
   it('reads one outlet’s customers, not the business’s', async () => {
@@ -571,12 +597,13 @@ describe('test numbers', () => {
 })
 
 describe('the stopped list', () => {
-  it('lists who replied STOP and who an owner added, with no number', async () => {
+  it('lists who an owner added, with no number', async () => {
     const { campaigns } = demo()
     const list = await campaigns.stopped()
     expect(list).toHaveLength(7)
-    expect(list.filter((row) => row.source === 'reply')).toHaveLength(6)
-    expect(list.find((row) => row.source === 'owner')).toMatchObject({
+    // Nobody replies STOP any more: every row was added by an owner.
+    expect(list.every((row) => row.source === 'owner')).toBe(true)
+    expect(list.find((row) => row.name === 'Sourav Pal')).toMatchObject({
       name: 'Sourav Pal',
       phoneLast4: '0105',
       recordedByName: 'Demo Owner',

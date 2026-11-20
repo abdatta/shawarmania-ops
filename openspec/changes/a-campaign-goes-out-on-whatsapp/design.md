@@ -368,6 +368,9 @@ Before the first campaign: chat backup on, on the business phone.
 
 ## D11. A linked device sees the account's chats
 
+*Superseded in part on 2026-11-20 (No stop line, below): the sender now reads
+no incoming message at all.*
+
 WhatsApp delivers the account's incoming messages to every linked device. The
 sender is configured not to sync history, keeps no message store, logs no
 message content and no number, and inspects an incoming message only to answer
@@ -1507,3 +1510,68 @@ staging". What that added, beyond the sections above:
 **Staging and production use the same sender.** Which database it sends for
 is which it is signed in to, per data folder; switching is a sign-out and a
 sign-in. Nothing in the laptop half differs between the two.
+
+## No stop line, and ordered between two dates (2026-11-20)
+
+The owner, on seeing the build on staging: "we can remove the reply STOP
+feature since we are sending these messages directly and not via business api
+of whatsapp. also i can imagine that we might ocassionally wanna send
+campaigns to people from a specific date range from the past, and may even
+further filter down to those who have not visited us again since then.
+basically we wanna increase revisits." Asked, they chose no line at all, the
+two-date filter with a "not since" switch, and replacing the database's
+audience function in place (proposal, decisions 15 and 16).
+
+### No stop line
+
+- **The message is the body as written.** `renderCampaignMessage` adds
+  nothing under it, so the bubble, the room left and the over-long check all
+  judge the body alone. The 1,024-character limit is unchanged.
+- **The sender reads no incoming message.** The `messages.upsert` listener,
+  `core/stop-reply.ts`, the loop's hand-over of STOPs and the
+  `recordStop` queue call are gone. Nothing in the sender now looks at what
+  the account receives; D11's one question is no longer asked.
+- **The stopped list stays.** An owner adds a customer who asks, at the counter
+  or by replying, and removes them by hand. It keeps them out of every audience
+  and passes them over at their turn, as before. The demo's list now holds only
+  customers added by an owner, so it shows nothing that can no longer happen.
+- **Kept in the database, uncalled:** `campaign_record_stop` and the
+  `reply` source of `marketing_stopped`. Both are on staging; dropping
+  them is a contract migration for nothing a reader would notice. A row of
+  that source, if one was ever recorded, still shows as "replied STOP".
+- **A campaign's "Stopped" tile** now counts only customers passed over at
+  their turn because they were on the list.
+
+### Ordered between two dates
+
+`{"kind": "between", "from": "YYYY-MM-DD", "to": "YYYY-MM-DD", "notSince": bool}`
+under the audience's `ordered`, beside "within N days" and "not for N days".
+
+- **What it matches**: a settled bill at the outlet with a business date in the
+  stretch, both dates included; with `notSince`, also no settled bill after
+  the second date. Business dates, never timestamps, as every recency here: a
+  bill rung after midnight belongs to the date before. A cancelled bill is not
+  a visit, in the stretch or after it.
+- **What it refuses**: a first date after the second, a date that does not
+  exist or is written any other way, a `notSince` that is not true or false,
+  and a key the stretch does not have. Each is `audience_invalid`, never no
+  filter.
+- **Replaced in place** (`20261120000000_campaign_audience_ordered_between.sql`):
+  `marketing_audience` with today's body verbatim plus the new kind, under a
+  `function-change` lint exception. The lint's own way, a second function
+  called from a gated path, would have split the count, the list and
+  submitting across two definitions, which is the one thing this function is
+  for. Safe because every audience a published build sends has a kind it
+  already knew, and #85 has reached no production build. The owner agreed on
+  2026-11-20.
+- **The sheet**: *Between dates* is one more choice under *Last ordered*.
+  Chosen, it shows two calendars, From and To, and a **Not back since 30 Sept**
+  switch naming the second date. It opens on sixty business dates back to
+  thirty, something to move rather than a suggestion. Neither date can pass
+  the other (moving one past brings the other along), and neither can be after
+  today. The summary under the search reads "Ordered 01 Sept to 30 Sept, not
+  back since"; the campaign's page says "ordered 01 Sept to 30 Sept" and "not
+  back since 30 Sept".
+- **The demo** reads the same rule over its own bills, and its tests hold it to
+  the database's: all time is everybody, the last seven days is "within 7
+  days", and not back since a week ago is "not for 6 days".

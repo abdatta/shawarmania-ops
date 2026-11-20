@@ -63,8 +63,16 @@ export type MarketingSenderRow = Tables<'marketing_sender'>
  */
 export interface CampaignAudience {
   outletId: string
-  /** Ordered here within, or not within, a number of days. */
-  ordered: { kind: 'any' } | { kind: 'within' | 'not_within'; days: number }
+  /**
+   * Ordered here within, or not within, a number of days; or between two
+   * business dates, both included, and with `notSince` not since the second
+   * [owner, 2026-11-20: to win back customers from a past stretch who have
+   * not come back]. Dates are `YYYY-MM-DD`.
+   */
+  ordered:
+    | { kind: 'any' }
+    | { kind: 'within' | 'not_within'; days: number }
+    | { kind: 'between'; from: string; to: string; notSince: boolean }
   /** Ordered here at least, or at most, a number of times. */
   orders: { kind: 'any' } | { kind: 'at_least' | 'at_most'; count: number }
   /** Gold members at this outlet, or everybody who is not one. */
@@ -162,9 +170,10 @@ export interface CampaignCounts {
   /** Cut off mid-send: nobody can say whether it went, and it is never retried. */
   unsure: number
   /**
-   * Said stop: replied STOP to this campaign, or was already on the stopped
-   * list when their turn came and so was sent nothing. Somebody who got the
-   * message and then replied STOP is counted here and in `sent`.
+   * On the stopped list when their turn came, and so sent nothing. Until
+   * 2026-11-20 a reply of STOP to this campaign counted here too; the sender
+   * reads no replies now (design, *No stop line*), so only a row recorded
+   * before then can add one.
    */
   stopped: number
 }
@@ -278,7 +287,7 @@ export interface StoppedCustomer {
   phoneLast4: string
   stoppedAt: string
   source: CampaignStopSource
-  /** The campaign they replied STOP to, when that is how they got here. */
+  /** The campaign they replied STOP to: only rows recorded before 2026-11-20. */
   campaignName: string | null
   /** The owner who added them by hand. */
   recordedByName: string | null

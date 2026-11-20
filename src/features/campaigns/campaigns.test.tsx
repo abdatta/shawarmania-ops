@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
@@ -18,8 +18,6 @@ import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { GatedSurface } from '@/routes/gated-surface'
 import { SessionContext } from '@/session/context'
 import { deriveSessionScope, type Role, type Session } from '@/session/session'
-
-import { CAMPAIGN_STOP_LINE } from '../../../shared/campaign-message'
 
 import { CampaignPage } from './campaign-page'
 import { LEAVE_UNSAVED } from './composer'
@@ -179,7 +177,7 @@ describe('a campaign’s own page', () => {
 
     expect(screen.getByTestId('tile-sent')).toHaveTextContent('Sent245')
     expect(screen.getByTestId('tile-to-go')).toHaveTextContent('To go753')
-    expect(screen.getByTestId('tile-stopped')).toHaveTextContent('Stopped4')
+    expect(screen.getByTestId('tile-stopped')).toHaveTextContent('Stopped0')
     // The two receipt figures say what kind of figure each is.
     expect(screen.getByTestId('tile-delivered')).toHaveTextContent('Delivered so far')
     expect(screen.getByTestId('tile-read')).toHaveTextContent('Read, at least')
@@ -193,7 +191,7 @@ describe('a campaign’s own page', () => {
     const bubble = screen.getByTestId('message-bubble')
     // The preview greets whoever is signed in: here, the demo's owner.
     expect(bubble).toHaveTextContent('Happy Diwali, Demo!')
-    expect(bubble).toHaveTextContent(CAMPAIGN_STOP_LINE)
+    expect(bubble).not.toHaveTextContent(/STOP/)
     expect(within(bubble).getByText('20% off every order')).toHaveClass('font-bold')
     expect(screen.getByTestId('campaign-audience')).toHaveTextContent('1,000 customers')
     expectNoSendControl()
@@ -268,20 +266,21 @@ describe('a campaign’s own page', () => {
 })
 
 describe('writing a campaign', () => {
-  it('draws the message as it is typed: the name, the formatting and the stop line', async () => {
+  it('draws the message as it is typed: the name and the formatting, nothing added', async () => {
     const user = userEvent.setup()
     open('campaigns/new')
     const bubble = screen.getByTestId('message-bubble')
     expect(bubble).toHaveTextContent('Your message')
 
     await user.type(screen.getByTestId('campaign-body'), 'Hi {{name}, *big* news')
-    expect(bubble).toHaveTextContent(`Hi Demo, big news${CAMPAIGN_STOP_LINE}`)
+    expect(bubble).toHaveTextContent('Hi Demo, big news')
+    expect(bubble).not.toHaveTextContent(/STOP/)
     expect(screen.getByTestId('preview-named')).toHaveTextContent('Demo')
     expect(within(bubble).getByText('big')).toHaveClass('font-bold')
 
     // A customer who never gave a name gets the greeting without one.
     await user.click(screen.getByTestId('preview-unnamed'))
-    expect(bubble).toHaveTextContent(`Hi, big news${CAMPAIGN_STOP_LINE}`)
+    expect(bubble).toHaveTextContent('Hi, big news')
   })
 
   it('counts down the room left, and refuses a message that is too long', async () => {
@@ -397,6 +396,58 @@ describe('writing a campaign', () => {
     await user.click(within(outlets).getByRole('button', { name: 'Shawarmania Kanchrapara' }))
     await waitFor(() =>
       expect(within(sheet).getByTestId('audience-people')).not.toHaveTextContent('Arjun Das'),
+    )
+  })
+
+  it('narrows to who ordered between two dates, and who has not been back since', async () => {
+    const user = userEvent.setup()
+    open(`campaigns/${DEMO_CAMPAIGN_DRAFT_ID}`)
+    await user.click(await screen.findByTestId('choose-audience'))
+    const sheet = screen.getByRole('dialog', { name: 'Choose customers' })
+    await within(sheet).findByTestId('audience-people')
+
+    await user.click(within(sheet).getByTestId('audience-filter'))
+    const filters = screen.getByRole('dialog', { name: 'Filter customers' })
+    const lastOrdered = within(filters).getByRole('region', { name: 'Last ordered' })
+    expect(within(filters).queryByTestId('audience-stretch')).toBeNull()
+    await user.click(within(lastOrdered).getByRole('radio', { name: 'Between dates' }))
+
+    // Two calendars, the second never before the first, and nothing after today.
+    const from = within(filters).getByTestId('audience-stretch-from') as HTMLInputElement
+    const to = within(filters).getByTestId('audience-stretch-to') as HTMLInputElement
+    expect(from.type).toBe('date')
+    expect(from.value <= to.value).toBe(true)
+    fireEvent.change(from, { target: { value: '2000-01-01' } })
+    fireEvent.change(to, { target: { value: '2000-01-05' } })
+    expect([from.value, to.value]).toEqual(['2000-01-01', '2000-01-05'])
+    // A first date moved past the second brings the second along, and back.
+    fireEvent.change(from, { target: { value: '2000-02-01' } })
+    expect([from.value, to.value]).toEqual(['2000-02-01', '2000-02-01'])
+    fireEvent.change(to, { target: { value: '2000-01-05' } })
+    expect([from.value, to.value]).toEqual(['2000-01-05', '2000-01-05'])
+
+    // A stretch long ago with nobody in it, and then all time, not back since.
+    await waitFor(() =>
+      expect(within(sheet).getByTestId('audience-select-all').parentElement).toHaveTextContent(
+        'Select all 0',
+      ),
+    )
+    fireEvent.change(from, { target: { value: '2000-01-01' } })
+    fireEvent.change(to, { target: { value: to.max } })
+    const since = within(filters).getByTestId('audience-not-since')
+    expect(since).toHaveAttribute('aria-checked', 'false')
+    await user.click(since)
+    expect(since).toHaveAttribute('aria-checked', 'true')
+    await user.click(within(filters).getByTestId('audience-filter-done'))
+
+    // Nobody has ordered after today, so all time, not back since, is everybody.
+    expect(within(sheet).getByTestId('audience-filter-summary')).toHaveTextContent(
+      /^Ordered 01 Jan 2000 to .+, not back since$/,
+    )
+    await waitFor(() =>
+      expect(within(sheet).getByTestId('audience-select-all').parentElement).toHaveTextContent(
+        'Select all 6',
+      ),
     )
   })
 
@@ -770,7 +821,7 @@ describe('the stopped list', () => {
     const list = await screen.findByTestId('stopped-list')
     const rows = within(list).getAllByRole('listitem')
     expect(rows).toHaveLength(7)
-    expect(list).toHaveTextContent('replied STOP')
+    expect(list).not.toHaveTextContent('replied STOP')
     expect(list).toHaveTextContent('added by Demo Owner')
     expect(list).toHaveTextContent('Sourav Pal')
     expect(list.textContent).not.toMatch(/9000000|\+91/)

@@ -416,6 +416,83 @@ select pg_temp.refused(
   '22023', 'audience_invalid', 'the filter gold replaced is refused, not read as no filter');
 
 -- ---------------------------------------------------------------------------
+-- 2a. Ordered between two dates, and not since (owner, 2026-11-20: to win back
+-- customers from a past stretch who have not come back). Both dates are
+-- business dates and both are included; "not since" means no settled bill
+-- after the second date.
+
+create function pg_temp.between(
+  p_from_days_ago integer, p_to_days_ago integer, p_not_since boolean default null)
+returns jsonb language sql stable as $$
+  select jsonb_build_object('ordered',
+           jsonb_build_object(
+             'kind', 'between',
+             'from', (current_setting('test.today')::date - p_from_days_ago)::text,
+             'to', (current_setting('test.today')::date - p_to_days_ago)::text)
+           || case when p_not_since is null then '{}'::jsonb
+                   else jsonb_build_object('notSince', p_not_since) end)
+$$;
+
+select is(
+  pg_temp.names(pg_temp.aud(pg_temp.between(12, 2))),
+  'Asha, Gauri, (no name), Esha',
+  'ordered between 12 and 2 days ago is everybody with a settled bill in that stretch');
+select is(
+  pg_temp.names(pg_temp.aud(pg_temp.between(12, 2, false))),
+  'Asha, Gauri, (no name), Esha',
+  'and "not since" off is the same');
+select is(
+  pg_temp.names(pg_temp.aud(pg_temp.between(12, 2, true))),
+  'Gauri, (no name), Esha',
+  'with "not since" on, a customer who ordered again after the second date is left out');
+select is(
+  pg_temp.names(pg_temp.aud(pg_temp.between(10, 10))),
+  'Esha',
+  'both dates are included: one day is a stretch of one');
+-- Bela's after-midnight bill belongs to the date 30 back, Chitra's to 31 back.
+select is(
+  pg_temp.names(pg_temp.aud(pg_temp.between(31, 30, true))),
+  'Bela, Chitra',
+  'counted on business dates, and a cancelled bill since is not a visit');
+select is(
+  pg_temp.names(pg_temp.aud(pg_temp.between(29, 11))),
+  '',
+  'a stretch with no settled bill in it finds nobody');
+select is(
+  pg_temp.names(pg_temp.aud(pg_temp.between(12, 2, true)
+                            || '{"gold": "not_gold"}'::jsonb)),
+  '(no name), Esha',
+  'and it narrows together with the other filters');
+select is(
+  pg_temp.goes_to(pg_temp.aud(pg_temp.between(12, 2, true))),
+  'Gauri, (no name), Esha',
+  'and a campaign submitted with it goes to exactly who the list shows');
+
+select pg_temp.refused(
+  format($$select public.campaign_audience_count(%L)$$, pg_temp.aud(pg_temp.between(2, 12))),
+  '22023', 'audience_invalid', 'a first date after the second is refused');
+select pg_temp.refused(
+  $$select public.campaign_audience_count(pg_temp.aud(
+      '{"ordered": {"kind": "between", "from": "2026-11-01"}}'))$$,
+  '22023', 'audience_invalid', 'a stretch with one date is refused');
+select pg_temp.refused(
+  $$select public.campaign_audience_count(pg_temp.aud(
+      '{"ordered": {"kind": "between", "from": "2026-11-01", "to": "2026-11-31"}}'))$$,
+  '22023', 'audience_invalid', 'a date that does not exist is refused');
+select pg_temp.refused(
+  $$select public.campaign_audience_count(pg_temp.aud(
+      '{"ordered": {"kind": "between", "from": "1 Nov 2026", "to": "2026-11-10"}}'))$$,
+  '22023', 'audience_invalid', 'a date is written YYYY-MM-DD and nothing else');
+select pg_temp.refused(
+  $$select public.campaign_audience_count(pg_temp.aud(
+      '{"ordered": {"kind": "between", "from": "2026-11-01", "to": "2026-11-10", "notSince": "yes"}}'))$$,
+  '22023', 'audience_invalid', '"not since" is true or false');
+select pg_temp.refused(
+  $$select public.campaign_audience_count(pg_temp.aud(
+      '{"ordered": {"kind": "between", "from": "2026-11-01", "to": "2026-11-10", "days": 30}}'))$$,
+  '22023', 'audience_invalid', 'a key the stretch does not have is refused, never ignored');
+
+-- ---------------------------------------------------------------------------
 -- 2b. Who is picked, and finding somebody (proposal, decision 12).
 --
 -- The list shows everybody the filters match. Who the campaign goes to is who

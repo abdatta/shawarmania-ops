@@ -99,9 +99,6 @@ class FakeLink implements WhatsAppLink {
   private handlers: LinkHandlers | null = null
   private finish: ((end: LinkEnd) => void) | null = null
   private listeners: ReceiptListener[] = []
-  private stopListeners: Array<(phone: string) => void> = []
-  /** STOP replies WhatsApp was holding, handed over on the next connection. */
-  heldStopsForNextOpen: string[] = []
   private live: object | null = null
   private readonly clock: FakeClock
   private readonly log: SentMessage[]
@@ -126,9 +123,6 @@ class FakeLink implements WhatsAppLink {
     const token = {}
     this.live = token
     this.listeners = []
-    this.stopListeners = []
-    let heldStops = this.heldStopsForNextOpen
-    this.heldStopsForNextOpen = []
     let held = this.heldForNextOpen
     this.heldForNextOpen = []
     const connection: LinkConnection = {
@@ -170,11 +164,6 @@ class FakeLink implements WhatsAppLink {
         for (const [id, status] of held) listener(id, status)
         held = []
       },
-      onStopReply: (listener) => {
-        this.stopListeners.push(listener)
-        for (const phone of heldStops) listener(phone)
-        heldStops = []
-      },
     }
     this.handlers?.onOpen(connection)
   }
@@ -191,10 +180,6 @@ class FakeLink implements WhatsAppLink {
 
   end(end: LinkEnd): void {
     this.finish?.(end)
-  }
-
-  stopReply(phone: string): void {
-    for (const listener of this.stopListeners) listener(phone)
   }
 
   receipt(id: string, status: ReceiptStatus, code?: string): void {
@@ -226,7 +211,6 @@ function hooked(inner: CampaignQueue, calls: string[], hooks: Hooks): CampaignQu
     tick: wrap('tick'),
     claimNext: wrap('claimNext'),
     claimNextTest: wrap('claimNextTest'),
-    recordStop: wrap('recordStop'),
     finishNotices: wrap('finishNotices'),
     markFinishNotice: wrap('markFinishNotice'),
     report: wrap('report'),
@@ -1179,50 +1163,6 @@ describe('a finished campaign', () => {
 
     expect(marked).toEqual([])
     expect(run.events).toContainEqual({ kind: 'finish_notice', sent: false })
-    await run.stop()
-  })
-})
-
-describe('a reply of STOP', () => {
-  it('is passed to the database, and said without the number', async () => {
-    const w = world(['text', 'text'])
-    const stops: string[] = []
-    w.hooks.before.recordStop = (phone) => {
-      stops.push(phone as string)
-    }
-    const link = w.newLink()
-    const run = w.start(link)
-    link.open()
-    await w.until(() => w.sent.length === 1)
-    link.stopReply(phoneAt(1))
-    link.stopReply('12135550177')
-    await w.clock.advance(minutes(3))
-
-    expect(stops).toEqual([phoneAt(1), '12135550177'])
-    expect(run.events).toContainEqual({ kind: 'stop_reply', stopped: true })
-    expect(run.events.filter((event) => event.kind === 'stop_reply')).toHaveLength(2)
-    expect(JSON.stringify(run.events)).not.toContain('12135550177')
-    await run.stop()
-  })
-
-  it('heard before the connection was ready is still passed on, and kept until it is', async () => {
-    const w = world(['text'])
-    let refusals = 2
-    const stops: string[] = []
-    w.hooks.before.recordStop = (phone) => {
-      if (refusals > 0) {
-        refusals -= 1
-        throw new Error('fetch failed')
-      }
-      stops.push(phone as string)
-    }
-    const link = w.newLink()
-    link.heldStopsForNextOpen = [phoneAt(1)]
-    const run = w.start(link)
-    link.open()
-    await w.clock.advance(minutes(5))
-
-    expect(stops).toEqual([phoneAt(1)])
     await run.stop()
   })
 })

@@ -10,21 +10,21 @@
  * So this file imports nothing: the sender is its own package and runs its
  * TypeScript directly under Node.
  *
- * Three rules:
+ * Two rules:
  *
  * 1. `{name}` becomes the customer's saved name. A customer with no saved name
  *    gets the greeting without one, never a gap or the word "customer".
- * 2. Every message ends with the stop line. It is added here, so no campaign
- *    can be written without it.
- * 3. A message is never cut to fit. Cutting could cut the stop line off, so an
- *    over-long one is reported and it is the caller that refuses it.
+ * 2. A message is never cut to fit: an over-long one is reported and it is
+ *    the caller that refuses it.
+ *
+ * Nothing is added under the body. Until 2026-11-20 every message ended with
+ * "Reply STOP to stop these messages."; the owner dropped it, as the messages
+ * go from a linked phone and not WhatsApp's Business API, and the sender no
+ * longer reads replies (design, *No stop line*).
  */
 
-/** How a customer stops the messages. A reply of STOP is what the sender acts on (design D11). */
-export const CAMPAIGN_STOP_LINE = 'Reply STOP to stop these messages.'
-
 /**
- * The longest message that goes out, stop line included.
+ * The longest message that goes out.
  *
  * A campaign may carry one image, and then the text is that image's caption.
  * 1,024 characters is the caption length WhatsApp is commonly said to allow;
@@ -97,7 +97,7 @@ export function renderCampaignMessage(
 ): RenderedCampaignMessage {
   const name = campaignGreetingName(savedName)
   const greeted = name === null ? withoutName(body) : body.replace(NAME_TOKEN, name)
-  const text = `${greeted.trim()}\n\n${CAMPAIGN_STOP_LINE}`
+  const text = greeted.trim()
   return { text, tooLong: text.length > CAMPAIGN_MESSAGE_MAX }
 }
 

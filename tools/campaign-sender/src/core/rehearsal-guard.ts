@@ -42,13 +42,6 @@ export function onlyTo(link: WhatsAppLink, reach: RehearsalReach): WhatsAppLink 
         return connection.send(address, message)
       },
       onReceipt: (listener) => connection.onReceipt(listener),
-      // A STOP is only passed on, never sent to.
-      ...(connection.onStopReply
-        ? {
-            onStopReply: (listener: (phoneDigits: string) => void) =>
-              connection.onStopReply?.(listener),
-          }
-        : {}),
     }
   }
 

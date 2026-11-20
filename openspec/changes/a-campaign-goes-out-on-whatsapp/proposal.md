@@ -13,8 +13,8 @@
 > reaches its first batch of customers on WhatsApp from the business number,
 > sent by the owner's own laptop; no batch starts until the owner releases it on
 > that laptop; the lid closed mid-batch and opened an hour later resumes at the
-> next customer and sends nobody a second message; a customer who replied STOP
-> is in no later audience; both owners watch the same progress; the sender
+> next customer and sends nobody a second message; a customer on the stopped
+> list is in no later audience; both owners watch the same progress; the sender
 > stops and stays stopped the moment WhatsApp ends its session; a manager, a
 > biller, an employee and a counter tablet are each refused every campaign
 > table and read by the database, proved by hand-crafted requests; and the
@@ -50,7 +50,8 @@ Customers. It is a list of campaigns, and each opens as its own page.
   above it a search by name or number, the outlet as chips (where there is
   more than one), the order, and one **Filter** button as the Billing page has
   (decisions 10, 12 and 13). Behind Filter: ordered at the chosen outlet
-  within, or not within, a number of days; spent at least an amount; gold or
+  within, or not within, a number of days, or between two dates with "not
+  back since" (decision 16); spent at least an amount; gold or
   not; ordered at least or at most a number of times; and never sent a
   campaign or not sent one within a number of days. Each is a choice from a
   short list of presets. **Select all** picks everybody the filters match; a
@@ -94,16 +95,17 @@ linked device.
 **Both owners see the same progress.** A campaign's page shows how many of how
 many are sent, a row per batch (waiting, sending 47 of 100, done), and for each
 finished batch how many were delivered, read, not on WhatsApp, unsure, and how
-many replied STOP. Above it, one line says whether the sender is online, when it
+many were passed over as stopped. Above it, one line says whether the sender is online, when it
 was last seen, and whether a batch is waiting for release. When a campaign
 finishes, the sender sends the person who scheduled it a WhatsApp message with
 the totals.
 
-**A customer can stop the messages.** Every campaign message ends with a line
-saying how. A reply of STOP, from that customer's number, puts them on a stopped
-list; they are in no later audience and no filter can bring them back. The
-Campaigns page shows the list and lets an owner add or remove a number by hand,
-for a customer who asks at the counter. It does not affect receipts or points.
+**A customer can be stopped.** A customer who asks not to be messaged, at the
+counter or in a reply on WhatsApp, is put on a stopped list by an owner; they
+are in no later audience and no filter can bring them back. The Campaigns page
+shows the list and lets an owner add or remove a number by hand. Messages carry
+no stop line, and the sender reads no replies (decision 15). It does not affect
+receipts or points.
 
 **Linking happens across two countries, by QR code.** The business phone is in
 India with the partner; the laptop is in Los Angeles with the owner. The sender
@@ -131,6 +133,8 @@ types. It was refused every time on the business number; see decision 9.)
 | 12 | How are customers picked from the list? (2026-11-18, second look at the demo) | **A tick on each customer, a Select all, and a search.** The owner asked for one search bar for name and number, a gold-or-not filter beside the others, Select all, the outlet chosen for him where there is only one, and the list filling the screen when there are enough customers. A new campaign opens with **nobody ticked**. *Select all* picks everybody the filters match, and keeps doing so as the filters change; unticking one of them leaves that one out. Customers ticked one by one stay picked whatever the filters show next; search only finds them. Changing the outlet starts the picking again. The outlet opens on the one last used, as every outlet page does, and is not offered at all where there is one. |
 | 13 | How is the picker laid out? (2026-11-18, third look at the demo) | **Only the customer list scrolls.** Above it, and still: the search beside a **Filter** button drawn and behaving as the Billing page's (an icon; every filter but outlet and order is behind it, as chips applied as tapped; what is in force is said under the search with **Clear**), then the outlet as the chips every outlet page uses (absent where there is one), then Select all with the order beside it. The first build's two scrollbars were a fault, not a choice: screen-reader words in rows below the fold were placed against the whole sheet, which made the sheet scroll as well as the list. |
 | 14 | Can one campaign go to several outlets' customers? (2026-11-18) | **No, one outlet per campaign.** The filters (orders, spend, gold, when last seen) are each a relationship with one shop, as on the Customers page, and the database holds one outlet. Kalyani Cafe is the only trading outlet for the months ahead, so there is nothing to combine yet. Revisit when a second outlet trades: orders and spend would be summed over the chosen outlets, gold and the last order read at any of them. |
+| 15 | Does a message end with "Reply STOP to stop these messages", and does the sender act on the reply? (2026-11-20) | **No to both.** The owner: the messages go directly from a linked phone, not through WhatsApp's Business API, so the line and the reply handling go. Messages are the body as written, with nothing added. The sender no longer listens to incoming messages at all. The **stopped list stays**, for an owner to add a customer who asks, at the counter or by replying; it still keeps them out of every audience. `campaign_record_stop` stays in the database, uncalled, because it is already on staging and dropping it is a contract migration for no gain. |
+| 16 | Can a campaign go to customers from a past stretch who have not come back? (2026-11-20) | **Yes: "Between dates" under Last ordered.** The owner wants to raise revisits: send to people who ordered in a chosen stretch of the past, and, with **Not back since**, only those who have not ordered after it. Two business dates, both included, picked from a calendar; it combines with every other filter. The database's one audience function learns it in place, a migration-lint exception the owner agreed to, because #85 has reached no production build and every audience a published build sends takes today's path. |
 
 ### Three more, answered by the owner the same day
 
@@ -148,7 +152,8 @@ each question was is kept below, because the reasons outlive the answers.
   more. This change reverses that. The proposal assumes the owner's intent:
   **every customer with a number may be sent a campaign unless they have said
   stop**, with the privacy page and terms on `shawarmania.in` changed to say so
-  **before** the first campaign, and the stop line on every message. The
+  **before** the first campaign, and the stop line on every message (dropped
+  on 2026-11-20: decision 15). The
   narrower choice is to send only to customers who agree from now on, which
   needs a question at the counter and starts from an empty list. The owner
   should say which, knowing India's data-protection law treats marketing as a
@@ -213,8 +218,8 @@ from the counter and kitchen with a clean revert.
   stopped list. A franchise's own campaigns to its own customers wait for a
   franchise to ask.
 - **Reading or keeping the business's chats.** The sender is a linked device,
-  so WhatsApp delivers the account's messages to it. It acts on one thing, a
-  reply of STOP from a campaign recipient, and keeps nothing else.
+  so WhatsApp delivers the account's messages to it. It reads none of them
+  and keeps nothing (decision 15).
 - **Replies in the app.** A customer who answers a campaign is answered from the
   business phone, as today.
 - **Videos, documents, several images, buttons or polls.** One text and one

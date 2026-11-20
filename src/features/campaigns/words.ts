@@ -6,7 +6,7 @@ import type {
   CampaignSenderReading,
   CampaignSummary,
 } from '@/data-access/campaigns'
-import { formatDayTime, formatFreshness, formatPaise } from '@/domain'
+import { formatBusinessDateShort, formatDayTime, formatFreshness, formatPaise } from '@/domain'
 
 /**
  * What the Campaigns pages say, worked out in one place
@@ -264,6 +264,11 @@ export function audienceWords(audience: CampaignAudience): string[] {
   if (audience.ordered.kind === 'not_within') {
     words.push(`not ordered in the last ${audience.ordered.days} days`)
   }
+  if (audience.ordered.kind === 'between') {
+    const { from, to, notSince } = audience.ordered
+    words.push(`ordered ${stretchWords(from, to)}`)
+    if (notSince) words.push(`not back since ${formatBusinessDateShort(to)}`)
+  }
   if (audience.orders.kind === 'at_least') words.push(`at least ${audience.orders.count} orders`)
   if (audience.orders.kind === 'at_most') words.push(`at most ${audience.orders.count} orders`)
   if (audience.gold === 'gold') words.push('gold members')
@@ -280,6 +285,13 @@ export function audienceWords(audience: CampaignAudience): string[] {
   if (left > 0) words.push(`${left} left out`)
   words.push(SORT_WORDS[audience.sort])
   return words
+}
+
+/** Two business dates as a stretch: `01 Sept to 30 Sept`, the year only where it is not this one. */
+export function stretchWords(from: string, to: string): string {
+  return from === to
+    ? `on ${formatBusinessDateShort(from)}`
+    : `${formatBusinessDateShort(from)} to ${formatBusinessDateShort(to)}`
 }
 
 /** `1 customer`, `412 customers`, with Indian digit grouping. */

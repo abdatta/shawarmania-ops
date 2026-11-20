@@ -197,6 +197,13 @@ customer.
       so the demo still sends nothing. The rest of the browser suites were not
       run. Design, *The pages on the real database*.)*
 
+- [x] 3.5 **Ordered between two dates, not back since** [owner, 2026-11-20;
+      proposal, decision 16]: pgTAP first, then
+      `marketing_audience` replaced in place with the owner's lint exception,
+      the demo, the sheet and the words.
+      *(2026-11-20: 14 pgTAP cases, all 4,943 green after a reset; design,
+      *Ordered between two dates*.)*
+
 ## 4. The sender
 
 - [x] 4.1 `tools/campaign-sender/` with its own `package.json`; confirm nothing
@@ -215,7 +222,7 @@ customer.
       functions. What the rehearsal did and did not show is in design, *The
       sending loop, rehearsed*. STOP matching was in this task and is now 4.2a:
       it needs the incoming-message handler, which does not exist.)*
-- [x] 4.2a STOP in the core, tests first: matched only as the whole message,
+- [x] 4.2a ~~STOP in the core, tests first~~ *(removed 2026-11-20, 4.8)*: matched only as the whole message,
       from a recipient of a campaign in the last 30 days, with the sender
       resolved to a phone number and never a LID (design, *Baileys as found*).
       *(2026-11-19: `core/stop-reply.ts` and the loop, unit-tested; the
@@ -262,6 +269,11 @@ customer.
       pgTAP and REST; the sender sends once nothing else is going. Not yet seen
       on a device.)*
 
+- [x] 4.8 **No stop line, no STOP replies** [owner, 2026-11-20; proposal,
+      decision 15]: the message is the body alone; the sender reads no incoming
+      message; the stopped list stays for owners' hand entries.
+      *(2026-11-20: renderer, bubble, sender and demo; design, *No stop line*.)*
+
 ## 5. Staging rehearsal
 
 - [x] 5.1 Push to `stage`; read the Staging run green.
@@ -275,8 +287,8 @@ customer.
       business number as the sender and the owners' own numbers as the only
       customers: link by QR code shown through a temporary link; send a test; schedule
       a campaign of a handful; release a batch; close the lid mid-batch and
-      reopen; pause and resume from a phone; reply STOP from one number and
-      schedule again; remove the linked device from the phone mid-batch and
+      reopen; pause and resume from a phone; add one number to the stopped
+      list and schedule again; try *Between dates* with *Not back since*; remove the linked device from the phone mid-batch and
       confirm the halt holds across a restart. **With the receiving phone
       online**: see delivered and read counted on the campaign's page while the
       batch is still sending (the rehearsal of 4.2 saw receipts only in a later
