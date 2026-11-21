@@ -18,9 +18,15 @@
  *                       only holds the WhatsApp link, as it did before
  *       `-- --only-test-recipient` sends to the number in test-recipient.txt
  *       and to nobody else: for a rehearsal against a real database
- *   npm run install-startup     start the sender at every logon, with no window
- *   npm run uninstall-startup   stop doing that
- *   npm run status      say whether a link is saved here, and whether halted
+ *   npm run install-startup     keep the sender running: start it now and at
+ *                       every logon, with no window, and start it again
+ *                       whenever it stops, until npm run stop
+ *   npm run stop        stop it, and keep it stopped, even across a restart,
+ *                       until install-startup (or npm start) starts it again
+ *   npm run uninstall-startup   no longer start it at logon
+ *   npm run keep-running        what install-startup runs: the keeper itself
+ *   npm run status      say whether a link is saved here, whether halted, and
+ *                       whether it is running and kept running
  *   npm run test-send   send one test message to one number
  *   npm run rehearse    run the sending loop on a rehearsal queue (see below)
  *   npm run restart     clear a halt, after reading why it happened
@@ -108,7 +114,16 @@ import { SITES } from './core/site-address.ts'
 import { STARTUP_FILE, startupScript } from './core/startup.ts'
 import type { SenderEvent } from './core/sending-loop.ts'
 import { indiaClock, parseClockTime } from './core/sending-window.ts'
-import { acquireSingleInstance, lockPath } from './core/single-instance.ts'
+import { acquireSingleInstance, heldBy, lockPath } from './core/single-instance.ts'
+import {
+  KEEPER_LOCK_FILE,
+  KEPT_ENV,
+  STOP_REQUEST_FILE,
+  afterExit,
+  readStopRequest,
+  stopRequestText,
+} from './core/keep-running.ts'
+import type { StopRequest } from './core/keep-running.ts'
 import QRCode from 'qrcode'
 
 import { canReachWhatsApp, holdLink, whatsAppLink } from './whatsapp-link.ts'
@@ -189,6 +204,144 @@ function stopOnCtrlC(controller = new AbortController()): AbortSignal {
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK'] as const)
     process.on(signal, stop)
   return controller.signal
+}
+
+// ── Kept running, and stopped on request ────────────────────────────────────
+
+function stopRequestPath(): string {
+  return join(folder, STOP_REQUEST_FILE)
+}
+
+/** The owner's request to stop, or null when there is none. */
+function readStopRequestFile(): StopRequest | null {
+  const path = stopRequestPath()
+  if (!existsSync(path)) return null
+  try {
+    return readStopRequest(readFileSync(path, 'utf8'))
+  } catch {
+    return { by: 'unknown', at: null }
+  }
+}
+
+function stoppedByOwnerLine(request: StopRequest): string {
+  const when = request.at ? `, ${localTime(request.at)}` : ''
+  return `Stopped by the owner (${request.by}${when}). Start it again: npm run install-startup`
+}
+
+/**
+ * Stops the sender once the owner asks, by `npm run stop` or the tray icon:
+ * the same way out as Ctrl+C, so a message in hand is finished first.
+ */
+function watchStopRequest(controller: AbortController): void {
+  const timer = setInterval(() => {
+    if (controller.signal.aborted) {
+      clearInterval(timer)
+      return
+    }
+    if (existsSync(stopRequestPath())) {
+      clearInterval(timer)
+      say(`${clock()}  Asked to stop. Stopping, after the message in hand if there is one.`)
+      controller.abort()
+    }
+  }, 2_000)
+  timer.unref()
+}
+
+const pauseFor = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+/**
+ * The keeper (`core/keep-running.ts`): runs the sender and starts it again
+ * whenever it stops, until the owner asks it to stop or it halts. This is
+ * what the logon script runs; nothing about it is the Claude app's, a
+ * terminal's or any window's, so closing one cannot end it.
+ */
+async function keepRunning(): Promise<number> {
+  const lock = acquireSingleInstance(folder, process.pid, undefined, KEEPER_LOCK_FILE)
+  if (!lock.ok) {
+    say(`${clock()}  A keeper is already running (process ${lock.heldByPid}). Nothing to do.`)
+    return 0
+  }
+  process.once('exit', lock.release)
+  // Ctrl+C in a window running the keeper by hand is a person stopping it.
+  let quitting = false
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK'] as const) {
+    process.on(signal, () => {
+      quitting = true
+    })
+  }
+  const program = fileURLToPath(import.meta.url)
+  say(
+    `${clock()}  Keeper started. The sender is started again whenever it stops, until asked to stop.`,
+  )
+  let quickExits = 0
+  for (;;) {
+    const asked = readStopRequestFile()
+    if (asked) {
+      say(`${clock()}  ${stoppedByOwnerLine(asked)}`)
+      return 0
+    }
+    if (quitting) return 0
+    const began = Date.now()
+    const code = await new Promise<number | null>((resolve) => {
+      const child = spawn(process.execPath, [...process.execArgv, program, 'start'], {
+        stdio: ['ignore', 'inherit', 'inherit'],
+        windowsHide: true,
+        env: { ...process.env, [KEPT_ENV]: '1' },
+      })
+      child.once('exit', (exitCode) => resolve(exitCode))
+      child.once('error', () => resolve(null))
+    })
+    if (quitting) return 0
+    const verdict = afterExit({
+      code,
+      ranMs: Date.now() - began,
+      stopAsked: readStopRequestFile() !== null,
+      quickExitsBefore: quickExits,
+    })
+    if (verdict.kind === 'stay_stopped') {
+      say(
+        verdict.why === 'owner'
+          ? `${clock()}  ${stoppedByOwnerLine(readStopRequestFile() ?? { by: 'unknown', at: null })}`
+          : `${clock()}  The sender halted, so the keeper leaves it stopped. npm run status says why.`,
+      )
+      return 0
+    }
+    quickExits = verdict.quickExits
+    say(
+      `${clock()}  The sender stopped (${code === null || code > 255 ? 'killed' : `exit ${code}`}). Starting it again in ${Math.round(verdict.afterMs / 1000)} s.`,
+    )
+    // The wait ends early for a stop request or Ctrl+C.
+    const until = Date.now() + verdict.afterMs
+    while (Date.now() < until && !quitting && !existsSync(stopRequestPath())) {
+      await pauseFor(Math.min(2_000, until - Date.now()))
+    }
+  }
+}
+
+/** Asks a running sender, kept or not, to stop, and keeps it stopped until started again. */
+async function stopCommand(): Promise<number> {
+  mkdirSync(folder, { recursive: true })
+  writeFileSync(stopRequestPath(), stopRequestText('npm run stop', new Date()), 'utf8')
+  const running = () => heldBy(folder) !== null || heldBy(folder, KEEPER_LOCK_FILE) !== null
+  const after =
+    'It stays stopped, even after a restart, until it is started again: npm run install-startup'
+  if (!running()) {
+    say(`The sender was not running. ${after}`)
+    return 0
+  }
+  say('Asked the sender to stop. It finishes the message in hand first …')
+  const deadline = Date.now() + 120_000
+  while (Date.now() < deadline) {
+    await pauseFor(2_000)
+    if (!running()) {
+      say(`Stopped. ${after}`)
+      return 0
+    }
+  }
+  say(
+    'Still running after two minutes. It stops after the message in hand; npm run status says when.',
+  )
+  return 1
 }
 
 const events: LinkEvents = {
@@ -291,6 +444,11 @@ async function link(): Promise<number> {
 
 async function start(): Promise<number> {
   if (refusedByHalt()) return 2
+  // Started by a person, not by the keeper: that is the person saying go.
+  if (!process.env[KEPT_ENV] && existsSync(stopRequestPath())) {
+    rmSync(stopRequestPath(), { force: true })
+    say('The stop asked for earlier is cleared: the sender was started by hand.')
+  }
   const client = await signedInClient(folder)
   if (!client) {
     say('Not signed in to the database, so nothing will be sent: this only holds the link.')
@@ -478,17 +636,35 @@ async function installStartup(): Promise<number> {
   }
   const packageDir = fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]+$/, '')
   mkdirSync(startup, { recursive: true })
+  const script = join(startup, STARTUP_FILE)
   writeFileSync(
-    join(startup, STARTUP_FILE),
+    script,
     startupScript({ nodePath: process.execPath, packageDir, dataFolder: folder }),
     'utf8',
   )
+  // Installing is the owner saying go: an earlier stop no longer holds.
+  rmSync(stopRequestPath(), { force: true })
   const address = readQueueAddress(folder)
-  say(`Installed. From the next logon the sender starts by itself, with no window, on:`)
+  say('Installed. The sender now keeps running, with no window, on:')
   say(`  WhatsApp: the link in ${folder}`)
   say(`  Database: ${address ? databaseName(address) : 'the one signed in here'}`)
+  say('It starts at every logon, and is started again whenever it stops, unless WhatsApp')
+  say('halts it. To stop it: npm run stop, or Stop the sender on the tray icon.')
+  const keeper = heldBy(folder, KEEPER_LOCK_FILE)
+  if (keeper !== null) {
+    say(`It is already running (keeper process ${keeper}), and is left as it is.`)
+  } else if (!process.env['CAMPAIGN_SENDER_STARTUP_DIR']) {
+    // Through Explorer, so that no terminal and no app is its parent: closing
+    // the window this ran in cannot end it.
+    spawn('explorer.exe', [script], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
+    say('Started now as well.')
+    if (heldBy(folder) !== null) {
+      say('A sender started by hand is running too. The kept one takes over when that one')
+      say('stops: press Ctrl+C in its window, or close it.')
+    }
+  }
   say(`What it prints goes to ${join(folder, 'sender.log')}. Its face is the tray icon.`)
-  say('To stop it starting: npm run uninstall-startup')
+  say('To stop it starting at logon as well: npm run uninstall-startup')
   return 0
 }
 
@@ -524,6 +700,18 @@ async function status(): Promise<number> {
       : 'Not signed in to the database: npm start would only hold the link.',
   )
   if (!refusedByHalt()) say('Not halted.')
+  const asked = readStopRequestFile()
+  const keeper = heldBy(folder, KEEPER_LOCK_FILE)
+  const sender = heldBy(folder)
+  say(
+    asked
+      ? stoppedByOwnerLine(asked)
+      : keeper !== null
+        ? `Running, and kept running (keeper process ${keeper}).`
+        : sender !== null
+          ? `Running in a window (process ${sender}), and not kept running: it ends with that window.`
+          : 'Not running. To keep it running: npm run install-startup',
+  )
   return 0
 }
 
@@ -868,7 +1056,17 @@ function startTray(port: number): void {
   try {
     spawn(
       'powershell.exe',
-      ['-NoProfile', '-WindowStyle', 'Hidden', '-File', script, '-Port', String(port)],
+      [
+        '-NoProfile',
+        '-WindowStyle',
+        'Hidden',
+        '-File',
+        script,
+        '-Port',
+        String(port),
+        '-StopFile',
+        stopRequestPath(),
+      ],
       // Not detached: Windows PowerShell started with no console at all exits
       // at once, before it has read the script (found 2026-11-18).
       { stdio: 'ignore', windowsHide: true },
@@ -1007,6 +1205,7 @@ async function runWithFace(options: {
 }): Promise<number> {
   const { link, queue, controller } = options
   const signal = stopOnCtrlC(controller)
+  if (!options.rehearsal) watchStopRequest(controller)
   // A second Ctrl+C does not wait for the message in hand.
   let interrupts = 0
   process.on('SIGINT', () => {
@@ -1169,6 +1368,8 @@ const commands: Record<string, () => Promise<number>> = {
   'uninstall-startup': uninstallStartup,
   'sign-out': signOutCommand,
   start: alone(start),
+  'keep-running': keepRunning,
+  stop: stopCommand,
   status,
   'test-send': alone(testSend),
   rehearse,
@@ -1179,7 +1380,7 @@ const command = commands[process.argv[2] ?? 'start']
 
 if (!command) {
   say(
-    'Commands: check, link, sign-in, sign-out, start, install-startup, uninstall-startup, status, test-send, rehearse, restart, unlink',
+    'Commands: check, link, sign-in, sign-out, start, install-startup, uninstall-startup, keep-running, stop, status, test-send, rehearse, restart, unlink',
   )
   process.exit(1)
 }

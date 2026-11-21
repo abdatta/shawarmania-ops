@@ -12,7 +12,12 @@ const PLACES = {
 describe('the script that starts the sender with Windows', () => {
   const script = startupScript(PLACES)
 
-  it('runs the sender with no window, from its package, on the folder it was installed from', () => {
+  it('runs the keeper, not the sender alone, so a sender that stops is started again', () => {
+    expect(script).toContain('src\\main.ts keep-running >> ')
+    expect(script).not.toContain('main.ts start')
+  })
+
+  it('runs with no window, from its package, on the folder it was installed from', () => {
     expect(script).toContain(`shell.CurrentDirectory = "${PLACES.packageDir}"`)
     expect(script).toContain(
       `shell.Environment("Process")("CAMPAIGN_SENDER_DATA_DIR") = "${PLACES.dataFolder}"`,
@@ -26,7 +31,7 @@ describe('the script that starts the sender with Windows', () => {
       'shell.Run "cmd /c """"C:\\Program Files\\nodejs\\node.exe"" --experimental-strip-types',
     )
     expect(script).toContain(
-      'src\\main.ts start >> ""C:\\Users\\owner\\AppData\\Local\\shawarmania-campaign-sender-business\\sender.log"" 2>&1"""',
+      'src\\main.ts keep-running >> ""C:\\Users\\owner\\AppData\\Local\\shawarmania-campaign-sender-business\\sender.log"" 2>&1"""',
     )
   })
 

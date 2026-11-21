@@ -264,6 +264,9 @@ customer.
       notifications are the pinned card and the tray icon [owner,
       2026-11-18]. The script's quoting was proved with a stand-in for node;
       a real logon has not been tried: the owner runs the install.)*
+      *(2026-11-21: the script now runs the keeper (4.9), and
+      `install-startup` starts it at once too; installed on the owner's laptop
+      for the business folder, on the owner's word.)*
 - [x] 4.7 The finished-campaign WhatsApp to the owner who scheduled it.
       *(2026-11-19: `campaign_finish_notices` and `campaign_mark_finish_notice`,
       pgTAP and REST; the sender sends once nothing else is going. Not yet seen
@@ -273,6 +276,11 @@ customer.
       decision 15]: the message is the body alone; the sender reads no incoming
       message; the stopped list stays for owners' hand entries.
       *(2026-11-20: renderer, bubble, sender and demo; design, *No stop line*.)*
+- [x] 4.9 **The sender keeps running until somebody stops it** [owner,
+      2026-11-21]: a keeper restarts it whenever it exits, except after the
+      owner's stop (`npm run stop`, the tray's *Stop the sender…*) or a halt.
+      *(2026-11-21: `core/keep-running.ts`, tests first; killed, stopped and
+      restarted for real on staging; design, *The sender keeps running*.)*
 
 ## 5. Staging rehearsal
 

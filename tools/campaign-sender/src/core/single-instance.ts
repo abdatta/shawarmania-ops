@@ -10,8 +10,9 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-export function lockPath(folder: string): string {
-  return join(folder, 'sender.lock')
+/** The sender's lock by default; the keeper has its own (`keep-running.ts`). */
+export function lockPath(folder: string, file = 'sender.lock'): string {
+  return join(folder, file)
 }
 
 function isRunning(pid: number): boolean {
@@ -36,13 +37,24 @@ function holderOf(path: string): number | null {
 
 export type LockResult = { ok: true; release: () => void } | { ok: false; heldByPid: number }
 
+/** The process holding a lock, while it is still running; null for none. */
+export function heldBy(
+  folder: string,
+  file = 'sender.lock',
+  running: (pid: number) => boolean = isRunning,
+): number | null {
+  const holder = holderOf(lockPath(folder, file))
+  return holder !== null && running(holder) ? holder : null
+}
+
 export function acquireSingleInstance(
   folder: string,
   pid: number = process.pid,
   running: (pid: number) => boolean = isRunning,
+  file = 'sender.lock',
 ): LockResult {
   mkdirSync(folder, { recursive: true })
-  const path = lockPath(folder)
+  const path = lockPath(folder, file)
 
   // Two tries: the second is for a lock left by a process that has since died.
   for (let tries = 0; tries < 2; tries += 1) {

@@ -16,6 +16,8 @@
     "uninstall-startup": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/main.ts uninstall-startup",
     "start": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/main.ts start",
     "status": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/main.ts status",
+    "stop": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/main.ts stop",
+    "keep-running": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/main.ts keep-running",
     "test-send": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/main.ts test-send",
     "rehearse": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/main.ts rehearse",
     "restart": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/main.ts restart",

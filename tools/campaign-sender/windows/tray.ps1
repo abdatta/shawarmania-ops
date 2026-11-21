@@ -21,9 +21,12 @@
 # sender's state, which arrives as UTF-8.
 #
 #   -Preview <file.png>   draw one card to a picture and exit (for looking at it)
+#   -StopFile <path>      where "Stop the sender" writes the owner's stop request;
+#                         the sender sees it and stops, and stays stopped
 
 param(
   [int]$Port = 7418,
+  [string]$StopFile = '',
   [string]$Preview = '',
   [string]$PreviewTone = 'action'
 )
@@ -321,6 +324,10 @@ $menuOpen = $menu.Items.Add('Open the sender page')
 $menuCard = $menu.Items.Add('Show the card')
 [void]$menu.Items.Add('-')
 $menuHide = $menu.Items.Add('Hide this icon until the sender restarts')
+if ($StopFile -ne '') {
+  [void]$menu.Items.Add('-')
+  $menuStop = $menu.Items.Add('Stop the sender...')
+}
 $script:tray.ContextMenuStrip = $menu
 
 function Stop-Helper {
@@ -339,6 +346,21 @@ $menuCard.Add_Click({
     }
   })
 $menuHide.Add_Click({ Stop-Helper })
+if ($StopFile -ne '') {
+  $menuStop.Add_Click({
+      $answer = [System.Windows.Forms.MessageBox]::Show(
+        "Stop sending campaigns from this laptop?`n`nIt stays stopped, even after a restart, until it is started again (npm run install-startup).",
+        'Shawarmania sender',
+        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+        [System.Windows.Forms.MessageBoxIcon]::Question)
+      if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+      # The sender looks for this file every two seconds and stops, after the
+      # message in hand. Plain ASCII JSON, as keep-running.ts reads it.
+      $at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+      [System.IO.File]::WriteAllText($StopFile, "{""by"":""the tray icon"",""at"":""$at""}`n")
+      Set-TrayText 'Shawarmania sender: stopping'
+    })
+}
 $menu.Add_Opening({ $menuCard.Enabled = ($null -ne $script:attention) })
 
 $script:tray.Add_MouseClick({

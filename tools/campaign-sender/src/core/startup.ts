@@ -7,10 +7,12 @@
  * and is removed by deleting it. So \`npm run install-startup\` writes one small
  * script there, and \`uninstall-startup\` deletes it.
  *
- * The script starts \`npm start\`'s program with no window, in the sender's
- * package, pointed at the data folder it was installed from (the business
- * link's, in practice), with everything it prints appended to \`sender.log\` in
- * that folder. The tray icon and the pinned card are its face.
+ * The script starts the **keeper** (\`keep-running.ts\`) with no window, in
+ * the sender's package, pointed at the data folder it was installed from (the
+ * business link's, in practice), with everything it and the sender print
+ * appended to \`sender.log\` in that folder. The keeper runs the sender and
+ * starts it again whenever it stops, until the owner asks it to stop or it
+ * halts. The tray icon and the pinned card are its face.
  *
  * Text in, text out: nothing here touches the disk.
  */
@@ -47,10 +49,10 @@ export function startupScript({ nodePath, packageDir, dataFolder }: StartupPlace
   const command = [
     'cmd /c',
     `"${quoted(nodePath)} --experimental-strip-types --no-warnings=ExperimentalWarning`,
-    `src\\main.ts start >> ${quoted(log)} 2>&1"`,
+    `src\\main.ts keep-running >> ${quoted(log)} 2>&1"`,
   ].join(' ')
   return [
-    "' Starts the Shawarmania campaign sender at logon, with no window.",
+    "' Keeps the Shawarmania campaign sender running from logon, with no window.",
     "' Written by npm run install-startup; npm run uninstall-startup deletes it.",
     'Set shell = CreateObject("WScript.Shell")',
     `shell.CurrentDirectory = ${vbsString(packageDir)}`,

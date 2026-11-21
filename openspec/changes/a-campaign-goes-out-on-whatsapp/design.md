@@ -1575,3 +1575,41 @@ under the audience's `ordered`, beside "within N days" and "not for N days".
 - **The demo** reads the same rule over its own bills, and its tests hold it to
   the database's: all time is everybody, the last seven days is "within 7
   days", and not back since a week ago is "not for 6 days".
+
+## The sender keeps running (2026-11-21)
+
+During the owner's first staging test the sender stopped answering: a second
+test waited with nothing sending it. It had been started in a terminal inside
+the Claude app, and went when the app closed its terminals on a restart of
+the session, 40 minutes after it started. Not a halt, not WhatsApp: nothing
+existed to bring it back. The owner: "It should not just auto stop", unless "I
+really manually go and stop it".
+
+- **A keeper** (`core/keep-running.ts`, `npm run keep-running`) runs the
+  sender as a child and starts it again whenever it exits. Five seconds after a
+  run of ten minutes or more; after quick exits in a row 5 s, 15 s, 1 min,
+  2 min, then every 5 min, for ever. A recurring fault is retried slowly, never
+  given up on.
+- **It stays down for two reasons only.** The owner's stop request, a file in
+  the data folder (`stopped-by-owner.json`) written by `npm run stop` or the
+  tray's *Stop the sender…*, which the running sender checks every two seconds
+  and obeys the way it obeys Ctrl+C, after the message in hand. Or a halt
+  (exit code 2), which D10 says only a person may clear.
+- **A stop holds across a restart of the laptop.** The keeper at logon reads
+  the file and starts nothing. `npm run install-startup` clears it and starts
+  the keeper; so does a person running `npm start` by hand. A sender the keeper
+  starts carries `CAMPAIGN_SENDER_KEPT` and never clears it, so a stop asked
+  for in the instant between two runs is not lost.
+- **Nothing owns it but Windows.** The logon script runs the keeper, and
+  `install-startup` also starts it at once through Explorer, so no terminal,
+  app or window is its parent. One keeper per data folder (`keeper.lock`,
+  beside the sender's own `sender.lock`).
+- **Tried for real** on the business folder against staging: the sender
+  killed outright was started again in 5 s and reconnected; `npm run stop`
+  stopped it between messages and the keeper with it; a keeper started after
+  that read the stop and started nothing; `install-startup` brought it back,
+  kept running. Not yet tried: an actual logon, and the tray's Stop clicked
+  (its script parses; what it writes is the file the sender already obeys).
+- **Not covered:** the keeper itself ended from Task Manager is not restarted
+  until the next logon. A sender it left behind keeps running; a new keeper
+  waits for that one to stop and takes over.

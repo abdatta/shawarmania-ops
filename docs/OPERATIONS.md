@@ -960,16 +960,36 @@ Open goes to the page.** Ctrl+C stops the sender; the link is kept.
 
 Not signed in, `npm start` only holds the WhatsApp link, as it always did.
 
-**Start with Windows**, once a folder is linked and signed in:
+**Keep it running**, once a folder is linked and signed in. This is the
+normal way to run the sender; `npm start` in a window ends when that window
+closes (on 2026-11-21 one started inside the Claude app's terminal went when
+the app closed it, mid-test):
 
 ```bash
 npm run install-startup
 ```
 
 It puts one small script in your own Startup folder (no administrator
-needed): from the next logon the sender starts with no window, on that folder,
-and writes what it prints to `sender.log` there. `npm run uninstall-startup`
-removes it.
+needed) and starts it now as well. The script runs a **keeper** with no
+window, on that folder, which runs the sender and **starts it again whenever
+it stops**: a crash, a kill, the network missing at logon, a window closed.
+Soon after a run that had settled; after quick failures in a row it waits
+longer each time, up to five minutes, and keeps trying. Everything both print
+goes to `sender.log` there. `npm run status` says *Running, and kept
+running*.
+
+It stays down for two reasons only, both a person's to undo:
+
+- **You stopped it**: `npm run stop`, or **Stop the sender…** on the tray
+  icon's menu. It finishes the message in hand, and stays stopped, even across
+  a restart of the laptop, until `npm run install-startup` (or `npm start`
+  by hand) starts it again.
+- **It halted** (below): WhatsApp ended the session, and only a person may let
+  it connect again.
+
+`npm run uninstall-startup` stops it starting at logon; one running keeps
+running until stopped. The script points at the checkout it was installed
+from: install again from wherever the sender's code lives after a Promote.
 
 ### A campaign, end to end
 
