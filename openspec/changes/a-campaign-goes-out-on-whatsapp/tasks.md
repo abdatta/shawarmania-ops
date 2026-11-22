@@ -341,9 +341,10 @@ customer.
       WhatsApp from the business number, sent by the owner's own laptop; no
       batch started until the owner released it on that laptop; the lid closed
       mid-batch and opened later resumed at the next customer and sent nobody a
-      second message; a customer who replied STOP is in no later audience; both
-      owners watched the same progress; the sender stopped and stayed stopped
-      when its WhatsApp session was ended; a manager, a biller, an employee and
+      second message; a number on the stopped list is in no later audience
+      (replying STOP was dropped on 2026-11-20, decision 15); both owners
+      watched the same progress; the sender stopped and stayed stopped when its
+      WhatsApp session was ended; a manager, a biller, an employee and
       a counter tablet were each refused every campaign table and read by the
       database, proved by hand-crafted requests; and the four-role demo
       walkthrough still walks.
