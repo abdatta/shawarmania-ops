@@ -80,10 +80,14 @@ test('the owner writes, filters, submits, pauses and stops a campaign', async ({
 
   // Picked through a filter, from the database's own list.
   await page.getByTestId('choose-audience').click()
+  // The seed has more than one outlet, so the chips are always there; they load
+  // after the sheet opens. Wait for Kalyani's rather than counting before they
+  // come: an outlet another spec makes can be the one the sheet opens on, and a
+  // count taken too early skipped the click (staging run 44985802065).
   const kalyani = page.getByTestId(`surface-outlet-${OUTLET_KALYANI}`)
-  if ((await kalyani.count()) > 0 && (await kalyani.getAttribute('aria-pressed')) !== 'true') {
-    await kalyani.click()
-  }
+  await expect(kalyani).toBeVisible()
+  if ((await kalyani.getAttribute('aria-pressed')) !== 'true') await kalyani.click()
+  await expect(kalyani).toHaveAttribute('aria-pressed', 'true')
   const people = page.getByTestId('audience-people')
   const search = page.getByTestId('audience-search')
   await search.fill(SHARED_NUMBER)
