@@ -77,6 +77,21 @@ describe('the sender, summed up for a person', () => {
     expect(view.thisRun.sent).toBe(1)
   })
 
+  it('says it is connected while it waits out the pause after connecting', () => {
+    // A start or a reconnect is followed by a pause before the queue is next
+    // asked; the sender is connected through it, not connecting.
+    let view = viewAfterEvent(startingView(at()), { kind: 'gap', ms: 75_000 }, at())
+    expect(view).toMatchObject({ mood: 'idle', headline: 'Connected to WhatsApp' })
+
+    view = viewAfterEvent(view, { kind: 'waiting_for_whatsapp' }, at())
+    view = viewAfterTick(view, tick({ waitingForRelease: WAITING }), at())
+    view = viewAfterEvent(view, { kind: 'gap', ms: 63_000 }, at())
+    expect(view).toMatchObject({
+      mood: 'waiting_for_you',
+      headline: 'Batch 3 of “Diwali offer” is waiting for you',
+    })
+  })
+
   it('says when it is sending to the test numbers', () => {
     const view = viewAfterEvent(startingView(at()), { kind: 'sent', batchNo: 0, position: 1 }, at())
     expect(view).toMatchObject({ mood: 'sending', headline: 'Sending to the test numbers' })

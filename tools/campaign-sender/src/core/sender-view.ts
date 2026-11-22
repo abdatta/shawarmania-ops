@@ -145,6 +145,12 @@ export function viewAfterEvent(
     next.mood = 'sending'
     next.headline = batchNo === 0 ? 'Sending to the test numbers' : `Sending batch ${batchNo}`
   }
+  const waitingOrNot = (waiting: WaitingBatch | null, otherwise: string) => {
+    next.mood = waiting ? 'waiting_for_you' : 'idle'
+    next.headline = waiting
+      ? `Batch ${waiting.batchNo} of “${waiting.campaignName}” is waiting for you`
+      : otherwise
+  }
 
   switch (event.kind) {
     case 'waiting_for_whatsapp':
@@ -153,10 +159,7 @@ export function viewAfterEvent(
       break
     case 'idle':
       next.waiting = event.waiting
-      next.mood = event.waiting ? 'waiting_for_you' : 'idle'
-      next.headline = event.waiting
-        ? `Batch ${event.waiting.batchNo} of “${event.waiting.campaignName}” is waiting for you`
-        : 'Nothing to send'
+      waitingOrNot(event.waiting, 'Nothing to send')
       break
     case 'outside_hours':
       next.mood = 'outside_hours'
@@ -176,7 +179,11 @@ export function viewAfterEvent(
       next.headline = 'Cannot reach the database'
       break
     case 'gap':
+      // Only a connected sender waits out a gap. After a start or a reconnect
+      // it pauses a minute or so before it next asks the queue, and through
+      // that pause it is connected, not connecting.
       if (next.released) sending(next.released.batchNo)
+      else if (next.mood === 'connecting') waitingOrNot(next.waiting, 'Connected to WhatsApp')
       break
     case 'sent':
       next.thisRun.sent += 1
