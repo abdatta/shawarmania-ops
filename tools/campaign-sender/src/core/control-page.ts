@@ -7,6 +7,10 @@
  * last batch finished, and one button. Pressing it posts the token the page
  * was served with; see `control-page-server.ts` for why that is enough.
  *
+ * Below them, the **history** (`history.ts`): what is coming up, what was
+ * sent, newest first, and the sender's own diary, read every thirty seconds
+ * from `/history` with the page's token, because it carries whole numbers.
+ *
  * Everything the page shows is put in as text, never as markup, so a
  * campaign's name cannot become part of the page.
  */
@@ -45,6 +49,19 @@ export function controlPage(token: string): string {
   .tile span { color: var(--muted); font-size: 13px; }
   .said { margin-top: 10px; font-weight: 600; }
   .rehearsal { color: var(--warn); font-weight: 600; margin-bottom: 14px; }
+  .history h2 { font-size: 13px; font-weight: 650; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .05em; margin: 26px 0 8px; }
+  .history ul { list-style: none; margin: 0; padding: 0; background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; overflow: hidden; }
+  .history li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 14px; }
+  .history li + li { border-top: 1px solid var(--line); }
+  .history li > span:first-child { min-width: 0; }
+  .history li b { display: block; font-weight: 600; overflow-wrap: anywhere; }
+  .history li small { display: block; color: var(--muted); font-size: 13px; }
+  .history li .end { text-align: right; flex: none; max-width: 45%; }
+  .history .good { color: var(--ok); } .history .warn { color: var(--warn); } .history .alarm { color: var(--alarm); }
+  .history .empty { color: var(--muted); margin: 0; padding: 10px 14px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 14px; }
   [hidden] { display: none !important; }
 </style>
 <main>
@@ -71,6 +88,19 @@ export function controlPage(token: string): string {
     <div class="tile"><b id="this-run">0</b><span>sent since it started</span></div>
   </div>
   <p class="sub" id="trouble" style="margin-left:0"></p>
+
+  <div class="history" id="history" hidden>
+    <h2>Coming up</h2>
+    <ul id="coming"></ul>
+    <p class="empty" id="coming-empty" hidden>Nothing planned.</p>
+    <h2>Sent</h2>
+    <ul id="sent-list"></ul>
+    <p class="empty" id="sent-empty" hidden>Nothing sent yet.</p>
+    <h2>The sender's diary</h2>
+    <ul id="diary"></ul>
+    <p class="empty" id="diary-empty" hidden>Nothing noted yet.</p>
+    <p class="sub" id="history-note" style="margin-left:0"></p>
+  </div>
 </main>
 <script>
   const TOKEN = ${JSON.stringify(token)}
@@ -129,6 +159,45 @@ export function controlPage(token: string): string {
     }
   }
 
+  function item(main, sub, end, endSub, tone) {
+    const li = document.createElement('li')
+    const left = document.createElement('span')
+    const b = document.createElement('b'); b.textContent = main; left.append(b)
+    if (sub) { const s = document.createElement('small'); s.textContent = sub; left.append(s) }
+    li.append(left)
+    if (end || endSub) {
+      const right = document.createElement('span'); right.className = 'end'
+      const e = document.createElement('b'); e.textContent = end || ''; if (tone) e.className = tone; right.append(e)
+      if (endSub) { const s = document.createElement('small'); s.textContent = endSub; right.append(s) }
+      li.append(right)
+    }
+    return li
+  }
+
+  function fill(listId, emptyId, items) {
+    $(listId).replaceChildren(...items)
+    $(listId).hidden = items.length === 0
+    $(emptyId).hidden = items.length !== 0
+  }
+
+  async function refreshHistory() {
+    try {
+      const answer = await fetch('/history', { cache: 'no-store', headers: { 'x-sender-token': TOKEN } })
+      if (answer.status === 404) { $('history').hidden = true; return }
+      if (!answer.ok) throw new Error()
+      const h = await answer.json()
+      $('history').hidden = false
+      fill('coming', 'coming-empty', h.comingUp.map((r) => item(r.title, r.detail)))
+      fill('sent-list', 'sent-empty', h.sent.map((r) => item(r.who, r.what, r.outcome, r.when, r.tone)))
+      fill('diary', 'diary-empty', h.diary.map((r) => item(r.text, '', '', r.when, '')))
+      $('history-note').textContent = h.databaseError
+        ? 'The database could not be reached just now, so Coming up and Sent may be out of date.'
+        : 'Read at ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '. Kept fresh every 30 seconds.'
+    } catch {
+      $('history-note').textContent = 'The history could not be read just now. It tries again by itself.'
+    }
+  }
+
   $('send').addEventListener('click', async () => {
     pressed = true
     $('send').disabled = true
@@ -140,10 +209,13 @@ export function controlPage(token: string): string {
     $('said').textContent = said
     $('said').hidden = false
     refresh()
+    refreshHistory()
   })
 
   refresh()
   setInterval(refresh, 2000)
+  refreshHistory()
+  setInterval(refreshHistory, 30000)
 </script>
 </html>
 `

@@ -110,6 +110,7 @@ function everyCall(client: Client) {
     ['campaign_release_stale_claims', client.rpc('campaign_release_stale_claims')],
     ['campaign_report_receipts', client.rpc('campaign_report_receipts', { p_receipts: [] })],
     ['campaign_outstanding_message_ids', client.rpc('campaign_outstanding_message_ids')],
+    ['campaign_sender_history', client.rpc('campaign_sender_history')],
     [
       'set_campaign_test_numbers',
       client.rpc('set_campaign_test_numbers', {

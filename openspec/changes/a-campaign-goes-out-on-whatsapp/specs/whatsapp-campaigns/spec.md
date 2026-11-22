@@ -243,8 +243,18 @@ linking by a typed code.
 
 A campaign's stored recipients SHALL carry no phone number and no name. A full
 number SHALL leave the database only when one recipient is handed to the sender
-for sending, to an owner's session, one at a time. The sender SHALL NOT keep
-numbers, message contents or the account's other chats, and SHALL NOT log them.
+for sending, to an owner's session, one at a time, and in the sender's history,
+to an owner's session, for the sender's own page on the owner's laptop [owner,
+2026-11-21]. The sender SHALL NOT keep numbers, message contents or the
+account's other chats, and SHALL NOT log them.
+
+#### Scenario: The owner looks at the sender's history
+
+- **WHEN** the owner opens the sender's page on the laptop
+- **THEN** it shows the tests and batches still to come, every message the
+  laptop picked up, newest first, with the customer's name, whole number, how
+  it ended and its receipts, and the sender's own diary; and a page from any
+  other site open in the same browser cannot read it
 
 #### Scenario: A number is corrected after scheduling
 

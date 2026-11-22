@@ -1167,6 +1167,82 @@ select is(
   null, 'a campaign that does not exist reads as nothing');
 
 -- ---------------------------------------------------------------------------
+-- 8a. The laptop's history (owner, 2026-11-21: what has gone, what is to come,
+-- on the sender's own page). The one read besides the claim that returns full
+-- numbers, by the owner's choice: the sender's page is on the owner's laptop.
+
+-- One test still to go, for the open campaign, and one gone, for the finished one.
+insert into public.marketing_campaign_tests
+  (campaign_id, phone, body, queued_by, state, claimed_at, sent_at, wa_message_id)
+values
+  (pg_temp.k(2), '+919000008599', 'Thank you, Asha.', pg_temp.owner(), 'waiting', null, null, null),
+  (pg_temp.k(1), '+12135550100', 'Hi Asha, *20% off* this week.', pg_temp.owner(), 'sent',
+   now() - interval '1 minute', now() - interval '1 minute', 'wamid.HISTORYTEST');
+
+select set_config('test.history',
+  pg_temp.o($$select public.campaign_sender_history()$$)::text, true);
+
+select is(
+  current_setting('test.history')::jsonb -> 'tests_waiting',
+  jsonb_build_array(jsonb_build_object(
+    'campaign_name', 'Big spenders', 'phone', '+919000008599',
+    'queued_at', (select to_jsonb(queued_at) from public.marketing_campaign_tests
+                   where phone = '+919000008599'))),
+  'coming up: a test still to go, with its whole number');
+select is(
+  (select jsonb_agg(b - 'campaign_id')
+     from jsonb_array_elements(current_setting('test.history')::jsonb -> 'batches_ahead') b),
+  jsonb_build_array(jsonb_build_object(
+    'campaign_name', 'Big spenders', 'campaign_state', 'scheduled', 'batch_no', 1,
+    'state', 'waiting', 'recipients', 1, 'to_go', 1)),
+  'and every batch not yet done of a campaign still going: none of a finished one, none of a draft');
+
+select bag_eq(
+  $$select h ->> 'kind' as kind, h ->> 'campaign_name' as campaign, h ->> 'name' as name,
+           h ->> 'phone' as phone, h ->> 'state' as state
+      from jsonb_array_elements(current_setting('test.history')::jsonb -> 'sent') h$$,
+  $$select 'customer' as kind, 'Diwali offer' as campaign, c.name, c.phone, r.state::text as state
+      from public.marketing_campaign_recipients r
+      join public.customers c on c.id = r.customer_id
+     where r.claimed_at is not null
+    union all
+    select 'test', 'Diwali offer', null, '+12135550100', 'sent'$$,
+  'sent: every message the laptop picked up, customers and tests, each with a whole number and how it ended');
+select is(
+  (select count(*)::int
+     from jsonb_array_elements(current_setting('test.history')::jsonb -> 'sent') h
+    where h ->> 'phone' !~ '^\+[1-9][0-9]{7,14}$'),
+  0, 'every number in it is whole, country code and all');
+select ok(
+  (select bool_and(prev is null or (h ->> 'at')::timestamptz <= prev)
+     from (select h, lag((h ->> 'at')::timestamptz) over (order by n) as prev
+             from jsonb_array_elements(current_setting('test.history')::jsonb -> 'sent')
+                  with ordinality as e (h, n)) x),
+  'newest first');
+select is(
+  (select jsonb_build_object('delivered', count(*) filter (where h ->> 'delivered_at' is not null),
+                             'read', count(*) filter (where h ->> 'read_at' is not null))
+     from jsonb_array_elements(current_setting('test.history')::jsonb -> 'sent') h
+    where h ->> 'kind' = 'customer'),
+  jsonb_build_object(
+    'delivered', (select count(*) from public.marketing_campaign_recipients
+                   where claimed_at is not null and delivered_at is not null),
+    'read', (select count(*) from public.marketing_campaign_recipients
+              where claimed_at is not null and read_at is not null)),
+  'with the receipts as they came');
+select is(
+  jsonb_array_length(pg_temp.o($$select public.campaign_sender_history(2)$$) -> 'sent'),
+  2, 'and as many of the newest as asked for');
+select pg_temp.refused(
+  $$select public.campaign_sender_history(0)$$,
+  '22023', 'history_invalid', 'at least one');
+select pg_temp.refused(
+  $$select public.campaign_sender_history(1001)$$,
+  '22023', 'history_invalid', 'and a thousand at most');
+
+delete from public.marketing_campaign_tests where phone in ('+919000008599', '+12135550100');
+
+-- ---------------------------------------------------------------------------
 -- 9. Who was sent a campaign, and STOP.
 
 -- Sent means handed to WhatsApp: Asha and Chitra. Bela is unsure and Esha is

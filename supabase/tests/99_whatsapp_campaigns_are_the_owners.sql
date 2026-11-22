@@ -15,7 +15,8 @@
 --     refused every table and every function, and an anonymous caller cannot
 --     call any of them at all;
 --   * a recipient row carries no phone and no name, and no function but the
---     claim returns more of a number than its last four digits.
+--     claim and the laptop's history (decision 17, the owner's choice) returns
+--     more of a number than its last four digits.
 --
 -- How a campaign behaves is `99_a_campaign_goes_out_on_whatsapp.sql`.
 
@@ -118,7 +119,8 @@ insert into campaign_calls values
    $$select public.campaign_mark_finish_notice('c0000000-0000-4000-a000-000000000001')$$),
   ('campaign_report_test_result',
    $$select public.campaign_report_test_result('80000000-0000-4000-a000-000000000001',
-       'sent', 'PROBE', null)$$);
+       'sent', 'PROBE', null)$$),
+  ('campaign_sender_history', $$select public.campaign_sender_history()$$);
 grant select on campaign_calls to authenticated, anon;
 
 -- ---------------------------------------------------------------------------
@@ -300,7 +302,8 @@ select lives_ok(call, format('the owner may call %s', fn))
               'marketing_stopped_list', 'campaign_outstanding_message_ids',
               'campaign_release_stale_claims', 'campaign_report_receipts',
               'campaign_sender_tick', 'save_campaign_draft', 'campaign_reading',
-              'update_marketing_sender_settings', 'campaign_record_stop')
+              'update_marketing_sender_settings', 'campaign_record_stop',
+              'campaign_sender_history')
  order by fn;
 
 select is(

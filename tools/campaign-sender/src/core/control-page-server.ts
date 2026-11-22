@@ -17,6 +17,10 @@
  *
  * `GET /state` is the summary the tray icon and the pinned card are drawn
  * from. It carries no number and no message.
+ *
+ * `GET /history` is the history (`history.ts`), which carries customers' whole
+ * numbers [owner, decision 17]. So it answers only the page's own token, as
+ * Send batch does: no other site open in the same browser can read it.
  */
 
 import { createServer } from 'node:http'
@@ -41,6 +45,8 @@ export interface ControlPageOptions {
   state: () => unknown
   /** The owner pressed Send batch. */
   onRelease: () => Promise<ReleaseOutcome>
+  /** The history page's rows; absent for a sender that has none (a rehearsal). */
+  history?: () => Promise<unknown>
   port?: number
 }
 
@@ -74,6 +80,16 @@ export function serveControlPage(options: ControlPageOptions): Promise<ControlPa
     }
     if (request.method === 'GET' && request.url === '/state') {
       return send(200, 'application/json', JSON.stringify(options.state()))
+    }
+    if (request.method === 'GET' && request.url === '/history' && options.history) {
+      if (request.headers['x-sender-token'] !== options.token) {
+        return send(403, 'application/json', JSON.stringify({ message: 'Refused.' }))
+      }
+      options
+        .history()
+        .then((rows) => send(200, 'application/json', JSON.stringify(rows)))
+        .catch(() => send(503, 'application/json', JSON.stringify({ message: 'Not now.' })))
+      return
     }
     if (request.method === 'POST' && request.url === '/release') {
       if (request.headers['x-sender-token'] !== options.token) {

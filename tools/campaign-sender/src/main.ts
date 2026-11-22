@@ -55,7 +55,7 @@
 
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline'
@@ -104,6 +104,7 @@ import {
   installationId,
   isProduction,
   pictureCache,
+  readHistory,
   readQueueAddress,
   signedInClient,
   signIn,
@@ -124,6 +125,9 @@ import {
   stopRequestText,
 } from './core/keep-running.ts'
 import type { StopRequest } from './core/keep-running.ts'
+import { DIARY_FILE, diaryLine, readDiary, trimDiary } from './core/diary.ts'
+import type { DiaryTone } from './core/diary.ts'
+import { shapeHistory } from './core/history.ts'
 import QRCode from 'qrcode'
 
 import { canReachWhatsApp, holdLink, whatsAppLink } from './whatsapp-link.ts'
@@ -206,6 +210,49 @@ function stopOnCtrlC(controller = new AbortController()): AbortSignal {
   return controller.signal
 }
 
+// ── The diary ───────────────────────────────────────────────────────────────
+
+let diaryTrimmed = false
+let lastNoted = ''
+
+/**
+ * One line in the sender's diary (`core/diary.ts`), which the history page
+ * shows. The same line twice in a row is written once: a connection that keeps
+ * dropping is one line until something else happens. Never a number. A diary
+ * that cannot be written costs the sender nothing.
+ */
+function note(tone: DiaryTone, text: string): void {
+  if (text === lastNoted) return
+  lastNoted = text
+  const path = join(folder, DIARY_FILE)
+  try {
+    if (!diaryTrimmed && existsSync(path)) {
+      const trimmed = trimDiary(readFileSync(path, 'utf8'))
+      if (trimmed !== null) writeFileSync(path, trimmed, 'utf8')
+    }
+    diaryTrimmed = true
+    appendFileSync(path, diaryLine({ at: new Date().toISOString(), tone, text }), 'utf8')
+  } catch {
+    // The page shows what there is.
+  }
+}
+
+function readDiaryFile(limit: number) {
+  try {
+    return readDiary(readFileSync(join(folder, DIARY_FILE), 'utf8'), limit)
+  } catch {
+    return []
+  }
+}
+
+/** A time as the history shows it: the time today, the day and month before today. */
+function historyClock(ms: number): string {
+  const then = new Date(ms)
+  const time = then.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  if (then.toDateString() === new Date().toDateString()) return time
+  return `${then.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, ${time}`
+}
+
 // ── Kept running, and stopped on request ────────────────────────────────────
 
 function stopRequestPath(): string {
@@ -241,6 +288,7 @@ function watchStopRequest(controller: AbortController): void {
     if (existsSync(stopRequestPath())) {
       clearInterval(timer)
       say(`${clock()}  Asked to stop. Stopping, after the message in hand if there is one.`)
+      note('plain', 'Asked to stop.')
       controller.abort()
     }
   }, 2_000)
@@ -273,6 +321,7 @@ async function keepRunning(): Promise<number> {
   say(
     `${clock()}  Keeper started. The sender is started again whenever it stops, until asked to stop.`,
   )
+  note('plain', 'The keeper started, at logon or by install-startup.')
   let quickExits = 0
   for (;;) {
     const asked = readStopRequestFile()
@@ -299,6 +348,12 @@ async function keepRunning(): Promise<number> {
       quickExitsBefore: quickExits,
     })
     if (verdict.kind === 'stay_stopped') {
+      note(
+        verdict.why === 'owner' ? 'plain' : 'alarm',
+        verdict.why === 'owner'
+          ? 'Stopped, as asked. It stays stopped until started again.'
+          : 'The sender halted, so the keeper leaves it stopped.',
+      )
       say(
         verdict.why === 'owner'
           ? `${clock()}  ${stoppedByOwnerLine(readStopRequestFile() ?? { by: 'unknown', at: null })}`
@@ -307,6 +362,10 @@ async function keepRunning(): Promise<number> {
       return 0
     }
     quickExits = verdict.quickExits
+    note(
+      'warn',
+      `The sender stopped (${code === null || code > 255 ? 'killed' : `exit ${code}`}); the keeper started it again ${Math.round(verdict.afterMs / 1000)} s later.`,
+    )
     say(
       `${clock()}  The sender stopped (${code === null || code > 255 ? 'killed' : `exit ${code}`}). Starting it again in ${Math.round(verdict.afterMs / 1000)} s.`,
     )
@@ -473,6 +532,13 @@ async function start(): Promise<number> {
   } else if (address && !isProduction(address)) {
     say('This is not production. Every customer it holds will be sent to.')
   }
+  const real = onlyRecipient === null
+  if (real) {
+    note(
+      'plain',
+      `Started ${process.env[KEPT_ENV] ? 'by the keeper' : 'by hand'}, sending for ${address ? databaseName(address) : 'the database'}.`,
+    )
+  }
 
   let linkedLast4: string | null = null
   const realLink = whatsAppLink(folder, {
@@ -480,6 +546,11 @@ async function start(): Promise<number> {
     onOnline: (ownJid) => {
       linkedLast4 = lastFour(ownJid).replace(/\D/g, '') || null
       say(`${clock()}  Connected as ${lastFour(ownJid)}.`)
+      if (real) note('good', `Connected to WhatsApp as ${lastFour(ownJid)}.`)
+    },
+    onOffline: (retryInMs, statusCode) => {
+      events.onOffline(retryInMs, statusCode)
+      if (real) note('warn', 'The WhatsApp connection dropped. It reconnects by itself.')
     },
   })
   const link = onlyRecipient ? onlyTo(realLink, { recipient: onlyRecipient }) : realLink
@@ -491,6 +562,7 @@ async function start(): Promise<number> {
     link,
     queue,
     rehearsal: onlyRecipient !== null,
+    ...(real ? { history: () => readHistory(client) } : {}),
     compose: async (claimed) => {
       const message: OutgoingMessage = {
         text: renderCampaignMessage(claimed.body, claimed.name).text,
@@ -1194,6 +1266,28 @@ async function rehearseRun(store: RehearsalStore): Promise<number> {
  * tray icon and the pinned card. The same for a rehearsal and the real thing;
  * only the queue and how a message is put together differ.
  */
+/** The events worth a line in the diary. Sends are not: the database holds those. */
+function noteEvent(event: SenderEvent): void {
+  switch (event.kind) {
+    case 'paused_by_sender':
+      return note('alarm', 'Three sends in a row went wrong, so the sender paused the campaign.')
+    case 'batch_finished':
+      return note('good', `Batch ${event.batchNo} finished.`)
+    case 'unsure':
+      return note('warn', `${event.count} message(s) were cut off mid-send and marked unsure.`)
+    case 'database_unreachable':
+      return note('warn', 'The database could not be reached. Nothing is sent until it can.')
+    case 'stood_down':
+      return note('warn', 'Another sender is the one in use, so this one stood down.')
+    case 'finish_notice':
+      return event.sent
+        ? note('good', 'A campaign finished; its totals went to the owner who submitted it.')
+        : undefined
+    default:
+      return undefined
+  }
+}
+
 async function runWithFace(options: {
   link: WhatsAppLink
   queue: CampaignQueue & BatchReleaser
@@ -1202,7 +1296,11 @@ async function runWithFace(options: {
   controller: AbortController
   /** A rehearsal stops by itself once nothing is left; the real sender runs on. */
   stopWhenFinished?: boolean
+  /** The database's half of the history page; none in a rehearsal, which keeps no diary. */
+  history?: () => Promise<unknown>
 }): Promise<number> {
+  const diaryOn = options.history !== undefined
+  const history = options.history
   const { link, queue, controller } = options
   const signal = stopOnCtrlC(controller)
   if (!options.rehearsal) watchStopRequest(controller)
@@ -1229,9 +1327,25 @@ async function runWithFace(options: {
           return { ok: false, message: 'That batch is not waiting any more.' }
         }
         say(`${clock()}  Send batch pressed: batch ${waiting.batchNo} is released.`)
+        if (diaryOn) {
+          note('good', `Send batch pressed: batch ${waiting.batchNo} of “${waiting.campaignName}”.`)
+        }
         askNow()
         return { ok: true, message: `Batch ${waiting.batchNo} is released. Sending starts now.` }
       },
+      ...(history
+        ? {
+            history: async () => {
+              const context = { now: Date.now(), clockText: historyClock }
+              const diary = readDiaryFile(200)
+              try {
+                return { ...shapeHistory(await history(), diary, context), databaseError: false }
+              } catch {
+                return { ...shapeHistory(null, diary, context), databaseError: true }
+              }
+            },
+          }
+        : {}),
     })
   } catch {
     say(`Could not open the sender's page on port ${CONTROL_PAGE_PORT}. Is another sender running?`)
@@ -1256,6 +1370,7 @@ async function runWithFace(options: {
     onEvent: (event) => {
       view = viewAfterEvent(view, event, viewNow())
       sayEvent(event)
+      if (diaryOn) noteEvent(event)
       if (options.stopWhenFinished && event.kind === 'idle' && !event.campaignsOpen && !lingering) {
         lingering = true
         say(
@@ -1268,6 +1383,11 @@ async function runWithFace(options: {
   })
   view = viewAfterEnd(view, end, end.kind === 'halted' ? explain(end.reason) : '', viewNow())
   await page.close()
+  if (diaryOn) {
+    if (end.kind === 'stopped') note('plain', 'Stopped.')
+    else if (end.kind === 'halted') note('alarm', `Halted: ${explain(end.reason)}`)
+    else note('alarm', 'Stopped: it needs a person to look (npm run status).')
+  }
 
   switch (end.kind) {
     case 'stopped':

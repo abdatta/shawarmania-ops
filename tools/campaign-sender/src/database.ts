@@ -212,6 +212,15 @@ async function call(client: SupabaseClient, fn: string, args?: Record<string, un
 }
 
 /**
+ * What the history page shows from the database: tests and batches still to
+ * come, and the newest messages the laptop picked up, with whole numbers
+ * (design, *The sender's history*). Shaped for the page by `core/history.ts`.
+ */
+export async function readHistory(client: SupabaseClient, limit = 300): Promise<unknown> {
+  return call(client, 'campaign_sender_history', { p_limit: limit })
+}
+
+/**
  * The real queue. Every method is one function call, and one that fails
  * rejects, which the loop treats as the database being out of reach: it sends
  * nothing and asks again later.

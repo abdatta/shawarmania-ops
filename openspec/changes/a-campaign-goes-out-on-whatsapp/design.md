@@ -1613,3 +1613,43 @@ really manually go and stop it".
 - **Not covered:** the keeper itself ended from Task Manager is not restarted
   until the next logon. A sender it left behind keeps running; a new keeper
   waits for that one to stop and takes over.
+
+## The sender's history (2026-11-21)
+
+The owner asked to see, on the laptop, "what has been sent, what maybe is
+planned to be sent, or whatever information it knows or it has known in the
+past", kept locally and fine to lose with the laptop. Asked, they chose to read
+the sends from the database and keep only the sender's own events locally, and
+to see customers' whole numbers (proposal, decision 17).
+
+- **Where**: under the tiles on the sender's page (`http://127.0.0.1:7418`,
+  the tray's *Open the sender page*), refreshed every thirty seconds and after
+  Send batch. Three lists: **Coming up**, **Sent**, **The sender's diary**.
+- **Coming up and Sent are the database's** (`campaign_sender_history`, in
+  `20261121000000_campaign_sender_history.sql`): tests waiting; every batch not
+  yet done of a campaign submitted or paused, with what it waits for (Send
+  batch, released, campaign paused); and the newest 300 messages the laptop
+  picked up, customers' and tests', with the campaign, the batch, the saved
+  name, the whole number as the customer's record holds it now, how it ended
+  and the receipts. A customer passed over because they were stopped was
+  picked up by nobody and is not in Sent; the app's batch counts hold them.
+  Read from the database rather than kept on the laptop because it already
+  records every message's fate, so the list is complete from the first
+  campaign, agrees with the app, and costs the laptop nothing to keep.
+- **Whole numbers, guarded like Send batch.** `GET /history` answers only the
+  page's own token, so no other site open in the same browser can read it;
+  `GET /state`, which the tray reads, still carries no number. Anyone using
+  the laptop itself can open the page, which the owner accepted.
+- **The diary is the laptop's** (`core/diary.ts`, `diary.jsonl` in the data
+  folder, the newest 2,000 lines): started (by the keeper or by hand) and for
+  which database, connected, connection dropped, Send batch pressed, a batch
+  finished, cut off mid-send, the database out of reach, asked to stop,
+  stopped, halted and why, restarted by the keeper. No number and no message:
+  sends are the database's. The same line twice in a row is written once. A
+  rehearsal keeps no diary and has no history.
+- **Shaped on the laptop, placed by the page** (`core/history.ts`): plain
+  sentences per row (*Read*, *Delivered*, *Not on WhatsApp*, *Failed (463)*,
+  *Unsure*), Indian numbers grouped as they are said, a time today and a date
+  before; a row it cannot read is left out rather than shown wrong. When the
+  database cannot be reached the diary still shows and the page says the rest
+  may be out of date.

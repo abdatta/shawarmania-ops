@@ -281,6 +281,11 @@ customer.
       owner's stop (`npm run stop`, the tray's *Stop the sender…*) or a halt.
       *(2026-11-21: `core/keep-running.ts`, tests first; killed, stopped and
       restarted for real on staging; design, *The sender keeps running*.)*
+- [x] 4.10 **The sender's history** [owner, 2026-11-21; proposal, decision
+      17]: Coming up and Sent from the database with whole numbers, and the
+      sender's own diary on the laptop, on the sender's page.
+      *(2026-11-21: `campaign_sender_history` tests first, `core/diary.ts`
+      and `core/history.ts` tests first; design, *The sender's history*.)*
 
 ## 5. Staging rehearsal
 

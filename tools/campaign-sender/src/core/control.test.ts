@@ -237,6 +237,61 @@ describe('the Send batch page server', () => {
     }
   })
 
+  it('shows the history only to the page that carries its token', async () => {
+    const server = await serveControlPage({
+      token: 'secret',
+      page: controlPage,
+      state: () => ({}),
+      onRelease: async () => ({ ok: true, message: '' }),
+      history: async () => ({ sent: [{ who: 'Asha Roy · +91 90000 00901' }] }),
+      port: 0,
+    })
+    try {
+      // Whole numbers: nobody without the page's token reads them.
+      expect((await fetch(`${server.url}/history`)).status).toBe(403)
+      const wrong = await fetch(`${server.url}/history`, { headers: { 'x-sender-token': 'guess' } })
+      expect(wrong.status).toBe(403)
+      const right = await fetch(`${server.url}/history`, {
+        headers: { 'x-sender-token': 'secret' },
+      })
+      expect(right.status).toBe(200)
+      expect(right.headers.get('cache-control')).toBe('no-store')
+      expect(await right.json()).toEqual({ sent: [{ who: 'Asha Roy · +91 90000 00901' }] })
+      // And the summary the tray reads still carries no number.
+      expect(await (await fetch(`${server.url}/state`)).text()).not.toMatch(/\d{6}/)
+    } finally {
+      await server.close()
+    }
+  })
+
+  it('says so when the history cannot be read just now, and has none in a rehearsal', async () => {
+    const failing = await serveControlPage({
+      token: 'secret',
+      page: controlPage,
+      state: () => ({}),
+      onRelease: async () => ({ ok: true, message: '' }),
+      history: async () => {
+        throw new Error('offline')
+      },
+      port: 0,
+    })
+    const none = await serveControlPage({
+      token: 'secret',
+      page: controlPage,
+      state: () => ({}),
+      onRelease: async () => ({ ok: true, message: '' }),
+      port: 0,
+    })
+    try {
+      const headers = { 'x-sender-token': 'secret' }
+      expect((await fetch(`${failing.url}/history`, { headers })).status).toBe(503)
+      expect((await fetch(`${none.url}/history`, { headers })).status).toBe(404)
+    } finally {
+      await failing.close()
+      await none.close()
+    }
+  })
+
   it('answers nobody who reached it under another name', async () => {
     const { server, presses } = await serve()
     try {

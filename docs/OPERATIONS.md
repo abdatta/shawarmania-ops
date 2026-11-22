@@ -991,6 +991,15 @@ It stays down for two reasons only, both a person's to undo:
 running until stopped. The script points at the checkout it was installed
 from: install again from wherever the sender's code lives after a Promote.
 
+**History.** The sender's page (the tray's *Open the sender page*) shows,
+under its tiles, **Coming up** (tests waiting, and each batch still to go with
+what it waits for), **Sent** (every message the laptop picked up, tests
+included, newest first, with the customer's name, **whole number**, how it
+ended and the receipts) and **the sender's diary** (started, connected,
+dropped, Send batch pressed, stopped, halted, restarted). Coming up and Sent
+are read from the database the folder is signed in to; the diary is
+`diary.jsonl` in the data folder and goes with the laptop.
+
 ### A campaign, end to end
 
 1. An owner writes it on the Campaigns page, adds **test numbers** if wanted

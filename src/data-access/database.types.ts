@@ -6360,6 +6360,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      campaign_sender_history: { Args: { p_limit?: number }; Returns: Json }
       campaign_sender_tick: {
         Args: {
           p_halt_reason?: string
