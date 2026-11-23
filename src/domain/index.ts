@@ -165,6 +165,7 @@ export {
   type CustomerQuery,
   type MatchSegment,
 } from './customer-search'
+export { capitalisedName, capitalisedWord, capitalisedWords, isWordSpace } from './customer-name'
 export {
   ALL_OFF_SERVICE_SETTINGS,
   busyTables,
