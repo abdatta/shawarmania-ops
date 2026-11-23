@@ -77,6 +77,13 @@ import {
 import { HALT_EXPLANATIONS } from './core/disconnect.ts'
 import { LINK_PAGE_PORT, serveLinkPage } from './core/link-page-server.ts'
 import type { LinkPageServer } from './core/link-page-server.ts'
+import {
+  noticeToken,
+  readNoticeRecipients,
+  sendNotice,
+  tappedLink,
+  tokenMatches,
+} from './core/owner-notice.ts'
 import { fullPhoneNumber, lastFour } from './core/phone-number.ts'
 import { linkedPage, qrPage, waitingPage } from './core/qr-page.ts'
 import { onlyTo } from './core/rehearsal-guard.ts'
@@ -559,9 +566,12 @@ async function start(): Promise<number> {
       if (real) note('warn', 'The WhatsApp connection dropped. It reconnects by itself.')
     },
   })
-  const link = onlyRecipient ? onlyTo(realLink, { recipient: onlyRecipient }) : realLink
+  // A real run also carries owner notices, on the same connection.
+  const tapped = tappedLink(realLink)
+  const link = onlyRecipient ? onlyTo(realLink, { recipient: onlyRecipient }) : tapped.link
   const queue = databaseQueue(client, installationId(folder), () => linkedLast4)
   const picture = pictureCache(client)
+  const token = real ? noticeToken(folder) : ''
 
   const controller = new AbortController()
   return runWithFace({
@@ -569,6 +579,19 @@ async function start(): Promise<number> {
     queue,
     rehearsal: onlyRecipient !== null,
     ...(real ? { history: () => readHistory(client) } : {}),
+    ...(real
+      ? {
+          notice: async (given: unknown, body: unknown) => {
+            if (!tokenMatches(given, token)) {
+              return { status: 403, body: { ok: false, message: 'Refused.' } }
+            }
+            const outcome = await sendNotice(body, readNoticeRecipients(folder), tapped.current())
+            say(`${clock()}  Owner notice: ${outcome.ok ? 'sent' : outcome.message}`)
+            if (outcome.ok) note('plain', 'An owner notice went out.')
+            return { status: outcome.status, body: outcome }
+          },
+        }
+      : {}),
     compose: async (claimed) => {
       const message: OutgoingMessage = {
         text: renderCampaignMessage(claimed.body, claimed.name).text,
@@ -1304,6 +1327,8 @@ async function runWithFace(options: {
   stopWhenFinished?: boolean
   /** The database's half of the history page; none in a rehearsal, which keeps no diary. */
   history?: () => Promise<unknown>
+  /** Owner notices (`owner-notice.ts`); a real run only. */
+  notice?: (token: unknown, body: unknown) => Promise<{ status: number; body: Record<string, unknown> }>
 }): Promise<number> {
   const diaryOn = options.history !== undefined
   const history = options.history
@@ -1339,6 +1364,7 @@ async function runWithFace(options: {
         askNow()
         return { ok: true, message: `Batch ${waiting.batchNo} is released. Sending starts now.` }
       },
+      ...(options.notice ? { notice: options.notice } : {}),
       ...(history
         ? {
             history: async () => {

@@ -47,8 +47,19 @@ export interface ControlPageOptions {
   onRelease: () => Promise<ReleaseOutcome>
   /** The history page's rows; absent for a sender that has none (a rehearsal). */
   history?: () => Promise<unknown>
+  /**
+   * `POST /notice`: an owner notice (`owner-notice.ts`). Its own token, sent
+   * as `x-notice-token`, is checked by the handler, not by the page's token.
+   */
+  notice?: (
+    token: unknown,
+    body: unknown,
+  ) => Promise<{ status: number; body: Record<string, unknown> }>
   port?: number
 }
+
+/** A notice body is a few kilobytes at most. */
+const NOTICE_BODY_MOST_BYTES = 32 * 1024
 
 export interface ControlPageServer {
   url: string
@@ -102,6 +113,32 @@ export function serveControlPage(options: ControlPageOptions): Promise<ControlPa
         .then((outcome) =>
           send(outcome.ok ? 200 : 409, 'application/json', JSON.stringify(outcome)),
         )
+      return
+    }
+    if (request.method === 'POST' && request.url === '/notice' && options.notice) {
+      const notice = options.notice
+      const chunks: Buffer[] = []
+      let size = 0
+      let tooBig = false
+      request.on('data', (chunk: Buffer) => {
+        size += chunk.length
+        if (size > NOTICE_BODY_MOST_BYTES) tooBig = true
+        else chunks.push(chunk)
+      })
+      request.on('end', () => {
+        if (tooBig) return send(413, 'application/json', JSON.stringify({ ok: false }))
+        let body: unknown = null
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+        } catch {
+          return send(400, 'application/json', JSON.stringify({ ok: false, message: 'Not JSON.' }))
+        }
+        notice(request.headers['x-notice-token'], body)
+          .catch(() => ({ status: 500, body: { ok: false, message: 'The send failed.' } }))
+          .then((outcome) =>
+            send(outcome.status, 'application/json', JSON.stringify(outcome.body)),
+          )
+      })
       return
     }
     send(404, 'text/plain', 'Not found.')

@@ -1055,6 +1055,26 @@ clears the halt, after asking. If the laptop is no longer under Linked devices,
 `npm run unlink` and link again. After a restriction, send nothing from the
 account by any means until the phone shows none.
 
+### Owner notices
+
+Another program on the laptop can send the owner a short WhatsApp from the
+business account through the running sender, on its one connection (a second
+connection on the same login would push the sender off WhatsApp). The daily
+Google review task uses it to report the replies it posted.
+
+It answers `POST http://127.0.0.1:7418/notice` with JSON `{"text": "…"}`
+(and optionally `"to"`), and only:
+
+- with the header `x-notice-token` holding the contents of `notice-token` in
+  the data folder, which the sender makes on its first signed-in start;
+- to a number listed in `notice-recipients.txt` in the data folder, one per
+  line with its country code, written by a person. With no file, nothing goes.
+  Without `"to"`, the first number listed gets it.
+
+It is not a way to reach customers: a number not on that list is refused
+before anything is looked up. A notice is at most 4,000 characters, and its
+text is never logged.
+
 ### Rehearsing without a database
 
 `npm run rehearse` runs the same sender against a stand-in queue in one file
