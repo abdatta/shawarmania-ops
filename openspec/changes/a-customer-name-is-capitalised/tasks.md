@@ -1,9 +1,10 @@
 # Tasks: a-customer-name-is-capitalised
 
-Read `proposal.md` and `design.md` first. The rule (D1), the counter line (D2)
-and the one-time correction's procedure (D5) are settled with the owner; the
-owner's ruling that a biller must be able to keep a name as typed is the
-constraint every step serves.
+Read `proposal.md` and `design.md` first. The rule (D1), the field correcting
+itself as each word is finished and stopping once a corrected word is edited
+(D2), and the one-time correction's procedure (D5) are settled with the owner.
+**There is no new line or button at the counter**: the owner refused one on
+2026-11-23.
 
 ## 1. The gate, off
 
@@ -18,33 +19,64 @@ constraint every step serves.
 
 ## 2. The rule
 
-- [ ] 2.1 `src/domain/customer-name.ts`: `capitalisedName(typed): string | null`
-  per design D1, with unit tests covering every row of D1's table, plus empty,
-  whitespace-only, digits-only and a name already capitalised (returns `null`).
+- [ ] 2.1 `src/domain/customer-name.ts`: `capitalisedWord` and
+  `capitalisedName` per design D1, with unit tests covering every row of D1's
+  test table, plus empty, whitespace-only, digits-only, a word whose case
+  mapping changes its length (left alone), and a name already capitalised
+  (unchanged).
 
 ## 3. The counter (demo first)
 
-- [ ] 3.1 Unit tests in `customer-dialog.test.tsx` with
-  `describeChangeGate('customer-names-capitalised', …)`, written first and seen
-  to fail on: on, `rahul das` shows `Saves as Rahul Das` and confirm sends
-  `Rahul Das`; Keep as typed sends `rahul das`; Capitalise sends `Rahul Das`
-  again; the choice survives an edit to the name; `MD Rahim` and `AA` show no
-  line and send as typed; a matched customer with a saved name shows no field
-  and no line. Off: no line, sends the trimmed text, as today.
-- [ ] 3.2 Implement D2 in `src/features/billing/customer-dialog.tsx` behind
-  `useChangeGate('customer-names-capitalised')`, the off path untouched. Rewrite
-  the comment above the name field: the 2026-09-19 decision, what the owner
-  revised on 2026-11-22, and why mixed case is still saved as typed.
-- [ ] 3.3 Find every existing test, unit or browser, that types an
-  all-lowercase or all-capitals name of three or more letters and asserts it
-  back verbatim; tag a browser test `@cg-off:customer-names-capitalised`, the
-  only edit it may receive.
-- [ ] 3.4 A browser test tagged `@cg-on:customer-names-capitalised` in the demo
-  suite: ring an order, attach a new number with `rahul das`, see the line,
-  confirm, pay, and read `Rahul Das` on the order card and in the bill; a second
-  order with Keep as typed reads `SANJAY`. Screenshot the box at the counter's
-  viewport with the line showing and check nothing above it moves.
-- [ ] 3.5 Walk it in demo with the gate on and off; show the owner the box.
+- [ ] 3.1 Unit tests for a `useCapitalisingName` hook (D2, D4), written first and
+  seen to fail: a space corrects the word before it; a pause (fake timers)
+  corrects the word at the cursor; confirm returns `capitalisedName`; `RAH`,
+  pause, `UL` gives `Rahul`; a backspace into a corrected word stops all further
+  correction, confirm included; deleting only the space after it does not;
+  fixing a typo in an uncorrected word does not; a paste is corrected at the
+  next pause.
+- [ ] 3.1a **Cursor safety, before anything else in section 3 is called done**
+  (design D2, "The cursor never moves"). One test per guard: a correction keeps
+  `selectionStart`, `selectionEnd` and `selectionDirection`; a keystroke landing
+  between the decision and the change drops the correction; nothing changes
+  between `compositionstart` and `compositionend`, nor in the word being
+  composed; a pause with the cursor inside the text changes nothing; a space
+  typed mid-text corrects only the word behind the cursor. Then the invariant
+  test: generated runs (at least a thousand, seeded so a failure replays) of
+  keystrokes, spaces, pauses, cursor moves, selections, compositions,
+  backspaces and pastes, asserting after every step that the cursor and
+  selection equal a correction-off run of the same steps and the text equals it
+  ignoring case. A failure here is fixed by skipping the correction, never by
+  relaxing the assertion.
+- [ ] 3.2 Tests in `customer-dialog.test.tsx` with
+  `describeChangeGate('customer-names-capitalised', …)`: on, typing `rahul das`
+  shows `Rahul Das` in the field and confirm sends it; `MD rahim` sends
+  `MD Rahim`; `McKenzie` is unchanged; going back over `Sanjay` to `SANJAY`
+  sends `SANJAY`; no new text or button renders. Off: the field is never
+  changed and confirm sends the trimmed text, as today.
+- [ ] 3.3 Implement the hook and wire it into
+  `src/features/billing/customer-dialog.tsx` behind
+  `useChangeGate('customer-names-capitalised')`, the off path's `onChange` and
+  confirm untouched. Rewrite the comment above the name field: the 2026-09-19
+  decision, what the owner revised on 2026-11-22 and 2026-11-23, and why a
+  mixed-case word is still kept as typed.
+- [ ] 3.4 Find every existing test, unit or browser, that types a name the rule
+  would correct and asserts it back verbatim; tag a browser test
+  `@cg-off:customer-names-capitalised`, the only edit it may receive.
+- [ ] 3.5 A browser test tagged `@cg-on:customer-names-capitalised` in the demo
+  suite: ring an order, attach a new number, type `rahul das` key by key, read
+  `Rahul Das` in the field, confirm, pay, and read `Rahul Das` on the order card
+  and in the bill; a second order typing `SANJAY`, backspacing into it and
+  retyping, reads `SANJAY`. A third types `rahul`, waits past the pause, then
+  types ` das` without a break and reads `Rahul Das`, with the caret at the end
+  after every keystroke; a fourth moves the caret back into `Rahul Das` and types
+  a letter, which lands exactly there.
+- [ ] 3.6 The owner walks it in demo on the counter tablet itself, gate on and
+  off, with the tablet's own keyboard (composition and autocapitalise are only
+  real there), typing fast, pausing mid-word and going back to fix letters; tune
+  the pause delay from what they feel. **Any cursor jump or misplaced letter seen
+  there blocks the change**: skip more corrections (as a last resort, drop the
+  pause correction and correct only at a space and on confirm) and walk it
+  again.
 
 ## 4. Docs and verification
 
@@ -53,16 +85,16 @@ constraint every step serves.
   `docs/DATA_MODEL.md` (the `customers.name` paragraph).
 - [ ] 4.2 `npm run format`, typecheck, the touched tests, `npm run lint`; push to
   `stage` and read the Staging run for both gate states.
-- [ ] 4.3 On staging: gate off, a lowercase name saves as typed; on, it saves
-  capitalised and Keep as typed keeps it; off again, the counter is as before
-  and the names saved while on still read capitalised.
+- [ ] 4.3 On staging: gate off, a lowercase name saves as typed; on, it is
+  capitalised in the field and saved so, and going back keeps a casing; off
+  again, the counter is as before and the names saved while on still read
+  capitalised.
 
 ## 5. The one-time correction (after release, on the owner's word)
 
 - [ ] 5.1 After the gate has been turned on in production and pulled once,
-  discovery read per design D5 step 1: counts only (to change, left alone,
-  differing from `initcap`). Expect about 747 to change; explain any gap before
-  going on.
+  discovery read per design D5 step 1: counts only, by kind. 725 matched on
+  2026-11-23; explain any gap beyond new customers since before going on.
 - [ ] 5.2 Save the before-image outside the repository (D5 step 2); never commit
   it.
 - [ ] 5.3 Dry run in one transaction as the owner through `customer_rename`,
@@ -76,9 +108,10 @@ constraint every step serves.
 ## 6. PHASE GATE
 
 - [ ] 6.1 Not a roadmap change, so its checkpoint is the proposal's Gate line,
-  every item checked against the running app: with the gate on, a one-case name
-  for a new number is shown and saved capitalised, Keep as typed saves it as
-  typed, mixed-case and short names are untouched; with it off the counter is as
-  today; the saved one-case names are corrected through the owner's rename with
-  every bill's name unchanged, and the before-image undoes any of them. Release,
-  the pull and archive follow the owner's word.
+  every item checked against the running app: with the gate on, the name field
+  capitalises each one-case word as it is finished with no new line or button,
+  leaves mixed-case words and two-letter capitals alone, and stops for the name
+  once a corrected word is edited; with it off the counter is as today; the
+  matched saved names are corrected through the owner's rename with every
+  bill's name unchanged, and the before-image undoes any of them. Release, the
+  pull and archive follow the owner's word.

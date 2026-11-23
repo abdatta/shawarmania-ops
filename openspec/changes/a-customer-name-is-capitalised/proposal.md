@@ -3,24 +3,27 @@
 > **Model**: Opus · **Kind**: correction to shipped behaviour, not a roadmap
 > change (no row, no number) · **Depends on**: #56 `a-customer-is-a-phone-number`,
 > #75 `a-release-can-be-switched-off` · **Gate**: with
-> `customer-names-capitalised` on, a name typed at the counter for a new number
-> entirely in small letters or entirely in capitals (`rahul das`, `RAHUL DAS`)
-> is saved as `Rahul Das`, the counter shows that under the name box before it
-> is saved, and one tap on **Keep as typed** saves it exactly as typed instead;
-> a name typed in mixed case (`MD Rahim`, `d'Souza`, `McKenzie`) and a name of
-> fewer than three letters are saved as typed, with no line shown; with the gate
-> off the counter is exactly as today; the 747 saved customer names that are
-> entirely lowercase or entirely capitals are corrected once, through the
-> owner's own rename, with every bill's name left as it was, and the correction
-> can be undone from its saved before-image
+> `customer-names-capitalised` on, the name box at the counter capitalises each
+> word of a new customer's name in the box itself as the biller finishes it
+> (`rahul das` and `RAHUL DAS` read `Rahul Das` before they are saved), with no
+> new line or button; a word typed in mixed case (`McKenzie`, `d'Souza`) and an
+> all-capitals word of one or two letters (`MD`, `SK`) are left as typed; once
+> the biller deletes into or edits a word the box corrected, the box corrects
+> nothing more in that name and saves exactly what it shows; with the gate off
+> the counter is exactly as today; the saved names the same rule would correct
+> (725 on 2026-11-23) are corrected once, through the owner's own rename, with
+> every bill's name left as it was, and the correction can be undone from its
+> saved before-image
 
 ## Why
 
-Read from production on 2026-11-22: of 2,107 saved customers, 1,331 names are
-already capitalised word by word, **508 are all lowercase, 239 are ALL CAPS**,
-and 29 mix the two. A quarter of the directory reads wrongly wherever a name
-is shown: the counter's match card, the owner's Customers page, Gold members,
-and the name a campaign greets a customer by.
+Read from production on 2026-11-23: of 2,142 saved customers, **725 (33.8%)
+have a word in one case that should be capitalised**: 534 a lowercase word, 186
+an all-capitals word, 5 a caps-lock word (`rAHUL`). 1,415 (66.1%) already read
+right, and 3 (0.1%) are oddly cased in a way the rule cannot judge (`MOhan`) and
+are left alone. A third of the directory reads wrongly wherever a name is shown:
+the counter's match card, the owner's Customers page, Gold members, and the name
+a campaign greets a customer by.
 
 The cause is deliberate. On 2026-09-19 the owner chose that the counter save a
 name **exactly as typed**, because title-casing in code would mangle the names
@@ -31,48 +34,50 @@ come out right. It does not: a physical keyboard, a paste, caps lock and a
 biller who simply types in small letters all ignore it.
 
 The owner now wants names capitalised (2026-11-22), **and kept the reason the
-old decision existed**: "if the counter really wants to write it in a different
-case … it should not be a complete impossibility." So this change corrects only
-the two shapes no deliberate spelling takes, entirely lowercase and entirely
-capitals, shows the correction before anything is saved, and lets the biller
-keep what they typed in one tap. Mixed case is taken as deliberate and left
-alone, which is exactly the set of names the 2026-09-19 decision protected.
+old decision existed**: a biller who means a different casing must still be able
+to type it. On 2026-11-23 the owner settled how: the box corrects itself as the
+biller types, the way a phone keyboard does, and going back to edit a corrected
+word turns the correction off for that name. No extra line, no extra button.
 
 ## What changes
 
-**At the counter (behind the gate).** In the customer box, when a new number is
-being saved and the name typed has three or more letters, all of them small or
-all of them capitals, a line appears beneath the name field:
+**At the counter (behind the gate).** In the customer box, while a name is
+being typed for a new number, each word is checked **when it is finished**: a
+space after it, a pause of about a second, or confirming the box. A word typed
+all in small letters, all in capitals (three or more letters), or with caps lock
+on (`rAHUL`) is capitalised **in the box**, where the biller can see it:
 
 ```
-┌──────────────────────────────────┐
-│ rahul das                        │   ← the field, exactly as typed
-└──────────────────────────────────┘
-  Saves as Rahul Das     [Keep as typed]
+typed:   r a h u l ␣ d a s  (pause)
+box:     rahul → Rahul␣ → Rahul das → Rahul Das
 ```
 
-Typing is never interrupted: the field always holds exactly what was typed, and
-the line updates as it changes. Confirming saves the line's name. **Keep as
-typed** switches the line to `Saves as typed  [Capitalise]` and the name is then
-saved exactly as typed; **Capitalise** switches it back. The choice holds until
-the box closes, even if the name is edited after it. A name typed in mixed case,
-a name of one or two letters, or a name with no capitalisable letters shows no
-line and is saved as typed, as today.
+A word typed in mixed case (`McKenzie`, `d'Souza`, `DSouza`) is taken as meant
+and left alone, and so is an all-capitals word of one or two letters (`MD`,
+`SK`, `AK`), which is usually initials. So `MD rahim` reads `MD Rahim`. A word
+in a script with no capitals (Bengali) is never touched. Typing is never
+interrupted: a word still being typed is not touched until it is finished, and
+a correction never moves the cursor.
 
-The same name goes onto the order and bill being rung, exactly as it already
-does. Nothing else at the counter changes: a returning customer's saved name is
-shown and used as it is, and the saved profile is still never rewritten from a
-till.
+**Going back turns it off.** Once the biller deletes into, or types inside, a
+word the box has corrected, the box corrects nothing more until it closes, and
+saves exactly what it shows. To keep `SANJAY`, the biller backspaces over the
+`anjay` the box made and types `ANJAY` again. Fixing a typo in a word the box has
+not yet corrected does not turn it off.
+
+The name saved is the name in the box, and the same name goes onto the order and
+bill being rung, as it already does. Nothing else at the counter changes: a
+returning customer's saved name is shown and used as it is, and the saved
+profile is still never rewritten from a till.
 
 **Once, for the names already saved.** After the gate has been released, the
-747 saved names that are entirely lowercase or entirely capitals and have three
-or more letters are corrected by the same rule, through the owner's existing
-rename (the correction the Customers page makes), run as the owner. Each
-customer's saved profile changes; **every bill and order keeps the name it was
-rung under**, as a rename always has. The old names are saved first, outside the
-repository, so the correction can be undone name by name for any that the owner
-finds were meant as typed. The 29 mixed-case names and the 94 one- and
-two-letter names are left alone; the owner can correct any of them on the
+saved names the same rule would correct (725 on 2026-11-23) are corrected,
+through the owner's existing rename (the correction the Customers page makes),
+run as the owner. Each customer's saved profile changes; **every bill and order
+keeps the name it was rung under**, as a rename always has. The old names are
+saved first, outside the repository, so the correction can be undone name by
+name for any that the owner finds were meant as typed. The 3 names the rule
+cannot judge are left alone; the owner can correct them, and any other, on the
 Customers page, which saves exactly what is typed.
 
 ## Non-goals
@@ -80,31 +85,31 @@ Customers page, which saves exactly what is typed.
 - **Past bills and orders.** Their `customer_name` is history, snapshotted at the
   sale, and stays as it was rung. No receipt changes.
 - **The owner's rename on the Customers page.** It keeps saving exactly what the
-  owner types, with no correction and no line: it is the deliberate path, and
-  the way to set any spelling at all.
+  owner types, with no correction: it is the deliberate path, and the way to set
+  any spelling at all.
 - **Names with no number, order labels, staff names, dish names.** Only a
   customer's own name, typed with their number.
-- **Choosing which customers get a name, or blocking a short one.** The 94
-  one- and two-letter names look like a skipped field more than a name; that is
-  a separate question about the counter, not about casing.
+- **Short names.** 99 saved names (4.6%) have only one or two letters (`AA`).
+  They look like a skipped field more than a name; that is a separate question
+  about the counter, not about casing. Their casing follows the same rule (`aa`
+  becomes `Aa`, `AA` stays).
 - **Correcting at the server.** The database keeps storing what the counter
-  sends, so a biller's Keep as typed means what it says, and a build published
+  sends, so a biller who goes back to a casing gets it, and a build published
   before this change keeps working unchanged.
-- **Spacing.** Double spaces inside a name are collapsed only in a name this
-  change capitalises; no other name is touched for spacing.
+- **Spacing.** Double spaces are collapsed only in a name this change corrects,
+  and only when it is saved, never while it is being typed.
 
 ## Change gate
 
 - **`customer-names-capitalised`** (*NC*)
-  - **On:** The counter saves a new customer's name typed all in small letters
-    or all in capitals as Rahul Das, shows that before saving, and Keep as typed
-    saves it as typed.
+  - **On:** The counter capitalises a new customer's name in the box as it is
+    typed, and stops for that name once the biller edits a word it corrected.
   - **Off:** The counter saves a new customer's name exactly as typed, as today.
 
 **Off is today.** With the gate off the customer box runs its current code path
-untouched: no line, and the name it sends is the trimmed text, as now. The
-toggle point is the customer box alone; the outbox never reads the gate, and
-the command it queues carries the same string field either way.
+untouched, and the name it sends is the trimmed text, as now. The toggle point
+is the customer box alone; the outbox never reads the gate, and the command it
+queues carries the same string field either way.
 
 **What the on path persists, and Off living with it.** A capitalised name is
 ordinary text in the fields the off path already writes and reads
@@ -113,29 +118,36 @@ names saved while it was on stay capitalised and every build reads them as it
 reads any name. Round trip `none:`.
 
 **The one-time correction is not behind the gate, and turning the gate off does
-not undo it.** It changes 747 saved names through the owner's rename, which is
-how the owner already corrects a name, and old builds read the result as they
-read any name. It runs only on the owner's word, after a dry run reports its
-counts, and its before-image is what undoes it (design D5).
+not undo it.** It changes the matched saved names through the owner's rename,
+which is how the owner already corrects a name, and old builds read the result
+as they read any name. It runs only on the owner's word, after a dry run reports
+its counts, and its before-image is what undoes it (design D5).
 
 ## Durable documentation
 
 Before archive: `docs/SCREENS.md` (the counter's customer entry: what is typed
 and what is saved), `docs/DATA_MODEL.md` (the `customers.name` paragraph: a name
-is saved capitalised unless typed in mixed case or kept as typed), and the
-comment above the name field in `src/features/billing/customer-dialog.tsx`,
-which records the 2026-09-19 decision this change revises and must say what
-replaced it.
+is saved capitalised word by word unless typed in mixed case or edited back),
+and the comment above the name field in
+`src/features/billing/customer-dialog.tsx`, which records the 2026-09-19
+decision this change revises and must say what replaced it.
 
-## Decisions taken with the owner, 2026-11-22
+## Decisions taken with the owner
 
 Recorded here because the implementing session will not have the conversation.
 Reasons and rejected alternatives are in `design.md`.
 
 1. **Names are capitalised word by word**: first letter of each word a capital,
-   the rest small. Asked for by the owner after seeing the counts above.
+   the rest small (2026-11-22, after seeing the counts).
 2. **The counter must still be able to save a different casing on purpose**
-   (owner, 2026-11-22). Hence: only entirely-lowercase and entirely-capital names
-   are corrected, the correction is visible before saving, Keep as typed is one
-   tap, and the owner's rename stays exact.
-3. **Existing badly cased names are fixed too**, not only new ones.
+   (2026-11-22).
+3. **Existing badly cased names are fixed too**, not only new ones (2026-11-22).
+4. **No new UI** (2026-11-23). An earlier draft showed `Saves as Rahul Das` under
+   the box with a **Keep as typed** button; the owner refused it. The box
+   corrects itself as each word is finished, and **editing a corrected word
+   turns the correction off for that name**: the owner's own description of the
+   experience they want.
+5. **A correction never moves the cursor** (2026-11-23), and nothing the biller
+   types ever lands anywhere but where they were typing. This outranks
+   correcting: a correction that cannot guarantee it is skipped, and a cursor
+   jump seen on the counter tablet blocks the change (design D2).
