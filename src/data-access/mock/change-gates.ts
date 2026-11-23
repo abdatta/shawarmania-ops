@@ -60,6 +60,13 @@ const WORDS: Record<
     offMeans: 'Menu has no photo field and the customer menu shows no photos, as today.',
     changeNumber: 84,
   },
+  'customer-names-capitalised': {
+    title: 'Customer names capitalised',
+    onMeans:
+      'The counter capitalises a new customer’s name in the box as it is typed, and stops for that name once the biller edits a word it corrected.',
+    offMeans: 'The counter saves a new customer’s name exactly as typed, as today.',
+    changeNumber: null,
+  },
 }
 
 /**

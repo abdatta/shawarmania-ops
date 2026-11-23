@@ -100,6 +100,21 @@ export const CHANGE_GATES = {
     roundTrip:
       'none: the off path never reads menu_item_photos or the menu-photos bucket; photos wait untouched for the gate to return',
   },
+  /**
+   * A new customer's name is capitalised word by word in the counter's name
+   * field as each word is finished, and the field stops correcting once the
+   * biller edits a word it corrected (a-customer-name-is-capitalised, design
+   * D1–D4). Off, the counter saves the name exactly as typed. The cursor never
+   * moves: a correction that cannot promise that is skipped.
+   */
+  'customer-names-capitalised': {
+    kind: 'change',
+    code: 'NC',
+    change: 'a-customer-name-is-capitalised',
+    retireBy: '2027-02-28',
+    roundTrip:
+      'none: a capitalised name is ordinary text in the fields the off path already writes and reads; nothing is queued or stored in a new shape',
+  },
 } as const satisfies Record<string, ChangeGateDeclaration>
 
 export type ChangeGateKey = keyof typeof CHANGE_GATES
