@@ -1,6 +1,7 @@
 import { Coins, Delete, TriangleAlert, UserRoundCheck, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
+import { useChangeGate } from '@/change-gates/context'
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,6 +17,7 @@ import {
 import { formatDate, goldEndsAt } from '@/domain'
 import { cn } from '@/lib/cn'
 import { formatIndianPhone, normalizeIndianPhone } from '../../../shared/phone'
+import { useCapitalisingName } from './use-capitalising-name'
 
 /**
  * Who this order is for — asked once, from a keypad, and answerable by skipping.
@@ -186,6 +188,15 @@ function OpenCustomerDialog({
   const [name, setName] = useState(() =>
     selection?.kind === 'identified' ? selection.name : suggestedName,
   )
+  /*
+    The toggle point of `customer-names-capitalised`
+    (a-customer-name-is-capitalised, design D4). Off, the name field below is
+    exactly as it was; on, a new customer's name is capitalised in the field as
+    each word is finished. The hook is always called, as hooks must be, and is
+    only wired in on the on path.
+  */
+  const namesCapitalised = useChangeGate('customer-names-capitalised')
+  const capitalising = useCapitalisingName(name, setName)
   const [lookedUp, setLookedUp] = useState<LookedUp | null>(null)
   const [suggested, setSuggested] = useState<{
     phone: string
@@ -342,6 +353,12 @@ function OpenCustomerDialog({
       return
     }
     if (canonical === null) return
+    if (namesCapitalised) {
+      // The name the field shows, with its last word finished: capitalised as
+      // typed, or exactly as shown once the biller has gone back over a word.
+      onChoose({ kind: 'identified', phone: canonical, name: capitalising.savedName() })
+      return
+    }
     onChoose({ kind: 'identified', phone: canonical, name: name.trim() })
   }
 
@@ -597,11 +614,27 @@ function OpenCustomerDialog({
                   - the action key says Done and submits the form, so the number
                     never needs the button.
 
-                  **The value itself is left exactly as typed.** Title-casing it
-                  in code would mangle the names this counter actually serves —
-                  `Sk Abdul`, `MD Rahim`, initials, `d'Souza` — and the first
-                  name saved is the only name, since `customer_create_or_get`
-                  never rewrites a profile from a till.
+                  **How the value is cased.** On 2026-09-19 the owner chose that
+                  the name be saved exactly as typed: title-casing in code would
+                  mangle the names this counter actually serves (`Sk Abdul`,
+                  `MD Rahim`, initials, `d'Souza`), and the first name saved is
+                  the only name, since `customer_create_or_get` never rewrites a
+                  profile from a till. The keyboard hint above was to make
+                  ordinary typing come out right, and it did not: by 2026-11-23 a
+                  third of saved names were in one case.
+
+                  So on 2026-11-22 the owner asked for names capitalised, keeping
+                  the reason the old rule existed, and on 2026-11-23 settled how
+                  (a-customer-name-is-capitalised, behind
+                  `customer-names-capitalised`): for a new customer the field
+                  capitalises each word in place as it is finished, at a space,
+                  a pause or confirm, with no line or button added. A word typed
+                  in mixed case (`McKenzie`, `d'Souza`) or two capitals (`MD`)
+                  is still kept as typed, because that is a casing somebody
+                  meant; and once the biller edits a word the field corrected,
+                  it corrects nothing more and saves exactly what it shows. The
+                  cursor never moves: a correction that cannot promise that is
+                  skipped. The off path below is the field as it was.
                 */
                 autoCapitalize="words"
                 autoCorrect="off"
@@ -611,6 +644,8 @@ function OpenCustomerDialog({
                 placeholder={nameRequired ? 'Enter New Customer’s Name' : 'Name (optional)'}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
+                // The on path: the same value, through the capitalising field.
+                {...(namesCapitalised && nameRequired ? capitalising.field : {})}
               />
             </>
           )}

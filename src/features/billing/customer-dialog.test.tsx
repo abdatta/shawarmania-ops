@@ -7,6 +7,7 @@ import {
   type CustomerIdentity,
   type PartialPhoneMatch,
 } from '@/data-access/adapters'
+import { ChangeGatesForTest, describeChangeGate } from '@/test/change-gates'
 
 import { CustomerDialog, type CustomerSelection } from './customer-dialog'
 
@@ -31,6 +32,8 @@ function open(
     selection?: CustomerSelection | null
     /** What this outlet has served, which the fake `suggest` below narrows. */
     served?: readonly CustomerIdentity[]
+    /** `customer-names-capitalised`, where a test turns it; off otherwise. */
+    namesCapitalised?: boolean
   } = {},
 ) {
   const onChoose = vi.fn()
@@ -49,14 +52,16 @@ function open(
     return best ? { customer: best, otherMatches: matching.length - 1 } : null
   })
   render(
-    <CustomerDialog
-      open
-      selection={options.selection ?? null}
-      lookup={lookup}
-      suggest={suggest}
-      onClose={onClose}
-      onChoose={onChoose}
-    />,
+    <ChangeGatesForTest on={{ 'customer-names-capitalised': options.namesCapitalised ?? false }}>
+      <CustomerDialog
+        open
+        selection={options.selection ?? null}
+        lookup={lookup}
+        suggest={suggest}
+        onClose={onClose}
+        onChoose={onChoose}
+      />
+    </ChangeGatesForTest>,
   )
   return { onChoose, onClose, lookup, suggest, person: userEvent.setup() }
 }
@@ -454,5 +459,110 @@ describe('CustomerDialog', () => {
     expect(screen.queryByPlaceholderText('Order label (optional)')).not.toBeInTheDocument()
     await person.click(screen.getByRole('button', { name: 'Skip' }))
     expect(onChoose).toHaveBeenCalledWith({ kind: 'skipped', name: 'Demo Customer' })
+  })
+})
+
+/*
+  A new customer's name capitalised in the field as each word is finished
+  (a-customer-name-is-capitalised). The keystroke-level rules and the cursor
+  guards are pinned in `use-capitalising-name.test.tsx`; these are the dialog
+  saving what its field shows, in both states of the gate.
+*/
+describeChangeGate('customer-names-capitalised', (on) => {
+  /** Long enough for the field's pause to finish the last word. */
+  const PAUSE = { timeout: 3000 }
+
+  async function newCustomer() {
+    const opened = open({ namesCapitalised: on })
+    await tap(opened.person, '9000000999')
+    const field = await screen.findByPlaceholderText<HTMLInputElement>(NEW_NAME)
+    return { ...opened, field }
+  }
+
+  it(
+    on ? 'capitalises rahul das in the field and saves it so' : 'saves rahul das as typed',
+    async () => {
+      const { person, onChoose, field } = await newCustomer()
+
+      await person.type(field, 'rahul das')
+      if (on) {
+        expect(field).toHaveValue('Rahul das')
+        await waitFor(() => expect(field).toHaveValue('Rahul Das'), PAUSE)
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 1200))
+        expect(field).toHaveValue('rahul das')
+      }
+      await person.type(field, ' ')
+      await person.click(screen.getByRole('button', { name: 'Save' }))
+
+      expect(onChoose).toHaveBeenCalledExactlyOnceWith({
+        kind: 'identified',
+        phone: '+919000000999',
+        name: on ? 'Rahul Das' : 'rahul das',
+      })
+    },
+  )
+
+  it('leaves initials and mixed case as typed', async () => {
+    const { person, onChoose, field } = await newCustomer()
+
+    await person.type(field, "MD rahim McKenzie d'Souza{Enter}")
+
+    expect(onChoose).toHaveBeenCalledExactlyOnceWith({
+      kind: 'identified',
+      phone: '+919000000999',
+      name: on ? "MD Rahim McKenzie d'Souza" : "MD rahim McKenzie d'Souza",
+    })
+  })
+
+  it('saves SANJAY once the biller goes back over the word the field corrected', async () => {
+    const { person, onChoose, field } = await newCustomer()
+
+    await person.type(field, 'SANJAY')
+    if (on) await waitFor(() => expect(field).toHaveValue('Sanjay'), PAUSE)
+    await person.type(field, '{Backspace>5/}ANJAY das')
+    await new Promise((resolve) => setTimeout(resolve, 1200))
+    expect(field).toHaveValue('SANJAY das')
+    await person.keyboard('{Enter}')
+
+    expect(onChoose).toHaveBeenCalledExactlyOnceWith({
+      kind: 'identified',
+      phone: '+919000000999',
+      name: 'SANJAY das',
+    })
+  })
+
+  it('adds no line or button to the box', async () => {
+    const { person, field } = await newCustomer()
+
+    await person.type(field, 'rahul das')
+    await new Promise((resolve) => setTimeout(resolve, 1200))
+
+    expect(
+      screen
+        .getAllByRole('button')
+        .map((button) => button.getAttribute('aria-label') ?? button.textContent),
+    ).toEqual([
+      'Close without deciding',
+      ...'1 2 3 4 5 6 7 8 9 00 0'.split(' '),
+      'Delete last digit',
+      'Skip',
+      'Save',
+    ])
+    expect(screen.queryByText(/saves as|keep as typed/i)).not.toBeInTheDocument()
+    // Under the number, only the field and its screen-reader label.
+    expect(screen.getByTestId('customer-resolution').textContent).toBe('Customer name')
+  })
+
+  it('keeps a matched customer’s order label as typed', async () => {
+    const { person, onChoose } = open({ namesCapitalised: on, lookup: vi.fn(async () => UNNAMED) })
+
+    await tap(person, '9000000102')
+    await person.type(await screen.findByPlaceholderText('Name (optional)'), 'window seat')
+    await new Promise((resolve) => setTimeout(resolve, 1200))
+    await person.click(screen.getByRole('button', { name: 'Use' }))
+
+    // Only a new customer's own name is capitalised (proposal, What changes).
+    expect(onChoose).toHaveBeenCalledWith(expect.objectContaining({ name: 'window seat' }))
   })
 })
