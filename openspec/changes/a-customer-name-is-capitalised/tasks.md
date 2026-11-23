@@ -83,7 +83,7 @@ itself as each word is finished and stopping once a corrected word is edited
 - [x] 4.1 Update `docs/SCREENS.md` (counter customer entry: "what is typed is
   what the bill snapshots" becomes what is saved and why) and
   `docs/DATA_MODEL.md` (the `customers.name` paragraph).
-- [ ] 4.2 `npm run format`, typecheck, the touched tests, `npm run lint`; push to
+- [x] 4.2 `npm run format`, typecheck, the touched tests, `npm run lint`; push to
   `stage` and read the Staging run for both gate states.
 - [ ] 4.3 On staging: gate off, a lowercase name saves as typed; on, it is
   capitalised in the field and saved so, and going back keeps a casing; off
