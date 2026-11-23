@@ -31,6 +31,9 @@
  *   npm run rehearse    run the sending loop on a rehearsal queue (see below)
  *   npm run restart     clear a halt, after reading why it happened
  *   npm run unlink      forget the WhatsApp login on this laptop
+ *   npm run notices     list the owner notices the running sender has sent
+ *   npm run notice-delete -- <id|last [n]>   delete notices for everyone
+ *   npm run notice-edit -- <id|last> "text"  edit one, within 15 minutes
  *
  * Rehearsing:
  *
@@ -77,8 +80,16 @@ import {
 import { HALT_EXPLANATIONS } from './core/disconnect.ts'
 import { LINK_PAGE_PORT, serveLinkPage } from './core/link-page-server.ts'
 import type { LinkPageServer } from './core/link-page-server.ts'
+import type { NoticeAction } from './core/control-page-server.ts'
 import {
+  appendNoticeLog,
+  deleteNotice,
+  editNotice,
+  headOf,
+  listNotices,
   noticeToken,
+  noticeTokenPath,
+  readNoticeLog,
   readNoticeRecipients,
   sendNotice,
   tappedLink,
@@ -581,14 +592,62 @@ async function start(): Promise<number> {
     ...(real ? { history: () => readHistory(client) } : {}),
     ...(real
       ? {
-          notice: async (given: unknown, body: unknown) => {
+          notice: async (action: NoticeAction, given: unknown, body: unknown) => {
             if (!tokenMatches(given, token)) {
               return { status: 403, body: { ok: false, message: 'Refused.' } }
             }
+            const now = Date.now()
+            const at = new Date(now).toISOString()
+            if (action === 'list') {
+              return {
+                status: 200,
+                body: { ok: true, notices: listNotices(readNoticeLog(folder), now) },
+              }
+            }
+            if (action === 'delete' || action === 'edit') {
+              const records = readNoticeLog(folder)
+              const outcome =
+                action === 'delete'
+                  ? await deleteNotice(body, records, tapped.current(), now)
+                  : await editNotice(body, records, tapped.current(), now)
+              say(`${clock()}  Owner notice ${action}: ${outcome.ok ? 'done' : outcome.message}`)
+              if (outcome.ok) {
+                const text = (body as { text?: unknown } | null)?.text
+                appendNoticeLog(
+                  folder,
+                  action === 'delete'
+                    ? { kind: 'deleted', at, id: outcome.id }
+                    : { kind: 'edited', at, id: outcome.id, head: headOf(String(text)) },
+                )
+                note(
+                  'plain',
+                  action === 'delete'
+                    ? 'An owner notice was deleted.'
+                    : 'An owner notice was edited.',
+                )
+              }
+              return { status: outcome.status, body: outcome }
+            }
             const outcome = await sendNotice(body, readNoticeRecipients(folder), tapped.current())
             say(`${clock()}  Owner notice: ${outcome.ok ? 'sent' : outcome.message}`)
-            if (outcome.ok) note('plain', 'An owner notice went out.')
-            return { status: outcome.status, body: outcome }
+            if (!outcome.ok) return { status: outcome.status, body: outcome }
+            note('plain', 'An owner notice went out.')
+            try {
+              const text = (body as { text?: unknown } | null)?.text
+              appendNoticeLog(folder, {
+                kind: 'sent',
+                at,
+                id: outcome.id,
+                to: outcome.to,
+                address: outcome.address,
+                head: headOf(String(text).trim()),
+              })
+            } catch {
+              say(
+                `${clock()}  Could not record the notice; it went, but cannot be deleted from here.`,
+              )
+            }
+            return { status: 200, body: { ok: true, message: outcome.message, id: outcome.id } }
           },
         }
       : {}),
@@ -1329,6 +1388,7 @@ async function runWithFace(options: {
   history?: () => Promise<unknown>
   /** Owner notices (`owner-notice.ts`); a real run only. */
   notice?: (
+    action: NoticeAction,
     token: unknown,
     body: unknown,
   ) => Promise<{ status: number; body: Record<string, unknown> }>
@@ -1491,6 +1551,119 @@ async function unlink(): Promise<number> {
   return 0
 }
 
+// ── Owner notices, from the command line ────────────────────────────────────
+//
+// The running sender holds the one WhatsApp connection, so these ask it, over
+// its own page on 127.0.0.1, with the notice token from its folder.
+
+interface ListedNotice {
+  id: string
+  sentAt: string
+  to: string
+  head: string
+  deleted: boolean
+  edited: boolean
+  canEdit: boolean
+  canDelete: boolean
+}
+
+async function askSender(
+  path: string,
+  body: Record<string, unknown>,
+): Promise<{ status: number; body: Record<string, unknown> } | null> {
+  let token: string
+  try {
+    token = readFileSync(noticeTokenPath(folder), 'utf8').trim()
+  } catch {
+    say('No notice token in this folder yet: the sender makes one on its first signed-in start.')
+    return null
+  }
+  try {
+    const response = await fetch(`http://127.0.0.1:${CONTROL_PAGE_PORT}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-notice-token': token },
+      body: JSON.stringify(body),
+    })
+    return { status: response.status, body: (await response.json()) as Record<string, unknown> }
+  } catch {
+    say('The sender is not running, or not on this folder. Start it: npm run install-startup')
+    return null
+  }
+}
+
+function describeNotice(notice: ListedNotice): string {
+  const flags = [
+    notice.deleted ? 'deleted' : null,
+    notice.edited ? 'edited' : null,
+    !notice.deleted && !notice.canDelete ? 'too old to delete' : null,
+  ].filter(Boolean)
+  return `${localTime(notice.sentAt)}  ${notice.id}  to ${notice.to}  ${notice.head}${flags.length ? `  (${flags.join(', ')})` : ''}`
+}
+
+async function listNoticesCommand(): Promise<number> {
+  const answer = await askSender('/notice/list', {})
+  if (!answer) return 1
+  const notices = (answer.body['notices'] as ListedNotice[] | undefined) ?? []
+  if (notices.length === 0) say('No owner notices recorded yet.')
+  for (const notice of notices) say(describeNotice(notice))
+  return 0
+}
+
+/**
+ * `npm run notice-delete -- <id> [<id> …]`, or `-- last` / `-- last 3` for the
+ * newest ones still standing. Asks first unless `--yes`.
+ */
+async function deleteNoticesCommand(): Promise<number> {
+  const args = process.argv.slice(3).filter((arg) => arg !== '--yes')
+  let ids: string[] = args
+  if (args[0] === 'last') {
+    const answer = await askSender('/notice/list', {})
+    if (!answer) return 1
+    const count = Math.max(1, Number(args[1] ?? 1) || 1)
+    ids = ((answer.body['notices'] as ListedNotice[] | undefined) ?? [])
+      .filter((notice) => notice.canDelete)
+      .slice(0, count)
+      .map((notice) => notice.id)
+  }
+  if (ids.length === 0) {
+    say('Name the notices: npm run notice-delete -- <id> … , or -- last, or -- last 3')
+    say('npm run notices lists them.')
+    return 1
+  }
+  say(`This deletes ${ids.length} owner notice${ids.length === 1 ? '' : 's'} for everyone:`)
+  for (const id of ids) say(`  ${id}`)
+  if (!process.argv.includes('--yes')) {
+    const confirmed = await ask('Type DELETE to delete them: ')
+    doneAsking()
+    if (confirmed !== 'DELETE') {
+      say('Nothing deleted.')
+      return 1
+    }
+  }
+  let failed = 0
+  for (const id of ids) {
+    const answer = await askSender('/notice/delete', { id })
+    if (!answer) return 1
+    say(`  ${id}: ${String(answer.body['message'] ?? answer.status)}`)
+    if (answer.status !== 200) failed += 1
+  }
+  return failed === 0 ? 0 : 1
+}
+
+/** `npm run notice-edit -- <id|last> "the new text"`, within WhatsApp's 15 minutes. */
+async function editNoticeCommand(): Promise<number> {
+  const [id, ...words] = process.argv.slice(3)
+  const text = words.join(' ').trim()
+  if (!id || !text) {
+    say('Use: npm run notice-edit -- <id|last> "the new text"')
+    return 1
+  }
+  const answer = await askSender('/notice/edit', { id, text })
+  if (!answer) return 1
+  say(String(answer.body['message'] ?? answer.status))
+  return answer.status === 200 ? 0 : 1
+}
+
 /** These hold or change the WhatsApp login, so only one may run at a time. */
 function alone(run: () => Promise<number>): () => Promise<number> {
   return async () => {
@@ -1530,12 +1703,15 @@ const commands: Record<string, () => Promise<number>> = {
   rehearse,
   restart,
   unlink: alone(unlink),
+  notices: listNoticesCommand,
+  'notice-delete': deleteNoticesCommand,
+  'notice-edit': editNoticeCommand,
 }
 const command = commands[process.argv[2] ?? 'start']
 
 if (!command) {
   say(
-    'Commands: check, link, sign-in, sign-out, start, install-startup, uninstall-startup, keep-running, stop, status, test-send, rehearse, restart, unlink',
+    'Commands: check, link, sign-in, sign-out, start, install-startup, uninstall-startup, keep-running, stop, status, test-send, rehearse, restart, unlink, notices, notice-delete, notice-edit',
   )
   process.exit(1)
 }

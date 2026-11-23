@@ -60,6 +60,13 @@ export interface LinkConnection {
    * receipts the moment a connection is made.
    */
   onReceipt: (listener: ReceiptListener) => void
+  /**
+   * Deletes, for everyone, a message this account sent to `address`. Only
+   * owner notices use it (`owner-notice.ts`); the sending loop never does.
+   */
+  revoke?: (address: string, messageId: string) => Promise<void>
+  /** Replaces the text of a message this account sent to `address`. Owner notices only. */
+  edit?: (address: string, messageId: string, text: string) => Promise<void>
 }
 
 export interface LinkHandlers {

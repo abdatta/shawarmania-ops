@@ -48,10 +48,13 @@ export interface ControlPageOptions {
   /** The history page's rows; absent for a sender that has none (a rehearsal). */
   history?: () => Promise<unknown>
   /**
-   * `POST /notice`: an owner notice (`owner-notice.ts`). Its own token, sent
-   * as `x-notice-token`, is checked by the handler, not by the page's token.
+   * Owner notices (`owner-notice.ts`): `POST /notice` sends one, and
+   * `/notice/delete`, `/notice/edit` and `/notice/list` act on the ones this
+   * sender sent. Their own token, sent as `x-notice-token`, is checked by the
+   * handler, not by the page's token.
    */
   notice?: (
+    action: NoticeAction,
     token: unknown,
     body: unknown,
   ) => Promise<{ status: number; body: Record<string, unknown> }>
@@ -60,6 +63,15 @@ export interface ControlPageOptions {
 
 /** A notice body is a few kilobytes at most. */
 const NOTICE_BODY_MOST_BYTES = 32 * 1024
+
+export type NoticeAction = 'send' | 'delete' | 'edit' | 'list'
+
+const NOTICE_ROUTES: Record<string, NoticeAction> = {
+  '/notice': 'send',
+  '/notice/delete': 'delete',
+  '/notice/edit': 'edit',
+  '/notice/list': 'list',
+}
 
 export interface ControlPageServer {
   url: string
@@ -115,7 +127,8 @@ export function serveControlPage(options: ControlPageOptions): Promise<ControlPa
         )
       return
     }
-    if (request.method === 'POST' && request.url === '/notice' && options.notice) {
+    const noticeAction = request.url ? NOTICE_ROUTES[request.url] : undefined
+    if (request.method === 'POST' && noticeAction && options.notice) {
       const notice = options.notice
       const chunks: Buffer[] = []
       let size = 0
@@ -129,12 +142,13 @@ export function serveControlPage(options: ControlPageOptions): Promise<ControlPa
         if (tooBig) return send(413, 'application/json', JSON.stringify({ ok: false }))
         let body: unknown
         try {
-          body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+          const raw = Buffer.concat(chunks).toString('utf8')
+          body = raw.trim() === '' ? {} : JSON.parse(raw)
         } catch {
           return send(400, 'application/json', JSON.stringify({ ok: false, message: 'Not JSON.' }))
         }
-        notice(request.headers['x-notice-token'], body)
-          .catch(() => ({ status: 500, body: { ok: false, message: 'The send failed.' } }))
+        notice(noticeAction, request.headers['x-notice-token'], body)
+          .catch(() => ({ status: 500, body: { ok: false, message: 'That did not work.' } }))
           .then((outcome) => send(outcome.status, 'application/json', JSON.stringify(outcome.body)))
       })
       return

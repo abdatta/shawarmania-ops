@@ -22,6 +22,9 @@
     "rehearse": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/main.ts rehearse",
     "restart": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/main.ts restart",
     "unlink": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/main.ts unlink",
+    "notices": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/main.ts notices",
+    "notice-delete": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/main.ts notice-delete",
+    "notice-edit": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/main.ts notice-edit",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

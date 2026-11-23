@@ -451,6 +451,17 @@ function connectOnce(
         if (!id) throw new Error('WhatsApp gave no id for the message')
         return id
       },
+      revoke: async (address, messageId) => {
+        await socket.sendMessage(address, {
+          delete: { remoteJid: address, fromMe: true, id: messageId },
+        })
+      },
+      edit: async (address, messageId, text) => {
+        await socket.sendMessage(address, {
+          text,
+          edit: { remoteJid: address, fromMe: true, id: messageId },
+        })
+      },
       onReceipt: (listener) => {
         receiptListeners.push(listener)
         for (const [messageId, status, code] of heldReceipts.splice(0)) {

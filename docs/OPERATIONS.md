@@ -1073,7 +1073,27 @@ It answers `POST http://127.0.0.1:7418/notice` with JSON `{"text": "…"}`
 
 It is not a way to reach customers: a number not on that list is refused
 before anything is looked up. A notice is at most 4,000 characters, and its
-text is never logged.
+text never goes into `sender.log`.
+
+**Taking one back.** Every notice the sender sends is written to
+`notices.jsonl` in the data folder: its WhatsApp id, the number, and its first
+line. Only a notice in that file can be deleted or edited, never a campaign
+message. With the sender running, in `tools/campaign-sender` with
+`CAMPAIGN_SENDER_DATA_DIR` set to the business folder:
+
+```bash
+npm run notices                              # the newest, with their ids
+npm run notice-delete -- last                # the newest one, for everyone
+npm run notice-delete -- last 2              # the newest two (a report to both owners)
+npm run notice-delete -- 3EB0AB12 3EB0CD34   # by id, or a unique start of one
+npm run notice-edit -- last "the new text"   # replace its text
+```
+
+Delete asks for `DELETE` first (`--yes` skips that). WhatsApp allows a
+delete for everyone for about two days and an edit for 15 minutes; the sender
+refuses outside those. A deleted notice leaves "This message was deleted" in
+the chat. The same actions are `POST /notice/list`, `/notice/delete` (`{"id"}`)
+and `/notice/edit` (`{"id", "text"}`) on the sender's page, with the same token.
 
 ### Rehearsing without a database
 
