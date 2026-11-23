@@ -39,7 +39,8 @@ test('the owner writes, submits, pauses and stops a campaign, and sends nothing'
     .getByRole('link', { name: /Diwali offer/ })
     .click()
   await expect(page.getByTestId('batch-3')).toContainText('send from the laptop')
-  await expect(page.getByRole('button', { name: /send|release/i })).toHaveCount(0)
+  // Send test is the one send on the page, and it reaches only the test numbers.
+  await expect(page.getByRole('button', { name: /send|release/i })).toHaveText(['Send test'])
   await page.getByRole('button', { name: 'Pause' }).click()
   await expect(page.getByTestId('campaign-state')).toHaveText('paused')
   await page.getByRole('button', { name: 'Resume' }).click()
