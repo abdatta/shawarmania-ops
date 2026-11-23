@@ -87,7 +87,13 @@ import {
   rehearsalQueue,
 } from './core/rehearsal-queue.ts'
 import type { RehearsalRowKind, RehearsalState, RehearsalStore } from './core/rehearsal-queue.ts'
-import { startingView, viewAfterEnd, viewAfterEvent, viewAfterTick } from './core/sender-view.ts'
+import {
+  isStuck,
+  startingView,
+  viewAfterEnd,
+  viewAfterEvent,
+  viewAfterTick,
+} from './core/sender-view.ts'
 import type { SenderView, ViewContext } from './core/sender-view.ts'
 import { runSender, systemClock } from './core/sending-loop.ts'
 import type { SenderEnd } from './core/sending-loop.ts'
@@ -1319,7 +1325,7 @@ async function runWithFace(options: {
     page = await serveControlPage({
       token: randomBytes(24).toString('base64url'),
       page: controlPage,
-      state: () => ({ ...view, rehearsal: options.rehearsal }),
+      state: () => ({ ...view, stuck: isStuck(view, Date.now()), rehearsal: options.rehearsal }),
       onRelease: async () => {
         const waiting = view.waiting
         if (!waiting) return { ok: false, message: 'No batch is waiting.' }

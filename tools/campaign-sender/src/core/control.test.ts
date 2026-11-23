@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { readFileSync } from 'node:fs'
 import { request } from 'node:http'
 
 import { describe, expect, it } from 'vitest'
@@ -9,7 +10,14 @@ import type { TickResult } from './contracts.ts'
 import { CONTROL_PAGE_PORT, serveControlPage } from './control-page-server.ts'
 import { controlPage } from './control-page.ts'
 import { LINK_PAGE_PORT } from './link-page-server.ts'
-import { startingView, viewAfterEnd, viewAfterEvent, viewAfterTick } from './sender-view.ts'
+import {
+  STUCK_AFTER_MS,
+  isStuck,
+  startingView,
+  viewAfterEnd,
+  viewAfterEvent,
+  viewAfterTick,
+} from './sender-view.ts'
 import type { SenderView, ViewContext } from './sender-view.ts'
 
 const NOW = Date.UTC(2026, 10, 18, 6, 30)
@@ -92,6 +100,54 @@ describe('the sender, summed up for a person', () => {
     })
   })
 
+  it('tells a dropped connection being remade apart from starting up', () => {
+    // Starting up, and the database out of reach before WhatsApp ever opened.
+    let view = viewAfterEvent(startingView(at()), { kind: 'waiting_for_whatsapp' }, at())
+    view = viewAfterEvent(view, { kind: 'database_unreachable', retryInMs: 5_000 }, at())
+    view = viewAfterEvent(view, { kind: 'waiting_for_whatsapp' }, at())
+    expect(view).toMatchObject({ mood: 'connecting', headline: 'Connecting to WhatsApp' })
+
+    // Connected once in this run, then dropped: it is mending, not starting.
+    view = viewAfterEvent(view, { kind: 'idle', campaignsOpen: false, waiting: null }, at())
+    view = viewAfterEvent(view, { kind: 'waiting_for_whatsapp' }, at())
+    expect(view).toMatchObject({ mood: 'reconnecting', headline: 'WhatsApp dropped. Reconnecting' })
+
+    view = viewAfterEvent(view, { kind: 'gap', ms: 60_000 }, at())
+    expect(view).toMatchObject({ mood: 'idle', headline: 'Connected to WhatsApp' })
+  })
+
+  it('counts as stuck once it has failed to reach WhatsApp or the database for ten minutes', () => {
+    const start = startingView(at())
+    expect(isStuck(start, NOW + STUCK_AFTER_MS - 1)).toBe(false)
+    expect(isStuck(start, NOW + STUCK_AFTER_MS)).toBe(true)
+
+    // Connected: the clock stops.
+    let view = viewAfterEvent(
+      start,
+      { kind: 'idle', campaignsOpen: false, waiting: null },
+      at(NOW + 60_000),
+    )
+    expect(view.troubleSince).toBeNull()
+    expect(isStuck(view, NOW + 60 * 60_000)).toBe(false)
+
+    // Dropped later: the clock starts from the drop, and the database going
+    // too does not restart it.
+    const dropped = NOW + 2 * 60 * 60_000
+    view = viewAfterEvent(view, { kind: 'waiting_for_whatsapp' }, at(dropped))
+    view = viewAfterEvent(
+      view,
+      { kind: 'database_unreachable', retryInMs: 60_000 },
+      at(dropped + 5 * 60_000),
+    )
+    expect(view.troubleSince).toBe(new Date(dropped).toISOString())
+    expect(isStuck(view, dropped + STUCK_AFTER_MS - 1)).toBe(false)
+    expect(isStuck(view, dropped + STUCK_AFTER_MS)).toBe(true)
+
+    // A halt is the owner's at once, and is not "stuck".
+    const halted = viewAfterEnd(view, { kind: 'halted', reason: 'logged_out' }, 'x', at(dropped))
+    expect(isStuck(halted, dropped + 2 * STUCK_AFTER_MS)).toBe(false)
+  })
+
   it('says when it is sending to the test numbers', () => {
     const view = viewAfterEvent(startingView(at()), { kind: 'sent', batchNo: 0, position: 1 }, at())
     expect(view).toMatchObject({ mood: 'sending', headline: 'Sending to the test numbers' })
@@ -150,6 +206,86 @@ describe('the sender, summed up for a person', () => {
     const view = viewAfterEvent(startingView(at()), { kind: 'outside_hours', opensAt: opens }, at())
     expect(view).toMatchObject({ mood: 'outside_hours', windowOpensAt: opens.toISOString() })
     expect(viewAfterEnd(view, { kind: 'stopped' }, '', at()).mood).toBe('stopped')
+  })
+})
+
+describe('the tray icon and the page', () => {
+  // Every state the sender can be in, and `unreachable`, the tray's own word
+  // for a sender that does not answer.
+  const MOODS = [
+    'connecting',
+    'reconnecting',
+    'idle',
+    'waiting_for_you',
+    'sending',
+    'outside_hours',
+    'held',
+    'database_unreachable',
+    'stood_down',
+    'halted',
+    'stopped',
+  ]
+  const tray = readFileSync(new URL('../../windows/tray.ps1', import.meta.url), 'utf8')
+  const hex = (r: string, g: string, b: string) =>
+    '#' + [r, g, b].map((n) => Number(n).toString(16).padStart(2, '0')).join('')
+  const named = Object.fromEntries(
+    [...tray.matchAll(/^\$(\w+)\s*=\s*\(Rgb (\d+) (\d+) (\d+)\)/gm)].map((m) => [
+      m[1]!.toUpperCase(),
+      hex(m[2]!, m[3]!, m[4]!),
+    ]),
+  )
+  const table = (name: string) => {
+    const from = tray.indexOf(`$${name} = @{`)
+    const body = tray.slice(from, tray.indexOf('}', from))
+    return Object.fromEntries(
+      [...body.matchAll(/^\s+(\w+)\s*=\s*\$(\w+)/gm)].map((m) => [m[1]!, m[2]!.toUpperCase()]),
+    )
+  }
+  const page = controlPage('t')
+  const pageNamed = Object.fromEntries(
+    [...page.matchAll(/(BLUE|GREEN|YELLOW|RED|GREY|BLACK) = '(#[0-9a-f]{6})'/g)].map((m) => [
+      m[1]!,
+      m[2]!,
+    ]),
+  )
+  const pageTable = (name: string, value: RegExp) => {
+    const from = page.indexOf(`const ${name} = {`)
+    const body = page.slice(from, page.indexOf('}', from))
+    return Object.fromEntries(
+      [...body.matchAll(new RegExp(`(\\w+): ${value.source}`, 'g'))].map((m) => [m[1]!, m[2]!]),
+    )
+  }
+
+  it('colours every state the same way, from a handful of colours', () => {
+    const trayColours = Object.fromEntries(
+      Object.entries(table('MoodColours')).map(([mood, colour]) => [mood, named[colour]]),
+    )
+    const pageColours = Object.fromEntries(
+      Object.entries(pageTable('COLOURS', /(BLUE|GREEN|YELLOW|RED|GREY|BLACK)/)).map(
+        ([mood, colour]) => [mood, pageNamed[colour]],
+      ),
+    )
+    expect(Object.keys(pageColours).sort()).toEqual([...MOODS].sort())
+    expect(Object.keys(trayColours).sort()).toEqual([...MOODS, 'unreachable'].sort())
+    for (const mood of MOODS) expect(pageColours[mood], mood).toBe(trayColours[mood])
+    expect(new Set(Object.values(trayColours)).size).toBeLessThanOrEqual(6)
+  })
+
+  it('pulses while something is worked on and blinks only when it waits on the owner', () => {
+    const trayMotion = Object.fromEntries(
+      Object.entries(table('MoodMotion')).map(([mood, motion]) => [mood, motion.toLowerCase()]),
+    )
+    const pageMotion = pageTable('MOTION', /'(pulse|blink)'/)
+    expect(pageMotion).toEqual(trayMotion)
+    expect(trayMotion).toEqual({
+      sending: 'pulse',
+      reconnecting: 'pulse',
+      database_unreachable: 'pulse',
+      halted: 'blink',
+    })
+    // Stuck mending blinks, on both.
+    expect(tray).toMatch(/if \(\$stuck\) \{ \$Blink \}/)
+    expect(page).toContain("view.stuck ? 'blink'")
   })
 })
 

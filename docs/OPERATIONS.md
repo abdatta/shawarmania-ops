@@ -951,12 +951,29 @@ npm start
 ```
 
 Signed in, this is the sender: a page at `http://127.0.0.1:7418` (what it is
-doing, India's time, sent today, **Send batch**), an icon in the tray (coloured
-by what it is doing; on Windows 11 drag it out of the `^` overflow once), and
-a card pinned above the taskbar when a batch waits, a batch finishes, or
-something is wrong. The card stays until Open or Later; Later puts that one
-away, and a click on the icon brings it back. **The card has no Send button:
-Open goes to the page.** Ctrl+C stops the sender; the link is kept.
+doing, India's time, sent today, **Send batch**), an icon in the tray (on
+Windows 11 drag it out of the `^` overflow once; hover it for what it is
+doing), and a card pinned above the taskbar when a batch waits, a batch
+finishes, or something is wrong. The card stays until Open or Later; Later
+puts that one away, and a click on the icon brings it back. **The card has no
+Send button: Open goes to the page.** Ctrl+C stops the sender; the link is
+kept.
+
+The icon's colour is the kind of moment and its motion which one. **Pulsing**:
+it is working on something, mending a dropped connection included.
+**Blinking**: it is waiting on you. Anything else is still.
+
+| Colour | Still | Pulsing | Blinking |
+|---|---|---|---|
+| Blue | Ready: connected, sends the moment a batch is released | Sending | |
+| Green | A batch is waiting for Send batch: your go | | |
+| Yellow | Starting up | WhatsApp dropped and it is reconnecting, or it cannot reach the database and is retrying | Still failing after ten minutes: check the laptop is online |
+| Red | | | Halted: look at it |
+| Grey | The campaign is paused or stopped, or it is outside the sending window | | |
+| Black | Not running; the icon goes about half a minute later | | |
+
+When another laptop's sender is the one in use, the icon shows this laptop's
+own health and the page says it is taking no batch.
 
 Not signed in, `npm start` only holds the WhatsApp link, as it always did.
 

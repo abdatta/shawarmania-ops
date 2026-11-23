@@ -22,6 +22,8 @@ import type { SenderEnd, SenderEvent } from './sending-loop.ts'
 
 export type SenderMood =
   | 'connecting'
+  /** Connected earlier in this run, dropped, and being remade by itself. */
+  | 'reconnecting'
   | 'idle'
   | 'waiting_for_you'
   | 'sending'
@@ -44,6 +46,13 @@ export interface SenderView {
   mood: SenderMood
   /** One line saying what the sender is doing now. */
   headline: string
+  /** Whether this run has been connected to WhatsApp, so a wait for it is a reconnection. */
+  connectedOnce: boolean
+  /**
+   * Since when it has been trying to reach WhatsApp or the database, without
+   * success, while it still is; null otherwise.
+   */
+  troubleSince: string | null
   waiting: WaitingBatch | null
   released: BatchRef | null
   /** Null until the queue has answered once. */
@@ -76,6 +85,8 @@ export function startingView(context: ViewContext): SenderView {
   return {
     mood: 'connecting',
     headline: 'Connecting to WhatsApp',
+    connectedOnce: false,
+    troubleSince: new Date(context.now).toISOString(),
     waiting: null,
     released: null,
     sentToday: null,
@@ -107,10 +118,30 @@ function waitingCard(view: SenderView, context: ViewContext): Attention | null {
   }
 }
 
+/** The states in which the sender is trying to reach WhatsApp or the database. */
+const MENDING: readonly SenderMood[] = ['connecting', 'reconnecting', 'database_unreachable']
+
+/**
+ * How long it may try before it counts as stuck. Ordinary drops mend in
+ * seconds or a minute or two; after this, it is waiting on the owner.
+ */
+export const STUCK_AFTER_MS = 10 * 60_000
+
+/** Whether the sender has been failing to reach WhatsApp or the database for long enough to need the owner. */
+export function isStuck(view: SenderView, now: number): boolean {
+  return (
+    view.troubleSince !== null &&
+    MENDING.includes(view.mood) &&
+    now - Date.parse(view.troubleSince) >= STUCK_AFTER_MS
+  )
+}
+
 function settle(view: SenderView, context: ViewContext): SenderView {
   const alarm = view.notice?.tone === 'alarm' ? view.notice : null
+  const mending = MENDING.includes(view.mood)
   return {
     ...view,
+    troubleSince: mending ? (view.troubleSince ?? new Date(context.now).toISOString()) : null,
     attention: alarm ?? waitingCard(view, context) ?? view.notice,
     updatedAt: new Date(context.now).toISOString(),
   }
@@ -152,10 +183,17 @@ export function viewAfterEvent(
       : otherwise
   }
 
+  // The loop says anything but these two only with a connection in hand.
+  if (event.kind !== 'waiting_for_whatsapp' && event.kind !== 'database_unreachable') {
+    next.connectedOnce = true
+  }
+
   switch (event.kind) {
     case 'waiting_for_whatsapp':
-      next.mood = 'connecting'
-      next.headline = 'Connecting to WhatsApp'
+      next.mood = next.connectedOnce ? 'reconnecting' : 'connecting'
+      next.headline = next.connectedOnce
+        ? 'WhatsApp dropped. Reconnecting'
+        : 'Connecting to WhatsApp'
       break
     case 'idle':
       next.waiting = event.waiting
@@ -183,7 +221,9 @@ export function viewAfterEvent(
       // it pauses a minute or so before it next asks the queue, and through
       // that pause it is connected, not connecting.
       if (next.released) sending(next.released.batchNo)
-      else if (next.mood === 'connecting') waitingOrNot(next.waiting, 'Connected to WhatsApp')
+      else if (next.mood === 'connecting' || next.mood === 'reconnecting') {
+        waitingOrNot(next.waiting, 'Connected to WhatsApp')
+      }
       break
     case 'sent':
       next.thisRun.sent += 1

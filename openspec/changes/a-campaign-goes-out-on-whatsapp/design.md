@@ -269,8 +269,8 @@ messages, which is nearly all of it, is dropped on the laptop.
   ordinary notification slides away in seconds and, raised from a script, is
   labelled "Windows PowerShell". So the sender has a small helper of its own
   (`windows/tray.ps1`, Windows' own WinForms, nothing installed). It keeps an
-  icon in the tray for as long as the sender runs, coloured by what the sender
-  is doing, and pins a card above the taskbar when a batch is waiting for
+  icon in the tray for as long as the sender runs, coloured and moving by what
+  the sender is doing (*The tray icon's colours*, 2026-11-22), and pins a card above the taskbar when a batch is waiting for
   release, when a batch finishes, when the sender pauses a campaign, and when
   it halts. **The card stays until Open or Later is pressed**, sits on top of
   everything and never takes the keyboard. Later puts that one piece of news
@@ -1653,3 +1653,44 @@ to see customers' whole numbers (proposal, decision 17).
   before; a row it cannot read is left out rather than shown wrong. When the
   database cannot be reached the diary still shows and the page says the rest
   may be out of date.
+
+## The tray icon's colours (2026-11-22, chosen on the tray 2026-11-23)
+
+The first icon had a colour for each state, four of them greys a person could
+not tell apart, and green meant sending. The owner asked for colours told apart
+at a glance, then for few of them with motion telling apart the states that
+share one, and chose the result by clicking through every state on the real
+tray (a stand-in sender on a spare port, with a page to pick the state).
+
+- **Colour is the kind of moment.** Blue: all is well. Green: the owner's go,
+  a batch waiting for Send batch, "like a green signal" [owner]. Yellow:
+  reaching WhatsApp or mending a connection. Red: halted. Grey: quiet, the
+  campaign paused or stopped, or outside the sending window. Black: not
+  running.
+- **Motion is which one, two kinds, each at one speed.** Pulsing (1.4 s): it is
+  working on something, so sending, and mending a dropped WhatsApp connection
+  or an unreachable database, which mend themselves. Blinking (1.2 s): it is
+  waiting on the owner, "blinking should really be for when it is blocked on
+  me" [owner], so a halt, and mending that has failed for ten minutes
+  (`STUCK_AFTER_MS`), when it no longer mends itself. Everything else is
+  still, starting up included, and a waiting batch, which the pinned card
+  already announces.
+- **A dropped connection is told apart from starting up.** The view remembers
+  whether this run has been connected (`connectedOnce`): a wait for WhatsApp
+  after that is `reconnecting`, "WhatsApp dropped. Reconnecting".
+  `troubleSince` is when it began failing to reach WhatsApp or the database
+  and is cleared when it gets through; `isStuck` is read when the state is
+  served, so the icon starts blinking at ten minutes without waiting for an
+  event. The page then says how long it has been trying.
+- **Standing down for another laptop's sender has no look of its own**
+  [owner]: it shows this laptop's health, and the page's headline says it
+  takes no batch.
+- Refused on the way: a colour per state; green for sending; a rolling centre
+  for connecting; two speeds of blinking for two meanings; blinking for
+  anything the owner is not needed for.
+- `windows/tray.ps1` draws each look's frames once and keeps them, and moves
+  the icon on every 100 ms; the state is still read every two seconds. The
+  sender's page dot uses the same colours and motions, and the pinned card's
+  stripe green for a waiting batch, blue for a finished one, red for an alarm.
+  `control.test.ts` reads the tray script and the page and fails if they
+  disagree.

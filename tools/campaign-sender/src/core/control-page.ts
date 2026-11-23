@@ -33,6 +33,13 @@ export function controlPage(token: string): string {
   h1 { font-size: 15px; font-weight: 600; color: var(--muted); margin: 0 0 18px; letter-spacing: .02em; }
   .state { display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 650; margin-bottom: 4px; }
   .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--muted); flex: none; }
+  /* The tray icon's two motions: pulsing while something is worked on,
+     blinking while it waits on the owner. */
+  .dot.pulse { animation: pulse 1.4s ease-in-out infinite; }
+  .dot.blink { animation: blink 1.2s linear infinite; }
+  @keyframes pulse { 50% { transform: scale(1.35); filter: brightness(1.3); } }
+  @keyframes blink { 0%, 49.9% { opacity: 1; } 50%, 100% { opacity: .3; } }
+  @media (prefers-reduced-motion: reduce) { .dot.pulse, .dot.blink { animation: none; } }
   .sub { color: var(--muted); margin: 0 0 20px 22px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-bottom: 14px; }
   .card h2 { font-size: 17px; margin: 0 0 6px; }
@@ -104,9 +111,15 @@ export function controlPage(token: string): string {
 </main>
 <script>
   const TOKEN = ${JSON.stringify(token)}
-  const COLOURS = { connecting: 'var(--muted)', idle: 'var(--muted)', waiting_for_you: 'var(--warn)',
-    sending: 'var(--ok)', outside_hours: 'var(--muted)', held: 'var(--warn)', database_unreachable: 'var(--alarm)',
-    stood_down: 'var(--muted)', halted: 'var(--alarm)', stopped: 'var(--muted)' }
+  // The tray icon's colours and motions (windows/tray.ps1): blue all well,
+  // green the owner's go, yellow reaching WhatsApp or mending itself, red the
+  // owner is needed, grey quiet, black not running.
+  const BLUE = '#2563eb', GREEN = '#22c55e', YELLOW = '#eab308', RED = '#dc2626', GREY = '#8c8c96', BLACK = '#18181b'
+  const COLOURS = { idle: BLUE, sending: BLUE, stood_down: BLUE, waiting_for_you: GREEN, connecting: YELLOW,
+    reconnecting: YELLOW, database_unreachable: YELLOW, halted: RED, held: GREY, outside_hours: GREY, stopped: BLACK }
+  // Starting up is still; mending pulses; blinking is only for waiting on the
+  // owner: a halt, or mending that has failed for ten minutes (view.stuck).
+  const MOTION = { sending: 'pulse', reconnecting: 'pulse', database_unreachable: 'pulse', halted: 'blink' }
   const $ = (id) => document.getElementById(id)
   const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   const india = () => new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })
@@ -114,10 +127,15 @@ export function controlPage(token: string): string {
 
   function draw(view) {
     $('rehearsal').hidden = !view.rehearsal
-    $('dot').style.background = COLOURS[view.mood] || 'var(--muted)'
+    $('dot').style.background = COLOURS[view.mood] || GREY
+    $('dot').className = 'dot ' + (view.stuck ? 'blink' : MOTION[view.mood] || '')
     $('headline').textContent = view.headline
     let sub = 'It is ' + india() + ' in India.'
     if (view.windowOpensAt) sub += ' The sending window opens at ' + clock(view.windowOpensAt) + ' your time.'
+    if (view.stuck && view.troubleSince) {
+      const minutes = Math.round((Date.now() - Date.parse(view.troubleSince)) / 60000)
+      sub += ' It has been trying for ' + minutes + ' minutes: check this laptop is online.'
+    }
     $('sub').textContent = sub
 
     const waiting = view.waiting

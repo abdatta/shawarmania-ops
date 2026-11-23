@@ -286,6 +286,14 @@ customer.
       sender's own diary on the laptop, on the sender's page.
       *(2026-11-21: `campaign_sender_history` tests first, `core/diary.ts`
       and `core/history.ts` tests first; design, *The sender's history*.)*
+- [x] 4.11 **The tray icon's colours** [owner, 2026-11-22 and 23]: a handful
+      of colours for the kind of moment (blue all well, green the owner's go,
+      yellow mending, red halted, grey quiet, black not running), pulsing while
+      it works, blinking only while it waits on the owner, the same on the page.
+      A dropped connection told apart from starting up, and ten minutes of
+      failing to mend counted as stuck.
+      *(2026-11-23: the agreement, reconnecting and stuck tests failing first;
+      chosen on the real tray; design, *The tray icon's colours*.)*
 
 ## 5. Staging rehearsal
 

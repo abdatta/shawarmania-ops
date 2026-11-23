@@ -5,7 +5,8 @@
 # It decides nothing. Every two seconds it asks the sender's own page for its
 # state (http://127.0.0.1:<port>/state) and draws what it is told:
 #
-#   the icon's colour   what the sender is doing
+#   the icon            what the sender is doing: its colour the kind of
+#                       moment, its motion which one (see Colours below)
 #   the card            whatever the state calls "attention", until it is put away
 #
 # A card stays on screen until Open or Later is pressed. Putting it away hides
@@ -82,39 +83,82 @@ $PageUrl = "http://127.0.0.1:$Port/"
 
 # -- Colours ----------------------------------------------------------------
 
+# The owner's rule (2026-11-22, recoloured 2026-11-23): a handful of
+# colours, each a kind of moment, and two motions, each at one speed. Blue is
+# all well, green is the owner's go (a batch waits for Send batch), yellow is
+# reaching WhatsApp or mending itself, red needs the owner, grey is quiet and
+# black is not running. Pulsing: something is being worked on, mending
+# included. Blinking: it waits on the owner, which is a halt, or mending that
+# has failed for ten minutes (the state's "stuck"). Anything else is still,
+# starting up included. Standing down for another
+# laptop's sender has no look of its own: it shows as ready, and the page says
+# why it takes no batch.
+$Blue   = (Rgb 37 99 235)
+$Green  = (Rgb 34 197 94)
+$Yellow = (Rgb 234 179 8)
+$Red    = (Rgb 220 38 38)
+$Grey   = (Rgb 140 140 150)
+$Black  = (Rgb 24 24 27)
 $MoodColours = @{
-  connecting           = (Rgb 148 163 184)
-  idle                 = (Rgb 100 116 139)
-  waiting_for_you      = (Rgb 245 158 11)
-  sending              = (Rgb 34 197 94)
-  outside_hours        = (Rgb 100 116 139)
-  held                 = (Rgb 245 158 11)
-  database_unreachable = (Rgb 220 38 38)
-  stood_down           = (Rgb 100 116 139)
-  halted               = (Rgb 220 38 38)
-  stopped              = (Rgb 82 82 91)
-  unreachable          = (Rgb 82 82 91)
+  idle                 = $Blue
+  sending              = $Blue
+  stood_down           = $Blue
+  waiting_for_you      = $Green
+  connecting           = $Yellow
+  reconnecting         = $Yellow
+  database_unreachable = $Yellow
+  halted               = $Red
+  held                 = $Grey
+  outside_hours        = $Grey
+  stopped              = $Black
+  unreachable          = $Black
+}
+# Frames are shown one every 100 ms: a pulse takes 1.4 s, a blink 1.2 s.
+$Pulse = @{ kind = 'pulse'; frames = 14 }
+$Blink = @{ kind = 'blink'; frames = 12 }
+$MoodMotion = @{
+  sending              = $Pulse
+  reconnecting         = $Pulse
+  database_unreachable = $Pulse
+  halted               = $Blink
 }
 $ToneColours = @{
-  action = (Rgb 245 158 11)
-  done   = (Rgb 34 197 94)
-  alarm  = (Rgb 220 38 38)
+  action = $Green
+  done   = $Blue
+  alarm  = $Red
 }
 
 # -- The tray icon ----------------------------------------------------------
 
-function New-DotIcon([System.Drawing.Color]$colour) {
+function Mix([System.Drawing.Color]$a, [System.Drawing.Color]$b, [double]$t) {
+  return [System.Drawing.Color]::FromArgb(
+    [int]($a.R + ($b.R - $a.R) * $t), [int]($a.G + ($b.G - $a.G) * $t), [int]($a.B + ($b.B - $a.B) * $t))
+}
+
+# One frame of a state's icon. A pulse swells the light centre and lightens the
+# dot, and settles back; a blink dims the dot for the second half.
+function New-DotIcon([System.Drawing.Color]$colour, [string]$kind, [int]$frame, [int]$frames) {
   $bitmap = New-Object System.Drawing.Bitmap 32, 32
   $g = [System.Drawing.Graphics]::FromImage($bitmap)
   $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
   $g.Clear([System.Drawing.Color]::Transparent)
-  $fill = New-Object System.Drawing.SolidBrush $colour
+  $phase = if ($frames -gt 0) { $frame / $frames } else { 0 }
+  $swell = (1 - [Math]::Cos(2 * [Math]::PI * $phase)) / 2
+  $fillColour = $colour
+  $centreSize = 8
+  if ($kind -eq 'pulse') {
+    $fillColour = Mix $colour ([System.Drawing.Color]::White) (0.35 * $swell)
+    $centreSize = 7 + 7 * $swell
+  }
+  if ($kind -eq 'blink' -and $phase -ge 0.5) { $fillColour = Mix $colour ([System.Drawing.Color]::Black) 0.6 }
+  $fill = New-Object System.Drawing.SolidBrush $fillColour
   $g.FillEllipse($fill, 3, 3, 26, 26)
   $ring = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(230, 255, 255, 255)), 2.5
   $g.DrawEllipse($ring, 3, 3, 26, 26)
   # A small light centre, so it reads as a made thing and not a status light.
   $centre = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(235, 255, 255, 255))
-  $g.FillEllipse($centre, 12, 12, 8, 8)
+  $offset = [single](16 - $centreSize / 2)
+  $g.FillEllipse($centre, $offset, $offset, [single]$centreSize, [single]$centreSize)
   $fill.Dispose(); $ring.Dispose(); $centre.Dispose(); $g.Dispose()
   $handle = $bitmap.GetHicon()
   $icon = [System.Drawing.Icon]::FromHandle($handle).Clone()
@@ -302,11 +346,32 @@ function Get-SenderState {
   }
 }
 
+# Each state's frames are drawn once and kept. A still state has one.
 $script:icons = @{}
-function Get-MoodIcon([string]$mood) {
+function Get-MoodFrames([string]$mood, [bool]$stuck) {
   if (-not $MoodColours.ContainsKey($mood)) { $mood = 'idle' }
-  if (-not $script:icons.ContainsKey($mood)) { $script:icons[$mood] = New-DotIcon $MoodColours[$mood] }
-  return $script:icons[$mood]
+  $key = if ($stuck) { "$mood stuck" } else { $mood }
+  if (-not $script:icons.ContainsKey($key)) {
+    $motion = if ($stuck) { $Blink } else { $MoodMotion[$mood] }
+    $kind = if ($motion) { $motion.kind } else { 'still' }
+    $count = if ($motion) { $motion.frames } else { 1 }
+    $list = New-Object System.Collections.ArrayList
+    for ($f = 0; $f -lt $count; $f++) { [void]$list.Add((New-DotIcon $MoodColours[$mood] $kind $f $count)) }
+    $script:icons[$key] = $list
+  }
+  return ,$script:icons[$key]
+}
+
+# The state is read every two seconds; the icon moves on every 100 ms.
+$script:mood = ''
+$script:stuck = $false
+$script:frame = 0
+function Set-Mood([string]$mood, [bool]$stuck = $false) {
+  if ($mood -eq $script:mood -and $stuck -eq $script:stuck) { return }
+  $script:mood = $mood
+  $script:stuck = $stuck
+  $script:frame = 0
+  $script:tray.Icon = (Get-MoodFrames $mood $stuck)[0]
 }
 
 function Set-TrayText([string]$text) {
@@ -315,8 +380,18 @@ function Set-TrayText([string]$text) {
 }
 
 $script:tray = New-Object System.Windows.Forms.NotifyIcon
-$script:tray.Icon = Get-MoodIcon 'connecting'
+Set-Mood 'connecting'
 $script:tray.Visible = $true
+
+$script:animator = New-Object System.Windows.Forms.Timer
+$script:animator.Interval = 100
+$script:animator.Add_Tick({
+    $frames = Get-MoodFrames $script:mood $script:stuck
+    if ($frames.Count -lt 2) { return }
+    $script:frame = ($script:frame + 1) % $frames.Count
+    $script:tray.Icon = $frames[$script:frame]
+  })
+$script:animator.Start()
 Set-TrayText 'Shawarmania sender: starting'
 
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
@@ -332,6 +407,7 @@ $script:tray.ContextMenuStrip = $menu
 
 function Stop-Helper {
   $script:timer.Stop()
+  $script:animator.Stop()
   Hide-Card $false
   $script:tray.Visible = $false
   $script:tray.Dispose()
@@ -387,7 +463,7 @@ $script:timer.Add_Tick({
       $script:misses += 1
       $script:attention = $null
       Hide-Card $false
-      $script:tray.Icon = Get-MoodIcon 'unreachable'
+      Set-Mood 'unreachable'
       Set-TrayText 'Shawarmania sender: not running'
       # About half a minute of silence: the sender has gone, and so does this.
       if ($script:misses -ge 15) { Stop-Helper }
@@ -395,7 +471,7 @@ $script:timer.Add_Tick({
     }
 
     $script:misses = 0
-    $script:tray.Icon = Get-MoodIcon ([string]$state.mood)
+    Set-Mood ([string]$state.mood) ([bool]$state.stuck)
     Set-TrayText ('Shawarmania sender: ' + [string]$state.headline)
 
     $attention = $state.attention
