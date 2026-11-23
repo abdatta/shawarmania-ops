@@ -226,8 +226,15 @@ jobs:
 
       - run: npm ci
 
+      # The stack's ports (54321 to 54324) sit inside Linux's range for outgoing
+      # connections, and the image pulls open hundreds of them. The start failed
+      # with "address already in use" on 54322 or 54324 on fresh runners (9 of 40
+      # Staging runs to 2026-11-23), most likely because a pull had borrowed the
+      # port. Reserved, they are never lent out; binding them on purpose still works.
       - name: Start the local stack (applies migrations and seed)
-        run: npx supabase start -x studio
+        run: |
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports=54320-54329
+          npx supabase start -x studio
 
       - name: Database policy suite (pgTAP)
         run: npm run test:db
@@ -273,6 +280,8 @@ jobs:
 
       - name: Start the local stack while Chromium installs and the app builds
         run: |
+          # The stack's ports, kept from outgoing connections: see the database job.
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports=54320-54329
           npx supabase start -x studio > supabase-start.log 2>&1 &
           stack=$!
           npx playwright install --with-deps chromium
@@ -338,6 +347,8 @@ jobs:
       - name: Start the local stack while Chromium installs and the app builds
         if: steps.gates.outputs.count != '0'
         run: |
+          # The stack's ports, kept from outgoing connections: see the database job.
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports=54320-54329
           npx supabase start -x studio > supabase-start.log 2>&1 &
           stack=$!
           npx playwright install --with-deps chromium
