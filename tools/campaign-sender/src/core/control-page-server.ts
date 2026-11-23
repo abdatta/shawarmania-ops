@@ -127,7 +127,7 @@ export function serveControlPage(options: ControlPageOptions): Promise<ControlPa
       })
       request.on('end', () => {
         if (tooBig) return send(413, 'application/json', JSON.stringify({ ok: false }))
-        let body: unknown = null
+        let body: unknown
         try {
           body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
         } catch {
@@ -135,9 +135,7 @@ export function serveControlPage(options: ControlPageOptions): Promise<ControlPa
         }
         notice(request.headers['x-notice-token'], body)
           .catch(() => ({ status: 500, body: { ok: false, message: 'The send failed.' } }))
-          .then((outcome) =>
-            send(outcome.status, 'application/json', JSON.stringify(outcome.body)),
-          )
+          .then((outcome) => send(outcome.status, 'application/json', JSON.stringify(outcome.body)))
       })
       return
     }

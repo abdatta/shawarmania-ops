@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
 import type { LinkConnection, OutgoingMessage } from './contracts.ts'
-import { parseNoticeRecipients, sendNotice, tokenMatches, NOTICE_MOST_CHARS } from './owner-notice.ts'
+import {
+  parseNoticeRecipients,
+  sendNotice,
+  tokenMatches,
+  NOTICE_MOST_CHARS,
+} from './owner-notice.ts'
 
 function fakeConnection(onWhatsApp = true) {
   const sent: Array<{ address: string; message: OutgoingMessage }> = []
@@ -39,7 +44,11 @@ describe('owner notices', () => {
 
   it('refuses any number not on the list, and sends nothing', async () => {
     const { connection, sent } = fakeConnection()
-    const outcome = await sendNotice({ to: '919800000000', text: 'Hi' }, ['12135550199'], connection)
+    const outcome = await sendNotice(
+      { to: '919800000000', text: 'Hi' },
+      ['12135550199'],
+      connection,
+    )
     expect(outcome).toMatchObject({ ok: false, status: 403 })
     expect(sent).toEqual([])
   })
@@ -52,7 +61,9 @@ describe('owner notices', () => {
 
   it('refuses empty or overlong text', async () => {
     const { connection } = fakeConnection()
-    expect(await sendNotice({ text: '  ' }, ['12135550199'], connection)).toMatchObject({ status: 400 })
+    expect(await sendNotice({ text: '  ' }, ['12135550199'], connection)).toMatchObject({
+      status: 400,
+    })
     expect(
       await sendNotice({ text: 'x'.repeat(NOTICE_MOST_CHARS + 1) }, ['12135550199'], connection),
     ).toMatchObject({ status: 400 })

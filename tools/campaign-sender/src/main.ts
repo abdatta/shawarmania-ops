@@ -1328,7 +1328,10 @@ async function runWithFace(options: {
   /** The database's half of the history page; none in a rehearsal, which keeps no diary. */
   history?: () => Promise<unknown>
   /** Owner notices (`owner-notice.ts`); a real run only. */
-  notice?: (token: unknown, body: unknown) => Promise<{ status: number; body: Record<string, unknown> }>
+  notice?: (
+    token: unknown,
+    body: unknown,
+  ) => Promise<{ status: number; body: Record<string, unknown> }>
 }): Promise<number> {
   const diaryOn = options.history !== undefined
   const history = options.history

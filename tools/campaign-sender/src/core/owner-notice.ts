@@ -120,7 +120,11 @@ export async function sendNotice(
   const text = typeof request?.text === 'string' ? request.text.trim() : ''
   if (!text) return { ok: false, status: 400, message: 'A notice needs text.' }
   if (text.length > NOTICE_MOST_CHARS) {
-    return { ok: false, status: 400, message: `A notice is at most ${NOTICE_MOST_CHARS} characters.` }
+    return {
+      ok: false,
+      status: 400,
+      message: `A notice is at most ${NOTICE_MOST_CHARS} characters.`,
+    }
   }
   if (allowed.length === 0) {
     return { ok: false, status: 403, message: 'No notice recipients are set on this laptop.' }
