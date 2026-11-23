@@ -8,18 +8,18 @@ itself as each word is finished and stopping once a corrected word is edited
 
 ## 1. The gate, off
 
-- [ ] 1.1 Declare `customer-names-capitalised` (*NC*) in
+- [x] 1.1 Declare `customer-names-capitalised` (*NC*) in
   `src/change-gates/gates.ts`: kind `change`, change
   `a-customer-name-is-capitalised`, `retireBy` 2027-02-28, `roundTrip` `none: a
   capitalised name is ordinary text in the fields the off path already writes
   and reads; nothing is queued or stored in a new shape`.
-- [ ] 1.2 Migration: the `change_gates` row, off, with the proposal's On and Off
+- [x] 1.2 Migration: the `change_gates` row, off, with the proposal's On and Off
   sentences, title `Customer names capitalised`, `change_number` null (not a
   roadmap change). Run `npm run lint:migrations` and `npm run lint:change-gates`.
 
 ## 2. The rule
 
-- [ ] 2.1 `src/domain/customer-name.ts`: `capitalisedWord` and
+- [x] 2.1 `src/domain/customer-name.ts`: `capitalisedWord` and
   `capitalisedName` per design D1, with unit tests covering every row of D1's
   test table, plus empty, whitespace-only, digits-only, a word whose case
   mapping changes its length (left alone), and a name already capitalised
@@ -27,14 +27,14 @@ itself as each word is finished and stopping once a corrected word is edited
 
 ## 3. The counter (demo first)
 
-- [ ] 3.1 Unit tests for a `useCapitalisingName` hook (D2, D4), written first and
+- [x] 3.1 Unit tests for a `useCapitalisingName` hook (D2, D4), written first and
   seen to fail: a space corrects the word before it; a pause (fake timers)
   corrects the word at the cursor; confirm returns `capitalisedName`; `RAH`,
   pause, `UL` gives `Rahul`; a backspace into a corrected word stops all further
   correction, confirm included; deleting only the space after it does not;
   fixing a typo in an uncorrected word does not; a paste is corrected at the
   next pause.
-- [ ] 3.1a **Cursor safety, before anything else in section 3 is called done**
+- [x] 3.1a **Cursor safety, before anything else in section 3 is called done**
   (design D2, "The cursor never moves"). One test per guard: a correction keeps
   `selectionStart`, `selectionEnd` and `selectionDirection`; a keystroke landing
   between the decision and the change drops the correction; nothing changes
@@ -47,22 +47,22 @@ itself as each word is finished and stopping once a corrected word is edited
   selection equal a correction-off run of the same steps and the text equals it
   ignoring case. A failure here is fixed by skipping the correction, never by
   relaxing the assertion.
-- [ ] 3.2 Tests in `customer-dialog.test.tsx` with
+- [x] 3.2 Tests in `customer-dialog.test.tsx` with
   `describeChangeGate('customer-names-capitalised', …)`: on, typing `rahul das`
   shows `Rahul Das` in the field and confirm sends it; `MD rahim` sends
   `MD Rahim`; `McKenzie` is unchanged; going back over `Sanjay` to `SANJAY`
   sends `SANJAY`; no new text or button renders. Off: the field is never
   changed and confirm sends the trimmed text, as today.
-- [ ] 3.3 Implement the hook and wire it into
+- [x] 3.3 Implement the hook and wire it into
   `src/features/billing/customer-dialog.tsx` behind
   `useChangeGate('customer-names-capitalised')`, the off path's `onChange` and
   confirm untouched. Rewrite the comment above the name field: the 2026-09-19
   decision, what the owner revised on 2026-11-22 and 2026-11-23, and why a
   mixed-case word is still kept as typed.
-- [ ] 3.4 Find every existing test, unit or browser, that types a name the rule
+- [x] 3.4 Find every existing test, unit or browser, that types a name the rule
   would correct and asserts it back verbatim; tag a browser test
   `@cg-off:customer-names-capitalised`, the only edit it may receive.
-- [ ] 3.5 A browser test tagged `@cg-on:customer-names-capitalised` in the demo
+- [x] 3.5 A browser test tagged `@cg-on:customer-names-capitalised` in the demo
   suite: ring an order, attach a new number, type `rahul das` key by key, read
   `Rahul Das` in the field, confirm, pay, and read `Rahul Das` on the order card
   and in the bill; a second order typing `SANJAY`, backspacing into it and
@@ -80,7 +80,7 @@ itself as each word is finished and stopping once a corrected word is edited
 
 ## 4. Docs and verification
 
-- [ ] 4.1 Update `docs/SCREENS.md` (counter customer entry: "what is typed is
+- [x] 4.1 Update `docs/SCREENS.md` (counter customer entry: "what is typed is
   what the bill snapshots" becomes what is saved and why) and
   `docs/DATA_MODEL.md` (the `customers.name` paragraph).
 - [ ] 4.2 `npm run format`, typecheck, the touched tests, `npm run lint`; push to

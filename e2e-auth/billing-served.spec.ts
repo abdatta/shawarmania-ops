@@ -238,86 +238,87 @@ test.afterAll(async ({ request }) => {
   await setKalyaniGold(request, false)
 })
 
-test('two tills seat one table while one is offline, and both orders say so', async ({
-  browser,
-  request,
-}) => {
-  test.setTimeout(240_000)
-  const run = Date.now().toString(36)
-  const seatedOne = `E2E seat one ${run}`
-  const seatedTwo = `E2E seat two ${run}`
-  const token = await accessToken(request, 'admin.kalyani')
+test(
+  'two tills seat one table while one is offline, and both orders say so',
+  { tag: '@cg-off:customer-names-capitalised' },
+  async ({ browser, request }) => {
+    test.setTimeout(240_000)
+    const run = Date.now().toString(36)
+    const seatedOne = `E2E seat one ${run}`
+    const seatedTwo = `E2E seat two ${run}`
+    const token = await accessToken(request, 'admin.kalyani')
 
-  await setSpareTillInService(request, true)
-  const one = await openTill(browser, request, TILL_ONE)
-  const two = await openTill(browser, request, TILL_TWO)
+    await setSpareTillInService(request, true)
+    const one = await openTill(browser, request, TILL_ONE)
+    const two = await openTill(browser, request, TILL_TWO)
 
-  try {
-    // Till two seats table 4 where till one cannot see it.
-    await two.context.setOffline(true)
-    await addShawarma(two.page)
-    await identifyNew(two.page, seatedTwo)
-    await two.page.getByTestId('service-chip-dine_in').click()
-    await keyTable(two.page, '4')
-    const seatedTwoOrder = await saveOrder(two.page)
+    try {
+      // Till two seats table 4 where till one cannot see it.
+      await two.context.setOffline(true)
+      await addShawarma(two.page)
+      await identifyNew(two.page, seatedTwo)
+      await two.page.getByTestId('service-chip-dine_in').click()
+      await keyTable(two.page, '4')
+      const seatedTwoOrder = await saveOrder(two.page)
 
-    // Till one, online, sees nothing at table 4 and seats it too. The counter
-    // refuses only a table it can see is busy (design D5).
-    await addShawarma(one.page)
-    await identifyNew(one.page, seatedOne)
-    await one.page.getByTestId('service-chip-dine_in').click()
-    await keyTable(one.page, '4')
-    const seatedOneOrder = await saveOrder(one.page)
+      // Till one, online, sees nothing at table 4 and seats it too. The counter
+      // refuses only a table it can see is busy (design D5).
+      await addShawarma(one.page)
+      await identifyNew(one.page, seatedOne)
+      await one.page.getByTestId('service-chip-dine_in').click()
+      await keyTable(one.page, '4')
+      const seatedOneOrder = await saveOrder(one.page)
 
-    // Till two reconnects and drains; the database records both, refusing
-    // neither, and marks each as having shared its table.
-    await two.context.setOffline(false)
-    await expect
-      .poll(
-        async () =>
-          (
-            await ordersWhere(request, token, {
-              customer_name: `in.(${seatedOne},${seatedTwo})`,
-            })
-          ).length,
-        { timeout: DRAIN_MS },
-      )
-      .toBe(2)
-    const both = await ordersWhere(request, token, {
-      customer_name: `in.(${seatedOne},${seatedTwo})`,
-    })
-    for (const order of both) {
-      expect(order).toMatchObject({
-        status: 'open',
-        service_type: 'dine_in',
-        table_number: 4,
-        table_shared: true,
+      // Till two reconnects and drains; the database records both, refusing
+      // neither, and marks each as having shared its table.
+      await two.context.setOffline(false)
+      await expect
+        .poll(
+          async () =>
+            (
+              await ordersWhere(request, token, {
+                customer_name: `in.(${seatedOne},${seatedTwo})`,
+              })
+            ).length,
+          { timeout: DRAIN_MS },
+        )
+        .toBe(2)
+      const both = await ordersWhere(request, token, {
+        customer_name: `in.(${seatedOne},${seatedTwo})`,
       })
-    }
+      for (const order of both) {
+        expect(order).toMatchObject({
+          status: 'open',
+          service_type: 'dine_in',
+          table_number: 4,
+          table_shared: true,
+        })
+      }
 
-    // And both tills call them Table 4, each saying which of the two it is.
-    for (const page of [one.page, two.page]) {
-      await page.reload()
-      await expect(page.getByTestId('menu-grid')).toBeVisible()
-      const atFour = cardsAt(page, 'Table 4')
-      await expect(atFour).toHaveCount(2, { timeout: 20_000 })
-      await expect(orderCard(page, seatedTwoOrder)).toContainText('1 of 2')
-      await expect(orderCard(page, seatedOneOrder)).toContainText('2 of 2')
-    }
+      // And both tills call them Table 4, each saying which of the two it is.
+      for (const page of [one.page, two.page]) {
+        await page.reload()
+        await expect(page.getByTestId('menu-grid')).toBeVisible()
+        const atFour = cardsAt(page, 'Table 4')
+        await expect(atFour).toHaveCount(2, { timeout: 20_000 })
+        await expect(orderCard(page, seatedTwoOrder)).toContainText('1 of 2')
+        await expect(orderCard(page, seatedOneOrder)).toContainText('2 of 2')
+      }
 
-    // Each till takes its own off the rail; neither may cancel the other's.
-    await cancelCard(one.page, seatedOneOrder)
-    // Till two hears of that cancellation by Realtime, on no schedule of ours,
-    // and slides its own card up when it does. Acting before then clicked a
-    // moving card: see `railSettled`.
-    await expect(orderCard(two.page, seatedOneOrder)).toHaveCount(0, { timeout: 20_000 })
-    await cancelCard(two.page, seatedTwoOrder)
-  } finally {
-    await one.context.close()
-    await two.context.close()
-    await setSpareTillInService(request, false)
-  }
-})
+      // Each till takes its own off the rail; neither may cancel the other's.
+      await cancelCard(one.page, seatedOneOrder)
+      // Till two hears of that cancellation by Realtime, on no schedule of ours,
+      // and slides its own card up when it does. Acting before then clicked a
+      // moving card: see `railSettled`.
+      await expect(orderCard(two.page, seatedOneOrder)).toHaveCount(0, { timeout: 20_000 })
+      await cancelCard(two.page, seatedTwoOrder)
+    } finally {
+      await one.context.close()
+      await two.context.close()
+      await setSpareTillInService(request, false)
+    }
+  },
+)
 
 test('the owner reads and changes how an outlet serves on its live page', async ({
   page,

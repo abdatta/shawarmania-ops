@@ -512,6 +512,8 @@ parent, lines, state, number allocation and receipt commit together or not at al
 
 **`customers`** — `id`, `phone` (canonical, unique, not null), `name` (nullable), `created_at`, `last_used_at`.
 
+`name` is stored exactly as the client sends it, trimmed; the database never recases it. The counter sends a new customer's name capitalised word by word unless a word was typed in mixed case or as two capitals, or the biller went back over a word the field corrected (`customer-names-capitalised`; the rule is `capitalisedName` in `src/domain/customer-name.ts`). With that gate off it sends the name as typed. The owner's `customer_rename()` saves exactly what is typed, and is the way to set any spelling the rule gets wrong. A bill's and an order's `customer_name` are snapshots at the sale and never follow a later rename.
+
 **The one table in this schema that belongs to no outlet.** One normalized phone is one customer for the whole business, so a returning customer is recognised at either counter. `phone` is stored as `+91` plus ten digits — `public.normalize_indian_phone()` canonicalises the ten-digit, `91…` and `+91…` forms and refuses everything else — and a check constraint means the column can hold nothing but its own canonical form.
 
 It carries **identity only**. There is no `outlet_id`, no `bill_count` and no `total_spend_paise`, and their absence is the design: a cached total on a globally readable row would disclose one outlet's trade to the other through a customer they share. Anything about trading is read from `bills`, which are outlet-scoped and always were.

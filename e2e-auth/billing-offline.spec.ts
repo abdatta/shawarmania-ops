@@ -228,182 +228,194 @@ async function restoreOnlineCounter(context: BrowserContext, page: Page) {
   await expect(page.getByTestId('menu-grid')).toBeVisible()
 }
 
-test('the real tablet survives network loss and settles each local acceptance exactly once', async ({
-  page,
-  context,
-  request,
-}) => {
-  /*
+test(
+  'the real tablet survives network loss and settles each local acceptance exactly once',
+  { tag: '@cg-off:customer-names-capitalised' },
+  async ({ page, context, request }) => {
+    /*
     Raised from ninety seconds when the customer moved onto a keypad: each
     identification is now about thirteen interactions where it was one `fill`,
     and this spec identifies several customers across two reloads and a service
     worker. The work is real rather than slow.
   */
-  test.setTimeout(180_000)
-  await signInSeededTablet(page, request)
+    test.setTimeout(180_000)
+    await signInSeededTablet(page, request)
 
-  const run = Date.now().toString(36)
-  const offlineCustomer = `E2E offline ${run}`
-  const lostResponseCustomer = `E2E lost response ${run}`
-  const managerToken = await managerAccessToken(request)
+    const run = Date.now().toString(36)
+    const offlineCustomer = `E2E offline ${run}`
+    const lostResponseCustomer = `E2E lost response ${run}`
+    const managerToken = await managerAccessToken(request)
 
-  // Backend disappears before local acceptance. The form still clears only
-  // after IndexedDB commits, and the pending command survives a browser reload.
-  await context.setOffline(true)
-  await markPaid(page, offlineCustomer)
-  await expect(page.getByTestId('sync-indicator').first()).toHaveAttribute('data-sync', 'pending')
-  // Correct the tender while the parent payment is still local. Both commands
-  // must survive restart and drain in dependency order.
-  await changeLatestCashBillToUpi(page, offlineCustomer)
-  await expect(page.getByText('Payment updated.')).toBeVisible()
-  await page.waitForTimeout(AFTER_LOCAL_ACCEPTANCE_MS)
+    // Backend disappears before local acceptance. The form still clears only
+    // after IndexedDB commits, and the pending command survives a browser reload.
+    await context.setOffline(true)
+    await markPaid(page, offlineCustomer)
+    await expect(page.getByTestId('sync-indicator').first()).toHaveAttribute('data-sync', 'pending')
+    // Correct the tender while the parent payment is still local. Both commands
+    // must survive restart and drain in dependency order.
+    await changeLatestCashBillToUpi(page, offlineCustomer)
+    await expect(page.getByText('Payment updated.')).toBeVisible()
+    await page.waitForTimeout(AFTER_LOCAL_ACCEPTANCE_MS)
 
-  await page.getByRole('button', { name: 'Finish day' }).click()
-  const finish = page.getByRole('dialog', { name: 'Finish day' })
-  await expect(finish.getByText(/authoritative server state is unavailable/i)).toBeVisible()
-  await expect(finish.getByText(/actions? still sending/i)).toBeVisible()
-  await expect(finish.getByRole('button', { name: 'Check again' })).toHaveCount(0)
-  await expect(finish.getByRole('button', { name: 'Keep billing' })).toBeVisible()
-  await expect(finish.getByRole('button', { name: /finish day now/i })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Finish day' }).click()
+    const finish = page.getByRole('dialog', { name: 'Finish day' })
+    await expect(finish.getByText(/authoritative server state is unavailable/i)).toBeVisible()
+    await expect(finish.getByText(/actions? still sending/i)).toBeVisible()
+    await expect(finish.getByRole('button', { name: 'Check again' })).toHaveCount(0)
+    await expect(finish.getByRole('button', { name: 'Keep billing' })).toBeVisible()
+    await expect(finish.getByRole('button', { name: /finish day now/i })).toHaveCount(0)
 
-  // THE COLD START, against the real backend and with it unreachable. Before
-  // extended-offline-billing this reload ended at "cannot confirm this
-  // tablet"; the assertion here was that the counter did NOT come back. It
-  // must now reopen from the resume record, labelled as remembered, with every
-  // captured command still on the device.
-  await page.reload({ waitUntil: 'domcontentloaded' })
+    // THE COLD START, against the real backend and with it unreachable. Before
+    // extended-offline-billing this reload ended at "cannot confirm this
+    // tablet"; the assertion here was that the counter did NOT come back. It
+    // must now reopen from the resume record, labelled as remembered, with every
+    // captured command still on the device.
+    await page.reload({ waitUntil: 'domcontentloaded' })
 
-  await expect(page.getByTestId('offline-resume-status')).toBeVisible({
-    timeout: OFFLINE_READ_MS,
-  })
-  await expect(page.getByTestId('offline-resume-status')).toContainText(
-    'Offline · last successful read',
-  )
-  // Every remembered read has to fail through the network stack before its
-  // fallback runs, so a resumed counter fills in over several seconds rather
-  // than instantly. `OFFLINE_READ_MS` is that budget, not a flake allowance.
-  // While it fills in, each waiting column says why rather than sitting on
-  // silent shimmer that reads as a frozen tablet.
-  await expect(page.getByTestId('offline-fill-hint').first()).toBeVisible()
-  await expect(page.getByTestId('menu-grid')).toBeVisible({ timeout: OFFLINE_READ_MS })
-  await expect(page.getByTestId('menu-as-of')).toBeVisible({ timeout: OFFLINE_READ_MS })
-  await expect(page.getByTestId('pipeline-as-of')).toBeVisible({ timeout: OFFLINE_READ_MS })
-  await expect(page.getByTestId('bills-as-of')).toBeVisible({ timeout: OFFLINE_READ_MS })
-  // And it goes with the column it explained, rather than standing as a notice.
-  await expect(page.getByTestId('offline-fill-hint')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Hand over', exact: true })).toBeDisabled()
-  // Nothing was lost across the restart: both commands are still unsent, and
-  // the counter says so as `stalled` rather than `pending` — a resumed tablet
-  // deliberately does not drain until it has re-resolved itself online.
-  await expect(page.getByTestId('sync-indicator').first()).toHaveAttribute('data-sync', 'stalled')
+    await expect(page.getByTestId('offline-resume-status')).toBeVisible({
+      timeout: OFFLINE_READ_MS,
+    })
+    await expect(page.getByTestId('offline-resume-status')).toContainText(
+      'Offline · last successful read',
+    )
+    // Every remembered read has to fail through the network stack before its
+    // fallback runs, so a resumed counter fills in over several seconds rather
+    // than instantly. `OFFLINE_READ_MS` is that budget, not a flake allowance.
+    // While it fills in, each waiting column says why rather than sitting on
+    // silent shimmer that reads as a frozen tablet.
+    await expect(page.getByTestId('offline-fill-hint').first()).toBeVisible()
+    await expect(page.getByTestId('menu-grid')).toBeVisible({ timeout: OFFLINE_READ_MS })
+    await expect(page.getByTestId('menu-as-of')).toBeVisible({ timeout: OFFLINE_READ_MS })
+    await expect(page.getByTestId('pipeline-as-of')).toBeVisible({ timeout: OFFLINE_READ_MS })
+    await expect(page.getByTestId('bills-as-of')).toBeVisible({ timeout: OFFLINE_READ_MS })
+    // And it goes with the column it explained, rather than standing as a notice.
+    await expect(page.getByTestId('offline-fill-hint')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Hand over', exact: true })).toBeDisabled()
+    // Nothing was lost across the restart: both commands are still unsent, and
+    // the counter says so as `stalled` rather than `pending` — a resumed tablet
+    // deliberately does not drain until it has re-resolved itself online.
+    await expect(page.getByTestId('sync-indicator').first()).toHaveAttribute('data-sync', 'stalled')
 
-  // New work is still accepted after the cold start, and survives a SECOND
-  // restart inside the same outage.
-  const afterRestartCustomer = `E2E after restart ${run}`
-  await markPaid(page, afterRestartCustomer)
-  await page.waitForTimeout(AFTER_LOCAL_ACCEPTANCE_MS)
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(page.getByTestId('offline-resume-status')).toBeVisible({
-    timeout: OFFLINE_READ_MS,
-  })
-  await expect(page.getByTestId('menu-grid')).toBeVisible({ timeout: OFFLINE_READ_MS })
-  await expect(page.getByTestId('sync-indicator').first()).toHaveAttribute('data-sync', 'stalled')
+    // New work is still accepted after the cold start, and survives a SECOND
+    // restart inside the same outage.
+    const afterRestartCustomer = `E2E after restart ${run}`
+    await markPaid(page, afterRestartCustomer)
+    await page.waitForTimeout(AFTER_LOCAL_ACCEPTANCE_MS)
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByTestId('offline-resume-status')).toBeVisible({
+      timeout: OFFLINE_READ_MS,
+    })
+    await expect(page.getByTestId('menu-grid')).toBeVisible({ timeout: OFFLINE_READ_MS })
+    await expect(page.getByTestId('sync-indicator').first()).toHaveAttribute('data-sync', 'stalled')
 
-  // Finish Day still refuses, and says why, from the resumed counter.
-  await page.getByRole('button', { name: 'Finish day' }).click()
-  const offlineFinish = page.getByRole('dialog', { name: 'Finish day' })
-  // The sheet drains and probes the server before it answers, and offline both
-  // have to time out first.
-  await expect(offlineFinish.getByText(/finish day is unavailable offline/i)).toBeVisible({
-    timeout: OFFLINE_READ_MS,
-  })
-  await expect(offlineFinish.getByRole('button', { name: /finish day now/i })).toHaveCount(0)
-  await offlineFinish.getByRole('button', { name: 'Keep billing' }).click()
+    // Finish Day still refuses, and says why, from the resumed counter.
+    await page.getByRole('button', { name: 'Finish day' }).click()
+    const offlineFinish = page.getByRole('dialog', { name: 'Finish day' })
+    // The sheet drains and probes the server before it answers, and offline both
+    // have to time out first.
+    await expect(offlineFinish.getByText(/finish day is unavailable offline/i)).toBeVisible({
+      timeout: OFFLINE_READ_MS,
+    })
+    await expect(offlineFinish.getByRole('button', { name: /finish day now/i })).toHaveCount(0)
+    await offlineFinish.getByRole('button', { name: 'Keep billing' }).click()
 
-  await restoreOnlineCounter(context, page)
-  await expect(page.getByTestId('offline-resume-status')).toHaveCount(0)
-  await expect(page.getByTestId('sync-indicator').first()).toHaveAttribute('data-sync', 'synced', {
-    timeout: 20_000,
-  })
-  await expect
-    .poll(() => billCount(request, managerToken, offlineCustomer), { timeout: 15_000 })
-    .toBe(1)
-  const offlineBillId = await billId(request, managerToken, offlineCustomer)
-  expect(offlineBillId).not.toBeNull()
+    await restoreOnlineCounter(context, page)
+    await expect(page.getByTestId('offline-resume-status')).toHaveCount(0)
+    await expect(page.getByTestId('sync-indicator').first()).toHaveAttribute(
+      'data-sync',
+      'synced',
+      {
+        timeout: 20_000,
+      },
+    )
+    await expect
+      .poll(() => billCount(request, managerToken, offlineCustomer), { timeout: 15_000 })
+      .toBe(1)
+    const offlineBillId = await billId(request, managerToken, offlineCustomer)
+    expect(offlineBillId).not.toBeNull()
 
-  /*
+    /*
     **The bill rung with the backend gone came back pointing at a customer.**
     Nothing on the tablet made that link: the command carried a phone and a null
     id, and the server resolved it when the command finally drained. Before this
     change every bill ever written failed this, offline or not.
   */
-  const offlineLink = await billCustomer(request, managerToken, offlineCustomer)
-  expect(offlineLink.customerPhone).not.toBeNull()
-  expect(offlineLink.customerId).not.toBeNull()
-  await expect
-    .poll(() => correctionCount(request, managerToken, offlineBillId!), { timeout: 15_000 })
-    .toBe(1)
-  await expect
-    .poll(() => effectiveTender(request, managerToken, offlineBillId!), { timeout: 15_000 })
-    .toEqual(['upi'])
-  // Captured after the cold start, through two restarts, and still exactly one.
-  await expect
-    .poll(() => billCount(request, managerToken, afterRestartCustomer), { timeout: 15_000 })
-    .toBe(1)
+    const offlineLink = await billCustomer(request, managerToken, offlineCustomer)
+    expect(offlineLink.customerPhone).not.toBeNull()
+    expect(offlineLink.customerId).not.toBeNull()
+    await expect
+      .poll(() => correctionCount(request, managerToken, offlineBillId!), { timeout: 15_000 })
+      .toBe(1)
+    await expect
+      .poll(() => effectiveTender(request, managerToken, offlineBillId!), { timeout: 15_000 })
+      .toEqual(['upi'])
+    // Captured after the cold start, through two restarts, and still exactly one.
+    await expect
+      .poll(() => billCount(request, managerToken, afterRestartCustomer), { timeout: 15_000 })
+      .toBe(1)
 
-  // The server commits the next bill but its response is discarded. Delivery
-  // retries the same command identity and receives exact replay, never a second
-  // bill or a second outlet bill number.
-  const rpcPattern = `${SUPABASE_URL}/rest/v1/rpc/pay_billing_now`
-  let committed!: () => void
-  const responseWasLost = new Promise<void>((resolve) => {
-    committed = resolve
-  })
-  await page.route(rpcPattern, async (route) => {
-    const response = await route.fetch()
-    expect(response.ok()).toBe(true)
-    committed()
-    await route.abort('failed')
-  })
+    // The server commits the next bill but its response is discarded. Delivery
+    // retries the same command identity and receives exact replay, never a second
+    // bill or a second outlet bill number.
+    const rpcPattern = `${SUPABASE_URL}/rest/v1/rpc/pay_billing_now`
+    let committed!: () => void
+    const responseWasLost = new Promise<void>((resolve) => {
+      committed = resolve
+    })
+    await page.route(rpcPattern, async (route) => {
+      const response = await route.fetch()
+      expect(response.ok()).toBe(true)
+      committed()
+      await route.abort('failed')
+    })
 
-  await markPaid(page, lostResponseCustomer)
-  await responseWasLost
-  await page.unroute(rpcPattern)
+    await markPaid(page, lostResponseCustomer)
+    await responseWasLost
+    await page.unroute(rpcPattern)
 
-  await expect(page.getByTestId('sync-indicator').first()).toHaveAttribute('data-sync', 'synced', {
-    timeout: 20_000,
-  })
-  await expect
-    .poll(() => billCount(request, managerToken, lostResponseCustomer), { timeout: 15_000 })
-    .toBe(1)
+    await expect(page.getByTestId('sync-indicator').first()).toHaveAttribute(
+      'data-sync',
+      'synced',
+      {
+        timeout: 20_000,
+      },
+    )
+    await expect
+      .poll(() => billCount(request, managerToken, lostResponseCustomer), { timeout: 15_000 })
+      .toBe(1)
 
-  // Lose the response after the correction commits as well. Retrying that
-  // correction identity must replay revision 1 rather than append revision 2.
-  const correctionRpcPattern = `${SUPABASE_URL}/rest/v1/rpc/correct_bill_payment`
-  let correctionCommitted!: () => void
-  const correctionResponseWasLost = new Promise<void>((resolve) => {
-    correctionCommitted = resolve
-  })
-  await page.route(correctionRpcPattern, async (route) => {
-    const response = await route.fetch()
-    expect(response.ok()).toBe(true)
-    correctionCommitted()
-    await route.abort('failed')
-  })
+    // Lose the response after the correction commits as well. Retrying that
+    // correction identity must replay revision 1 rather than append revision 2.
+    const correctionRpcPattern = `${SUPABASE_URL}/rest/v1/rpc/correct_bill_payment`
+    let correctionCommitted!: () => void
+    const correctionResponseWasLost = new Promise<void>((resolve) => {
+      correctionCommitted = resolve
+    })
+    await page.route(correctionRpcPattern, async (route) => {
+      const response = await route.fetch()
+      expect(response.ok()).toBe(true)
+      correctionCommitted()
+      await route.abort('failed')
+    })
 
-  await changeLatestCashBillToUpi(page, lostResponseCustomer)
-  await correctionResponseWasLost
-  await page.unroute(correctionRpcPattern)
+    await changeLatestCashBillToUpi(page, lostResponseCustomer)
+    await correctionResponseWasLost
+    await page.unroute(correctionRpcPattern)
 
-  await expect(page.getByTestId('sync-indicator').first()).toHaveAttribute('data-sync', 'synced', {
-    timeout: 20_000,
-  })
-  const lostResponseBillId = await billId(request, managerToken, lostResponseCustomer)
-  expect(lostResponseBillId).not.toBeNull()
-  await expect
-    .poll(() => correctionCount(request, managerToken, lostResponseBillId!), { timeout: 15_000 })
-    .toBe(1)
-  await expect
-    .poll(() => effectiveTender(request, managerToken, lostResponseBillId!), { timeout: 15_000 })
-    .toEqual(['upi'])
-})
+    await expect(page.getByTestId('sync-indicator').first()).toHaveAttribute(
+      'data-sync',
+      'synced',
+      {
+        timeout: 20_000,
+      },
+    )
+    const lostResponseBillId = await billId(request, managerToken, lostResponseCustomer)
+    expect(lostResponseBillId).not.toBeNull()
+    await expect
+      .poll(() => correctionCount(request, managerToken, lostResponseBillId!), { timeout: 15_000 })
+      .toBe(1)
+    await expect
+      .poll(() => effectiveTender(request, managerToken, lostResponseBillId!), { timeout: 15_000 })
+      .toEqual(['upi'])
+  },
+)
