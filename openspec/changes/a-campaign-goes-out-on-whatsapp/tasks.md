@@ -295,6 +295,16 @@ customer.
       *(2026-11-23: the agreement, reconnecting and stuck tests failing first;
       chosen on the real tray; design, *The tray icon's colours*.)*
 
+- [x] 4.12 **Double asterisks are bold** [owner, 2026-11-24]: a pair of `**`
+      is sent as `*`, by the one renderer the bubble and the sender share, so a
+      campaign already submitted with `**` goes out bold once the laptop has
+      the build. *(Design, *Double asterisks, and a test after Submit*.)*
+- [x] 4.13 **Send test from a submitted campaign** [owner, 2026-11-24]: the
+      test numbers and Send test on the campaign's page while it is going.
+- [ ] 4.14 After the Promote: update the sender's checkout on the laptop, send
+      a test of the submitted campaign to the owner's own number, and see the
+      headline bold with no asterisk before its first Send batch.
+
 ## 5. Staging rehearsal
 
 - [x] 5.1 Push to `stage`; read the Staging run green.

@@ -273,3 +273,40 @@ data.
 
 - **WHEN** a person walking the demo submits a campaign
 - **THEN** it appears with its batches waiting and no message leaves anything
+
+### Requirement: Double asterisks are bold, in the preview and in the message sent
+
+A message SHALL be sent with every pair of double asterisks that WhatsApp's own
+rules would read as a pair, `**like this**`, written as single ones,
+`*like this*`, so that text typed the way most apps write bold comes out bold
+on the customer's phone with no asterisk showing. The app's preview SHALL be
+drawn from the same text the sender sends, so it shows exactly that.
+
+#### Scenario: A message written with double asterisks
+
+- **WHEN** a campaign's body says `🍯 **Something sweet** ❤️`
+- **THEN** the customer is sent `🍯 *Something sweet* ❤️`, which WhatsApp shows
+  as bold with no asterisk
+- **AND** the app's bubble shows "Something sweet" bold with no asterisk
+
+#### Scenario: Asterisks that are not a pair are left alone
+
+- **WHEN** a body holds `**` that does not open and close on one line, such as
+  `5 ** 2` or a lone `**`
+- **THEN** those characters are sent as written
+
+### Requirement: A test can be sent from a submitted campaign
+
+While a campaign is still going (submitted or paused), an owner SHALL be able
+to add and remove its test numbers and press **Send test** on the campaign's
+own page, as on a draft. The test SHALL be sent the message as the customers
+will get it, by the laptop with no release and outside the sending window, and
+SHALL send no customer anything. A stopped or finished campaign SHALL offer
+neither.
+
+#### Scenario: A test from a submitted campaign
+
+- **WHEN** an owner adds their own number to a submitted campaign whose batches
+  are all waiting and presses Send test
+- **THEN** the laptop sends that number the message, and every batch is still
+  waiting with nothing sent

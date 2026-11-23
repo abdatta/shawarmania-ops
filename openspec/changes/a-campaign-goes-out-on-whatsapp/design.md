@@ -1694,3 +1694,35 @@ tray (a stand-in sender on a spare port, with a page to pick the state).
   stripe green for a waiting batch, blue for a finished one, red for an alarm.
   `control.test.ts` reads the tray script and the page and fails if they
   disagree.
+
+## Double asterisks, and a test after Submit (2026-11-24)
+
+The first real campaign was submitted in production on 2026-11-24 with its
+headline written `**like this**`, the way most apps write bold. WhatsApp's bold
+is a single asterisk, so it would have shown bold with one stray `*` each side,
+and the bubble showed exactly that, faithfully and too quietly for anybody to
+notice. And once it was submitted there was no way to send it to the owner's
+own phone and look: the test numbers and **Send test** were only in the
+composer, though the database has allowed both on a going campaign from the
+start (`set_campaign_test_numbers`, `send_campaign_test`).
+
+- **`**` becomes `*` where it sends, not where it is typed.**
+  `renderCampaignMessage` writes each pair of double asterisks as single ones,
+  after `{name}` is filled in and before anything else reads the text. A pair
+  is what WhatsApp's own rule would take for one: it opens at the edge of a
+  word with text straight after, closes with text straight before and no
+  letter or digit after, and never crosses a line. One function both draws the
+  bubble and hands WhatsApp the text, so the two cannot disagree, and the body
+  stored is not touched: **a campaign already submitted with `**` is sent bold
+  by a sender that has this build**, with no need to stop it and write it
+  again. Only `**`: `__` is left alone because a link can carry it, and `~~`
+  nobody has typed.
+- **Version skew.** The sender on the laptop runs from its own checkout of
+  `main`. Until that checkout is updated after the Promote, it still sends
+  `**` as typed while the app's bubble already shows clean bold. So the order
+  is: Promote, update the sender's checkout, send a test, then Send batch.
+- **Test numbers on the campaign's page.** While a campaign is going, the
+  page has the composer's own `TestNumbers` box above the list of tests sent:
+  add, remove, the numbers used before, **Send test**. It sends the stored
+  message, which is what the customers get. Gone once the campaign is stopped
+  or done, as the database already refuses it then.

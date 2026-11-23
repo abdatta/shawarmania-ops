@@ -206,6 +206,14 @@ from the counter and kitchen with a clean revert.
   by quitting the sender on the laptop. A message already sent cannot be taken
   back by any gate.
 
+**Follow-up, 2026-11-24 (double asterisks; Send test after Submit). No gate:**
+both stay on the Campaigns surface and the sender, away from the counter and
+kitchen, and a revert is clean. The renderer change alters only the text the
+sender hands WhatsApp and the bubble draws; nothing is stored differently, so
+an older build reads every row as before. The page change calls two functions
+the database has had since the first migration and adds no migration. Neither
+is loaded by a tablet.
+
 ## Non-goals
 
 - **The official WhatsApp Business API, SMS campaigns, or any paid provider.**

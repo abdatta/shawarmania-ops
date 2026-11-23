@@ -90,6 +90,29 @@ export interface RenderedCampaignMessage {
   tooLong: boolean
 }
 
+/**
+ * Monospace, left as it is, or a pair of double asterisks WhatsApp's own rule
+ * would read as a pair: opening at the edge of a word with text straight
+ * after, closing with text straight before and no letter or digit after, on
+ * one line.
+ */
+const DOUBLE_ASTERISKS =
+  /```[\s\S]*?```|`[^`\n]*`|(^|[^\p{L}\p{N}*])\*\*(?=[^\s*])([^\n]*?[^\s*])\*\*(?![\p{L}\p{N}*])/gu
+
+/**
+ * `**bold**`, as most apps write bold, becomes WhatsApp's `*bold*`
+ * [owner, 2026-11-24]. WhatsApp would otherwise show it bold with a stray `*`
+ * each side. Done here, where the text is sent, so a campaign already stored
+ * with `**` goes out bold too, and the bubble shows what is sent.
+ */
+function singleAsterisks(text: string): string {
+  return text.replace(
+    DOUBLE_ASTERISKS,
+    (match, before: string | undefined, inside: string | undefined) =>
+      inside === undefined ? match : `${before ?? ''}*${inside}*`,
+  )
+}
+
 /** The message one customer gets. `savedName` is their name as the directory holds it. */
 export function renderCampaignMessage(
   body: string,
@@ -97,7 +120,7 @@ export function renderCampaignMessage(
 ): RenderedCampaignMessage {
   const name = campaignGreetingName(savedName)
   const greeted = name === null ? withoutName(body) : body.replace(NAME_TOKEN, name)
-  const text = greeted.trim()
+  const text = singleAsterisks(greeted).trim()
   return { text, tooLong: text.length > CAMPAIGN_MESSAGE_MAX }
 }
 

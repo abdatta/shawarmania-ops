@@ -1,5 +1,5 @@
 import { Megaphone } from 'lucide-react'
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
@@ -15,15 +15,21 @@ import type { CampaignBatchReading, CampaignDetail, CampaignReading } from '@/da
 import { formatDayTime } from '@/domain'
 import { cn } from '@/lib/cn'
 
-import { formatTestNumber } from '../../../shared/campaign-test-number'
+import {
+  checkTestNumber,
+  formatTestNumber,
+  testNumberProblem,
+} from '../../../shared/campaign-test-number'
 
 import { Composer } from './composer'
 import { MessageBubble } from './message-bubble'
 import { Section, StateChip, Tile } from './pieces'
 import { SenderLine } from './sender-line'
+import { TestNumbers } from './test-numbers'
 import { useCampaignRead } from './use-campaign-read'
 import { useOutletName } from './use-outlet-name'
 import { usePreviewName } from './use-preview-name'
+import { useTestNumberSuggestions } from './use-test-number-suggestions'
 import {
   audienceWords,
   batchWords,
@@ -49,6 +55,8 @@ const QUIET_BATCHES_SHOWN = 2
  * sends it from the laptop (design D7); the next batch's row says so and
  * offers nothing to press. Pause and Stop are here because either owner
  * may need them from any phone, and the sender asks before every message.
+ * **Send test** is here too while the campaign is going [owner, 2026-11-24]:
+ * it reaches only the test numbers, never a customer.
  *
  * `new` in place of an id is a campaign not yet saved.
  */
@@ -128,6 +136,7 @@ export function CampaignPage() {
             reading.replace({ ...current, campaign: next })
             toast.show({ text: said })
           }}
+          onSay={(text) => toast.show({ text })}
         />
       ) : (
         <>
@@ -154,10 +163,12 @@ function Scheduled({
   reading,
   onBack,
   onChanged,
+  onSay,
 }: {
   reading: CampaignReading
   onBack: () => void
   onChanged: (campaign: CampaignDetail, said: string) => void
+  onSay: (text: string) => void
 }) {
   const { campaigns } = useAdapters()
   const { sender, campaign } = reading
@@ -345,32 +356,35 @@ function Scheduled({
           </ul>
         </Section>
 
-        {campaign.tests.length > 0 && (
+        {(going || campaign.tests.length > 0) && (
           <Section id="campaign-tests" title="Tests">
-            <ul
-              data-testid="test-list"
-              className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface"
-            >
-              {campaign.tests.map((test) => (
-                <li
-                  key={test.id}
-                  data-testid={`test-${test.id}`}
-                  className="flex min-h-11 items-center justify-between gap-3 px-3 py-2 text-sm"
-                >
-                  <span className="font-semibold tabular-nums text-content">
-                    {formatTestNumber(test.phone)}
-                  </span>
-                  <span
-                    className={cn(
-                      'text-right',
-                      test.state === 'sent' ? 'text-content' : 'text-content-muted',
-                    )}
+            {going && <SubmittedTests campaign={campaign} onSay={onSay} />}
+            {campaign.tests.length > 0 && (
+              <ul
+                data-testid="test-list"
+                className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface"
+              >
+                {campaign.tests.map((test) => (
+                  <li
+                    key={test.id}
+                    data-testid={`test-${test.id}`}
+                    className="flex min-h-11 items-center justify-between gap-3 px-3 py-2 text-sm"
                   >
-                    {testStateWords(test, sender.serverNow)}
-                  </span>
-                </li>
-              ))}
-            </ul>
+                    <span className="font-semibold tabular-nums text-content">
+                      {formatTestNumber(test.phone)}
+                    </span>
+                    <span
+                      className={cn(
+                        'text-right',
+                        test.state === 'sent' ? 'text-content' : 'text-content-muted',
+                      )}
+                    >
+                      {testStateWords(test, sender.serverNow)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Section>
         )}
 
@@ -433,6 +447,87 @@ function Scheduled({
         onConfirm={() => void act(() => campaigns.stop(campaign.id), 'Stopped')}
       />
     </>
+  )
+}
+
+/**
+ * The test numbers and Send test on a campaign that is going
+ * (design, *Double asterisks, and a test after Submit*). The composer's own
+ * box; what it sends is the stored message, which is what the customers get.
+ */
+function SubmittedTests({
+  campaign,
+  onSay,
+}: {
+  campaign: CampaignDetail
+  onSay: (text: string) => void
+}) {
+  const { campaigns } = useAdapters()
+  const suggestions = useTestNumberSuggestions()
+  const [phones, setPhones] = useState<string[]>(campaign.testPhones)
+  const [busy, setBusy] = useState<'tests' | 'test' | false>(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [queuedHere, setQueuedHere] = useState(false)
+  const attentionRef = useRef<HTMLDivElement>(null)
+  const waiting = queuedHere || campaign.tests.some((test) => test.state === 'waiting')
+
+  async function store(next: string[]): Promise<boolean> {
+    setBusy('tests')
+    setMessage(null)
+    try {
+      setPhones(await campaigns.setTestNumbers(campaign.id, next))
+      return true
+    } catch (cause) {
+      setMessage(messageOf(cause, 'That number was not saved. Try again in a moment.'))
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function add(typed: string): Promise<boolean> {
+    const checked = checkTestNumber(typed)
+    if (checked.phone === null) {
+      setMessage(testNumberProblem(checked.error))
+      return false
+    }
+    setMessage(null)
+    if (phones.includes(checked.phone)) return true
+    return store([...phones, checked.phone])
+  }
+
+  async function send() {
+    setBusy('test')
+    setMessage(null)
+    try {
+      const queued = await campaigns.sendTest(campaign.id)
+      setQueuedHere(true)
+      onSay(
+        `Test for ${queued} ${queued === 1 ? 'number' : 'numbers'}. It goes out when the laptop is on.`,
+      )
+    } catch (cause) {
+      setMessage(messageOf(cause, 'That test was not sent. Try again in a moment.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mb-3">
+      <TestNumbers
+        phones={phones}
+        suggestions={suggestions}
+        busy={busy}
+        attentionRef={attentionRef}
+        message={message}
+        canSend
+        waiting={waiting}
+        onAdd={add}
+        onRemove={(phone) => void store(phones.filter((held) => held !== phone))}
+        onSend={() => void send()}
+        onTyping={() => setMessage(null)}
+      />
+    </div>
   )
 }
 

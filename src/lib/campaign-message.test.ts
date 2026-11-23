@@ -165,3 +165,45 @@ describe('previewCampaignMessage: WhatsApp formatting', () => {
     ])
   })
 })
+
+describe('renderCampaignMessage: double asterisks', () => {
+  // The first real campaign wrote its headline `**like this**`, as most apps
+  // write bold; WhatsApp would have shown a stray `*` each side [owner, 2026-11-24].
+  it('sends a pair of double asterisks as single ones', () => {
+    expect(
+      renderCampaignMessage(
+        '🍯 **Something Sweet at SHAWARMANIA!** ❤️\n\nOur **NEW KUNAFA!** 😍',
+        null,
+      ).text,
+    ).toBe('🍯 *Something Sweet at SHAWARMANIA!* ❤️\n\nOur *NEW KUNAFA!* 😍')
+  })
+
+  it('draws it bold in the bubble with no asterisk showing', () => {
+    const { text } = renderCampaignMessage('Try **Kunafa** today', null)
+    expect(previewCampaignMessage(text)).toEqual([
+      [{ text: 'Try ' }, { text: 'Kunafa', bold: true }, { text: ' today' }],
+    ])
+  })
+
+  it('works beside a filled-in name and at the start of a line', () => {
+    expect(renderCampaignMessage('**Hi {name}**,\n**New** here', 'Riya').text).toBe(
+      '*Hi Riya*,\n*New* here',
+    )
+  })
+
+  it('leaves asterisks alone that WhatsApp would not read as a pair', () => {
+    for (const body of ['5 ** 2', 'a lone ** here', '** spaced **', 'x**y**z', '**one\ntwo**']) {
+      expect(renderCampaignMessage(body, null).text).toBe(body)
+    }
+  })
+
+  it('leaves asterisks inside monospace alone', () => {
+    expect(renderCampaignMessage('`**raw**` and ```\n**block**\n```', null).text).toBe(
+      '`**raw**` and ```\n**block**\n```',
+    )
+  })
+
+  it('leaves single-asterisk bold as it was', () => {
+    expect(renderCampaignMessage('*Already bold*', null).text).toBe('*Already bold*')
+  })
+})

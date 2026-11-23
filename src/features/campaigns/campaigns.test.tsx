@@ -95,9 +95,14 @@ async function filterBy(
   await user.click(within(filters).getByTestId('audience-filter-done'))
 }
 
-/** No page may offer to send or release: that is the laptop's (design D7). */
+/**
+ * No page may offer to send or release to customers: that is the laptop's
+ * (design D7). Send test is the one send a page has, and it reaches only the
+ * test numbers [owner, 2026-11-24].
+ */
 function expectNoSendControl() {
   for (const control of [...screen.queryAllByRole('button'), ...screen.queryAllByRole('link')]) {
+    if (control.getAttribute('data-testid') === 'send-test') continue
     expect(control.textContent ?? '').not.toMatch(/\b(send|release)\b/i)
     expect(control.getAttribute('aria-label') ?? '').not.toMatch(/\b(send|release)\b/i)
   }
@@ -800,6 +805,37 @@ describe('test numbers', () => {
     // The submitted page lists the test, waiting for the laptop.
     const tests = await screen.findByTestId('test-list')
     expect(tests).toHaveTextContent('+91 90000 00901waiting for the laptop')
+  })
+
+  it('sends a test from a submitted campaign, and no customer anything', async () => {
+    const user = userEvent.setup()
+    const { data } = open(`campaigns/${DEMO_CAMPAIGN_SENDING_ID}`, { scene: 'waiting' })
+    const part = await screen.findByTestId('test-numbers')
+    const sentBefore = data.campaigns.recipients.filter((row) => row.state === 'sent').length
+    await user.type(within(part).getByTestId('test-number-input'), '90000 00909{Enter}')
+    await waitFor(() => expect(within(part).getByTestId('test-number-+919000000909')).toBeVisible())
+    await user.click(within(part).getByTestId('send-test'))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('campaign-toast')).toHaveTextContent(
+        /^Test for \d numbers?\. It goes out when the laptop is on\.$/,
+      ),
+    )
+    expect(within(part).getByTestId('send-test')).toBeDisabled()
+    const queued = data.campaigns.tests.filter(
+      (test) => test.campaign_id === DEMO_CAMPAIGN_SENDING_ID && test.state === 'waiting',
+    )
+    expect(queued.map((test) => test.phone)).toContain('+919000000909')
+    // The batch still waits for the laptop, and no customer was sent anything.
+    expect(screen.getByTestId('batch-3')).toHaveTextContent('send from the laptop')
+    expect(data.campaigns.recipients.filter((row) => row.state === 'sent')).toHaveLength(sentBefore)
+  })
+
+  it('offers no test once a campaign is finished', async () => {
+    open(`campaigns/${DEMO_CAMPAIGN_DONE_ID}`)
+    await screen.findByTestId('batch-list')
+    expect(screen.queryByTestId('test-numbers')).toBeNull()
+    expect(screen.queryByTestId('send-test')).toBeNull()
   })
 
   it('lists a submitted campaign’s tests by number and state, outside its figures', async () => {

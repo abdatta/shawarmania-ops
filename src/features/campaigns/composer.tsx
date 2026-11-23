@@ -26,6 +26,7 @@ import { MessageBubble } from './message-bubble'
 import { TestNumbers } from './test-numbers'
 import { useOutletName } from './use-outlet-name'
 import { usePreviewName } from './use-preview-name'
+import { useTestNumberSuggestions } from './use-test-number-suggestions'
 import { audienceWords, batchesWord, customersWord, messageOf, windowTime } from './words'
 
 type Field = 'name' | 'body' | 'audience' | 'tests'
@@ -601,25 +602,4 @@ function useAudienceCount(audience: CampaignAudience | null): number | null {
     }
   }, [campaigns, audience])
   return answer !== null && answer.audience === audience ? answer.count : null
-}
-
-/** Numbers used on earlier campaigns, read once as the composer opens. */
-function useTestNumberSuggestions(): string[] {
-  const { campaigns } = useAdapters()
-  const [phones, setPhones] = useState<string[]>([])
-  useEffect(() => {
-    let current = true
-    campaigns
-      .testNumberSuggestions()
-      .then((answer) => {
-        if (current) setPhones(answer)
-      })
-      .catch(() => {
-        // Suggestions are a convenience; a number can still be typed.
-      })
-    return () => {
-      current = false
-    }
-  }, [campaigns])
-  return phones
 }

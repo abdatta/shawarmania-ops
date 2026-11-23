@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input'
 import { formatTestNumber, MAX_TEST_NUMBERS } from '../../../shared/campaign-test-number'
 
 /**
- * A campaign's test numbers, in the composer [owner, 2026-11-18].
+ * A campaign's test numbers, in the composer [owner, 2026-11-18] and on a
+ * submitted campaign's page while it is still going [owner, 2026-11-24].
  *
  * Numbers the owners type themselves, their own or a friend's, shown whole
  * as chips. The laptop sends them the message with no press: on **Send
