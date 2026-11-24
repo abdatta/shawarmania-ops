@@ -92,18 +92,35 @@ itself as each word is finished and stopping once a corrected word is edited
 
 ## 5. The one-time correction (after release, on the owner's word)
 
-- [ ] 5.1 After the gate has been turned on in production and pulled once,
+- [x] 5.1 After the gate has been turned on in production and pulled once,
   discovery read per design D5 step 1: counts only, by kind. 725 matched on
   2026-11-23; explain any gap beyond new customers since before going on.
-- [ ] 5.2 Save the before-image outside the repository (D5 step 2); never commit
-  it.
-- [ ] 5.3 Dry run in one transaction as the owner through `customer_rename`,
-  rolled back, the changed count asserted.
-- [ ] 5.4 With the count in front of the owner and their yes, commit. Read back:
+  _2026-11-24: run after the gate went on (12:34 IST) but **before the pull**,
+  on the owner's word; the saved names do not depend on the gate. 727 of 2,161
+  matched (754 lowercase, 224 all-capitals and 6 caps-lock words); the two
+  beyond 725 are new customers. 12 names differing only in spacing were left
+  alone, and none lacked an outlet._
+- [x] 5.2 Save the before-image outside the repository (D5 step 2); never commit
+  it. _In the owner's production-snapshots folder, with `undo.mjs` and a
+  `STATE.md`; never in the repository._
+- [x] 5.3 Dry run in one transaction as the owner through `customer_rename`,
+  rolled back, the changed count asserted. _2026-11-24 12:47 IST: 727 renamed,
+  0 errors, all as written; bills, orders and customers identical after the
+  rollback. Production has two active owners, so the run pins the owner's own
+  profile rather than picking one. Each rename takes about 0.9 s (the card is
+  rebuilt), so the transaction holds those customers for about 11 minutes and
+  must run outside trading._
+- [x] 5.4 With the count in front of the owner and their yes, commit. Read back:
   the matched count is now zero, and no bill's or order's `customer_name`
-  changed (count bills by `customer_name` before and after).
-- [ ] 5.5 Keep the undo ready (D5 step 5) and tell the owner how to ask for a
-  name back.
+  changed (count bills by `customer_name` before and after). _Committed
+  2026-11-24 about 13:14 IST, saving only after every check passed. Read back
+  independently: 0 of 2,161 names still match the rule, 727/727 as written,
+  and the bills' and orders' `customer_name` are identical. No orders, bills or
+  tablet failures occurred while it ran._
+- [x] 5.5 Keep the undo ready (D5 step 5) and tell the owner how to ask for a
+  name back. _`undo.mjs` puts back one customer or all of them, and only where
+  the name is unchanged since; proven with a one-customer dry run. The owner was
+  told where it lives, and that the Customers page rename is the simple route._
 
 ## 6. PHASE GATE
 
