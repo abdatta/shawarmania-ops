@@ -25,7 +25,7 @@ describe('renderCampaignMessage: {name}', () => {
 
   it('fills every {name}, however a phone capitalised it', () => {
     expect(renderCampaignMessage('{Name}! Yes, { name }.', 'Arjun Das').text).toBe(
-      `Arjun Das! Yes, Arjun Das.`,
+      `Arjun! Yes, Arjun.`,
     )
   })
 
@@ -52,9 +52,9 @@ describe('renderCampaignMessage: {name}', () => {
   it('keeps formatting characters inside a name from formatting the message', () => {
     // A name saved before #56 may be an order label, typed with anything in it.
     const { text } = renderCampaignMessage('Hi {name}, 20% off today.', '*Raj_ ~K~ `x`')
-    expect(text).toBe(`Hi Raj K x, 20% off today.`)
+    expect(text).toBe(`Hi Raj, 20% off today.`)
     const [greeting] = previewCampaignMessage(text)
-    expect(greeting).toEqual([{ text: 'Hi Raj K x, 20% off today.' }])
+    expect(greeting).toEqual([{ text: 'Hi Raj, 20% off today.' }])
   })
 
   it('treats a name that is only formatting characters as no name', () => {
@@ -66,7 +66,7 @@ describe('renderCampaignMessage: {name}', () => {
   })
 
   it('never lets a name carry a second {name} or a line break in', () => {
-    expect(campaignGreetingName('Ritika\n{name}  Sen')).toBe('Ritika name Sen')
+    expect(campaignGreetingName('{name}Ritika\nSen')).toBe('nameRitika')
   })
 
   it('cuts a very long saved name at the cap', () => {
@@ -77,6 +77,45 @@ describe('renderCampaignMessage: {name}', () => {
   it('says whether a body greets by name at all', () => {
     expect(usesCampaignName('Hi {Name}')).toBe(true)
     expect(usesCampaignName('Hi there')).toBe(false)
+  })
+})
+
+describe('campaignGreetingName: the first name, or none', () => {
+  // A full saved name read like a bill ("Hi Debarati Roy!"), and initials or
+  // two letters greeted nobody ("Hi S Ghosh!", "Hi ss!") [owner, 2026-11-24].
+  it('greets by the first name alone', () => {
+    expect(campaignGreetingName('Debarati Roy')).toBe('Debarati')
+    expect(campaignGreetingName('Avijit Roy Chowdhury')).toBe('Avijit')
+    expect(renderCampaignMessage('Hi {name}! 👋', 'Supratik De').text).toBe('Hi Supratik! 👋')
+  })
+
+  it('capitalises a name typed all in one case, and leaves a mixed one as typed', () => {
+    expect(campaignGreetingName('argha')).toBe('Argha')
+    expect(campaignGreetingName('ANU mitra')).toBe('Anu')
+    expect(campaignGreetingName('McKenzie')).toBe('McKenzie')
+  })
+
+  it('looks past Md and Sk to the name after them', () => {
+    expect(campaignGreetingName('Md Rafi')).toBe('Rafi')
+    expect(campaignGreetingName('SK. imran ali')).toBe('Imran')
+  })
+
+  it('greets nobody by name for initials, a few letters or a title', () => {
+    for (const saved of [
+      'S Ghosh',
+      'A K Sinha',
+      'P. Samadder',
+      'ss',
+      'AA',
+      'Oj',
+      'Mr Bagchi',
+      'Dr Sen',
+      'u8uuu',
+      'Md',
+    ]) {
+      expect(campaignGreetingName(saved)).toBeNull()
+    }
+    expect(renderCampaignMessage('Hi {name}! 👋', 'S Ghosh').text).toBe('Hi! 👋')
   })
 })
 

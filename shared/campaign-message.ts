@@ -12,8 +12,9 @@
  *
  * Two rules:
  *
- * 1. `{name}` becomes the customer's saved name. A customer with no saved name
- *    gets the greeting without one, never a gap or the word "customer".
+ * 1. `{name}` becomes the customer's first name (`campaignGreetingName`). A
+ *    customer with none to greet by gets the greeting without one, never a
+ *    gap, an initial or the word "customer".
  * 2. A message is never cut to fit: an over-long one is reported and it is
  *    the caller that refuses it.
  *
@@ -39,23 +40,38 @@ export const CAMPAIGN_NAME_MAX = 40
 
 const NAME_TOKEN = /\{\s*name\s*\}/gi
 
+/** Words before a given name, looked past: "Md Rafi" is greeted as Rafi. */
+const BEFORE_A_NAME = /^(md|mohd|mohammad|sk|sheikh)\.?$/i
+/** Words that start a name nobody is greeted by: "Mr Bagchi" has no first name to use. */
+const TITLE = /^(mr|mrs|ms|miss|dr|smt|shri|sri|sh)\.?$/i
+/** Fewer letters than this is an initial or a placeholder ("S", "ss"), not a name. */
+const NAME_MIN_LETTERS = 3
+
 /**
- * A saved name as it may stand in a message, or null where there is none to
- * greet with.
+ * The first name a saved name greets by, or null where there is none to greet
+ * with [owner, 2026-11-24]: "Debarati Roy" is greeted as Debarati, and
+ * "S Ghosh", "ss" and "Mr Bagchi" are greeted by no name at all, since
+ * "Hi S Ghosh!" reads like a form and "Hi ss!" like a mistake. A name typed
+ * all in one case is capitalised; a mixed one is left as typed.
  *
  * WhatsApp has no way to escape `*`, `_`, `~` or a backtick, so a name holding
  * one would format whatever sits beside it. They are taken out. Braces go too,
- * so a name can never smuggle a second `{name}` in, and a line break becomes a
- * space.
+ * so a name can never smuggle a second `{name}` in.
  */
 export function campaignGreetingName(saved: string | null | undefined): string | null {
   if (saved == null) return null
-  const clean = saved
+  let words = saved
     .replace(/[*_~`{}]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-  if (clean === '') return null
-  return clean.length > CAMPAIGN_NAME_MAX ? clean.slice(0, CAMPAIGN_NAME_MAX).trimEnd() : clean
+    .split(/\s+/)
+    .filter((word) => word !== '')
+  if (words.length === 0 || TITLE.test(words[0] ?? '')) return null
+  if (BEFORE_A_NAME.test(words[0] ?? '')) words = words.slice(1)
+  const first = (words[0] ?? '').replace(/\.+$/, '')
+  const letters = first.match(/\p{L}/gu)?.length ?? 0
+  if (letters < NAME_MIN_LETTERS || /\d/.test(first)) return null
+  const oneCase = first === first.toLowerCase() || first === first.toUpperCase()
+  const name = oneCase ? first.charAt(0).toUpperCase() + first.slice(1).toLowerCase() : first
+  return name.length > CAMPAIGN_NAME_MAX ? name.slice(0, CAMPAIGN_NAME_MAX) : name
 }
 
 /** Whether a body greets by name anywhere. */

@@ -304,6 +304,9 @@ customer.
 - [ ] 4.14 After the Promote: update the sender's checkout on the laptop, send
       a test of the submitted campaign to the owner's own number, and see the
       headline bold with no asterisk before its first Send batch.
+- [x] 4.15 **Greeted by first name** [owner, 2026-11-24]: `{name}` is the
+      first name, capitalised, and no name for initials, two letters or a
+      title. *(Design, *Greeted by first name*.)*
 
 ## 5. Staging rehearsal
 

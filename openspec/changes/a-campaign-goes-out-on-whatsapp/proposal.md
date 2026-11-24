@@ -43,8 +43,9 @@ Three constraints shaped everything below, and each is the owner's:
 Customers. It is a list of campaigns, and each opens as its own page.
 
 - **Writing one.** A message with WhatsApp's own formatting, shown as the bubble
-  the customer will see as it is typed. `{name}` becomes the customer's saved
-  name, and a customer with no saved name gets the greeting without one. One
+  the customer will see as it is typed. `{name}` becomes the customer's first
+  name, and a customer with none we can greet by (no saved name, or only
+  initials, a few letters or a title) gets the greeting without one. One
   image, optional.
 - **Choosing customers.** A list of the customers with a tick on each, and
   above it a search by name or number, the outlet as chips (where there is

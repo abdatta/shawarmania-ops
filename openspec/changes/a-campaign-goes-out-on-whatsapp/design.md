@@ -1737,3 +1737,25 @@ start (`set_campaign_test_numbers`, `send_campaign_test`).
   add, remove, the numbers used before, **Send test**. It sends the stored
   message, which is what the customers get. Gone once the campaign is stopped
   or done, as the database already refuses it then.
+
+## Greeted by first name (2026-11-24)
+
+`{name}` was the whole saved name, so the first real campaign would have
+opened "Hi Debarati Roy!" and, for the names the counter took down as
+initials, "Hi S Ghosh!" or "Hi ss!". The owner asked for the first name and
+for a call on the rest, made from the 1,677 names in that campaign: 936 one
+word, 451 two or more, 213 starting with an initial, 74 of one or two
+letters, 3 a title or junk.
+
+- **The first word, capitalised when typed all in one case**; a mixed one
+  ("McKenzie") is left as typed.
+- **"Md" and "Sk" are looked past** ("Md Rafi" is Rafi). **A title ends it**
+  ("Mr Bagchi", "Dr Sen"): what follows is a surname, and "Hi Bagchi!" is
+  worse than no name.
+- **Fewer than three letters is no name** ("S Ghosh", "ss", "Oj"), and so is
+  a word with a digit: the greeting goes without one, as for a customer with
+  no saved name, so "Hi {name}! 👋" reads "Hi! 👋".
+- On that campaign: 1,382 greeted by name, 295 without. Three-letter names
+  ("Dip", "Joy", "Ria") are kept, which is why the floor is three.
+- `campaignGreetingName` is the one place, used by the sender and the bubble;
+  the bubble's own preview already greeted by the reader's first name.

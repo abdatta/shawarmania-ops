@@ -310,3 +310,21 @@ neither.
   are all waiting and presses Send test
 - **THEN** the laptop sends that number the message, and every batch is still
   waiting with nothing sent
+
+### Requirement: A customer is greeted by first name, or by none
+
+`{name}` SHALL become the customer's first name, capitalised when it was
+saved all in one case. Where the saved name gives no first name to greet by
+(no saved name, an initial or fewer than three letters, a title such as "Mr"
+or "Dr", or a word with a digit), the greeting SHALL go without a name rather
+than with an initial or a surname.
+
+#### Scenario: A full name
+
+- **WHEN** a message says "Hi {name}! 👋" and the customer's saved name is "Debarati Roy"
+- **THEN** they are sent "Hi Debarati! 👋"
+
+#### Scenario: Initials
+
+- **WHEN** the saved name is "S Ghosh" or "ss"
+- **THEN** they are sent "Hi! 👋"
