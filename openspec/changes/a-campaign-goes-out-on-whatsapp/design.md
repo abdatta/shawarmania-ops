@@ -1717,6 +1717,17 @@ start (`set_campaign_test_numbers`, `send_campaign_test`).
   by a sender that has this build**, with no need to stop it and write it
   again. Only `**`: `__` is left alone because a link can carry it, and `~~`
   nobody has typed.
+- **Kept on purpose, after weighing it** [owner, 2026-11-24]. It is the one
+  rule that rewrites the owner's own formatting everywhere (the others only
+  fill or tidy `{name}`, and trim the ends), so the owner first asked for it
+  to be reverted, with the campaign's stored text corrected by hand instead.
+  Kept because no realistic message is harmed: the rule leaves `f**k`,
+  `5 ** 2`, `Sunday**`, `** NEW **` and `****` alone, and the only text it
+  changes is `**word**`, which is markdown bold, mostly pasted from an AI
+  draft. Refused: sending exactly what is typed with a **Fix** prompt in the
+  composer (it would leave every submitted `**` campaign wrong until someone
+  noticed), and the silent rule's removal. The cost accepted: the stored body
+  and the sent text differ by those asterisks.
 - **Version skew.** The sender on the laptop runs from its own checkout of
   `main`. Until that checkout is updated after the Promote, it still sends
   `**` as typed while the app's bubble already shows clean bold. So the order
